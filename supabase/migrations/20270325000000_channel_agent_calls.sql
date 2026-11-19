@@ -8,8 +8,9 @@
 -- and a reply keeps one row per (message, Agent) instead of one per message. Each Agent's Run is started in the order
 -- named, and the next only once the one before it has ended, whatever its outcome. Every function #148 and #165 added is
 -- redefined from its latest definition, per Run. No stored row loses anything: the new columns answer the one Run and one
--- reply each message had, so every message and Run reads as before, the previous app version runs against this (it drives
--- the first Agent of a message; the second answers under this version), and no existing test loses a case.
+-- reply each message had, so every message and Run reads as before, and no existing test loses a case. The previous app
+-- version runs against this too: during an update it names a Run's Engine key by the message alone, so a second Run it
+-- starts on a message reuses the first Run's key and waits until the new app starts it at its own place's key.
 
 -- Two or three Agents per message: `ordinal` is the place the Agent was named in, 1 to 3. The pair is the Run's key, so a
 -- message and an Agent keep one Run; agent_id stays nullable (a removed Agent leaves its replies).
@@ -22,9 +23,14 @@ alter table public.channel_runs add primary key (message_id, ordinal);
 create unique index channel_runs_one_agent on public.channel_runs(message_id, agent_id) where agent_id is not null;
 
 -- A reply names the place of the Run that wrote it, so a message keeps one reply per Agent. A reply stored before this
--- migration has no place and is still the one reply its message had.
+-- migration has no place and is still the one reply its message had, so it takes the first place's. Every reply carries
+-- a place from here, which the one-reply rule needs: two replies of one message are refused even when neither names a
+-- place. The default keeps the previous app version working, since it inserts its replies without one.
 alter table public.channel_messages add column reply_ordinal smallint check (reply_ordinal between 1 and 3);
 alter table public.channel_messages drop constraint channel_messages_reply_to_key;
+update public.channel_messages set reply_ordinal=1 where author='agent' and reply_to is not null and reply_ordinal is null;
+alter table public.channel_messages alter column reply_ordinal set default 1;
+alter table public.channel_messages add constraint channel_messages_reply_place check (reply_to is null or reply_ordinal is not null);
 create unique index channel_messages_one_reply on public.channel_messages(reply_to, reply_ordinal);
 -- Every member reads which of a message's Agents a reply is, so each reply draws its own cards and steps.
 grant select (reply_ordinal) on public.channel_messages to authenticated;

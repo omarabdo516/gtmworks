@@ -18,7 +18,7 @@ const { channelRecord } = await import('../lib/channels.ts');
 // still open, and `states` is the one agent_states call. `states` rows carry more than the record may keep: the state is
 // all a channel's reader gets. `notes` are the quiet lines the channel got, and `members` what channel_members answered.
 function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], cards = [], handovers = [], board = null, members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
- const rows = select => String(select).includes('message_id') ? runs : select === 'agent_id' ? open : [];
+ const rows = select => select === 'message_id,ordinal,agent_id' ? open : String(select).includes('agent_name') ? runs : [];
  const chain = table => {
   const data = table === 'channels' ? { id: 'ch-1', company_id: 'co-1', kind: 'team', name: 'Launch week' }
    : table === 'channel_runs' ? rows(selectOf.get(table))
@@ -136,6 +136,24 @@ test('a message that called two Agents carries both turns in the order named, ea
  assert.equal(said?.author === 'person' ? said.mention?.agent : null, 'Ads', 'the first Agent is still the message\'s one mention');
  assert.equal(record?.open, true, 'the second Agent is still working');
  assert.deepEqual(record?.agents.map(row => row.state), ['idle', 'working'], 'the Agent answering is working, the one that answered is idle');
+});
+
+// #152: Runs go one after another, so only the Run being worked on now is working: the lowest open place of each
+// message. A second or third Agent still waiting its turn reads idle, never "Working", and does not count in the dots.
+test('only the lowest open Run of a message counts as working, a later Agent waiting its turn is idle', async () => {
+ const agents = [agent('a-1', 'Ads'), agent('a-2', 'SEO'), agent('a-3', 'Critic')];
+ const states = agents.map(row => ({ agent: row.id, running: false, waiting_mine: false }));
+ const record = await channelRecord(database({
+  agents,
+  open: [
+   { message_id: 2, ordinal: 1, agent_id: 'a-1' },
+   { message_id: 2, ordinal: 2, agent_id: 'a-2' },
+   { message_id: 4, ordinal: 1, agent_id: 'a-3' },
+  ],
+  states,
+ }), 'p-1', 'co-1', 'ch-1');
+ assert.deepEqual(record?.agents.map(row => [row.name, row.state]), [['Ads', 'working'], ['SEO', 'idle'], ['Critic', 'working']], 'the message\'s first open place works, the later one waits its turn');
+ assert.equal(record?.open, true, 'the channel still asks while a message\'s Run is open');
 });
 
 test('a message that called two Agents draws each one\'s card under that Agent\'s own reply', async () => {

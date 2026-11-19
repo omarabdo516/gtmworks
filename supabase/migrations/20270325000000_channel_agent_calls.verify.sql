@@ -9,7 +9,9 @@ select json_build_object(
  'one_run_per_agent',exists(select 1 from pg_indexes where schemaname='public' and indexname='channel_runs_one_agent'
    and indexdef like 'CREATE UNIQUE INDEX%'),
  'reply_place',exists(select 1 from information_schema.columns where table_schema='public' and table_name='channel_messages'
-   and column_name='reply_ordinal' and is_nullable='YES')
+   and column_name='reply_ordinal' and is_nullable='YES' and column_default='1')
+  and exists(select 1 from pg_constraint where conrelid='public.channel_messages'::regclass and conname='channel_messages_reply_place'
+   and pg_get_constraintdef(oid) like '%reply_to IS NULL%' and pg_get_constraintdef(oid) like '%reply_ordinal IS NOT NULL%')
   and exists(select 1 from pg_indexes where schemaname='public' and indexname='channel_messages_one_reply'
    and indexdef like 'CREATE UNIQUE INDEX%')
   and not exists(select 1 from pg_constraint where conrelid='public.channel_messages'::regclass and conname='channel_messages_reply_to_key'),

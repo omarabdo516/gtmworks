@@ -4,7 +4,7 @@
 -- is logged on the Card for "Worked on it:". Only the database ties a Card to a channel.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(40);
 
 -- RS Learning's seeded Members: the Owner, the Manager, the Contributor, the Viewer and a second Contributor. Faye is an
 -- Agent shown to the Contributor; Lead is the main Agent, shown to everyone. The Viewer is in the channel and does not
@@ -127,5 +127,43 @@ select throws_ok($$insert into public.work_cards(company_id,stage_id,title,chann
 select throws_ok($$update public.work_cards set channel_id=null where channel_id=(select id from made where label='launch')$$,
  '42501','cardChannelProtected','nor unties one');
 
+-- #150/#151: a handover in the channel reaches its Card. Lead's Run hands a job to Writer, an Agent of the channel that
+-- has not answered: the handover's log row is on the Card, so its "Worked on it:" lists Writer and its Log shows
+-- "handed to Writer"; Writer's answer is logged on the Card as a reply in the channel is.
+reset role;
+-- Lead runs on the Company's own profile, as the handover rule asks (only a channel's Lead hands work over).
+insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
+update public.hermes_agents set profile='co-10000000000000000000000000000001' where id='a1510000-0000-0000-0000-000000000002';
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('a1510000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1510000-0000-0000-0000-000000000003','Writer','Writes for search.',false,'default');
+insert into public.channel_agents(channel_id,company_id,agent_id,added_by) values
+ ((select id from made where label='launch'),'10000000-0000-0000-0000-000000000001','a1510000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000001');
+insert into public.member_agent_access(company_id,person_id,agent_id) values
+ ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1510000-0000-0000-0000-000000000003');
+update public.channel_runs set run_id='run-lead',attempts=1 where message_id=(select id from sent where label='second') and ordinal=2;
+create temporary table handed as select public.channel_hand_to_agent((select id from sent where label='second'),'run-lead','call-hand','Writer','Write the launch post','The plan is ready.') as kept;
+select is((select kept from handed),'{"state":"created","agent":"Writer"}'::jsonb,'Lead hands a job to another Agent of the channel');
+select set_config('test.handover',(select id::text from public.agent_handovers where channel_message_id=(select id from sent where label='second')),true);
+set local role service_role;
+select is(public.answer_handover(current_setting('test.handover')::bigint,1,'run-target'),true,'the target''s Run is kept once');
+select is(public.close_handover_target(current_setting('test.handover')::bigint,'run-target','completed','The launch post is written.'),true,'and its report ends it');
+reset role;
+select is((select l.card_id from public.company_log l join public.agent_handovers h on h.id=l.source_id
+ where l.source='agent_handovers' and h.channel_message_id=(select id from sent where label='second')),
+ (select id from public.work_cards where channel_id=(select id from made where label='launch')),'the handover''s log row is on the channel''s Card');
+select is((select count(*)::int from public.company_log l join public.work_cards w on w.id=l.card_id
+ where w.channel_id=(select id from made where label='launch') and l.action='agent_handed_to' and l.agent_id='a1510000-0000-0000-0000-000000000003'),1,
+ 'so the Card''s Log shows Lead handed it to Writer');
+select is((select count(*)::int from public.company_log
+ where source='channel_handover_replies' and action='channel_reply'
+  and card_id=(select id from public.work_cards where channel_id=(select id from made where label='launch'))
+  and agent_id='a1510000-0000-0000-0000-000000000003'),1,'and Writer''s answer is logged on the Card as a reply is');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select array_agg(h.name order by h.name) from public.work_cards w
+ cross join lateral unnest(public.crew(w)) c(id) join public.hermes_agents h on h.id=c.id
+ where w.channel_id=(select id from made where label='launch')),array['Faye','Lead','Writer'],'and "Worked on it:" lists the handed-to Agent');
+reset role;
 select * from finish();
 rollback;

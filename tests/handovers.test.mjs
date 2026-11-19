@@ -20,7 +20,8 @@ function handover(overrides = {}) {
  const calls=/** @type {[string,any][]} */([]); const messages=/** @type {{author:string,body:string,run:string}[]} */([]); const ends=/** @type {{run:string,outcome:string}[]} */([]);
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  const input=()=>{
-  if(row.state==='waiting') return `hand this to Ads: ${row.goal}\n\nWhat Lead knows: ${row.context}`;
+  if(row.state==='waiting') return `hand this to Ads: ${row.goal}\n\nWhat Lead knows: ${row.context}`
+   +'\n\nDo not save anything to memory, do not schedule anything, and do not hand the job on.';
   return row.target_outcome==='completed'?`The job Ads was given: ${row.goal}\n\nWhat Ads reported:\n${row.summary}`:`The job Ads was given did not finish: ${row.goal}`;
  };
  const service={
@@ -79,6 +80,9 @@ test('Lead\'s handover runs the job on the target\'s own profile with no tools, 
  assert.equal(targetRuns[0].instructions,null,'its instructions are its own profile\'s soul, never the Company\'s Agent instructions');
  assert.match(targetRuns[0].input,/Plan the Meta ads for the March intake/);
  assert.match(targetRuns[0].input,/EGP 9,000 for 30 days\./);
+ // #317/#354: the pinned Engine cannot switch the target's toolsets per Run, so the target's own profile keeps its memory
+ // and cronjob tools: the input says plainly not to use them, nor to hand the job on.
+ assert.match(targetRuns[0].input,/Do not save anything to memory, do not schedule anything, and do not hand the job on\./);
  assert.deepEqual(target.answers.map(answer=>answer.text),[''],'its question is answered empty');
  assert.deepEqual(target.permits.map(permit=>permit.choice),['deny'],'its action is not allowed');
  assert.deepEqual([target.provided,target.agentReads],[[],[]],'nothing is made or read on the Target\'s profile');

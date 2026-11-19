@@ -29,19 +29,25 @@ select json_build_object(
   and position('md5(chan::text' in pg_get_functiondef('public.begin_handover(bigint)'::regprocedure))>0
   and position('in this channel' in pg_get_functiondef('public.begin_handover(bigint)'::regprocedure))>0
   and position('target_closed_at' in pg_get_functiondef('public.close_handover_target(bigint,text,text,text)'::regprocedure))>0,
+ 'reaches_its_card',position('card_id' in pg_get_functiondef('public.channel_hand_to_agent(bigint,text,text,text,text,text)'::regprocedure))>0
+  and position('channel_handover_replies' in pg_get_functiondef('public.close_handover_target(bigint,text,text,text)'::regprocedure))>0,
  'channel_reads_its_record',has_function_privilege('authenticated','public.channel_handovers(uuid)','execute')
   and not has_function_privilege('anon','public.channel_handovers(uuid)','execute')
   and not has_function_privilege('service_role','public.channel_handovers(uuid)','execute')
   and position('in_channel' in pg_get_functiondef('public.channel_handovers(uuid)'::regprocedure))>0,
  'who_hands_over_private',(select bool_and(not has_function_privilege(r,f,'execute')) from unnest(array['public','anon','authenticated','service_role']) r,
    unnest(array['public.channel_can_hand_over(uuid,uuid,uuid)']) f),
- 'handover_row_read_by_channel',exists(select 1 from pg_policies where schemaname='public' and tablename='agent_handovers'
+ 'handover_row_not_read_by_channel',not exists(select 1 from pg_policies where schemaname='public' and tablename='agent_handovers'
    and policyname='agent_handovers_channel_read')
-  and has_column_privilege('authenticated','public.agent_handovers','channel_message_id','select'),
+  and not has_column_privilege('authenticated','public.agent_handovers','channel_message_id','select'),
  'log_row_read_by_channel',position('agent_handovers' in (select qual from pg_policies where schemaname='public'
+   and tablename='company_log' and policyname='company_log_read'))>0
+  and position('handover_in_my_channel' in (select qual from pg_policies where schemaname='public'
    and tablename='company_log' and policyname='company_log_read'))>0
   and position('handover_in_channel' in (select qual from pg_policies where schemaname='public'
    and tablename='company_log' and policyname='company_log_read'))>0
   and has_function_privilege('authenticated','public.handover_in_channel(bigint)','execute')
   and not has_function_privilege('anon','public.handover_in_channel(bigint)','execute')
+  and has_function_privilege('authenticated','public.handover_in_my_channel(bigint)','execute')
+  and not has_function_privilege('anon','public.handover_in_my_channel(bigint)','execute')
 );

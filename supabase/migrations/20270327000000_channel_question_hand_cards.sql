@@ -165,8 +165,9 @@ begin
   on conflict (source,source_id) do nothing;
  select * into called from public.channel_runs
   where message_id=handed.channel_message_id and ordinal=coalesce(handed.channel_ordinal,1);
- -- A removed Agent has no Run any more: the step stays done, and nothing picks it up.
- if called.agent_id is not null then
+ -- The pickup Run starts only for an Agent the presser may call in this channel (#354): one hidden from them, or since
+ -- removed from the channel, gets none. The step is still recorded as done.
+ if called.agent_id is not null and public.channel_agent(m.channel_id,auth.uid(),called.agent_id) then
   body:=public.hand_turn_message(writer,handed.title,handed.content->>'app',handed.done_at);
   insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key,hand_card)
    values(m.company_id,m.channel_id,'person',auth.uid(),coalesce(writer,''),body,gen_random_uuid(),handed.id) returning id into told;

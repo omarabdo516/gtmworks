@@ -6,8 +6,8 @@
 --
 -- Additive only: `agent_handovers` keeps a Conversation's link or a channel message's, never both, as reply_cards does;
 -- two columns keep what the target reported and Lead's reply for the channel to draw, the channel's record reads them
--- through one function, and the log's channel branch reads the handover's row. Every function is redefined from its
--- latest definition. The previous app version runs against this: its own handovers carry no channel link, its pinned
+-- through one function (channel_handovers) and never from the table, which keeps no channel read policy, and the log's
+-- channel branch reads the handover's row. Every function is redefined from its latest definition. The previous app version runs against this: its own handovers carry no channel link, its pinned
 -- channel Runs hold no hand_to_agent, and the functions it calls are unchanged.
 
 -- A handover keeps a Conversation's link or a channel message's, never both, and the same run and call keep one handover
@@ -24,13 +24,16 @@ alter table public.agent_handovers add column target_closed_at timestamptz;
 alter table public.agent_handovers add column reply text constraint agent_handovers_reply check (reply is null or length(reply) between 1 and 200000);
 alter table public.agent_handovers add constraint agent_handovers_reply_only_reported check (reply is null or follow_up_outcome='completed');
 
--- A channel's handover is read by the channel's members, a Viewer included, and by nobody else, as its message is.
-create policy agent_handovers_channel_read on public.agent_handovers for select to authenticated using (
- channel_message_id is not null and exists(select 1 from public.channel_messages m
-  where m.id=agent_handovers.channel_message_id and m.company_id=agent_handovers.company_id and public.in_channel(m.channel_id)));
--- The channel message a handover was made in is what a reader of the table may name; what the chat draws comes from
--- channel_handovers below.
-grant select (channel_message_id) on public.agent_handovers to authenticated;
+-- A channel handover's answer on its Card (#151) is a log row of its own, kept against the handover, so its source is
+-- its own; every other source stays as it was.
+alter table public.company_log drop constraint company_log_source_check;
+alter table public.company_log add constraint company_log_source_check check (source in
+ ('work_activity','work_comments','member_audit','hermes_agent_audit','company_audit','note_runs','reply_cards',
+  'member_invitations','reply_card_answers','channel_permissions','agent_handovers','channel_handover_replies'));
+
+-- A channel's handover is read through channel_handovers below and never from the table: the table keeps no channel
+-- read policy and no channel_message_id grant, so a channel's member reads no row of it (and so Lead's Engine run id,
+-- run_id, which no person may name). Its message link stays the worker's own column.
 
 -- Whether a handover was made in a channel, read without the reader's own row-level security: a log row's policy asks it
 -- about a handover the reader may not see, and it answers only that the handover is a channel's, never which.
@@ -40,6 +43,16 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke all on function public.handover_in_channel(bigint) from public,anon,service_role;
 grant execute on function public.handover_in_channel(bigint) to authenticated;
+
+-- Whether a handover belongs to a channel the caller is in, read without the reader's own row-level security: the log's
+-- channel branches ask it, since no person reads a channel handover from the table itself.
+create function public.handover_in_my_channel(h bigint) returns boolean
+language sql stable security definer set search_path='' as $$
+ select exists(select 1 from public.agent_handovers x join public.channel_messages m on m.id=x.channel_message_id
+  where x.id=h and auth.uid() is not null and public.in_channel(m.channel_id));
+$$;
+revoke all on function public.handover_in_my_channel(bigint) from public,anon,service_role;
+grant execute on function public.handover_in_my_channel(bigint) to authenticated;
 
 -- Who may hand work over in a channel: a Member of it who may write there (never a Viewer), talking to the Company's
 -- Lead, which must be an Agent of that channel. No other Agent hands on (decision 0043).
@@ -100,7 +113,7 @@ grant execute on function public.pin_channel_run(bigint,jsonb) to service_role;
 -- not exist still closes its Run (lib/agent-tools.mjs). Its log row is written once, and the channel's members read it.
 create function public.channel_hand_to_agent(message bigint, run text, call text, agent_name text, goal text, context text)
  returns jsonb language plpgsql security definer set search_path='' as $$
-declare m public.channel_messages; r public.channel_runs; target public.hermes_agents; handed public.agent_handovers; asker text;
+declare m public.channel_messages; r public.channel_runs; target public.hermes_agents; handed public.agent_handovers; asker text; card bigint;
 begin
  select * into m from public.channel_messages where id=message;
  select * into r from public.channel_runs where message_id=message and run_id=run;
@@ -118,8 +131,11 @@ begin
   on conflict (channel_message_id,run_id,call_id) do nothing returning * into handed;
  if handed.id is not null then
   select name into asker from public.hermes_agents where id=r.agent_id;
-  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
-   values(r.company_id,r.agent_id,'agent',asker,'agent',target.id,'agent_handed_to',
+  -- #150/#151: the channel's Card, when it has one, carries the row, so its Log shows "handed to <Agent>" and its
+  -- "Worked on it:" lists the Agent handed the work.
+  select w.id into card from public.work_cards w where w.company_id=r.company_id and w.channel_id=m.channel_id;
+  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,details,source,source_id,created_at)
+   values(r.company_id,r.agent_id,'agent',asker,case when card is null then 'agent' else 'card' end,card,target.id,'agent_handed_to',
     jsonb_build_object('agent_name',asker,'to_name',target.name,'goal',handed.goal),'agent_handovers',handed.id,handed.created_at)
    on conflict (source,source_id) do nothing;
  end if;
@@ -153,7 +169,9 @@ grant execute on function public.handovers_due(uuid,bigint,uuid) to service_role
 
 -- 20270320000000's begin_handover, with the channel's leg: the target works in the session it has in that channel, and
 -- Lead's follow-up in Lead's own, so a channel's memory follows each Agent. A channel's job names the channel and the
--- team Lead reports to; a Conversation's is worded as before.
+-- team Lead reports to; a Conversation's is worded as before. The pinned Engine cannot switch the target's toolsets for
+-- its Run, so the target's own profile keeps Hermes's memory and cronjob tools: its input says plainly not to save
+-- anything to memory, not to schedule anything and not to hand the job on.
 create or replace function public.begin_handover(h bigint)
  returns table(state text, attempt integer, company uuid, profile text, session uuid, input text, instructions text)
  language plpgsql security definer set search_path='' as $$
@@ -188,12 +206,14 @@ begin
    asking := 'Lead in the team is handing you a job in one of the team''s chats.'
     || E'\n\nThe job:\n' || r.goal
     || coalesce(E'\n\nWhat Lead knows about the job:\n' || r.context,'')
-    || E'\n\nDo the job now. Reply with your result for Lead: what you did, what you found and anything Lead must tell the person. Do not ask anyone a question: nobody but Lead reads this chat.';
+    || E'\n\nDo the job now. Reply with your result for Lead: what you did, what you found and anything Lead must tell the person. Do not ask anyone a question: nobody but Lead reads this chat.'
+    || E'\n\nDo not save anything to memory, do not schedule anything, and do not hand the job on.';
   else
    asking := 'Lead in the team is handing you a job in this channel.'
     || E'\n\nThe job:\n' || r.goal
     || coalesce(E'\n\nWhat Lead knows about the job:\n' || r.context,'')
-    || E'\n\nDo the job now. Reply with your result for Lead: what you did, what you found and anything Lead must tell the team. Do not ask anyone a question: your reply is what Lead reports, so write the result, not a question.';
+    || E'\n\nDo the job now. Reply with your result for Lead: what you did, what you found and anything Lead must tell the team. Do not ask anyone a question: your reply is what Lead reports, so write the result, not a question.'
+    || E'\n\nDo not save anything to memory, do not schedule anything, and do not hand the job on.';
   end if;
   -- The target works in a session of its own for this chat (its own in the channel), never Lead's: an Agent on the
   -- Company's profile shares Lead's profile, and Lead's session holds only what Lead was told.
@@ -244,6 +264,18 @@ begin
   summary=case when run_outcome='completed' then left(btrim(words),8000) end, target_closed_at=now(), attempted_at=null
   where id=h and state='target' and target_run=run and target_outcome is null
   returning * into r;
+ -- #150/#151: a channel's Card logs the handed-to Agent's answer as a reply in that channel is logged, so its Log draws it
+ -- and its "Worked on it:" keeps the Agent. A channel with no Card, or a target that did not report, logs nothing.
+ if r.id is not null and run_outcome='completed' and r.channel_message_id is not null then
+  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,details,source,source_id,created_at)
+   select r.company_id,r.to_agent,'agent',t.name,'card',w.id,r.to_agent,'channel_reply','{}'::jsonb,
+    'channel_handover_replies',r.id,now()
+   from public.hermes_agents t
+   join public.work_cards w on w.company_id=r.company_id
+    and w.channel_id=(select m.channel_id from public.channel_messages m where m.id=r.channel_message_id)
+   where t.id=r.to_agent
+   on conflict (source,source_id) do nothing;
+ end if;
  return r.id is not null;
 end $$;
 revoke all on function public.close_handover_target(bigint,text,text,text) from public,anon,authenticated;
@@ -308,5 +340,4 @@ alter policy company_log_read on public.company_log using (
    or case when details->>'private'='owners' then public.is_company_owner(company_id) else public.can_manage_company(company_id) end))
  or (source in ('reply_cards','reply_card_answers') and exists(select 1 from public.reply_cards c join public.channel_messages m on m.id=c.channel_message_id
   where c.id=company_log.source_id and c.company_id=company_log.company_id and public.in_channel(m.channel_id)))
- or (source='agent_handovers' and exists(select 1 from public.agent_handovers h join public.channel_messages m on m.id=h.channel_message_id
-  where h.id=company_log.source_id and h.company_id=company_log.company_id and public.in_channel(m.channel_id))));
+ or (source in ('agent_handovers','channel_handover_replies') and public.handover_in_my_channel(company_log.source_id)));

@@ -73,7 +73,9 @@ select is((select count(*)::int from public.handovers_due(null,0) where id=(sele
 select is((select state||':'||attempt from public.handovers_due(null,0) where conversation='c3170000-0000-0000-0000-000000000003' limit 1),'waiting:0','another kept handover waits for the worker');
 select is((select profile||':'||session||':'||instructions from begun),'ag-a3170000000000000000000000000012:'||md5('c3170000-0000-0000-0000-000000000001:'||(select to_agent from public.agent_handovers where run_id='run-owner'))::uuid||':Run the Meta ads.','the target''s own profile, a session of its own for this chat, and its own instructions');
 select is((select attempt from begun),1,'the first attempt of the target''s Run');
-select is((select input from begun) like '%Plan the Meta ads for the March intake%' and (select input from begun) like '%EGP 9,000 for 30 days.%',true,'the job and its context go with it');
+select is((select input from begun) like '%Plan the Meta ads for the March intake%' and (select input from begun) like '%EGP 9,000 for 30 days.%'
+ and (select input from begun) like '%Do not save anything to memory, do not schedule anything, and do not hand the job on.%',true,
+ 'the job and its context go with it, and the target is told not to use the memory and cronjob tools its own profile keeps, nor hand the job on');
 select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-owner'))),0,'nor does it start again within thirty seconds');
 select is(public.answer_handover((select id from public.agent_handovers where run_id='run-owner'),1,'run-target'),true,'the target''s Run is kept once');
 select is((select state||':'||run from public.handovers_due(null,0) where id=(select id from public.agent_handovers where run_id='run-owner')),'target:run-target','and is read on the target''s own profile');

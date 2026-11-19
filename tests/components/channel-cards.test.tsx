@@ -103,3 +103,36 @@ test.each([
  expect(card.getByRole('button').elements().every(chip => chip.classList.contains('chip'))).toBe(true);
  await expect.element(card.getByText(language === 'ar' ? 'أو اكتب الإجابة تحت' : 'or type the answer below', { exact: true })).toBeVisible();
 });
+
+// #143/#149: in a team channel a typed answer reaches nothing, so the main Agent's chip card is drawn as the reference's
+// offer card: the line for what may be typed is there but empty.
+const team = { channel: { id: 'ch-1', company: 'co-1', kind: 'team' as const, name: 'Launch week' } };
+test.each([
+ ['en', 'or type the answer below'],
+ ['ar', 'أو اكتب الإجابة تحت'],
+] as const)('in the %s interface a team channel\'s chips card offers no typed answer', async (language, orType) => {
+ held();
+ const screen = await channel(record([questionFrom('Lead', true, language === 'ar' ? 'عمر' : 'Omar', true)], team), language);
+ const card = screen.getByRole('group', { name: 'Which angle first?' });
+ await expect.element(card).toBeVisible();
+ expect(card.getByRole('button').elements().map(button => button.textContent)).toEqual(['Graduates', 'Parents']);
+ const line = card.element().querySelector('.ask1__or');
+ expect(line).not.toBeNull();
+ expect(line?.textContent).toBe('');
+ expect(card.element().textContent).not.toContain(orType);
+});
+
+// A question with no choices has no chip to press in a channel, so it waits on the team instead of offering an answer
+// the channel's route cannot take.
+test.each([
+ ['en', 'Waiting for someone on the team to pick'],
+ ['ar', 'مستني حد من الفريق يختار'],
+] as const)('in the %s interface a team channel\'s question with no choices waits on the team', async (language, wait) => {
+ held();
+ const noChoices = { ...asked(true), choices: [], multiple: false };
+ const asked_ = { ...questionFrom('Lead', true, language === 'ar' ? 'عمر' : 'Omar', true), mention: { agent: 'Lead', face: 'c-2', state: 'open' as const, permissions: [], questions: [noChoices] } };
+ const screen = await channel(record([asked_], team), language);
+ const card = screen.getByRole('group', { name: 'Which angle first?' });
+ await expect.element(card.getByText(wait, { exact: true })).toBeVisible();
+ expect(card.getByRole('button').elements()).toEqual([]);
+});

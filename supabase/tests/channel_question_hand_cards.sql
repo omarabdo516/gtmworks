@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(45);
+select plan(55);
 -- #149. Ads in RS Learning's general channel, shown to the Manager (2) and the Contributors (3, 5); the Owner (1) sees
 -- every Agent and Viewer 4 none. Lead is the main Agent. A team channel "scripts" holds Contributor 3 and Viewer 4 and
 -- the hidden Ads; the Manager and another Contributor are outside it, and Karim is a Manager of Aleem only.
@@ -232,6 +232,38 @@ select is(public.settle_channel_question(current_setting('test.latecard')::bigin
 reset role;
 select is((select state||':'||answered_by::text from public.reply_cards where id=current_setting('test.latecard')::bigint),
  'answered:20000000-0000-0000-0000-000000000005','the record keeps the answer and who gave it');
+
+-- #354: "Done it" starts the pickup Run only for an Agent the presser may call in that channel. One since removed from
+-- the channel, or one hidden from them, starts none; the step is still recorded as done and asks nothing.
+set local role service_role;
+select is(public.channel_show_card(current_setting('test.team')::bigint,'run-team','call-team-hand','hand','Publish in the team',
+ '{"app":"WordPress","line":"The draft is ready","rows":[]}'::jsonb)->>'state','shown','a team channel''s Run hands a step over too');
+reset role;
+select set_config('test.teamhand',(select id::text from public.reply_cards where channel_message_id=current_setting('test.team')::bigint and kind='hand'),true);
+delete from public.channel_agents where channel_id='e9150000-0000-0000-0000-000000000011' and agent_id='e9150000-0000-0000-0000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is(public.mark_channel_hand_done('10000000-0000-0000-0000-000000000001','e9150000-0000-0000-0000-000000000011',
+ current_setting('test.teamhand')::bigint)->>'first','true','a Contributor presses Done it on a step of an Agent since removed from the channel');
+reset role;
+select is((select state from public.reply_cards where id=current_setting('test.teamhand')::bigint),'done','the step is still recorded as done');
+select is((select count(*)::int from public.channel_messages where hand_card=current_setting('test.teamhand')::bigint),0,'and no quiet message asks the Agent to pick up');
+select is((select count(*)::int from public.channel_runs where message_id=current_setting('test.team')::bigint),1,'no pickup Run starts');
+delete from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001'
+ and person_id='20000000-0000-0000-0000-000000000005' and agent_id='e9150000-0000-0000-0000-000000000001';
+set local role service_role;
+select is(public.channel_show_card(current_setting('test.ads')::bigint,'run-ads','call-ads-hand','hand','Publish the launch',
+ '{"app":"WordPress","line":"The draft is ready","rows":[]}'::jsonb)->>'state','shown','a Run of an Agent some writer cannot see hands a step over');
+reset role;
+select set_config('test.hiddenhand',(select id::text from public.reply_cards where channel_message_id=current_setting('test.ads')::bigint and kind='hand'),true);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
+select is(public.mark_channel_hand_done('10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001',
+ current_setting('test.hiddenhand')::bigint)->>'first','true','a Member who does not see the Agent presses Done it');
+reset role;
+select is((select state from public.reply_cards where id=current_setting('test.hiddenhand')::bigint),'done','the step is still recorded as done');
+select is((select count(*)::int from public.channel_messages where hand_card=current_setting('test.hiddenhand')::bigint),0,'and no quiet message asks the Agent to pick up');
+select is((select count(*)::int from public.channel_runs where message_id=current_setting('test.ads')::bigint),1,'nor starts a Run of an Agent they may not call');
 
 select * from finish();
 rollback;

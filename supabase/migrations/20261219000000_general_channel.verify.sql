@@ -25,6 +25,9 @@ select json_build_object(
   from unnest(array['public.post_channel_message(uuid,uuid,text)','public.in_channel(uuid)','public.channel_members(uuid)']) f),
  'append_only',exists(select 1 from pg_trigger where tgrelid='public.channel_messages'::regclass and tgname='channel_messages_append_only' and not tgisinternal),
  'one_run_one_reply',exists(select 1 from pg_indexes where schemaname='public' and indexname='channel_messages_one_reply' and indexdef like 'CREATE UNIQUE INDEX%')
+  and exists(select 1 from information_schema.columns where table_schema='public' and table_name='channel_messages'
+   and column_name='reply_ordinal' and column_default='1')
+  and exists(select 1 from pg_constraint where conrelid='public.channel_messages'::regclass and conname='channel_messages_reply_place')
   and exists(select 1 from pg_constraint where conrelid='public.channel_runs'::regclass and contype='p' and pg_get_constraintdef(oid)='PRIMARY KEY (message_id, ordinal)'),
  'move_waits_for_channel_runs',position('channel_runs' in pg_get_functiondef('public.move_company_profile(uuid)'::regprocedure))>0
 );

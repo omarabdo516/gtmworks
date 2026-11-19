@@ -105,7 +105,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const runsOf=new Map<number,StoredRun[]>();
  for(const run of runs) runsOf.set(run.message_id,[...(runsOf.get(run.message_id)??[]),run]);
  for(const group of runsOf.values()) group.sort((a,b)=>(a.ordinal??1)-(b.ordinal??1));
- const {data:openRuns}=await db.from('channel_runs').select('agent_id').eq('channel_id',channel).is('outcome',null);
+ const {data:openRuns}=await db.from('channel_runs').select('message_id,ordinal,agent_id').eq('channel_id',channel).is('outcome',null);
  const latest=((await db.from('channel_messages').select('id,author,person_id,agent_id,author_name,body,reply_to,reply_ordinal,hand_card,created_at').eq('channel_id',channel).order('id',{ascending:false}).limit(shownMessages)).data||[]) as StoredMessage[];
  // The quiet lines the channel got (#207). Not messages: nobody writes them, they are never called, and they start no
  // Run. Only the ones inside the messages shown are drawn.
@@ -165,8 +165,13 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  }
  const people=(members||[]) as ChannelMember[];
  const seen=(agents||[]) as StoredAgent[];
- // A Run open in this channel counts as its Agent working, in addition to the Runs the Agent's own state sees.
- const working=new Set(((openRuns||[]) as {agent_id:string|null}[]).flatMap(run=>run.agent_id??[]));
+ // A Run open in this channel counts as its Agent working, in addition to the Runs the Agent's own state sees. Runs go
+ // one after another (#152), so only the Run being worked on now works: the lowest open place of each message. A second
+ // or third Agent still waiting its turn is idle, never "Working".
+ const open=((openRuns||[]) as {message_id:number,ordinal:number|null,agent_id:string|null}[]);
+ const firstPlace=new Map<number,number>();
+ for(const run of open) { const place=run.ordinal??1; firstPlace.set(run.message_id,Math.min(firstPlace.get(run.message_id)??place,place)); }
+ const working=new Set(open.filter(run=>(run.ordinal??1)===firstPlace.get(run.message_id)).flatMap(run=>run.agent_id??[]));
  const stateOfAgent=new Map(((states||[]) as {agent:string,running:boolean,waiting_mine:boolean}[]).map(row=>[row.agent,row]));
  // Only who is in a team channel can change it (set_channel_person, set_channel_agent), so only they are named: the
  // Owner first, then the Managers. An invited person is no Member yet, and changes nothing.

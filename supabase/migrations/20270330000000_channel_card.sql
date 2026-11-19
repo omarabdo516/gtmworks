@@ -29,7 +29,7 @@ create unique index channel_notes_one_card on public.channel_notes(card_id) wher
 alter table public.company_log drop constraint company_log_source_check;
 alter table public.company_log add constraint company_log_source_check check (source in
  ('work_activity','work_comments','member_audit','hermes_agent_audit','company_audit','note_runs','reply_cards',
-  'member_invitations','reply_card_answers','channel_permissions','agent_handovers','channel_cards','channel_replies'));
+  'member_invitations','reply_card_answers','channel_permissions','agent_handovers','channel_handover_replies','channel_cards','channel_replies'));
 
 -- The Card of a team channel, made by the first Run an Agent called in it starts (design-reference: teamTurn): the
 -- Company's first stage In progress, the channel's name, the Agent called, tied to the channel. One Run per Agent of a

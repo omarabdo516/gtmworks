@@ -18,7 +18,7 @@ import { offeredChoices, type PermissionChoice, type ReplyCard as Card } from '@
 
 export function ReplyCard({card,fresh,answer,chips=false,done,decide,may=[],connect,team=false,waitingFor=null}:{card:Card,fresh:boolean,answer?:AnswerQuestion,chips?:boolean,done?:MarkHandDone,decide?:DecidePermission,may?:PermissionChoice[],connect?:ConnectApps,team?:boolean,waitingFor?:string|null}) {
  switch(card.kind) {
-  case 'question': return <QuestionCard card={card} fresh={fresh} answer={answer} chips={chips} waitingFor={waitingFor}/>;
+  case 'question': return <QuestionCard card={card} fresh={fresh} answer={answer} chips={chips} team={team} waitingFor={waitingFor}/>;
   case 'hand': return <HandCard card={card} fresh={fresh} done={done} team={team}/>;
   case 'permission': return <PermissionCard card={card} fresh={fresh} offered={offeredChoices(card,may)} decide={decide}/>;
   case 'connect': return <ConnectCard card={card} fresh={fresh} connect={connect}/>;

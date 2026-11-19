@@ -9,7 +9,8 @@ select json_build_object(
  'note_takes_a_card',exists(select 1 from information_schema.columns where table_schema='public' and table_name='channel_notes' and column_name='card_id')
   and position('''card''' in pg_get_constraintdef((select oid from pg_constraint where conrelid='public.channel_notes'::regclass and conname='channel_notes_kind_check')))>0,
  'logged_from_its_source',position('''channel_cards''' in pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_log'::regclass and conname='company_log_source_check')))>0
-  and position('''channel_replies''' in pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_log'::regclass and conname='company_log_source_check')))>0,
+  and position('''channel_replies''' in pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_log'::regclass and conname='company_log_source_check')))>0
+  and position('''channel_handover_replies''' in pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_log'::regclass and conname='company_log_source_check')))>0,
  'made_from_a_run',position('work_cards' in pg_get_functiondef('public.channel_run_card()'::regprocedure))>0
   and position('''team''' in pg_get_functiondef('public.channel_run_card()'::regprocedure))>0
   and position('progress' in pg_get_functiondef('public.channel_run_card()'::regprocedure))>0,

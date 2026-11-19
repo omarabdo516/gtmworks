@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(57);
+select plan(59);
 -- #150. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The "scripts" team
 -- channel holds the Owner (1), the Manager (2), the Contributor (3) and the Viewer (4), and only Lead and Ads: Writer is
 -- the Company's third Agent, outside it. Member 5 is in the Company but not in the channel; Karim belongs to Aleem only.
@@ -101,7 +101,9 @@ select is((select profile||':'||session||':'||instructions from begun),
  'ag-a1500000000000000000000000000012:'||md5('c1500000-0000-0000-0000-000000000001:'||'a1500000-0000-0000-0000-000000000012')::uuid||':Run the Meta ads.',
  'the target''s own profile, in the session it has in this channel, with its own instructions');
 select ok((select input from begun) like '%Plan the Meta ads for the March intake%' and (select input from begun) like '%EGP 9,000 for 30 days.%'
- and (select input from begun) like '%in this channel%','the job, its context and the channel go with it');
+ and (select input from begun) like '%in this channel%'
+ and (select input from begun) like '%Do not save anything to memory, do not schedule anything, and do not hand the job on.%',
+ 'the job, its context and the channel go with it, and the target is told not to use the memory and cronjob tools its own profile keeps, nor hand the job on');
 select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-lead'))),0,'nor does it start again within thirty seconds');
 select is(public.answer_handover((select id from public.agent_handovers where run_id='run-lead'),1,'run-target'),true,'the target''s Run is kept once');
 select is((select state||':'||run from public.handovers_due(null,0,'c1500000-0000-0000-0000-000000000001')),'target:run-target','and is read on the target''s profile');
@@ -155,12 +157,17 @@ select is((select reads from seen where who=5),0,'a Member of the Company outsid
 select is((select reads from seen where who=6),0,'and another Company reads none');
 select is((select string_agg(who::text||':'||logged,',' order by who) from seen),'1:1,2:1,3:1,4:1,5:0,6:0','its log row is read by the channel''s members alone');
 
--- The table itself answers the same, and only one place is a handover's.
+-- The table itself answers none of it: a channel's handover is read through channel_handovers alone, so no channel member
+-- reads its row (and the Engine run id it keeps) from the table. Only one place is a handover's.
 set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is((select count(*)::int from public.agent_handovers),0,'the Owner, in the channel, reads no handover row from the table');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select count(*)::int from public.agent_handovers),0,'nor does a Contributor');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
-select is((select count(*)::int from public.agent_handovers),1,'the Viewer reads the channel''s handover row');
+select is((select count(*)::int from public.agent_handovers),0,'nor the Viewer, who reads the channel''s record');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select is((select count(*)::int from public.agent_handovers),0,'a Member outside the channel reads no row');
+select is((select count(*)::int from public.agent_handovers),0,'and a Member outside the channel reads no row either');
 reset role;
 select throws_ok($$insert into public.agent_handovers(company_id,run_id,call_id,from_agent,to_agent,goal) values
  ('10000000-0000-0000-0000-000000000001','run-x','call-x','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000012','Plan')$$,
@@ -182,6 +189,8 @@ select is(has_function_privilege('authenticated','public.channel_handovers(uuid)
 select is((select bool_and(not has_function_privilege(r,f,'execute')) from unnest(array['public','anon','authenticated','service_role']) r,
  unnest(array['public.channel_can_hand_over(uuid,uuid,uuid)']) f),true,'and who may hand over stays private');
 select is(has_function_privilege('authenticated','public.handover_in_channel(bigint)','execute')
- and not has_function_privilege('anon','public.handover_in_channel(bigint)','execute'),true,'the log''s rule answers a signed-in reader');
+ and not has_function_privilege('anon','public.handover_in_channel(bigint)','execute')
+ and has_function_privilege('authenticated','public.handover_in_my_channel(bigint)','execute')
+ and not has_function_privilege('anon','public.handover_in_my_channel(bigint)','execute'),true,'the log''s rules answer a signed-in reader');
 select * from finish();
 rollback;

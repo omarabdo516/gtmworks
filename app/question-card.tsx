@@ -16,6 +16,8 @@
 // In a channel (#149) the card is the team's: a Member who may not answer it (a Viewer, or anyone else when the main
 // Agent asked the Member whose message it answers) sees its options as plain rows under "Waiting for someone on the
 // team to pick", or the main Agent's card as its wait line "Waiting for <first name>". `waitingFor` names that Member.
+// A team channel (`team`) takes no typed answer, so its chip card draws the reference's offer card with the empty
+// "or type" line; a question with no choices has no chip to press and waits on the team instead.
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
@@ -29,7 +31,7 @@ export type AnswerQuestion=(card:number,choice:number,answerKey:string)=>Promise
 // design-reference: justCls. The answered card settles only on the page where it was answered, within this long.
 const settling=900;
 
-export function QuestionCard({card,fresh,answer,chips=false,waitingFor=null}:{card:Question,fresh:boolean,answer?:AnswerQuestion,chips?:boolean,waitingFor?:string|null}) {
+export function QuestionCard({card,fresh,answer,chips=false,waitingFor=null,team=false}:{card:Question,fresh:boolean,answer?:AnswerQuestion,chips?:boolean,waitingFor?:string|null,team?:boolean}) {
  const {t}=useI18n();
  // One letter per choice, in the interface's language (أ ب ج د, or A B C D). Only the lettered card draws them.
  const keys=Array.from(t('questionLetters'));
@@ -93,7 +95,8 @@ export function QuestionCard({card,fresh,answer,chips=false,waitingFor=null}:{ca
  if(chips) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
   {ask1Head}
   {lettered&&<div className="ask1__opts">{card.choices.map((choice,index)=><button key={index} type="button" className="chip" onClick={()=>void pick(index)}>{choice}</button>)}</div>}
-  <p className="ask1__or">{t(lettered?'questionOrType':'questionHintWords')}</p>
+  {team&&!lettered?<div className="card__outcome"><ShellIcon name="clock"/><span>{t('questionWaitTeam')}</span></div>
+   :<p className="ask1__or">{team?'':t(lettered?'questionOrType':'questionHintWords')}</p>}
   {error&&<p className="qcard__error" role="alert">{t(error)}</p>}
  </div>;
  return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">

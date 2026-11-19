@@ -7,8 +7,9 @@
 -- (read_channel_mention), never by opening the channel another way.
 -- Additive: one column on waiting_items with its index and its line in the read policy, one helper, read_channel_mention,
 -- and post_channel_message redefined from its latest definition (20270325000000's). The previous app version runs against
--- it unchanged: it posts the same messages and starts the same Runs, and the rows this version adds are ones it never
--- writes and no read of its returns differently.
+-- it and posts the same messages and starts the same Runs. A waiting_items row with only channel_message_id set (a
+-- mention) still reaches its reader there: it draws it as an ordinary "Waiting on you" item, titled with the channel's
+-- name and carrying the message's text, which opens the approvals list and counts as one.
 
 -- The message a waiting item points at, for a mention in a channel (the note a #22 mention opens is note_id). Such an
 -- item has no Card and no Conversation, so the row's source check names the message too.

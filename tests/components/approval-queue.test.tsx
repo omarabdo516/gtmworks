@@ -63,3 +63,26 @@ test('the channel a mention opens is read within the caller\'s Company only',asy
  await approvalQueue(mentionDb({id:'ch-1',kind:'team',name:'Launch week'},seen),'company-a','person','owner');
  expect(seen).toEqual(['channels:company_id=company-a']);
 });
+
+// #152/#149: a message that called two Agents keeps one question or handed step per Agent, at its Run's place. Each item's
+// Agent is the one whose Run asked it, never the other Agent the same message called.
+test('a channel card names the Agent whose Run asked it, not the other Agent the same message called',async()=>{
+ const listed=[
+  {kind:'channel_question',id:31,title:'Which angle?',body:'',asked_by:'Ads',card_id:31,conversation_id:null,created_at:'2026-06-01T00:00:00Z'},
+  {kind:'channel_hand',id:32,title:'Publish the post',body:'',asked_by:'Lead',card_id:32,conversation_id:null,created_at:'2026-06-01T00:00:00Z'},
+ ];
+ const from=(name:string)=>{
+  const rows=name==='reply_cards'?[
+    {id:31,channel_message_id:7,channel_ordinal:1,channel_messages:{channel_id:'ch-1'}},
+    {id:32,channel_message_id:7,channel_ordinal:2,channel_messages:{channel_id:'ch-1'}},
+   ]:name==='channel_runs'?[
+    {message_id:7,ordinal:1,agent_id:'a-1'},
+    {message_id:7,ordinal:2,agent_id:'a-2'},
+   ]:name==='hermes_agents'?[{id:'a-1',connection_id:'c-1',name:'Ads'},{id:'a-2',connection_id:'c-2',name:'Lead'}]:[];
+  const query:Record<string,unknown>={then:(resolve:(value:unknown)=>unknown)=>resolve({data:rows,error:null})};
+  for(const method of ['select','is','order','in','eq']) query[method]=()=>query;
+  return query; };
+ const {items}=await approvalQueue({from,rpc:async()=>({data:listed,error:null})} as unknown as Parameters<typeof approvalQueue>[0],'company','person','owner');
+ expect(items.map(item=>({kind:item.kind,agent:item.agent?.name,channel_id:item.channel_id})))
+  .toEqual([{kind:'channel_question',agent:'Ads',channel_id:'ch-1'},{kind:'channel_hand',agent:'Lead',channel_id:'ch-1'}]);
+});

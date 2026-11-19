@@ -166,6 +166,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className="turn turn--agent msg" data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {mention.questions.map(card=><ReplyCard key={`question${card.id}`} card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
+       team={channel.kind==='team'}
        answer={writer&&(!card.chips||message.mine)?answer:undefined}
        waitingFor={card.chips&&!message.mine?firstName(message.name):null}/>)}
      {mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}

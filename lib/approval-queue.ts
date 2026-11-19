@@ -49,17 +49,19 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   mentionIds.length?db.from('waiting_items').select('id,note_id,work_comments(body)').in('id',mentionIds):{data:[],error:null},
   chats.length?db.from('conversations').select('id,agent_id').eq('company_id',company).in('id',chats):{data:[],error:null},
   channelIds.length?db.from('channel_permissions').select('id,channel_id,channel_runs(agent_id)').eq('company_id',company).in('id',channelIds):{data:[],error:null},
-  channelCardIds.length?db.from('reply_cards').select('id,channel_message_id,channel_messages(channel_id)').eq('company_id',company).in('id',channelCardIds):{data:[],error:null},
+  channelCardIds.length?db.from('reply_cards').select('id,channel_message_id,channel_ordinal,channel_messages(channel_id)').eq('company_id',company).in('id',channelCardIds):{data:[],error:null},
   channelMentionIds.length?db.from('waiting_items').select('id,channel_message_id').in('id',channelMentionIds):{data:[],error:null},
  ]);
  type ChatRow={id:string,agent_id:string}; type ChannelRow={id:number,channel_id:string,channel_runs:{agent_id:string|null}|null};
- type ChannelCardRow={id:number,channel_message_id:number,channel_messages:{channel_id:string}|null};
+ type ChannelCardRow={id:number,channel_message_id:number,channel_ordinal:number|null,channel_messages:{channel_id:string}|null};
  const chatAgents=new Map(((chatResult.data || []) as ChatRow[]).map(row=>[row.id,row.agent_id]));
  const channelRows=new Map(((channelResult.data || []) as unknown as ChannelRow[]).map(row=>[row.id,row]));
  const channelCards=new Map(((channelCardResult.data || []) as unknown as ChannelCardRow[]).map(row=>[row.id,row]));
  const cardMessageIds=[...new Set([...channelCards.values()].map(row=>row.channel_message_id))];
- const {data:cardRuns,error:cardRunError}=cardMessageIds.length?await db.from('channel_runs').select('message_id,agent_id').eq('company_id',company).in('message_id',cardMessageIds):{data:[],error:null};
- const cardAgents=new Map(((cardRuns || []) as {message_id:number,agent_id:string|null}[]).map(row=>[row.message_id,row.agent_id]));
+ // #152: a message may call up to three Agents, each with a Run at its own place. A card names the place of the Run that
+ // asked it (`channel_ordinal`), so its Agent is that Run's, never the message's other Agent.
+ const {data:cardRuns,error:cardRunError}=cardMessageIds.length?await db.from('channel_runs').select('message_id,ordinal,agent_id').eq('company_id',company).in('message_id',cardMessageIds):{data:[],error:null};
+ const cardAgents=new Map(((cardRuns || []) as {message_id:number,ordinal:number|null,agent_id:string|null}[]).map(row=>[`${row.message_id}:${row.ordinal??1}`,row.agent_id]));
  const askingIds=[...new Set([...chatAgents.values(),...[...channelRows.values()].flatMap(row=>row.channel_runs?.agent_id??[]),...[...cardAgents.values()].flatMap(agent=>agent??[])])];
  const {data:faces,error:faceError}=askingIds.length?await db.from('hermes_agents').select('id,connection_id,name').eq('company_id',company).in('id',askingIds):{data:[],error:null};
  const faceOf=(agent:string|null|undefined)=>((faces || []) as {id:string,connection_id:string,name:string}[]).find(row=>row.id===agent) ?? null;
@@ -84,7 +86,7 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   if(item.kind==='agent_request') return {...item,request:requests.get(item.id)??null};
   if(item.kind==='permission') { const face=faceOf(chatAgents.get(item.conversation_id!)); return {...item,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
   if(item.kind==='channel_permission') { const row=channelRows.get(item.id); const face=faceOf(row?.channel_runs?.agent_id); return {...item,channel_id:row?.channel_id??null,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
-  if(item.kind==='channel_question'||item.kind==='channel_hand') { const row=channelCards.get(item.id); const face=faceOf(row?cardAgents.get(row.channel_message_id):null); return {...item,channel_id:row?.channel_messages?.channel_id??null,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
+  if(item.kind==='channel_question'||item.kind==='channel_hand') { const row=channelCards.get(item.id); const face=faceOf(row?cardAgents.get(`${row.channel_message_id}:${row.channel_ordinal??1}`):null); return {...item,channel_id:row?.channel_messages?.channel_id??null,agent:face&&{connection_id:face.connection_id,name:face.name}}; }
   if(item.kind==='channel_mention') { const message=mentioned.get(item.id)??null; const channel=message!==null?messageChannel.get(message)??null:null;
    return {...item,channel_message_id:message,channel_id:channel,title:channel!==null?channelName.get(channel)??'':item.title}; }
   const rule=item.kind==='rule_suggestion'&&rules.get(item.id);
