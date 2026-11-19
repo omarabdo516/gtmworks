@@ -20,10 +20,16 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // note is the one quiet line a channel gets that is not a message (#207): nobody writes it, nobody can be mentioned in it, and it
 // starts no Run. Its id is negative, so it is never a message's. The quiet message "Done it" writes to ask an Agent to
 // pick up (#149) is `handDone`: nothing draws a bubble of it, and the card shows the press instead.
+// A handover in the channel (#150) is a quiet row between turns, with its own id: the two Agents and their faces, the
+// other Agent's answer marked `to` the Agent that handed it over, and then that Agent's own reply.
+type ChannelFace={name:string,face:string};
 export type ChannelMessage=
  | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true}
- | {id:number,author:'agent',name:string,face:string,body:string,at:string,steps?:RunSteps,cards?:ReplyCard[]}
- | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string};
+ | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[]}
+ | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
+ | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string};
+// One handover of a channel, as its details draw it: both faces, the Agent handed the work, and the job, newest first.
+export type ChannelHandoff={id:number,from:ChannelFace,to:ChannelFace,goal:string,at:string};
 export type ChannelName={kind:'general'}|{kind:'team',name:string};
 export type ChannelSummary=ChannelName&{id:string,unread:number};
 // One row of a channel's members. An invited person who has not joined is a row too (#207): no person yet, their name made
@@ -43,7 +49,11 @@ export type ChannelRecord={
  // Who does, named to a reader who cannot (a team channel only).
  managers:{name:string,role:'owner'|'manager'}[],
  messages:ChannelMessage[],
+ // The channel's handovers (#150), newest first, for the details' "Handoffs" section and its count.
+ handoffs:ChannelHandoff[],
  open:boolean,
+ // A handover of this channel is still moving, so the channel asks again as it does while a Run is open.
+ handover:boolean,
  // The choices the reader's role may send on a request of their own (permission_choices, #163).
  may:PermissionChoice[],
 };
@@ -54,6 +64,10 @@ type StoredPermission={id:number,message_id:number,ordinal:number|null,title:str
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
 type StoredCard=ReplyCardRow&{channel_message_id:number,channel_ordinal:number|null,addressed_to:string|null};
 type StoredSession={message_id:number,agent_id:string,profile:string,session:string,reply:number};
+// One handover of the channel (#150) as channel_handovers answers it: both Agents and their faces, the job, what the
+// target reported, Lead's reply and when each came. Only what the chat draws; never the context or the Engine's runs.
+type StoredHandover={id:number,message:number,from_agent:string,from_name:string,from_connection:string,to_agent:string,to_name:string,
+ to_connection:string,goal:string,summary:string|null,reply:string|null,state:string,created_at:string,answered_at:string|null,closed_at:string|null};
 // A channel's replies read their Run's steps from the Agent's Hermes session when the channel opens (#346), never kept.
 // `profile` is the one the Run was pinned to; the callback reads the session there.
 type ReadSession=(agent:string,session:string,profile:string)=>Promise<{turns:SessionTurn[],usage:SessionUsage|null}|null>;
@@ -90,6 +104,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const {data:members}=await db.rpc('channel_members',{ch:channel});
  // A team channel's Agents come with it, also one hidden from the reader elsewhere, so its replies keep their face.
  const {data:agents}=await db.rpc('channel_agent_list',{ch:channel});
+ // The channel's handovers (#150), newest first: the transcript draws the row, the target's answer and Lead's reply of
+ // the ones whose message is shown, and the details draw the count and the last four.
+ const {data:handed}=await db.rpc('channel_handovers',{ch:channel});
  // Each Agent's own state (#206): what waits on the reader, and its open Runs. It runs as the reader, so only their own
  // state comes back, and only the state is kept below.
  const {data:states}=await db.rpc('agent_states',{c:company});
@@ -157,9 +174,19 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   }),
   notes.filter(note=>oldest===undefined||note.created_at>=oldest).map((note):ChannelMessage=>({id:-note.id,author:'note',kind:note.kind,actor:note.actor_name,name:note.invitee_name,at:note.created_at})),
  ];
+ // #150: a handover is a quiet row under the reply that made it, then the other Agent's answer marked "to <Lead>", then
+ // Lead's own reply, all from gtmworks's own record and never from the Engine's helper events (design-reference: the
+ // handoff row, `to` on the sender line). Only handovers of the messages shown are drawn, and a completed target's
+ // answer and Lead's reply appear as soon as each comes in.
+ const shownIds=new Set(ordered.map(message=>message.id));
+ const handoverMessages=((handed||[]) as StoredHandover[]).filter(row=>shownIds.has(row.message)).flatMap((row):ChannelMessage[]=>[
+  {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at},
+  ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
+  ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,body:row.reply,at:row.closed_at}]:[]),
+ ]);
  // The lines in the order they were written: a note is drawn where it happened, after a message written at the same
- // moment (the sort is stable, and the messages come first).
- const messages=written.flat().sort((a,b)=>a.at<b.at?-1:a.at>b.at?1:0);
+ // moment (the sort is stable, and the messages come first), and a handover's row after the reply that made it.
+ const messages=[...written.flat(),...handoverMessages].sort((a,b)=>a.at<b.at?-1:a.at>b.at?1:0);
  if(read&&newest!==undefined) await db.rpc('read_channel',{ch:channel,through:newest});
  return {
   channel:{id:found.id,company:found.company_id,...name},
@@ -173,7 +200,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   manage:!!manager&&name.kind==='team',
   managers,
   messages,
+  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at})),
   open:((openRuns||[]) as {agent_id:string|null}[]).length>0,
+  handover:((handed||[]) as StoredHandover[]).some(row=>row.state!=='done'&&row.state!=='failed'),
   may:(may||[]) as PermissionChoice[],
  };
 }

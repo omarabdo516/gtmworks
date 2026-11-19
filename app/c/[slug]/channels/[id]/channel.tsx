@@ -37,7 +37,7 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
  // The same, for the steps' tool lines: each value isolated in its own direction, as a Conversation draws them.
  const cb:StepsBidiText=(key,...values)=>own[key].split(/\{(\d+)\}/).map((part,index)=>index%2?<bdi key={index}>{values[Number(part)]}</bdi>:part);
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel(); const zone=useZone();
- const {channel,members,agents,writer,messages,open,may}=record;
+ const {channel,members,agents,writer,messages,open,handover,may}=record;
  const refresh=useCallback(async()=>{
   try {
    const response=await fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'});
@@ -63,11 +63,11 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
      if(response.ok&&!stopped) setRecord(await response.json() as ChannelRecord);
     } catch {}
    }
-   if(!stopped) timer=setTimeout(poll,open?1500:6000);
+   if(!stopped) timer=setTimeout(poll,(open||handover)?1500:6000);
   };
-  timer=setTimeout(poll,sent?300:open?1500:6000);
+  timer=setTimeout(poll,sent?300:(open||handover)?1500:6000);
   return ()=>{stopped=true;clearTimeout(timer);};
- },[open,sent,channel.company,channel.id]);
+ },[open,handover,sent,channel.company,channel.id]);
  // The Member who called the Agent decides its Run's request (#165), as a Conversation's person does (#163); the choice
  // then goes to the waiting Run after the answer, and the next read shows the reply.
  const permit:DecidePermission=async(request,choice)=>{
@@ -173,19 +173,26 @@ export default function ChannelView({person,initial}:{person:string,initial:Chan
     return failure;
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
   </div>
- </div><ChannelDetails panel={panel} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
+ </div><ChannelDetails panel={panel} name={name} person={person} record={record} tip={tip} c={c} time={time} refresh={refresh}/></div>;
 }
 
 function Turn({message,time,c,name,cb,drawnCards,memberNames,done}:{message:ChannelMessage,time:(value:string)=>string,c:Say,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone}) {
- const {t}=useI18n();
+ const {t,language}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
  // The quiet line an invitation adds (#207): not a message, and the channel's own name is the one it joined.
  if(message.author==='note') return <li className="note note--icon" data-kind={message.kind}>
   <ShellIcon name="team" className="note__icon"/><span>{c('channelInviteNote',firstName(message.actor),message.name,name)}</span>
  </li>;
+ // A job the main Agent handed another Agent of the channel (#150; design-reference: the handoff row, `.handoff`): both
+ // faces with the arrow between them, the Agent it went to, and the job. It has nothing to press.
+ if(message.author==='handoff') return <li className="handed" role="note" data-handover>
+  <span className="handed__faces"><CompanyAgentFace agent={{connection_id:message.from.face,name:message.from.name}} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:message.to.face,name:message.to.name}} size={18}/></span>
+  <span className="handed__t">{c('channelHandedTo',message.to.name)}</span>
+  {message.goal&&<span className="handed__d"><bdi>{message.goal}</bdi></span>}
+ </li>;
  if(message.author==='agent') return <li className="turn turn--agent msg" data-author="agent">
-  <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi><time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
+  <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)} done={done} team/>)}
@@ -208,11 +215,11 @@ function Turn({message,time,c,name,cb,drawnCards,memberNames,done}:{message:Chan
 
 const Initial=({name,size}:{name:string,size:number})=><span className="me__av lg-av" style={{'--av':`${size}px`} as CSSProperties} aria-hidden="true">{Array.from(name.trim())[0]||'?'}</span>;
 
-// design-reference: renderTeamDetails; its "On the board" and "Handoffs" sections are not built.
-function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsPanel,name:string,person:string,record:ChannelRecord,tip:ReactNode,c:Say,refresh:()=>Promise<void>}) {
+// design-reference: renderTeamDetails; its "On the board" section is not built, and "Handoffs" is (#150).
+function ChannelDetails({panel,name,person,record,tip,c,time,refresh}:{panel:DetailsPanel,name:string,person:string,record:ChannelRecord,tip:ReactNode,c:Say,time:(value:string)=>string,refresh:()=>Promise<void>}) {
  const {t,language}=useI18n();
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
- const {channel,members,agents,manage,managers}=record;
+ const {channel,members,agents,manage,managers,handoffs}=record;
  const team=channel.kind==='team';
  const [addingPerson,setAddingPerson]=useState(false); const [addingAgent,setAddingAgent]=useState(false);
  const [choices,setChoices]=useState<Choices|null>(null); const [failed,setFailed]=useState(false);
@@ -277,6 +284,16 @@ function ChannelDetails({panel,name,person,record,tip,c,refresh}:{panel:DetailsP
     {failed&&<p className="set-err ch-who" role="alert">{c('channelChangeFailed')}</p>}
     {team&&!manage&&managedBy&&<p className="set-hint ch-who">{c('channelManagedBy',managedBy)}</p>}
    </section>
+   {handoffs.length>0&&<section className="dp-sec" aria-labelledby="ch-h-h">
+    <h3 className="dp-label" id="ch-h-h"><span>{c('channelHandoffs')} <span className="muted num">{count(handoffs.length)}</span></span></h3>
+    <ul className="panel-card">
+     {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row">
+      <span className="handed__faces"><CompanyAgentFace agent={{connection_id:handoff.from.face,name:handoff.from.name}} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:handoff.to.face,name:handoff.to.name}} size={20}/></span>
+      <span className="panel-row__text"><span className="panel-row__t">{c('channelHandedTo',handoff.to.name)}</span>
+       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{time(handoff.at)}</span></span>
+     </li>)}
+    </ul>
+   </section>}
   </div>
  </DetailsShell>;
 }

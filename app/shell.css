@@ -796,6 +796,9 @@
 .gw .handed__d { color: var(--gw-text-3); overflow-wrap: anywhere; }
 .gw .handed__d::before { content: "·"; margin-inline-end: 6px; }
 [dir="ltr"] .gw .handed__t { unicode-bidi: plaintext; }
+/* The Agent that handed a channel's work over, after the one answering it (#150; design-reference: .sender__to). */
+.gw .sender__to { color: var(--gw-text-3); }
+.gw .sender__to::before { content: "·"; margin-inline-end: 6px; }
 
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate, .reply-card .card__title, .reply-card .card__sub, .reply-card .kv__row dd) { unicode-bidi: plaintext; text-align: left; }

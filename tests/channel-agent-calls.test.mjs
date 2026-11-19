@@ -34,6 +34,7 @@ function runDatabase(runs) {
      session: `s-${next.ordinal}`, input: `Sara: ${next.text ?? ''}`, instructions: null }], error: null };
    }
    if (name === 'pin_channel_run') return { data: { tools: null }, error: null };
+   if (name === 'channel_handover_agents') return { data: [], error: null };
    if (name === 'answer_channel_start') {
     if (args.run && runs.some(run => run.message === args.message && run.run_id === args.run && run.outcome === null))
      return { data: true, error: null };

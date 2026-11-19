@@ -17,7 +17,7 @@ const { channelRecord } = await import('../lib/channels.ts');
 // The channel's reads as the page makes them. `runs` are the channel's closed Runs, newest first; `open` are the Runs
 // still open, and `states` is the one agent_states call. `states` rows carry more than the record may keep: the state is
 // all a channel's reader gets. `notes` are the quiet lines the channel got, and `members` what channel_members answered.
-function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], cards = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
+function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], cards = [], handovers = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
  const rows = select => String(select).includes('message_id') ? runs : select === 'agent_id' ? open : [];
  const chain = table => {
   const data = table === 'channels' ? { id: 'ch-1', company_id: 'co-1', kind: 'team', name: 'Launch week' }
@@ -41,6 +41,7 @@ function database({ agents, runs = [], open = [], states = [], messages = [], no
   if (name === 'can_manage_company') return { data: false, error: null };
   if (name === 'permission_choices') return { data: [], error: null };
   if (name === 'agent_states') return { data: states, error: null };
+  if (name === 'channel_handovers') return { data: handovers, error: null };
   throw new Error(`unexpected ${name}`);
  };
  return {
@@ -154,4 +155,60 @@ test('a message that called two Agents draws each one\'s card under that Agent\'
  }), 'p-1', 'co-1', 'ch-1');
  const replies = (record?.messages ?? []).filter(message => message.author === 'agent');
  assert.deepEqual(replies.map(reply => [reply.name, reply.author === 'agent' ? reply.cards?.map(shown => shown.title) : null]), [['Ads', ['Scripts']], ['SEO', ['Section']]]);
+});
+
+// #150: a handover in the channel reads as the reference draws it: Lead's reply, the quiet row with both faces and the
+// job, the other Agent's answer marked "to Lead", then Lead's reply with what came of it. All of it comes from
+// gtmworks's own record, and the details count every handover and draw the last four newest first.
+const handover = (overrides = {}) => ({
+ id: 7, message: 2, from_agent: 'a-1', from_name: 'Lead', from_connection: 'c-a-1', to_agent: 'a-2', to_name: 'Ads', to_connection: 'c-a-2',
+ goal: 'Plan the Meta ads for the March intake', summary: 'Three ad sets, 30 days, EGP 9,000.', reply: 'Ads planned the March intake.',
+ state: 'done', created_at: '2026-06-10T10:01:00Z', answered_at: '2026-06-10T10:03:00Z', closed_at: '2026-06-10T10:04:00Z', ...overrides,
+});
+
+test('a channel handover is drawn as the row, the other Agent\'s answer marked with the Agent that handed it over, then that Agent\'s reply', async () => {
+ const record = await channelRecord(database({
+  agents: [agent('a-1', 'Lead'), agent('a-2', 'Ads')],
+  runs: [{ message_id: 2, ordinal: 1, agent_id: 'a-1', agent_name: 'Lead', outcome: 'completed' }],
+  messages: [
+   { id: 3, author: 'agent', person_id: null, agent_id: 'a-1', author_name: 'Lead', body: 'On it: I handed the job to Ads.', reply_to: 2, reply_ordinal: 1, created_at: '2026-06-10T10:00:30Z' },
+   { id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: '@Lead plan the March ads', reply_to: null, reply_ordinal: null, created_at: '2026-06-10T10:00:00Z' },
+  ],
+  handovers: [handover()],
+ }), 'p-1', 'co-1', 'ch-1');
+ const drawn = (record?.messages ?? []).map(message => message.author === 'agent' ? `${message.name}: ${message.body}${message.to ? ` → ${message.to}` : ''}`
+  : message.author === 'handoff' ? `handoff: ${message.from.name} → ${message.to.name}: ${message.goal}` : message.body);
+ assert.deepEqual(drawn, [
+  '@Lead plan the March ads',
+  'Lead: On it: I handed the job to Ads.',
+  'handoff: Lead → Ads: Plan the Meta ads for the March intake',
+  'Ads: Three ad sets, 30 days, EGP 9,000. → Lead',
+  'Lead: Ads planned the March intake.',
+ ]);
+ const row = record?.messages.find(message => message.author === 'handoff');
+ assert.deepEqual(row, { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'c-a-1' }, to: { name: 'Ads', face: 'c-a-2' },
+  goal: 'Plan the Meta ads for the March intake', at: '2026-06-10T10:01:00Z' });
+ assert.deepEqual(record?.handoffs, [{ id: 7, from: { name: 'Lead', face: 'c-a-1' }, to: { name: 'Ads', face: 'c-a-2' },
+  goal: 'Plan the Meta ads for the March intake', at: '2026-06-10T10:01:00Z' }]);
+ assert.equal(record?.handover, false, 'a finished handover is not still moving');
+});
+
+test('a channel handover still moving keeps the channel asking, and a target that could not report draws no answer', async () => {
+ const record = await channelRecord(database({
+  agents: [agent('a-1', 'Lead'), agent('a-2', 'Ads')],
+  messages: [{ id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: '@Lead plan the March ads', reply_to: null, reply_ordinal: null, created_at: '2026-06-10T10:00:00Z' }],
+  handovers: [handover({ id: 8, state: 'target', summary: null, reply: null, answered_at: null, closed_at: null, created_at: '2026-06-10T10:01:00Z' })],
+ }), 'p-1', 'co-1', 'ch-1');
+ assert.equal(record?.handover, true);
+ assert.deepEqual(record?.messages.map(message => message.author), ['person', 'handoff']);
+ assert.equal(record?.handoffs.length, 1);
+});
+
+test('a channel with no handover draws none, and one whose handover belongs to a message not shown draws no row of it', async () => {
+ const empty = await channelRecord(database({ agents: [agent('a-1', 'Lead')], messages: [{ id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: 'Morning all', reply_to: null, reply_ordinal: null, created_at: '2026-06-10T10:00:00Z' }] }), 'p-1', 'co-1', 'ch-1');
+ assert.deepEqual(empty?.handoffs, []);
+ assert.equal(empty?.handover, false);
+ assert.deepEqual(empty?.messages.map(message => message.author), ['person']);
+ const elsewhere = await channelRecord(database({ agents: [agent('a-1', 'Lead')], messages: [{ id: 9, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: 'Before the handover', reply_to: null, reply_ordinal: null, created_at: '2026-06-10T10:00:00Z' }], handovers: [handover()] }), 'p-1', 'co-1', 'ch-1');
+ assert.deepEqual(elsewhere?.messages.map(message => message.author), ['person'], 'no row of a message that is not shown');
 });

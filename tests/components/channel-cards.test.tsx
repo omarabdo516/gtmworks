@@ -18,7 +18,7 @@ const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): 
  channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
  members: [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'manager', invitation: null, email: null }],
  agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'Runs the ads.', main: false, only: false, state: 'idle' }, { id: 'a-2', connection_id: 'c-2', name: 'Lead', speciality: 'General', main: true, only: false, state: 'idle' }],
- writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages, open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), ...more,
+ writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages, handoffs: [], open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), handover: false, ...more,
 });
 const channel = (initial: ChannelRecord, language: 'en' | 'ar') => render(<LanguageProvider language={language}><ChannelView person="p-1" initial={initial}/></LanguageProvider>);
 
