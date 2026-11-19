@@ -562,7 +562,7 @@ check_archive() {
   else
     other=$(printf '%s\n' "$key_engines" | grep -vx first | grep . || true)
     [ -z "$other" ] \
-      || fail "$archive is not a complete gtmworks backup: it names an Engine without its data (${other//$'\n'/ }). Nothing was changed."
+      || fail "$archive is not a complete gtmworks backup: it names an Engine without its data ($(printf '%s' "$other" | tr '\n' ' ')). Nothing was changed."
   fi
   # An Engine folder in the archive is named like an Engine and holds only its ENGINE_KEY (64 hex characters) (#378, X2).
   # install.sh writes each Engine's own file from that key with this release's standard names; a name or a line that

@@ -32,10 +32,11 @@ for(const company of await checked(service.from('companies').select('id,name').o
  targets.push({company:company.id,name:company.name,agent:agent.id,profile:agent.profile,engine,
   code:`backup-${company.id.replaceAll('-','')}`,management:engine.address.replace(/:\d+$/,'')+':9119'});
 }
-assert.equal(targets.length,2,`two Companies, each with its main Agent and its own Engine: ${targets.map(target=>target.name).join(', ')}`);
-assert.notEqual(targets[0].engine.address,targets[1].engine.address,'each Company is on its own Engine');
-assert.notEqual(targets[0].engine.key,targets[1].engine.key,'each Engine has its own key');
-assert.notEqual(targets[0].profile,targets[1].profile,'each Company has its own profile');
+assert.ok(targets.length>=2,`two Companies or more, each with its main Agent and its own Engine: ${targets.map(target=>target.name).join(', ')}`);
+const distinct=pick=>new Set(targets.map(pick)).size===targets.length;
+assert.ok(distinct(target=>target.engine.address),'each Company is on its own Engine');
+assert.ok(distinct(target=>target.engine.key),'each Engine has its own key');
+assert.ok(distinct(target=>target.profile),'each Company has its own profile');
 
 // The fake model: one Arabic reply, streamed or not, and every request it was sent. It stands in for each Company's own
 // model access; what an Engine puts in the request is the memory it kept.

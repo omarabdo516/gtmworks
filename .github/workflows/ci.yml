@@ -822,12 +822,15 @@ jobs:
           # a code word in its own Engine first; after the restore each Company's Agent answers on its own Engine, with its own
           # code word and never the other Company's.
           engines_memory() {
-            db -F ' ' -c "select c.id,a.profile,e.address from public.companies c join public.hermes_agents a on a.company_id=c.id and a.is_default join public.company_engines e on e.id=c.engine_id order by c.created_at"
+            db -F ' ' -c "select c.id,a.profile,e.address from public.companies c join public.hermes_agents a on a.company_id=c.id and a.is_default join public.company_engines e on e.id=c.engine_id order by e.created_at"
           }
+          # Every Engine the install has holds a Company by now (the first run's, the named Owner's, the link's).
+          engines_before=$(ls -d .engines/*/ | wc -l)
+          [[ $engines_before -ge 2 ]] || fail 'the install has two Engines or more before the backup'
           for attempt in $(seq 1 240); do
             engines_memory > engines.txt
-            [[ $(grep -c . engines.txt || true) -ge 2 ]] && break
-            [[ $attempt == 240 ]] && fail 'two Companies get a main Agent each on their own Engine'
+            [[ $(grep -c . engines.txt || true) == "$engines_before" ]] && break
+            [[ $attempt == 240 ]] && fail 'every Company gets a main Agent on its own Engine'
             sleep 1
           done
           while read -r company profile address; do
@@ -850,7 +853,7 @@ jobs:
           rm -f .env.install
           sh scripts/install.sh || fail 'fresh install before the every-Engine restore'
           sh scripts/install.sh restore "$every_engine" || fail 'restore every Engine'
-          [[ $(ls -d .engines/* | wc -l) == 2 ]] || fail 'the every-Engine restore brings both Engines back'
+          [[ $(ls -d .engines/*/ | wc -l) == "$engines_before" ]] || fail 'the every-Engine restore brings every Engine back'
           for folder in .engines/*/; do
             name=$(sed -n 's/^ENGINE_NAME=//p' "$folder/.env")
             volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$folder/.env")
@@ -871,7 +874,7 @@ jobs:
           incomplete="$RUNNER_TEMP/incomplete-engines"
           rm -rf "$incomplete" && mkdir -p "$incomplete"
           tar -xzf "$every_engine" -C "$incomplete" || fail 'read the every-Engine archive'
-          second_folder=$(ls -d .engines/* | grep -v '/first$')
+          second_folder=$(ls -d .engines/* | grep -v '/first$' | head -n 1)
           second_name=${second_folder#.engines/}
           rm -rf "$incomplete/engines/$second_name" || fail 'leave an Engine out of the archive'
           ( cd "$incomplete" && tar -czf "$RUNNER_TEMP/incomplete-engines.tgz" .env.install .engines engines var/lib/postgresql/data etc/postgresql-custom var/lib/storage ) \
@@ -1096,7 +1099,7 @@ jobs:
             docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \
               || fail "the $service joins the Engine's network"
           done
-          docker run --rm --network gtmworks-engine-first -e INSTALL_SERVICE_IPS="$(install_service_ips)" -v "$PWD/scripts:/check:ro" \
+          docker run --rm --network gtmworks-engine-first -e INSTALL_SERVICE_IPS="$(install_service_ips)" -v "$root/scripts:/check:ro" \
             node:22.14.0-alpine3.21 node /check/check-install-engine-network.mjs || fail "the adopted Engine's network reaches no install service"
           if docker ps -aq --filter 'label=com.docker.compose.project=gtmworks-install' --filter 'label=com.docker.compose.service=hermes' | grep -q .; then
             fail 'the container the previous release ran the Engine in is retired'
@@ -1151,7 +1154,7 @@ jobs:
             node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail 'first run before company add'
           sh install.sh company add --name 'Second Company' --owner proxy-owner@example.com || fail 'company add before the update'
           for attempt in $(seq 1 240); do
-            db -F ' ' -c "select c.id,a.profile,e.address from public.companies c join public.hermes_agents a on a.company_id=c.id and a.is_default join public.company_engines e on e.id=c.engine_id order by c.created_at" > engines.txt
+            db -F ' ' -c "select c.id,a.profile,e.address from public.companies c join public.hermes_agents a on a.company_id=c.id and a.is_default join public.company_engines e on e.id=c.engine_id order by e.created_at" > engines.txt
             [[ $(grep -c . engines.txt || true) -ge 2 ]] && break
             [[ $attempt == 240 ]] && fail 'two Companies get a main Agent each on their own Engine'
             sleep 1

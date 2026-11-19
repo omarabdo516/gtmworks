@@ -388,7 +388,7 @@ test('the install job backs up and restores every Company Engine, refuses an inc
   "[[ -n $engine ]] || fail \"the restored install runs the Engine $name\"",
   "== 1 ]] || fail \"a Company's record names the Engine $name\"",
   "|| fail \"the $service joins the network of the Engine $name\"",
-  "[[ $(ls -d .engines/* | wc -l) == 2 ]] || fail 'the every-Engine restore brings both Engines back'",
+  "[[ $(ls -d .engines/*/ | wc -l) == \"$engines_before\" ]] || fail 'the every-Engine restore brings every Engine back'",
  ]) assert.ok(run.includes(text),text);
  // An archive naming an Engine without its data is refused before anything stops or changes.
  const incomplete=at('rm -rf "$incomplete/engines/$second_name"');
