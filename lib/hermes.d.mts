@@ -16,6 +16,21 @@ export function readModels(connection:import('./engine.mjs').EngineConnection):P
 export type ProfileModels={state:'found',models:Record<string,{provider:string,model:string}|null>}|{state:'refused'|'unreachable'|'failed',models:null};
 export function readProfileModels(connection:HermesConnection,profiles:string[]):Promise<ProfileModels>;
 export function writeProfileModel(connection:HermesConnection,change:{profile:string,provider:string,model:string}):Promise<{state:'saved',provider:string,model:string}|{state:'mismatch'|'refused'|'unreachable'|'failed',provider:null,model:null}>;
+// The Library of an Agent (#194, #353): one folder of one of the Agent's Library roots in its own Engine profile — its
+// work folder, or the images it generated — and one of its files.
+export type LibraryEntry={name:string,isFolder:boolean,size:number|null,time:string|null};
+export type LibraryList={state:'found',entries:LibraryEntry[]}|{state:'missing'|'refused'|'unreachable'|'invalid',entries:null};
+export type LibraryFile={state:'found',name:string,type:string,size:number,body:Uint8Array<ArrayBuffer>}|{state:'missing'|'refused'|'unreachable'|'invalid'|'tooLarge'};
+export type LibraryRoot='work'|'images';
+export function workSegments(raw:unknown):string[]|null;
+export function libraryRoot(raw:unknown):LibraryRoot|null;
+export function listAgentFiles(connection:import('./engine.mjs').EngineConnection,folder?:unknown,root?:unknown):Promise<LibraryList>;
+export function downloadAgentFile(connection:import('./engine.mjs').EngineConnection,file:{folder?:unknown,name?:unknown,root?:unknown}):Promise<LibraryFile>;
+// A file's first part, for the read-only preview (#195): its type, its whole size, whether more follows, and its text
+// (null when the Engine read it as binary).
+export type LibraryPreview={name:string,type:string,byteSize:number,truncated:boolean,text:string|null};
+export type LibraryPreviewRead={state:'found',name:string,type:string,byteSize:number,truncated:boolean,text:string|null}|{state:'missing'|'refused'|'unreachable'|'invalid'|'tooLarge'|'failed'};
+export function readAgentFile(connection:import('./engine.mjs').EngineConnection,file:{folder?:unknown,name?:unknown,root?:unknown}):Promise<LibraryPreviewRead>;
 export type ProfileTools={state:'configured'|'missing'|'refused'|'unreachable'|'failed',toolsets:string[]|null};
 export function provideProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,soul:string,config:object,forbidden:string[]}):Promise<ProfileTools>;
 export function configureProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,config:object,forbidden:string[]}):Promise<ProfileTools>;
@@ -59,6 +74,10 @@ export function setSkillEnabled(connection:import('./engine.mjs').EngineConnecti
 export function writeSkill(connection:import('./engine.mjs').EngineConnection,skill:{name:string,content:string}):Promise<{state:'written'|'shared'|'refused'|'unreachable'|'failed'}>;
 export function writeSharedSkill(connection:import('./engine.mjs').EngineConnection,skill:{space:string,name:string,content:string}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
 export function shareSkills(connection:import('./engine.mjs').EngineConnection,sharing:{profile:string,folder:string,skill:string}):Promise<{state:'shared'|'shadowed'|'missing'|'refused'|'unreachable'|'failed'}>;
+export function readMemoryNotes(connection:import('./engine.mjs').EngineConnection):Promise<import('./engine.mjs').MemoryNotes>;
+export function resetMemory(connection:import('./engine.mjs').EngineConnection):Promise<import('./engine.mjs').MemoryReset>;
+export function editMemoryNote(connection:import('./engine.mjs').EngineConnection,change:{note:string,text:string}):Promise<import('./engine.mjs').MemoryEdit>;
+export function forgetMemoryNote(connection:import('./engine.mjs').EngineConnection,change:{note:string}):Promise<import('./engine.mjs').MemoryForget>;
 export type ProviderKey={provider:string,label:string,set:boolean};
 export function readProviderKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',keys:ProviderKey[],lacking:string[],leftover:string[],unread:string[]}|{state:'refused'|'unreachable'|'failed',keys:null,lacking:null,leftover:null,unread:null}>;
 export function readHeldKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',held:Record<string,string[]>,unread:string[]}|{state:'refused'|'unreachable'|'failed',held:null,unread:null}>;

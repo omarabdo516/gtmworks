@@ -86,7 +86,7 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(details.locator('.born')).toContainText('Made on Jun 10 at your request');
  await expect(details.locator('.born').getByRole('link',{name:'See the ask',exact:true})).toHaveAttribute('href',`/c/rs-learning/conversations/${id(9)}`);
  await expect(details.getByRole('link',{name:'Settings for Meta Ads',exact:true})).toBeVisible();
- await expect(details.getByRole('tab')).toHaveText(['Activity','Tasks','Files','Memory · Soon','Log']);
+ await expect(details.getByRole('tab')).toHaveText(['Activity','Tasks','Files','Memory','Log']);
  const panel=details.getByRole('tabpanel');
  await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-activity');
 
@@ -114,12 +114,14 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await page.keyboard.press('ArrowRight');
  await expect(tab(details,'Files')).toBeFocused();
  await page.keyboard.press('ArrowRight');
+ await expect(tab(details,'Memory')).toBeFocused();
+ await page.keyboard.press('ArrowRight');
  await expect(tab(details,'Log')).toBeFocused();
  await expect(panel.locator('.dp-label > span')).toHaveText('Log 2');
  await expect(panel.locator('.lg-row .lg-line')).toHaveText(['عمر (you) added the agent “Meta Ads”','عمر (you) changed the agent “Meta Ads”']);
  await expect(panel.locator('.lg-forever')).toHaveText('Nothing in the log is ever deleted, not even by the Owner.');
  await page.keyboard.press('ArrowLeft');
- await expect(tab(details,'Files')).toHaveAttribute('aria-selected','true');
+ await expect(tab(details,'Memory')).toHaveAttribute('aria-selected','true');
  await tab(details,'Log').click();
  await panel.getByRole('link',{name:'Open the activity log',exact:true}).click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=a:${ads}$`));
@@ -137,7 +139,7 @@ test('the Files tab lists the Agent\'s Card files and the reader\'s own Conversa
  await tab(details,'Files').click();
  const panel=details.getByRole('tabpanel');
  await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-files');
- await expect(panel.locator('.dp-label > span')).toHaveText('Files 2');
+ await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 2');
  const rows=panel.locator('.panel-row');
  await expect(rows.locator('.panel-row__t')).toHaveText(['audiences.csv','june-brief.pdf']);
  await expect(rows.locator('.panel-row__d')).toHaveText(['18 KB · Plan the June campaign','86 KB · June campaign']);
@@ -161,7 +163,7 @@ test('a Contributor sees the Card file and their own Conversation file, never an
  const details=await openDetails(page,'reviewer@example.com',ads,'Meta Ads');
  await tab(details,'Files').click();
  const panel=details.getByRole('tabpanel');
- await expect(panel.locator('.dp-label > span')).toHaveText('Files 2');
+ await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 2');
  await expect(panel.locator('.panel-row__t')).toHaveText(['reviewer-notes.txt','june-brief.pdf']);
  await expect(panel).not.toContainText('audiences.csv');
  expect((await page.request.get(`/c/rs-learning/files/conversation/${fileId('reviewer-notes.txt')}`)).status()).toBe(200);
@@ -194,7 +196,7 @@ test('every file of the Agent is listed, past fifty, and the heading counts what
  const details=await openDetails(page,'omar@example.com',seo,'SEO');
  await tab(details,'Files').click();
  const panel=details.getByRole('tabpanel');
- await expect(panel.locator('.dp-label > span')).toHaveText('Files 51');
+ await expect(panel.locator('#dp-files-h > span')).toHaveText('Files 51');
  await expect(panel.locator('.panel-row')).toHaveCount(51);
  await expect(panel.locator('.panel-row__t').first()).toHaveText('file-51.txt');
  await expect(panel.locator('.panel-row__t').last()).toHaveText('file-1.txt');

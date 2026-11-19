@@ -7,7 +7,7 @@ import { i18n } from '@/lib/i18n.mjs';
 import { OverlayChrome } from '@/app/settings-overlay-chrome';
 import { BackLink } from '@/app/settings-overlay-frame';
 import { AgentAbout, AgentSaveBar, AgentSkills, type AgentSkillRow } from '@/app/settings-agent-form';
-import { MemoryTab } from '@/app/settings-memory-tab';
+import { AgentTabs } from '@/app/settings-agent-tabs';
 import { ToastHost } from '@/app/toast';
 import '@/app/globals.css';
 import '@/app/tokens.css';
@@ -34,7 +34,7 @@ const agentPage = (description = 'Runs the Meta ads.', skills: AgentSkillRow[] =
   <ToastHost />
   <OverlayChrome t={i18n('en').t} slug="rs-learning" companyName="RS Learning" role="owner" readOnly={false} section="agents" learningWaiting={0}>
    <BackLink className="link-btn sov-back" id="sov-back" slug="rs-learning" agent={agent}>All agents</BackLink>
-   <div role="tablist"><button type="button" role="tab" id="sov-tab-settings" aria-selected="true">Settings</button><MemoryTab label="Memory" soon="Soon"/></div>
+   <AgentTabs slug="rs-learning" agent={agent} tab="settings" label="Lead"/>
    <div id="sov-agent-panel"><AgentAbout agent={agent} name="Lead" description={description}/><AgentSkills agent={agent} name="Lead" slug="rs-learning" learning skills={skills} editable={editable}/></div>
    <AgentSaveBar company="10000000-0000-0000-0000-000000000001" agent={agent} name="Lead"/>
   </OverlayChrome>
@@ -107,9 +107,9 @@ for (const way of ['a section', 'All agents', 'the close button', 'Escape', 'the
   else if (way === 'All agents') await screen.getByRole('link', { name: 'All agents', exact: true }).click();
   else if (way === 'the close button') await screen.getByRole('button', { name: 'Close settings and go back' }).click();
   else if (way === 'Escape') await userEvent.keyboard('{Escape}');
-  else await screen.getByRole('tab', { name: 'Memory' }).click({ force: true });
+  else await screen.getByRole('tab', { name: 'Memory' }).click();
  } finally { clicks.stop(); }
- if (way === 'a section' || way === 'All agents') expect(clicks.prevented.at(-1), 'the page kept the click').toBe(true);
+ if (way === 'a section' || way === 'All agents' || way === 'the Memory tab') expect(clicks.prevented.at(-1), 'the page kept the click').toBe(true);
  expect(push).not.toHaveBeenCalled();
  await expect.element(screen.getByRole('button', { name: 'Save', exact: true })).toHaveFocus();
  await expect.poll(() => bar().className).toContain('is-flash');
