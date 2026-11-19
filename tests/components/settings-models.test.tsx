@@ -225,11 +225,19 @@ test('the default thinking level is the reference\'s read-only Medium with its l
 test('a sub-agent model is one choice that saves the provider and the bare model id apart, as the Engine reads them', async () => {
  const sent = stub();
  const settings = [
-  { key: 'delegation.model', type: 'string' as const, choices: null, default: '', value: '', limits: null, label: 'settingSubagentModel' },
+  { key: 'delegation.model', type: 'string' as const, choices: null, default: '', value: 'openai/gpt-5.5', limits: null, label: 'settingSubagentModel' },
   { key: 'delegation.provider', type: 'string' as const, choices: null, default: '', value: '', limits: null, label: 'settingSubagentProvider' },
  ];
  const screen = await renderNode(<EachAgent company={company} owner models={{ default: { model: 'openrouter/openai/gpt-5.5', options }, agents: [agent({ subagents: true, settings })] }}/>);
  await screen.getByRole('combobox', { name: en.settingSubagentModel }).selectOptions('openrouter/openai/gpt-5.5');
  await expect.poll(() => sent.length).toBe(1);
  expect(sent[0]).toEqual({ url: '/api/agent-settings', body: { company, agent: 'a-1', settings: { 'delegation.provider': 'openrouter', 'delegation.model': 'openai/gpt-5.5' } } });
+ // Changing the provider sends the model it runs on in the same request, so the Engine never holds one without the other.
+ await screen.getByRole('combobox', { name: en.settingSubagentProvider }).selectOptions('anthropic');
+ await expect.poll(() => sent.length).toBe(2);
+ expect(sent[1].body).toEqual({ company, agent: 'a-1', settings: { 'delegation.provider': 'anthropic', 'delegation.model': 'openai/gpt-5.5' } });
+ // Clearing the provider clears the pair together.
+ await screen.getByRole('combobox', { name: en.settingSubagentProvider }).selectOptions('');
+ await expect.poll(() => sent.length).toBe(3);
+ expect(sent[2].body).toEqual({ company, agent: 'a-1', settings: { 'delegation.provider': '', 'delegation.model': '' } });
 });

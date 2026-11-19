@@ -295,13 +295,27 @@ test('a sub-agent\'s model is one save of the provider and the bare model id the
   enabled: {
    const on=rows(); on[1]={...on[1],subagents:true};
    const {db}=database({rowsFor:on});
+   const before=fake.settings.managementRequests.length;
    const saved=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'openrouter','delegation.model':'anthropic/claude-opus-4.6'},hermes:install(fake),driver:driver(fake)});
    assert.equal(saved.state,'written',JSON.stringify(saved));
    assert.deepEqual(fake.settings.profiles.get(own(writer)).config.delegation,{provider:'openrouter',model:'anthropic/claude-opus-4.6'},'the Engine gets the provider and the model id, never provider/model in one key');
-   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'&&request.path.includes('/api/config')).map(request=>request.body),[
-    {config:{delegation:{provider:'openrouter'}}},
-    {config:{delegation:{model:'anthropic/claude-opus-4.6'}}},
-   ]);
+   assert.deepEqual(fake.settings.managementRequests.slice(before).filter(request=>request.method==='PUT'&&request.path.includes('/api/config')).map(request=>request.body),[
+    {config:{delegation:{provider:'openrouter',model:'anthropic/claude-opus-4.6'}}},
+   ],'the pair is one config update');
+   // Both values are checked before the one write: a bad second value sends nothing.
+   const refused=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'anthropic','delegation.max_concurrent_children':'3'},hermes:install(fake),driver:driver(fake)});
+   assert.deepEqual(refused,{state:'invalid',problem:'type'});
+   assert.equal(fake.settings.managementRequests.slice(before).filter(request=>request.method==='PUT').length,1,'no write follows a refused pair');
+   // A write the Engine refuses leaves neither half of the pair stored.
+   fake.settings.configWriteFail.add(own(writer));
+   const failed=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'anthropic','delegation.model':'claude-opus-4-6'},hermes:install(fake),driver:driver(fake)});
+   assert.notEqual(failed.state,'written',JSON.stringify(failed));
+   assert.deepEqual(fake.settings.profiles.get(own(writer)).config.delegation,{provider:'openrouter',model:'anthropic/claude-opus-4.6'},'neither key changed');
+   fake.settings.configWriteFail.delete(own(writer));
+   // A write the Engine accepts but does not apply is a mismatch, not a save.
+   fake.settings.staleConfig=true;
+   const stale=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'anthropic','delegation.model':'claude-opus-4-6'},hermes:install(fake),driver:driver(fake)});
+   assert.deepEqual(stale,{state:'mismatch',old:'openrouter'});
   }
  } finally { await fake.close(); }
 });

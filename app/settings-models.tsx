@@ -277,7 +277,7 @@ function SubagentFields({company,owner,agent}:{company:string,owner:boolean,agen
    </select>:<p className="ro-text">{(heldModel?`${heldProvider}${heldProvider?'/':''}${heldModel}`:'')||t('settingsModelsFollows')}</p>}
   </div>
   <div className="set-field"><label className="set-label" htmlFor={`mdl-sub-${agent.id}-provider`}>{t('settingSubagentProvider')}</label>
-   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-provider`} value={String(provider?.value??'')} disabled={busy} onChange={event=>write('delegation.provider',event.target.value)}>
+   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-provider`} value={String(provider?.value??'')} disabled={busy} onChange={event=>{ const next=event.target.value; writeMany(next?{'delegation.provider':next,'delegation.model':heldModel}:{'delegation.provider':'','delegation.model':''}); }}>
     <option value="">{t('settingsModelsFollows')}</option>
     {providerNames.map(([slug,name])=><option key={slug} value={slug}>{name}</option>)}
    </select>:<p className="ro-text">{String(provider?.value??'')||'—'}</p>}
