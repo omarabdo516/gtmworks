@@ -186,10 +186,11 @@ case "${1:-check}" in
  install)
   # The CI `install` job (scripts/ci-install-check.sh, #378) on an isolated Docker machine of its own, in a throwaway
   # checkout of HEAD: the job writes into the checkout it runs in, as it does on a CI runner. Commit first: uncommitted
-  # changes are not run.
-  work=$(mktemp -d); dind=gtmworks-install-docker-$$; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
+  # changes are not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there
+  # reaches its containers empty.
+  work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-docker-$$; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
   git worktree add -q --detach "$work/src" HEAD
-  trap 'docker rm -fv "$dind" > /dev/null 2>&1 || true; git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true' EXIT
+  trap 'docker rm -fv "$dind" > /dev/null 2>&1 || true; git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true; rm -rf "$work"' EXIT
   docker run -d --privileged --name "$dind" -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$port:2375" -v "$work/src:$work/src" docker:28.5.1-dind > /dev/null
   export DOCKER_HOST=tcp://127.0.0.1:$port RUNNER_TEMP=$work/tmp INSTALL_REF BASE_SHA
   INSTALL_REF=$(git rev-parse HEAD); BASE_SHA=${BASE_SHA:-$(git merge-base origin/main HEAD)}
