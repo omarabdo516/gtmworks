@@ -22,5 +22,8 @@
     "server-only",
     "tailwindcss",
     "@tailwindcss/typography"
+  ],
+  "ignoreBinaries": [
+    "ssh-keygen"
   ]
 }

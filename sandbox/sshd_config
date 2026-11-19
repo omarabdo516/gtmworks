@@ -1,0 +1,20 @@
+# The work sandbox's sshd: a key is the only way in, and the key is the one that arrived when the container started.
+# There is no password, no empty password, no interactive challenge, no root login and no user but the work user.
+Port 2222
+
+HostKey /home/pn/.ssh/ssh_host_ed25519_key
+PidFile /home/pn/.ssh/sshd.pid
+
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+PermitRootLogin no
+UsePAM no
+AllowUsers pn
+AuthorizedKeysFile .ssh/authorized_keys
+
+PrintMotd no
+PrintLastLog no
+AcceptEnv LANG LC_*
+Subsystem sftp internal-sftp
