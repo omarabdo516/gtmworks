@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { load } from 'js-yaml';
 
-// The install proof is four jobs (#406): the first install and its repeat with Companies, Agents, backup and restore
+// The install proof is four jobs (#406): the first install and its repeat with Agents, backup and restore
 // (`install-first`), and the public address behind a proxy, the update between releases and the one-line install, each
-// on a fresh isolated Docker machine of its own. Each job is one command of the repo, holds no check of its own, and
-// loads the one app image the run built (#403): no install job builds an image.
+// on a fresh isolated Docker machine of its own; Companies and their Engines runs as an area command of its own (#407).
+// Each job is one command of the repo, holds no check of its own, and loads the one app image the run built (#403): no
+// install job builds an image.
 const ci = load(readFileSync(resolve('.github/workflows/ci.yml'), 'utf8'));
 const areas = {
   'install-first': 'first-install',
@@ -70,7 +71,8 @@ test('no helper function is defined twice in the proof or its lib', () => {
 });
 
 // The proof is the spec's seven areas in the order it has always run them, all of them when no area is named, and one
-// area when one is (#406): the first-install job's four, then the proxy, the update and the one-line install.
+// area when one is (#406): the first-install job's areas, then the Companies area, the proxy, the update and the
+// one-line install.
 const seven = ['first_install', 'companies', 'agents', 'backup', 'proxy', 'update', 'one_line'];
 test('the install proof is the seven areas of the spec, run one after another when named all', () => {
   for (const area of seven) assert.match(script, new RegExp(`^${area}\\(\\) \\{$`, 'm'), area);
@@ -80,9 +82,19 @@ test('the install proof is the seven areas of the spec, run one after another wh
   assert.deepEqual(calls, seven, 'all seven run in their order');
 });
 
+// The Companies and their Engines area is a command of its own since #407: it makes the install and the first Company
+// it needs, and the first-install job no longer runs any of its checks.
+test('the Companies area is a command of its own, and the first-install job no longer runs it', () => {
+  const firstInstall = script.split('\n').find(line => /^ first-install\)/.test(line));
+  assert.ok(firstInstall, 'the first-install command exists');
+  assert.doesNotMatch(firstInstall, /\bcompanies\b/, 'the first-install job no longer runs the Companies area');
+  assert.match(script, /^ companies\) companies;;$/m);
+});
+
 test('each area is one command: no area runs all seven, and naming one runs only it', () => {
   for (const [job, area] of Object.entries(areas)) assert.match(script, new RegExp(`^ ${area}\\)`, 'm'), `${job} has a command`);
-  assert.match(script, /^ first-install\) first_install; companies; agents; backup;;$/m);
+  assert.match(script, /^ first-install\) first_install(;|;;)/m);
+  assert.match(script, /^ companies\) companies;;$/m);
   assert.match(script, /^ proxy\) proxy;;$/m);
   assert.match(script, /^ update\) update;;$/m);
   assert.match(script, /^ one-line\) one_line;;$/m);

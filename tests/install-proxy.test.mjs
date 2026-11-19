@@ -153,7 +153,8 @@ test('the install job runs first run and sign-in through an HTTPS proxy whose or
  assert.equal(checks.length,2,'the links check runs on the local and on the proxied install');
  const [local,proxied]=checks;
  assert.match(local[0],/-e APP_ORIGIN=http:\/\/localhost:3000 -e MAIL_URL=http:\/\/127\.0\.0\.1:8025/);
- assert.ok(at("sh scripts/install.sh || fail 'first install'") < local.index && local.index < at("cp .env.install .env.install.before"),'on the fresh local install');
+ const setup=at("complete_setup || fail 'emailed sign-in and invitation links on the local install'");
+ assert.ok(at("sh scripts/install.sh || fail 'first install'") < setup && setup < at("cp .env.install .env.install.before"),'on the fresh local install');
  assert.match(proxied[0],/-e APP_ORIGIN="\$public"/);
  assert.ok(at("sh scripts/install.sh || fail 'proxied install'") < proxied.index && proxied.index < at('check-install-rate-limit.mjs fresh'));
  // Both get the anon and service role keys from .env.install as an env file, so neither key is printed.

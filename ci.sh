@@ -220,5 +220,5 @@ case "${1:-check}" in
   umask 0000
   bash scripts/ci-install-check.sh "$@"
   ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install [first-install | proxy | update | one-line]' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install [first-install | companies | proxy | update | one-line]' >&2; exit 2;;
 esac

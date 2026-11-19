@@ -111,13 +111,15 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   that delivers it. No CI job compares a screen with `design/`, and no animation frame is sampled in CI.
 - `install` is the Docker install, update, backup, restore, release and one-line install. The proof is four jobs side
   by side, one per area of the repo's proof, each on a fresh isolated Docker machine of its own (#406): `install-first`
-  (the first install and its repeat, Companies and their Engines, Agents on their Engines, backup and restore),
-  `install-proxy`, `install-update` and `install-one-line`. Each job is one command of the repo — `bash
-  scripts/ci-install-check.sh first-install|proxy|update|one-line`; `./ci.sh install` runs the whole proof here and
-  `./ci.sh install proxy` one area (`docs/agents/checks.md`) — and holds no check of its own, so a red job's name is the
-  area that failed and one red area leaves the others running to their end. The three areas that already started from a
-  fresh install are independent: each makes the install, its local registry and its release files itself, so no area
-  needs another to have run. Every install job loads the one image the `image` job built, tagged as the source install's
+  (the first install and its repeat, Agents on their Engines, backup and restore), `install-proxy`, `install-update`
+  and `install-one-line`; Companies and their Engines is a command of its own since #407, and the first-install job no
+  longer runs it. Each job is one command of the repo — `bash scripts/ci-install-check.sh
+  first-install|companies|proxy|update|one-line`; `./ci.sh install` runs the whole proof here and `./ci.sh install
+  companies` one area (`docs/agents/checks.md`) — and holds no check of its own, so a red job's name is the area that
+  failed and one red area leaves the others running to their end. The four areas that started from a fresh install are
+  independent: the Companies area makes its install, first run and first Company itself, and the release areas make the
+  install, registry and release files they need, so no area needs another to have run. Every install job loads the one
+  image the `image` job built, tagged as the source install's
   own (`gtmworks-local:237`), and the installer skips its build for it (`GTMWORKS_IMAGE_PREBUILT`, tests only); the
   update area still builds the previous release from the pull request's base, which is a different image (#378). A job on
   a GitHub-hosted runner does not wait for its Docker machine's removal. It runs when the image, its build inputs, the
