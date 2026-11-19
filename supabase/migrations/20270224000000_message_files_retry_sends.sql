@@ -19,7 +19,7 @@ end $$;
 
 -- #355 review: two writers must not both pass the sender check of one send key and reserve different places under it.
 -- Each reserve takes a transaction-scoped advisory lock on the place and the send key, so its check and its insert are
--- one step for every caller: the same bodies as 20270219000000_message_files_retries.sql, with the lock added. A null
+-- one step for every caller: the same bodies as 20270223000000_message_files_retries.sql, with the lock added. A null
 -- key hashes to no lock and is refused by the checks below, as before.
 
 create or replace function public.reserve_conversation_files(conversation uuid, c uuid, message_key uuid, files jsonb)

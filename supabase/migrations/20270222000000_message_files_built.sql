@@ -105,7 +105,7 @@ end;
 $$;
 
 -- A message may be images alone only when its send key already keeps some: empty text with nothing to carry it is
--- refused, and so is text of spaces only, as before. post_channel_message, as 20270217000000_channel_message_files.sql
+-- refused, and so is text of spaces only, as before. post_channel_message, as 20270221000000_channel_message_files.sql
 -- left it, with only that rule changed.
 do $$
 declare def text;
