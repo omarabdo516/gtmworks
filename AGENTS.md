@@ -4,11 +4,11 @@ An open-source, self-hosted marketing operating system. Conversations run on an 
 
 ## How work is done
 
-Work arrives as a GitHub issue in this repo with an acceptance list. A UI change with no approved look names its approved prototype in the issue. The pull request body says `Part of #<n>` until the last ticket of the spec lands, the required check is `check`, and the pull request is reviewed on GitHub before it merges. CodeRabbit and Codex comments on GitHub are advisory.
+Work arrives as a spec issue with its tickets as sub-issues; one thread runs `/implement-spec` on branch `spec/<slug>`. The spec's one pull request closes the spec and every ticket it built, one `Closes #<n>` per line; a ticket left unbuilt is named in the body and stays open. The spec and its tickets are the scope: open an issue for anything else you find. A UI change with no approved look names its approved prototype in the issue. CodeRabbit and the `code-review` skill review the pull request; every review thread is fixed or answered.
 
-Every build uses Matt Pocock's engineering skills (configured in `docs/agents/`, see the Agent skills section of `CLAUDE.md`) with Ponytail. Money, secrets, deletion, release tags and repo settings stay with Omar: a build always pauses for them. Impeccable stays the design tool for screens (Design workflow below).
+Every build uses Matt Pocock's engineering skills (configured in `docs/agents/`, see the Agent skills section of `CLAUDE.md`) with Ponytail. Money, secrets, deletion, release tags and repo settings stay with Omar: write an `ASK-HERMES:` line and carry on with the rest of the work. Impeccable stays the design tool for screens (Design workflow below).
 
-Every pull request merges itself. Once `check` is green on the head and every review thread is fixed or answered and resolved, the builder turns on GitHub auto-merge (`gh pr merge <n> --auto --squash`), and GitHub merges it. This is the standing request to merge, so no build stops at merge-ready waiting for a person. Never merge directly, bypass the ruleset, or weaken a test to go green.
+Merge: every pull request merges itself by GitHub auto-merge (you arm it: `gh pr merge <n> --auto --squash`, once the PR is ready and CodeRabbit has posted) when its required check `check` is green and every review thread is fixed or answered and resolved; no build waits at merge-ready for a person. Never merge directly, bypass the ruleset, or weaken a test to go green.
 
 ## Before exploring, read these
 
