@@ -194,11 +194,19 @@ case "${1:-check}" in
   # One install lane at a time on this machine: a machine an interrupted run left behind is removed first.
   docker rm -fv "$dind" > /dev/null 2>&1 || true
   docker run -d --privileged --name "$dind" -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$port:2375" -v "$work/src:$work/src" docker:28.5.1-dind > /dev/null
+  host_docker=${DOCKER_HOST:-}
   export DOCKER_HOST=tcp://127.0.0.1:$port RUNNER_TEMP=$work/tmp INSTALL_REF BASE_SHA
   INSTALL_REF=$(git rev-parse HEAD); BASE_SHA=${BASE_SHA:-$(git merge-base origin/main HEAD)}
   mkdir -p "$RUNNER_TEMP"
   for attempt in $(seq 1 60); do docker info > /dev/null 2>&1 && break; sleep 1; done
   docker info > /dev/null
+  # Pulls inside this machine stall here (the nested network behind rootless Docker), so every image the job runs comes
+  # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
+  images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local'
+    awk '/^FROM/ && $2 ~ /[:@]/ {print $2}' Dockerfile
+    grep -o -h -E '(alpine:[0-9.]+|node:[0-9a-z.-]+|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
+  for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
+  DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null
   ln -s "$here/node_modules" "$work/src/node_modules"
   cd "$work/src"
   # Under rootless Docker this machine's root is the invoking user and its `--user $(id -u)` is another one, unlike a CI
