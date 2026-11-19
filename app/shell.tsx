@@ -19,6 +19,7 @@ import RecentChats from './recent-chats';
 import ChannelList from './channel-list';
 import { channelSidebar } from '@/lib/channels';
 import FirstRunChoice from './first-run-choice';
+import { chooseWorkMode } from './work-mode-actions';
 import NewChatKey from './new-chat-key';
 import { SidebarSearchProvider, SearchToggle, SearchBox } from './sidebar-search';
 import { Frame } from './frame';
@@ -67,7 +68,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
  const chats=conversations.map(c=>({id:c.id,created_at:c.created_at,title:c.conversation_messages[0]?.body.split('\n')[0]||c.agent_name}));
  const asksForAgents=writer&&!owner;
- const account=<><AccountMenu slug={slug} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
+ const account=<><AccountMenu slug={slug} company={company?.id} personId={personId} canManage={manage} owner={owner} alone={workMode==='alone'} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
  const sidebar=<SidebarSearchProvider>
   <div className="sb-top">
@@ -113,7 +114,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const asking=!!company?.id&&owner&&workMode===null;
  const mark=<svg className="ws__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--gw-accent)"/><path d="M21.5 11.5a7 7 0 1 0 1 7.5h-6.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
  const main=agents.find(agent=>agent.is_default);
- const question=asking&&company?<FirstRunChoice slug={company.slug} company={company.id} companyName={company.name} personName={personName} lead={main?{name:main.name,connection_id:main.connection_id}:null} mark={mark} brand={<>gtm<span>works</span></>}/>:null;
+ const question=asking&&company?<FirstRunChoice slug={company.slug} company={company.id} companyName={company.name} personName={personName} lead={main?{name:main.name,connection_id:main.connection_id}:null} mark={mark} brand={<>gtm<span>works</span></>} finish={chooseWorkMode}/>:null;
  const frame=<Frame sidebar={sidebar} title={chat?t('chats'):title} breadcrumb={chat?undefined:breadcrumb} chat={chat}>{children}</Frame>;
  // The apps sheet sits around the whole frame, so the sidebar, the account menu and every composer's "+" open it (#202).
  const framed=company?.id?<AppsSheetProvider company={company.id} owner={owner} rtl={language==='ar'}>{frame}</AppsSheetProvider>:frame;

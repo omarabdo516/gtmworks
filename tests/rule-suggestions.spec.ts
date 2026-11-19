@@ -76,6 +76,7 @@ test('the Owner makes one team-wide from "Waiting on you"; the Contributor reads
  await expect(page.locator('#sov-nav-learning')).toHaveAccessibleName(/^Learning\s*2 waiting for your OK$/);
  await page.goto('/c/rs-learning/approvals');
  await suggestion(page,saudi).getByRole('button',{name:'Make it team-wide'}).click();
+ await expect(page.locator('.toast')).toHaveText('The rule now applies team-wide for Ads');
  await expect(suggestion(page,saudi)).toHaveCount(0);
  await expect(suggestion(page,emojis)).toBeVisible();
  await page.goto(`/c/rs-learning/settings?agent=${ads}`);
@@ -99,6 +100,7 @@ test('a Manager declines the other; the Contributor reads that the agent won’t
  await signIn(page,'manager@example.com','/c/rs-learning/approvals');
  await expect(suggestion(page,saudi)).toHaveCount(0);
  await suggestion(page,emojis).getByRole('button',{name:'Decline'}).click();
+ await expect(page.locator('.toast')).toHaveText('Ads won’t save it');
  await expect(suggestion(page,emojis)).toHaveCount(0);
  await page.goto('/c/rs-learning/settings?section=learning');
  await expect(page.locator('#sov-nav-learning .sov-count')).toHaveCount(0);
