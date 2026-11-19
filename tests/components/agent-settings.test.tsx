@@ -7,6 +7,7 @@ import { i18n } from '@/lib/i18n.mjs';
 import { OverlayChrome } from '@/app/settings-overlay-chrome';
 import { BackLink } from '@/app/settings-overlay-frame';
 import { AgentAbout, AgentSaveBar, AgentSkills, type AgentSkillRow } from '@/app/settings-agent-form';
+import { seedDraft, useDraftValue, changedValues } from '@/app/settings-draft';
 import { AgentTabs } from '@/app/settings-agent-tabs';
 import { ToastHost } from '@/app/toast';
 import '@/app/globals.css';
@@ -30,7 +31,7 @@ let count = 0;
 const skillsOf = (list: {name:string,description?:string,enabled?:boolean,learned?:boolean}[]): AgentSkillRow[] => list.map(skill => ({ name: skill.name, description: skill.description ?? '', enabled: skill.enabled ?? true, learned: skill.learned ?? false }));
 const agentPage = (description = 'Runs the Meta ads.', skills: AgentSkillRow[] = [], editable = true) => {
  const agent = `ag-${++count}`;
- return render(<LanguageProvider language="en">
+ const view = render(<LanguageProvider language="en">
   <ToastHost />
   <OverlayChrome t={i18n('en').t} slug="rs-learning" companyName="RS Learning" role="owner" readOnly={false} section="agents" learningWaiting={0}>
    <BackLink className="link-btn sov-back" id="sov-back" slug="rs-learning" agent={agent}>All agents</BackLink>
@@ -39,6 +40,7 @@ const agentPage = (description = 'Runs the Meta ads.', skills: AgentSkillRow[] =
    <AgentSaveBar company="10000000-0000-0000-0000-000000000001" agent={agent} name="Lead"/>
   </OverlayChrome>
  </LanguageProvider>);
+ return Object.assign(view, { agent });
 };
 const bar = () => document.getElementById('dp-savebar')!;
 
@@ -96,6 +98,48 @@ test('a Save the server refuses says so and keeps the draft', async () => {
  await expect.element(screen.getByRole('alert')).toHaveTextContent('Could not save the settings. Try again.');
  await expect.element(field).toHaveValue('Something else.');
  await expect.poll(() => bar().hidden).toBe(false);
+});
+
+test('a Save that answers after another Agent is opened changes nothing on that Agent', async () => {
+ let respond!: (response: Response) => void;
+ const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() => new Promise<Response>(resolve => { respond = resolve; }));
+ const a = await agentPage('Runs the Meta ads.');
+ const aField = a.getByRole('textbox', { name: 'What Lead does' });
+ await aField.fill('A changed.');
+ await a.getByRole('button', { name: 'Save', exact: true }).click();
+ await expect.poll(() => fetchSpy.mock.calls.length).toBe(1);
+ // The person cancels and opens another Agent while A's save waits: the store is B's when A's answer arrives.
+ const other = `ag-other-${++count}`;
+ seedDraft(other, { about: 'Writes the Friday recap.' });
+ const b = await render(<LanguageProvider language="en"><DraftProbe agent={other}/></LanguageProvider>);
+ await expect.element(b.getByText('Writes the Friday recap.')).toBeVisible();
+ respond(new Response(JSON.stringify({ saved: { about: 'A from the server.' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+ await new Promise(resolve => setTimeout(resolve, 20));
+ await expect.element(b.getByText('Writes the Friday recap.')).toBeVisible();
+ expect(changedValues(other)).toEqual({});
+ await expect.poll(() => bar().hidden).toBe(true);
+ expect(document.querySelector('.toast')?.textContent ?? '').not.toContain('Saved.');
+});
+function DraftProbe({ agent }: { agent: string }) {
+ return <p>{useDraftValue(agent, 'about', '')}</p>;
+}
+
+test('an edit made while Save waits survives the read-back and keeps the bar', async () => {
+ let respond!: (response: Response) => void;
+ const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(() => new Promise<Response>(resolve => { respond = resolve; }));
+ const screen = await agentPage('Runs the Meta ads.');
+ const field = screen.getByRole('textbox', { name: 'What Lead does' });
+ await field.fill('first');
+ await screen.getByRole('button', { name: 'Save', exact: true }).click();
+ await expect.poll(() => fetchSpy.mock.calls.length).toBe(1);
+ await field.fill('second');
+ respond(new Response(JSON.stringify({ saved: { about: 'first' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+ // The read-back is what was saved, so Cancel goes back to it; the later edit stays in the draft and the bar stays open.
+ await expect.element(field).toHaveValue('second');
+ await expect.poll(() => bar().hidden).toBe(false);
+ await screen.getByRole('button', { name: 'Cancel' }).click();
+ await expect.element(field).toHaveValue('first');
+ await expect.poll(() => bar().hidden).toBe(true);
 });
 
 for (const way of ['a section', 'All agents', 'the close button', 'Escape', 'the Memory tab'] as const) test(`leaving by ${way} while the draft differs keeps the page, flashes the bar and puts the focus on Save`, async () => {

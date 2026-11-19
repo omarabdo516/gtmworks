@@ -1,9 +1,11 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
+import { userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n } from '@/lib/i18n.mjs';
 import { LearningSection } from '@/app/settings-learning';
+import { AgentLearningMode } from '@/app/settings-learning-client';
 import type { CompanyLearning } from '@/lib/company-learning.mjs';
 import '@/app/globals.css';
 import '@/app/tokens.css';
@@ -107,6 +109,51 @@ test('a reader below Owner sees the Company mode and each Agent\'s with no choic
  expect(reader.getByRole('radio').elements()).toHaveLength(2);
  expect(reader.getByRole('radio').elements().every(element => element.getAttribute('aria-disabled') === 'true')).toBe(true);
  expect(reader.getByRole('radiogroup', { name: 'Lead' }).elements()).toHaveLength(0);
+ // With no mode marked, the first choice still receives the Tab stop.
+ expect(reader.getByRole('radio').elements()[0].tabIndex).toBe(0);
+});
+
+test('the mode choices are one Tab stop and the arrow keys move and select them, left in Arabic', async () => {
+ const view = await screen('en', { value: { ...data, agents: (data.agents ?? []).map(agent => ({ ...agent, follow: false, mode: 'auto' as const })) } });
+ const auto = companyModes(view).getByRole('radio', { name: /^Learns on its own/ });
+ const ask = companyModes(view).getByRole('radio', { name: /^Asks first/ });
+ await expect.element(auto).toHaveAttribute('aria-checked', 'true');
+ expect(auto.element().tabIndex).toBe(0);
+ expect(ask.element().tabIndex).toBe(-1);
+ auto.element().focus();
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+ expect(await bodyOf(0)).toEqual({ company, mode: 'ask' });
+ expect(document.activeElement?.id).toBe(`ln-co-ask`);
+ await view.unmount();
+ const arabic = await screen('ar', { value: { ...data, agents: (data.agents ?? []).map(agent => ({ ...agent, follow: false, mode: 'auto' as const })) } });
+ const arabicAuto = arabic.getByRole('radiogroup', { name: 'للشركة كلها' }).getByRole('radio', { name: /^يتعلّم لوحده/ });
+ await expect.element(arabicAuto).toHaveAttribute('aria-checked', 'true');
+ arabicAuto.element().focus();
+ await userEvent.keyboard('{ArrowLeft}');
+ await expect.poll(() => fetchMock.mock.calls.length).toBe(2);
+ expect(await bodyOf(1)).toEqual({ company, mode: 'ask' });
+ expect(document.activeElement?.id).toBe('ln-co-ask');
+});
+
+test('one Agent\'s mode is one Tab stop and the arrow keys move and select it; a mode it has not chosen still has one', async () => {
+ const view = await screen('en', { value: { ...data, agents: [{ id: writer, name: 'Writer', own: true, shared: false, follow: false, mode: 'auto', learned: null }] } });
+ const writerModes = view.getByRole('radiogroup', { name: 'Writer' });
+ const auto = writerModes.getByRole('radio', { name: 'Learns on its own', exact: true });
+ const ask = writerModes.getByRole('radio', { name: 'Asks first', exact: true });
+ await expect.element(auto).toHaveAttribute('aria-checked', 'true');
+ expect(auto.element().tabIndex).toBe(0);
+ expect(ask.element().tabIndex).toBe(-1);
+ auto.element().focus();
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+ expect(await bodyOf(0)).toEqual({ company, agent: writer, mode: 'ask' });
+ expect(document.activeElement?.id).toBe(`ln-${writer}-ask`);
+ await view.unmount();
+ // A mode the screen does not know leaves the first choice as the group's one Tab stop.
+ const unknown = await render(<LanguageProvider language="en"><AgentLearningMode company={company} agent={writer} labelId="ln-t" mode={null} follows={false}/></LanguageProvider>);
+ expect(unknown.getByRole('radio', { name: 'Learns on its own' }).element().tabIndex).toBe(0);
+ expect(unknown.getByRole('radio', { name: 'Asks first' }).element().tabIndex).toBe(-1);
 });
 
 test('a Company whose Agents disagree reads as mixed, and an Agent whose profile cannot be read says so', async () => {

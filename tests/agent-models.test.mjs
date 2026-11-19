@@ -164,6 +164,47 @@ test('the Company default reaches the shared space and every Agent without its o
  } finally { await fake.close(); }
 });
 
+test('the default model is written to the shared space before any Agent, so a space the Engine refuses changes none', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake); schema(fake);
+  // The Engine serves the profile list but refuses the shared space's model write.
+  fake.settings.profiles.delete(space);
+  const {db,logged}=database();
+  const before=requestsTo(fake,'/model').length;
+  const result=await changeCompanySetting(db,{company,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
+  assert.notEqual(result.state,'written',JSON.stringify(result));
+  assert.deepEqual(requestsTo(fake,'/model').slice(before).map(request=>request.path),[`/api/profiles/${space}/model`],'the shared space is the only write sent');
+  assert.equal(fake.settings.profiles.get(companyProfileName).model,'openai/gpt-5.5','no follower took the new default');
+  assert.equal(fake.settings.profiles.get(own(writer)).model,'openai/gpt-5.5');
+  assert.deepEqual(logged(),[],'nothing changed, so nothing is logged');
+ } finally { await fake.close(); }
+});
+
+test('a default that reaches the Company but not an Agent names it, and sending it again lands on that Agent', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake); schema(fake);
+  // The Engine no longer serves Writer's own profile, so its write fails after the shared space and Lead took the model.
+  fake.settings.profiles.delete(own(writer));
+  const {db,logged}=database();
+  const partial=await changeCompanySetting(db,{company,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
+  assert.equal(partial.state,'written',JSON.stringify(partial));
+  assert.equal(partial.space,true);
+  assert.deepEqual(partial.failed,[{agent:writer,name:'Writer'}],'the Agent the default did not reach is named');
+  assert.deepEqual(partial.agents.map(agent=>[agent.name,agent.written]),[['Lead',true],['Writer',false],['Critic',false]]);
+  assert.equal(fake.settings.profiles.get(companyProfileName).model,'anthropic/claude-opus-4.6');
+  assert.deepEqual(logged().map(row=>row.agent),[lead],'only the Agent that changed is logged');
+  // The Owner sends the same default again once the profile is back: it reaches Writer and names no failure.
+  profileOn(fake,own(writer),{provider:'openrouter',model:'openai/gpt-5.5'});
+  const retried=await changeCompanySetting(db,{company,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
+  assert.equal(retried.state,'written',JSON.stringify(retried));
+  assert.deepEqual(retried.failed,[]);
+  assert.equal(fake.settings.profiles.get(own(writer)).model,'anthropic/claude-opus-4.6');
+  assert.deepEqual(logged().map(row=>row.agent),[lead,writer]);
+ } finally { await fake.close(); }
+});
+
 test('one Agent\'s model is written to its own profile and remembered as its choice; following the default clears it', async () => {
  const fake=await fakeHermes();
  try {
@@ -254,13 +295,27 @@ test('a sub-agent\'s model is one save of the provider and the bare model id the
   enabled: {
    const on=rows(); on[1]={...on[1],subagents:true};
    const {db}=database({rowsFor:on});
+   const before=fake.settings.managementRequests.length;
    const saved=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'openrouter','delegation.model':'anthropic/claude-opus-4.6'},hermes:install(fake),driver:driver(fake)});
    assert.equal(saved.state,'written',JSON.stringify(saved));
    assert.deepEqual(fake.settings.profiles.get(own(writer)).config.delegation,{provider:'openrouter',model:'anthropic/claude-opus-4.6'},'the Engine gets the provider and the model id, never provider/model in one key');
-   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'&&request.path.includes('/api/config')).map(request=>request.body),[
-    {config:{delegation:{provider:'openrouter'}}},
-    {config:{delegation:{model:'anthropic/claude-opus-4.6'}}},
-   ]);
+   assert.deepEqual(fake.settings.managementRequests.slice(before).filter(request=>request.method==='PUT'&&request.path.includes('/api/config')).map(request=>request.body),[
+    {config:{delegation:{provider:'openrouter',model:'anthropic/claude-opus-4.6'}}},
+   ],'the pair is one config update');
+   // Both values are checked before the one write: a bad second value sends nothing.
+   const refused=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'anthropic','delegation.max_concurrent_children':'3'},hermes:install(fake),driver:driver(fake)});
+   assert.deepEqual(refused,{state:'invalid',problem:'type'});
+   assert.equal(fake.settings.managementRequests.slice(before).filter(request=>request.method==='PUT').length,1,'no write follows a refused pair');
+   // A write the Engine refuses leaves neither half of the pair stored.
+   fake.settings.configWriteFail.add(own(writer));
+   const failed=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'anthropic','delegation.model':'claude-opus-4-6'},hermes:install(fake),driver:driver(fake)});
+   assert.notEqual(failed.state,'written',JSON.stringify(failed));
+   assert.deepEqual(fake.settings.profiles.get(own(writer)).config.delegation,{provider:'openrouter',model:'anthropic/claude-opus-4.6'},'neither key changed');
+   fake.settings.configWriteFail.delete(own(writer));
+   // A write the Engine accepts but does not apply is a mismatch, not a save.
+   fake.settings.staleConfig=true;
+   const stale=await changeCompanySettings(db,{company,agent:writer,settings:{'delegation.provider':'anthropic','delegation.model':'claude-opus-4-6'},hermes:install(fake),driver:driver(fake)});
+   assert.deepEqual(stale,{state:'mismatch',old:'openrouter'});
   }
  } finally { await fake.close(); }
 });

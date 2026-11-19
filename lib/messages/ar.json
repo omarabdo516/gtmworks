@@ -1276,5 +1276,7 @@
   "ideaAdded": "الفكرة اتضافت",
   "boardNewIdeaFrom": "فكرة جديدة من {0}",
   "logActIdeaAdded": "ضاف فكرة",
-  "addedAnIdea": "ضاف فكرة"
+  "addedAnIdea": "ضاف فكرة",
+  "settingsModelsNotReached": "الافتراضي الجديد موصلش لـ {0}.",
+  "settingsModelsRetry": "ابعتها تاني"
 }

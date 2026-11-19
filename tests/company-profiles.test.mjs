@@ -660,7 +660,7 @@ function agentWorkerDatabase(rows,{log=[],failRecord=false}={}) {
   if(name==='agent_profile_work') return {data:rows.filter(lags).sort((a,b)=>Number(a.tools_level!=null)-Number(b.tools_level!=null)).map(found=>({...found})),error:null};
   if(name==='begin_agent_tools') { row.tools_pending=true; return {data:null,error:null}; }
   if(name==='record_agent_profile') {
-   if(failRecord||args.engine_profile!==row.profile||args.policy!==toolPolicy||args.subagents!==row.subagents) return {data:null,error:{message:'agentProfileInvalid'}};
+   if(failRecord||args.engine_profile!==row.profile||args.policy!==toolPolicy||args.subagents_written!==row.subagents) return {data:null,error:{message:'agentProfileInvalid'}};
    Object.assign(row,{tools_level:args.level,tools_policy:args.policy,tools_pending:false}); return {data:null,error:null};
   }
   if(name==='forget_company_profile') { const lost=rows.find(found=>found.profile===args.engine_profile); Object.assign(lost,{tools_level:null,tools_policy:null,tools_pending:false}); return {data:true,error:null}; }
@@ -682,7 +682,7 @@ test('after a level change every Agent profile gets the new tools, each marked b
   `begin_agent_tools ${writer}`,`configure ag-${writer.replaceAll('-','')}`,`record_agent_profile ${writer}`,
   `begin_agent_tools ${critic}`,`configure ag-${critic.replaceAll('-','')}`,`record_agent_profile ${critic}`]);
  for(const call of db.log.filter(({name})=>name==='configure')) assert.deepEqual(call.args,{name:call.args.name,config:levelConfig(3),forbidden:levelConfig(3).agent.disabled_toolsets});
- assert.deepEqual(db.log.filter(({name})=>name==='record_agent_profile').map(({args})=>args),[writer,critic].map(agent=>({agent,engine_profile:`ag-${agent.replaceAll('-','')}`,level:3,policy:toolPolicy,subagents:false})));
+ assert.deepEqual(db.log.filter(({name})=>name==='record_agent_profile').map(({args})=>args),[writer,critic].map(agent=>({agent,engine_profile:`ag-${agent.replaceAll('-','')}`,level:3,policy:toolPolicy,subagents_written:false})));
  assert.ok(db.rows.every(row=>row.tools_level===3&&!row.tools_pending));
  db.log.length=0;
  assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:0,configured:0});
@@ -696,7 +696,7 @@ test('the worker writes an Agent\'s sub-agents choice with the policy\'s delegat
  const written=db.log.find(({name})=>name==='configure');
  assert.deepEqual(written.args.config,levelConfig(2,{subagents:true}));
  assert.ok(written.args.config.platform_toolsets.api_server.includes('delegation'));
- assert.deepEqual(db.log.find(({name})=>name==='record_agent_profile').args,{agent:writer,engine_profile:`ag-${writer.replaceAll('-','')}`,level:2,policy:toolPolicy,subagents:true});
+ assert.deepEqual(db.log.find(({name})=>name==='record_agent_profile').args,{agent:writer,engine_profile:`ag-${writer.replaceAll('-','')}`,level:2,policy:toolPolicy,subagents_written:true});
 });
 
 test('a write the Engine did not apply leaves its profile marked and unrecorded, so no Run starts on it, and the next profile is still kept', async () => {

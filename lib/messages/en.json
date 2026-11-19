@@ -1276,5 +1276,7 @@
   "ideaAdded": "Idea added",
   "boardNewIdeaFrom": "New idea from {0}",
   "logActIdeaAdded": "added an idea",
-  "addedAnIdea": "Added an idea"
+  "addedAnIdea": "Added an idea",
+  "settingsModelsNotReached": "The new default did not reach {0}.",
+  "settingsModelsRetry": "Send it again"
 }

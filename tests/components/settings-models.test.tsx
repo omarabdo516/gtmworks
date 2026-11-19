@@ -1,8 +1,9 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { ProviderKeys, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { ToastHost } from '@/app/toast';
 import en from '@/lib/messages/en.json';
 import ar from '@/lib/messages/ar.json';
 import '@/app/tokens.css';
@@ -121,6 +122,24 @@ test('a member below Owner reads every model and the sub-agents state with no co
   expect(document.body.textContent).not.toContain(key);
 });
 
+test('the default names the Agents it did not reach and the Owner can send it again, with no success toast until it lands', async () => {
+ const bodies: object[] = [];
+ vi.stubGlobal('fetch', (_url: string, init: RequestInit) => {
+  bodies.push(JSON.parse(String(init.body)) as object);
+  const failed = bodies.length === 1 ? [{ agent: 'a-2', name: 'Critic' }] : [];
+  return Promise.resolve(new Response(JSON.stringify({ agents: [{ agent: 'a-1', name: 'Writer', written: failed.length === 0 }], failed }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+ });
+ const screen = await renderNode(<><ToastHost/><DefaultModel company={company} owner models={{ model: 'openrouter/openai/gpt-5.5', options }}/></>);
+ await screen.getByRole('radio', { name: /claude-opus-4-6/ }).click();
+ await expect.element(screen.getByText(en.settingsModelsNotReached.replace('{0}', 'Critic'))).toBeVisible();
+ expect(document.querySelector('.toast')?.textContent ?? '').not.toContain(en.settingsModelsSaved);
+ await screen.getByRole('button', { name: en.settingsModelsRetry }).click();
+ await expect.poll(() => bodies.length).toBe(2);
+ expect(bodies[1]).toEqual(bodies[0]);
+ await expect.poll(() => document.querySelector('.toast')?.textContent ?? '').toContain(en.settingsModelsSaved);
+ await expect.element(screen.getByText(en.settingsModelsNotReached.replace('{0}', 'Critic'))).not.toBeInTheDocument();
+});
+
 test('an Agent\'s "Thinks with" rows change its own profile\'s model, and an Agent on the Company profile only reads', async () => {
   const sent = stub();
   const screen = await renderNode(<AgentModel company={company} agent="a-1" name="Writer" model="openrouter/openai/gpt-5.5" options={options} choosable owner/>);
@@ -131,6 +150,58 @@ test('an Agent\'s "Thinks with" rows change its own profile\'s model, and an Age
   await renderNode(<AgentModel company={company} agent="lead" name="Lead" model="openrouter/openai/gpt-5.5" options={[]} choosable={false} owner/>);
   expect(document.querySelectorAll('[role=radio]')).toHaveLength(0);
   expect(document.getElementById('set-model')?.textContent).toContain('gpt-5.5');
+});
+
+test('the model choices are one Tab stop and the arrow keys move and select them, left in Arabic', async () => {
+ const sent = stub();
+ const screen = await renderNode(<DefaultModel company={company} owner models={{ model: 'openrouter/openai/gpt-5.5', options }}/>);
+ const first = screen.getByRole('radio', { name: /gpt-5.5/ });
+ const second = screen.getByRole('radio', { name: /claude-opus-4-6/ });
+ await expect.element(first).toHaveAttribute('aria-checked', 'true');
+ expect(first.element().tabIndex).toBe(0);
+ expect(second.element().tabIndex).toBe(-1);
+ first.element().focus();
+ await userEvent.keyboard('{ArrowDown}');
+ await expect.poll(() => sent.length).toBe(1);
+ expect(sent[0]).toEqual({ url: '/api/agent-settings', body: { company, setting: 'model', value: 'anthropic/claude-opus-4-6' } });
+ expect(document.activeElement?.textContent).toContain('claude-opus-4-6');
+ await screen.unmount();
+ const arabic = await renderNode(<DefaultModel company={company} owner models={{ model: 'openrouter/openai/gpt-5.5', options }}/>, 'ar');
+ arabic.getByRole('radio', { name: /gpt-5.5/ }).element().focus();
+ await userEvent.keyboard('{ArrowLeft}');
+ await expect.poll(() => sent.length).toBe(2);
+ expect(sent[1].body).toEqual({ company, setting: 'model', value: 'anthropic/claude-opus-4-6' });
+ await arabic.unmount();
+ const agent = await renderNode(<AgentModel company={company} agent="a-1" name="Writer" model="openrouter/openai/gpt-5.5" options={options} choosable owner/>);
+ const agentFirst = agent.getByRole('radio', { name: /gpt-5.5/ });
+ const agentSecond = agent.getByRole('radio', { name: /claude-opus-4-6/ });
+ expect(agentFirst.element().tabIndex).toBe(0);
+ expect(agentSecond.element().tabIndex).toBe(-1);
+ agentFirst.element().focus();
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.poll(() => sent.length).toBe(3);
+ expect(sent[2].body).toEqual({ company, agent: 'a-1', setting: 'model', value: 'anthropic/claude-opus-4-6' });
+ expect(document.activeElement?.textContent).toContain('claude-opus-4-6');
+});
+
+test('a group with no model marked still gives its first choice the Tab stop and the keyboard can pick it', async () => {
+ const sent = stub();
+ const screen = await renderNode(<DefaultModel company={company} owner models={{ model: null, options }}/>);
+ const first = screen.getByRole('radio', { name: /gpt-5.5/ });
+ expect(first.element().tabIndex).toBe(0);
+ expect(screen.getByRole('radio', { name: /claude-opus-4-6/ }).element().tabIndex).toBe(-1);
+ first.element().focus();
+ await userEvent.keyboard('{ArrowDown}');
+ await expect.poll(() => sent.length).toBe(1);
+ expect(sent[0].body).toEqual({ company, setting: 'model', value: 'openrouter/openai/gpt-5.5' });
+ await screen.unmount();
+ const agent = await renderNode(<AgentModel company={company} agent="a-1" name="Writer" model={null} options={options} choosable owner/>);
+ const agentFirst = agent.getByRole('radio', { name: /gpt-5.5/ });
+ expect(agentFirst.element().tabIndex).toBe(0);
+ agentFirst.element().focus();
+ await userEvent.keyboard('{ArrowDown}');
+ await expect.poll(() => sent.length).toBe(2);
+ expect(sent[1].body).toEqual({ company, agent: 'a-1', setting: 'model', value: 'openrouter/openai/gpt-5.5' });
 });
 
 test('each Agent in "Each agent" reads its model and its own thinking level', async () => {
@@ -154,11 +225,19 @@ test('the default thinking level is the reference\'s read-only Medium with its l
 test('a sub-agent model is one choice that saves the provider and the bare model id apart, as the Engine reads them', async () => {
  const sent = stub();
  const settings = [
-  { key: 'delegation.model', type: 'string' as const, choices: null, default: '', value: '', limits: null, label: 'settingSubagentModel' },
+  { key: 'delegation.model', type: 'string' as const, choices: null, default: '', value: 'openai/gpt-5.5', limits: null, label: 'settingSubagentModel' },
   { key: 'delegation.provider', type: 'string' as const, choices: null, default: '', value: '', limits: null, label: 'settingSubagentProvider' },
  ];
  const screen = await renderNode(<EachAgent company={company} owner models={{ default: { model: 'openrouter/openai/gpt-5.5', options }, agents: [agent({ subagents: true, settings })] }}/>);
  await screen.getByRole('combobox', { name: en.settingSubagentModel }).selectOptions('openrouter/openai/gpt-5.5');
  await expect.poll(() => sent.length).toBe(1);
  expect(sent[0]).toEqual({ url: '/api/agent-settings', body: { company, agent: 'a-1', settings: { 'delegation.provider': 'openrouter', 'delegation.model': 'openai/gpt-5.5' } } });
+ // Changing the provider sends the model it runs on in the same request, so the Engine never holds one without the other.
+ await screen.getByRole('combobox', { name: en.settingSubagentProvider }).selectOptions('anthropic');
+ await expect.poll(() => sent.length).toBe(2);
+ expect(sent[1].body).toEqual({ company, agent: 'a-1', settings: { 'delegation.provider': 'anthropic', 'delegation.model': 'openai/gpt-5.5' } });
+ // Clearing the provider clears the pair together.
+ await screen.getByRole('combobox', { name: en.settingSubagentProvider }).selectOptions('');
+ await expect.poll(() => sent.length).toBe(3);
+ expect(sent[2].body).toEqual({ company, agent: 'a-1', settings: { 'delegation.provider': '', 'delegation.model': '' } });
 });
