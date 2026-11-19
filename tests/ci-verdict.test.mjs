@@ -104,6 +104,14 @@ test('the integration job runs as 6 shards, each uploading its own artifacts, an
   assert.match(ci, /npm run test:e2e -- "\$@"\n/);
 });
 
+// #410: a job that runs past its `timeout-minutes` ends as a failure or as cancelled, the two ways GitHub ends it, and
+// either turns the required check red for the install proof and the browser suite alike.
+test('a job that ran past its limit turns check red', () => {
+  for (const stage of ['INSTALL', 'INTEGRATION']) {
+    for (const result of ['failure', 'cancelled']) assert.equal(verdict({ [`${stage}_RESULT`]: result }), 1, `${stage}=${result}`);
+  }
+});
+
 // The install proof runs as a matrix (#406) with fail-fast off: GitHub's one result for the matrix is a failure or
 // cancelled when any area is, so it alone judges them, and a skipped install passes only when it was not asked for.
 test('the install proof is red when one area failed or was cancelled, green when all passed', () => {

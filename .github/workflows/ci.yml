@@ -44,7 +44,8 @@ concurrency:
 jobs:
   changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 0.2 min measured on run 44636876755: 3 min is 1.5 times it, floored at 3 (#410).
+    timeout-minutes: 3
     permissions:
       contents: read
       actions: read
@@ -105,6 +106,7 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    # 2.7 min measured on run 44636876755: 5 min is 1.5 times it, rounded up (#410).
     timeout-minutes: 5
     permissions:
       contents: read
@@ -190,7 +192,8 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 0.1 min measured on run 44636876755: 3 min is 1.5 times it, floored at 3 (#410).
+    timeout-minutes: 3
     continue-on-error: true
     permissions:
       contents: read
@@ -233,7 +236,8 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 2.1 min measured on run 44636876755: 4 min is 1.5 times it, rounded up (#410).
+    timeout-minutes: 4
     permissions:
       contents: read
     steps:
@@ -361,7 +365,7 @@ jobs:
             gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
 
-  # The app image, built once per run with its own layer cache (#403). The browser suite's shards, the install job and
+  # The app image, built once per run with its own layer cache (#403). The browser suite's shards, the install proof and
   # the measurement load this archive instead of each building the image again, so one run pays for one build; a change
   # that leaves the dependencies alone restores them from the cache. Next's build repeats no lint and no type check the
   # fast job already ran (NEXT_SKIP_CHECKS, next.config.mjs). It follows the answers of the suites that load it — the
@@ -371,7 +375,8 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 3.7 min measured on run 44636876755: 6 min is 1.5 times it, rounded up (#410).
+    timeout-minutes: 6
     permissions:
       contents: read
     steps:
@@ -412,9 +417,8 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6]
-    # main's browser suite already took 24 of 25 minutes on one runner (run 43398274074); a shard takes about a sixth,
-    # and the limit leaves room for a slow shard and its stack's start.
-    timeout-minutes: 40
+    # 10.6 min measured for the slowest shard on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
+    timeout-minutes: 12
     permissions:
       contents: read
     steps:
@@ -545,8 +549,8 @@ jobs:
       fail-fast: false
       matrix:
         area: [first-install, companies, agents, backup, proxy, update, one-line]
-    # The proof's own areas add a fresh stack and a real install of this release (#402).
-    timeout-minutes: 90
+    # 9.5 min measured for its slowest area, backup, on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
+    timeout-minutes: 12
     permissions:
       contents: read
     steps:
@@ -643,6 +647,8 @@ jobs:
     needs: [changes, fast, image, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
+    # 0.1 min measured on run 44636876755: 3 min is 1.5 times it, floored at 3 (#410).
+    timeout-minutes: 3
     permissions:
       contents: read
     steps:

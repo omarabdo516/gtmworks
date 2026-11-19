@@ -8,7 +8,7 @@ already proves its promise, when it checks only implementation detail or wording
 step every other test walks through. The first-run setup link (#50), the release install and update (decision 0015),
 contrast, and the English/Arabic direction checks are never removed.
 
-## How CI runs them
+## What runs when: how CI runs them
 
 As Hermes and T3 Code run their CI (#76): a first job decides what runs, the fast layers run on every pull request, and
 the whole-app browser and install suites run only when their own area changed, on `main`, or when asked for by hand.
@@ -67,8 +67,8 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   with its layers kept between runs (`cache-from: type=gha`, `cache-to: type=gha,mode=max`), so a change that leaves the
   dependencies alone restores them. It passes `NEXT_SKIP_CHECKS=true`, so `next build` repeats no lint and no type check
   `fast` already ran (`next.config.mjs`); a release image and a local build keep both. It uploads the image as the
-  `gtmworks-image` artifact, kept for a day and stored uncompressed. `integration`, the install job and the
-  measurement job wait for it and load that image from the artifact: no shard and no install job builds an image of its
+  `gtmworks-image` artifact, kept for a day and stored uncompressed. `integration`, the install proof and the
+  measurement job wait for it and load that image from the artifact: no shard and no install area builds an image of its
   own, and `check` is red when the build failed or was cancelled.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the functional journeys and
   first run, on the image the `image` job built, loaded from its artifact (a shard builds nothing, #403). Its dependencies and its browser come from the caches the `fast` job keeps, restored by the same keys (the
@@ -115,10 +115,11 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   (#406): `install-first-install` (the first install and its repeat), `install-companies` (Companies and their Engines,
   #407), `install-agents` (Agents on their Engines, #408), `install-backup` (backup and restore, #409),
   `install-proxy` (the public address behind a proxy), `install-update` (the update between releases) and
-  `install-one-line` (the one-line install). Each entry is one command of the repo — `bash scripts/ci-install-check.sh
-  first-install|companies|agents|backup|proxy|update|one-line`; `./ci.sh install` runs the whole proof here and
-  `./ci.sh install proxy` one area (`docs/agents/checks.md`) — and holds no check of its own, so a red entry's name is
-  the area that failed and fail-fast is off: one red area leaves the others running to their end. A new area is one more
+  `install-one-line` (the one-line install). Each entry is one command of the repo, `bash scripts/ci-install-check.sh
+  <area>`; here `./ci.sh install first-install`, `./ci.sh install companies`, `./ci.sh install agents`,
+  `./ci.sh install backup`, `./ci.sh install proxy`, `./ci.sh install update` and `./ci.sh install one-line` each run one
+  area, and `./ci.sh install` runs the whole proof (`docs/agents/checks.md`) — and holds no check of its own, so a red
+  entry's name is the area that failed and fail-fast is off: one red area leaves the others running to their end. A new area is one more
   matrix entry and one more case of the script. Every area is independent: each makes the install, its first run, the
   Companies, the archives, its local registry and its release files itself, so no area needs another to have run (#406,
   #407, #408, #409); the profile-size measurement is the `install-measure` job below. Every entry loads the one image
@@ -168,7 +169,7 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   not guarded. The visual lane (#257, which aborts outside requests with guards of its own) and
   the install suite, which drives a real install on purpose, are not guarded, nor yet the containers' network.
   `provider-hosts.test.mjs` fails `static` when a tracked file under `tests/` names a real model provider host
-  (`scripts/provider-hosts.mjs`): tests talk to the fake engine, the fake Hermes or the install job's fake provider.
+  (`scripts/provider-hosts.mjs`): tests talk to the fake engine, the fake Hermes or the install proof's fake provider.
 - The nightly `Time zones` workflow (`time-zones.yml`, #266) runs the node tests (`npm test`) and `./ci.sh components`
   under `TZ=Africa/Cairo` and `TZ=America/Sao_Paulo`. The day boundary is checked with fixed instants in the runner's
   zone, so it holds whatever the hour; the run is set for 02:35 UTC, 23:35 in Sao Paulo while Cairo and UTC are on the
@@ -176,6 +177,23 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   to the job summary. It holds `contents: read` only and reads no secret. Day boundaries are checked with
   `tests/clock.mjs` in the runner's own zone (`sidebar.test.mjs`), so the same check meets a different midnight in each
   zone. A change to the workflow or its test runs it on its own pull request.
+
+Every job of the full check has a time limit near its budget: one and a half times the minutes measured on run 44636876755,
+the first run with every other ticket of spec #401, kept between 3 and 12 minutes; `visual` and `install-measure` are no
+part of it and keep the limits they had. A job that runs past its limit ends as cancelled or failed, and `check` is red
+either way. `tests/ci-budgets.test.mjs` reads the limits from `.github/workflows/ci.yml` and fails when one rises without
+the table changing.
+
+| Job | Measured | Limit |
+|---|---|---|
+| `changes` | 0.2 min | 3 min |
+| `fast` | 2.7 min | 5 min |
+| `supabase-images` | 0.1 min | 3 min |
+| `image` | 3.7 min | 6 min |
+| `database` | 2.1 min | 4 min |
+| `integration` | 10.6 min, its slowest shard | 12 min |
+| `install` | 9.5 min, its slowest area (backup) | 12 min |
+| `check` | 0.1 min | 3 min |
 
 A pull request that changes only screens runs the fast job with its component tests; the compared screens run on `main`
 and on a manual run only (#257), where a failed comparison uploads its expected, actual and difference images in

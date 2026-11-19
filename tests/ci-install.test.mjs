@@ -22,7 +22,8 @@ const cases = [...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, comma
 test('the proof is one job with one matrix entry per area, every entry left to its end', () => {
   assert.equal(job.name, 'install-${{ matrix.area }}', 'the name says which area failed');
   assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'update', 'one-line'] } });
-  assert.equal(job['timeout-minutes'], 90);
+  // The slowest area (backup, 9.5 min on run 44636876755) sets the one limit for the matrix (#410).
+  assert.equal(job['timeout-minutes'], 12);
   assert.equal(job.permissions.contents, 'read');
 });
 
@@ -167,6 +168,16 @@ test('the profile-size measurement is a job of its own, and the required check d
   assert.match(remove.run, /docker rm -fv install-docker/);
   assert.equal(remove.if, "${{ always() && runner.environment != 'github-hosted' }}", 'removed on a reused runner, also after a failure');
   assert.equal(ci.jobs.check.needs.includes(measureJob), false, 'the required check does not wait for the measurement');
+});
+
+// #410: the checks document tells a reader to run one area by name (`./ci.sh install <area>`), so every area it writes
+// must be a case of the proof's dispatch: a command in the document runs as written.
+test('every ./ci.sh install area the checks document names is a case of the dispatch', () => {
+  const doc = readFileSync('docs/agents/checks.md', 'utf8');
+  const dispatches = new Set([...script.matchAll(/^ ([\w-]+)\)/gm)].map(([, name]) => name));
+  const areas = new Set([...doc.matchAll(/\.\/ci\.sh install ([a-z][a-z-]*)/g)].map(([, area]) => area));
+  assert.deepEqual([...areas].sort(), ['agents', 'backup', 'companies', 'first-install', 'measure', 'one-line', 'proxy', 'update']);
+  for (const area of areas) assert.ok(dispatches.has(area), `./ci.sh install ${area}`);
 });
 
 // #409: backup and restore is an area of its own, so the first-install job no longer runs a backup or a restore check,
