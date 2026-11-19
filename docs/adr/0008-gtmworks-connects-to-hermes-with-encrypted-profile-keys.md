@@ -8,6 +8,8 @@ Superseded where it describes pasted connections, by [ADR 0017](0017-hermes-keep
 
 Partly superseded by [ADR 0009](0009-conversations-run-on-engines-behind-one-engine-contract.md) (#274): Hermes is now one driver behind the engine contract, not the only engine. The rules below still hold for the Hermes driver.
 
+[ADR 0018](0018-an-engine-and-a-work-sandbox-per-company.md): Agents still do not approve, and nothing is published or spent through gtmworks without a person's Approval; on its screen, in an account a person signed in to, an Agent may publish or spend when a Member asks.
+
 Omar's direction change on #184 (2026-11-09), approved ticket #241 (2026-11-11), supersedes the runtime-neutral dispatch direction in ADR 0006/0007. gtmworks is self-hosted beside Hermes and runs no model or agent engine.
 
 Partly superseded by [ADR 0012](0012-no-agency-layer-the-company-owner-manages-the-company.md) (#7): every Agency owner below is now the Company's Owner, with no two-step verification, and a Connection's `agency_owner_id` is `owner_id`.
