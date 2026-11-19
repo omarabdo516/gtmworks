@@ -106,6 +106,7 @@ case "$*" in
  *' ps -aq '*) eval "service=\\\${$#}"; echo "id-$service";;
  inspect\\ *) eval "id=\\\${$#}"; case "$id" in "id-\${UNHEALTHY:-none}") echo exited;; id-worker) echo running;; *) echo 'running healthy';; esac;;
  *'exec -T web node'*) echo 'http://gateway:8080/api/health 200';;
+ *'exec -i -u hermes gtmworks-engine-'*'hermes auth add anthropic'*) echo 'Open this address in a browser: https://claude.example/oauth';;
 esac
 exit 0
 `;
@@ -171,7 +172,8 @@ const ok=(result,label='')=>assert.equal(result.status,0,`${label}\n${result.std
 test('options: each wrong one stops with usage before Docker, curl or any folder is touched', t => {
  const m=machine(t);
  for(const args of [['--version','1.2.3'],['--version','v1.2'],['--version=v1.2.3-rc1'],['--channel','beta'],['--version','v1.2.3','--channel','main'],
-  ['--no-backup'],['status','--version','v1.2.3'],['backup','--channel','main'],['restore'],['frobnicate'],['--dir'],['--bogus'],['update','extra'],['status','--no-backup'],['update','--yes'],['--version',`main@sha256:${mainHex}`],['backup','--version',`main@sha256:${mainHex}`],['update','--version','main@sha256:abc']]) {
+  ['--no-backup'],['status','--version','v1.2.3'],['backup','--channel','main'],['restore'],['frobnicate'],['--dir'],['--bogus'],['update','extra'],['status','--no-backup'],['update','--yes'],['--version',`main@sha256:${mainHex}`],['backup','--version',`main@sha256:${mainHex}`],['update','--version','main@sha256:abc'],
+  ['sign-in','--company','Acme'],['sign-in','gemini','--company','Acme'],['sign-in','claude'],['status','--company','Acme'],['sign-in','claude','--company']]) {
   const result=m.line(args);
   assert.equal(result.status,2,`${args.join(' ')}: ${result.stderr}`);
   assert.match(result.stderr,/Usage:/,args.join(' '));
@@ -182,6 +184,43 @@ test('options: each wrong one stops with usage before Docker, curl or any folder
  assert.equal(m.line(['--command']).status,2);
  assert.equal(m.line(['--help']).status,0);
  assert.equal(m.docker(),'');
+});
+
+test('gtmworks sign-in claude runs the Engine\'s own Claude sign-in in the Company\'s Engine, found by its record (#384)', t => {
+ const m=machine(t);
+ ok(m.line());
+ m.clear();
+ const row='c-1|RS Learning|http://gtmworks-engine-first:8642\n';
+ // By the Company's name: the record names the Engine, and the Engine's own sign-in runs in it on its root profile.
+ writeFileSync(m.env.DB_FILE,row);
+ const named=m.gtmworks(['sign-in','claude','--company','RS Learning']);
+ ok(named,'sign-in by name');
+ assert.match(named.stdout,/Signing RS Learning in to Claude on its Engine: gtmworks-engine-first/);
+ assert.match(named.stdout,/https:\/\/claude\.example\/oauth/);
+ const docker=m.docker();
+ assert.match(docker,/exec -T db psql .*-v company=RS Learning/);
+ assert.match(docker,/exec -i -u hermes gtmworks-engine-first hermes auth add anthropic --type oauth --no-browser/);
+ // By the Company's id, the same Engine.
+ m.clear();
+ ok(m.gtmworks(['sign-in','claude','--company','c-1']),'sign-in by id');
+ assert.match(m.docker(),/exec -i -u hermes gtmworks-engine-first hermes auth add anthropic/);
+ // A Company the install does not have, or a name two Companies share: a plain message, and no Engine is asked.
+ m.clear(); writeFileSync(m.env.DB_FILE,'');
+ const missing=m.gtmworks(['sign-in','claude','--company','Nope']);
+ assert.notEqual(missing.status,0);
+ assert.match(missing.stderr,/No Company in .* is named Nope/);
+ assert.doesNotMatch(m.docker(),/auth add anthropic/);
+ writeFileSync(m.env.DB_FILE,'c-1|Same|http://gtmworks-engine-first:8642\nc-2|Same|http://gtmworks-engine-first:8642\n');
+ const two=m.gtmworks(['sign-in','claude','--company','Same']);
+ assert.notEqual(two.status,0);
+ assert.match(two.stderr,/More than one Company .* is named Same/);
+ assert.doesNotMatch(m.docker(),/auth add anthropic/);
+ // A record whose address names no Engine container of this install: refused, and nothing is run.
+ m.clear(); writeFileSync(m.env.DB_FILE,'c-1|RS Learning|http://db:5432\n');
+ const stray=m.gtmworks(['sign-in','claude','--company','RS Learning']);
+ assert.notEqual(stray.status,0);
+ assert.match(stray.stderr,/names no Engine of this install/);
+ assert.doesNotMatch(m.docker(),/auth add anthropic/);
 });
 
 test('the line installs the highest published vX.Y.Z by default, --version that release, --dir that folder', t => {
