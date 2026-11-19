@@ -3,7 +3,8 @@ create extension if not exists pgtap with schema extensions;
 select plan(56);
 -- A Company of its own, with the ten stages a new one receives (ADR 0013): «كتابة» and «تصميم ومونتاج» are both In
 -- progress, and «بريف جاهز» is Planned, so a Card's stage and its column are told apart.
-insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000097','undo-move','Undo move');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000007','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000097','undo-move','Undo move','e3821000-0000-4000-8000-000000000007');
 insert into public.members(company_id,person_id,role) values
  ('10000000-0000-0000-0000-000000000097','20000000-0000-0000-0000-000000000001','owner'),
  ('10000000-0000-0000-0000-000000000097','20000000-0000-0000-0000-000000000002','manager'),

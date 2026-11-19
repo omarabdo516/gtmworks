@@ -23,7 +23,8 @@ select gen_random_uuid() as person_id,gen_random_uuid() as company_id,x.* from (
  ('المصمم','viewer',null,false),
  ('الكاتب','contributor','writer',true)
 ) x(name,role,expected,removed);
-insert into public.companies(id,slug,name) select company_id,company_id::text,'Legacy test' from legacy_agents;
+insert into public.company_engines(id,address,key_encrypted) select company_id,'http://engine:8642','cipher' from legacy_agents;
+insert into public.companies(id,slug,name,engine_id) select company_id,company_id::text,'Legacy test',company_id from legacy_agents;
 insert into auth.users(id) select person_id from legacy_agents;
 insert into public.people(id,name) select person_id,name from legacy_agents;
 insert into public.members(company_id,person_id,role,removed_at) select company_id,person_id,role::public.member_role,case when removed then now() end from legacy_agents;

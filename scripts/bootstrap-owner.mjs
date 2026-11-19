@@ -17,7 +17,7 @@ export function bootstrapSql(email) {
  return `do $bootstrap$
 declare
  mail text := convert_from(decode('${hex}','hex'),'UTF8');
- person uuid; company uuid; owners integer;
+ person uuid; company uuid; owners integer; engine uuid;
 begin
  -- Serialize the check and assignment, including competing membership writes.
  lock table public.companies, public.members in share row exclusive mode;
@@ -31,7 +31,11 @@ begin
  end if;
  if company is null then
   company=gen_random_uuid();
-  insert into public.companies(id,slug,name) values(company,'rs-learning','RS Learning');
+  -- A Company names the one Engine record it is made on (#382); scripts/local-db.sh points every record at the lane's
+  -- fake Hermes and encrypts its key.
+  engine=gen_random_uuid();
+  insert into public.company_engines(id,address,key_encrypted) values(engine,'http://127.0.0.1:8642','bootstrap');
+  insert into public.companies(id,slug,name,engine_id) values(company,'rs-learning','RS Learning',engine);
  end if;
  -- OWNER_EMAIL is Omar: the Owner Membership below is what lets him manage the company and its agent engine.
  insert into public.people(id,name) values(person,split_part(mail,'@',1))

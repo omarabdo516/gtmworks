@@ -482,11 +482,22 @@ jobs:
           { sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log
           compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
           db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
-          # The first Engine is its own Compose project (ADR 0018), so removing the install removes it too.
+          # Each Engine is its own Compose project (ADR 0018), so removing the install removes every one of them: the
+          # first Engine and every Company's Engine under .engines/.
           remove_engine() {
+            for folder in .engines/*/; do
+              [ -f "$folder/.env" ] || continue
+              name=$(sed -n 's/^ENGINE_NAME=//p' "$folder/.env")
+              volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$folder/.env")
+              network=$(sed -n 's/^ENGINE_NETWORK=//p' "$folder/.env")
+              docker rm -f "$name" > /dev/null 2>&1 || true
+              docker volume rm "$volume" > /dev/null 2>&1 || true
+              docker network rm "$network" > /dev/null 2>&1 || true
+            done
             docker rm -f gtmworks-engine-first > /dev/null 2>&1 || true
             docker volume rm gtmworks-install_hermes > /dev/null 2>&1 || true
             docker network rm gtmworks-engine-first > /dev/null 2>&1 || true
+            rm -rf .engines
           }
           remove_install() { compose down -v && remove_engine; }
           [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
@@ -548,7 +559,8 @@ jobs:
             fail 'no container of the install mounts the Docker socket'
           fi
           cp .env.install .env.install.before
-          db -c "insert into public.company_engines (address,key_encrypted) values ('$engine_address','install-probe'); insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000237','install-probe','Keep me');" || fail 'insert persistence probe'
+          # A Company names its Engine record (#382): the probe makes its own waiting record and the Company on it.
+          db -c "with e as (insert into public.company_engines (id,address,key_encrypted) values ('00000000-0000-4000-8000-000000000236','$engine_address','install-probe') returning id) insert into public.companies (id,slug,name,engine_id) select '00000000-0000-4000-8000-000000000237','install-probe','Keep me',id from e;" || fail 'insert persistence probe'
           db -c 'select name from gtmworks_install.schema_migrations order by name' > before || fail 'read initial migrations'
           find supabase/migrations -name '*.sql' ! -name '*.verify.sql' -printf '%f\n' | sort > expected
           diff -u expected before || fail 'applied migrations match migration files'
@@ -612,8 +624,74 @@ jobs:
             [[ $attempt == 60 ]] && fail 'the Engine is healthy after configuration'
             sleep 1
           done
+          # `gtmworks company add` (#382, ADR 0018): an email no Person has is refused before anything is made; an Engine
+          # that never becomes healthy leaves nothing behind and says so in one line; the same command again makes the
+          # second Company on its own Engine, with the existing Person as its Owner.
+          if sh scripts/install.sh company add --name 'No Owner' --owner nobody@example.com > company-unknown.log 2>&1; then
+            fail 'company add must refuse an email no Person has'
+          fi
+          cat company-unknown.log
+          grep -Fq 'No Person on this install has the email nobody@example.com. Nothing was created.' company-unknown.log || fail 'the refusal names the email and says nothing was made'
+          [[ $(ls -d .engines/* | wc -l) == 1 ]] || fail 'the refused add made no Engine folder'
+          [[ $(db -c "select count(*) from public.companies where name='No Owner'") == 0 ]] || fail 'the refused add made no Company'
+          [[ $(db -c "select count(*) from public.company_engines where address like '%no-owner%'") == 0 ]] || fail 'the refused add made no Engine record'
+          if ENGINE_IMAGE=alpine:3.21 sh scripts/install.sh company add --name 'Second Company' --owner proxy-owner@example.com > company-failed.log 2>&1; then
+            fail 'company add with an Engine that never becomes healthy must fail'
+          fi
+          cat company-failed.log
+          grep -Fq 'Company "Second Company" was not made: its Engine did not become healthy. Nothing was left behind; run the same command again.' company-failed.log || fail 'a failed Engine is one plain line'
+          [[ $(ls -d .engines/* | wc -l) == 1 ]] || fail 'the failed add removed its Engine folder'
+          if docker ps -aq --filter 'name=^gtmworks-engine-' | while read -r id; do docker inspect -f '{{.Name}}' "$id"; done | grep -vq '^/gtmworks-engine-first$'; then fail 'the failed add left an Engine container'; fi
+          [[ $(docker volume ls -q --filter 'name=^gtmworks-engine' | wc -l) == 0 ]] || fail 'the failed add left an Engine volume'
+          [[ $(docker network ls -q --filter 'name=^gtmworks-engine' | wc -l) == 1 ]] || fail 'the failed add left an Engine network'
+          [[ $(db -c "select count(*) from public.companies where name='Second Company'") == 0 ]] || fail 'the failed add left no Company'
+          [[ $(db -c "select count(*) from public.company_engines where address like '%second-company%'") == 0 ]] || fail 'the failed add left no Engine record'
+          # Running it again, on an Engine that becomes healthy, succeeds.
+          sh scripts/install.sh company add --name 'Second Company' --owner proxy-owner@example.com || fail 'company add makes the second Company'
+          second_folder=$(ls -d .engines/* | grep -v '/first$')
+          second_container=$(sed -n 's/^ENGINE_NAME=//p' "$second_folder/.env")
+          second_network=$(sed -n 's/^ENGINE_NETWORK=//p' "$second_folder/.env")
+          second_key=$(sed -n 's/^ENGINE_KEY=//p' "$second_folder/.env")
+          second_address=http://$second_container:8642
+          second_company=$(db -c "select id from public.companies where name='Second Company'") || fail 'read the second Company'
+          [[ -n $second_company ]] || fail 'the second Company exists'
+          [[ $(db -c "select count(*) from public.company_engines where id=(select engine_id from public.companies where name='Second Company') and address='$second_address'") == 1 ]] || fail 'the second Company names its own Engine record'
+          [[ $(db -c "select m.role from public.members m join public.companies c on c.id=m.company_id join auth.users u on u.id=m.person_id where c.name='Second Company' and u.email='proxy-owner@example.com'") == owner ]] || fail "the existing Person is the second Company's Owner"
+          # The second Engine is the template's own: pinned image, its own volume, key and network, no host port, and the
+          # app and the worker join its network.
+          [[ $(docker inspect -f '{{.Config.Image}}' "$second_container") == *'nousresearch/hermes-agent:v0.23.0@sha256:'* ]] || fail 'the second Engine runs the pinned Hermes image'
+          [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$second_container") != *HostPort* ]] || fail 'the second Engine publishes no host port'
+          [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container") == "$second_network" ]] || fail 'the second Engine joins its own network only'
+          for service in web worker; do
+            docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx "$second_network" \
+              || fail "the $service joins the second Engine's network"
+          done
+          # From inside the second Engine's network the first Engine cannot be reached, and neither can any install service.
+          docker run --rm --network "$second_network" node:22.14.0-alpine3.21 node --input-type=module -e "try { await fetch('http://gtmworks-engine-first:8642/health',{signal:AbortSignal.timeout(5000)}); process.exit(1); } catch { console.log('the other Engine is unreachable'); }" || fail 'one Engine cannot reach another'
+          docker run --rm --network "$second_network" -v "$PWD/scripts:/check:ro" node:22.14.0-alpine3.21 \
+            node /check/check-install-engine-network.mjs || fail 'the second Engine network reaches no install service'
+          # One Engine's key is refused by the other Engine, in both directions.
+          key_status() { compose exec -T -e CHECK_KEY="$1" -e CHECK_URL="$2" web node --input-type=module -e "const r=await fetch(process.env.CHECK_URL,{headers:{Authorization:'Bearer '+process.env.CHECK_KEY}}); console.log(r.status); if(![401,403].includes(r.status)) process.exitCode=1;"; }
+          key_status "$engine_key" "http://$second_container:9119/api/profiles" || fail "the second Engine refuses the first Engine's key"
+          key_status "$second_key" "$engine_management/api/profiles" || fail "the first Engine refuses the second Engine's key"
+          # `gtmworks company list` and `gtmworks status` report each Company's own Engine and its state.
+          sh scripts/install.sh company list | tee company-list.log || fail 'company list'
+          grep -F '"Proxy Company": Engine http://gtmworks-engine-first:8642 (healthy)' company-list.log || fail 'company list names the first Company and its healthy Engine'
+          grep -F "\"Second Company\": Engine $second_address (healthy)" company-list.log || fail 'company list names the second Company and its healthy Engine'
+          sh scripts/install.sh engines | tee engines.log || fail 'every Engine is reported'
+          grep -F "Engine $second_address: healthy (Company \"Second Company\")" engines.log || fail 'the Engine report names the second Engine'
+          # The memory one idle Engine uses, printed for the README.
+          echo "one idle Engine uses $(docker stats --no-stream --format '{{.MemUsage}}' "$second_container")"
+          # Stopping the second Company's Engine leaves the first Company answering, then the second Engine starts again.
+          docker stop "$second_container" > /dev/null || fail 'stop the second Engine'
           compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
-            node --input-type=module - < scripts/check-install-conversation.mjs || fail 'Arabic conversation answered by the Engine'
+            node --input-type=module - < scripts/check-install-conversation.mjs || fail 'the first Company still answers while the second Engine is stopped'
+          docker start "$second_container" > /dev/null || fail 'start the second Engine'
+          for attempt in $(seq 1 120); do
+            [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$second_container") == healthy ]] && break
+            [[ $attempt == 120 ]] && fail 'the second Engine is healthy again'
+            sleep 1
+          done
           # The Engine's management listener (ADR 0011): an Agent made through the contract runs, the worker reaches it with
           # the Engine's key, and it is never public: the gateway routes only to the app, and no host port is published.
           compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
@@ -623,16 +701,17 @@ jobs:
           status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/profiles) || fail 'management path status on install host port 3000'
           [[ $status == 404 && $body != *is_default* ]] || fail "public gateway must not reach the management listener (HTTP $status)"
           if docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null --max-time 5 http://127.0.0.1:9119/api/profiles; then fail 'management listener must not be published on the host'; fi
-          # One profile per company (ADR 0014): two new companies get two different profiles in the Engine, each with
-          # terminal, files and code execution off in its config and absent from its Runs' toolsets. A run on each
-          # answers, and a memory written in the first company's profile reaches its run and never the second's. A lesson
-          # its Owner approves reaches the runs of the first company's Agents only, which cannot change it (#122).
+          # One Engine per Company (ADR 0018): the first Company's Engine and the second Company's own Engine each hold
+          # their Company's profiles, with terminal, files and code execution off in the profile's config and absent from
+          # its Runs' toolsets. A run on each answers across the two Engines, and a memory written in the first Engine
+          # reaches its run and never an Agent of the other Company. A lesson its Owner approves reaches the runs of the
+          # first Company's Agents only, which cannot change it (#122).
           compose exec -T -e HERMES_API_KEY="$engine_key" -e HERMES_ADDRESS="$engine_address" -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web \
-            node --input-type=module - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles with terminal, file and code tools off, each with one shared space'
+            node --input-type=module - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles on two Engines with terminal, file and code tools off, each with one shared space'
           first=$(tail -n 1 prepare-profiles.log)
           [[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
           # One Company cannot name another's profile (#126): the database refuses the row, whoever writes it.
-          company_b=$(db -c "select id from public.companies where name='Profile check B'") || fail 'the second profile company'
+          company_b=$(db -c "select id from public.companies where name='Second Company'") || fail 'the second profile company'
           if db -c "insert into public.hermes_agents(company_id,profile,name,speciality) values ('$company_b','$first','Other company agent','Writes the install check.')" 2> profile-refusal.log; then fail 'the database refuses a profile of another company'; fi
           grep -q hermesProfileNotShared profile-refusal.log || { cat profile-refusal.log >&2; fail 'the database refuses a profile of another company, by its guard'; }
           marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
@@ -661,8 +740,17 @@ jobs:
           per_without=$(( (disk_without-disk_with)/10 )) || fail 'the disk one profile without Skills takes'
           echo "capacity: engine memory $memory_before before and $memory_after after 20 agent profiles; $per_with KiB per profile with the bundled Skills, $per_without KiB without"
           # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
-          # read are scanned for the real values in .env.install, passed on stdin; only names and paths are printed.
-          { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$engine_id" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine holds none of gtmworks's keys and passwords"
+          # read are scanned for the real values in .env.install, passed on stdin; only names and paths are printed. Every
+          # Engine of the install is scanned, the first and each Company's own (#382).
+          engines_scanned=0
+          for folder in .engines/*/; do
+            [ -f "$folder/.env" ] || continue
+            name=$(sed -n 's/^ENGINE_NAME=//p' "$folder/.env")
+            [[ -n $(docker ps -q --filter "name=^${name}$") ]] || fail "the Engine container $name"
+            engines_scanned=$((engines_scanned+1))
+            { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$name" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine $name holds none of gtmworks's keys and passwords"
+          done
+          [[ $engines_scanned -ge 2 ]] || fail 'the scan covers every Engine'
           # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
           # First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
           # invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40).
@@ -746,7 +834,7 @@ jobs:
           # An install made by the previous release keeps its Engine record across the update (#380): make one Company on
           # the waiting record the installer registered, and prove after the update that its Engine still answers.
           compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At \
-            -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000239','release-probe','Release probe');" \
+            -c "with e as (insert into public.company_engines (id,address,key_encrypted) values ('00000000-0000-4000-8000-000000000235','http://gtmworks-engine-first:8642','release-probe') returning id) insert into public.companies (id,slug,name,engine_id) select '00000000-0000-4000-8000-000000000239','release-probe','Release probe',id from e;" \
             || fail 'the release install makes a Company on its Engine record'
           release_probe=00000000-0000-4000-8000-000000000239
           compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/bundled-hermes.mjs'); const at=await engineOf('$release_probe'); console.log(at?.address==='http://gtmworks-engine-first:8642'?'record':'no');" \
@@ -816,7 +904,7 @@ jobs:
           probe 'after the one line'
           checksum=$(sha256sum < .env.install)
           echo ".env.install sha256 after the first run: $checksum"
-          db -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000238','one-line-probe','Kept by the line');" || fail 'insert the probe'
+          db -c "with e as (insert into public.company_engines (id,address,key_encrypted) values ('00000000-0000-4000-8000-000000000234','http://gtmworks-engine-first:8642','one-line-probe') returning id) insert into public.companies (id,slug,name,engine_id) select '00000000-0000-4000-8000-000000000238','one-line-probe','Kept by the line',id from e;" || fail 'insert the probe'
           migrations > "$RUNNER_TEMP/one-line-migrations" || fail 'read the migrations'
           # The line again, and once naming the version: each repairs and restarts the same release, keeping keys and data.
           for run in again version; do
@@ -841,6 +929,7 @@ jobs:
             grep -E "^$service +healthy" "$RUNNER_TEMP/status.log" || fail "gtmworks status reports $service healthy"
           done
           grep -Ex 'All [0-9]+ services are healthy\.' "$RUNNER_TEMP/status.log" || fail 'gtmworks status reports every service healthy'
+          grep -Ex 'Engine http://gtmworks-engine-first:8642: healthy \(waiting for a Company\)' "$RUNNER_TEMP/status.log" || fail 'gtmworks status reports every Engine'
           export PATH="$HOME/.local/bin:$PATH"
           # v0.0.1 is published: gtmworks update moves to it, backing up first.
           cp "$workspace/release-next/docker-compose.install.yml" "$workspace/release-next/install.sh" "$releases/v0.0.1/" || fail 'test release v0.0.1'

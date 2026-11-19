@@ -29,7 +29,7 @@ worker_stopped=no
 cleanup() {
   status=$?
   trap - EXIT
-  if [ "$resume" = yes ]; then compose up -d --wait --wait-timeout 300 || status=1; engine_up || status=1; fi
+  if [ "$resume" = yes ]; then compose up -d --wait --wait-timeout 300 || status=1; engines_up || status=1; fi
   # A run that stopped the worker for a gateway change and failed before the app started leaves it running again.
   if [ "$worker_stopped" = yes ]; then compose start worker || status=1; fi
   rm -f .env.install.tmp
@@ -40,30 +40,35 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 node_image=node:22.14.0-alpine3.21
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
-# The first Company's Engine (ADR 0018) is made from the template shipped with the release, as its own Compose project:
-# the pinned official Hermes image, its own data volume, its own key and its own network. The app and the worker join
-# that network; the Engine joins nothing else. An install made before ADR 0018 keeps its existing `hermes` volume, now
-# under this Engine's name, so its Agents' memory, Skills and history stay. `gtmworks company add` (#382) uses the same
-# template and naming for later Companies.
-engine_project=gtmworks-engine-first
-engine_container=gtmworks-engine-first
-engine_network=gtmworks-engine-first
-engine_volume=gtmworks-install_hermes
+# A Company's Engine (ADR 0018) is made from the template shipped with the release, as its own Compose project: the pinned
+# official Hermes image, its own data volume, its own key and its own network. The app and the worker join that network;
+# the Engine joins nothing else. The installer makes the first Company's Engine; `gtmworks company add` (#382) makes a
+# later Company's the same way, one folder under .engines/<slug>. An install made before ADR 0018 keeps its existing
+# `hermes` volume, now under the first Engine's name, so its Agents' memory, Skills and history stay.
+engine_template=scripts/engine-template.yml
 engine_address=http://gtmworks-engine-first:8642
 engine_management=http://gtmworks-engine-first:9119
-engine_folder=.engines/first
-engine_template=scripts/engine-template.yml
+engine_volume=gtmworks-install_hermes
+engine_project() { printf 'gtmworks-engine-%s' "$1"; }
+engine_folder() { printf '.engines/%s' "$1"; }
+engine_container() { engine_project "$1"; }
+engine() {
+  slug=$1
+  shift
+  docker compose --project-name "$(engine_project "$slug")" --env-file "$(engine_folder "$slug")/.env" -f "$engine_template" "$@"
+}
 engine_key() { sed -n 's/^HERMES_API_KEY=//p' .env.install; }
-engine() { docker compose --project-name "$engine_project" --env-file "$engine_folder/.env" -f "$engine_template" "$@"; }
 write_engine_env() {
-  mkdir -p "$engine_folder"
+  slug=$1 key=$2 volume=$3 network=$4
+  folder=$(engine_folder "$slug")
+  mkdir -p "$folder"
   {
-    printf 'ENGINE_NAME=%s\n' "$engine_container"
-    printf 'ENGINE_KEY=%s\n' "$1"
-    printf 'ENGINE_VOLUME=%s\n' "$engine_volume"
-    printf 'ENGINE_NETWORK=%s\n' "$engine_network"
-  } > "$engine_folder/.env"
-  chmod 600 "$engine_folder/.env"
+    printf 'ENGINE_NAME=%s\n' "$(engine_container "$slug")"
+    printf 'ENGINE_KEY=%s\n' "$key"
+    printf 'ENGINE_VOLUME=%s\n' "$volume"
+    printf 'ENGINE_NETWORK=%s\n' "$network"
+  } > "$folder/.env"
+  chmod 600 "$folder/.env"
 }
 # A container from the one-Hermes install (before ADR 0018) is not part of this compose file any more. It must stop
 # before the Engine template uses the same volume, and its volume is the first Engine's data.
@@ -73,28 +78,119 @@ retire_old_engine() {
   [ -z "$old" ] || docker rm -f $old > /dev/null
 }
 # The app and the worker reach every Engine by its container name. Compose recreates them on an update, which drops the
-# extra network, so the connection is made again after every start of the stack.
+# extra networks, so each connection is made again after every start of the stack.
 join_engine_network() {
+  network=$1
+  test -n "$network" || return 0
   for service in web worker; do
     id=$(compose ps -q "$service") || return 1
     [ -n "$id" ] || continue
-    name=$(docker inspect -f '{{.Name}}' "$id") || return 1
-    name=${name#/}
-    if docker network inspect "$engine_network" -f '{{range .Containers}}{{println .Name}}{{end}}' | grep -qx "$name"; then
+    container_name=$(docker inspect -f '{{.Name}}' "$id") || return 1
+    container_name=${container_name#/}
+    if docker network inspect "$network" -f '{{range .Containers}}{{println .Name}}{{end}}' | grep -qx "$container_name"; then
       continue
     fi
-    docker network connect "$engine_network" "$id" || return 1
+    docker network connect "$network" "$id" || return 1
   done
+}
+engine_network_of() { sed -n 's/^ENGINE_NETWORK=//p' "$(engine_folder "$1")/.env"; }
+join_engine_networks() {
+  for folder in .engines/*/; do
+    [ -f "$folder/.env" ] || continue
+    join_engine_network "$(sed -n 's/^ENGINE_NETWORK=//p' "$folder/.env")" || return 1
+  done
+}
+engine_start() { engine "$1" up -d --wait --wait-timeout "${GTMWORKS_ENGINE_WAIT:-300}"; }
+# One Engine stopped and removed with everything it made. Its folder and record go too; a record's removal is the caller's
+# (it needs the database) and only ever a record no Company names.
+engine_destroy() {
+  slug=$1 volume=$2 network=$3
+  engine "$slug" down -v --remove-orphans > /dev/null 2>&1 || true
+  docker rm -f "$(engine_container "$slug")" > /dev/null 2>&1 || true
+  docker volume rm "$volume" > /dev/null 2>&1 || true
+  # The app and the worker may have joined this Engine's network before a later step failed: detach them first, or the
+  # network would be left behind and the same command run again would meet it.
+  for service in web worker; do
+    id=$(compose ps -q "$service" 2> /dev/null || true)
+    [ -z "$id" ] || docker network disconnect -f "$network" "$id" > /dev/null 2>&1 || true
+  done
+  docker network rm "$network" > /dev/null 2>&1 || true
+  rm -rf "$(engine_folder "$slug")"
 }
 engine_up() {
   key=$(engine_key)
   test -n "$key" || { echo 'The install has no Engine key: run sh scripts/install.sh.' >&2; return 1; }
-  write_engine_env "$key"
+  write_engine_env first "$key" gtmworks-install_hermes gtmworks-engine-first
   retire_old_engine || return 1
-  engine up -d --wait --wait-timeout 300 || return 1
-  join_engine_network
+  engine_start first || return 1
+  join_engine_network gtmworks-engine-first
 }
-engine_stop() { docker stop "$engine_container" > /dev/null 2>&1 || true; }
+# Every Engine the install has, the first one included: an update starts each from its own folder, so a Company's Engine
+# is never left stopped by an install of the app.
+engines_up() {
+  engine_up || return 1
+  for folder in .engines/*/; do
+    slug=${folder#.engines/}
+    slug=${slug%/}
+    [ "$slug" != first ] || continue
+    engine_start "$slug" || return 1
+    join_engine_network "$(engine_network_of "$slug")" || return 1
+  done
+}
+engine_stop() { docker stop "$(engine_container first)" > /dev/null 2>&1 || true; }
+# A new Engine's key: 64 hex characters, the shape the install's own key has, generated here and kept in the Engine's own
+# folder file (owner-only) and encrypted in its record. It is never printed.
+new_engine_key() { od -An -N32 -tx1 /dev/urandom | tr -d ' \n'; }
+company_usage() {
+  echo 'Usage: gtmworks company add --name <Company> --owner <email> | gtmworks company list' >&2
+  exit 1
+}
+# `gtmworks company add` (#382, ADR 0018): one new Company, its Engine made from the template with its own volume, key and
+# network. The Owner email is refused before anything exists; the Engine is made and waited on before the Company; a
+# failure removes everything this command made, in one plain line, so the same command can be run again.
+company_add() {
+  company_name= owner_email=
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --name) [ $# -ge 2 ] || company_usage; company_name=$2; shift;;
+      --owner) [ $# -ge 2 ] || company_usage; owner_email=$2; shift;;
+      *) company_usage;;
+    esac
+    shift
+  done
+  test -n "$company_name" && test -n "$owner_email" || company_usage
+  test -f .env.install || { echo 'Install first.' >&2; exit 1; }
+  # The Owner and the name are checked in the database before an Engine, a folder or a record is made.
+  slug=$(compose exec -T web node scripts/company-add.mjs check --name "$company_name" --owner "$owner_email") || return 1
+  slug=$(printf '%s\n' "$slug" | tail -n 1)
+  case "$slug" in ''|*[!a-z0-9-]*) echo "The Company's Engine folder name is not usable: $slug" >&2; return 1;; esac
+  volume=$(engine_container "$slug")
+  network=$(engine_container "$slug")
+  address="http://$(engine_container "$slug"):8642"
+  key=$(new_engine_key)
+  write_engine_env "$slug" "$key" "$volume" "$network"
+  if ! engine_start "$slug" >&2 || ! join_engine_network "$network"; then
+    engine_destroy "$slug" "$volume" "$network"
+    echo "Company \"$company_name\" was not made: its Engine did not become healthy. Nothing was left behind; run the same command again."
+    return 1
+  fi
+  if ! compose exec -T -e ENGINE_ADDRESS="$address" -e ENGINE_KEY="$key" web \
+    node scripts/company-add.mjs add --name "$company_name" --owner "$owner_email" --address "$address"; then
+    # The record and the Company are removed by the script; a waiting record the script did not reach is removed here.
+    compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
+    engine_destroy "$slug" "$volume" "$network"
+    echo "Company \"$company_name\" was not made. Nothing was left behind; run the same command again."
+    return 1
+  fi
+  echo "Company \"$company_name\" is made on its own Engine ($(engine_container "$slug")). Its Owner is $owner_email."
+}
+company() {
+  case "${1:-}" in
+    add) shift; company_add "$@";;
+    list) compose exec -T web node scripts/company-list.mjs companies;;
+    *) company_usage;;
+  esac
+}
 complete_env() {
   docker run --rm --env-file "$1" -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs missing > .install-lock/missing
   if [ -s .install-lock/missing ]; then
@@ -180,7 +276,7 @@ elif [ "$operation" = restore ]; then
   ' sh "$hermes_data"
   mv .env.install.tmp .env.install
   compose up -d --force-recreate --wait --wait-timeout 300
-  engine_up
+  engines_up
   if [ "$hermes_data" = no ]; then
     echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
   fi
@@ -203,8 +299,16 @@ elif [ "$operation" = update ]; then
     echo "Extracting update source..."
     tar -xzf /install/.install-lock/source.tgz -C /install --strip-components=1
   ' sh "$ref"
+elif [ "$operation" = company ]; then
+  shift
+  company "$@"
+  return
+elif [ "$operation" = engines ]; then
+  # Every Engine's state, as `gtmworks status` reports it (scripts/get.sh). Non-zero when one does not answer.
+  compose exec -T web node scripts/company-list.mjs engines
+  return
 elif [ "$operation" != install ]; then
-  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive>]' >&2; exit 1
+  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> --owner <email> | company list | engines]' >&2; exit 1
 fi
 if [ -n "$release_image" ]; then
   docker pull "$release_image"
@@ -267,9 +371,9 @@ if [ -z "$release_image" ]; then
     mv .install-lock/gateway .install-gateway
   fi
 fi
-# The first Engine is made from the template before the app and the worker start, recreated when the release pins a new
+# Every Engine is made from the template before the app and the worker start, recreated when the release pins a new
 # image, and left running otherwise.
-engine_up
+engines_up
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
   # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
   compose up -d --no-deps --wait --wait-timeout 300 auth web worker
@@ -278,8 +382,8 @@ else
   compose up -d --wait --wait-timeout 300
 fi
 worker_stopped=no
-# The app and the worker join the Engine's network once they exist, and again after every recreation.
-join_engine_network
+# The app and the worker join every Engine's network once they exist, and again after every recreation.
+join_engine_networks
 # The extraction replaced the gateway configuration in place; Nginx reads it again without dropping connections.
 if [ "$operation" = update ] && [ -n "$release_image" ]; then compose exec -T gateway nginx -s reload; fi
 # The install's Engine record (#380, ADR 0018): its address and key, the key encrypted with WEBHOOK_ENCRYPTION_KEY, kept in

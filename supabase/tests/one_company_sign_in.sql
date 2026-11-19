@@ -59,7 +59,8 @@ select is((select one_company from public.company_engine_target('10000000-0000-0
 select is((select profiles from public.company_engine_target('10000000-0000-0000-0000-000000000001')),
  array['co-10000000000000000000000000000001','ag-e1240000000000000000000000000001'],'and names the same profiles');
 reset role;
-insert into public.companies(id,slug,name) values ('e1250000-0000-0000-0000-000000000001','second-company','Second Company');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000005','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('e1250000-0000-0000-0000-000000000001','second-company','Second Company','e3821000-0000-4000-8000-000000000005');
 select is(public.install_has_one_company(),false,'a second Company ends it');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

@@ -104,7 +104,7 @@ test('older rows are reached page by page in a stable order, each row once',asyn
  // The Viewer reads it and is removed again at the end, which hides the Company from everyone.
  const stamp=Date.now(), slug=`paged-${stamp}`, title=`Paged log ${stamp}`, viewer='20000000-0000-0000-0000-000000000004';
  const comments=logPageSize+2, total=comments+1, moment=Math.floor(logPageSize*0.4); // the card's creation and its comments
- const company=rows(`insert into public.companies(id,slug,name) values (gen_random_uuid(),'${slug}','Paged ${stamp}') returning id`)[0].id as string;
+ const company=rows(`with engine as (insert into public.company_engines(address,key_encrypted) values ('http://127.0.0.1:8642','paged') returning id) insert into public.companies(id,slug,name,engine_id) select gen_random_uuid(),'${slug}','Paged ${stamp}',id from engine returning id`)[0].id as string;
  query(`insert into public.members(company_id,person_id,role) values ('${company}','${viewer}','viewer')`);
  try {
   query(`with card as (insert into public.work_cards(company_id,stage_id,title) select '${company}',id,'${title}' from public.work_stages where company_id='${company}' and kind='ideas' order by position limit 1 returning id)

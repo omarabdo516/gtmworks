@@ -1,12 +1,16 @@
--- Each Company is made only onto a waiting Engine record (#380); the seed makes the three Companies below and keeps spare
--- records for the Companies a test makes. scripts/local-db.sh then points every record at the lane's fake Hermes and
+-- Each Company names the one Engine record it is made on (#382); the seed makes the three Companies below and keeps spare
+-- waiting records for a Company a test makes. scripts/local-db.sh then points every record at the lane's fake Hermes and
 -- encrypts its key, so the record is the only place the app and worker read them.
+insert into public.company_engines (id,address,key_encrypted) values
+('e3800000-0000-4000-8000-000000000001','http://127.0.0.1:8642','seed'),
+('e3800000-0000-4000-8000-000000000002','http://127.0.0.1:8642','seed'),
+('e3800000-0000-4000-8000-000000000003','http://127.0.0.1:8642','seed');
 insert into public.company_engines (address,key_encrypted)
-select 'http://127.0.0.1:8642','seed' from generate_series(1,23);
-insert into public.companies (id,slug,name) values
-('10000000-0000-0000-0000-000000000001','rs-learning','RS Learning'),
-('10000000-0000-0000-0000-000000000002','rs-consultations','R&S Consultations'),
-('10000000-0000-0000-0000-000000000003','aleem','Aleem');
+select 'http://127.0.0.1:8642','seed' from generate_series(1,20);
+insert into public.companies (id,slug,name,engine_id) values
+('10000000-0000-0000-0000-000000000001','rs-learning','RS Learning','e3800000-0000-4000-8000-000000000001'),
+('10000000-0000-0000-0000-000000000002','rs-consultations','R&S Consultations','e3800000-0000-4000-8000-000000000002'),
+('10000000-0000-0000-0000-000000000003','aleem','Aleem','e3800000-0000-4000-8000-000000000003');
 update public.channels set id='69000000-0000-0000-0000-000000000001' where company_id='10000000-0000-0000-0000-000000000001' and kind='general';
 insert into auth.users (instance_id,id,aud,role,email,email_confirmed_at,created_at,updated_at,raw_app_meta_data,raw_user_meta_data,confirmation_token,email_change,email_change_token_new,recovery_token) values
 ('00000000-0000-0000-0000-000000000000','20000000-0000-0000-0000-000000000001','authenticated','authenticated','omar@example.com',now(),now(),now(),'{"provider":"email","providers":["email"]}','{}','','','',''),

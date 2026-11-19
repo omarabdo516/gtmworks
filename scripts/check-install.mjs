@@ -27,11 +27,11 @@ if(seed) {
  await checked(admin.from('people').insert({id:user.id,name:'Restore Person'}));
  const companies=[];
  for(const slug of ['restore-one','restore-two']) {
-  // Like bootstrap-owner and the test seed, supply the UUID; companies.id has no default. A Company is made only onto a
-  // waiting Engine record (#380), so the install's Engine is registered first.
+  // Like bootstrap-owner and the test seed, supply the UUID; companies.id has no default. A Company names the Engine
+  // record it is made on (#382), so the install's Engine is registered for it first.
   const company=randomUUID();
-  await registerEngine(admin,{address:engine.address,key:engine.key});
-  const created=await checked(admin.from('companies').insert({id:company,slug,name:slug}).select().single());
+  const record=await registerEngine(admin,{address:engine.address,key:engine.key});
+  const created=await checked(admin.from('companies').insert({id:company,slug,name:slug,engine_id:record.id}).select().single());
   companies.push(created.id);
   await checked(admin.from('members').insert({company_id:company,person_id:user.id,role:'contributor'}));
   // A card waiting on the person, with one stored file, written by the server (the external-agent API is gone, #341).

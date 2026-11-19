@@ -13,7 +13,8 @@ update public.members set removed_at=now() where company_id='10000000-0000-0000-
 select lives_ok($$update public.companies set work_mode='alone' where id='10000000-0000-0000-0000-000000000002'$$,'with the other Member removed the switch succeeds');
 select is((select work_mode from public.companies where id='10000000-0000-0000-0000-000000000002'),'alone','the Company is alone');
 -- An unanswered Company may still answer alone while it has a Manager.
-insert into public.companies(id,slug,name,work_mode) values ('10000000-0000-0000-0000-000000000092','unanswered','Unanswered',null);
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000002','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,work_mode,engine_id) values ('10000000-0000-0000-0000-000000000092','unanswered','Unanswered',null,'e3821000-0000-4000-8000-000000000002');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000092','20000000-0000-0000-0000-000000000001','owner');
 select is((select work_mode from public.companies where id='10000000-0000-0000-0000-000000000092'),null,'a Member joining does not answer for an unanswered Company');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000092','20000000-0000-0000-0000-000000000002','manager');

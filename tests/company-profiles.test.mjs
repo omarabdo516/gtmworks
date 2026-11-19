@@ -526,11 +526,11 @@ test('the install job proves profiles per company on the pinned release, after t
  // #122: the Owner approves a Contributor's suggestion; it reaches the first company's Agents only, locked against their edits.
  assert.match(script,/personOf\(first\)\.rpc\('decide_agent_rule',\{c:first\.company,item:item\.id,approve:true\}\)/);
  assert.match(script,/assert\.deepEqual\(lessons,\[true,true,false,false\]\)/);
- assert.match(script,/assert\.equal\(await skill\(spaceOf\(first\)\),written,'team-lessons is unchanged'\)/);
+ assert.match(script,/assert\.equal\(await skill\(firstEngine,spaceOf\(first\)\),written,'team-lessons is unchanged'\)/);
  // #126: four Agents in two Companies, each on its own profile, and the marker reaches only the first Company's main Agent.
  assert.match(script,/assert\.equal\(new Set\(profiles\)\.size,4,'each of the four Agents has a profile of its own'\)/);
  assert.match(script,/assert\.deepEqual\(memory,\[true,false,false,false\]\)/);
- assert.match(script,/assert\.deepEqual\(\[await listsSkill\(other\.profile\),await listsSkill\(other\.secondProfile\)\],\[false,false\]/);
+ assert.match(script,/assert\.deepEqual\(\[await listsSkill\(otherEngine,other\.profile\),await listsSkill\(otherEngine,other\.secondProfile\)\],\[false,false\]/);
 });
 
 // The person's session and the service role, as sendMessage sees them; every call is recorded in order.

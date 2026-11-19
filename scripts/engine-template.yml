@@ -4,7 +4,9 @@
 # way. The image is the one place the Engine release is pinned; tests/bundled-hermes.test.mjs and the driver check it.
 services:
   engine:
-    image: nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002
+    # The one place the Engine release is pinned, by tag and digest. ENGINE_IMAGE overrides it only for the install job's
+    # forced-failure proof; every Engine of an install runs the pin.
+    image: ${ENGINE_IMAGE:-nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002}
     restart: unless-stopped
     container_name: ${ENGINE_NAME:?Run scripts/install.sh}
     # The key is required: an Engine with no key must refuse to start rather than serve an API with none.
