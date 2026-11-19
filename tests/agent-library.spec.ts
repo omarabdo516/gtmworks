@@ -79,7 +79,7 @@ test('the Owner opens the Agent\'s Library above its files, its generated images
  const briefRow=library.locator('li.lib-file').filter({hasText:'brief.md'});
  await expect(briefRow.locator('.panel-row__d')).toContainText(fileSize(Buffer.byteLength(brief)));
  await expect(briefRow.locator('time')).toHaveAttribute('datetime',new Date(at*1000).toISOString());
- await expect(library.locator('.lib-hint')).toHaveText('Files in Librarian’s work folder show here. You can view and download them, and ask for edits in the chat.');
+ await expect(library.locator('.lib-hint')).toHaveText('Files in Librarian’s work folder, and the images it generated, show here. You can view and download them, and ask for edits in the chat.');
 
  // A folder opens in place with its own count of files, the focus on the way back to the Library (the reference's
  // lib-open focuses #lib-root), and the way back puts the focus on that folder's row; a folder inside a folder opens
