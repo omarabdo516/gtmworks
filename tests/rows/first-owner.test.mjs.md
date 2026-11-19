@@ -1,0 +1,1 @@
+| `first-owner.test.mjs` | A first-Owner link's secret has 256 bits and sits after `#`, only its sha256 hash is stored and printed nowhere, and both `company add --owner` and the link claim make a Company and its Owner through the one transaction function (#383). | 0.1 s | first-owner.spec.ts, supabase/tests/company_owner_link.sql | keep, new (#383) |

@@ -92,3 +92,26 @@ test("company list and the Engine report are the installer's own, so gtmworks sh
  assert.equal(engines.status,0,engines.stderr);
  assert.ok(installDir.lines().some(line=>line.includes('company-list.mjs engines')));
 });
+
+test('company add with no Owner makes the Engine and holds the Company behind the first-Owner link the script prints', t => {
+ const installDir=install(t);
+ const result=installDir.run('company','add','--name','Held Company');
+ assert.equal(result.status,0,result.stderr);
+ const commands=installDir.lines();
+ // The name is checked, and the record is registered, with no Owner email any step could require.
+ assert.ok(commands.some(line=>line.endsWith('company-add.mjs check --name Held Company')),commands.join('\n'));
+ const add=commands.find(line=>line.includes('company-add.mjs add --name Held Company'));
+ assert.ok(add&&!add.includes('--owner'),commands.join('\n'));
+ assert.ok(add.includes('ENGINE_ADDRESS=http://gtmworks-engine-second-company-0000abcd:8642'));
+ // The Engine is the same template the named-Owner path makes, and the closing line says where its link is.
+ assert.ok(commands.some(line=>/^compose --project-name gtmworks-engine-second-company-0000abcd --env-file \.engines\/second-company-0000abcd\/\.env -f scripts\/engine-template\.yml up -d --wait --wait-timeout 300$/.test(line)));
+ assert.deepEqual(result.stdout.trim().split('\n'),['Company "Held Company" is waiting for its Owner on its own Engine (gtmworks-engine-second-company-0000abcd). Send the first-Owner link above; it works once.']);
+});
+
+test('company link asks the web container for a fresh first-Owner link for a Company still waiting, and prints only that', t => {
+ const installDir=install(t);
+ const result=installDir.run('company','link','Held Company');
+ assert.equal(result.status,0,result.stderr);
+ assert.deepEqual(installDir.lines(),['compose --env-file .env.install -f docker-compose.install.yml exec -T web node scripts/company-add.mjs link --name Held Company']);
+ assert.equal(installDir.lines().some(line=>line.includes(' up -d ')),false,'a fresh link makes no Engine');
+});

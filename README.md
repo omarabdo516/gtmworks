@@ -93,14 +93,22 @@ template when the install owner adds it on the server:
 
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
+gtmworks company add --name "Third Company"     # prints a first-Owner link instead
 gtmworks company list
 ```
 
 `--owner` names a Person who already has an account on this install; an email that
-belongs to no Person is refused before anything is made. `company add` makes the
-Engine, waits until it is healthy, registers it and makes the Company with that
-Person as its Owner; the worker then gives the Company its main Agent on its own
-Engine. If the Engine does not become healthy the command says so in one line,
+belongs to no Person is refused before anything is made. With no `--owner`, the
+Company's name waits behind a first-Owner link that the command prints once: whoever
+opens it types their name, email and password, becomes that Company's Owner and lands
+in it signed in. Its secret sits after `#` in the address, so only its hash is kept,
+it works once, and opening the page without sending the form leaves it open. A lost
+link is replaced with `gtmworks company link "Third Company"`, which ends the earlier
+one. Until the link is used the Company exists nowhere, and `gtmworks company list`
+shows it waiting for its Owner. `company add` makes the Engine, waits until it is
+healthy, registers it and then makes the Company with that Person as its Owner, or
+holds the name behind the link; the worker then gives the Company its main Agent on
+its own Engine. If the Engine does not become healthy the command says so in one line,
 removes what it made (its container, volume, network and folder, and its record), and
 leaves no Company, so running it again is safe. `gtmworks company list` shows every
 Company with the state of its Engine, and `gtmworks status` reports every Engine.
@@ -188,15 +196,20 @@ restore <archive>` there.
 
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
+gtmworks company add --name "Third Company"     # prints a first-Owner link instead
+gtmworks company link "Fourth Company"          # a fresh link for a Company still waiting
 gtmworks company list
 ```
 
 `company add` makes the Company's own Engine from the same template, waits until it is
-healthy, and makes the Company with that existing Person as its Owner; `company list`
-shows every Company with the state of its Engine. A failed Engine leaves nothing
-behind and the same command can be run again. `gtmworks status` reports every Engine
-beside the services. See **One Engine per Company** under Install for what each
-Engine holds and how much memory it adds.
+healthy, and makes the Company with that existing Person as its Owner; with no
+`--owner` it prints a first-Owner link instead and makes the Company when that link is
+sent. `company link` prints a fresh link for a Company still waiting and ends the
+earlier one. A failed Engine leaves nothing behind and the same command can be run
+again. `company list` shows every Company with the state of its Engine, including one
+still waiting for its Owner. `gtmworks status` reports every Engine beside the
+services. See **One Engine per Company** under Install for what each Engine holds and
+how much memory it adds.
 
 ## Update
 

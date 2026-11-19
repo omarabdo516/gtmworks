@@ -9,7 +9,7 @@
 # image and starts gtmworks; nothing is built and no source is downloaded. It keeps a copy of itself in the folder as
 # gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
 #   gtmworks status | update | backup | restore <archive> | install | sign-in claude
-#   gtmworks company add --name <Company> --owner <email> | gtmworks company list
+#   gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
 # stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
@@ -50,7 +50,8 @@ Usage:
   gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes]]
   gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
-  gtmworks company add --name <Company> --owner <email>
+  gtmworks company add --name <Company> [--owner <email>]
+  gtmworks company link <Company>  (a fresh first-Owner link for a Company still waiting)
   gtmworks company list     (each Company and the state of its Engine)
 USAGE
   exit "${1:-2}"
