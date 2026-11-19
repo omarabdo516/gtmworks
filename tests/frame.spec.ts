@@ -95,7 +95,9 @@ test('a section not built yet says so at its address, and a settings page\'s tra
 test('Viewer has the same navigation, New chat included, without new card on every company section',async({page})=>{
  test.setTimeout(180000);
  await signIn(page,'viewer@example.com','/c/rs-learning/home');
- for(const path of Object.keys(sections)) {
+ // Usage is the Owner's and the Managers' (#32): it has no page for a Viewer, and usage.spec.ts proves the refusal, so
+ // the walk leaves that one address out; every other section is the same frame as it is for the other Roles.
+ for(const path of Object.keys(sections).filter(path=>path!=='usage')) {
   await page.goto(`/c/rs-learning/${path}`);
   // Settings is the full-window overlay (#26) over the same frame, which stays behind it, inert.
   if(path==='settings') await expect(page.locator('[inert] .sidebar .sb-nav .sb-item')).toHaveText(labels);
