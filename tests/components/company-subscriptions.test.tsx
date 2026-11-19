@@ -14,7 +14,7 @@ const profile = 'co-10000000000000000000000000000001';
 const command = 'docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes';
 const signIns = (chatgpt: SubscriptionState, claude: SubscriptionState): CompanySignIns['signIns'] =>
   ({ 'openai-codex': { state: chatgpt, flow: 'device_code' }, anthropic: { state: claude, flow: 'external' } });
-const section = (props: { owner: boolean, oneCompany: boolean, signIns: CompanySignIns['signIns'] }, language: 'en' | 'ar' = 'en') =>
+const section = (props: { owner: boolean, oneCompany: boolean, signIns: CompanySignIns['signIns'], noEngine?: boolean }, language: 'en' | 'ar' = 'en') =>
   render(<LanguageProvider language={language}><CompanySubscriptions company="c-1" profile={profile} {...props}/></LanguageProvider>);
 const stateOf = (provider: string) => document.querySelector(`#sub-${provider}-state`)?.textContent;
 const buttons = () => [...document.querySelectorAll('#md-subscriptions button')].map(button => button.getAttribute('aria-label'));
@@ -60,6 +60,18 @@ test('on an install with several companies a root sign-in is shared: the warning
   expect(buttons()).toEqual([]);
   expect(document.querySelector('#sub-anthropic code')?.textContent).toBe(`${command} -p ${profile} auth add anthropic --type oauth --no-browser`);
   expect(document.querySelector('#md-subscriptions > .set-hint')?.textContent).toBe(`${en.signInHint} ${en.signInOwnSpace}`);
+});
+
+test('when the company\'s engine is not running, one notice says so in both languages and no sign-in action is offered', async () => {
+  for (const [language, text] of [['en', en.noEngine], ['ar', ar.noEngine]] as const) {
+    const screen = await section({ owner: true, oneCompany: true, signIns: null, noEngine: true }, language);
+    await expect.element(screen.getByRole('note')).toHaveTextContent(text);
+    expect(buttons()).toEqual([]);
+    expect(document.querySelector('#sub-openai-codex')).toBeNull();
+    expect(document.querySelector('#md-subscriptions code')).toBeNull();
+    expect(document.querySelector('#md-subscriptions > .set-hint')).toBeNull();
+    await screen.unmount();
+  }
 });
 
 test('a member who is not the Owner reads each state and gets no button and no command', async () => {

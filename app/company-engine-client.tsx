@@ -52,7 +52,7 @@ async function ask(body:object):Promise<{ok:boolean,body:Record<string,unknown>}
 // shows its state, and for the Owner starts ChatGPT's sign-in (a code and a link), follows it until it is connected, or
 // disconnects. Claude signs in from the install's command line only.
 const stateText:Record<SubscriptionState,string>={connected:'signInConnected',mainAgentOnly:'signInMainAgentOnly',someAgentsOnly:'signInSomeAgentsOnly',shared:'signInShared',notConnected:'signInNotConnected'};
-export function CompanySubscriptions({company,owner,profile,oneCompany,signIns}:{company:string,owner:boolean,profile:string|null,oneCompany:boolean,signIns:CompanySignIns['signIns']}) {
+export function CompanySubscriptions({company,owner,profile,oneCompany,signIns,noEngine=false}:{company:string,owner:boolean,profile:string|null,oneCompany:boolean,signIns:CompanySignIns['signIns'],noEngine?:boolean}) {
  const {t}=useI18n(); const router=useRouter();
  const [started,setStarted]=useState<Started|null>(null);
  const [note,setNote]=useState<{provider:Provider,key:string,alert?:boolean}|null>(null);
@@ -115,8 +115,9 @@ export function CompanySubscriptions({company,owner,profile,oneCompany,signIns}:
  };
  return <section className="dp-sec" aria-labelledby="md-h-sub" id="md-subscriptions"><h4 className="dp-label" id="md-h-sub"><span>{t('settingsModelsSubs')}</span></h4>
   {signIns&&Object.values(signIns).some(found=>found.state==='shared')&&<p className="ro-note sov-warn" role="note" id="sub-shared"><SettingsIcon name="shield"/><span>{t('signInSharedWarning')}</span></p>}
-  {profile?<div className="panel-card">{row('openai-codex',t('signInChatGPT'))}{row('anthropic',t('signInClaude'))}</div>
+  {noEngine?<p className="ro-note sov-warn" role="note" id="sub-no-engine"><SettingsIcon name="shield"/><span>{t('noEngine')}</span></p>
+   :profile?<div className="panel-card">{row('openai-codex',t('signInChatGPT'))}{row('anthropic',t('signInClaude'))}</div>
    :<div className="panel-card"><p className="panel-empty">{t('signInNoProfile')}</p></div>}
-  <p className="set-hint">{t('signInHint')} {t(oneCompany?'signInOneCompany':'signInOwnSpace')}</p>
+  {!noEngine&&<p className="set-hint">{t('signInHint')} {t(oneCompany?'signInOneCompany':'signInOwnSpace')}</p>}
  </section>;
 }
