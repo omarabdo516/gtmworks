@@ -1,5 +1,5 @@
 -- Review of spec #353 (#191): one note of an Agent's memory is rewritten or removed by the id the Engine gave it, so who
--- may change one and the log of each change stay in gtmworks, as a reset does (20270219000000). check_memory_edit checks
+-- may change one and the log of each change stay in gtmworks, as a reset does (20270225000000). check_memory_edit checks
 -- an edit before the Engine is changed: an active Owner or Manager of the Company, an Agent of that Company, and a note
 -- id that is a memory note's (never a skill's). check_memory_forget checks a removal: the Owner alone, as a reset is.
 -- log_memory_edit and log_memory_forget record one row of the Company log each once the Engine holds the change, naming

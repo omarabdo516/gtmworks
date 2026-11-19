@@ -95,7 +95,9 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
   return turn?.steps.length?[{run_id:message.run_id,steps:turn.steps,seconds:turn.seconds}]:[];
  }):[];
 }
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps};
+// A file a person sent with a message (#155; design-reference: filesHTML): its name, and the id its own route serves it by.
+type MessageFile={id:number,name:string};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_session_id,hermes_agents(connection_id,is_default)';
@@ -119,8 +121,12 @@ const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='
 // questions follow its person's message, each with its answer, before the run's reply (#138), as its requests do (#163). The reply carries its
 // Run's steps when the Engine reported any (#141). The message of a turn "Done it" started (#140, `handTurn`) was
 // never written by the person: it draws no bubble, and what its run showed stays.
-export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
- const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at};
+// The files a message carries (#155) are read beside the messages, by the message they were linked to; a file still
+// waiting for its message (a turn that has not started) is named by its send key instead (withTeamWork).
+export type StoredFile={id:number,name:string,message_id:number|null,send_key:string|null,position:number};
+export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[],files:StoredFile[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
+ const sent=files.filter(row=>row.message_id===message.id).map(({id,name})=>({id,name}));
+ const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at,...(sent.length?{files:sent}:{})};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
  // A connect card (#203) sits right under the reply's text, before the run's other cards (design-reference: msgHTML).
  const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isAsked(row)).sort((a,b)=>Number(isConnect(b))-Number(isConnect(a))); const cards=ofRun.map(row=>row.card);
@@ -155,7 +161,9 @@ export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'}
 export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[])=>messages.filter(message=>message.author==='person'&&!messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)&&!ends.some(run=>run.run_id===message.run_id));
 // Whether the latest message's run was recorded as ended without a reply (stopped, lost or failed).
 export const latestEnded=(messages:StoredMessage[],ends:RunEnd[])=>{ const latest=messages.filter(message=>message.author==='person').at(-1); return !!latest&&ends.some(run=>run.run_id===latest.run_id&&run.outcome!=='completed'); };
-export const titleOf=(messages:ConversationMessage[],agentName:string)=>messages[0]?.body.split('\n')[0]||agentName;
+// A chat is named by its first message: its first line, or, for a message that carries images alone, its first file
+// (design-reference: send's title). A chat with no message yet keeps the Agent's name.
+export const titleOf=(messages:ConversationMessage[],agentName:string)=>messages[0]?.body.split('\n')[0]||messages[0]?.files?.[0]?.name||agentName;
 // The agent's face is drawn from its Connection, as on the Agents page; a detached agent keeps a stable face from the conversation.
 export const faceOf=(conversation:{id:string,hermes_agents:unknown})=>(conversation.hermes_agents as {connection_id:string}|null)?.connection_id||conversation.id;
 export const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -170,12 +178,12 @@ export const queuedColumns='send_key,message,queued_at,started_at,failed_at,hand
 // A turn "Done it" queued, and the person's message it became, name their hand card (#140): the one test every reader
 // of the record uses, waiting or started.
 export const handTurn=(row:{hand_card?:number|null})=>row.hand_card!=null;
-export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],queued:QueuedTurn[]=[],sender=''):ConversationMessage[]=>{
+export const withTeamWork=(record:ConversationMessage[],notes:StoredNote[]=[],queued:QueuedTurn[]=[],sender='',files:StoredFile[]=[]):ConversationMessage[]=>{
  // The record keeps its own order (by id); each note goes before the first message written after it.
  const merged:ConversationMessage[]=[]; const left=[...notes].sort((a,b)=>a.id-b.id);
  for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(noteOf(left.shift()!)); merged.push(message); }
  return [...merged,...left.map(noteOf),
-  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>({id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(turn.failed_at?{failed:true,...(turn.model_refused?{model_refused:true}:{})}:{})}))];
+  ...queued.filter(turn=>!turn.started_at&&!handTurn(turn)).map((turn,index)=>{ const waiting=files.filter(row=>row.send_key===turn.send_key&&row.message_id===null).map(({id,name})=>({id,name})); return {id:index,author:'person' as const,author_name:sender,body:turn.message,created_at:turn.queued_at,kind:'queued' as const,...(waiting.length?{files:waiting}:{}),...(turn.failed_at?{failed:true,...(turn.model_refused?{model_refused:true}:{})}:{})}; })];
 };
 const noteOf=(note:StoredNote):ConversationMessage=>({id:note.id,author:'person',author_name:note.author_name,body:note.body,created_at:note.created_at,kind:'note',to:note.addressed_name});
 // Waiting turns keep the page asking until they have started and been answered.

@@ -227,7 +227,7 @@
   font-size: var(--gw-fs-sm); line-height: 1.4; text-align: start; color: var(--gw-text-1); text-decoration: none;
 }
 .gw .menu__item > .gw-icon { width: 16px; height: 16px; color: var(--gw-text-2); }
-.gw .menu__item:focus-visible { background: var(--gw-bg-hover); outline: none; }
+.gw .menu__item[aria-selected="true"], .gw .menu__item:focus-visible { background: var(--gw-bg-hover); outline: none; }
 .gw .menu__t { flex: 1 1 0; min-width: 0; }
 .gw .menu__d { display: block; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .lang-native { display: block; }
@@ -329,6 +329,19 @@
 .gw .queued { display: inline-flex; align-items: center; gap: 4px; padding-inline-end: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .queued .gw-icon { width: 13px; height: 13px; }
 .gw .turn--user.is-queued .bubble--user { opacity: .72; }
+/* The images a person sent with their message sit under their bubble, on the start side (#155; design-reference:
+   .msg-files, .file-chip), and so do the images chosen for the message above the composer's field. */
+.gw .msg-files, .gw .composer__files { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.gw .composer__files { padding: 8px 8px 0; }
+.gw .file-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--gw-r-full); max-width: 260px;
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-sm); color: var(--gw-text-2);
+}
+.gw a.file-chip { text-decoration: none; }
+.gw .file-chip .gw-icon { width: 14px; height: 14px; flex: none; }
+.gw .file-chip bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw .file-chip button { display: inline-flex; color: var(--gw-text-3); border-radius: 50%; }
+@media (hover: hover) { .gw .file-chip button:hover { color: var(--gw-text-1); } }
 .gw .composer__send.is-stop .gw-icon { width: 16px; height: 16px; }
 .gw .empty-chat { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 40px 0; }
 .gw .empty-chat__faces { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -360,6 +373,18 @@
 .gw .suggest b { font-size: var(--gw-fs-base); font-weight: 600; }
 .gw .suggest span { font-size: var(--gw-fs-sm); color: var(--gw-text-3); text-wrap: pretty; }
 @media (hover: hover) { .gw .suggest button:hover { background: var(--gw-bg-elevated-hover); } }
+/* The picker of a known Agent's empty chat (#171; design-reference: .agent-picker, .chip): every Agent this Member sees,
+   its pressed chip the primary fill and a face inside it. */
+.gw .empty-chat .agent-picker { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+.gw .empty-chat .chip {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; padding-inline-start: 6px; border: 0;
+  border-radius: var(--gw-r-full); background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset;
+  font: inherit; font-size: var(--gw-fs-sm); font-weight: 400; color: var(--gw-text-1); white-space: nowrap; cursor: pointer;
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .empty-chat .chip__face { display: inline-flex; }
+.gw .empty-chat .chip[aria-pressed="true"] { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+@media (hover: hover) { .gw .empty-chat .chip:hover:not([aria-pressed="true"]) { background: var(--gw-bg-elevated-hover); } }
 .gw .main-h { display: inline-flex; align-items: center; gap: 8px; }
 .gw .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
 .gw .main-badge { align-self: center; }
@@ -377,7 +402,20 @@
 }
 .gw .composer__btn .gw-icon { width: 16px; height: 16px; }
 .gw .composer__mic { background: transparent; box-shadow: none; color: var(--gw-text-2); }
+/* A recording microphone is pressed, and a microphone the Engine cannot use is quiet (design-reference: .composer__mic). */
+.gw .composer__mic[aria-pressed="true"] { background: var(--gw-bg-secondary-hover); color: var(--gw-text-1); }
+.gw .composer__mic[aria-disabled="true"] { color: var(--gw-text-4); }
 @media (hover: hover) { .gw .composer__btn:hover:not([aria-disabled="true"]) { background: var(--gw-bg-secondary-hover); } }
+/* While it records, a waveform takes the place of the field, with the dot and the clock beside it (design-reference:
+   .composer.is-rec, .wave, .composer__rec, .rec-dot; #160). */
+.gw .composer.is-rec .composer__input { display: none; }
+.gw .wave { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.gw .wave__bars { display: flex; align-items: center; gap: 2px; height: 24px; flex: none; direction: ltr; }
+.gw .wave__bar { display: block; width: 2px; height: 22px; border-radius: var(--gw-r-full); background: var(--gw-text-2); transform: scaleY(.2); transition: transform 140ms var(--gw-ease-out); }
+.gw .wave__hint { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .composer__rec { display: inline-flex; align-items: center; gap: 6px; height: 28px; margin: 8px 0; flex: none; font-size: var(--gw-fs-xs); color: var(--gw-text-2); white-space: nowrap; }
+.gw .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gw-text-1); animation: gw-breathe 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .gw .rec-dot { animation: none; } .gw .wave__bar { transition: none; } }
 /* The "+" button while its menu is open (#153; design-reference: .composer__btn[aria-expanded]): its plus turns to a cross. */
 .gw .composer__btn[aria-expanded="true"] { background: var(--gw-bg-secondary-hover); }
 .gw .composer__btn .gw-icon { transition: transform var(--gw-dur-fast) var(--gw-ease-out); }
@@ -848,11 +886,11 @@
 .gw .tool-tile--ink .gw-icon { width: 22px; height: 22px; }
 
 /* Authored text inside the English interface takes its direction from its own words. */
-[dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate, .reply-card .card__title, .reply-card .card__sub, .reply-card .kv__row dd) { unicode-bidi: plaintext; text-align: left; }
+[dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }
+/* A reply card sets its direction once from its title (#307), so its texts follow the card and keep the left edge. */
+[dir="ltr"] .gw :is(.reply-card .card__title, .reply-card .card__sub, .reply-card .kv__row dd) { text-align: left; }
 [dir="ltr"] .gw :is(.dp-id__name, .empty-chat h2, .new-hint__t, .born span, .ac-never span, .modal__sub, .tpl__line, .tpl__hand span) { unicode-bidi: plaintext; }
 [dir="ltr"] .gw .suggest :is(b, span) { unicode-bidi: plaintext; text-align: left; }
-/* Longer Arabic text reads as a right-aligned paragraph (design-reference: .rv-note). */
-[dir="ltr"] .gw .reply-card .rv-note { unicode-bidi: plaintext; }
 
 /* ---------- the reference's widths: a narrower sidebar and details below 1280px, the details over the chat below 1024px ---------- */
 @media (max-width: 1279px) {
@@ -911,6 +949,9 @@
   .gw .new-hint__alt::before { content: ""; position: absolute; inset: -11px 0; }
   .gw .tpl-cats { padding-block: 5px; margin-block: -3px; }
   .gw .tpl-cats .chip::before { content: ""; position: absolute; inset: -5px 0; }
+  /* The picker's chips keep the reference's 34px, each with a 44px tap area. */
+  .gw .agent-picker .chip { position: relative; }
+  .gw .agent-picker .chip::before { content: ""; position: absolute; inset: -5px 0; }
   .gw.modal .btn::before { content: ""; position: absolute; inset: -4px 0; }
   .gw.modal .btn--sm::before { inset: -7px 0; }
   .gw .tpl-search { padding-block: 4px; margin-block: -4px; }

@@ -64,7 +64,7 @@ const runsOf=(conversation:string)=>fake.settings.runs.filter(run=>run.session==
 
 test('the Owner\'s menu: New channel opens the channel dialog and gives the focus back to "+", and Connect apps counts the connected app and opens the apps sheet',async({page})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${lead}`);
- await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, new channel, commands');
+ await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, new channel, commands, attach');
  await plus(page).click();
  await expect(menu(page).getByRole('menuitem',{name:'New channel For the team and agents in one conversation'})).toBeVisible();
  const apps=menu(page).getByRole('menuitem',{name:/^Connect apps/});
@@ -100,7 +100,7 @@ test('a Manager has New channel, only the count, and no Model; a Contributor has
 
  await page.context().clearCookies();
  await signIn(page,'reviewer@example.com',`/c/rs-learning/chat/${lead}`);
- await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, commands');
+ await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, commands, attach');
  await plus(page).click();
  await expect(menu(page).getByRole('menuitem',{name:/^New channel/})).toHaveCount(0);
  await expect(menu(page).getByRole('menuitem',{name:/^Connect apps/}).locator('.menu__d')).toHaveText('1 connected');
@@ -160,7 +160,7 @@ test('in a Company worked alone the Owner has no New channel',async({page})=>{
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${sage}','${alone}','${connection}','Sage','General',true,'plus-alone');
  end $$;`);
  await signIn(page,'omar@example.com',`/c/rs-consultations/chat/${sage}`);
- await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, commands');
+ await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, commands, attach');
  await plus(page).click();
  await expect(menu(page).getByRole('menuitem',{name:/^Connect apps/})).toBeVisible();
  await expect(menu(page).getByRole('menuitem',{name:/^New channel/})).toHaveCount(0);
@@ -170,7 +170,7 @@ test('the Owner picks a model: the menu closes, the field has the focus, the toa
  await signIn(page,'omar@example.com','/c/rs-learning/home');
  const other=await conversationWith(page,'Draft the welcome email');
  const conversation=await conversationWith(page,'Plan the launch');
- await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, new channel, commands, model');
+ await expect(plus(page)).toHaveAttribute('aria-label','More: call someone, new channel, commands, attach, model');
  await plus(page).click();
  const models=menu(page).getByRole('menuitemradio');
  // Each row is the model and its provider, as the Engine names them.

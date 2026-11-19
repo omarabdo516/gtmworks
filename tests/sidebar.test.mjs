@@ -22,7 +22,7 @@ test('the sidebar reads the company’s own real Agents, the main Agent first', 
   order: column => { calls.push(['order', column]); return Promise.resolve({ data: rows }); },
  }; return chain; } };
  assert.deepEqual((await companyAgents(db, 'company-1')).map(agent => agent.id), ['l', 'a']);
- assert.deepEqual(calls, [['from', 'hermes_agents'], ['select', 'id,connection_id,name,speciality,is_default,requested_by,requester_opened_at'], ['eq', 'company_id', 'company-1'], ['order', 'name']]);
+ assert.deepEqual(calls, [['from', 'hermes_agents'], ['select', 'id,connection_id,name,speciality,is_default,requested_by,requester_opened_at,template'], ['eq', 'company_id', 'company-1'], ['order', 'name']]);
  const empty = { from: () => ({ select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: null }) }) }) }) };
  assert.deepEqual(await companyAgents(empty, 'company-1'), []);
 });

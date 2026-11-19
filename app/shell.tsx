@@ -38,9 +38,9 @@ export const sidebarReads=cache(async(id:string|undefined)=>{
  return Promise.all([
   id?Promise.all([companyAgents(db,id),db.rpc('agent_states',{c:id}).then(({data})=>agentStates(data))]):[[],agentStates(null)] as const,
   // Each listed chat with its own first message (a limit per chat), so a long chat never crowds another out of the titles.
-  id?db.from('conversations').select('id,agent_name,created_at,conversation_messages(body)').eq('company_id',id).eq('conversation_messages.author','person')
+  id?db.from('conversations').select('id,agent_name,created_at,conversation_messages(body,conversation_attachments(name))').eq('company_id',id).eq('conversation_messages.author','person')
    .order('created_at',{ascending:false}).order('id',{referencedTable:'conversation_messages'}).limit(1,{referencedTable:'conversation_messages'}).limit(20)
-   .then(({data})=>(data||[]) as {id:string,agent_name:string,created_at:string,conversation_messages:{body:string}[]}[]):[],
+   .then(({data})=>(data||[]) as {id:string,agent_name:string,created_at:string,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[]}[]):[],
   id?db.from('companies').select('work_mode').eq('id',id).maybeSingle().then(({data})=>data?.work_mode as string|null|undefined):undefined,
   id?channelSidebar(db,id):[],
   id?db.rpc('can_manage_company',{target:id}).then(({data})=>!!data):false,
@@ -65,8 +65,9 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const [[agents,stateOf],conversations,workMode,channels,manage,canWrite,ids]=await sidebarReads(id);
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
- // A chat is named by the first line of its first message, as its own page names it (lib/conversations titleOf).
- const chats=conversations.map(c=>({id:c.id,created_at:c.created_at,title:c.conversation_messages[0]?.body.split('\n')[0]||c.agent_name}));
+ // A chat is named by the first line of its first message, or by its first file when it carries images alone (#155), as
+ // its own page names it (lib/conversations titleOf).
+ const chats=conversations.map(c=>{ const first=c.conversation_messages[0]; return {id:c.id,created_at:c.created_at,title:first?.body.split('\n')[0]||first?.conversation_attachments?.[0]?.name||c.agent_name}; });
  const asksForAgents=writer&&!owner;
  const account=<><AccountMenu slug={slug} company={company?.id} personId={personId} canManage={manage} owner={owner} alone={workMode==='alone'} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
@@ -119,8 +120,10 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  // The apps sheet sits around the whole frame, so the sidebar, the account menu and every composer's "+" open it (#202).
  const framed=company?.id?<AppsSheetProvider company={company.id} owner={owner} rtl={language==='ar'}>{frame}</AppsSheetProvider>:frame;
  const shown=question?<><div style={{display:'contents'}} inert>{framed}</div>{question}</>:framed;
- // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153).
- const callable=agents.map(({id,connection_id,name})=>({id,connection_id,name}));
+ // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153); the "@" list offers the
+ // same Agents with the line under each name, their state and role (#154; design-reference: mentionMenu). Each Agent
+ // carries the ready-made role it was made from, so the Commands can name it (#159).
+ const callable=agents.map(({id,connection_id,name,speciality,template})=>({id,connection_id,name,speciality,role:template,status:stateOf(id)}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
  return <AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider>;

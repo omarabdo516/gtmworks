@@ -18,26 +18,39 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 // The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
 const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
 
-// #136: every word on a draft card is the Agent's, so the card is laid out in its title's direction and each text keeps
-// its own, whichever the interface's.
+// #136: every word on a draft card is the Agent's, so the card is laid out once in its title's direction and every text on
+// it follows the card, whichever the interface's.
 const plan: Card = { id: 1, kind: 'draft', title: 'خطة الحملة', line: 'مسودة · Meta Ads', rows: [{ label: 'الهدف', value: 'ليدز على واتساب' }, { label: 'Budget', value: 'EGP 500 a day' }] };
 const outline: Card = { id: 2, kind: 'draft', title: 'Article outline', line: 'Draft · the blog', rows: [{ label: 'Keyword', value: 'كورس محاسبة اونلاين' }] };
 const drawn = (card: Card, language: 'en' | 'ar') => render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false}/></div></LanguageProvider>);
 
 test.each([
- ['Arabic', 'English', plan, 'en', [['خطة الحملة', 'rtl'], ['مسودة · Meta Ads', 'rtl'], ['الهدف', 'rtl'], ['ليدز على واتساب', 'rtl'], ['Budget', 'ltr'], ['EGP 500 a day', 'ltr']]],
- ['English', 'Arabic', outline, 'ar', [['Article outline', 'ltr'], ['Draft · the blog', 'ltr'], ['Keyword', 'ltr'], ['كورس محاسبة اونلاين', 'rtl']]],
-] as const)('a draft written in %s, in the %s interface, is laid out in its own direction and shows its title, line and rows, each in its own direction', async (_, __, card, language, texts) => {
+ ['Arabic', 'English', plan, 'en', 'rtl'],
+ ['English', 'Arabic', outline, 'ar', 'ltr'],
+] as const)('a draft written in %s, in the %s interface, is laid out in its title\'s direction and shows its title, line and rows, each following the card', async (_, __, card, language, direction) => {
  const screen = await drawn(card, language);
  const group = screen.getByRole('group', { name: card.title });
  await expect.element(group).toBeVisible();
- expect(group.element().matches(`:dir(${language === 'ar' ? 'ltr' : 'rtl'})`), 'the card follows its title, not the interface').toBe(true);
+ expect(group.element().matches(`:dir(${direction})`), 'the card follows its title, not the interface').toBe(true);
  expect([...group.element().querySelectorAll('dt, dd')].map(text => text.textContent)).toEqual(card.rows.flatMap(row => [row.label, row.value]));
- for (const [text, direction] of texts) expect(group.getByText(text, { exact: true }).element().matches(`:dir(${direction})`), text).toBe(true);
+ const texts = [group.element().querySelector('.card__title'), group.element().querySelector('.card__sub'), ...group.element().querySelectorAll('dt, dd')];
+ for (const text of texts) expect(text?.matches(`:dir(${direction})`), text?.textContent ?? '').toBe(true);
 });
 
-// design-reference/index.html: Arabic content inside the English interface takes each line's direction from its own text
-// and keeps the interface's left edge; a label stays in its column. In the Arabic interface nothing changes.
+// #307: the card sets its direction once, from its title, so its line and rows follow the card and an Arabic card whose
+// line starts with a Latin name ("SEO سابه مسودة…") stays right to left in either interface.
+test.each(['en', 'ar'] as const)('in the %s interface, the line and rows of an Arabic draft follow the card, also when they start with a Latin name', async language => {
+ const card: Card = { id: 4, kind: 'draft', title: 'مسودة مقال «كورس محاسب شامل»', line: 'SEO سابه مسودة على WordPress، وانت اللي تدوس نشر.', rows: [{ label: 'SEO', value: 'Search Console هيتابع الترتيب' }, { label: 'المراجعة', value: 'Critic: مقبول بعد تعديل واحد' }] };
+ const screen = await drawn(card, language);
+ const group = screen.getByRole('group', { name: card.title });
+ await expect.element(group).toBeVisible();
+ expect(group.element().matches(':dir(rtl)'), 'the card follows its title, not the interface').toBe(true);
+ const texts = [group.element().querySelector('.card__title'), group.element().querySelector('.card__sub'), ...group.element().querySelectorAll('dt, dd')];
+ for (const text of texts) expect(text?.matches(':dir(rtl)'), text?.textContent ?? '').toBe(true);
+});
+
+// design-reference/index.html: Arabic content inside the English interface keeps the interface's left edge; a label stays
+// in its column. Every text follows the card's direction (#307), so none takes its own. In the Arabic interface nothing changes.
 test.each([['en', 'left'], ['ar', 'start']] as const)('in the %s interface, the title, line and values align %s', async (language, align) => {
  const sheets = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
  const styles = sheets.map(css => Object.assign(document.createElement('style'), { textContent: css }));
@@ -49,7 +62,7 @@ test.each([['en', 'left'], ['ar', 'start']] as const)('in the %s interface, the 
  const style = (text: string) => { const found = getComputedStyle(group.getByText(text, { exact: true }).element()); return [found.textAlign, found.unicodeBidi]; };
  for (const text of [plan.title, plan.line, plan.rows[0].value]) {
   expect(style(text)[0], text).toBe(align);
-  if (language === 'en') expect(style(text)[1], text).toBe('plaintext');
+  expect(style(text)[1], `${text} follows the card (#307)`).not.toBe('plaintext');
  }
  expect(style(plan.rows[0].label)[0], 'a label keeps its column').toBe('start');
  if (language === 'en') {
@@ -91,13 +104,13 @@ test.each([
 });
 
 // design-reference: the review card sets its direction once, so a reviewed text that starts with a Latin word ("Excel …")
-// stays in the Arabic card's lines, as do its note and the decision.
+// stays in the Arabic card's lines, as do its line, note and decision.
 test.each(['en', 'ar'] as const)('in the %s interface, every text of an Arabic review follows the card\'s direction', async language => {
- const card: Card = { ...review, items: [{ text: 'Excel وOdoo والضرايب في كورس واحد بـ 2,400 ج', fine: true, note: 'Odoo: السعر مطابق لصفحة الكورس.' }], decision: 'OK كله جاهز' };
+ const card: Card = { ...review, line: 'Meta Ads · نصوص ديسمبر', items: [{ text: 'Excel وOdoo والضرايب في كورس واحد بـ 2,400 ج', fine: true, note: 'Odoo: السعر مطابق لصفحة الكورس.' }], decision: 'OK كله جاهز' };
  const screen = await render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false}/></div></LanguageProvider>);
  const group = screen.getByRole('group', { name: language === 'ar' ? `مراجعة: ${card.title}` : `Review: ${card.title}` });
  await expect.element(group).toBeVisible();
- for (const part of group.element().querySelectorAll('.rv-q, .rv-note, .rv-decision__t')) expect(part.matches(':dir(rtl)'), part.textContent ?? '').toBe(true);
+ for (const part of group.element().querySelectorAll('.card__title, .card__sub, .rv-q, .rv-note, .rv-decision__t')) expect(part.matches(':dir(rtl)'), part.textContent ?? '').toBe(true);
 });
 
 const at = '2026-06-10T09:41:00Z';

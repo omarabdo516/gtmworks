@@ -11,7 +11,7 @@ import { workDate } from './work-date.mjs';
 import { roleAgents } from './role-agents';
 import { isThumbnail } from './attachments.mjs';
 import { columnLabel } from './board-columns.mjs';
-export type WorkMember={person_id:string,agent_role?:string|null,people:{name:string}|null};
+export type WorkMember={person_id:string,role?:'owner'|'manager'|'contributor'|'viewer',agent_role?:string|null,people:{name:string}|null};
 export type WorkActivity={id:number,card_id:number,action:string,details:Record<string,unknown>,created_at:string,actor_id:string|null,evidence:string|null,evidence_url?:string|null};
 function useAgentIdentity(id:string|null,members:WorkMember[]) {
  const identity=useAgentIdentities().find(agent=>agent.id===id);
