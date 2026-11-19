@@ -115,6 +115,12 @@ if(step==='prepare') {
  }
  assert.notEqual(companies[0].profile,companies[1].profile);
  assert.notEqual(companies[0].space,companies[1].space);
+ // The settings gtmworks lists are the running Engine's own: its schema and defaults are read here, so a release that
+ // renames or retypes one fails the install instead of a Settings screen.
+ const {engineSettings,settingsSchemaProblems}=await import(`${process.cwd()}/lib/engine-settings.mjs`);
+ const schema=await (await manage(`/api/config/schema?profile=${companies[0].profile}`)).json();
+ const defaults=await (await manage('/api/config/defaults')).json();
+ assert.deepEqual(settingsSchemaProblems(engineSettings,schema,defaults),[],'the running Engine has every setting gtmworks lists');
  const listed=(await (await manage('/api/profiles')).json()).profiles.map(profile=>profile.name);
  for(const entry of companies) {
   assert.ok(listed.includes(entry.profile),`${entry.profile} is a Hermes profile`);

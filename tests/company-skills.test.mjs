@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readSkills, writeSkill, setSkillEnabled } from '../lib/hermes.mjs';
-import { readCompanySkills, changeCompanySkill, changeCompanySkillEnabled } from '../lib/company-skills.mjs';
+import { readSkills, writeSkill, setSkillEnabled, readLearningGraph } from '../lib/hermes.mjs';
+import { readCompanySkills, readAgentSkills, changeCompanySkill, changeCompanySkillEnabled } from '../lib/company-skills.mjs';
 import { companyProfile } from '../lib/agent-levels.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -33,7 +33,8 @@ function sessions(fake,{refuse=null,agents=rows,target=true}={}) {
  process.env.BUNDLED_HERMES_URL=fake.address; process.env.HERMES_API_KEY='test-only-key';
  return {db,logged};
 }
-const driverAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress}); return {read:target=>readSkills(at(target)),write:(target,skill)=>writeSkill(at(target),skill),enable:(target,skill)=>setSkillEnabled(at(target),skill)}; };
+const driverAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress}); return {read:target=>readSkills(at(target)),write:(target,skill)=>writeSkill(at(target),skill),enable:(target,skill)=>setSkillEnabled(at(target),skill),learned:target=>readLearningGraph(at(target))}; };
+const driverTarget=(fake,profile)=>({address:fake.address,managementAddress:fake.managementAddress,profile,key:fake.settings.key});
 const profileOn=(fake,name,config={})=>fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config,credentials:{}});
 const skillMd=(name,body='Do the thing.')=>`---\nname: ${name}\ndescription: Writes the Friday recap.\n---\n\n${body}\n`;
 
@@ -48,9 +49,9 @@ test('each Agent\'s skills are its profile\'s, the shared ones marked shared', a
   const {db}=sessions(fake);
   const read=await readCompanySkills(db,{company,driver:driverAt(fake)});
   assert.deepEqual(read,[
-   {id:lead,name:'Lead',own:true,skills:[{name:'team-lessons',shared:true,enabled:true}]},
-   {id:writer,name:'Writer',own:true,skills:[{name:'weekly-recap',shared:false,enabled:true},{name:'team-lessons',shared:true,enabled:true}]},
-   {id:helper,name:'Helper',own:false,skills:[{name:'team-lessons',shared:true,enabled:true}]},
+   {id:lead,name:'Lead',own:true,skills:[{name:'team-lessons',description:'Writes the Friday recap.',category:null,locked:false,provenance:'external',shared:true,enabled:true}]},
+   {id:writer,name:'Writer',own:true,skills:[{name:'weekly-recap',description:'Writes the Friday recap.',category:null,locked:false,provenance:'agent',shared:false,enabled:true},{name:'team-lessons',description:'Writes the Friday recap.',category:null,locked:false,provenance:'external',shared:true,enabled:true}]},
+   {id:helper,name:'Helper',own:false,skills:[{name:'team-lessons',description:'Writes the Friday recap.',category:null,locked:false,provenance:'external',shared:true,enabled:true}]},
   ]);
   const unread=await readCompanySkills(db,{company,driver:{read:async()=>({state:'unreachable',skills:null})}});
   assert.deepEqual(unread?.map(agent=>agent.skills),[null,null,null],'a profile that cannot be read has no list, never an empty one');
@@ -130,16 +131,59 @@ test('a skill is switched off and on for one Agent\'s own profile, checked and l
   const toggle=(agent,name,enabled,on=db)=>changeCompanySkillEnabled(on,{company,agent,name,enabled,driver});
   assert.deepEqual(await toggle(writer,'weekly-recap',false),{state:'changed',name:'weekly-recap'});
   const writerSkills=async()=>(await readCompanySkills(db,{company,driver}))?.find(agent=>agent.id===writer)?.skills;
-  assert.deepEqual(await writerSkills(),[{name:'weekly-recap',shared:false,enabled:false},{name:'team-lessons',shared:true,enabled:true}]);
+  assert.deepEqual((await writerSkills())?.map(({name,enabled})=>({name,enabled})),[{name:'weekly-recap',enabled:false},{name:'team-lessons',enabled:true}]);
   assert.deepEqual(await toggle(writer,'weekly-recap',true),{state:'changed',name:'weekly-recap'});
   assert.equal((await writerSkills())?.[0].enabled,true);
   assert.deepEqual(logged.map(row=>row.act),['disabled','enabled']);
+  // Every switch named the Writer's own profile and no other.
+  const toggles=fake.settings.managementRequests.filter(request=>request.path.startsWith('/api/skills/toggle'));
+  assert.equal(toggles.length,2);
+  for(const request of toggles) assert.equal(request.path,`/api/skills/toggle?profile=${agentProfile(writer)}`);
   assert.deepEqual(await toggle(writer,'team-lessons',false),{state:'shared',name:'team-lessons'},'the team\'s skill reaches every Agent');
   assert.deepEqual(await toggle(helper,'weekly-recap',false),{state:'notOwn',name:null});
   assert.deepEqual(await toggle(writer,'missing',false),{state:'failed',name:'missing'},'a skill the profile does not have');
+  // The Engine's essential skill is always on, and is never asked about (#180).
+  const asked=fake.settings.managementRequests.length;
+  assert.deepEqual(await toggle(writer,'hermes-agent',false),{state:'essential',name:'hermes-agent'});
+  assert.equal(fake.settings.managementRequests.length,asked,'the essential skill is refused before the Engine is asked');
+  // The driver refuses it on its own too, and the read never lists it.
+  assert.deepEqual(await setSkillEnabled({...driverTarget(fake,agentProfile(writer))},{name:'hermes-agent',enabled:false}),{state:'essential'});
+  assert.equal(fake.settings.managementRequests.length,asked);
+  assert.equal((await readSkills(driverTarget(fake,agentProfile(writer)))).skills.some(skill=>skill.name==='hermes-agent'),false);
   const refused=sessions(fake,{refuse:'skillNotAllowed'});
   assert.deepEqual(await toggle(writer,'weekly-recap',false,refused.db),{state:'notAllowed',name:'weekly-recap'});
   assert.equal((await writerSkills())?.[0].enabled,true);
   assert.equal(logged.length,2);
+ } finally { await fake.close(); }
+});
+
+test('the Agent page reads that Agent\'s own profile only, leaves the team\'s and the essential skills out, and marks what it learned', async () => {
+ const fake=await fakeHermes();
+ try {
+  const shared={skills:{external_dirs:[`/opt/data/profiles/${space}/skills`]}};
+  profileOn(fake,companyProfile(company),shared); profileOn(fake,agentProfile(writer),shared); profileOn(fake,space);
+  fake.settings.skills.set(space,new Map([['team-lessons',skillMd('team-lessons')]]));
+  fake.settings.skills.set(agentProfile(writer),new Map([['weekly-recap',skillMd('weekly-recap')],['ads-brief',skillMd('ads-brief')],
+   ['report',skillMd('report').replace('description: Writes the Friday recap.','description: Writes the Friday recap.\ncategory: writing')]]));
+  fake.settings.skills.set(companyProfile(company),new Map([['lead-only',skillMd('lead-only')]]));
+  fake.settings.skillProvenance.set(`${agentProfile(writer)}:ads-brief`,'hub');
+  fake.settings.skillProvenance.set(`${agentProfile(writer)}:report`,'bundled');
+  fake.settings.skillLocks.add(`${agentProfile(writer)}:report`);
+  fake.settings.skillsOff.add(`${agentProfile(writer)}:ads-brief`);
+  fake.settings.learnedSkills.set(agentProfile(writer),new Set(['weekly-recap']));
+  const {db}=sessions(fake);
+  const driver=driverAt(fake);
+  const read=await readAgentSkills(db,{company,agent:writer,driver});
+  assert.deepEqual(read,{state:'found',own:true,skills:[
+   {name:'weekly-recap',description:'Writes the Friday recap.',category:null,locked:false,provenance:'agent',shared:false,enabled:true,learned:true},
+   {name:'ads-brief',description:'Writes the Friday recap.',category:null,locked:false,provenance:'hub',shared:false,enabled:false,learned:false},
+   {name:'report',description:'Writes the Friday recap.',category:'writing',locked:true,provenance:'bundled',shared:false,enabled:true,learned:false},
+  ]},'the team\'s shared skill and the essential one are not on the Agent page');
+  // Two Agents of one Company read their own lists, and the Agent on the shared profile reads the keeper's without a switch.
+  assert.deepEqual((await readAgentSkills(db,{company,agent:lead,driver}))?.skills.map(skill=>skill.name),['lead-only']);
+  assert.deepEqual(await readAgentSkills(db,{company,agent:helper,driver}),{state:'found',own:false,skills:[{name:'lead-only',description:'Writes the Friday recap.',category:null,locked:false,provenance:'agent',shared:false,enabled:true,learned:false}]});
+  assert.equal(await readAgentSkills(db,{company,agent:'not-an-id',driver}),null);
+  const unread=await readAgentSkills(db,{company,agent:writer,driver:{read:async()=>({state:'unreachable',skills:null}),learned:async()=>({state:'found',learned:[]})}});
+  assert.deepEqual(unread,{state:'unreachable',own:true,skills:null});
  } finally { await fake.close(); }
 });

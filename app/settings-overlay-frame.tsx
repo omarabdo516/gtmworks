@@ -6,12 +6,14 @@ import { useI18n } from '@/lib/i18n-client';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { SettingsIcon } from './settings-icons';
 import { leaveOverlay, returnFocusTo, takeReturnFocus } from './settings-opener';
+import { holdLeave } from './settings-draft';
 
 // Kept apart from the overlay's controls (settings-overlay-client.tsx), which import server actions, so the frame and
 // its close button alone are a client module that a component test can render.
 // The full-window overlay (reference: dialog#sov): it holds the keyboard's first stop and closes on Escape.
 export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFocus?:string,children:ReactNode}) {
  const router=useRouter();
+ const {t}=useI18n();
  const box=useRef<HTMLDivElement>(null);
  // Opening moves focus into the overlay: to the element the page names (an Agent's page: its Settings tab, as the
  // reference's openSov and sov-agent do, also when a row of the list opens it), else the dialog itself, so Tab starts at
@@ -21,26 +23,39 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
   if(named) named.focus({preventScroll:true}); else if(!box.current?.contains(document.activeElement)) box.current?.focus({preventScroll:true});
  },[initialFocus]);
  useEffect(()=>{
-  const keys=(event:globalThis.KeyboardEvent)=>{ if(event.key==='Escape'&&!event.defaultPrevented) router.push(leaveOverlay(slug)); };
+  const keys=(event:globalThis.KeyboardEvent)=>{
+   if(event.key!=='Escape'||event.defaultPrevented) return;
+   // A draft that differs keeps the page: the bar flashes and Save takes the focus.
+   if(holdLeave(t('settingsSaveFirst'))) return;
+   router.push(leaveOverlay(slug));
+  };
   document.addEventListener('keydown',keys);
   return ()=>document.removeEventListener('keydown',keys);
- },[router,slug]);
+ },[router,slug,t]);
  return <div className="gw sov-root"><div ref={box} className="sov" role="dialog" aria-modal="true" aria-labelledby="sov-title" tabIndex={-1}>{children}</div></div>;
 }
 
 export function CloseButton({slug}:{slug:string}) {
  const {t}=useI18n(); const router=useRouter();
- return <button type="button" className="circle-btn" id="sov-close" aria-label={t('settingsCloseLabel')} title={t('settingsCloseTitle')} onClick={()=>router.push(leaveOverlay(slug))}><SettingsIcon name="x"/></button>;
+ return <button type="button" className="circle-btn" id="sov-close" aria-label={t('settingsCloseLabel')} title={t('settingsCloseTitle')} onClick={()=>{ if(!holdLeave(t('settingsSaveFirst'))) router.push(leaveOverlay(slug)); }}><SettingsIcon name="x"/></button>;
 }
 
 // From an Agent's page back to the Agents list, where that Agent's row takes the focus (reference: sov-agent-back and
-// "Back" in The job).
+// "Back" in The job). A draft that differs keeps the page, as every way out does.
 export function BackLink({slug,agent,id,className,children}:{slug:string,agent:string,id?:string,className:string,children:ReactNode}) {
- return <Link className={className} id={id} href={overlayHref(slug,'agents')} replace onClick={()=>returnFocusTo(`sov-ag-${agent}`)}>{children}</Link>;
+ const {t}=useI18n();
+ return <Link className={className} id={id} href={overlayHref(slug,'agents')} replace onClick={event=>{ if(holdLeave(t('settingsSaveFirst'))) { event.preventDefault(); return; } returnFocusTo(`sov-ag-${agent}`); }}>{children}</Link>;
 }
 
-// Drawn in the Agents list: gives the focus to the row of the Agent whose page was just left.
-export function FocusReturn() {
- useEffect(()=>{ const id=takeReturnFocus(stored=>stored.startsWith('sov-ag-')); if(id) document.getElementById(id)?.focus(); },[]);
+// From a Skill's page back to Learning, where the learned Skill's own link takes the focus (reference: sov-skill-back,
+// design-reference/app.js 7585). The skill page's own Back is the first stop when it opens (OverlayFrame).
+export function SkillBack({slug,agent,skill,rtl}:{slug:string,agent:string,skill:string,rtl:boolean}) {
+ const {t}=useI18n();
+ return <Link className="link-btn sov-back" id="sov-skill-back" href={overlayHref(slug,'learning')} replace onClick={()=>returnFocusTo(`ln-see-${agent}:${skill}`)}><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsLearning')}</span></Link>;
+}
+
+// Drawn in a list: gives the focus back to the row whose page was just left, when that row is on this page.
+export function FocusReturn({prefix='sov-ag-'}:{prefix?:string}={}) {
+ useEffect(()=>{ const id=takeReturnFocus(stored=>stored.startsWith(prefix)); if(id) document.getElementById(id)?.focus(); },[prefix]);
  return null;
 }

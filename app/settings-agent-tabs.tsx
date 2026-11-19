@@ -4,10 +4,12 @@ import { useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { overlayHref, type AgentTab } from '@/lib/settings-overlay.mjs';
+import { holdLeave } from './settings-draft';
 
 // The two tabs of an Agent's Settings page (#193; design-reference: sovAgentHTML's tabs). Each is a link to its own
 // address, so the tab survives a reload and a test or a link can open it; the arrow keys choose the other tab in the
-// reader's direction, as the details panel's tabs do (app/agent-details.tsx), and leave the focus on it.
+// reader's direction, as the details panel's tabs do (app/agent-details.tsx), and leave the focus on it. Leaving the
+// Settings tab while its draft differs is held like every way out of the page (#161, design-reference: sovDirty).
 const tabs = [{ key: 'settings', label: 'settings' }, { key: 'memory', label: 'settingsTabMemory' }] as const;
 
 export function AgentTabs({ slug, agent, tab, label }: { slug: string, agent: string, tab: AgentTab, label: string }) {
@@ -18,9 +20,11 @@ export function AgentTabs({ slug, agent, tab, label }: { slug: string, agent: st
   event.preventDefault();
   const step = (event.key === 'ArrowLeft') === (language === 'ar') ? 1 : -1;
   const next = tabs[(tabs.findIndex(item => item.key === tab) + step + tabs.length) % tabs.length].key;
+  if (next !== tab && holdLeave(t('settingsSaveFirst'))) return;
   router.replace(address(next));
   document.getElementById(`sov-tab-${next}`)?.focus();
  };
  return <div className="segmented sov-tabs" role="tablist" aria-label={label}>{tabs.map(item =>
-  <Link key={item.key} replace role="tab" id={`sov-tab-${item.key}`} href={address(item.key)} aria-selected={tab === item.key} aria-controls="sov-agent-panel" tabIndex={tab === item.key ? 0 : -1} onKeyDown={move}>{t(item.label)}</Link>)}</div>;
+  <Link key={item.key} replace role="tab" id={`sov-tab-${item.key}`} href={address(item.key)} aria-selected={tab === item.key} aria-controls="sov-agent-panel" tabIndex={tab === item.key ? 0 : -1} onKeyDown={move}
+  onClick={event => { if (item.key !== tab && holdLeave(t('settingsSaveFirst'))) event.preventDefault(); }}>{t(item.label)}</Link>)}</div>;
 }

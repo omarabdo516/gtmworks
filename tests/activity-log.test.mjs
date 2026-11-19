@@ -33,10 +33,39 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([saved.act, saved.obj, saved.to], [['logActRuleSaved', { text: 'Ads' }], rule, { key: 'logRuleInEffect' }], 'the rule is the object, said in the chat and in effect now');
  const removed = describeEntry({ subject: 'agent', action: 'agent_rule_removed', agent_id: lead, details: { rule: 'x'.repeat(200) } }, { agentName: id => id === lead ? 'Ads' : undefined });
  assert.deepEqual([removed.act, removed.obj.length, removed.to], [['logActRuleRemoved', { text: 'Ads' }], 80, undefined]);
+ const restored = describeEntry({ subject: 'agent', action: 'agent_rule_restored', agent_id: lead, details: { agent_name: 'Ads', rule } });
+ assert.deepEqual([restored.act, restored.obj, restored.to], [['logActRuleRestored', { text: 'Ads' }], rule, { key: 'logRuleInEffect' }], 'a rule brought back is in effect again');
+ assert.equal(i18n('en').t('logActRuleRestored', 'Ads'), 'brought back a rule for Ads');
  // A skill written into an Agent's profile, or switched for it: the skill is the object, the Agent named in the act.
  const skills = ['skill_written', 'skill_enabled', 'skill_disabled'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', skill: 'weekly-recap' } }));
  assert.deepEqual(skills.map(entry => [entry.act, entry.obj]), [[['logActSkillWritten', { text: 'Ads' }], 'weekly-recap'], [['logActSkillEnabled', { text: 'Ads' }], 'weekly-recap'], [['logActSkillDisabled', { text: 'Ads' }], 'weekly-recap']]);
  assert.equal(i18n('en').t('logActSkillDisabled', 'Ads'), 'switched off a skill for Ads');
+ // A field saved from an Agent's page (#161): the Agent is named in the act and the field is what changed. About keeps
+ // no text, so it reads Edited; a field this version has no words for reads as a change to the Agent.
+ const setting = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'about' } });
+ assert.deepEqual([setting.act, setting.obj, setting.from, setting.to], [['logActSettingChanged', { key: 'logFieldAbout' }, { text: 'Ads' }], undefined, undefined, { key: 'logEdited' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); const [key, ...args] = setting.act; return [t(key, ...args.map(value => 'key' in value ? t(value.key) : value.text)), t('logEdited')]; }),
+  [['changed the description in the settings of Ads', 'Edited'], ['غيّر الوصف في إعدادات Ads', 'اتعدّل']]);
+ const unknownField = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'thinking' } }, { agentName: () => 'Ads' });
+ assert.deepEqual([unknownField.act, unknownField.to], [['logActAgentChanged'], undefined], 'a field with no words is never guessed');
+ // The standing instructions read as Edited too (#176): their text is never in the row.
+ const instructions = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'instructions' } });
+ assert.deepEqual([instructions.act, instructions.obj, instructions.from, instructions.to], [['logActSettingChanged', { key: 'logFieldInstructions' }, { text: 'Ads' }], undefined, undefined, { key: 'logEdited' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); const [key, ...args] = instructions.act; return t(key, ...args.map(value => 'key' in value ? t(value.key) : value.text)); }),
+  ['changed the instructions in the settings of Ads', 'غيّر التعليمات في إعدادات Ads']);
+ // The Voice section saved on the Agent's page (#162): one row named by the section, with no value in it.
+ const voice = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'voice' } });
+ assert.deepEqual([voice.act, voice.obj, voice.from, voice.to], [['logActSettingChanged', { key: 'logFieldVoice' }, { text: 'Ads' }], undefined, undefined, undefined]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); const [key, ...args] = voice.act; return t(key, ...args.map(value => 'key' in value ? t(value.key) : value.text)); }),
+  ['changed the voice in the settings of Ads', 'غيّر الصوت في إعدادات Ads']);
+ // A setting on an Agent's Engine profile (#125): its label, then the value before and after; a yes or no is a word.
+ const engineSetting = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', setting: 'memory.memory_char_limit', old: 2200, new: 3000 } });
+ assert.deepEqual([engineSetting.act, engineSetting.from, engineSetting.to], [['logActSettingChanged', { key: 'settingMemorySize' }, { text: 'Ads' }], { text: '2200' }, { text: '3000' }]);
+ assert.equal(i18n('en').t('logActSettingChanged', 'Memory size', 'Ads'), 'changed Memory size in the settings of Ads');
+ const toggled = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', setting: 'memory.memory_enabled', old: true, new: false } });
+ assert.deepEqual([toggled.from, toggled.to], [{ key: 'logOn' }, { key: 'logOff' }]);
+ const unknown = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', setting: 'gone.away', old: 'a', new: 'b' } });
+ assert.equal(unknown.act[1].key, 'settingUnknown', 'a setting this version does not list is never its raw key');
  // An Agent's memory cleared by the Owner (#350): the Agent is named, and no note text is ever in the row.
  const cleared = describeEntry({ subject: 'agent', action: 'memory_reset', agent_id: lead, details: { agent_name: 'Ads' } });
  assert.deepEqual([cleared.act, cleared.obj], [['logActMemoryReset', { text: 'Ads' }], undefined]);

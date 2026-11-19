@@ -53,6 +53,8 @@ insert into decisions
  union all select fn,'exempt','a Member''s own channel action: a message names the Members it mentions, and each of them reads one waiting item that names that message and no Card, while opening the mention (#200) resolves the reader''s own item alone; neither answers a Card' from unnest(array[
   'public.post_channel_message(uuid,uuid,text)','public.read_channel_mention(uuid,bigint)']) fn
  union all select 'public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)','exempt','callable inside the database only; it writes an Agent''s log row, which names no Card'
+ union all select fn,'exempt','an Owner or a Manager saves a field of an Agent''s settings page and writes that Agent''s log row, which names no Card; the caller is checked by check_agent_setting or check_agent_owner_setting' from unnest(array[
+  'public.log_agent_setting(uuid,uuid,text,text,text)','public.log_agent_instructions(uuid,uuid)']) fn
  union all select 'public.pin_run_history(uuid,uuid)','exempt','the worker''s, callable by the service role only: it reads when an Agent last moved from that Agent''s log rows, which name no Card, and answers the Conversation''s own messages'
  union all select 'public.agent_move_blocked(uuid)','exempt','callable inside the database only; it answers whether an Agent has running work, and names no Card'
  union all select fn,'exempt','reads only the waiting items of rule suggestions, which name no Card; the rule''s Agent is checked with can_see_agent' from unnest(array[

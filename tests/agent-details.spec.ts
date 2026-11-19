@@ -124,7 +124,10 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(tab(details,'Memory')).toHaveAttribute('aria-selected','true');
  await tab(details,'Log').click();
  await panel.getByRole('link',{name:'Open the activity log',exact:true}).click();
- await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=a:${ads}$`));
+ // The log is a whole page read on the server, and the address commits when its answer arrives: under the browser
+ // suite's four loaded lanes that took longer than five seconds while the page said it was opening. The address is
+ // still required exactly, with its Agent filter.
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=a:${ads}$`),{timeout:20000});
  await expect(page.locator('.lgp-count')).toHaveText('2 entries');
 
  await page.goto(`/c/rs-learning/chat/${ads}`);
@@ -245,7 +248,7 @@ for(const [who,email,reads] of [['the Owner','omar@example.com',false],['a Manag
  await expect(page).toHaveURL(agentPage(lead));
  await expect(page.locator('#sov-tab-settings')).toBeFocused();
  await expect(page.locator('.sov-agent-id .dp-id__name')).toHaveText('LeadMain');
- await expect(page.locator('#sov-agent-panel .ro-note')).toHaveText(reads?['Agent settings are changed by the Owner only.']:[]);
+ await expect(page.locator('#sov-agent-panel .ro-note')).toHaveText(reads?['Agent settings are changed by the Owner and Managers only.']:[]);
 });
 
 for(const [where,path] of [['a Conversation',`/c/rs-learning/conversations/${conversation}`],['the Agent\'s empty chat',`/c/rs-learning/chat/${ads}`]] as const) test(`closing the Agent's settings opened from ${where} returns there with the focus on the gear, by the button and by Escape`,async({page})=>{

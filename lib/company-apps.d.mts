@@ -4,7 +4,8 @@ export function readCompanyApps(db:SupabaseClient,request:{company:string,hermes
 export function readAgentApps(db:SupabaseClient,request:{company:string,agent:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<Record<string,AppState>|null>;
 export function readAgentSession(db:SupabaseClient,request:{company:string,agent:string,session:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{turns:import('./engine.mjs').SessionTurn[],usage:import('./engine.mjs').SessionUsage|null}|null>;
 export function readChannelAgentSession(db:SupabaseClient,request:{company:string,session:string,profile:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{turns:import('./engine.mjs').SessionTurn[],usage:import('./engine.mjs').SessionUsage|null}|null>;
-export type AgentsUsage={agents:{id:string,name:string}[],input:number|null,output:number|null,sessions:number|null};
+export type UsageModel={model:string,input:number,output:number,sessions:number};
+export type AgentsUsage={agents:{id:string,name:string}[],input:number|null,output:number|null,sessions:number|null,models:UsageModel[]|null};
 export function readCompanyUsage(db:SupabaseClient,request:{company:string,days:number,hermes?:{address:string,key:string}|null,driver?:object}):Promise<AgentsUsage[]|null>;
 export type AgentTool={key:string,name:string,mark:string,state:'connected'|'attention'|'turnedOff'|'missing'};
 export function readAgentTools(db:SupabaseClient,request:{company:string,agent:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<AgentTool[]|null>;

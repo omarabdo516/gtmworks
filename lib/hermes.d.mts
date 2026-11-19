@@ -8,9 +8,14 @@ export function startRun(message:HermesConnection&{input:string,instructions?:st
 export type RunUsage={input:number,output:number};
 export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null,question?:import('./engine.mjs').RunQuestion}>;
 export function readSession(connection:import('./engine.mjs').EngineConnection,session:string):Promise<import('./engine.mjs').SessionRead>;
-export type ProfileUsage={state:'found',input:number,output:number,sessions:number}|{state:'refused'|'unreachable',input:null,output:null,sessions:null};
+export type UsageModel={model:string,input:number,output:number,sessions:number};
+export type ProfileUsage={state:'found',input:number,output:number,sessions:number,models:UsageModel[]}|{state:'refused'|'unreachable',input:null,output:null,sessions:null,models:null};
 export function readUsage(connection:import('./engine.mjs').EngineConnection,days:number):Promise<ProfileUsage>;
 export function hermesEngine(connection:import('./engine.mjs').EngineConnection):import('./engine.mjs').Engine;
+export function readModels(connection:import('./engine.mjs').EngineConnection):Promise<import('./engine.mjs').AgentModels>;
+export type ProfileModels={state:'found',models:Record<string,{provider:string,model:string}|null>}|{state:'refused'|'unreachable'|'failed',models:null};
+export function readProfileModels(connection:HermesConnection,profiles:string[]):Promise<ProfileModels>;
+export function writeProfileModel(connection:HermesConnection,change:{profile:string,provider:string,model:string}):Promise<{state:'saved',provider:string,model:string}|{state:'mismatch'|'refused'|'unreachable'|'failed',provider:null,model:null}>;
 // The Library of an Agent (#194, #353): one folder of one of the Agent's Library roots in its own Engine profile — its
 // work folder, or the images it generated — and one of its files.
 export type LibraryEntry={name:string,isFolder:boolean,size:number|null,time:string|null};
@@ -30,6 +35,11 @@ export type ProfileTools={state:'configured'|'missing'|'refused'|'unreachable'|'
 export function provideProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,soul:string,config:object,forbidden:string[]}):Promise<ProfileTools>;
 export function configureProfile(connection:import('./engine.mjs').EngineConnection,profile:{name:string,config:object,forbidden:string[]}):Promise<ProfileTools>;
 export function readToolsets(connection:HermesConnection):Promise<{state:'found'|'missing'|'refused'|'unreachable'|'failed',toolsets:string[]|null}>;
+export function readAgent(connection:import('./engine.mjs').EngineConnection,name:string):Promise<(import('./engine.mjs').FoundAgent)>;
+export function writeAgentAbout(connection:HermesConnection,change:{name:string,description:string}):Promise<{state:'written',description:string}|{state:'refused'|'unreachable'|'failed',description:null}>;
+export type AgentInstructions={state:'found',instructions:string,sectionChars:number,limit:number}|{state:'missing'|'refused'|'unreachable'|'failed',instructions:string,sectionChars:number,limit:number};
+export function readAgentInstructions(connection:import('./engine.mjs').EngineConnection,name:string):Promise<AgentInstructions>;
+export function writeAgentInstructions(connection:import('./engine.mjs').EngineConnection,change:{profile:string,instructions:string}):Promise<{state:'written',instructions:string,sectionChars:number,limit:number}|{state:'tooLong'|'missing'|'refused'|'unreachable'|'failed',instructions:null,sectionChars:number,limit:number}>;
 export type SignInProvider='openai-codex'|'anthropic';
 export const signInProviders:SignInProvider[];
 export type SignIns=Record<SignInProvider,{connected:boolean,shared:boolean,flow:'device_code'|'external'}>;
@@ -45,9 +55,22 @@ export function pollAppSignIn(connection:import('./engine.mjs').EngineConnection
 export function cancelAppSignIn(connection:import('./engine.mjs').EngineConnection,flow:string):Promise<{state:'cancelled'|'refused'|'unreachable'|'failed'}>;
 export function finishAppSignIn(connection:import('./engine.mjs').EngineConnection,signIn:{key:string,flow:string,answer:Record<string,unknown>,settle?:number}):Promise<{state:'approved'|'waiting'|'expired'|'unreachable'|'failed'}>;
 export function disconnectApp(connection:import('./engine.mjs').EngineConnection,key:string):Promise<{state:'disconnected'|'refused'|'unreachable'|'failed'}>;
+export function readConfig(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
+export function readSavedConfig(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
+export function readConfigDefaults(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
+export function readConfigSchema(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',schema:{fields:Record<string,{type?:string,options?:unknown[]}>,category_order?:string[]}}|{state:'refused'|'unreachable'|'failed',schema:null}>;
+export function writeConfig(connection:import('./engine.mjs').EngineConnection,config:Record<string,unknown>):Promise<{state:'written'|'refused'|'unreachable'|'failed'}>;
+export type VoiceChoice={id:string,name:string,label:string};
+export type VoiceList={state:'found',available:boolean,voices:VoiceChoice[],error?:string}|{state:'refused'|'unreachable'|'failed',available:false,voices:[]};
+export const speakLimit:number;
+export function readVoices(connection:import('./engine.mjs').EngineConnection):Promise<VoiceList>;
+export function speakText(connection:import('./engine.mjs').EngineConnection,say:{text:string}):Promise<{state:'spoken',dataUrl:string,mimeType:string|null,provider:string|null}|{state:'refused'|'unreachable'|'failed'|'tooLarge',dataUrl:null,mimeType:null,provider:null}>;
 export function provideSharedSpace(connection:import('./engine.mjs').EngineConnection,space:{name:string}):Promise<{state:'provided',folder:string}|{state:'refused'|'unreachable'|'failed',folder:null}>;
 export function writeSoulRules(connection:import('./engine.mjs').EngineConnection,change:{profile:string,rules:string[]}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
-export function readSkills(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',skills:{name:string,shared:boolean}[]}|{state:'refused'|'unreachable'|'failed',skills:null}>;
+export function readSkills(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',skills:{name:string,description:string,category:string|null,locked:boolean,provenance:string,shared:boolean,enabled:boolean}[]}|{state:'refused'|'unreachable'|'failed',skills:null}>;
+export function readLearningGraph(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',learned:string[]}|{state:'refused'|'unreachable'|'failed',learned:null}>;
+export function readOwnSkill(connection:import('./engine.mjs').EngineConnection,skill:{name:string}):Promise<{state:'found',content:string}|{state:'absent'|'refused'|'unreachable'|'failed',content:null}>;
+export function setSkillEnabled(connection:import('./engine.mjs').EngineConnection,skill:{name:string,enabled:boolean}):Promise<{state:'changed'|'essential'|'shared'|'failed'|'refused'|'unreachable'}>;
 export function writeSkill(connection:import('./engine.mjs').EngineConnection,skill:{name:string,content:string}):Promise<{state:'written'|'shared'|'refused'|'unreachable'|'failed'}>;
 export function writeSharedSkill(connection:import('./engine.mjs').EngineConnection,skill:{space:string,name:string,content:string}):Promise<{state:'unchanged'|'written'|'missing'|'refused'|'unreachable'|'failed'}>;
 export function shareSkills(connection:import('./engine.mjs').EngineConnection,sharing:{profile:string,folder:string,skill:string}):Promise<{state:'shared'|'shadowed'|'missing'|'refused'|'unreachable'|'failed'}>;

@@ -101,8 +101,9 @@ test('the Owner sees the company’s real Agents, main first, and makes another 
   await expect(rows.nth(1)).toContainText('Ads agent');
   await rows.nth(1).click();
   await expect(page).toHaveURL(new RegExp(`\\?agent=${ads}$`));
-  await expect(overlay.locator('#set-name')).toHaveValue('Ads');
-  await expect(overlay.locator('#set-role')).toHaveValue('Ads agent');
+  // Name and Role are the reference's read-only rows: the Engine writes neither on a named profile (#161).
+  await expect(overlay.locator('#set-name-val')).toHaveText('Ads · @ads');
+  await expect(overlay.locator('#set-role-val')).toHaveText('Ads agent');
   // The Memory tab (#193) is a real tab with its own address; with no Engine profile to read it says so.
   await overlay.locator('#sov-tab-memory').click();
   await expect(page).toHaveURL(new RegExp(`\\?agent=${ads}&tab=memory$`));
@@ -110,7 +111,7 @@ test('the Owner sees the company’s real Agents, main first, and makes another 
   await expect(overlay.locator('#sov-agent-panel')).toContainText(/What Ads remembers|Its memory can’t be read right now/);
   await overlay.locator('#sov-tab-settings').click();
   await expect(page).toHaveURL(new RegExp(`\\?agent=${ads}$`));
-  await expect(overlay.locator('#set-name')).toHaveValue('Ads');
+  await expect(overlay.locator('#set-name-val')).toHaveText('Ads · @ads');
   await overlay.locator('#set-make-main').click();
   await expect(page.locator('.toast')).toHaveText('Ads is now the main agent. It shows first for everyone');
   await expect(overlay.locator('.dp-id__name')).toContainText('Main');
@@ -217,7 +218,7 @@ const surfaces={
 const roleViews=[
  {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-pause','#danger-delete','.talk-tip a']},
  {role:'Manager',email:'manager@example.com',sections:staffSections,readOnly:false,movesMain:false,company:['.ro-text','.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
- {role:'Contributor',email:'reviewer@example.com',sections:staffSections,readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
+ {role:'Contributor',email:'reviewer@example.com',sections:staffSections.filter(section=>section!=='Usage'),readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
  {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account'],readOnly:true,movesMain:false,company:null,agents:['.ro-note'],agent:['.ro-note']},
 ];
 
@@ -246,7 +247,7 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   await expect(overlay.locator('.sov-ag')).toHaveCount(2);
   await shows('agents',view.agents);
   await page.goto(`/c/rs-learning/settings?agent=${ads}`);
-  await expect(overlay.locator('#set-name')).toHaveValue('Ads');
+  await expect(overlay.locator('#set-name-val')).toHaveText('Ads · @ads');
   await shows('agent',view.agent);
   // The pinned Engine has no paused state for a profile, so Pause stays "Soon" and opens nothing (#177); force, as Playwright waits on aria-disabled.
   // Delete's confirm is drawn after the click on Pause, so a confirm Pause opened would be drawn by then too.

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { agentLevels, levelToolsets, alwaysOff, riskyToolsets, levelConfig, forbiddenOf, riskyOf, companyProfile, toolPolicy } from '../lib/agent-levels.mjs';
+import { agentLevels, levelToolsets, alwaysOff, riskyToolsets, levelConfig, childToolsets, forbiddenOf, riskyOf, companyProfile, toolPolicy } from '../lib/agent-levels.mjs';
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn } from '../lib/hermes.mjs';
@@ -48,6 +48,40 @@ test('the level table: three levels, each adding to the one below, none ever off
  for(const composite of ['debugging','safe']) assert.ok(!levelConfig(1).agent.disabled_toolsets.includes(composite));
  for(const bad of [0,4,'1',null]) assert.throws(()=>levelConfig(bad),/agentLevelInvalid/);
  assert.deepEqual(riskyOf(['web','file','terminal','memory']),['terminal','file']);
+ // Sub-agents are a per-Agent choice (#29): off, the delegation toolset stays disabled at every level; on, it is offered
+ // and only it leaves the disabled list, while terminal, files and code execution stay off for the Agent and its children.
+ for(const level of agentLevels) {
+  assert.ok(!levelConfig(level).platform_toolsets.api_server.includes('delegation'));
+  assert.ok(levelConfig(level).agent.disabled_toolsets.includes('delegation'));
+  const withSubagents=levelConfig(level,{subagents:true});
+  assert.deepEqual(withSubagents.platform_toolsets.api_server,[...levelToolsets[level],'delegation']);
+  assert.ok(!withSubagents.agent.disabled_toolsets.includes('delegation'));
+  for(const off of ['terminal','file','code_execution']) assert.ok(withSubagents.agent.disabled_toolsets.includes(off),`${off} stays off`);
+  assert.deepEqual(alwaysOff.filter(name=>name!=='delegation').filter(name=>!withSubagents.agent.disabled_toolsets.includes(name)),[]);
+  // What a child of that Agent is offered, from the Engine's own rule: the parent's tools without delegation or kanban,
+  // with the parent's disabled list inherited, so terminal, files and code execution never arrive from a parent below.
+  const child=childToolsets(withSubagents);
+  assert.ok(!child.toolsets.includes('delegation')&&!child.toolsets.includes('kanban'));
+  for(const off of ['terminal','file','code_execution']) {
+   assert.ok(!child.toolsets.includes(off),`a child is not offered ${off}`);
+   assert.ok(child.disabled.includes(off),`a child keeps ${off} disabled`);
+  }
+  assert.ok(childToolsets(levelConfig(level)).disabled.includes('delegation'));
+ }
+});
+
+test('an Agent whose Owner turned sub-agents on offers delegation in the Engine\'s read-back, never terminal, files or code', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  const config=levelConfig(2,{subagents:true});
+  const made=await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets});
+  assert.equal(made.state,'configured');
+  assert.ok(made.toolsets.includes('delegation'));
+  for(const off of alwaysOff.filter(toolset=>toolset!=='delegation')) assert.ok(!made.toolsets.includes(off),`${off} is off`);
+  for(const off of riskyToolsets) assert.ok(!made.toolsets.includes(off),`${off} is off`);
+  assert.deepEqual(made.toolsets.filter(toolset=>toolset==='terminal'||toolset==='file'||toolset==='code_execution'),[]);
+ } finally { await fake.close(); }
 });
 
 test('a company profile is named from the company id, in Hermes profile name form', () => {
@@ -539,8 +573,10 @@ test('a run never starts on another company\'s profile, nor while the profile\'s
 
 test('the level table is versioned: any change to it needs a new policy, in the code and in the database', () => {
  // The fingerprint of each policy's table. Changing the table without a new toolPolicy (and its migration) fails here.
- const fingerprints={2:'863aa8ac90a8fce674cf7880e0e63444c107d9051d7b95f9e861a58ac437da4d',3:'06888790e0994ba07a8ad5c2c6a2bd8000f2842362ab1e553be595e77da53354'};
- const table=JSON.stringify(agentLevels.map(level=>levelConfig(level)));
+ // Policy 4 adds the sub-agent variant an Agent takes only when its Owner turned sub-agents on (#29).
+ const fingerprints={2:'863aa8ac90a8fce674cf7880e0e63444c107d9051d7b95f9e861a58ac437da4d',3:'06888790e0994ba07a8ad5c2c6a2bd8000f2842362ab1e553be595e77da53354',
+  4:'bddb8d0dbaeefd90cb3925ec65c036c258d8a0763c4ec2fd634d3c66721328fb'};
+ const table=JSON.stringify(agentLevels.flatMap(level=>[levelConfig(level),levelConfig(level,{subagents:true})]));
  assert.equal(createHash('sha256').update(table).digest('hex'),fingerprints[toolPolicy]);
  const latest=readdirSync('supabase/migrations').filter(file=>file.endsWith('.sql')&&!file.endsWith('.verify.sql')).sort()
   .map(file=>readFileSync(`supabase/migrations/${file}`,'utf8')).filter(sql=>/function public\.engine_tool_policy\(\)/.test(sql)).at(-1);
@@ -624,7 +660,7 @@ function agentWorkerDatabase(rows,{log=[],failRecord=false}={}) {
   if(name==='agent_profile_work') return {data:rows.filter(lags).sort((a,b)=>Number(a.tools_level!=null)-Number(b.tools_level!=null)).map(found=>({...found})),error:null};
   if(name==='begin_agent_tools') { row.tools_pending=true; return {data:null,error:null}; }
   if(name==='record_agent_profile') {
-   if(failRecord||args.engine_profile!==row.profile||args.policy!==toolPolicy) return {data:null,error:{message:'agentProfileInvalid'}};
+   if(failRecord||args.engine_profile!==row.profile||args.policy!==toolPolicy||args.subagents_written!==row.subagents) return {data:null,error:{message:'agentProfileInvalid'}};
    Object.assign(row,{tools_level:args.level,tools_policy:args.policy,tools_pending:false}); return {data:null,error:null};
   }
   if(name==='forget_company_profile') { const lost=rows.find(found=>found.profile===args.engine_profile); Object.assign(lost,{tools_level:null,tools_policy:null,tools_pending:false}); return {data:true,error:null}; }
@@ -632,7 +668,7 @@ function agentWorkerDatabase(rows,{log=[],failRecord=false}={}) {
  }};
 }
 const [writer,critic]=['a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'];
-const agentRow=(agent,extra={})=>({agent_id:agent,profile:`ag-${agent.replaceAll('-','')}`,agent_level:1,tools_level:1,tools_policy:toolPolicy,tools_pending:false,instructions:`You are ${agent}.`,...extra});
+const agentRow=(agent,extra={})=>({agent_id:agent,profile:`ag-${agent.replaceAll('-','')}`,agent_level:1,tools_level:1,tools_policy:toolPolicy,tools_pending:false,subagents:false,instructions:`You are ${agent}.`,...extra});
 // A driver that records what it is asked in the database's log, and answers as `answer` says.
 const recordingDriver=(log,answer=()=>({state:'configured',toolsets:[]}))=>({
  provide:async(hermes,profile)=>{ log.push({name:'provide',args:profile}); return answer('provide',profile); },
@@ -646,12 +682,21 @@ test('after a level change every Agent profile gets the new tools, each marked b
   `begin_agent_tools ${writer}`,`configure ag-${writer.replaceAll('-','')}`,`record_agent_profile ${writer}`,
   `begin_agent_tools ${critic}`,`configure ag-${critic.replaceAll('-','')}`,`record_agent_profile ${critic}`]);
  for(const call of db.log.filter(({name})=>name==='configure')) assert.deepEqual(call.args,{name:call.args.name,config:levelConfig(3),forbidden:levelConfig(3).agent.disabled_toolsets});
- assert.deepEqual(db.log.filter(({name})=>name==='record_agent_profile').map(({args})=>args),[writer,critic].map(agent=>({agent,engine_profile:`ag-${agent.replaceAll('-','')}`,level:3,policy:toolPolicy})));
+ assert.deepEqual(db.log.filter(({name})=>name==='record_agent_profile').map(({args})=>args),[writer,critic].map(agent=>({agent,engine_profile:`ag-${agent.replaceAll('-','')}`,level:3,policy:toolPolicy,subagents_written:false})));
  assert.ok(db.rows.every(row=>row.tools_level===3&&!row.tools_pending));
  db.log.length=0;
  assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:0,configured:0});
  assert.deepEqual(db.log.map(({name})=>name),['agent_profile_work']);
  assert.deepEqual(await keepAgentProfiles(db,{hermes:null}),{provided:0,configured:0});
+});
+
+test('the worker writes an Agent\'s sub-agents choice with the policy\'s delegation variant and records the read-back with it', async () => {
+ const db=agentWorkerDatabase([agentRow(writer,{agent_level:2,tools_level:2,tools_policy:3,subagents:true})]);
+ assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:0,configured:1});
+ const written=db.log.find(({name})=>name==='configure');
+ assert.deepEqual(written.args.config,levelConfig(2,{subagents:true}));
+ assert.ok(written.args.config.platform_toolsets.api_server.includes('delegation'));
+ assert.deepEqual(db.log.find(({name})=>name==='record_agent_profile').args,{agent:writer,engine_profile:`ag-${writer.replaceAll('-','')}`,level:2,policy:toolPolicy,subagents_written:true});
 });
 
 test('a write the Engine did not apply leaves its profile marked and unrecorded, so no Run starts on it, and the next profile is still kept', async () => {

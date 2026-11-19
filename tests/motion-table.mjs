@@ -122,6 +122,9 @@ export const motionTable = [
   { ref: '.panel-row', built: '.gw .panel-row', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><ul class="panel-card"><a class="panel-row sov-ag" href="#">Lead</a></ul></div></div>', held: 0.985 },
   { ref: '.panel-row', built: '.gw .panel-row', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><ul class="panel-card"><button type="button" class="panel-row">Arabic</button></ul></div></div>', held: 0.985 },
   { ref: '.panel-row', built: '.gw .panel-row', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><ul class="panel-card"><li class="panel-row">Owner</li></ul></div></div>', held: 1 },
+  // An Agent page's save bar rises in when the draft starts to differ, and flashes when a way out is tried (#161).
+  { ref: '.dp-savebar', built: '.gw .sov .dp-savebar', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><div class="dp-savebar sov-savebar" role="region"></div></div></div>' },
+  { ref: '.dp-savebar.is-flash', built: '.gw .sov .dp-savebar.is-flash', file: 'app/settings.css', html: '<div class="gw sov-root"><div class="sov" role="dialog"><div class="dp-savebar sov-savebar is-flash" role="region"></div></div></div>' },
   // First run.
   { ref: '.btn', built: '.gw .btn', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr" role="dialog"><div class="fr__actions"><button type="submit" class="btn btn--primary">Open</button></div></div></div>', held: 0.96 },
   { ref: '.btn', built: '.gw .btn', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr" role="dialog"><div class="fr__actions"><button type="submit" class="btn btn--primary" disabled>Open</button></div></div></div>', held: 1 },
