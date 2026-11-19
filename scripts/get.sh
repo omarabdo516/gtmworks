@@ -530,12 +530,31 @@ check_archive() {
   entries=$(docker run --rm -i alpine:3.21 tar -tzf - < "$archive") || fail "$archive cannot be read as a gtmworks backup archive. Nothing was changed."
   bad=$(printf '%s\n' "$entries" | while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..|..) printf 'an unsafe path: %s\n' "$entry"; break;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|.engines|.engines/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
+    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
   done)
   [ -z "$bad" ] || fail "$archive is not a gtmworks backup: it holds $bad. Nothing was changed."
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
     printf '%s\n' "$entries" | grep -Fqx -- "$entry" || fail "$archive is not a complete gtmworks backup: it has no $entry. Nothing was changed."
   done
+  # Every Company's Engine is in the archive as one data folder per Engine under engines/, named as its folder under
+  # .engines/ (its key), or, in an archive made before that (#386), as the first Engine's data at opt/data. An archive
+  # naming an Engine without its data, data without its key, or both layouts at once cannot be fully restored.
+  data_engines=$(printf '%s\n' "$entries" | sed -n 's#^engines/\([^/][^/]*\)/.*#\1#p' | sort -u)
+  key_engines=$(printf '%s\n' "$entries" | sed -n 's#^\.engines/\([^/][^/]*\)/\.env$#\1#p' | sort -u)
+  if printf '%s\n' "$entries" | grep -Eq '^engines/'; then
+    printf '%s\n' "$entries" | grep -Eq '^opt/data(/|$)' \
+      && fail "$archive is not a gtmworks backup: it holds one Engine's data at opt/data and every Engine's data under engines/. Nothing was changed."
+    [ "$data_engines" = "$key_engines" ] \
+      || fail "$archive is not a complete gtmworks backup: it does not hold every Company Engine. Nothing was changed."
+    if [ -n "$data_engines" ]; then
+      printf '%s\n' "$data_engines" | grep -qx first \
+        || fail "$archive is not a complete gtmworks backup: it does not hold the first Engine. Nothing was changed."
+    fi
+  else
+    other=$(printf '%s\n' "$key_engines" | grep -vx first | grep . || true)
+    [ -z "$other" ] \
+      || fail "$archive is not a complete gtmworks backup: it names an Engine without its data (${other//$'\n'/ }). Nothing was changed."
+  fi
 }
 # The archive's settings, checked as install.sh restore checks them (completed, then validated) but with the tool of the
 # release that will run them, before anything stops: a restore that refused them later would leave an empty install.
@@ -600,6 +619,10 @@ op_restore() {
   # So does a release from before #385, whose restore knows no .engines/ (the Engines' keys).
   if printf '%s\n' "$entries" | grep -Eq '^\.engines(/|$)' && ! grep -Fq '.engines/*' "$stage/install.sh"; then
     fail "gtmworks $version cannot restore $archive: it holds the Engines' keys, which releases before it cannot restore. Restore it with a newer release. Nothing was changed."
+  fi
+  # And one from before #386, whose restore knows no engines/ (each Company's Engine data).
+  if printf '%s\n' "$entries" | grep -Eq '^engines/' && ! grep -Fq 'engines|engines/*' "$stage/install.sh"; then
+    fail "gtmworks $version cannot restore $archive: it holds each Company's Engine data, which releases before it cannot restore. Restore it with a newer release. Nothing was changed."
   fi
   check_archive_settings
   archived=$(archive_migrations)

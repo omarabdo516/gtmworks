@@ -168,7 +168,8 @@ are never applied. Migration history lives in `gtmworks_install.schema_migration
 Persistent data lives in Docker named volumes `gtmworks-install_database`
 (Postgres), `gtmworks-install_database-config` (database encryption configuration),
 `gtmworks-install_files` (Storage files) and `gtmworks-install_hermes` (the first
-Company's Engine data), under Docker's data root (normally
+Company's Engine data); each later Company's Engine keeps its own
+`gtmworks-engine-<name>` volume, under Docker's data root (normally
 `/var/lib/docker/volumes`). The local email inbox is temporary. Never use `down -v`
 on live data.
 
@@ -209,7 +210,10 @@ gtmworks update --channel stable             # a main install back to the latest
 Update backs up first and prints the archive's path (`--no-backup` skips it),
 downloads the new release's two files, pulls its images by digest, applies its
 migrations from inside the new image and recreates the containers whose image
-changed. It keeps the existing volumes and `.env.install`, downloads no source,
+changed — every Company's Engine included: an Engine whose image the release
+changed is recreated from the new release's Engine template with its own data
+volume, its key and its network, so no Company is left on an old Engine. It keeps
+the existing volumes and `.env.install`, downloads no source,
 and every file in the install folder stays owned by you. Its last line is the
 exact command that goes back to the release you ran before:
 `gtmworks update --version <previous>` when the update applied no migration, or,
@@ -220,8 +224,8 @@ migration `<previous>` does not carry, or whose `.env.install` that release's ow
 check refuses; then it names what it replaces and asks you
 to type `yes` (`--yes` answers for a script). It then backs up the current data,
 makes the install anew with that release, restores the archive and applies that
-release's migrations the archive predates (the Engine's data, now in the archive,
-goes back with it).
+release's migrations the archive predates (every Engine's data, now in the
+archive, goes back with it).
 
 An install made before each Company had its own Engine has every Company on the
 one Engine, and this release has no way to give each of them one. With one
@@ -268,10 +272,12 @@ the `gtmworks` command itself; run the line again for a newer one.
 gtmworks backup                              # dated archive in backups/
 ```
 
-Backup briefly stops the stack — the first Company's Engine included — for a consistent
-copy of the database and its configuration, the Storage files, the Engine's data volume,
-each Engine's key file (`.engines/`) and `.env.install`, then starts it again. The Engine's data holds every Agent's profile,
-rules, memory, skills and history, so a restore brings them back as they were. An
+Backup briefly stops the stack — every Company's Engine included — for a consistent
+copy of the database and its configuration (which holds each Company's Engine record),
+the Storage files, each Company's Engine data volume, each Engine's key file
+(`.engines/`) and `.env.install`, then starts every Engine and the stack again. Each
+Engine's data holds that Company's Agents, their profiles, rules, memory, skills and
+history, so a restore brings every Company back as it was. An
 optional directory after `backup` changes the destination.
 **A backup holds every company's data and the encryption key. Keep it private.**
 Archives have owner-only permissions (600); copy them to private storage on another
@@ -287,9 +293,15 @@ Restore only accepts an empty install: install the same release as the backup
 first, then restore the trusted archive (or, on a running install, use
 `gtmworks restore <archive> --version vX.Y.Z` as Update describes). It replaces that
 empty install's volumes, each Engine's key (`.engines/`) and `.env.install`, including its keys and origin settings,
-and restarts the stack. This is a full-install backup, not a company export, and it
-includes the first Company's Engine data, so every Agent comes back with its knowledge,
-rules, skills and memory. An archive made before that data was included still restores: the
+and restarts the stack, every Company's Engine included: each Company comes back on
+its own Engine, in that Engine's own container with its own network, volume and key,
+so its Engine record still finds it. This is a full-install backup, not a company
+export, and it includes every Company's Engine data, so every Agent comes back with
+its knowledge, rules, skills and memory. Before it changes anything, restore refuses
+an archive it cannot fully restore, such as one naming an Engine without that
+Engine's data or its key. An archive made before each Company had its own Engine
+still restores: it holds one Engine and comes back as one Company on its own Engine.
+An archive made before that data was included still restores: the
 command says in one line that the Agents' Hermes data was not in it, and the worker
 makes each company's profile again, empty. Do not use it to change the pinned Postgres version.
 A relative archive path the current folder does not hold is read from the install
