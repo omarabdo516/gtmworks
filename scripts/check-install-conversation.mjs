@@ -49,7 +49,7 @@ try {
  const {data:{user}}=await person.auth.signInWithPassword(credentials);
  assert.ok(user,'the first-run Owner signs in');
  // The first-run Company, which the proxy check made: its Engine record is the install's first Engine.
- const first=await checked(service.from('companies').select('id').eq('name','Proxy Company').single());
+ const first=await checked(service.from('companies').select('id,engine_id').eq('name','Proxy Company').single());
  const company=first.id;
  assert.ok(company,'first run made the Proxy Company');
  // The record, not the install's environment, is where its Engine comes from.
