@@ -65,7 +65,9 @@ test('the page reads the code from the link fragment only', () => {
 
 test('the first-run form sends the code only as a field of its POST body, read from the fragment', () => {
  const form=readFileSync('app/first-run/form.tsx','utf8');
- assert.match(form,/<form action="\/first-run\/submit" method="post"/);
+ assert.match(form,/<form action=\{endpoint\} method="post"/);
+ // First run posts to its own route; a first-Owner link (#383) shares this form and posts to its own.
+ assert.match(form,/const endpoint=owner\?'\/first-owner\/submit':'\/first-run\/submit'/);
  assert.match(form,/<input type="hidden" name="code" value=\{code\}\/>/);
  assert.match(form,/setupCodeFromHash\(window\.location\.hash\)/);
  // The server page no longer looks for a code: it cannot see the fragment, and a query string would reach the logs.
@@ -79,14 +81,14 @@ test('the first-run form sends the code only as a field of its POST body, read f
 test('the first-run form shows only after the server confirms the code, asked in the body of a submit request', () => {
  const form=readFileSync('app/first-run/form.tsx','utf8');
  // The check goes to the submit route as a POST body, like the submission itself: no other request carries the code.
- assert.match(form,/fetch\('\/first-run\/submit',\{method:'POST',body\}\)/);
+ assert.match(form,/fetch\(endpoint,\{method:'POST',body\}\)/);
  assert.match(form,/body\.set\('code',code\)/);
  assert.match(form,/body\.set\('check','1'\)/);
  assert.doesNotMatch(form,/console\.|fetch\(`/);
  // Nothing renders the form until the answer for this exact code is "open"; a missing or refused code gets the message.
  const gate=form.indexOf("if(!code || checked?.state!=='open') return <p role=\"alert\"");
  assert.ok(gate>0,'the form waits for the server to accept the code');
- assert.ok(gate<form.indexOf('<form action="/first-run/submit"'));
+ assert.ok(gate<form.indexOf('<form action={endpoint}'));
  // The route answers the check only after the code matched, and before it reads the details or creates anything.
  const route=readFileSync('app/first-run/submit/route.ts','utf8');
  const answer=route.indexOf("if(form.get('check')==='1') return new NextResponse(null,{status:204});");

@@ -700,6 +700,35 @@ jobs:
           grep -F "\"Second Company\": Engine $second_address (healthy)" company-list.log || fail 'company list names the second Company and its healthy Engine'
           sh scripts/install.sh engines | tee engines.log || fail 'every Engine is reported'
           grep -F "Engine $second_address: healthy (Company \"Second Company\")" engines.log || fail 'the Engine report names the second Engine'
+          # A Company with no Owner yet is held behind a first-Owner link (#383, ADR 0019): the command prints the link,
+          # only its hash is stored, the Company exists nowhere, `company list` shows it waiting for its Owner, and a
+          # fresh link ends the earlier one. Sending the fresh link's form then makes the Company with its sender as
+          # Owner, signed in, on that link's own Engine record.
+          sh scripts/install.sh company add --name 'Linked Company' > company-link.log 2>&1 || fail 'company add with no Owner holds a Company behind its first-Owner link'
+          cat company-link.log
+          first_link=$(grep -o 'http://[^[:space:]]*/first-owner#code=[a-f0-9]*' company-link.log | head -n 1)
+          [[ -n $first_link ]] || fail 'company add prints the first-Owner link'
+          first_hash=$(printf '%s' "${first_link#*#code=}" | sha256sum | cut -d' ' -f1)
+          [[ $(db -c "select count(*) from public.company_owner_links where company_name='Linked Company' and secret_hash='$first_hash' and claimed_at is null") == 1 ]] || fail 'only the link secret is kept, hashed, and the link waits'
+          [[ $(db -c "select count(*) from public.company_owner_links where secret_hash='${first_link#*#code=}'") == 0 ]] || fail 'the link secret itself is stored nowhere'
+          [[ $(db -c "select count(*) from public.companies where name='Linked Company'") == 0 ]] || fail 'the Company exists nowhere until its link is used'
+          sh scripts/install.sh company list | tee company-waiting.log || fail 'company list with a Company waiting for its Owner'
+          grep -F "Company \"Linked Company\": waiting for its Owner (Engine http://gtmworks-engine-linked-company" company-waiting.log || fail 'company list shows the Company waiting for its Owner'
+          sh scripts/install.sh company link 'Linked Company' > company-link-fresh.log 2>&1 || fail 'company link prints a fresh link'
+          cat company-link-fresh.log
+          second_link=$(grep -o 'http://[^[:space:]]*/first-owner#code=[a-f0-9]*' company-link-fresh.log | head -n 1)
+          second_hash=$(printf '%s' "${second_link#*#code=}" | sha256sum | cut -d' ' -f1)
+          [[ -n $second_link && $second_link != "$first_link" ]] || fail 'a fresh link for the waiting Company is a new link'
+          [[ $(db -c "select count(*) from public.company_owner_links where secret_hash='$first_hash'") == 0 ]] || fail 'a fresh link ends the earlier one'
+          [[ $(db -c "select count(*) from public.company_owner_links where secret_hash='$second_hash' and claimed_at is null") == 1 ]] || fail 'the fresh link is the one waiting'
+          compose exec -T -e LINK_SECRET="${second_link#*#code=}" web node --input-type=module - < scripts/check-install-owner-link.mjs > owner-link-proof \
+            || fail 'sending the first-Owner link makes the Company and signs its Owner in'
+          cat owner-link-proof
+          [[ $(db -c "select count(*) from public.companies c join public.company_engines e on e.id=c.engine_id where c.name='Linked Company' and e.address like 'http://gtmworks-engine-linked-company%'") == 1 ]] || fail 'the link makes the Company on its own Engine record'
+          [[ $(db -c "select m.role from public.members m join public.companies c on c.id=m.company_id join auth.users u on u.id=m.person_id where c.name='Linked Company' and u.email='linked-owner@example.test'") == owner ]] || fail "the link's sender is the Company Owner"
+          [[ $(db -c "select count(*) from public.company_owner_links where secret_hash='$second_hash' and claimed_at is not null") == 1 ]] || fail 'the link is used once'
+          sh scripts/install.sh company list | tee company-claimed.log || fail 'company list after the link is used'
+          grep -F "Company \"Linked Company\": Engine http://gtmworks-engine-linked-company" company-claimed.log || fail 'the Company the link made is listed with its Engine'
           # The memory one idle Engine uses, printed for the README.
           echo "one idle Engine uses $(docker stats --no-stream --format '{{.MemUsage}}' "$second_container")"
           # Stopping the second Company's Engine leaves the first Company answering, then the second Engine starts again.

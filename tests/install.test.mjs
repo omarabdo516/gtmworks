@@ -453,6 +453,33 @@ test('the install job writes an Agent rule and the Company knowledge before the 
  assert.match(script,/knowledgeSkill\(/);
 });
 
+// A Company with no Owner yet is held behind a first-Owner link (#383, ADR 0019): the install job proves the link is
+// printed with its secret after `#`, only its hash is kept, the Company exists nowhere, `company list` shows it waiting,
+// a fresh link ends the earlier one, and sending it makes the Company with its sender as Owner on that link's Engine.
+test('the install job proves a first-Owner link holds a Company, a fresh link ends it, and sending it makes the Company', () => {
+ const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const lines=run.split('\n');
+ const at=text=>lines.findIndex(line=>line.includes(text));
+ const add=at("company add --name 'Linked Company'"),fresh=at("company link 'Linked Company'"),claimed=at('company list after the link is used');
+ for(const [index,name] of [[add,'the link-held add'],[fresh,'a fresh link'],[claimed,'the list after the claim']]) assert.ok(index>=0,`the job runs ${name}`);
+ assert.ok(add<fresh&&fresh<claimed,lines.join('\n'));
+ for(const text of [
+  "grep -o 'http://[^[:space:]]*/first-owner#code=[a-f0-9]*'",
+  'the link secret itself is stored nowhere',
+  'the Company exists nowhere until its link is used',
+  'company list shows the Company waiting for its Owner',
+  'a fresh link ends the earlier one',
+  'check-install-owner-link.mjs',
+  'the link makes the Company on its own Engine record',
+  "the link's sender is the Company Owner",
+  'the link is used once',
+ ]) assert.ok(run.includes(text),text);
+ const script=readFileSync('scripts/check-install-owner-link.mjs','utf8');
+ assert.match(script,/first-owner\/submit/);
+ assert.match(script,/linked-company-\[a-f0-9\]\{8\}.+home/);
+ assert.doesNotMatch(script,/console\.(log|error)\([^)]*process\.env\.LINK_SECRET/,'the proof never prints the secret');
+});
+
 test('failed backup resumes the install and leaves no archive or secrets behind', t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-backup-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));

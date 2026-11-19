@@ -45,12 +45,12 @@ export default defineConfig({
     // after every functional test and before the budgets, on the pull request too.
     { name: 'alone-anchor', testMatch: /^$/, dependencies: ['measured-anchor'], teardown: 'alone' },
     { name: 'functional-anchor', testMatch: /^$/, dependencies: ['alone-anchor'], teardown: 'functional' },
-    { name: 'functional', testIgnore: ['first-run.spec.ts', 'fresh-install-journey.spec.ts', 'navigation.spec.ts', 'chat-steps.spec.ts', '**/proxy/**', 'visual-lane*.spec.ts'] },
+    { name: 'functional', testIgnore: ['first-run.spec.ts', 'first-owner.spec.ts', 'fresh-install-journey.spec.ts', 'navigation.spec.ts', 'chat-steps.spec.ts', '**/proxy/**', 'visual-lane*.spec.ts'] },
     { name: 'alone', testMatch: 'chat-steps.spec.ts', workers: 1 },
     // CI measures the budgets in a job of their own on ubuntu-latest (`./ci.sh visual`), on a machine no other job
     // shares; `ci.sh integration` leaves this project empty, so it still orders the projects around it.
     { name: 'measured', testMatch: hostedElsewhere ? /^$/ : 'navigation.spec.ts', workers: 1 },
-    // Empty-install scenarios (first run, and the whole journey from it, #329) mutate the whole local database and run only after seeded functional tests finish.
-    { name: 'first-run', testMatch: ['first-run.spec.ts', 'fresh-install-journey.spec.ts'] },
+    // Empty-install scenarios (first run, a first-Owner link, and the whole journey from first run, #329) mutate the whole local database and run only after seeded functional tests finish.
+    { name: 'first-run', testMatch: ['first-run.spec.ts', 'first-owner.spec.ts', 'fresh-install-journey.spec.ts'] },
   ],
 });

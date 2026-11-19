@@ -42,8 +42,9 @@ node_image=node:22.14.0-alpine3.21
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
 # A Company's Engine (ADR 0018) is made from the template shipped with the release, as its own Compose project: the pinned
 # official Hermes image, its own data volume, its own key and its own network. The app and the worker join that network;
-# the Engine joins nothing else. The installer makes the first Company's Engine; `gtmworks company add` (#382) makes a
-# later Company's the same way, one folder under .engines/<slug>. An install made before ADR 0018 keeps its existing
+# the Engine joins nothing else. The installer makes the first Company's Engine; `gtmworks company add` (#382, #383) makes
+# a later Company's the same way, one folder under .engines/<slug>, and holds an unnamed Owner's Company behind a
+# first-Owner link. An install made before ADR 0018 keeps its existing
 # `hermes` volume, now under the first Engine's name, so its Agents' memory, Skills and history stay.
 engine_template=scripts/engine-template.yml
 engine_address=http://gtmworks-engine-first:8642
@@ -198,26 +199,31 @@ engine_stop() {
 # folder file (owner-only) and encrypted in its record. It is never printed.
 new_engine_key() { od -An -N32 -tx1 /dev/urandom | tr -d ' \n'; }
 company_usage() {
-  echo 'Usage: gtmworks company add --name <Company> --owner <email> | gtmworks company list' >&2
+  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list' >&2
   exit 1
 }
-# `gtmworks company add` (#382, ADR 0018): one new Company, its Engine made from the template with its own volume, key and
-# network. The Owner email is refused before anything exists; the Engine is made and waited on before the Company; a
-# failure removes everything this command made, in one plain line, so the same command can be run again.
+# `gtmworks company add` (#382, #383, ADR 0018, 0019): one new Company, its Engine made from the template with its own
+# volume, key and network. A named existing Person is checked before anything exists; with no --owner the Company's name is
+# held behind a first-Owner link whose secret is printed once, after `#`. The Engine is made and waited on before either;
+# a failure removes everything this command made, in one plain line, so the same command can be run again.
 company_add() {
-  company_name= owner_email=
+  company_name= owner_email= has_owner=no
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) [ $# -ge 2 ] || company_usage; company_name=$2; shift;;
-      --owner) [ $# -ge 2 ] || company_usage; owner_email=$2; shift;;
+      --owner) [ $# -ge 2 ] || company_usage; owner_email=$2; has_owner=yes; shift;;
       *) company_usage;;
     esac
     shift
   done
-  test -n "$company_name" && test -n "$owner_email" || company_usage
+  test -n "$company_name" || company_usage
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   # The Owner and the name are checked in the database before an Engine, a folder or a record is made.
-  slug=$(compose exec -T web node scripts/company-add.mjs check --name "$company_name" --owner "$owner_email") || return 1
+  if [ "$has_owner" = yes ]; then
+    slug=$(compose exec -T web node scripts/company-add.mjs check --name "$company_name" --owner "$owner_email") || return 1
+  else
+    slug=$(compose exec -T web node scripts/company-add.mjs check --name "$company_name") || return 1
+  fi
   slug=$(printf '%s\n' "$slug" | tail -n 1)
   case "$slug" in ''|*[!a-z0-9-]*) echo "The Company's Engine folder name is not usable: $slug" >&2; return 1;; esac
   volume=$(engine_container "$slug")
@@ -230,19 +236,38 @@ company_add() {
     echo "Company \"$company_name\" was not made: its Engine did not become healthy. Nothing was left behind; run the same command again."
     return 1
   fi
-  if ! compose exec -T -e ENGINE_ADDRESS="$address" -e ENGINE_KEY="$key" web \
-    node scripts/company-add.mjs add --name "$company_name" --owner "$owner_email" --address "$address" --slug "$slug"; then
-    # The record and the Company are removed by the script; a waiting record the script did not reach is removed here.
-    compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
-    engine_destroy "$slug" "$volume" "$network"
-    echo "Company \"$company_name\" was not made. Nothing was left behind; run the same command again."
-    return 1
+  if [ "$has_owner" = yes ]; then
+    if ! compose exec -T -e ENGINE_ADDRESS="$address" -e ENGINE_KEY="$key" web \
+      node scripts/company-add.mjs add --name "$company_name" --owner "$owner_email" --address "$address" --slug "$slug"; then
+      # The record and the Company are removed by the script; a waiting record the script did not reach is removed here.
+      compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
+      engine_destroy "$slug" "$volume" "$network"
+      echo "Company \"$company_name\" was not made. Nothing was left behind; run the same command again."
+      return 1
+    fi
+    echo "Company \"$company_name\" is made on its own Engine ($(engine_container "$slug")). Its Owner is $owner_email."
+  else
+    if ! compose exec -T -e ENGINE_ADDRESS="$address" -e ENGINE_KEY="$key" web \
+      node scripts/company-add.mjs add --name "$company_name" --address "$address" --slug "$slug"; then
+      compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
+      engine_destroy "$slug" "$volume" "$network"
+      echo "Company \"$company_name\" was not made. Nothing was left behind; run the same command again."
+      return 1
+    fi
+    echo "Company \"$company_name\" is waiting for its Owner on its own Engine ($(engine_container "$slug")). Send the first-Owner link above; it works once."
   fi
-  echo "Company \"$company_name\" is made on its own Engine ($(engine_container "$slug")). Its Owner is $owner_email."
+}
+# `gtmworks company link` (#383, ADR 0019): a fresh first-Owner link for a Company still waiting, which ends the earlier one.
+company_link() {
+  company_name=${1:-}
+  test -n "$company_name" || company_usage
+  test -f .env.install || { echo 'Install first.' >&2; exit 1; }
+  compose exec -T web node scripts/company-add.mjs link --name "$company_name"
 }
 company() {
   case "${1:-}" in
     add) shift; company_add "$@";;
+    link) shift; company_link "$@";;
     list) compose exec -T web node scripts/company-list.mjs companies;;
     *) company_usage;;
   esac
@@ -451,7 +476,7 @@ elif [ "$operation" = engines ]; then
   compose exec -T web node scripts/company-list.mjs engines
   return
 elif [ "$operation" != install ]; then
-  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> --owner <email> | company list | engines]' >&2; exit 1
+  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] | company link <Company> | company list | engines]' >&2; exit 1
 fi
 if [ -n "$release_image" ]; then
   docker pull "$release_image"
