@@ -192,7 +192,7 @@ test('gtmworks sign-in claude runs the Engine\'s own Claude sign-in in the Compa
  const m=machine(t);
  ok(m.line());
  m.clear();
- const row='c-1|RS Learning|http://gtmworks-engine-first:8642\n';
+ const row='http://gtmworks-engine-first:8642|RS Learning\n';
  // By the Company's name: the record names the Engine, and the Engine's own sign-in runs in it on its root profile.
  writeFileSync(m.env.DB_FILE,row);
  const named=m.gtmworks(['sign-in','claude','--company','RS Learning']);
@@ -212,17 +212,33 @@ test('gtmworks sign-in claude runs the Engine\'s own Claude sign-in in the Compa
  assert.notEqual(missing.status,0);
  assert.match(missing.stderr,/No Company in .* is named Nope/);
  assert.doesNotMatch(m.docker(),/auth add anthropic/);
- writeFileSync(m.env.DB_FILE,'c-1|Same|http://gtmworks-engine-first:8642\nc-2|Same|http://gtmworks-engine-first:8642\n');
+ writeFileSync(m.env.DB_FILE,'http://gtmworks-engine-first:8642|Same\nhttp://gtmworks-engine-first:8642|Same\n');
  const two=m.gtmworks(['sign-in','claude','--company','Same']);
  assert.notEqual(two.status,0);
  assert.match(two.stderr,/More than one Company .* is named Same/);
  assert.doesNotMatch(m.docker(),/auth add anthropic/);
  // A record whose address names no Engine container of this install: refused, and nothing is run.
- m.clear(); writeFileSync(m.env.DB_FILE,'c-1|RS Learning|http://db:5432\n');
+ m.clear(); writeFileSync(m.env.DB_FILE,'http://db:5432|RS Learning\n');
  const stray=m.gtmworks(['sign-in','claude','--company','RS Learning']);
  assert.notEqual(stray.status,0);
  assert.match(stray.stderr,/names no Engine of this install/);
  assert.doesNotMatch(m.docker(),/auth add anthropic/);
+ // The whole address must name an Engine of this install: no trailing path, port or host part slips past the check.
+ for(const address of ['http://gtmworks-engine-first:9999','http://gtmworks-engine-first:8642/other','http://gtmworks-engine-first.evil:8642','https://gtmworks-engine-first:8642']) {
+  m.clear(); writeFileSync(m.env.DB_FILE,`${address}|RS Learning\n`);
+  const refused=m.gtmworks(['sign-in','claude','--company','RS Learning']);
+  assert.notEqual(refused.status,0,address);
+  assert.match(refused.stderr,/names no Engine of this install/,address);
+  assert.doesNotMatch(m.docker(),/auth add anthropic/,address);
+ }
+ // A Company's name may hold `|`: the address is read first, so the name can never move the sign-in into another
+ // Company's Engine, and the whole address is checked before anything runs.
+ m.clear(); writeFileSync(m.env.DB_FILE,'http://gtmworks-engine-first:8642|Acme|x://gtmworks-engine-other/\n');
+ const hostile=m.gtmworks(['sign-in','claude','--company','Acme|x://gtmworks-engine-other/']);
+ ok(hostile,'a hostile Company name');
+ assert.match(hostile.stdout,/Signing Acme\|x:\/\/gtmworks-engine-other\/ in to Claude on its Engine: gtmworks-engine-first/);
+ assert.match(m.docker(),/exec -i -u hermes gtmworks-engine-first hermes auth add anthropic --type oauth --no-browser/);
+ assert.doesNotMatch(m.docker(),/-u hermes gtmworks-engine-other/);
 });
 
 test('the line installs the highest published vX.Y.Z by default, --version that release, --dir that folder', t => {

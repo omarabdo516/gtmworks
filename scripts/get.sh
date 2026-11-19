@@ -683,27 +683,30 @@ op_status() {
   say "All $total services are healthy."
 }
 
-# The Company's Engine, read from its Engine record (#384): its id, name and address, by the Company's id or its name.
-# The record is where the app and the worker read the Engine, so the command reaches the same Engine they do.
+# The Company's Engine, read from its Engine record (#384): its address and the Company's name, by the Company's id or
+# its name. The address comes first and is used only when the whole of it names one Engine of this install
+# (http://gtmworks-engine-<name>:8642), so a Company's name, which a person chooses, can never move the command into
+# another Company's Engine. The record is where the app and the worker read the Engine, so the command reaches the same
+# Engine they do.
 engine_row() {
-  printf '%s\n' "select c.id,c.name,e.address from public.companies c join public.company_engines e on e.company_id=c.id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
+  printf '%s\n' "select e.address,c.name from public.companies c join public.company_engines e on e.company_id=c.id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
     | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v company="$1"
 }
 
 # #384, ADR 0018: Claude's sign-in is the Engine's own, run in the Company's Engine on its root profile, which lends it
 # to every Agent of the Company. The Engine's address names its container (scripts/engine-template.yml), so the command
-# runs in that container only; an address that names no Engine container is refused. The sign-in asks for a pasted code,
-# so stdin stays open, with a terminal when there is one.
+# runs in that container only; an address that names no Engine container is refused.
+# The sign-in asks for a pasted code, so stdin stays open, with a terminal when there is one.
 op_signin() {
   in_install
   rows=$(engine_row "$company") || fail "Could not read $dir's Companies: is gtmworks running? See gtmworks status."
   count=$(printf '%s\n' "$rows" | grep -c . || true)
   [ "$count" -ne 0 ] || fail "No Company in $dir is named $company. Pass the Company's id or its exact name."
   [ "$count" -eq 1 ] || fail "More than one Company in $dir is named $company. Pass the Company's id instead."
-  rest=${rows#*|}
-  name=${rest%%|*} address=${rest#*|}
-  host=${address#*://} host=${host%%/*} host=${host%%:*}
-  case $host in gtmworks-engine-*) ;; *) fail "The Engine record of $name names no Engine of this install. Nothing was changed.";; esac
+  address=${rows%%|*} name=${rows#*|}
+  printf '%s\n' "$address" | grep -Eq '^http://gtmworks-engine-[a-z0-9-]+:8642$' \
+    || fail "The Engine record of $name names no Engine of this install. Nothing was changed."
+  host=${address#*://} host=${host%%:*}
   say "Signing $name in to Claude on its Engine: $host. One account serves one Company."
   if [ -t 0 ]; then tty=-t; else tty=; fi
   docker exec -i $tty -u hermes "$host" hermes auth add anthropic --type oauth --no-browser
