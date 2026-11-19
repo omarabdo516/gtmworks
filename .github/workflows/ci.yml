@@ -1000,7 +1000,10 @@ jobs:
           # own and installed from its own two release files: its own schema (no Engine record, no companies.engine_id),
           # its own one `hermes` service, and its own key in .env.install.
           base=$BASE_SHA
-          if [[ ! $base =~ ^[a-f0-9]{40}$ ]]; then base=$(git rev-parse origin/main) || fail 'the main commit of the previous release'; fi
+          if [[ ! $base =~ ^[a-f0-9]{40}$ ]]; then
+            git fetch --no-tags origin main || fail 'the main branch of the previous release'
+            base=$(git rev-parse origin/main) || fail 'the main commit of the previous release'
+          fi
           git cat-file -e "$base^{commit}" 2> /dev/null || git fetch --no-tags origin "$base" || fail 'the previous release commit'
           git worktree add "$RUNNER_TEMP/previous-release" "$base" || fail 'the previous release checkout'
           docker build -q -t localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release" > /dev/null || fail 'build the previous release image'
