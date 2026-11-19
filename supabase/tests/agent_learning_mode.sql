@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(8);
 -- #28: an Agent's own learning mode is remembered apart from the Engine's two approvals: the Owner sets "auto" or "ask"
 -- for one Agent, or clears it so the Agent follows the Company, and a member reads each Agent's choice.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
