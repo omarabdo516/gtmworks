@@ -124,7 +124,10 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  await expect(tab(details,'Memory')).toHaveAttribute('aria-selected','true');
  await tab(details,'Log').click();
  await panel.getByRole('link',{name:'Open the activity log',exact:true}).click();
- await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=a:${ads}$`));
+ // The log is a whole page read on the server, and the address commits when its answer arrives: under the browser
+ // suite's four loaded lanes that took longer than five seconds while the page said it was opening. The address is
+ // still required exactly, with its Agent filter.
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/log\\?who=a:${ads}$`),{timeout:20000});
  await expect(page.locator('.lgp-count')).toHaveText('2 entries');
 
  await page.goto(`/c/rs-learning/chat/${ads}`);
