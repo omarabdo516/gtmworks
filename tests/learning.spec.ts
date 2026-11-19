@@ -56,6 +56,11 @@ test.afterAll(async()=>{ await fake?.close(); });
 const learning=(email:string,page:import('@playwright/test').Page)=>signIn(page,email,'/c/rs-learning/settings?section=learning');
 const group=(page:import('@playwright/test').Page,name:string)=>page.getByRole('dialog',{name:'Settings'}).getByRole('radiogroup',{name});
 const ruleRow=(page:import('@playwright/test').Page,text:string)=>page.locator('.ln-row').filter({hasText:text});
+// A rule's button does nothing until React hydrated it: wait for the first one's handlers.
+const hydrated=(page:import('@playwright/test').Page)=>page.waitForFunction(()=>{
+ const button=document.querySelector('.ln-row button');
+ return !!button&&Object.getOwnPropertyNames(button).some(name=>name.startsWith('__reactFiber$')||name.startsWith('__reactProps$'));
+});
 
 test('the Owner switches the Company\'s mode and one Agent\'s, and each profile reads back its two values', async ({page}) => {
  await learning('omar@example.com',page);
@@ -112,6 +117,7 @@ test('the Owner forgets a rule and brings it back, both written in the log, and 
  await expect(skill.locator('button')).toHaveCount(0);
  await expect(overlay.getByRole('button',{name:/Restore|previous version/})).toHaveCount(0);
  // Forget this marks the rule removed and the worker's list drops it; the log says so once.
+ await hydrated(page);
  const row=ruleRow(page,rule);
  await row.getByRole('button',{name:/^Forget the rule:/}).click();
  await expect(ruleRow(page,rule)).toContainText('Forgotten');
