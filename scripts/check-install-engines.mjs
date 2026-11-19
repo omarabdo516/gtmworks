@@ -61,10 +61,19 @@ const model=createServer((request,response)=>{
 });
 await new Promise(resolve=>model.listen(8080,'0.0.0.0',resolve));
 try {
- const owner=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options);
- const {data:{user}}=await owner.auth.signInWithPassword({email:'proxy-owner@example.com',password:'proxy-owner-password'});
- assert.ok(user,'the Owner of every Company signs in');
+ // Each Company is spoken to by its own Owner: the first run's and the named Owner's is proxy-owner, the first-Owner
+ // link's Company belongs to whoever claimed it.
+ const owners=[];
+ for(const [email,password] of [['proxy-owner@example.com','proxy-owner-password'],['linked-owner@example.test','linked-owner-password']]) {
+  const client=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options);
+  const {data:{user:signedIn}}=await client.auth.signInWithPassword({email,password});
+  if(signedIn) owners.push({client,user:signedIn});
+ }
  for(const target of targets) {
+  const [membership]=await checked(service.from('members').select('person_id').eq('company_id',target.company).eq('role','owner'));
+  const found=owners.find(one=>one.user.id===membership?.person_id);
+  assert.ok(found,`${target.name}'s Owner signs in`);
+  const {client:owner,user}=found;
   const pointed=await fetch(`${target.management}/api/config?profile=${encodeURIComponent(target.profile)}`,{method:'PUT',
    headers:{Authorization:`Bearer ${target.engine.key}`,'Content-Type':'application/json'},
    body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
