@@ -22,7 +22,7 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // pick up (#149) is `handDone`: nothing draws a bubble of it, and the card shows the press instead.
 // A handover in the channel (#150) is a quiet row between turns, with its own id: the two Agents and their faces, the
 // other Agent's answer marked `to` the Agent that handed it over, and then that Agent's own reply.
-export type ChannelFace={name:string,face:string};
+type ChannelFace={name:string,face:string};
 export type ChannelMessage=
  | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true}
  | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[]}
