@@ -199,7 +199,7 @@ restore <archive>` there.
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
 gtmworks company add --name "Third Company"     # prints a first-Owner link instead
-gtmworks company link "Fourth Company"          # a fresh link for a Company still waiting
+gtmworks company link "Third Company"          # a fresh link for a Company still waiting
 gtmworks company list
 ```
 
