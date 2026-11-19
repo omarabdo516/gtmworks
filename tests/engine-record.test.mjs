@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { engineRecord, registerEngine, attachEngine, removeEngine, settleInstallEngine } from '../lib/engine-record.mjs';
 import { decryptSecret } from '../lib/agent-crypto.mjs';
+import { readFileSync } from 'node:fs';
 
 // The Engine record's module (#380, #382, ADR 0018): it writes an Engine's key encrypted with the install's
 // WEBHOOK_ENCRYPTION_KEY, returns only the decrypted address and key to server code, and never carries the ciphertext or
@@ -85,6 +86,14 @@ test('a Company names the one record it is made on, and a failed add removes onl
 // The release before this one had no Engine records (#378, S1): the installer adopts the Engine that install already
 // runs as its one Company's Engine, in one transaction. A fresh install leaves one record waiting, an install of this
 // release is left alone, and more than one Company with no Engine is refused rather than put on the same one.
+test('nothing keeps a released install\'s old Engine address: the one-adopt path is the only move (#378, T6)', async () => {
+ const api=await import('../lib/engine-record.mjs');
+ assert.equal(Object.hasOwn(api,'readdressEngine'),false,'no second way to move a record');
+ const script=readFileSync(new URL('../scripts/install-engine.mjs',import.meta.url),'utf8');
+ assert.doesNotMatch(script,/hermes:8642/,'no legacy address is special-cased');
+ assert.match(script,/settleInstallEngine\(/);
+});
+
 test('an install made before the Engine records adopts its one Company\'s Engine, and a fresh one waits', async () => {
  const saved=process.env.WEBHOOK_ENCRYPTION_KEY;
  process.env.WEBHOOK_ENCRYPTION_KEY=encryptionKey;

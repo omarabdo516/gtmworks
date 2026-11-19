@@ -529,6 +529,14 @@ update_to() {
 # required: an archive the installer made before #349 restores, and install.sh says what it lacks.
 check_archive() {
   entries=$(docker run --rm -i alpine:3.21 tar -tzf - < "$archive") || fail "$archive cannot be read as a gtmworks backup archive. Nothing was changed."
+  # The target release's own installer makes the same check a restore makes, before anything changes (#378, T4): the
+  # archive's entries, the Engines it holds and their keys are one check, not two that can drift. A release made before
+  # this check keeps the copy below for archives it can restore.
+  if grep -q 'check-restore' "$stage/install.sh"; then
+    checked=$( ( cd "$stage" && sh ./install.sh check-restore "$archive" ) 2>&1 ) \
+      || fail "$checked Nothing was changed."
+    return 0
+  fi
   bad=$(printf '%s\n' "$entries" | while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..|..) printf 'an unsafe path: %s\n' "$entry"; break;; esac
     case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
@@ -694,33 +702,13 @@ op_status() {
   say "All $total services are healthy."
 }
 
-# The Company's Engine, read from its Engine record (#384): its address and the Company's name, by the Company's id or
-# its name. The address comes first and is used only when the whole of it names one Engine of this install
-# (http://gtmworks-engine-<name>:8642), so a Company's name, which a person chooses, can never move the command into
-# another Company's Engine. The record is where the app and the worker read the Engine, so the command reaches the same
-# Engine they do.
-engine_row() {
-  printf '%s\n' "select e.address,c.name from public.companies c join public.company_engines e on e.id=c.engine_id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
-    | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v company="$1"
-}
-
 # #384, ADR 0018: Claude's sign-in is the Engine's own, run in the Company's Engine on its root profile, which lends it
-# to every Agent of the Company. The Engine's address names its container (scripts/engine-template.yml), so the command
-# runs in that container only; an address that names no Engine container is refused.
-# The sign-in asks for a pasted code, so stdin stays open, with a terminal when there is one.
+# to every Agent of the Company. install.sh owns the Engine lookup and the container it runs in, as it does for `company`
+# (#378, T4); stdin stays open because the sign-in asks for a pasted code.
 op_signin() {
+  check_prerequisites
   in_install
-  rows=$(engine_row "$company") || fail "Could not read $dir's Companies: is gtmworks running? See gtmworks status."
-  count=$(printf '%s\n' "$rows" | grep -c . || true)
-  [ "$count" -ne 0 ] || fail "No Company in $dir is named $company. Pass the Company's id or its exact name."
-  [ "$count" -eq 1 ] || fail "More than one Company in $dir is named $company. Pass the Company's id instead."
-  address=${rows%%|*} name=${rows#*|}
-  printf '%s\n' "$address" | grep -Eq '^http://gtmworks-engine-[a-z0-9-]+:8642$' \
-    || fail "The Engine record of $name names no Engine of this install. Nothing was changed."
-  host=${address#*://} host=${host%%:*}
-  say "Signing $name in to Claude on its Engine: $host. One account serves one Company."
-  if [ -t 0 ]; then tty=-t; else tty=; fi
-  docker exec -i $tty -u hermes "$host" hermes auth add anthropic --type oauth --no-browser
+  sh ./install.sh sign-in "$provider" --company "$company"
 }
 
 case "$operation" in

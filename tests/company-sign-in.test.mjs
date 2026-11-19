@@ -32,7 +32,9 @@ test('the sign-in page says one account serves one Company, in both languages, a
  assert.match(client,/gtmworks sign-in claude --company/);
  const get=readFileSync('scripts/get.sh','utf8');
  assert.match(get,/sign-in claude --company/);
- assert.match(get,/hermes auth add anthropic --type oauth --no-browser/,'the Engine\'s own Claude sign-in, on its root profile');
+ // The sign-in itself is the installer's own (#378, T4), still on the Company's Engine root profile.
+ const install=readFileSync('scripts/install.sh','utf8');
+ assert.match(install,/hermes auth add anthropic --type oauth --no-browser/,'the Engine\'s own Claude sign-in, on its root profile');
 });
 
 test('the database answers the Company\'s profiles and no longer asks whether the install has one Company', () => {

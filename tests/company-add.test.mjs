@@ -46,8 +46,8 @@ test('company add makes one Engine from the template, joins it, then makes the C
  assert.ok(commands.some(line=>/^compose --project-name gtmworks-engine-second-company-0000abcd --env-file \.engines\/second-company-0000abcd\/\.env -f scripts\/engine-template\.yml up -d --wait --wait-timeout 300$/.test(line)),commands.join('\n'));
  assert.ok(commands.includes('network connect --alias web gtmworks-engine-second-company-0000abcd web-id'));
  assert.ok(commands.includes('network connect gtmworks-engine-second-company-0000abcd worker-id'));
- const addLine=commands.find(line=>line.includes('company-add.mjs add --name Second Company --owner person@example.com'));
- assert.ok(addLine&&addLine.includes('--address http://gtmworks-engine-second-company-0000abcd:8642'),commands.join('\n'));
+ const addLine=commands.find(line=>line.includes('company-add.mjs add --name Second Company'));
+ assert.ok(addLine&&addLine.includes('--address http://gtmworks-engine-second-company-0000abcd:8642')&&addLine.includes('--owner person@example.com'),commands.join('\n'));
  // The Engine's key reaches the script from the environment, by name: it is never on the command line (#378, X4).
  assert.ok(addLine.includes('-e ENGINE_KEY')&&!addLine.includes('ENGINE_KEY='),addLine);
  // The Engine's own folder holds its own generated key, its volume and its network, readable by its owner alone.
@@ -58,6 +58,23 @@ test('company add makes one Engine from the template, joins it, then makes the C
  assert.equal(statSync(installDir.envFile('second-company-0000abcd')).mode&0o777,0o600);
  assert.ok(!result.stdout.includes(env.match(/^ENGINE_KEY=(.*)$/m)[1]),'the command prints no key');
  assert.equal(result.stdout.trim(),'Company "Second Company" is made on its own Engine (gtmworks-engine-second-company-0000abcd). Its Owner is person@example.com.');
+});
+
+test('company add has one add path and the installer has one Engine name and one list of Engines (#378, T5)', () => {
+ const install=readFileSync('scripts/install.sh','utf8');
+ // The named-Owner and no-Owner paths make the Company in one call, and clean up a failure in one place.
+ assert.equal((install.match(/company-add\.mjs add/g)||[]).length,1);
+ assert.match(install,/set -- --name "\$company_name"/);
+ assert.match(install,/node scripts\/company-add\.mjs add "\$@"/);
+ assert.match(install,/node scripts\/company-add\.mjs check "\$@"/);
+ // One name for an Engine's Compose project, container, volume and network; the first Engine starts by a name that says so.
+ assert.doesNotMatch(install,/engine_container/);
+ assert.match(install,/first_engine_up\(\)/);
+ assert.doesNotMatch(install,/^engine_up\(\)/m);
+ // Every loop over the install's Engines reads the one lister, and every network the one reader.
+ assert.equal((install.match(/for folder in \.engines\/\*\//g)||[]).length,1);
+ assert.equal((install.match(/for name in \$\(engine_names\)/g)||[]).length,5);
+ assert.match(install,/join_engine_network "\$\(engine_network_of "\$name"\)"/);
 });
 
 test('a refused Owner or a failed Engine leaves nothing and says so in one plain line, and the same command can run again', t => {

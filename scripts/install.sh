@@ -52,7 +52,6 @@ engine_management=http://gtmworks-engine-first:9119
 engine_volume=gtmworks-install_hermes
 engine_project() { printf 'gtmworks-engine-%s' "$1"; }
 engine_folder() { printf '.engines/%s' "$1"; }
-engine_container() { engine_project "$1"; }
 # Every Engine the install has, one folder each under .engines: the first Engine and every Company's own. A backup, a
 # restore and a stop cover each of them (#386); a folder with no .env is not an Engine.
 engine_names() {
@@ -83,7 +82,7 @@ adopt_engine_key() {
     key=$(docker run --rm -v "$PWD/lib:/code:ro" "$node_image" node /code/install-env.mjs engine-key) || return 1
   fi
   test -n "$key" || { echo 'Could not make an Engine key: run sh scripts/install.sh.' >&2; return 1; }
-  write_engine_env first "$key" "$engine_volume" "$(engine_container first)"
+  write_engine_env first "$key" "$engine_volume" "$(engine_project first)"
   drop_install_env_key
 }
 # No Engine key sits in .env.install. An install made before ADR 0018 kept it there; its line goes as the key moves into
@@ -99,7 +98,7 @@ write_engine_env() {
   folder=$(engine_folder "$slug")
   mkdir -p "$folder"
   {
-    printf 'ENGINE_NAME=%s\n' "$(engine_container "$slug")"
+    printf 'ENGINE_NAME=%s\n' "$(engine_project "$slug")"
     printf 'ENGINE_KEY=%s\n' "$key"
     printf 'ENGINE_VOLUME=%s\n' "$volume"
     printf 'ENGINE_NETWORK=%s\n' "$network"
@@ -143,9 +142,8 @@ join_engine_network() {
 }
 engine_network_of() { sed -n 's/^ENGINE_NETWORK=//p' "$(engine_folder "$1")/.env"; }
 join_engine_networks() {
-  for folder in .engines/*/; do
-    [ -f "$folder/.env" ] || continue
-    join_engine_network "$(sed -n 's/^ENGINE_NETWORK=//p' "$folder/.env")" || return 1
+  for name in $(engine_names); do
+    join_engine_network "$(engine_network_of "$name")" || return 1
   done
 }
 engine_start() { engine "$1" up -d --wait --wait-timeout "${GTMWORKS_ENGINE_WAIT:-300}"; }
@@ -154,7 +152,7 @@ engine_start() { engine "$1" up -d --wait --wait-timeout "${GTMWORKS_ENGINE_WAIT
 engine_destroy() {
   slug=$1 volume=$2 network=$3
   engine "$slug" down -v --remove-orphans > /dev/null 2>&1 || true
-  docker rm -f "$(engine_container "$slug")" > /dev/null 2>&1 || true
+  docker rm -f "$(engine_project "$slug")" > /dev/null 2>&1 || true
   docker volume rm "$volume" > /dev/null 2>&1 || true
   # The app and the worker may have joined this Engine's network before a later step failed: detach them first, or the
   # network would be left behind and the same command run again would meet it.
@@ -165,7 +163,7 @@ engine_destroy() {
   docker network rm "$network" > /dev/null 2>&1 || true
   rm -rf "$(engine_folder "$slug")"
 }
-engine_up() {
+first_engine_up() {
   adopt_engine_key || return 1
   key=$(engine_key)
   test -n "$key" || { echo 'The install has no Engine key: run sh scripts/install.sh.' >&2; return 1; }
@@ -177,13 +175,11 @@ engine_up() {
 # template replaced the one on disk, so a release that pins another Engine image recreates every Company's Engine with
 # its data volume, its key and its network, and no Company is left on an old Engine (#386).
 engines_up() {
-  engine_up || return 1
-  for folder in .engines/*/; do
-    slug=${folder#.engines/}
-    slug=${slug%/}
-    [ "$slug" != first ] || continue
-    engine_start "$slug" || return 1
-    join_engine_network "$(engine_network_of "$slug")" || return 1
+  first_engine_up || return 1
+  for name in $(engine_names); do
+    [ "$name" != first ] || continue
+    engine_start "$name" || return 1
+    join_engine_network "$(engine_network_of "$name")" || return 1
   done
 }
 # Every Engine stopped before its data volume is copied: a live Engine writes under its volume while the archive reads
@@ -191,13 +187,43 @@ engines_up() {
 # key is adopted; its one Engine is the first one.
 engine_stop() {
   for name in $(engine_names); do
-    docker stop "$(engine_container "$name")" > /dev/null 2>&1 || true
+    docker stop "$(engine_project "$name")" > /dev/null 2>&1 || true
   done
-  [ -f "$(engine_folder first)/.env" ] || docker stop "$(engine_container first)" > /dev/null 2>&1 || true
+  [ -f "$(engine_folder first)/.env" ] || docker stop "$(engine_project first)" > /dev/null 2>&1 || true
 }
 # A new Engine's key: 64 hex characters, the shape the install's own key has, generated here and kept in the Engine's own
 # folder file (owner-only) and encrypted in its record. It is never printed.
 new_engine_key() { od -An -N32 -tx1 /dev/urandom | tr -d ' \n'; }
+# `gtmworks sign-in claude --company <id-or-name>` (#384, ADR 0018): Claude's sign-in is the Engine's own, run in that
+# Company's Engine on its root profile, which lends it to every Agent of the Company. The Engine's address in the record
+# names its container (scripts/engine-template.yml), so the command runs in that container only; an address whose whole
+# value is not an Engine of this install is refused. The sign-in asks for a pasted code, so stdin stays open.
+sign_in() {
+  provider=${1:-}
+  shift || true
+  company_name=
+  while [ $# -gt 0 ]; do
+    case "$1" in --company) [ $# -ge 2 ] || break; company_name=$2; shift;; esac
+    shift
+  done
+  [ "$provider" = claude ] || { echo 'gtmworks sign-in signs in claude.' >&2; return 1; }
+  test -n "$company_name" || { echo 'gtmworks sign-in claude needs --company <id-or-name>.' >&2; return 1; }
+  test -f .env.install || { echo 'Install first.' >&2; return 1; }
+  rows=$(printf '%s\n' "select e.address,c.name from public.companies c join public.company_engines e on e.id=c.engine_id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
+    | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v company="$company_name") \
+    || { echo "Could not read this install's Companies: is gtmworks running? See gtmworks status." >&2; return 1; }
+  count=$(printf '%s\n' "$rows" | grep -c . || true)
+  [ "$count" -ne 0 ] || { echo "No Company in this install is named $company_name. Pass the Company's id or its exact name." >&2; return 1; }
+  [ "$count" -eq 1 ] || { echo "More than one Company in this install is named $company_name. Pass the Company's id instead." >&2; return 1; }
+  address=${rows%%|*} name=${rows#*|}
+  printf '%s\n' "$address" | grep -Eq '^http://gtmworks-engine-[a-z0-9-]+:8642$' \
+    || { echo "The Engine record of $name names no Engine of this install. Nothing was changed." >&2; return 1; }
+  host=${address#*://} host=${host%%:*}
+  echo "Signing $name in to Claude on its Engine: $host. One account serves one Company."
+  if [ -t 0 ]; then tty=-t; else tty=; fi
+  docker exec -i $tty -u hermes "$host" hermes auth add anthropic --type oauth --no-browser
+}
+
 company_usage() {
   echo 'Usage: gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list' >&2
   exit 1
@@ -219,16 +245,14 @@ company_add() {
   test -n "$company_name" || company_usage
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   # The Owner and the name are checked in the database before an Engine, a folder or a record is made.
-  if [ "$has_owner" = yes ]; then
-    slug=$(compose exec -T web node scripts/company-add.mjs check --name "$company_name" --owner "$owner_email") || return 1
-  else
-    slug=$(compose exec -T web node scripts/company-add.mjs check --name "$company_name") || return 1
-  fi
+  set -- --name "$company_name"
+  [ "$has_owner" = no ] || set -- "$@" --owner "$owner_email"
+  slug=$(compose exec -T web node scripts/company-add.mjs check "$@") || return 1
   slug=$(printf '%s\n' "$slug" | tail -n 1)
   case "$slug" in ''|*[!a-z0-9-]*) echo "The Company's Engine folder name is not usable: $slug" >&2; return 1;; esac
-  volume=$(engine_container "$slug")
-  network=$(engine_container "$slug")
-  address="http://$(engine_container "$slug"):8642"
+  volume=$(engine_project "$slug")
+  network=$(engine_project "$slug")
+  address="http://$(engine_project "$slug"):8642"
   key=$(new_engine_key)
   write_engine_env "$slug" "$key" "$volume" "$network"
   if ! engine_start "$slug" >&2 || ! join_engine_network "$network"; then
@@ -236,25 +260,21 @@ company_add() {
     echo "Company \"$company_name\" was not made: its Engine did not become healthy. Nothing was left behind; run the same command again."
     return 1
   fi
+  # One add for both paths: the Owner is the only difference, and a failure removes everything this command made.
+  set -- --name "$company_name" --address "$address" --slug "$slug"
+  [ "$has_owner" = no ] || set -- "$@" --owner "$owner_email"
+  if ! ENGINE_ADDRESS="$address" ENGINE_KEY="$key" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web \
+    node scripts/company-add.mjs add "$@"; then
+    # The record and the Company are removed by the script; a waiting record the script did not reach is removed here.
+    compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
+    engine_destroy "$slug" "$volume" "$network"
+    echo "Company \"$company_name\" was not made. Nothing was left behind; run the same command again."
+    return 1
+  fi
   if [ "$has_owner" = yes ]; then
-    if ! ENGINE_ADDRESS="$address" ENGINE_KEY="$key" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web \
-      node scripts/company-add.mjs add --name "$company_name" --owner "$owner_email" --address "$address" --slug "$slug"; then
-      # The record and the Company are removed by the script; a waiting record the script did not reach is removed here.
-      compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
-      engine_destroy "$slug" "$volume" "$network"
-      echo "Company \"$company_name\" was not made. Nothing was left behind; run the same command again."
-      return 1
-    fi
-    echo "Company \"$company_name\" is made on its own Engine ($(engine_container "$slug")). Its Owner is $owner_email."
+    echo "Company \"$company_name\" is made on its own Engine ($(engine_project "$slug")). Its Owner is $owner_email."
   else
-    if ! ENGINE_ADDRESS="$address" ENGINE_KEY="$key" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web \
-      node scripts/company-add.mjs add --name "$company_name" --address "$address" --slug "$slug"; then
-      compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
-      engine_destroy "$slug" "$volume" "$network"
-      echo "Company \"$company_name\" was not made. Nothing was left behind; run the same command again."
-      return 1
-    fi
-    echo "Company \"$company_name\" is waiting for its Owner on its own Engine ($(engine_container "$slug")). Send the first-Owner link above; it works once."
+    echo "Company \"$company_name\" is waiting for its Owner on its own Engine ($(engine_project "$slug")). Send the first-Owner link above; it works once."
   fi
 }
 # `gtmworks company link` (#383, ADR 0019): a fresh first-Owner link for a Company still waiting, which ends the earlier one.
@@ -315,6 +335,63 @@ volumes() {
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
     --tmpfs /engines "$@"
 }
+# The one check of a backup archive, made before anything stops or changes: only the backup's own entries, none outside
+# it, each of them present, and every Company's Engine with its data and a usable key (#378, T4). It sets engines_layout,
+# hermes_data and engine_keys for the restore that follows. get.sh runs it as `check-restore`, so a restore --version asks
+# the same questions of the target release's own installer.
+check_backup() {
+  cp "$1" .install-lock/backup.tgz
+  docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
+    tar -tzf /backup/backup.tgz > .install-lock/entries
+  while IFS= read -r entry; do
+    case "$entry" in /*|*../*|../*|*/..) echo 'Unsafe backup path.' >&2; return 1;; esac
+    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) echo 'Unrecognised backup.' >&2; return 1;; esac
+  done < .install-lock/entries
+  for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
+    grep -Fx "$entry" .install-lock/entries >/dev/null || { echo 'Incomplete backup.' >&2; return 1; }
+  done
+  # Every Company runs on its own Engine (ADR 0018), so an archive made by this release holds one data folder per Engine
+  # under engines/, named as its folder under .engines/ (where its key is). An archive made before that holds the first
+  # Engine's data at opt/data and its key in .engines/first/.env, or, older still, in .env.install. An archive naming an
+  # Engine without its data, data without its key, or both layouts at once cannot be fully restored: say so here, before
+  # anything stops or changes.
+  engines_layout=no
+  if grep -Eq '^engines/' .install-lock/entries; then engines_layout=yes; fi
+  engine_data=$(sed -n 's#^engines/\([^/][^/]*\)/.*#\1#p' .install-lock/entries | sort -u)
+  engine_key_folders=$(sed -n 's#^\.engines/\([^/][^/]*\)/\.env$#\1#p' .install-lock/entries | sort -u)
+  # An archive from before #349 holds no Engine data: the install restores as it did, and says what the backup left out.
+  hermes_data=no
+  if grep -Eq '^opt/data/?$' .install-lock/entries; then hermes_data=yes; fi
+  # An archive from before #385 holds no .engines/: its key is in .env.install, and this installer moves it into the
+  # Engine's own file below, as an update does.
+  engine_keys=no
+  if grep -Eq '^\.engines/first/\.env$' .install-lock/entries; then engine_keys=yes; fi
+  if [ "$engines_layout" = yes ]; then
+    if [ "$hermes_data" = yes ]; then echo 'Unrecognised backup.' >&2; return 1; fi
+    test "$engine_data" = "$engine_key_folders" || { echo 'The backup does not hold an Engine for every Company.' >&2; return 1; }
+    if [ -n "$engine_data" ]; then
+      printf '%s\n' "$engine_data" | grep -qx first || { echo 'The backup does not hold an Engine for every Company.' >&2; return 1; }
+      hermes_data=yes
+    fi
+  else
+    test -z "$(printf '%s\n' "$engine_key_folders" | grep -vx first | grep .)" \
+      || { echo 'The backup does not hold an Engine for every Company.' >&2; return 1; }
+  fi
+  # An archive is not trusted with an Engine folder's name or its whole file (#378, X2): each Engine folder is named like
+  # an Engine, and only its ENGINE_KEY is taken (64 hex characters), which this installer writes from below with this
+  # release's own ENGINE_NAME/ENGINE_VOLUME/ENGINE_NETWORK. A file that could point the install network or the database's
+  # volume at something else is never used.
+  for name in $engine_key_folders; do
+    printf '%s\n' "$name" | grep -Eq '^[a-z0-9-]+$' \
+      || { echo "The backup names an Engine folder that is not usable: $name" >&2; return 1; }
+    key=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
+      tar -xOzf /backup/backup.tgz ".engines/$name/.env" | sed -n 's/^ENGINE_KEY=//p') || return 1
+    printf '%s\n' "$key" | grep -Eq '^[a-f0-9]{64}$' \
+      || { echo "The backup's Engine $name has no usable key." >&2; return 1; }
+  done
+  return 0
+}
+
 operation=${1:-install}
 if [ -n "$release_image" ]; then
   # Release mode replaces the install files below; a checkout's own copies of them are source code.
@@ -353,55 +430,7 @@ if [ "$operation" = backup ]; then
   return
 elif [ "$operation" = restore ]; then
   test -f .env.install && test -f "${2:-}" || { echo 'Usage: sh scripts/install.sh restore <archive> (into an empty install)' >&2; exit 1; }
-  cp "$2" .install-lock/backup.tgz
-  docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
-    tar -tzf /backup/backup.tgz > .install-lock/entries
-  while IFS= read -r entry; do
-    case "$entry" in /*|*../*|../*|*/..) echo 'Unsafe backup path.' >&2; exit 1;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) echo 'Unrecognised backup.' >&2; exit 1;; esac
-  done < .install-lock/entries
-  for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
-    grep -Fx "$entry" .install-lock/entries >/dev/null || { echo 'Incomplete backup.' >&2; exit 1; }
-  done
-  # Every Company runs on its own Engine (ADR 0018), so an archive made by this release holds one data folder per Engine
-  # under engines/, named as its folder under .engines/ (where its key is). An archive made before that holds the first
-  # Engine's data at opt/data and its key in .engines/first/.env, or, older still, in .env.install. An archive naming an
-  # Engine without its data, data without its key, or both layouts at once cannot be fully restored: say so here, before
-  # anything stops or changes.
-  engines_layout=no
-  if grep -Eq '^engines/' .install-lock/entries; then engines_layout=yes; fi
-  engine_data=$(sed -n 's#^engines/\([^/][^/]*\)/.*#\1#p' .install-lock/entries | sort -u)
-  engine_key_folders=$(sed -n 's#^\.engines/\([^/][^/]*\)/\.env$#\1#p' .install-lock/entries | sort -u)
-  # An archive from before #349 holds no Engine data: the install restores as it did, and says what the backup left out.
-  hermes_data=no
-  if grep -Eq '^opt/data/?$' .install-lock/entries; then hermes_data=yes; fi
-  # An archive from before #385 holds no .engines/: its key is in .env.install, and this installer moves it into the
-  # Engine's own file below, as an update does.
-  engine_keys=no
-  if grep -Eq '^\.engines/first/\.env$' .install-lock/entries; then engine_keys=yes; fi
-  if [ "$engines_layout" = yes ]; then
-    if [ "$hermes_data" = yes ]; then echo 'Unrecognised backup.' >&2; exit 1; fi
-    test "$engine_data" = "$engine_key_folders" || { echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; }
-    if [ -n "$engine_data" ]; then
-      printf '%s\n' "$engine_data" | grep -qx first || { echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; }
-      hermes_data=yes
-    fi
-  else
-    test -z "$(printf '%s\n' "$engine_key_folders" | grep -vx first | grep .)" \
-      || { echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; }
-  fi
-  # An archive is not trusted with an Engine folder's name or its whole file (#378, X2): each Engine folder is named like
-  # an Engine, and only its ENGINE_KEY is taken (64 hex characters), which this installer writes from below with this
-  # release's own ENGINE_NAME/ENGINE_VOLUME/ENGINE_NETWORK. A file that could point the install network or the database's
-  # volume at something else is never used.
-  for name in $engine_key_folders; do
-    printf '%s\n' "$name" | grep -Eq '^[a-z0-9-]+$' \
-      || { echo "The backup names an Engine folder that is not usable: $name" >&2; exit 1; }
-    key=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
-      tar -xOzf /backup/backup.tgz ".engines/$name/.env" | sed -n 's/^ENGINE_KEY=//p') || exit 1
-    printf '%s\n' "$key" | grep -Eq '^[a-f0-9]{64}$' \
-      || { echo "The backup's Engine $name has no usable key." >&2; exit 1; }
-  done
+  check_backup "$2" || exit 1
   docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
     tar -xOzf /backup/backup.tgz .env.install > .env.install.tmp
   complete_env "$PWD/.env.install.tmp"
@@ -417,7 +446,7 @@ elif [ "$operation" = restore ]; then
   resume=no
   # This empty install's Engine keys are its own, made a moment ago; the archive's take their place, so each Engine whose
   # data went back answers to the key the archive kept (#385). An archive from before .engines/ keeps the key in
-  # .env.install, which engine_up below moves into the Engine's own file. The key folders are read first, because each
+  # .env.install, which first_engine_up below moves into the Engine's own file. The key folders are read first, because each
   # Engine's data goes back into the volume its own folder names.
   rm -rf .engines
   if [ "$engine_keys" = yes ]; then
@@ -429,9 +458,9 @@ elif [ "$operation" = restore ]; then
    for name in $(engine_names); do
      key=$(sed -n 's/^ENGINE_KEY=//p' "$(engine_folder "$name")/.env")
      if [ "$name" = first ]; then
-       write_engine_env first "$key" "$engine_volume" "$(engine_container first)"
+       write_engine_env first "$key" "$engine_volume" "$(engine_project first)"
      else
-       write_engine_env "$name" "$key" "$(engine_container "$name")" "$(engine_container "$name")"
+       write_engine_env "$name" "$key" "$(engine_project "$name")" "$(engine_project "$name")"
      fi
    done
   fi
@@ -478,6 +507,13 @@ elif [ "$operation" = restore ]; then
     echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
   fi
   return
+elif [ "$operation" = check-restore ]; then
+  # get.sh runs this with the target release's own installer before it changes anything (#378, T4): the same check a
+  # restore makes, and nothing is stopped, migrated or written.
+  test -f "${2:-}" || { echo 'Usage: sh scripts/install.sh check-restore <archive>' >&2; exit 1; }
+  check_backup "$2" || exit 1
+  echo 'The backup can be restored.'
+  return
 elif [ "$operation" = update ] && [ -n "$release_image" ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   test -z "${2:-}" || { echo 'A release install updates to the next release: put its docker-compose.install.yml and install.sh here, then run sh install.sh update.' >&2; exit 1; }
@@ -498,6 +534,10 @@ elif [ "$operation" = update ]; then
     echo "Extracting update source..."
     tar -xzf /install/.install-lock/source.tgz -C /install --strip-components=1
   ' sh "$ref"
+elif [ "$operation" = sign-in ]; then
+  shift
+  sign_in "$@"
+  return
 elif [ "$operation" = company ]; then
   shift
   company "$@"

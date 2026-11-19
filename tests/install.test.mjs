@@ -252,6 +252,20 @@ esac
 // are the ones it already had, so its Agents' memory and its sign-in stay and its Engine gets a network of its own. The
 // previous release is a real install of origin/main's code at this pull request's base, not this release's schema.
 // An install with more than one Company on that schema is refused before anything changes.
+test('a restore --version asks the target release the same archive check a restore makes (#378, T4)', () => {
+ const get=readFileSync('scripts/get.sh','utf8');
+ assert.match(get,/install\.sh check-restore/,'get.sh delegates the archive check');
+ assert.match(get,/check-restore/);
+ const install=readFileSync('scripts/install.sh','utf8');
+ assert.match(install,/elif \[ "\$operation" = check-restore \]/);
+ assert.match(install,/check_backup "\$2" \|\| exit 1/,'the restore and the check share one function');
+ assert.match(install,/check_backup "\$2" \|\| exit 1/);
+ assert.match(install,/The backup does not hold an Engine for every Company\./,'the installer holds the archive-layout check');
+ // get.sh asks the target release's installer rather than laying out the archive itself (#378, T4).
+ assert.ok(get.indexOf("grep -q 'check-restore'")>=0);
+ assert.match(get,/check-restore "\$archive"/);
+});
+
 test('the install job updates a real previous-release install with one Company, and refuses one with two', () => {
  const step=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>/release install and update/.test(step.name||''));
  const run=step.run;
@@ -344,7 +358,9 @@ test('the install job backs up and restores every Company Engine, refuses an inc
  assert.ok(early>=0&&early<probeCompany,'the one-Engine archive is made before the probe Company is added');
  for(const text of [
   "sh scripts/install.sh backup || fail 'backup before the Engines are proven'",
-  'mv "$before_dir/engines/first" "$before_dir/opt/data"',
+  'first_folder=$(ls -d "$before_dir"/engines/*/ 2> /dev/null | head -n 1)',
+  'mkdir -p "$before_dir/opt"',
+  'mv "${first_folder%/}" "$before_dir/opt/data"',
   "printf 'HERMES_API_KEY=%s\\n' \"$before_engines_key\" >> \"$before_dir/.env.install\"",
   'rm -rf "$before_dir/engines" "$before_dir/.engines"',
   'tar -czf "$RUNNER_TEMP/before-engines.tgz" .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage',

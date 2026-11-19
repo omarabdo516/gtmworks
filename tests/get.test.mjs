@@ -193,6 +193,11 @@ test('gtmworks sign-in claude runs the Engine\'s own Claude sign-in in the Compa
  const m=machine(t);
  ok(m.line());
  m.clear();
+ // The sign-in's Engine lookup is the installer's own (#378, T4), as the Company commands are: get.sh only hands it on.
+ assert.doesNotMatch(getText,/engine_row|company_engines/);
+ assert.match(getText,/sh \.\/install\.sh sign-in "\$provider" --company "\$company"/);
+ // The real installer runs here, because it owns the lookup and the container the sign-in runs in.
+ writeFileSync(join(m.dir,'install.sh'),readFileSync('scripts/install.sh','utf8').replace('release_image=',`release_image=${ref('v1.10.0')}`));
  const row='http://gtmworks-engine-first:8642|RS Learning\n';
  // By the Company's name: the record names the Engine, and the Engine's own sign-in runs in it on its root profile.
  writeFileSync(m.env.DB_FILE,row);
@@ -1037,6 +1042,28 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
  assert.ok(run.indexOf('--version v0.0.2')>run.indexOf("gtmworks update || fail"));
  assert.match(run,/\[\[ \$\(web_image\) == "\$image" && \$\(cat \.install-release\) == "\$next"/);
  assert.match(run,/migrations \| diff -u "\$RUNNER_TEMP\/updated-migrations" -/);
+});
+
+// #378 (T4): the archive-layout check is the target installer's own `check-restore`, so get.sh and install.sh cannot drift.
+test('gtmworks restore --version asks the target release\'s own installer to check the archive', t => {
+ const m=machine(t);
+ ok(m.line());
+ const archive=join(m.root,'old.tgz');
+ writeFileSync(archive,'archive');
+ const release=join(m.env.FIXTURE,'v1.2.3');
+ writeFileSync(join(release,'install.sh'),`#!/bin/sh
+release_image=${ref('v1.2.3')}
+# check-restore
+if [ "$1" = check-restore ]; then echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; fi
+exit 0
+`);
+ writeFileSync(join(release,'docker-compose.install.yml'),composeTemplate.replaceAll('@REF@',ref('v1.2.3')));
+ m.clear();
+ const refused=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes']);
+ assert.notEqual(refused.status,0);
+ assert.match(refused.stderr,/The backup does not hold an Engine for every Company\. Nothing was changed\./);
+ assert.deepEqual(m.installer(),[],'nothing was restored or backed up');
+ assert.doesNotMatch(m.docker(),/ down$|^volume rm /,'nothing stopped or removed');
 });
 
 test('the README installs with the one line, keeps the source route under From source, and updates with gtmworks update', () => {

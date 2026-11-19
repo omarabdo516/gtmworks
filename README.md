@@ -112,9 +112,7 @@ its own Engine. If the Engine does not become healthy the command says so in one
 removes what it made (its container, volume, network and folder, and its record), and
 leaves no Company, so running it again is safe. `gtmworks company list` shows every
 Company with the state of its Engine, and `gtmworks status` reports every Engine.
-Each Engine adds roughly the memory measured below for one Engine: 775 MiB before its
-Agents' profiles and 825 MiB with twenty of them, so size the server for that much per
-Company; the install job prints the memory one idle Engine uses on every run.
+Each Engine adds roughly the memory one Engine takes, and the install job prints the memory one idle Engine uses on every run. The measured figures below are 775 MiB before its Agents' profiles and 825 MiB with twenty of them, so size the server for that much per Company.
 
 **Agent profiles and isolation (ADR 0014).** Inside its Engine a Company keeps the
 shape gtmworks has: the worker gives the Company its own profile (`co-<company

@@ -585,7 +585,12 @@ jobs:
           tar -xzf "$before_engines" -C "$before_dir" || fail 'read the one-Engine backup'
           before_engines_key=$(sed -n 's/^ENGINE_KEY=//p' .engines/first/.env)
           [[ $before_engines_key =~ ^[a-f0-9]{64}$ ]] || fail 'the first Engine key before the Engines are proven'
-          mv "$before_dir/engines/first" "$before_dir/opt/data" || fail 'put the first Engine at opt/data'
+          # The archive names the Engine folder it holds; the one-Engine layout puts that data at opt/data. The move's
+          # destination folder has to exist for mv, and a listing says what the archive held when it does not.
+          first_folder=$(ls -d "$before_dir"/engines/*/ 2> /dev/null | head -n 1)
+          if [[ -z $first_folder ]]; then tar -tzf "$before_engines" | sed -n '1,40p'; fail 'the one-Engine archive holds the Engine data'; fi
+          mkdir -p "$before_dir/opt"
+          mv "${first_folder%/}" "$before_dir/opt/data" || fail 'put the first Engine at opt/data'
           rm -rf "$before_dir/engines" "$before_dir/.engines"
           if [ -n "$(tail -c 1 "$before_dir/.env.install")" ]; then echo >> "$before_dir/.env.install"; fi
           printf 'HERMES_API_KEY=%s\n' "$before_engines_key" >> "$before_dir/.env.install"
