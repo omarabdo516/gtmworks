@@ -136,10 +136,11 @@ An install updated from before ADR 0014 keeps a Company's agents on the shared
 `default` profile until its own profile holds a sign-in; the worker then moves it
 there. Memory already written on `default` stays there, and earlier conversations
 do not carry their Engine context to the new profile.
-A backup includes the first Company's Engine data: every Agent's profile, its rules
+A backup includes every Company's Engine: each Company's Agents' profiles, rules
 and memory, its skills, the Company knowledge, and its conversations' history. A
 backup made before this was included holds none of it; restoring one says so in a
-line, and the worker makes the profile again, empty, so the Company signs in again.
+line, and the worker makes the profiles again, empty, so the Companies sign in
+again.
 Realtime, Studio, analytics and edge functions are not installed. Service settings
 follow the [official Supabase self-hosted stack](https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml).
 

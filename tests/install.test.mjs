@@ -634,7 +634,7 @@ if(args[0]==='compose') {
  for(const [name,folder] of [['gtmworks-engine-first','first'],['gtmworks-engine-second-company','second-company']]) {
   assert.ok(after.some(command=>command.join(' ')===
    `compose --project-name ${name} --env-file .engines/${folder}/.env -f scripts/engine-template.yml up -d --wait --wait-timeout 300`),`${name} starts from its own folder`);
-  assert.ok(after.some(command=>command.join(' ')===`network connect ${name} web-id`),after.map(command=>command.join(' ')).join('\n'));
+  assert.ok(after.some(command=>command.join(' ')===`network connect --alias web ${name} web-id`),after.map(command=>command.join(' ')).join('\n'));
   assert.ok(after.some(command=>command.join(' ')===`network connect ${name} worker-id`),after.map(command=>command.join(' ')).join('\n'));
  }
  writeFileSync(join(directory,'commands'),'');
