@@ -45,6 +45,8 @@ assert.ok(installText.includes('opt/data/*'),'install.sh restores opt/data/* ent
 const installerTemplate=`#!/bin/sh
 release_image=@REF@
 # restore accepts opt/data/* (the Agents' data, #349)
+# restore accepts .engines/* (each Engine's key, #385)
+# restore accepts engines|engines/* (each Company's Engine data, #386)
 op=\${1:-install}
 ${lockBlock}printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
 case "$op" in
@@ -872,6 +874,13 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
   [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\n.env.install'},['--yes'],/not a complete gtmworks backup: it has no var\/lib\/storage\/\./],
   [{ENV_INVALID:'1'},['--yes'],/SUPABASE_PUBLIC_URL must equal APP_ORIGIN\n.*The settings in .*old\.tgz \(its \.env\.install\) are not valid for gtmworks v1\.2\.3, for the reason above\. Nothing was changed\./],
   [{ARCHIVE_MIGRATIONS:'001.sql 002.sql 003.sql'},['--yes'],/old\.tgz holds migrations that gtmworks v1\.2\.3 does not carry \(002\.sql 003\.sql\): a later release made it\./],
+  // Every Company's Engine is in the archive as one data folder per Engine under engines/ (#386), named as its folder
+  // under .engines/ (its key): an Engine without its data, data without its key, or both layouts at once cannot be
+  // restored.
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\nengines/second/\n.engines/first/.env'},['--yes'],/not a complete gtmworks backup: it does not hold every Company Engine\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env\n.engines/second/.env'},['--yes'],/not a complete gtmworks backup: it does not hold every Company Engine\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nopt/data/\nengines/first/\n.engines/first/.env'},['--yes'],/not a gtmworks backup: it holds one Engine's data at opt\/data and every Engine's data under engines\/\./],
+  [{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/second/\n.engines/second/.env'},['--yes'],/not a complete gtmworks backup: it does not hold the first Engine\./],
  ];
  for(const [extra,flags,message] of cases) {
   m.clear();
@@ -894,6 +903,12 @@ test('gtmworks restore --version checks the archive and asks before it replaces 
  assert.match(noKeys.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds the Engines' keys, which releases before it cannot restore\./);
  nothingChanged(noKeys,'a release before the Engines\' keys');
  writeFileSync(targetInstaller,withAgents);
+ // A release from before #386 knows no engines/ either: each Company's Engine data is asked about before the volumes go.
+ writeFileSync(targetInstaller,withAgents.replace(/^# restore accepts engines.*\n/m,''));
+ m.clear();
+ const noEngines=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_ENTRIES:'var/lib/postgresql/data/\netc/postgresql-custom/\nvar/lib/storage/\n.env.install\nengines/first/\n.engines/first/.env'}});
+ assert.match(noEngines.stderr,/gtmworks v1\.2\.3 cannot restore .*old\.tgz: it holds each Company's Engine data, which releases before it cannot restore\./);
+ nothingChanged(noEngines,'a release before the Engines\' data');
  // An archive whose migrations cannot be read is not taken for one with none.
  m.clear();
  const unread=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes'],{extra:{ARCHIVE_UNREADABLE:'1'}});

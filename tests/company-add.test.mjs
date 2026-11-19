@@ -44,7 +44,7 @@ test('company add makes one Engine from the template, joins it, then makes the C
  const commands=installDir.lines();
  assert.ok(commands.some(line=>line.includes('company-add.mjs check --name Second Company --owner person@example.com')),commands.join('\n'));
  assert.ok(commands.some(line=>/^compose --project-name gtmworks-engine-second-company-0000abcd --env-file \.engines\/second-company-0000abcd\/\.env -f scripts\/engine-template\.yml up -d --wait --wait-timeout 300$/.test(line)),commands.join('\n'));
- assert.ok(commands.includes('network connect gtmworks-engine-second-company-0000abcd web-id'));
+ assert.ok(commands.includes('network connect --alias web gtmworks-engine-second-company-0000abcd web-id'));
  assert.ok(commands.includes('network connect gtmworks-engine-second-company-0000abcd worker-id'));
  assert.ok(commands.some(line=>line.includes('company-add.mjs add --name Second Company --owner person@example.com')&&line.includes('ENGINE_ADDRESS=http://gtmworks-engine-second-company-0000abcd:8642')));
  // The Engine's own folder holds its own generated key, its volume and its network, readable by its owner alone.

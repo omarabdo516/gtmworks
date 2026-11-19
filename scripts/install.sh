@@ -53,6 +53,15 @@ engine_volume=gtmworks-install_hermes
 engine_project() { printf 'gtmworks-engine-%s' "$1"; }
 engine_folder() { printf '.engines/%s' "$1"; }
 engine_container() { engine_project "$1"; }
+# Every Engine the install has, one folder each under .engines: the first Engine and every Company's own. A backup, a
+# restore and a stop cover each of them (#386); a folder with no .env is not an Engine.
+engine_names() {
+  for folder in .engines/*/; do
+    [ -f "$folder/.env" ] || continue
+    name=${folder#.engines/}
+    printf '%s\n' "${name%/}"
+  done
+}
 engine() {
   slug=$1
   shift
@@ -105,7 +114,10 @@ retire_old_engine() {
   [ -z "$old" ] || docker rm -f $old > /dev/null
 }
 # The app and the worker reach every Engine by its container name. Compose recreates them on an update, which drops the
-# extra networks, so each connection is made again after every start of the stack.
+# extra networks, so each connection is made again after every start of the stack. The app answers on each Engine's
+# network as `web`, the name its own scripts use there (`http://web:8080/v1`), so a probe or a model server on that
+# network reaches it without a second address; the worker needs no name there. An install made before this name keeps
+# its connection and joins again with it.
 join_engine_network() {
   network=$1
   test -n "$network" || return 0
@@ -114,10 +126,19 @@ join_engine_network() {
     [ -n "$id" ] || continue
     container_name=$(docker inspect -f '{{.Name}}' "$id") || return 1
     container_name=${container_name#/}
+    alias=
+    [ "$service" = web ] && alias=web
     if docker network inspect "$network" -f '{{range .Containers}}{{println .Name}}{{end}}' | grep -qx "$container_name"; then
-      continue
+      [ -z "$alias" ] && continue
+      docker inspect -f "{{range \$network,\$settings := .NetworkSettings.Networks}}{{if eq \$network \"$network\"}}{{range .Aliases}}{{println .}}{{end}}{{end}}{{end}}" "$id" \
+        | grep -qx "$alias" && continue
+      docker network disconnect "$network" "$id" || return 1
     fi
-    docker network connect "$network" "$id" || return 1
+    if [ -n "$alias" ]; then
+      docker network connect --alias "$alias" "$network" "$id" || return 1
+    else
+      docker network connect "$network" "$id" || return 1
+    fi
   done
 }
 engine_network_of() { sed -n 's/^ENGINE_NETWORK=//p' "$(engine_folder "$1")/.env"; }
@@ -152,8 +173,9 @@ engine_up() {
   engine_start first || return 1
   join_engine_network gtmworks-engine-first
 }
-# Every Engine the install has, the first one included: an update starts each from its own folder, so a Company's Engine
-# is never left stopped by an install of the app.
+# Every Engine the install has, the first one included: an update starts each from its own folder after the release's
+# template replaced the one on disk, so a release that pins another Engine image recreates every Company's Engine with
+# its data volume, its key and its network, and no Company is left on an old Engine (#386).
 engines_up() {
   engine_up || return 1
   for folder in .engines/*/; do
@@ -164,7 +186,15 @@ engines_up() {
     join_engine_network "$(engine_network_of "$slug")" || return 1
   done
 }
-engine_stop() { docker stop "$(engine_container first)" > /dev/null 2>&1 || true; }
+# Every Engine stopped before its data volume is copied: a live Engine writes under its volume while the archive reads
+# it, and a restore replaces what is in it (#386). An install the previous release made has no .engines/first until its
+# key is adopted; its one Engine is the first one.
+engine_stop() {
+  for name in $(engine_names); do
+    docker stop "$(engine_container "$name")" > /dev/null 2>&1 || true
+  done
+  [ -f "$(engine_folder first)/.env" ] || docker stop "$(engine_container first)" > /dev/null 2>&1 || true
+}
 # A new Engine's key: 64 hex characters, the shape the install's own key has, generated here and kept in the Engine's own
 # folder file (owner-only) and encrypted in its record. It is never printed.
 new_engine_key() { od -An -N32 -tx1 /dev/urandom | tr -d ' \n'; }
@@ -268,9 +298,23 @@ complete_env() {
   fi
   rm -f .install-lock/missing
 }
+# One helper container holding the data a backup copies or a restore writes: the database, its custom configuration and
+# the stored files (through the running services' own volumes), and every Engine's data volume under /engines/<folder>
+# (#386), so a restore puts each Engine's data back into the volume its own folder names. $1 is ro for a backup and rw
+# for a restore, which makes each volume that is missing.
 volumes() {
+  mode=$1
+  shift
+  engine_mounts=
+  for name in $(engine_names); do
+    volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$(engine_folder "$name")/.env")
+    test -n "$volume" || { echo "The Engine $name names no data volume: run sh scripts/install.sh." >&2; return 1; }
+    if [ "$mode" = rw ]; then docker volume create "$volume" > /dev/null || return 1; fi
+    engine_mounts="$engine_mounts -v $volume:/engines/$name:$mode"
+  done
+  # shellcheck disable=SC2086
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
-    -v "$engine_volume:/opt/data" "$@"
+    --tmpfs /engines $engine_mounts "$@"
 }
 operation=${1:-install}
 if [ -n "$release_image" ]; then
@@ -290,19 +334,20 @@ if [ "$operation" = backup ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   destination=${2:-backups}
   mkdir -p "$destination"
-  # The stack starts again after the copy, the first Engine included, and an install the previous release made has its
+  # The stack starts again after the copy, every Engine included, and an install the previous release made has its
   # Engine key moved into the Engine's own file then (#385).
   complete_env "$PWD/.env.install"
   resume=yes
   engine_stop
   compose stop
-  # BusyBox tar applies the last -C to every entry, so keep all paths under one root. The Agents' profiles, rules,
-  # knowledge, skills, memory and history live only in the first Company's Engine volume (#349, ADR 0018), so opt/data
-  # goes with them. Each Engine's key lives in .engines/ (#385), so it goes too: a restore brings back an Engine that
-  # answers to the same key. An install that has not run this installer yet has no .engines/; its key is in .env.install.
+  # BusyBox tar applies the last -C to every entry, so keep all paths under one root. Every Company runs on its own
+  # Engine (ADR 0018), so every Engine's data volume goes in, one folder per Engine under engines/ (#386): each
+  # Company's Agents, profiles, rules, knowledge, skills, memory and history live in its own Engine's volume, and each
+  # Engine's key lives in .engines/ (#385), so a restore brings back an Engine that answers to the same key. An install
+  # that has not run this installer yet has no .engines/; its key is in .env.install.
   mkdir -p .engines
-  volumes -v "$PWD/.env.install:/.env.install:ro" -v "$PWD/.engines:/.engines:ro" alpine:3.21 tar -czf - \
-    -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data .env.install .engines > .install-lock/backup.tgz
+  volumes ro -v "$PWD/.env.install:/.env.install:ro" -v "$PWD/.engines:/.engines:ro" alpine:3.21 tar -czf - \
+    -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines .env.install .engines > .install-lock/backup.tgz
   archive="$destination/gtmworks-$(date -u +%Y%m%dT%H%M%SZ)-$$.tgz"
   mv .install-lock/backup.tgz "$archive"
   echo "Backup: $archive"
@@ -314,18 +359,38 @@ elif [ "$operation" = restore ]; then
     tar -tzf /backup/backup.tgz > .install-lock/entries
   while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..) echo 'Unsafe backup path.' >&2; exit 1;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|.engines|.engines/*) ;; *) echo 'Unrecognised backup.' >&2; exit 1;; esac
+    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) echo 'Unrecognised backup.' >&2; exit 1;; esac
   done < .install-lock/entries
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
     grep -Fx "$entry" .install-lock/entries >/dev/null || { echo 'Incomplete backup.' >&2; exit 1; }
   done
-  # An archive from before #349 holds no opt/data: the install restores as it did, and says what the backup left out.
+  # Every Company runs on its own Engine (ADR 0018), so an archive made by this release holds one data folder per Engine
+  # under engines/, named as its folder under .engines/ (where its key is). An archive made before that holds the first
+  # Engine's data at opt/data and its key in .engines/first/.env, or, older still, in .env.install. An archive naming an
+  # Engine without its data, data without its key, or both layouts at once cannot be fully restored: say so here, before
+  # anything stops or changes.
+  engines_layout=no
+  if grep -Eq '^engines/' .install-lock/entries; then engines_layout=yes; fi
+  engine_data=$(sed -n 's#^engines/\([^/][^/]*\)/.*#\1#p' .install-lock/entries | sort -u)
+  engine_key_folders=$(sed -n 's#^\.engines/\([^/][^/]*\)/\.env$#\1#p' .install-lock/entries | sort -u)
+  # An archive from before #349 holds no Engine data: the install restores as it did, and says what the backup left out.
   hermes_data=no
   if grep -Eq '^opt/data/?$' .install-lock/entries; then hermes_data=yes; fi
   # An archive from before #385 holds no .engines/: its key is in .env.install, and this installer moves it into the
   # Engine's own file below, as an update does.
   engine_keys=no
   if grep -Eq '^\.engines/first/\.env$' .install-lock/entries; then engine_keys=yes; fi
+  if [ "$engines_layout" = yes ]; then
+    if [ "$hermes_data" = yes ]; then echo 'Unrecognised backup.' >&2; exit 1; fi
+    test "$engine_data" = "$engine_key_folders" || { echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; }
+    if [ -n "$engine_data" ]; then
+      printf '%s\n' "$engine_data" | grep -qx first || { echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; }
+      hermes_data=yes
+    fi
+  else
+    test -z "$(printf '%s\n' "$engine_key_folders" | grep -vx first | grep .)" \
+      || { echo 'The backup does not hold an Engine for every Company.' >&2; exit 1; }
+  fi
   docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
     tar -xOzf /backup/backup.tgz .env.install > .env.install.tmp
   complete_env "$PWD/.env.install.tmp"
@@ -339,27 +404,43 @@ elif [ "$operation" = restore ]; then
   compose stop db
   # A failed extraction must stay offline, rather than start a partially restored database.
   resume=no
-  volumes -v "$PWD/.install-lock:/backup:ro" alpine:3.21 sh -ec '
-    if [ "$1" = yes ]; then
-      find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage /opt/data -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-      # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
-      tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data
-    else
-      # An archive from before #349: the Engine volume of this empty install stays as it is.
-      find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-      tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage
-    fi
-  ' sh "$hermes_data"
-  mv .env.install.tmp .env.install
-  # This empty install's Engine key is its own, made a moment ago; the archive's takes its place, so the Engine whose
-  # data went back answers to the key the archive kept (#385). An archive from before .engines/ keeps it in .env.install,
-  # which engine_up below moves into the Engine's own file.
+  # This empty install's Engine keys are its own, made a moment ago; the archive's take their place, so each Engine whose
+  # data went back answers to the key the archive kept (#385). An archive from before .engines/ keeps the key in
+  # .env.install, which engine_up below moves into the Engine's own file. The key folders are read first, because each
+  # Engine's data goes back into the volume its own folder names.
   rm -rf .engines
   if [ "$engine_keys" = yes ]; then
    mkdir -p .engines
    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/.install-lock:/backup:ro" -v "$PWD/.engines:/.engines" alpine:3.21 \
      tar -xzpf /backup/backup.tgz -C / .engines
   fi
+  if [ "$engines_layout" = yes ]; then
+    # One folder per Engine (#386): each Engine's volume is mounted under its folder's name, emptied, and the archive's
+    # data for it goes back where its record's address finds it.
+    volumes rw -v "$PWD/.install-lock:/backup:ro" alpine:3.21 sh -ec '
+      find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+      for folder in /engines/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
+      # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
+      tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines
+    '
+  else
+    # An archive from before this release: the first Engine is the install's one Engine, and its data is at opt/data.
+    first_volume=$engine_volume
+    if [ -f "$(engine_folder first)/.env" ]; then first_volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$(engine_folder first)/.env"); fi
+    volumes rw -v "$first_volume:/opt/data" -v "$PWD/.install-lock:/backup:ro" alpine:3.21 sh -ec '
+      find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+      for folder in /engines/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
+      if [ "$1" = yes ]; then
+        find /opt/data -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
+        tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage opt/data
+      else
+        # An archive from before #349: the Engine volume of this empty install stays as it is.
+        tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage
+      fi
+    ' sh "$hermes_data"
+  fi
+  mv .env.install.tmp .env.install
   compose up -d --force-recreate --wait --wait-timeout 300
   engines_up
   if [ "$hermes_data" = no ]; then
