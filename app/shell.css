@@ -484,6 +484,90 @@
 .gw .details .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .gw .details .dp-file { color: var(--gw-text-1); text-decoration: none; border-radius: var(--gw-r-xs); }
 @media (hover: hover) { .gw .details .dp-file:hover { text-decoration: underline; text-underline-offset: 3px; } }
+/* The Library of an Agent (#194; design-reference: .lib-chev, .lib-hint, .lib-crumbs, .lib-file, .lib-thumb, .lib-dl,
+   .lib-empty): a folder row that opens in place, a file row with its size, its time and its download, and the empty
+   state. The download is a link to the route that serves the bytes as an attachment. */
+.gw .details .lib-chev { color: var(--gw-text-3); width: 16px; height: 16px; }
+.gw .details .lib-hint { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); text-wrap: pretty; }
+.gw .details .lib-crumbs { display: flex; align-items: center; gap: 2px; min-height: 22px; padding-inline: 6px; color: var(--gw-text-3); }
+.gw .details .lib-crumbs .gw-icon { width: 14px; height: 14px; }
+[dir="rtl"] .gw .details .lib-crumbs .gw-icon, .gw[dir="rtl"] .details .lib-crumbs .gw-icon { transform: scaleX(-1); }
+.gw .details .lib-crumbs .link-btn { margin-inline-start: -6px; }
+.gw .details .lib-crumbs__cur { margin: 0; padding: 2px 6px; font-size: var(--gw-fs-sm); font-weight: 600; color: var(--gw-text-1); }
+.gw .details .lib-crumbs__cur .muted { font-weight: 400; }
+.gw .details .panel-row.lib-file { gap: 4px; padding: 0; }
+.gw .details .lib-file__main { display: flex; align-items: center; gap: 10px; flex: 1 1 0; min-width: 0; min-height: 52px; padding: 6px var(--s2); border-radius: var(--gw-r-sm); text-align: start; }
+@media (hover: hover) { .gw .details :is(button, a).lib-file__main:hover { background: var(--gw-bg-hover); } }
+.gw .details .lib-file__main .panel-row__text { display: grid; min-width: 0; flex: 1 1 0; }
+.gw .details .lib-1l { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gw .details .lib-thumb { width: 36px; height: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border-radius: var(--gw-r-xs); background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
+.gw .details .lib-thumb .gw-icon { width: 18px; height: 18px; }
+.gw .lib-thumb img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
+.gw .details .lib-dl { width: 32px; height: 32px; margin-inline-end: 6px; }
+.gw .details .lib-dl .gw-icon { width: 16px; height: 16px; }
+.gw .details .lib-empty { display: grid; justify-items: center; gap: 6px; padding: var(--s5) var(--s3); text-align: center; color: var(--gw-text-3); }
+.gw .details .lib-empty .gw-icon { width: 22px; height: 22px; }
+.gw .details .lib-empty p { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; max-width: 32ch; text-wrap: pretty; }
+
+/* A file's read-only preview (#195; design-reference: .pv, .pv__inner, .pv-title, .pv__body, .pv-fig, .pv-img, .pv-article,
+   .modal.is-closing): a centred dialog over the page, the body scrolling between its head and its foot, and the foot's
+   Download. The leave runs 190ms, as closeDlg waits. */
+.gw dialog.pv {
+  position: fixed; inset: 0; margin: auto; display: block; padding: 0; border: 0;
+  width: min(760px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 48px)); max-width: none; max-height: none;
+  border-radius: var(--gw-r-lg); background: var(--gw-bg-chrome); color: var(--gw-text-1); box-shadow: var(--gw-shadow-modal); overflow: hidden;
+  font-family: var(--gw-font); font-size: var(--gw-fs-base); line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+.gw dialog.pv::backdrop { background: var(--gw-bg-scrim); }
+.gw dialog.pv[open] { animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out); }
+.gw dialog.pv.is-closing { animation: gw-modal-out 190ms var(--gw-ease-in) forwards; }
+.gw .pv__inner { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; min-height: 0; }
+.gw .pv-title { overflow-wrap: anywhere; }
+.gw .pv__body { overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--s2) var(--s6) var(--s6); display: flex; flex-direction: column; gap: var(--s4); }
+.gw .pv-text { margin: 0; font-family: inherit; font-size: var(--gw-fs-sm); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gw .pv-fig { margin: 0; display: grid; justify-items: center; gap: var(--s2); }
+.gw .pv-img { display: block; max-width: 100%; max-height: min(540px, calc(100dvh - 300px)); width: auto; height: auto; border-radius: var(--gw-r-sm); box-shadow: var(--gw-border-2) 0 0 0 0.5px; }
+.gw .pv-none { display: grid; justify-items: center; gap: var(--s2); padding: var(--s6) 0; color: var(--gw-text-3); text-align: center; }
+.gw .pv-none .gw-icon { width: 40px; height: 40px; }
+.gw .pv-none span { font-size: var(--gw-fs-sm); overflow-wrap: anywhere; }
+.gw :is(.pv-more, .pv-note) { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
+.gw .pv .table-wrap { overflow-x: auto; }
+.gw .pv .table { width: 100%; border-collapse: collapse; font-size: var(--gw-fs-sm); }
+.gw .pv .table th { text-align: start; font-weight: 400; color: var(--gw-text-3); padding: 0 var(--s2) var(--s2); border-bottom: 0.5px solid var(--gw-border-2); white-space: nowrap; background: none; }
+.gw .pv .table td { padding: var(--s3) var(--s2); border-bottom: 0.5px solid var(--gw-border-3); white-space: nowrap; }
+.gw .pv .table tbody tr:last-child :is(td, th) { border-bottom: 0; }
+.gw .pv .lib-thumb--lg { width: 44px; height: 44px; }
+.gw .pv .lib-thumb--lg .gw-icon { width: 22px; height: 22px; }
+@media (max-width: 599px) {
+  .gw dialog.pv { width: 100vw; height: 100dvh; border-radius: 0; }
+  .gw .pv__body { padding-inline: var(--s4); }
+}
+/* The Agent's memory (#350; design-reference: .mem-intro, .mem-know, .mem-main, .mem-note, .mem-search, .mem-empty,
+   .mem-confirm). The Add form is not built (the Engine has no route that adds a note). */
+.gw .details .mem-intro { margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-2); text-wrap: pretty; }
+.gw .details .mem-know, .gw .details .mem-main { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin: 0; padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); text-wrap: pretty; }
+.gw .details .mem-know > .gw-icon { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--gw-text-3); }
+.gw .details .mem-know > span { flex: 1 1 200px; min-width: 0; }
+.gw .details .mem-know .link-btn { margin-inline-start: -6px; }
+.gw .details .mem-main { color: var(--gw-text-3); }
+.gw .details .mem-search { padding-inline: var(--s3); }
+.gw .details .mem-search input {
+  width: 100%; height: 36px; padding: 0 var(--s3); border-radius: var(--gw-r-full); border: 0.5px solid var(--gw-border-2);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font-size: var(--gw-fs-sm); outline: none;
+}
+.gw .details .mem-search input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .details .mem-search input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw .details .mem-empty { display: grid; justify-items: start; gap: var(--s1); padding: var(--s2) var(--s1); }
+.gw .details .mem-empty .panel-empty { margin: 0; padding: 0 var(--s2); }
+.gw .details .panel-row.mem-note { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px var(--s2); }
+.gw .details .mem-note__t { font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .details .mem-confirm { display: grid; gap: var(--s2); padding: var(--s2) var(--s1) var(--s1); }
+.gw .details .mem-confirm .panel-empty { padding: 0 var(--s2); }
+.gw .details .panel-form__row { display: flex; gap: var(--s2); }
+.gw .details .panel-form__row--end { justify-content: flex-end; }
+.gw .details .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+@media (hover: hover) { .gw .details .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+.gw .details .btn:disabled { opacity: .55; }
 /* The Agent's screen (design-reference: .scr, .scr__off, .scr-card, .scr-thumb), drawn in code from tokens so it follows
    the theme. Sizes inside are container units, as the reference's are; only the empty frame is built (#21). */
 .gw .details .scr {

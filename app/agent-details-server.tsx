@@ -13,6 +13,10 @@ import { FeedWhen, LogDays } from '@/app/c/[slug]/log/log-client';
 import { FeedText, LogEntry, logColumns, logPeople } from '@/app/c/[slug]/log/entries';
 import { detailsTabs } from '@/app/agent-details-tabs';
 import { ConnectedTools } from '@/app/connected-tools';
+import { AgentLibrary } from '@/app/agent-library';
+import { AgentMemory } from '@/app/agent-memory';
+import { companyKnowledgeHref } from '@/lib/settings-overlay.mjs';
+import { readAgentMemory } from '@/lib/agent-memory.mjs';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentStatus,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
@@ -39,7 +43,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
  const talkFiles=((talkFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,conversation_id:string,conversations:{agent_name:string}}[]).map(file=>({...file,agent_name:file.conversations.agent_name}));
  const talks=[...new Set(talkFiles.map(file=>file.conversation_id))];
- const [{items:waiting},{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts]=await Promise.all([waitingRead,
+ const [{items:waiting},{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts,memory]=await Promise.all([waitingRead,
   ids.length?db.from('work_stages').select('id,name,board_column').eq('company_id',company):Promise.resolve({data:[]}),
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
   run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
@@ -47,6 +51,9 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
   ids.length?db.from('work_attachments').select('id,name,size,created_at,card_id',{count:'exact'}).eq('company_id',company).in('card_id',ids).order('created_at',{ascending:false}).order('id',{ascending:false}):Promise.resolve({data:[],count:0}),
   // A Conversation is named as the sidebar names it: the first line of its person's first message.
   Promise.all(talks.map(async talk=>(await db.from('conversation_messages').select('body').eq('conversation_id',talk).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined)),
+  // The Agent's memory (#350) is its own Engine profile's; an Agent the reader does not see is not found, and an Engine
+  // that cannot be read leaves the tab unread rather than empty.
+  readAgentMemory(db,{company,agent}).catch(()=>({state:'failed' as const,main:false,notes:null})),
  ]);
  const tasks=agentTasks(cards,stages||[],checklist||[],waiting);
  const recent=latestActivity(rows,feedSince());
@@ -81,6 +88,12 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
 
  const log=rows.length?<div className="lg-wrap"><LogDays items={rows.map(row=>({id:row.id,at:row.created_at,node:<LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={writer} drawnAt={drawn} t={t} language={language} faceSize={24}/>}))}/></div>:undefined;
 
+ // The Agent's Library (#194): the Owner and Managers open it, and the route refuses anyone below them. Its folder is
+ // read in the browser after the panel is drawn, so no page waits on the Engine.
+ const library=role==='owner'||role==='manager'?<AgentLibrary company={company} slug={slug} agent={agent} name={name}/>:undefined;
+
  return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
-  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,tasks:tasksTab,files:filesList,fileCount:(cardFileCount??0)+(talkFileCount??0),log,logCount:count??rows.length})};
+  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
+   memory:memory.state==='found'?<AgentMemory key={agent} company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>:undefined,
+   log,logCount:count??rows.length})};
 }

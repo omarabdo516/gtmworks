@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
@@ -67,6 +67,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
+  // Each profile's memory (#350): the entries of its MEMORY.md and its USER.md, as the memory tool parses them (the
+  // learning graph lists one node per entry, its id carrying the entry's position and a digest of its text).
+  memory:/** @type {Map<string,{memory:string[],profile:string[]}>} */(new Map()),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -91,6 +94,20 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
   backlogLimit:1000,runSeconds:41,
+  // An Agent's work folder (#194), as the dashboard's file routes read it: each entry is the folder's absolute path to
+  // the entries `/api/files?path=` reports (a name, whether it is a folder, its size, its mtime, and `resolves`: the
+  // path a link points at, which is the entry itself unless it leaves the folder), and `fileBytes` holds the bytes
+  // `/api/fs/download?path=` serves, by absolute file path. A folder not in `files` is not found.
+  files:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
+  // The pictures a profile generated (#353), as the Engine's own folder `<profile home>/cache/generated/images`
+  // (agent/provider_media.py, GENERATED_SUBDIR, cache_dir) holds them. The Engine makes that folder when the first
+  // image lands and not before, so a profile with no entry here has no folder and `/api/files?path=` answers it 404.
+  images:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
+  fileBytes:/** @type {Map<string,{body:string|Uint8Array,type?:string}>} */(new Map()),
+  filesUnreadable:/** @type {Set<string>} */(new Set()),
+  // The path `/api/files?path=` and `/api/fs/read-text?path=` answer with, when it is not the one asked for: a folder or
+  // a file that is a link somewhere else, which the Engine resolves and reports as its own `path`.
+  resolved:/** @type {Map<string,string>} */(new Map()),
   // One recording as text (#160): the profile it was sent for, the MIME type and how many bytes, and the words the
   // Engine hears ('' is silence). A `transcriptionStatus` that is not 200 answers with `transcriptionDetail`, and the
   // pinned image's missing speech-to-text provider is that detail with a 400, as its route answers.
@@ -114,6 +131,21 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  };
  const merge=(base,over)=>{ const out={...base}; for(const [key,value] of Object.entries(over||{})) out[key]=value&&typeof value==='object'&&!Array.isArray(value)&&base?.[key]&&typeof base[key]==='object'?merge(base[key],value):value; return out; };
  const send=(response,code,body)=>{response.writeHead(code,{'Content-Type':'application/json',Location:'/must-not-follow'});response.end(JSON.stringify(body));};
+ // The type the pinned release gives a managed file (mimetypes.guess_type, files.py _fs_mime_type).
+ const mimeOf=name=>{const ext=(/\.([a-z0-9]+)$/i.exec(name)?.[1]||'').toLowerCase();
+  return {png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',csv:'text/csv',md:'text/markdown',txt:'text/plain',json:'application/json'}[ext]||'application/octet-stream';};
+  // The entries of one folder: those a test set for it, or a profile's generated images folder (#353), which the Engine
+  // makes when its first image lands and not before — a profile with none has no such folder at all.
+  const generatedRoot=/^\/opt\/data\/profiles\/([^/]+)\/cache\/generated\/images$/;
+  const entriesAt=path=>{ const generated=generatedRoot.exec(path); return settings.files.get(path)??(generated?settings.images.get(generated[1]):undefined); };
+ // The memory an Agent's profile holds (#350): MEMORY.md's entries first, then USER.md's, each named by its position in
+ // the combined list and a digest of its text (agent/learning_graph.py memory_node_id, memory_fingerprint).
+ const memoryCards=name=>{
+  const files=settings.memory.get(name)||{memory:[],profile:[]}; const cards=[];
+  for(const source of ['memory','profile']) for(const text of files[source]) cards.push({source,text});
+  return cards.map((card,index)=>({...card,index,id:`memory:${card.source}:${index}:${createHash('sha256').update(card.text.trim(),'utf8').digest('hex').slice(0,12)}`}));
+ };
+ const memoryTitle=text=>{ const first=text.split('\n')[0].trim().replace(/^#+\s*/,''); return first.length>80?`${first.slice(0,80)}…`:first; };
  const server=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    settings.requests.push({method:request.method,path:request.url,authorization:request.headers.authorization,session:request.headers['x-hermes-session-key'],idempotency:request.headers['idempotency-key']});
@@ -239,6 +271,47 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    if(request.headers.authorization!==`Bearer ${settings.key}`) return send(response,401,{error:'session_expired',message:request.headers.authorization});
    if(settings.managementStatus!==200) return send(response,settings.managementStatus,{detail:request.headers.authorization});
+   // An Agent's work folder (#194). `/api/files?path=` lists a folder under the managed root with each entry's size,
+   // time and resolved path (hermes_cli/web_routers/files.py 616, web_server_files.py _managed_file_entry), refusing a
+   // path outside it (403); `/api/fs/download?path=` serves one file as an attachment (files.py 1356).
+   if(url.pathname==='/api/files'&&request.method==='GET') {
+    const path=(url.searchParams.get('path')||'').replace(/\/+$/,'');
+    if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
+    if(settings.filesUnreadable.has(path)) return send(response,500,{detail:'Could not read directory'});
+    const entries=entriesAt(path);
+    if(!entries) return send(response,404,{detail:'Path not found'});
+    return send(response,200,{path:settings.resolved.get(path)??path,parent:null,root:'/opt/data',locked_root:'/opt/data',can_change_path:false,entries:entries.map(entry=>{
+     const folder=entry.isFolder===true;
+     const at=entry.broken?`${path}/${entry.name}`:entry.resolves??`${path}/${entry.name}`;
+     return {name:entry.name,path:at,is_directory:folder,size:folder||entry.broken?null:entry.size??0,mtime:folder||entry.broken?null:entry.mtime??1763500000,
+      mime_type:folder||entry.broken?null:mimeOf(entry.name),...(entry.broken?{broken_link:true}:{})};
+    })});
+   }
+   // A text file's first part (#195): `/api/fs/read-text` answers the bytes up to 512 KB decoded as UTF-8, the whole
+   // size, the type, whether more follows and whether it reads as binary (hermes_cli/web_routers/files.py 1032-1079).
+   if(url.pathname==='/api/fs/read-text'&&request.method==='GET') {
+    const path=url.searchParams.get('path')||'';
+    if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
+    const cut=path.lastIndexOf('/');
+    const entry=(entriesAt(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
+    if(!entry||entry.broken) return send(response,404,{detail:'File not found'});
+    if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
+    const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};
+    const data=Buffer.from(file.body);
+    return send(response,200,{binary:data.includes(0),byteSize:data.length,language:'text',mimeType:file.type??mimeOf(entry.name),path:settings.resolved.get(path)??path,
+     text:data.subarray(0,512*1024).toString('utf8'),truncated:data.length>512*1024});
+   }
+   if(url.pathname==='/api/fs/download'&&['GET','HEAD'].includes(request.method)) {
+    const path=url.searchParams.get('path')||'';
+    const cut=path.lastIndexOf('/');
+    const entry=(entriesAt(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
+    if(!entry||entry.broken) return send(response,404,{detail:'File not found'});
+    if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
+    const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};
+    const body=Buffer.from(file.body);
+    response.writeHead(200,{'Content-Type':file.type??mimeOf(entry.name),'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(entry.name)}`,'Content-Length':body.length});
+    return response.end(request.method==='HEAD'?undefined:body);
+   }
    // A session answers only under its own profile; a page holds at most 500 messages, from `offset`.
    // One recording as text (#160; hermes_cli/web_routers/audio.py 89-149): the body is a data URL and its MIME type,
    // the answer the transcript and the provider. Only its size and type are kept here, never the recording.
@@ -343,7 +416,69 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(scoped==='default') settings.defaultConfig=home.config;
     return send(response,200,{ok:true});
    }
-   // Skills (hermes_cli/web_routers/skills.py): a profile sees its own and those of each folder its
+   // Learning (hermes_cli/web_routers/status.py 746-800, agent/learning_graph.py): the graph lists a profile's skills and
+ // its memory entries side by side, and one node's text is read on its own. A skill's name resolves to its SKILL.md
+ // here too, so what keeps a skill out of memory is the contract's own guard, not this fake.
+ if(url.pathname==='/api/learning/graph'&&request.method==='GET') {
+  const named=url.searchParams.get('profile')||'default';
+  if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+  const cards=memoryCards(named); const skillNames=[...(settings.skills.get(named)||new Map()).keys()];
+  return send(response,200,{
+   nodes:[...skillNames.map(name=>({id:name,label:name,kind:'skill',timestamp:null,category:null,useCount:3,state:'active',createdBy:'agent',pinned:false})),
+    ...cards.map(card=>({id:card.id,label:memoryTitle(card.text),kind:'memory',memorySource:card.source,timestamp:null,category:'memory',useCount:0,state:'active',createdBy:'memory',pinned:false}))],
+   edges:[],clusters:[],
+   memory:cards.map(card=>({source:card.source,title:memoryTitle(card.text),body:card.text,fingerprint:card.id.split(':')[3]})),
+   stats:{memory_nodes:cards.length,memory_skill_edges:0,learned_skills:skillNames.length}});
+ }
+ if(url.pathname==='/api/learning/node'&&request.method==='GET') {
+  const named=url.searchParams.get('profile')||'default';
+  if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+  const id=url.searchParams.get('id')||'';
+  const card=memoryCards(named).find(found=>found.id===id);
+  if(card) return send(response,200,{ok:true,kind:'memory',id,label:memoryTitle(card.text),content:card.text});
+  const skill=settings.skills.get(named)?.get(id);
+  return skill?send(response,200,{ok:true,kind:'skill',id,label:id,content:skill}):send(response,404,{detail:'not found'});
+ }
+ // A note rewritten or removed by its id (status.py 780-795, agent/learning_mutations.py edit_node/delete_node): an id
+ // whose entry changed under the reader is stale, an empty note is refused, and a note over its file's limit too.
+ if(url.pathname==='/api/learning/node'&&['PUT','DELETE'].includes(request.method)) {
+  const named=url.searchParams.get('profile')||'default';
+  if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+  const id=body?.id;
+  if(typeof id!=='string'||!/^memory:(memory|profile):\d{1,9}(:[0-9a-f]{12})?$/.test(id)) return send(response,400,{detail:`bad memory node id: ${id}`});
+  const source=id.split(':')[1]; const files=settings.memory.get(named)||{memory:[],profile:[]};
+  const card=memoryCards(named).find(found=>found.id===id);
+  const at=card?files[source].indexOf(card.text):-1;
+  if(!card||at<0) return send(response,400,{detail:'memory node id is stale — refresh the graph'});
+  const name=source==='memory'?'MEMORY.md':'USER.md';
+  if(request.method==='DELETE') {
+   files[source].splice(at,1); settings.memory.set(named,files);
+   return send(response,200,{ok:true,message:`deleted memory from ${name}`});
+  }
+  if(typeof body?.content!=='string'||!body.content.trim()) return send(response,400,{detail:'empty memory — use delete to remove it'});
+  const replacement=body.content.trim();
+  const next=[...files[source].slice(0,at),replacement,...files[source].slice(at+1)];
+  const limit=source==='memory'?2200:1375;
+  if(next.join('\n§\n').length>limit) return send(response,400,{detail:'Replacement would put memory at '+(next.join('\n§\n').length)+'/'+limit+' chars. Shorten the new content.'});
+  files[source]=next; settings.memory.set(named,files);
+  return send(response,200,{ok:true,message:`updated memory in ${name}`});
+ }
+
+ // A reset deletes that profile's MEMORY.md and USER.md only, and is refused without a profile while the backend serves
+ // several (ops.py 535-553, _common.py destructive_profile).
+ if(url.pathname==='/api/memory/reset'&&request.method==='POST') {
+  const named=url.searchParams.get('profile');
+  if(!named) return send(response,400,{detail:'POST /api/memory/reset requires an explicit profile: this backend serves several profiles'});
+  if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+  const target=body?.target??'all';
+  if(!['all','memory','user'].includes(target)) return send(response,400,{detail:'target must be all, memory, or user'});
+  const files=settings.memory.get(named)||{memory:[],profile:[]}; const deleted=[];
+  if(['all','memory'].includes(target)&&files.memory.length) { files.memory=[]; deleted.push('MEMORY.md'); }
+  if(['all','user'].includes(target)&&files.profile.length) { files.profile=[]; deleted.push('USER.md'); }
+  settings.memory.set(named,files);
+  return send(response,200,{ok:true,deleted});
+ }
+ // Skills (hermes_cli/web_routers/skills.py): a profile sees its own and those of each folder its
    // skills.external_dirs names (a profile's folder is its home's `skills`), and keeps its own locks.
    const skillsPath=url.pathname.match(/^\/api\/skills(?:\/(content|lock|toggle))?$/);
    if(skillsPath) {

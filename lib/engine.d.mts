@@ -38,6 +38,13 @@ export type Transcription={state:'transcribed',text:string}|{state:'unavailable'
 // The language an Agent's profile listens in (`stt.language`); null when the profile detects it itself.
 export type DictationSettings={state:'found',language:string|null}|{state:'refused'|'unreachable'|'failed',language:null};
 export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[]}|{state:'refused'|'unreachable'|'failed',keys:null};
+// An Agent's memory (#350), read from its own profile: its notes, each with the Engine's id and its text, never a skill.
+export type MemoryNote={id:string,text:string};
+export type MemoryNotes={state:'found',notes:MemoryNote[]}|{state:'refused'|'unreachable'|'failed',notes:null};
+export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed'};
+// One note rewritten or removed by the Engine's own id (#191); a note that changed since it was read is `stale`.
+export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed'};
+export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed'};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={

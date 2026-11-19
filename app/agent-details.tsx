@@ -39,9 +39,9 @@ export function HeadPill({panel,agent,details,face,title,titleDir,corner}:{panel
  return <div className="chat__top"><h1 className="chat__h">{panel&&label?<button type="button" className="head-pill" id="btn-details" aria-controls="details" aria-expanded={panel.expanded} aria-label={`${title} · ${label}`} onClick={panel.toggle}>{inside}</button>:<span className="head-pill">{inside}</span>}</h1>{corner}</div>;
 }
 
-const tabs=[{key:'activity',label:'chatTabActivity'},{key:'tasks',label:'chatTabTasks'},{key:'files',label:'chatTabFiles'},{key:'memory',label:'chatTabMemory',soon:true},{key:'log',label:'chatTabLog'}] as const;
-type Tab=Exclude<(typeof tabs)[number],{soon:true}>['key'];
-const open=tabs.filter((tab):tab is Extract<(typeof tabs)[number],{key:Tab}>=>!('soon' in tab));
+const tabs=[{key:'activity',label:'chatTabActivity'},{key:'tasks',label:'chatTabTasks'},{key:'files',label:'chatTabFiles'},{key:'memory',label:'chatTabMemory'},{key:'log',label:'chatTabLog'}] as const;
+type Tab=(typeof tabs)[number]['key'];
+const open=tabs;
 
 // The frame every details panel shares (an Agent's, a channel's): over the chat it takes the focus, and Escape gives
 // it back to the title pill.
@@ -109,9 +109,8 @@ export function AgentDetails({panel,agent,details,tab:first,slug}:{panel:Details
     {agent.made&&<MadeLine made={agent.made} where="panel"/>}
    </div>
   </div>
-  <div className="segmented dp-tabs" role="tablist" aria-label={t('chatDetailsOf',agent.name)} onKeyDown={move}>{tabs.map(item=>'soon' in item
-   ?<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected="false" aria-disabled="true" tabIndex={-1} title={t('soon')}>{t(item.label)}<span className="sr-only"> · {t('soon')}</span></button>
-   :<button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected={tab===item.key} aria-controls="dp-panel" tabIndex={tab===item.key?0:-1} onClick={()=>setTab(item.key)}>{t(item.label)}</button>)}</div>
+  <div className="segmented dp-tabs" role="tablist" aria-label={t('chatDetailsOf',agent.name)} onKeyDown={move}>{tabs.map(item=>
+   <button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected={tab===item.key} aria-controls="dp-panel" tabIndex={tab===item.key?0:-1} onClick={()=>setTab(item.key)}>{t(item.label)}</button>)}</div>
   <div id="dp-panel" role="tabpanel" aria-labelledby={`dp-tab-${tab}`} className="dp-sections"><Later details={details} part={tab}/></div>
  </DetailsShell>;
 }
