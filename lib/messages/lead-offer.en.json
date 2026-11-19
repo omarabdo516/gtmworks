@@ -1,0 +1,8 @@
+{
+  "makeIt": "Make it?",
+  "makeItChoice": "Make it",
+  "askForIt": "Ask {0} for it?",
+  "askForItChoice": "Ask {0} for it",
+  "notNow": "Not now",
+  "ownerFallback": "the Owner"
+}

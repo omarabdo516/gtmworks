@@ -204,6 +204,9 @@
 }
 @media (hover: hover) { .gw .board-view .mcard:hover { box-shadow: var(--gw-border-2) 0 0 0 0.5px, var(--gw-shadow-popover); } }
 .gw .board-view .mcard__top { display: flex; align-items: flex-start; gap: var(--s2); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-2); }
+.gw .board-view .mcard__top > :first-child { margin-top: 1px; }
+/* The face of the Member who mentioned the reader in a channel (#200; design-reference: .mcard__top > :first-child). */
+.gw .board-view .mcard__top .mcard__av { width: 20px; height: 20px; font-size: 10px; }
 .gw .board-view .mcard__who b { color: var(--gw-text-1); font-weight: 600; }
 .gw .board-view .mcard__time { flex: none; color: var(--gw-text-3); }
 .gw .board-view .mcard__q { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); }

@@ -33,7 +33,8 @@ const repliesTo=(message:number)=>JSON.parse(query(`select author,author_name,bo
 
 test('integration: ordinary talk starts no Run; a mention starts exactly one, and its reply is posted in the channel once',async()=>{
  test.setTimeout(120000);
- const fake=fakeEngine(); fake.settings.pendingReads=2; fake.settings.usage={input:2100,output:35};
+ // #152: each drive reads its page again after it moves a Run, so the fake is held open one read longer than before.
+ const fake=fakeEngine(); fake.settings.pendingReads=3; fake.settings.usage={input:2100,output:35};
  const {service,person}=await memberClient('omar@example.com'); const {agent,detach}=attachAgent();
  const told=randomUUID();
  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${told}','${company}','${omar}','${agent}','Faye')`);
@@ -81,6 +82,9 @@ test('integration: a start whose answer was lost is asked again with the same ke
   const drive=()=>driveChannelRuns(service,{hermes,channel,engineFor:fake.engineFor});
   expect(await drive()).toEqual({started:0,closed:0});
   expect(fake.runs).toEqual([]);
+  // #152: the post's own drive reads the page again after it starts the Run, so it is held open for that read and the
+  // next drive closes it.
+  fake.settings.pendingReads=1;
   expect(await postChannelMessage(person,service,{...post,engineFor:fake.engineFor})).toEqual(lost);
   expect(fake.runs.map(run=>run.key)).toEqual([`channel:${lost.message}`]);
   expect(await drive()).toEqual({started:0,closed:1});

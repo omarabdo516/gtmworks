@@ -9,7 +9,7 @@ const push = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn() }) }));
 vi.mock('@/app/channel-actions', () => ({ channelChoices: vi.fn(), createChannel: vi.fn() }));
 const choices = {
- people: [{ person: 'p-1', name: 'Omar', role: 'owner' as const }, { person: 'p-2', name: 'Sara Adel', role: 'manager' as const }, { person: 'p-4', name: 'Mona', role: 'viewer' as const }],
+ people: [{ person: 'p-1', name: 'Omar', role: 'owner' as const, invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'manager' as const, invitation: null, email: null }, { person: 'p-4', name: 'Mona', role: 'viewer' as const, invitation: null, email: null }],
  agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true }, { id: 'a-2', connection_id: 'c-2', name: 'Critic', speciality: '', main: false }],
 };
 beforeEach(() => { vi.mocked(channelChoices).mockResolvedValue(choices); });
@@ -61,7 +61,7 @@ test('Create the channel makes it with the people and Agents chosen and opens it
  await screen.getByRole('checkbox', { name: /Critic/ }).click();
  await screen.getByRole('button', { name: 'Create the channel' }).click();
  await expect.poll(() => push.mock.calls).toEqual([['/c/rs/channels/ch-9']]);
- expect(vi.mocked(createChannel).mock.calls).toEqual([['co-1', { key: expect.stringMatching(/^[0-9a-f-]{36}$/), name: 'Launch week', people: ['p-2'], agents: ['a-2'] }]]);
+ expect(vi.mocked(createChannel).mock.calls).toEqual([['co-1', { key: expect.stringMatching(/^[0-9a-f-]{36}$/), name: 'Launch week', people: ['p-2'], agents: ['a-2'], invitees: [] }]]);
  expect(close).toHaveBeenCalled();
 });
 
@@ -92,4 +92,18 @@ test('a request that fails is said so, and Create works again with the same requ
  await expect.poll(() => push.mock.calls).toEqual([['/c/rs/channels/ch-9']]);
  const [first, second] = vi.mocked(createChannel).mock.calls.map(([, request]) => request);
  expect(second.key).toBe(first.key);
+});
+
+// #207: an invited person is offered like a Member, with their Role and email, and is created with the channel.
+test('an invited person is offered with their Role and email and is created with the channel', async () => {
+ vi.mocked(channelChoices).mockResolvedValue({ ...choices, people: [...choices.people, { person: null, name: 'Mona', role: 'contributor', invitation: 'i-1', email: 'mona@example.test' }] });
+ vi.mocked(createChannel).mockResolvedValue({ channel: 'ch-9' });
+ const { screen } = await dialog();
+ const invited = screen.getByRole('checkbox', { name: /Mona Contributor/ });
+ expect(invited.element().textContent).toBe('MMonaContributor · mona@example.test');
+ await userEvent.type(screen.getByRole('textbox', { name: 'Channel name' }), 'Launch week');
+ await invited.click();
+ await expect.element(screen.getByRole('group', { name: /^Members/ })).toHaveAccessibleName('Members 2');
+ await screen.getByRole('button', { name: 'Create the channel' }).click();
+ await expect.poll(() => vi.mocked(createChannel).mock.calls.map(([, request]) => request.invitees)).toEqual([['i-1']]);
 });

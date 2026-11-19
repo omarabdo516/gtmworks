@@ -30,9 +30,10 @@ import { workDate as date } from '@/lib/work-date.mjs';
 import { sortWorkCards } from '@/lib/work-sort.mjs';
 import { boardColumns, blockReason, cardAgent, chatPlace, chatWait, columnLabel, columnOf, keyboardTarget, onCard, orderColumn, placeByOne, progressOf, type CardWait } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
+import { withMention } from '@/lib/channels';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
-type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // An open Card's notes (#22): each note's current text, the Runs its Agent mentions started and their replies in the
 // log, the Agents those are drawn with, the reader and the moment the page was drawn (for the edit countdown).
 type CardNotes={me:string,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
@@ -165,7 +166,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const yours=(c:Card)=>chatOf(c)?.mine??p.approvableIds.includes(c.id);
  // Read from every Card, not the drawn ones, so a filter that brings a waiting Card back does not shake it again.
  const fresh=useNewlyWaiting(p.cards.filter(c=>columnOfCard(c)==='waiting'&&yours(c)).map(c=>c.id));
- const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const own=cardAgentOf(c); const crew=(c.crew||[]).flatMap(id=>agentById.get(id)??[]); const names=crew.map(a=>a.name); const job=c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const chat=chatOf(c); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
+ const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const own=cardAgentOf(c); const crew=(c.crew||[]).flatMap(id=>agentById.get(id)??[]); const names=crew.map(a=>a.name); const job=c.channel_id?t('boardCardChannel'):c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const chat=chatOf(c); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
   const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
  // The line an idea added in the column carries (#188; design-reference: saveIdea's prog): who thought of it. A Card
  // made from a message has its mode and a Card read from the board's data keeps its brief, so neither takes this line.
@@ -206,14 +207,21 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   agent_key:item=><AgentKeyWaitCard key={`${item.kind}:${item.id}`} item={item}/>,
  };
  const answeredHere=(item:WaitingItem)=>Object.hasOwn(decidedHere,item.kind);
+ // A Member mentioned in a channel (#200) is named by the writer and opens the channel at that message: its initial, the
+ // writer and "mentioned you in #channel", with the message cut to three lines and the reader's own name marked, as the
+ // channel draws every Member's name.
+ const mine=p.members.find(member=>member.person_id===p.me)?.people?.name?.trim()??'';
+ const myNames=mine?[mine,mine.split(/\s+/)[0]]:[];
+ const marked=(body:string)=>withMention(body,myNames).map((part,index)=>part.mention?<bdi key={index} className="mention">{part.text}</bdi>:<Fragment key={index}>{part.text}</Fragment>);
+ const inChannel=(item:WaitingItem)=>item.kind==='channel_mention';
  // A mention (#22) names who wrote the note and on which Card, shows the note and opens it on its Card. A step an Agent
  // handed over (#140; design-reference: waitTagHTML, kcardHTML's waiting branch) is tagged before its title and opens the
  // Conversation at its card. A permission request (#165) names its Agent with its face and opens the Conversation, or
-// the channel, at its card.
+// the channel, at its card. A channel's question or handed step (#149) does the same, in its channel.
  const itemView=(item:WaitingItem)=>answeredHere(item)?decidedHere[item.kind](item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={chatPlace(p.slug,item)??`${base}/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`}>
-  <span className="mcard__top"><span className="od-fill mcard__who">{item.kind==='question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionIn',item.title)}</>:item.agent?<span className="ln-who"><span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={16}/></span><b dir="auto">{item.asked_by}</b></span>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
-  {item.kind==='hand'&&<span className="wtag wtag--hand"><ShellIcon name="hand"/>{t('handBadge')}</span>}
-  <span className="mcard__q od-clamp-3" dir="auto">{item.kind==='mention'?item.body:<>{item.title}{item.body&&<> {item.body}</>}</>}</span>
+  <span className="mcard__top">{inChannel(item)&&<span className="avatar mcard__av" aria-hidden="true">{Array.from(item.asked_by.trim())[0]||'؟'}</span>}<span className="od-fill mcard__who">{item.kind==='question'||item.kind==='channel_question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionIn',item.title)}</>:inChannel(item)?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionInChannel',`#${!item.title||item.title==='general'?t('shellGeneralChannel'):item.title}`)}</>:item.agent?<span className="ln-who"><span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={16}/></span><b dir="auto">{item.asked_by}</b></span>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
+  {(item.kind==='hand'||item.kind==='channel_hand')&&<span className="wtag wtag--hand"><ShellIcon name="hand"/>{t('handBadge')}</span>}
+  <span className="mcard__q od-clamp-3" dir="auto">{item.kind==='mention'?item.body:inChannel(item)?marked(item.body):<>{item.title}{item.body&&<> {item.body}</>}</>}</span>
  </Link>;
  // A Card's conversation: each message with its current text; under a Member's note, the reply of the Agent it called,
  // or the line that it is working on it while its Run is open.
@@ -225,12 +233,12 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    {reply?<NoteReplyRow name={agentOf(reply.actor_id)?.name||reply.actor_name||''} face={agentOf(reply.actor_id)?.connection_id||null} body={reply.body} at={reply.created_at}/>
     :run&&!run.outcome?<NoteReplyRow name={agentOf(run.agent_id)?.name||run.agent_name} face={agentOf(run.agent_id)?.connection_id||null} working={p.members.find(m=>m.person_id===a.actor_id)?.people?.name?.split(' ')[0]||''}/>:null}
   </Fragment>; };
- // A Card opened over the board (#116; design-reference: renderSheetHead): its Agent, else its channel, and where it stands.
+ // A Card opened over the board (#116; design-reference: renderSheetHead): its channel's mark, else its Agent, and where it stands.
  const sheetView=(c:Card,sheet:CardSheetData)=>{ const agent=agentOfCard(c); const own=cardAgentOf(c); const column=columnOfCard(c); const chat=chatOf(c);
   return <CardSheet key={c.id} send={workAction} slug={p.slug} company={p.company} title={c.title} sheet={sheet} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
    people={p.members.filter(member=>member.person_id!==p.me&&member.people?.name).map(member=>({id:member.person_id,name:member.people!.name,role:member.role}))} agents={companyAgents}
-   face={own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={28}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
-   who={own?<bdi>{own.name}</bdi>:agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
+   face={c.channel_id?<span className="hp-hash hp-hash--lg" aria-hidden="true"><ShellIcon name="hash"/></span>:own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={28}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
+   who={c.channel_id?<>{t('boardCardChannel')} <bdi>#{c.title}</bdi></>:own?<bdi>{own.name}</bdi>:agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
    badge={column==='waiting'?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{chat?chatBadge(chat):p.approvableIds.includes(c.id)?t('boardWaitingYou'):p.canCreate?waitingOn(c.next_actor):t('boardWaitingTeam')}</span>:<span className="badge">{columnName(column)}</span>}/>; };
  const sheet=p.sheet; const sheetCard=sheet&&p.cards.find(c=>c.id===sheet.id);
  const ideasStage=stagesIn('ideas')[0]?.id;
@@ -260,12 +268,19 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   {!p.cards.length&&!items.length&&<div className="board-bare" role="note"><p>{t('boardEmpty',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</p>{p.canCreate&&<Link className="btn btn--secondary btn--sm" href={`/c/${p.slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</span></Link>}</div>}
   <KanbanBoard label={t('workBoard')} busy={moving} cards={boardColumns.flatMap(column=>inColumn(column)).map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
    {boardColumns.map(column=>{ const list=inColumn(column); const extra=column==='waiting'&&!ownList?items:[]; const stages=stagesIn(column);
-    // Mentions of the reader (#22) wait apart from what needs their reply.
-    const groups=[{id:'mn-h-mentions',label:'waitingMentions',items:extra.filter(item=>item.kind==='mention')},{id:'mn-h',label:'waitingNeedsReply',items:extra.filter(item=>item.kind!=='mention'&&!answeredHere(item))}].filter(group=>group.items.length);
-    if(column==='waiting'&&ownList) return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={ownEntries.length} waiting head={null}>
-     {ownEntries.map(entry=>entry.card?<div key={`approval:${entry.card.id}`} className="column" data-stage-id={entry.card.stage_id} data-stage-name={stageName(entry.card)}>{cardView(entry.card)}</div>:itemView(entry.item))}
-     {!ownEntries.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
-    </KanbanColumn>;
+    // Mentions of the reader (#22 in a note, #200 in a channel) wait apart from what needs their reply.
+    const groups=[{id:'mn-h-mentions',label:'waitingMentions',items:extra.filter(item=>item.kind==='mention'||item.kind==='channel_mention')},{id:'mn-h',label:'waitingNeedsReply',items:extra.filter(item=>item.kind!=='mention'&&item.kind!=='channel_mention'&&!answeredHere(item))}].filter(group=>group.items.length);
+    if(column==='waiting'&&ownList) {
+     // The reader's own list: everything the mentions name first, under "Mentions of you" with its count, then what needs
+     // their reply, as the board's column draws it (design-reference: mentionGroupHTML above the Cards).
+     const mentions=ownEntries.filter(entry=>!entry.card&&(entry.item.kind==='mention'||entry.item.kind==='channel_mention'));
+     const replies=ownEntries.filter(entry=>!mentions.includes(entry));
+     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={ownEntries.length} waiting head={null}>
+      {mentions.length>0&&<div className="mn-group" role="group" aria-labelledby="mn-h-own"><h3 className="mn-h" id="mn-h-own"><BoardIcon name="at"/><span>{t('waitingMentions')}</span> <span className="num">{mentions.length}</span></h3>{mentions.map(entry=>itemView(entry.item))}{replies.length>0&&<div className="mn-sep" role="separator"/>}</div>}
+      {replies.map(entry=>entry.card?<div key={`approval:${entry.card.id}`} className="column" data-stage-id={entry.card.stage_id} data-stage-name={stageName(entry.card)}>{cardView(entry.card)}</div>:itemView(entry.item))}
+      {!ownEntries.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
+     </KanbanColumn>;
+    }
     const add=column==='ideas'&&p.canCreate&&ideasStage?<button ref={addButton} type="button" className="circle-btn add-btn add-card" aria-label={t('boardAddIdea')} title={t('boardAddIdea')} aria-expanded={addingIdea} onClick={toggleIdea}><BoardIcon name="plus"/></button>:null;
     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add} data-stage-name={stages.length===1?stages[0].name:undefined}>
      {extra.filter(answeredHere).map(itemView)}

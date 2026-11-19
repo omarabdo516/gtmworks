@@ -24,6 +24,8 @@ function databases({pinned,attempt=1,address='http://hermes:8642'}) {
   if(name==='pin_run') return {data:pinned&&{tools:pinned.tools.length?`[${pinned.tools.map((/** @type {string} */ tool)=>given.specs[tool]).join(',')}]`:null,rules:pinned.rules},error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
+  // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
+  if(name==='pin_lead_brief') return {data:null,error:null};
   if(name==='begin_start') return {data:attempt,error:null};
   if(['send_conversation_message','record_conversation_turn'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}}; };

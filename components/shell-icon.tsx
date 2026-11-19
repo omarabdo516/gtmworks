@@ -12,6 +12,9 @@ const paths = {
  monitor: <><rect x="3.5" y="4.5" width="17" height="11.5" rx="2"/><path d="M9 20h6M12 16v4"/></>,
  up: <path d="M7 14l5-5 5 5"/>,
  chevronDown: <path d="M6 9l6 6 6-6"/>,
+ // The reference's arrow, pointing to the start side; the left-to-right interface takes the other one (FLIP).
+ arrow: <><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></>,
+ arrowLtr: <><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></>,
  chevron: <path d="M15 6l-6 6 6 6"/>,
  download: <><path d="M12 4v11"/><path d="M7 10.5l5 5 5-5"/><path d="M5 20h14"/></>,
  image: <><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="9.5" r="1.75"/><path d="M20.5 15.5l-5-5-9 9"/></>,

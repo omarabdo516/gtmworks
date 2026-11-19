@@ -45,6 +45,8 @@ function databases({reserve={state:'reserved',connection,profile:'writer',note:n
   }
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:model,error:null};
+  // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
+  if(name==='pin_lead_brief') return {data:null,error:null};
   if(name==='keep_unknown_start') return {data:kept,error:null};
   if(name==='refuse_conversation_run_model') return {data:modelRefused,error:null};
   if(['keep_unknown_start','fail_conversation_turn','release_conversation_run','record_conversation_turn','send_conversation_message','refuse_run_model'].includes(name)) return {data:true,error:null};

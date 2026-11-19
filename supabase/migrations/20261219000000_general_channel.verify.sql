@@ -1,3 +1,4 @@
+-- #23's channel, its one Run and one reply per calling message now one per Agent it calls (#152 keeps the index below).
 select json_build_object(
  'every_company_has_one_general',not exists(select 1 from public.companies c where (select count(*) from public.channels k where k.company_id=c.id and k.kind='general')<>1),
  'general_made_with_company',exists(select 1 from pg_trigger where tgrelid='public.companies'::regclass and tgname='companies_general_channel' and not tgisinternal),
@@ -17,13 +18,20 @@ select json_build_object(
   and not has_column_privilege('authenticated','public.channel_runs','connection_id','select')
   and not has_column_privilege('authenticated','public.channel_runs','run_id','select'),
  'lifecycle_service_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.channel_runs_due(uuid,bigint,bigint)','public.begin_channel_start(bigint)','public.answer_channel_start(bigint,integer,text)','public.close_channel_run(bigint,text,text,text,bigint,bigint)']) f),
+  from unnest(array['public.channel_runs_due(uuid,bigint,bigint)','public.begin_channel_start(bigint)','public.answer_channel_start(bigint,integer,text,smallint)','public.close_channel_run(bigint,text,text,text,bigint,bigint)']) f),
  'internals_uncallable',(select bool_and(not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute') and not has_function_privilege('service_role',f,'execute'))
   from unnest(array['public.channel_member(uuid,uuid)','public.channel_mention(uuid,uuid,text)','public.add_general_channel()','public.refuse_channel_change()']) f),
  'members_callable',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
   from unnest(array['public.post_channel_message(uuid,uuid,text)','public.in_channel(uuid)','public.channel_members(uuid)']) f),
  'append_only',exists(select 1 from pg_trigger where tgrelid='public.channel_messages'::regclass and tgname='channel_messages_append_only' and not tgisinternal),
- 'one_run_one_reply',exists(select 1 from pg_constraint where conrelid='public.channel_messages'::regclass and contype='u' and pg_get_constraintdef(oid)='UNIQUE (reply_to)')
-  and exists(select 1 from pg_constraint where conrelid='public.channel_runs'::regclass and contype='p' and pg_get_constraintdef(oid)='PRIMARY KEY (message_id)'),
+ 'one_run_one_reply',exists(select 1 from pg_index i
+   where i.indexrelid='public.channel_messages_one_reply'::regclass
+    and i.indrelid='public.channel_messages'::regclass
+    and i.indisunique and i.indisvalid and i.indpred is null
+    and pg_get_indexdef(i.indexrelid) like '%(reply_to, reply_ordinal)%')
+  and exists(select 1 from information_schema.columns where table_schema='public' and table_name='channel_messages'
+   and column_name='reply_ordinal' and column_default='1')
+  and exists(select 1 from pg_constraint where conrelid='public.channel_messages'::regclass and conname='channel_messages_reply_place')
+  and exists(select 1 from pg_constraint where conrelid='public.channel_runs'::regclass and contype='p' and pg_get_constraintdef(oid)='PRIMARY KEY (message_id, ordinal)'),
  'move_waits_for_channel_runs',position('channel_runs' in pg_get_functiondef('public.move_company_profile(uuid)'::regprocedure))>0
 );

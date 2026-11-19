@@ -36,6 +36,9 @@ function databases({mention=false,attachments=stored,refusePost=false,failUpload
   if(name==='channel_runs_due') return ok(due);
   if(name==='begin_channel_start') return ok([{attempt:1,company,profile:'default',connection:'conn',session:'sess',input:'مراجع: Look at these',instructions:null,rules:[],has_files:true}]);
   if(name==='answer_channel_start') return ok(true);
+  // A channel Run pins its tools at its first start (#148, #150); this stand-in pins none, so the Run carries no tools.
+  if(name==='channel_handover_agents') return ok([]);
+  if(name==='pin_channel_run') return ok(null);
   return {data:null,error:{message:`unexpected ${name}`}};
  };
  const chain=(/** @type {unknown} */ data)=>{ const c={select:()=>c,eq:()=>c,order:async()=>ok(data)}; return c; };

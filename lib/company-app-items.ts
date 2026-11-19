@@ -1,7 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 import { supabase } from './supabase';
-import { readAgentApps, readAgentSession, readAgentTools, readCompanyApps, readCompanyUsage, type AgentsUsage } from './company-apps.mjs';
+import { readAgentApps, readAgentSession, readAgentTools, readChannelAgentSession, readCompanyApps, readCompanyUsage, type AgentsUsage } from './company-apps.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/apps.en.json';
 import ar from './messages/apps.ar.json';
@@ -35,6 +35,12 @@ export const agentAppStates=cache(async(company:string,agent:string):Promise<App
 // when it cannot be read.
 export const agentSessionTurns=cache(async(company:string,agent:string,session:string)=>{
  try { return await readAgentSession(await supabase(),{company,agent,session}); } catch { return null; }
+});
+
+// One channel reply's Hermes session on the profile its Run was pinned to, for the channel's steps (#148); null when it
+// cannot be read. The database gave the profile only to a member of that channel (channel_run_sessions).
+export const channelSessionTurns=cache(async(company:string,profile:string,session:string)=>{
+ try { return await readChannelAgentSession(await supabase(),{company,profile,session}); } catch { return null; }
 });
 
 // One Agent's connected tools now, each with what it is for in the reader's words, for its details (#204); null when

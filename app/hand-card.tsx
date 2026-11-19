@@ -7,7 +7,7 @@
 // (a line that starts with a Latin name, "SEO سابه…", must not turn left to right); the reference's "Open the screen" and "Open the
 // merge request" variants are not drawn (#21, #36). Its id is the address "Waiting on you" opens the Conversation at
 // (#140), and a done card whose turn to the Agent could not start tells a person who may write to tell it in a message,
-// until they write to it.
+// until they write to it. In a channel (`team`) a Viewer reads the reference's wait line instead of the buttons (#149).
 import { useEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
@@ -29,7 +29,7 @@ const settling=900;
 // An app gtmworks does not know draws the reference's plain tile.
 const handApp=(name:string)=>knownApp(name)??{key:'',mark:'·'};
 
-export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHandDone}) {
+export function HandCard({card,fresh,done,team=false}:{card:Hand,fresh:boolean,done?:MarkHandDone,team?:boolean}) {
  const {t,language}=useI18n(); const zone=useZone();
  const [pressed,setPressed]=useState<string|null>(null); const [error,setError]=useState(''); const [just,setJust]=useState(false);
  const [sending,setSending]=useState(false); const busy=useRef(false);
@@ -60,6 +60,7 @@ export function HandCard({card,fresh,done}:{card:Hand,fresh:boolean,done?:MarkHa
    <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
   {card.rows.length>0&&<dl className="kv">{card.rows.map((row,index)=><div key={index} className="kv__row"><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>}
   {at?<div className="card__outcome"><ShellIcon name="check"/><span><bdi className="hand__at" dir={language==='ar'?'rtl':'ltr'}>{before}{time(at)}{after}</bdi>{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
+   :!done&&team?<div className="card__outcome"><ShellIcon name="clock"/><span>{t('handWaitTeam')}</span></div>
    :<div className="card__actions">
     {card.url&&<a className="btn btn--secondary" href={card.url} target="_blank" rel="noopener noreferrer"><ShellIcon name="open"/><span>{t('handOpen')}</span></a>}
     <button type="button" className="btn btn--primary" disabled={!done||sending} onClick={()=>void press()}>{t('handDone')}</button>

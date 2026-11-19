@@ -8,7 +8,8 @@ export type { PermissionChoice };
 // What Lead's turn of a run holds besides its words is a card: an Agent Lead made in it (#13), or a Member's request for
 // an Agent kept in it (#17), which shows the Owner's answer once there is one. The card is in Lead's reply of that run;
 // when Lead wrote nothing but the call, it is Lead's whole turn (`kind` made) after the message that asked. A card any
-// Agent shows with its reply (#136) is placed the same way.
+// Agent shows with its reply (#136) is placed the same way. A job Lead handed another Agent (#317) is a quiet row under
+// that reply (`kind` handed), drawn from gtmworks's own record of the handover.
 // A lasting rule the Agent saved in a run (#18) shows as a saved line (`kind` saved) after the Agent's reply of that run,
 // or after the message that told it when the reply was nothing but the call. A rule since removed keeps its line, since
 // the Conversation is the record as people saw it; only its way to the Agent's page goes, with the Agent's.
@@ -73,7 +74,7 @@ const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow,apps:AppStates)=>
 export const offeredChoices=(card:Extract<ReplyCard,{kind:'permission'}>,may:readonly PermissionChoice[]):PermissionChoice[]=>
  (['deny','always','once'] as const).filter(choice=>card.choices.includes(choice)&&may.includes(choice));
 export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row,apps):null;
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard};
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
@@ -82,7 +83,7 @@ export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,nam
 export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};
 export type RunSteps={list:RunStep[],seconds:number|null};
 export type RunStepsRow={run_id:string,steps:RunStep[],seconds:number|null};
-type SessionTurn={at:number,seconds:number,steps:RunStep[]};
+export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 // Each reply takes the last turn its session started after the reply before it and by the time the reply was written:
 // one turn is one Run, and a Run that ended with no reply leaves its turn to none. No turn, or none with a tool call,
 // no steps. The session's clock and the database's are the same machine's (the bundled Engine, ADR 0010).
@@ -102,16 +103,16 @@ type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_session_id,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
-// own message though none is stored, and the main Agent's question carries the plain words it is drawn as (`words`)
-// until #143 draws its own card.
-export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean},words?:string};
+// own message though none is stored; the main Agent's question is drawn as the reference's chip card by its Agent's
+// name (lib/conversation-record.ts), and any other Agent's as the lettered card (#143).
+export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean}};
 // What a question adds to its place in the record (#138): the answer its person gave, at the time they gave it, and
 // whether it reached the Engine (one claimed after the Engine stopped waiting, or as its Run ended, did not: its card
-// closed), and for the main Agent the plain words it is drawn as (the question, then each choice on its own line).
-export function questionParts(row:ReplyCardRow,card:ReplyCard,lead:boolean):Pick<PlacedCard,'answer'|'words'> {
+// closed).
+export function questionParts(row:ReplyCardRow,card:ReplyCard):Pick<PlacedCard,'answer'> {
  if(card.kind!=='question') return {};
  const {answer}=row.content as {answer?:string};
- return {...(answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at,delivered:card.state!=='closed'}}:{}),...(lead?{words:[card.question,...card.choices.map(choice=>`- ${choice}`)].join('\n')}:{})};
+ return answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at,delivered:card.state!=='closed'}}:{};
 }
 // What the Engine stops a Run for, a question (#138) or a request to allow an action (#163), is the Agent's own turn
 // after the message of that Run, before its reply.
@@ -133,7 +134,7 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
  const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
  const asked=message.author==='person'?leadCards.filter(row=>row.run_id===message.run_id&&isAsked(row)).flatMap((row):ConversationMessage[]=>{
   const id=row.card.kind==='reply'?row.card.card.id:0;
-  return [{id,author:'agent',author_name:agentName,body:row.words??'',created_at:row.at,kind:'asked',...(row.words===undefined?{cards:[row.card]}:{})},
+  return [{id,author:'agent',author_name:agentName,body:'',created_at:row.at,kind:'asked',cards:[row.card]},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];
  }):[];
   const own=handTurn(message)?[]:[plain];
@@ -144,8 +145,9 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
  const last=message.author==='agent'||!replied;
  return last&&rules.length?[...turn,{id:message.id,author:'agent',author_name:agentName,body:'',created_at:rules[0].said_at,kind:'saved',saved:rules}]:turn;
 });
-// A Conversation that put its Card on the board (#144) says so once, under the Agent's reply to its first Run
-// (`kind` boarded; design-reference: send's note after the first reply).
+// A Conversation that put its Card on the board (#144) says so once, under the Agent's reply to its first Run, or under
+// the handover's answer when Lead's handover put it there (#147; design-reference: send's note and mainTurn's note after
+// the handover).
 export const withBoardNote=(record:ConversationMessage[],reply:number|undefined):ConversationMessage[]=>record.flatMap(message=>
  message.author==='agent'&&!message.kind&&message.id===reply?[message,{id:message.id,author:'agent',author_name:message.author_name,body:'',created_at:message.created_at,kind:'boarded'}]:[message]);
 // Each decision goes before the first item shown after it.

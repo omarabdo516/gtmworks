@@ -296,8 +296,8 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   await expect(waiting.locator('.col__count')).toHaveText(String(count-2));
 
   // #138: the Agent asks with the Engine's own clarify tool. The question waits in the list and the sidebar's count
-  // while the Run waits. This Agent is the main one, whose question is drawn as its plain words until #143 (no card), so
-  // the person answers in words; the same Run replies, and the question leaves both.
+  // while the Run waits. This Agent is the main one, so its question is drawn as the reference's chip card (#143): the
+  // person presses a chip, the same Run replies, and the question leaves both.
   fake.settings.questions=input=>input.includes(`angle ${stamp}`)?[{question:`Which angle first ${stamp}?`,choices:['Graduates','Excel and Odoo']}]:[];
   fake.settings.reply=(input,answers=[])=>`Reply to: ${input}${answers.length?` (${answers.join(', ')})`:''}`;
   const sidebar=page.locator('a[href="/c/rs-learning/approvals"]').first();
@@ -307,8 +307,12 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   await page.getByRole('button',{name:'Send',exact:true}).click();
   // Sending waits for the engine to accept the run, as above.
   await expect(page.locator('.msg[data-author=person]').filter({hasText:`which angle ${stamp}`})).toBeVisible({timeout:30000});
-  await expect(page.locator('.msg[data-author=agent]').filter({hasText:`Which angle first ${stamp}?`})).toContainText('Excel and Odoo');
-  await expect(page.getByRole('group',{name:`Which angle first ${stamp}?`,exact:true})).toHaveCount(0);
+  const card=page.getByRole('group',{name:`Which angle first ${stamp}?`,exact:true});
+  await expect(card).toBeVisible();
+  await expect(card.locator('.ask1__opts .chip')).toHaveText(['Graduates','Excel and Odoo']);
+  await expect(card).toContainText('or type the answer below');
+  // The card is the Agent's turn, and its words are the card's own: no plain bubble repeats the question (#143).
+ await expect(page.locator('.msg[data-author=agent] .bubble--agent').filter({hasText:`Which angle first ${stamp}?`}),'the main Agent asks with its card, not plain words').toHaveCount(0);
   await page.goto('/c/rs-learning/approvals');
   const asked=waiting.locator('.mcard').filter({hasText:`Which angle first ${stamp}?`});
   await expect(asked).toContainText('Question from Lead');
@@ -316,8 +320,7 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   await expect(sidebar).toContainText(String(count-1));
   await asked.click();
   await expect(page).toHaveURL(new RegExp(`/conversations/${conversation}$`));
-  await page.getByLabel('Message',{exact:true}).fill('Excel and Odoo');
-  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await card.getByRole('button',{name:'Excel and Odoo'}).click();
   await expect(page.locator('.msg[data-author=person][data-kind=answer]').filter({hasText:'Excel and Odoo'})).toBeVisible();
   await expect(page.locator('.msg[data-author=agent]').filter({hasText:`which angle ${stamp} (Excel and Odoo)`})).toBeVisible();
   expect(fake.settings.runs.filter(run=>run.input.includes(`angle ${stamp}`))).toHaveLength(1);

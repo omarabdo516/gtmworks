@@ -2,13 +2,14 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { decideChannelPermission, driveChannelRuns, postChannelMessage } from '@/lib/channel-runs.mjs';
+import { decideChannelPermission, driveChannelRuns, postChannelMessage, answerChannelQuestion, markChannelHandDone } from '@/lib/channel-runs.mjs';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { channelRecord } from '@/lib/channels';
+import { channelSessionTurns } from '@/lib/company-app-items';
 import { uuid } from '@/lib/conversations';
 
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -25,6 +26,31 @@ async function permit(db:Awaited<ReturnType<typeof supabase>>,body:Record<string
  const decided=await decideChannelPermission(db,service(),{company:body.company as string,channel:body.channel as string,request:body.request,choice:body.choice as PermissionChoice,later:after});
  if('code' in decided) return refuse(...(refusals[decided.code||'']||['channelFailed',500]));
  return reply(decided);
+}
+
+// A pick on the question a channel's Agent waits on (#149): the card and the choice's index, never its text, and one key
+// per card on the page, so a second click is the same claim. Any Member of the channel who may write claims it, except
+// the main Agent's own question, which only the Member it was addressed to may answer (answer_channel_question). The
+// answer then goes to the waiting Run.
+async function answer(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
+ if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('channelFailed',400);
+ if(!(typeof body.choice==='number'&&Number.isSafeInteger(body.choice)&&body.choice>=0&&body.choice<4)) return refuse('channelFailed',400);
+ if(typeof body.answerKey!=='string'||!uuid.test(body.answerKey)) return refuse('channelFailed',400);
+ const answered=await answerChannelQuestion(db,service(),{company:body.company as string,channel:body.channel as string,card:body.card,choice:body.choice,answerKey:body.answerKey,later:after});
+ if('code' in answered) return refuse(...(refusals[answered.code||'']||['channelFailed',500]));
+ // Another Member or another tab was first: the pick is not recorded, so the card says so and reads the channel again.
+ if(answered.state==='taken'||answered.state==='closed') return refuse(answered.state==='taken'?'questionTaken':'questionClosed',409);
+ return reply({state:answered.state});
+}
+
+// "Done it" on a step a channel's Agent handed the team (#149): the Member's own word, recorded once by the database with
+// who and when (mark_channel_hand_done), under the Member's own session. The first press also writes the message that asks
+// that Agent to pick up (#140), as a Run of the channel. gtmworks does not do the step and checks nothing outside.
+async function done(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
+ if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('channelFailed',400);
+ const made=await markChannelHandDone(db,service(),{company:body.company as string,channel:body.channel as string,card:body.card,later:after});
+ if('code' in made) return refuse(...(refusals[made.code||'']||['channelFailed',500]));
+ return reply({state:'done',at:made.at,first:made.first});
 }
 
 async function respond(request:NextRequest) {
@@ -56,6 +82,8 @@ async function respond(request:NextRequest) {
   if(![company,channelId].every(value=>uuid.test(value))) return refuse('channelFailed',400);
   if(!await routeAllowed(db,'app/api/channels/route.ts',request.method,company,user.id)) return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
   if(writing&&body.intent==='permit') return await permit(db,body);
+ if(writing&&body.intent==='answer') return await answer(db,body);
+ if(writing&&body.intent==='done') return await done(db,body);
   if(writing) {
    if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||body.message.length>20000) return refuse('channelFailed',400);
    // An image the Engine cannot read, more of them than a message carries, or text and images past its request limit:
@@ -66,11 +94,14 @@ async function respond(request:NextRequest) {
    const sent=await postChannelMessage(db,service(),{company,channel:channelId,sendKey:body.sendKey,message:body.message,files:chosen});
    return 'refused' in sent?refuse(sent.refused,sent.status):reply(sent);
   }
-  const record=await channelRecord(db,user.id,company,channelId,true);
+  // A Member opened the channel from their mention of a message (#200): their own item is done. Opening the channel any
+  // other way leaves it waiting, since reading a channel is not reading a mention.
+  if(typeof body.mention==='string'&&/^\d{1,19}$/.test(body.mention)) await db.rpc('read_channel_mention',{ch:channelId,message:Number(body.mention)});
+  const record=await channelRecord(db,user.id,company,channelId,true,(_agent,session,profile)=>channelSessionTurns(company,profile,session));
   if(!record) return refuse('channelNotFound',404);
   if(!record.open) return reply(record);
   await driveChannelRuns(service(),{channel:channelId});
-  return reply(await channelRecord(db,user.id,company,channelId,true)??record);
+  return reply(await channelRecord(db,user.id,company,channelId,true,(_agent,session,profile)=>channelSessionTurns(company,profile,session))??record);
  } catch { logActionFailure('channel',new Error('Channel request failed')); return refuse('channelFailed',400); }
 }
 export const GET=respond;

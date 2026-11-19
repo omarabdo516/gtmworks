@@ -5,9 +5,9 @@ create extension if not exists pgtap with schema extensions;
 -- the first test red until it is added here.
 create temp table isolation_matrix(name text primary key, fixed jsonb not null default '{}');
 insert into isolation_matrix(name) values
- ('agent_grants'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
+ ('agent_grants'),('agent_handovers'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
- ('channel_agents'),('channel_attachments'),('channel_messages'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
+ ('channel_agents'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
@@ -23,11 +23,15 @@ insert into isolation_matrix(name) values
 -- Company, as naming the caller would make them a member of RS Learning, and a Contributor, so the Owner-only guard
 -- does not answer before the policy does.
 update isolation_matrix m set fixed = v.fixed::jsonb from (values
+ -- A handover sits in one place: a Conversation's or a channel message's (#150); this row names a Conversation.
+ ('agent_handovers', $${"conversation_id": "gen_random_uuid()"}$$),
  ('agent_profile_leftovers', $${"profile": "'ag-' || md5('isolation')"}$$),
  ('approval_steps', $${"person_id": "'e3370000-0000-0000-0000-000000000001'", "role": "null"}$$),
  ('channel_attachments', $${"channel_id": "'e3370000-0000-0000-0000-00000000000d'",
    "path": "'10000000-0000-0000-0000-000000000001/channels/e3370000-0000-0000-0000-00000000000d/isolation'"}$$),
  ('channel_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
+ -- A channel's quiet line names its invited person or its Card (#207, #151); this row is an invitation's.
+ ('channel_notes', $${"kind": "'invite'", "invitee_name": "'Mona'"}$$),
  ('channel_permissions', $${"state": "'open'",
    "content": "'{\"choices\": [\"once\", \"deny\"], \"command\": \"ls\", \"description\": \"isolation\"}'"}$$),
  ('channels', $${"kind": "'team'", "created_by": "'e3370000-0000-0000-0000-000000000001'", "create_key": "gen_random_uuid()",
@@ -42,7 +46,10 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('conversation_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
  ('conversation_run_ends', $${"outcome": "'completed'"}$$),
  ('members', $${"person_id": "'e3370000-0000-0000-0000-000000000002'", "role": "'contributor'"}$$),
- ('reply_cards', $${"kind": "'draft'", "state": "'shown'", "content": "'{\"line\": \"isolation\", \"rows\": []}'"}$$),
+ -- A card sits in one place: a Conversation's or a channel message's (#148); this row names a Conversation, as the
+ -- test's own Conversation row does.
+ ('reply_cards', $${"kind": "'draft'", "state": "'shown'", "content": "'{\"line\": \"isolation\", \"rows\": []}'",
+   "conversation_id": "'e3370000-0000-0000-0000-00000000000c'"}$$),
  ('waiting_items', $${"card_id": "1"}$$),
  ('work_attachments', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$),
  ('work_stages', $${"board_column": "'ideas'"}$$),

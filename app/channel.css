@@ -21,6 +21,11 @@
 .gw .sender__role { color: var(--gw-text-3); }
 .gw .mention { font-weight: 600; }
 .gw .bubble--agent .mention, .gw .bubble--peer .mention { color: var(--gw-text-1); }
+/* Where a mention lands (#200): the message rings once for 1.6 seconds, and with reduced motion the ring stays still
+   (design-reference: .is-spot, @keyframes spot). */
+.gw .transcript .is-spot { animation: channel-spot 1.6s var(--gw-ease-out); }
+@keyframes channel-spot { 0%, 45% { box-shadow: 0 0 0 2px var(--gw-text-1); } 100% { box-shadow: 0 0 0 2px transparent; } }
+@media (prefers-reduced-motion: reduce) { .gw .transcript .is-spot { animation: none; box-shadow: 0 0 0 2px var(--gw-text-1); } }
 .gw .me__av.lg-av { width: var(--av, 28px); height: var(--av, 28px); font-size: var(--gw-fs-xs); line-height: 1; }
 
 .gw .details .dp-top__l { font-size: var(--gw-fs-sm); color: var(--gw-text-3); padding-inline-start: 8px; }

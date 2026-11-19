@@ -164,6 +164,26 @@ test('a draft, a review, an answer and a Done it written on the chat\'s Card rea
  assert.deepEqual(describeEntry({ subject: 'card', action: 'agent_card_shown', agent_id: lead, details: { card: { kind: 'question', title: 'Which angle?' } } }).act, ['logActCardOther']);
 });
 
+// #147: a job Lead handed another Agent is on the Card: the Agent it went to, and the job it went to.
+test('a job Lead handed to another Agent names the Agent and the job, in both languages', () => {
+ const line = describeEntry({ subject: 'card', action: 'agent_handed_to', agent_id: lead, details: { agent_name: 'Lead', to_name: 'Ads', goal: 'Plan the March intake' } });
+ assert.deepEqual([line.act, line.obj, line.from, line.to], [['logActHandedTo', { text: 'Ads' }], undefined, undefined, { text: 'Plan the March intake' }]);
+ assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActHandedTo', 'Ads')), ['handed to Ads', 'سلّم لـ Ads']);
+ // A row that only names the Agent it went to reads from that Agent's name; one naming neither is a change with no words.
+ const named = describeEntry({ subject: 'card', action: 'agent_handed_to', agent_id: lead, details: {} }, { agentName: id => id === lead ? 'Ads' : undefined });
+ assert.deepEqual([named.act, named.to], [['logActHandedTo', { text: 'Ads' }], undefined]);
+ assert.deepEqual(describeEntry({ subject: 'card', action: 'agent_handed_to', details: { to_name: 7 } }).act, ['logActCardOther']);
+});
+
+// #150: a job handed over inside a channel is written on the Agent, so its row names the Agent it went to and the job.
+test('a job handed over inside a channel names the Agent and the job, in both languages', () => {
+ const line = describeEntry({ subject: 'agent', action: 'agent_handed_to', agent_id: lead, details: { agent_name: 'Lead', to_name: 'Ads', goal: 'Plan the March intake' } });
+ assert.deepEqual([line.act, line.obj, line.from, line.to], [['logActHandedTo', { text: 'Ads' }], undefined, undefined, { text: 'Plan the March intake' }]);
+ const named = describeEntry({ subject: 'agent', action: 'agent_handed_to', agent_id: lead, details: {} }, { agentName: id => id === lead ? 'Ads' : undefined });
+ assert.deepEqual([named.act, named.to], [['logActHandedTo', { text: 'Ads' }], undefined]);
+ assert.deepEqual(describeEntry({ subject: 'agent', action: 'agent_handed_to', details: { to_name: 7 } }).act, ['logActAgentChanged']);
+});
+
 test('an Agent called in a note replies in the log, with its reply as the note under the line (#22)', () => {
  const reply = describeEntry({ subject: 'card', action: 'note_reply', agent_id: lead, body: 'Here is the draft.', details: { reply_to: 12 } });
  assert.deepEqual([reply.act, reply.note, reply.from, reply.to], [['logActNoteReply'], 'Here is the draft.', undefined, undefined]);

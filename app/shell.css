@@ -603,7 +603,8 @@
 .gw .details .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
 .gw .details .dot--working { background: var(--gw-accent); }
 .gw .details .dot--waiting { background: var(--gw-wait); }
-.gw .details .face-wrap .dot { position: absolute; bottom: 2px; inset-inline-end: 2px; width: 12px; height: 12px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
+.gw .details .face-wrap .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; width: 8px; height: 8px; box-shadow: 0 0 0 2.5px var(--gw-bg-sidebar); }
+.gw .details .face-wrap--lg .dot { bottom: 2px; inset-inline-end: 2px; width: 12px; height: 12px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
 .gw .dp-scrim { display: none; }
 
 /* "New agent": one hint line above Lead's composer (design-reference: .new-hint) */
@@ -829,6 +830,10 @@
 }
 .gw .opt.is-chosen { cursor: default; }
 .gw .opt.is-chosen:hover { background: none; }
+/* A question a Member may not answer (#149; design-reference: .opt--static): the same rows, never a button. */
+.gw .opt--static { cursor: default; }
+.gw .opt--static:hover { background: none; }
+.gw .opt--static:hover .opt__key { background: var(--gw-bg-tertiary); color: var(--gw-text-2); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; }
 .gw .opt.is-chosen .opt__key { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
 .gw .reply-card .opt--typed { grid-template-columns: minmax(0, 1fr) auto; }
 .gw .opt--typed .opt__t { white-space: pre-line; overflow-wrap: anywhere; }
@@ -837,6 +842,21 @@
 .gw .reply-card.is-just { animation: gw-settle 320ms var(--gw-ease-out); }
 .gw .reply-card.is-just .opt.is-chosen .opt__key { animation: gw-ck-pop 320ms var(--gw-ease-spring); }
 .gw .reply-card.is-just .opt__check path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 380ms var(--gw-ease-out) 140ms forwards; }
+/* The main Agent's question (#143; design-reference: .ask1__head, .ask1__q, .ask1__opts, .ask1__or, the text chip):
+   the question, one chip per choice and "or type the answer below"; answered, the question stays and the answer shows
+   with a check in the reference's outcome line. The card keeps the standard card frame, not the lettered card's border. */
+.gw .reply-card--ask1 { box-shadow: var(--gw-shadow-card); }
+.gw .ask1__head { display: grid; gap: 2px; padding: 14px 16px 0; }
+.gw .ask1__q { font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; white-space: pre-line; }
+.gw .ask1__opts { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 0; }
+.gw .ask1__or { margin: 0; padding: 8px 16px 16px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .reply-card .chip {
+  display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: var(--gw-r-full);
+  background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-sm);
+  line-height: 1; color: var(--gw-text-1); white-space: nowrap; transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+@media (hover: hover) { .gw .reply-card .chip:hover { background: var(--gw-bg-elevated-hover); } }
+.gw .reply-card--ask1.is-resolved .card__outcome { padding-top: 8px; }
 /* A step handed to the person (#139; design-reference: .hcard, .ck-badge, .card__actions, .card__outcome, .card.is-resolved,
    .card.is-just): the badge, the app's tile, the title, its rows, then "Open the draft" and "Done it"; once done, the
    outcome line with its check, which draws on the page where it was pressed. */
@@ -884,6 +904,23 @@
 .gw .steps__list.is-just .step__ck path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 320ms var(--gw-ease-out) forwards; animation-delay: calc(var(--i, 0) * 45ms + 160ms); }
 .gw .tool-tile--ink { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
 .gw .tool-tile--ink .gw-icon { width: 22px; height: 22px; }
+/* A job Lead handed another Agent (#317; design-reference: .handoff): a quiet row under Lead's reply, both faces with
+   the arrow between them, the other Agent's name in the record's own voice, and the job after it. It has nothing to
+   press and no motion of its own: it arrives with the reply. */
+.gw .handed {
+ display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: center; align-self: center; gap: 2px 6px; max-width: min(560px,100%);
+ min-height: 28px; margin: 0; padding: 3px var(--s3); padding-inline-start: 4px; border-radius: var(--gw-r-full);
+ box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2);
+}
+.gw .handed__faces { display: inline-flex; align-items: center; gap: 2px; flex: none; color: var(--gw-text-3); }
+.gw .handed__arrow { width: 12px; height: 12px; }
+.gw .handed__t bdi { color: var(--gw-text-1); font-weight: 600; }
+.gw .handed__d { color: var(--gw-text-3); overflow-wrap: anywhere; }
+.gw .handed__d::before { content: "·"; margin-inline-end: 6px; }
+[dir="ltr"] .gw .handed__t { unicode-bidi: plaintext; }
+/* The Agent that handed a channel's work over, after the one answering it (#150; design-reference: .sender__to). */
+.gw .sender__to { color: var(--gw-text-3); }
+.gw .sender__to::before { content: "·"; margin-inline-end: 6px; }
 
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw :is(.head-pill__title, .thread-item .od-truncate) { unicode-bidi: plaintext; text-align: left; }

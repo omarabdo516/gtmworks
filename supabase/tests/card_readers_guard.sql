@@ -30,21 +30,28 @@ insert into decisions
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
+ union all select 'public.channel_board_card(uuid)','exempt','a channel member reads the one Card their channel put on the board only while they see its Agent (can_see_agent), as the board shows it (#151); anyone else reads nothing'
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
   'public.approval_card_guard()','public.conversation_reply_card()','public.log_card_activity()','public.log_card_comment()',
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
-  'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_card_place()','public.work_guard()']) fn
+  'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_card_place()','public.work_guard()',
+  'public.channel_run_card()','public.channel_reply_card()']) fn
  union all select 'public.work_card_moved()','exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller; the move it writes is read by its own mover alone, on a Card that mover can see (work_card_moves_read)'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
-  'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.close_note_run(bigint,text,text,text,bigint,bigint)',
-  'public.move_company_profile(uuid)','public.note_runs_due(bigint,bigint)']) fn
+  'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.channel_hand_to_agent(bigint,text,text,text,text,text)','public.channel_show_card(bigint,text,text,text,text,jsonb)','public.close_note_run(bigint,text,text,text,bigint,bigint)',
+  'public.lead_hand_to_agent(uuid,text,text,text,text,text)','public.move_company_profile(uuid)','public.note_runs_due(bigint,bigint)']) fn
+ union all select 'public.close_handover_target(bigint,text,text,text)','exempt','the worker''s, callable by the service role only: it logs the handed-to Agent''s answer on the channel''s Card, whose log its channel''s members read under the channel''s own rule, and answers no Member'
  union all select 'public.settle_question(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a question card it was handed and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to the Conversation''s person; it answers no Member'
  union all select 'public.settle_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a permission request card it was handed and writes its log row, private to the Conversation''s person; it answers no Member'
  union all select 'public.settle_channel_permission(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a channel''s permission request it was handed and writes its log row, private to the Member who decided it; it answers no Member'
+ union all select 'public.settle_channel_question(bigint,text)','exempt','the worker''s, callable by the service role only: it settles a channel''s question it was handed and writes its log row, which is read by the channel''s members alone; it answers no Member'
+ union all select 'public.mark_channel_hand_done(uuid,uuid,bigint)','exempt','a Member of the channel marks a step its Agent handed the team done and writes its log row, read by the channel''s members alone; it refuses anyone outside the channel and answers the press, never a Card'
  union all select 'public.mark_hand_done(uuid,uuid,bigint)','exempt','the Conversation''s own person marks a hand card of that Conversation done and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to that person; it answers no Card'
+ union all select fn,'exempt','a Member''s own channel action: a message names the Members it mentions, and each of them reads one waiting item that names that message and no Card, while opening the mention (#200) resolves the reader''s own item alone; neither answers a Card' from unnest(array[
+  'public.post_channel_message(uuid,uuid,text)','public.read_channel_mention(uuid,bigint)']) fn
  union all select 'public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)','exempt','callable inside the database only; it writes an Agent''s log row, which names no Card'
  union all select fn,'exempt','an Owner or a Manager saves a field of an Agent''s settings page and writes that Agent''s log row, which names no Card; the caller is checked by check_agent_setting or check_agent_owner_setting' from unnest(array[
   'public.log_agent_setting(uuid,uuid,text,text,text)','public.log_agent_instructions(uuid,uuid)']) fn

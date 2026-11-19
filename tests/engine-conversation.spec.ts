@@ -17,6 +17,7 @@ import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
+import { driveHandovers } from '../lib/handovers.mjs';
 
 // A conversation on the fake engine (tests/fake-engine.mjs): the engine contract with no subscription and no network,
 // through the same send and close code the conversation route and the worker run, on the local database.
@@ -38,6 +39,13 @@ function attachAgent() {
  const [connection,agent]=[randomUUID(),randomUUID()];
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${agent}','${company}','${connection}','Faye','Marketing','fake-${connection.slice(0,8)}')`);
  // Shown to every Member, as the #15 update shows every Agent that existed before it.
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
+ return {connection,agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); }};
+}
+// An Agent of the Company on a profile of its own, with the name its chat's handover gives it (#147).
+function attachTarget(name:string,speciality:string) {
+ const [connection,agent]=[randomUUID(),randomUUID()];
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${agent}','${company}','${connection}','${name}','${speciality}','fake-${connection.slice(0,8)}')`);
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
  return {connection,agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); }};
 }
@@ -139,7 +147,8 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app'],['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app']]);
+ // #317: Lead may hand the job to another Agent, so its Runs are offered hand_to_agent after create_agent.
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app'],['create_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app']]);
  expect(fake.agentReads).toContain(profile);
  const [agent]=made();
  expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
@@ -186,7 +195,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',hermes,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','save_rule','show_draft','show_review','hand_over','ask_for_app']);
+ expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app']);
  expect(await closeOpenRuns(service,{hermes,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
 });
@@ -213,7 +222,8 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
   const closed=await Promise.all([close(),close()]);
   expect(closed[0]+closed[1]).toBe(1);
  }
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','save_rule','show_draft','show_review','hand_over','ask_for_app'],['request_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app']]);
+ // #317: a Manager or Contributor's request still offers hand_to_agent after request_agent.
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app'],['request_agent','hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app']]);
  expect(fake.agentReads).toEqual([]);
  expect(agents()).toBe(before);
  const listed=`('${conversations.join("','")}')`;
@@ -1102,4 +1112,89 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
   await expect(page.getByRole('group',{name:'Filter by agent'}).getByRole('button',{name:'All',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(shown.locator('.kcard__foot')).toHaveText('Faye· Marketing');
  } finally { language('en'); detach(); }
+});
+
+// #147: a Card follows a handover. A chat with Lead puts no Card on the board by itself (#144): when Lead hands the job
+// to another Agent the Card appears for that Agent under In progress, titled from the chat's first message and tied to
+// it, once, and the chat says so under the handover's answer. A Chat that already has a Card gives it the Agent handed
+// the work, so its foot shows that Agent's job, and the handover's log row is on the Card for another Contributor.
+test('a Card follows Lead\'s handover: the Agent handed the work owns it and a second handover moves it, with the chat\'s line and the Card\'s Log',async({page,browser})=>{
+ test.setTimeout(240000);
+ const fake=await laneHermes();
+ const hermes={address:fake.address,key:fake.settings.key};
+ const {lead}=bundledLead();
+ const {service,person}=await clients();
+ const target=attachTarget('Salma','Runs the March launch.');
+ const next=attachTarget('Tarek','Writes the launch email.');
+ const language=(value:'en'|'ar')=>query(`update public.people set language='${value}' where id in ('${omar}','20000000-0000-0000-0000-000000000003')`);
+ const opened:{close:()=>Promise<void>}[]=[];
+ const member=async(email:string)=>{ const context=await browser.newContext(); opened.push(context); const other=await context.newPage(); await signIn(other,email,'/c/rs-learning/work/board'); return other; };
+ const conversation=randomUUID();
+ const handoff=(name:string,goal:string)=>`On it: I handed the job to ${name}.\n\n\`\`\`gtmworks-tool\n${JSON.stringify({name:'hand_to_agent',arguments:{agent:name,goal,context:'EGP 9,000 for 30 days.'}})}\n\`\`\``;
+ fake.settings.reply=input=>input.startsWith('Lead in the team is handing you a job')?'Three ad sets, 30 days, EGP 9,000.'
+  :input.startsWith('You handed this job to')?'Ads planned the March intake: three ad sets, 30 days, EGP 9,000.'
+  :input.includes('Now the launch email')?handoff('Tarek','Write the March launch email')
+  :handoff('Salma','Plan the Meta ads for the March intake');
+ // The handover's two Runs move here as well as in the worker (both reach the lane's one Hermes, and a leg is started
+ // once), so the test never waits on the worker's next pass.
+ const drive=async()=>{ await closeOpenRuns(service,{hermes,conversation}); await driveHandovers(service,{hermes,conversation}); };
+ type Handover={id:number,state:string,to_agent:string,goal:string,target_outcome:string|null};
+ const handovers=():Handover[]=>JSON.parse(query(`select id,state,to_agent,goal,target_outcome from public.agent_handovers where conversation_id='${conversation}' order by id`));
+ const settle=async()=>expect.poll(async()=>{ await drive(); const rows=handovers(); return rows.length>0&&rows.every(row=>row.state==='done'||row.state==='failed'); },{timeout:60000}).toBe(true);
+ const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.conversation_id='${conversation}'`));
+ const rows=(card:number):{actor_id:string,actor_kind:string,agent_id:string,action:string,details:{agent_name:string,to_name:string,goal:string}}[]=>JSON.parse(query(`select actor_id,actor_kind,agent_id,action,details from public.company_log where card_id=${card} and action='agent_handed_to' order by id`));
+ try {
+  language('en');
+  await page.setViewportSize({width:1440,height:900});
+  // One message to Lead, which hands the Meta ads to Salma.
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'Plan the March intake',hermes})).toEqual({conversation});
+  await settle();
+  expect(handovers().map(row=>({state:row.state,to_agent:row.to_agent,target_outcome:row.target_outcome})))
+   .toEqual([{state:'done',to_agent:target.agent,target_outcome:'completed'}]);
+  const [card]=cards();
+  expect(cards()).toEqual([{id:card.id,title:'Plan the March intake',agent_id:target.agent,board_column:'progress'}]);
+  expect(rows(card.id)).toEqual([{actor_id:lead,actor_kind:'agent',agent_id:target.agent,action:'agent_handed_to',
+   details:{agent_name:'Lead',to_name:'Salma',goal:'Plan the Meta ads for the March intake'}}]);
+  // Closing the Runs again adds no Card and no row.
+  expect(await closeOpenRuns(service,{hermes,conversation})).toBe(0);
+  expect(cards()).toHaveLength(1);
+
+  // The chat says so under the handover's answer, and its pill opens the Card.
+  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+  const kinds=()=>page.locator('.turns > li').evaluateAll(turns=>turns.map(turn=>turn.getAttribute('data-author')||turn.getAttribute('data-kind')));
+  const line=page.locator('.turns > li[data-kind="boarded"]'), pill=page.locator('.chat__corner .corner-pill');
+  expect(await kinds()).toEqual(['person','agent','agent','boarded']);
+  await expect(line).toHaveText('This card was added to the board under “In progress”');
+  await expect(pill).toHaveAccessibleName('On the board: In progress');
+
+  // Another Contributor reads the handover's row on the Card's Log.
+  const reviewer=await member('reviewer@example.com');
+  const onCard=(on:typeof page)=>on.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);
+  await reviewer.goto(`/c/rs-learning/work/board?card=${card.id}`);
+  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('handed to Salma');
+  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('Plan the Meta ads for the March intake');
+  await reviewer.goto('/c/rs-learning/work/board');
+  await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Salma');
+  await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Runs the March launch.');
+
+  // A second handover in the same chat gives the same Card the other Agent, and its own row on the Card.
+  language('en');
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'Now the launch email',hermes})).toEqual({conversation});
+  await expect.poll(async()=>{ await drive(); return handovers().length; },{timeout:60000}).toBe(2);
+  await settle();
+  expect(handovers().map(row=>({state:row.state,to_agent:row.to_agent}))).toEqual([{state:'done',to_agent:target.agent},{state:'done',to_agent:next.agent}]);
+  expect(cards()).toEqual([{id:card.id,title:'Plan the March intake',agent_id:next.agent,board_column:'progress'}]);
+  expect(rows(card.id).map(row=>row.details.to_name)).toEqual(['Salma','Tarek']);
+  await page.reload();
+  await expect(page.locator('.turns > li[data-kind="boarded"]')).toHaveCount(1);
+  await reviewer.goto(`/c/rs-learning/work/board?card=${card.id}`);
+  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('handed to Tarek');
+  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('Write the March launch email');
+  await reviewer.goto('/c/rs-learning/work/board');
+  await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Tarek');
+  await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Writes the launch email.');
+ } finally {
+  language('en'); for(const context of opened) await context.close();
+  target.detach(); next.detach(); await fake.close();
+ }
 });

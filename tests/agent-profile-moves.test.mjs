@@ -115,6 +115,8 @@ function runDatabases(fake,{history}) {
   if(name==='pin_run') return {data:{tools:null,rules:[]},error:null};
   if(name==='pin_run_history') return {data:history,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
+  // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
+  if(name==='pin_lead_brief') return {data:null,error:null};
   if(name==='begin_start') { attempts.set(given.message_key,(attempts.get(given.message_key)??0)+1); return {data:attempts.get(given.message_key),error:null}; }
   if(['send_conversation_message','record_conversation_turn','keep_unknown_start'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}}; };
