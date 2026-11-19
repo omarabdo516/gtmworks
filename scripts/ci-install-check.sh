@@ -452,6 +452,8 @@ public=https://app.gtmworks.test:4443
 remove_install || fail 'remove restored install'
 sed -i -e "s#^APP_ORIGIN=.*#APP_ORIGIN=$public#" -e "s#^SUPABASE_PUBLIC_URL=.*#SUPABASE_PUBLIC_URL=$public#" .env.install || fail 'set the public origin'
 { sh scripts/install.sh || fail 'proxied install'; } 2>&1 | tee proxied-install.log
+# The backup and restore proofs above made fresh installs, so the setup code is read again from the install it belongs to.
+code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
 [[ $(tail -n 1 proxied-install.log) == "Set up gtmworks with this one-time link: $public/first-run#code=$code" ]] || fail 'the proxied install prints its setup link on the public origin'
 printf '%s\n' '{' '  local_certs' '  auto_https disable_redirects' '}' 'app.gtmworks.test:4443 {' '  reverse_proxy 127.0.0.1:3000' '}' > Caddyfile
 docker run -d --name install-proxy --network host -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 >/dev/null || fail 'start the HTTPS proxy'
