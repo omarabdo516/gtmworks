@@ -377,9 +377,9 @@ test('the install job backs up and restores every Company Engine, refuses an inc
  assert.ok(verify<memory&&memory<everyBackup&&everyBackup<restore&&restore<runs,lines.join('\n'));
  // Both Engines' data and keys are in the archive, and the install it restores into is empty.
  for(const text of [
-  "tar -tzf \"$every_engine\" | grep -q \"^engines/$name/\"",
-  "tar -tzf \"$every_engine\" | grep -qx \"\\.engines/$name/\\.env\"",
-  "if tar -tzf \"$every_engine\" | grep -qx 'opt/data/'; then fail 'the every-Engine backup holds no opt/data'; fi",
+  "grep -q \"^engines/$name/\" \"$RUNNER_TEMP/every-engine.list\"",
+  "grep -qx \"\\.engines/$name/\\.env\" \"$RUNNER_TEMP/every-engine.list\"",
+  "if grep -qx 'opt/data/' \"$RUNNER_TEMP/every-engine.list\"; then fail 'the every-Engine backup holds no opt/data'; fi",
   "remove_install || fail 'remove the install before the every-Engine restore'",
   "sh scripts/install.sh || fail 'fresh install before the every-Engine restore'",
  ]) assert.ok(run.includes(text),text);

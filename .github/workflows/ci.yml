@@ -842,12 +842,14 @@ jobs:
           sh scripts/install.sh backup || fail 'backup of every Engine'
           every_engine=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
           [[ -f $every_engine ]] || fail 'the every-Engine backup archive'
+          # Listed once into a file: under pipefail, grep -q leaving a long listing early makes tar's SIGPIPE fail the check.
+          tar -tzf "$every_engine" > "$RUNNER_TEMP/every-engine.list" || fail 'list the every-Engine backup'
           for folder in .engines/*/; do
             name=${folder#.engines/}; name=${name%/}
-            tar -tzf "$every_engine" | grep -q "^engines/$name/" || fail "the backup holds the Engine $name data"
-            tar -tzf "$every_engine" | grep -qx "\.engines/$name/\.env" || fail "the backup holds the key of the Engine $name"
+            grep -q "^engines/$name/" "$RUNNER_TEMP/every-engine.list" || fail "the backup holds the Engine $name data"
+            grep -qx "\.engines/$name/\.env" "$RUNNER_TEMP/every-engine.list" || fail "the backup holds the key of the Engine $name"
           done
-          if tar -tzf "$every_engine" | grep -qx 'opt/data/'; then fail 'the every-Engine backup holds no opt/data'; fi
+          if grep -qx 'opt/data/' "$RUNNER_TEMP/every-engine.list"; then fail 'the every-Engine backup holds no opt/data'; fi
           # The install is made empty and the one archive brings both Companies and both Engines back.
           remove_install || fail 'remove the install before the every-Engine restore'
           rm -f .env.install
