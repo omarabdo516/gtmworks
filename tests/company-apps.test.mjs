@@ -24,9 +24,9 @@ const helperRow={agent:helper,name:'Helper',connection:'f0000000-0000-0000-0000-
 // The person's own session as the database answers it: is_company_owner, company_engine_target, the three app
 // functions, and the sign-ins row-level security shows an Owner. The service role only reads the Connection's key.
 function sessions(fake,{person,isOwner,canManage=isOwner,signIns,agents=[leadRow]}) {
- const asked=[]; const logged=[];
+ const asked=[]; const logged=[]; const calls=[];
  const db={rpc:async(name,args)=>{
-   asked.push(name);
+   asked.push(name); calls.push([name,args]);
    if(name==='can_manage_company') return {data:canManage,error:null};
    if(name==='is_company_owner') return {data:isOwner,error:null};
    if(name==='company_engine_target') return {data:[{profile:companyProfile(args.c)}],error:null};
@@ -47,7 +47,7 @@ function sessions(fake,{person,isOwner,canManage=isOwner,signIns,agents=[leadRow
  // The install's Hermes is the fake (#342): the code reaches it as it reaches the bundled one.
  process.env.BUNDLED_HERMES_URL=fake.address; process.env.HERMES_API_KEY='test-only-key';
  const service={};
- return {db,service,asked,logged};
+ return {db,service,asked,logged,calls};
 }
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 function driverAt(fake) {
@@ -269,6 +269,8 @@ test('an Owner or a Manager reads each Agent\'s token use from its own profile w
    {agents:[{id:writer,name:'Writer'}],input:5000,output:60,sessions:1,models:[{model:'openai/gpt-5.5',input:5000,output:60,sessions:1}]},
    {agents:[{id:analyst,name:'Analyst'}],input:null,output:null,sessions:null,models:null}];
   assert.deepEqual(await readCompanyUsage(owner_.db,{company,days:30,driver}),expected);
+  // The database function is named by its own parameter: a call it cannot resolve answers no role at all (#32).
+  assert.deepEqual(owner_.calls.find(([name])=>name==='can_manage_company')?.[1],{target:company});
   const manager=sessions(fake,{person:member,isOwner:false,canManage:true,signIns:[],agents});
   assert.deepEqual(await readCompanyUsage(manager.db,{company,days:30,driver}),expected,'a Manager reads their Company\'s usage');
   const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents});

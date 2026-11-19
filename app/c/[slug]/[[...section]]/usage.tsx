@@ -19,7 +19,7 @@ export async function UsageTable({rows}:{rows:UsageRow[]}) {
 export async function UsageModels({models}:{models:{model:string,input:number,output:number,sessions:number}[]}) {
  const {t,locale}=await getI18n(); const count=(value:number)=>new Intl.NumberFormat(locale).format(value);
  return <div className="panel table-wrap section-title"><table className="table usage-table usage-models"><thead><tr><th scope="col">{t('usageModel')}</th><th scope="col">{t('usageInput')}</th><th scope="col">{t('usageOutput')}</th><th scope="col">{t('usageSessions')}</th></tr></thead>
-  <tbody>{models.map(model=><tr key={model.model}><td dir="auto">{model.model}</td><td>{count(model.input)}</td><td>{count(model.output)}</td><td>{count(model.sessions)}</td></tr>)}</tbody></table></div>;
+  <tbody>{models.map(model=><tr key={model.model}><th scope="row" dir="auto">{model.model}</th><td>{count(model.input)}</td><td>{count(model.output)}</td><td>{count(model.sessions)}</td></tr>)}</tbody></table></div>;
 }
 
 export default async function Usage({rows,slug}:{rows:UsageRow[],slug:string}) {

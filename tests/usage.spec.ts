@@ -31,7 +31,7 @@ async function bundled(page:Page,company:string,lead:string) {
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo.file,testInfo.retry>0);
  fake=await laneHermes();
  for(const profile of [profileOf(rs),profileOf(aleem),writerProfile]) fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`update public.people set language='en' where id='${omar}'`);
@@ -103,17 +103,19 @@ test('the Owner reads each Agent\'s tokens and each model\'s own count from the 
 
 test('the Manager opens Usage, the Contributor and the Viewer cannot, and the server reads usage for neither',async({browser})=>{
  const row=(viewer:Page,company:string,agent:string)=>viewer.getByRole('row').filter({hasText:company}).filter({has:viewer.getByRole('cell',{name:agent,exact:true})});
- // A Manager reads the Companies they manage: RS Learning, and Aleem they do not manage stays absent.
+ // A Manager reads the Companies they manage: RS Learning, and Aleem they do not manage stays absent. An Agent the
+ // Manager is not shown is not in its own row either (#15: the seed shows the Manager the main Agent only).
  const managerContext=await browser.newContext(); const manager=await managerContext.newPage();
  try {
   await signIn(manager,'manager@example.com','/c/rs-learning/home');
   await manager.goto('/c/rs-learning/settings?section=usage');
   await expect(manager.getByRole('heading',{name:'Usage',exact:true})).toBeVisible();
-  await expect(row(manager,'RS Learning','Writer').getByRole('cell')).toHaveText(['RS Learning','Writer','5,000','60','1']);
+  await expect(row(manager,'RS Learning','Lead').getByRole('cell')).toHaveText(['RS Learning','Lead','2,000','40','2']);
+  await expect(row(manager,'RS Learning','Writer')).toHaveCount(0);
   await expect(manager.getByRole('row').filter({hasText:'Aleem'})).toHaveCount(0);
   // The standalone address the account menu links to opens for them too.
   expect((await manager.goto('/c/rs-learning/usage'))!.status()).toBe(200);
-  await expect(manager.getByRole('heading',{name:'Usage',exact:true})).toBeVisible();
+  await expect(manager.getByRole('main').getByRole('heading',{name:'Usage',exact:true})).toBeVisible();
  } finally { await managerContext.close(); }
  // A Contributor and a Viewer see no Usage section, and asking for it falls back to their first section; the page refuses.
  for(const [email,heading] of [['reviewer@example.com','Company'],['viewer@example.com','Agents']] as const) {
@@ -121,7 +123,7 @@ test('the Manager opens Usage, the Contributor and the Viewer cannot, and the se
   try {
    await signIn(viewer,email,'/c/rs-learning/home');
    await viewer.goto('/c/rs-learning/settings?section=usage');
-   await expect(viewer.getByRole('heading',{name:heading,exact:true})).toBeVisible();
+   await expect(viewer.getByRole('dialog',{name:'Settings'}).getByRole('heading',{name:heading,exact:true})).toBeVisible();
    await expect(viewer.getByRole('link',{name:'Usage',exact:true})).toHaveCount(0);
    expect((await viewer.goto('/c/rs-learning/usage'))!.status()).toBe(404);
   } finally { await context.close(); }
