@@ -112,6 +112,7 @@ test('the Owner sees the company’s real Agents, main first, and makes another 
   await expect(page).toHaveURL(new RegExp(`\\?agent=${ads}$`));
   await expect(overlay.locator('#set-name')).toHaveValue('Ads');
   await overlay.locator('#set-make-main').click();
+  await expect(page.locator('.toast')).toHaveText('Ads is now the main agent. It shows first for everyone');
   await expect(overlay.locator('.dp-id__name')).toContainText('Main');
   await expect.poll(()=>JSON.parse(query(`select is_default from public.hermes_agents where id='${ads}'`))[0].is_default).toBe(true);
   // The main Agent cannot be deleted here; the others can, after typing the name.
@@ -138,9 +139,10 @@ test('the Owner renames the Company from Settings; other Roles read the name and
   await expect(save).toBeDisabled();
   await field.fill(`  ${renamed}  `);
   await save.click();
-  // The settings header shows the new name once the page has been read again, and the confirmation is still there.
+  // The settings header shows the new name once the page has been read again; the toast says it, and no inline line does.
   await expect(overlay.locator('.sov__co')).toHaveText(renamed);
-  await expect(overlay.locator('#co-name-status')).toHaveText('Name saved.');
+  await expect(page.locator('.toast')).toHaveText(`The company is now called ${renamed}`);
+  await expect(overlay.locator('#co-name-status')).toHaveCount(0);
   expect(name()).toBe(renamed);
   await expect(field).toHaveValue(renamed);
   // The Company keeps its address.
@@ -314,4 +316,22 @@ test('the Owner invites a Member from the Team table, the row says Invite sent, 
  await expect(joined.locator('.ta-role')).toHaveText('Viewer');
  await expect(joined.locator('.ta-pending')).toHaveCount(0);
  await expect(overlay.locator('.ta-table tbody tr').filter({hasText:email})).toHaveCount(0);
+});
+
+// #169: a Viewer may do none of what raises these toasts, so their screens raise none, and the routes that would answer a
+// permitted Member refuse them before any change is made.
+test('a Viewer raises none of the toasts, on the screens or through the routes',async({page})=>{
+ const rs='10000000-0000-0000-0000-000000000001';
+ await signIn(page,'viewer@example.com','/c/rs-learning/home');
+ for(const path of ['/c/rs-learning/settings?section=company','/c/rs-learning/settings?section=knowledge','/c/rs-learning/settings?section=apps','/c/rs-learning/settings?section=agents','/c/rs-learning/approvals']) {
+  await page.goto(path);
+  await expect(page.locator('.toast')).toHaveCount(0);
+ }
+ // The same requests a permitted Member sends are refused for the Viewer, and no toast follows them.
+ expect((await page.request.post('/api/company-name',{data:{company:rs,name:'Taken over'}})).status()).toBe(403);
+ const madeToast=await page.request.post('/api/agent-toast',{data:{company:rs,agent:'10000000-0000-0000-0000-000000000099'}});
+ expect(madeToast.status()).toBe(200);
+ expect(await madeToast.json()).toEqual({shown:false});
+ await page.goto('/c/rs-learning/settings?section=knowledge');
+ await expect(page.locator('.toast')).toHaveCount(0);
 });

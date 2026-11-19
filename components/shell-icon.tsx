@@ -15,6 +15,10 @@ const paths = {
  chevron: <path d="M15 6l-6 6 6 6"/>,
  download: <><path d="M12 4v11"/><path d="M7 10.5l5 5 5-5"/><path d="M5 20h14"/></>,
  image: <><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="9.5" r="1.75"/><path d="M20.5 15.5l-5-5-9 9"/></>,
+ // Chevrons point where reading goes: `back` the other way, `forward` the way on. English swaps them, as the
+ // reference does (design-reference/app.js: FLIP).
+ forward: <path d="M15 6l-6 6 6 6"/>,
+ back: <path d="M9 6l6 6-6 6"/>,
  plus: <path d="M12 5v14M5 12h14"/>,
  slash: <path d="M15 4L9 20"/>,
  send: <><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></>,

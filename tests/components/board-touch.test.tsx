@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { cdp } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
-import { sent, showWork, workProps } from './work-page';
+import { placed, showWork, workProps } from './work-page';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
 vi.mock('@/lib/link', () => ({ default: ({ prefetch: _prefetch, scroll: _scroll, ...props }: ComponentProps<'a'> & { prefetch?: unknown, scroll?: unknown }) => <a {...props}/> }));
@@ -18,7 +18,7 @@ const props = workProps();
 const phoneBoard = async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  await cdp().send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
- vi.mocked(props.workAction).mockClear();
+ vi.mocked(props.placeMove).mockClear();
  await showWork(props, { width: 390 });
  return document.querySelector<HTMLElement>('.board')!;
 };
@@ -34,7 +34,7 @@ test('on a phone a swipe that starts on a card scrolls the board and moves no ca
  for (let step = 1; step <= 12; step++) { vi.advanceTimersByTime(16); await touch('touchMove', x - step * 14, y); }
  await touch('touchEnd');
  await expect.poll(() => board.scrollLeft, { message: 'the board scrolled under the swipe' }).toBeGreaterThan(0);
- expect(sent(props)).toEqual([]);
+ expect(placed(props)).toEqual([]);
  expect(document.querySelector('.board-status')).toBeNull();
 });
 
@@ -56,7 +56,7 @@ test('on a phone a card held for a moment is carried to the next list and moved 
  for (let step = 1; step <= 15; step++) { const to = aim(); await touch('touchMove', from.x + (to.x - from.x) * step / 15, from.y + (to.y - from.y) * step / 15); }
  expect(board.scrollLeft, 'the board holds still under the finger').toBe(scrolled);
  await touch('touchEnd');
- await expect.poll(() => sent(props)).toEqual([{ op: 'move-column', company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned' }]);
+ await expect.poll(() => placed(props)).toEqual([{ company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned', before: '' }]);
  expect(cancels, 'no pointercancel ends the drag').toBe(0);
 });
 
