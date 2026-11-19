@@ -32,3 +32,6 @@ knowledge_base:
       - "AGENTS.md"
       - "GLOSSARY.md"
       - "docs/adr/*.md"
+      - "docs/agents/checks.md"
+      - "docs/agents/visual-comparison.md"
+      - "docs/agents/code-review-rules.md"
