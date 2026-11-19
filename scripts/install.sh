@@ -175,7 +175,7 @@ company_add() {
     return 1
   fi
   if ! compose exec -T -e ENGINE_ADDRESS="$address" -e ENGINE_KEY="$key" web \
-    node scripts/company-add.mjs add --name "$company_name" --owner "$owner_email" --address "$address"; then
+    node scripts/company-add.mjs add --name "$company_name" --owner "$owner_email" --address "$address" --slug "$slug"; then
     # The record and the Company are removed by the script; a waiting record the script did not reach is removed here.
     compose exec -T web node scripts/company-add.mjs drop --address "$address" > /dev/null 2>&1 || true
     engine_destroy "$slug" "$volume" "$network"

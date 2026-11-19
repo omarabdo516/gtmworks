@@ -14,6 +14,7 @@ const sayError=message=>{ console.error(message); process.exitCode=1; };
 const name=option('name').trim();
 const owner=option('owner').trim();
 const address=option('address').trim();
+const slug=option('slug').trim();
 const key=process.env.ENGINE_KEY||'';
 const slugFor=name=>`${name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'company'}-${randomUUID().slice(0,8)}`;
 const press=async query=>{ const {data,error}=await query; if(error) throw new Error(error.message); return data; };
@@ -48,11 +49,13 @@ try {
   else {
    const person=await checked();
    if(person) {
+    // The slug names the Engine's folder and the Company alike, so the two are read together; the preflight printed it.
+    const companySlug=/^[a-z0-9-]{1,80}$/.test(slug)?slug:slugFor(name);
     let made=null,company=null;
     try {
      made=await registerEngine(service,{address,key});
      company=randomUUID();
-     await press(service.from('companies').insert({id:company,slug:slugFor(name),name,engine_id:made.id,work_mode:null}).select('id').single());
+     await press(service.from('companies').insert({id:company,slug:companySlug,name,engine_id:made.id,work_mode:null}).select('id').single());
      await press(service.from('members').insert({company_id:company,person_id:person,role:'owner',grant_publishing:true,grant_money_figures:true,grant_customer_data:true}).select('company_id').single());
     } catch(error) {
      // Nothing half made: remove the Company (the record goes with it) or the waiting record alone, then say so plainly.
