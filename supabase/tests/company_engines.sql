@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
--- #380: one Engine record per Company, readable by server code alone, and a Company is made only onto a waiting record.
+select plan(16);
+-- #380, #382: one Engine record per Company, readable by server code alone, and a Company names the record it is made on.
 select ok(to_regclass('public.company_engines') is not null,'the Engine record is a table');
 select ok((select relrowsecurity from pg_class where oid='public.company_engines'::regclass),'it has row-level security on');
 select ok(not has_table_privilege('anon','public.company_engines','select'),'a signed-out visitor reads nothing');
@@ -17,22 +17,30 @@ reset role;
 set local role service_role;
 select ok((select count(*) from public.company_engines)>0,'the server role reads the Engine records');
 reset role;
--- A Company cannot be made without an Engine record to attach to: with none waiting the insert fails and leaves nothing.
+-- A Company names the record it is made on; a Company that ends its transaction with no Engine is refused whole. The
+-- check is deferred to the commit, so the test sets it immediate to see the refusal now.
 delete from public.company_engines where company_id is null;
+set constraints company_needs_engine immediate;
 select throws_ok($$insert into public.companies(id,slug,name) values ('1fed0000-0000-0000-0000-000000000001','engine-missing','No Engine')$$,
- '55000','companyEngineMissing','a Company cannot be made without an Engine record');
+ '55000','companyEngineMissing','a Company with no Engine is refused');
 select is((select count(*)::int from public.companies where slug='engine-missing'),0,'the refused Company left nothing behind');
-insert into public.company_engines(address,key_encrypted) values ('http://hermes:8642','cipher');
-insert into public.companies(id,slug,name) values ('1fed0000-0000-0000-0000-000000000002','engine-owner','Attached Engine');
+set constraints company_needs_engine deferred;
+insert into public.company_engines(id,address,key_encrypted) values ('e3820000-0000-4000-8000-000000000001','http://gtmworks-engine-one:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('1fed0000-0000-0000-0000-000000000002','engine-owner','Attached Engine','e3820000-0000-4000-8000-000000000001');
 select is((select count(*)::int from public.company_engines e join public.companies c on c.id=e.company_id where c.slug='engine-owner'),1,
- 'the Company attached the waiting Engine record');
-select throws_ok($$insert into public.companies(id,slug,name) values ('1fed0000-0000-0000-0000-000000000003','engine-missing-two','Again')$$,
- '55000','companyEngineMissing','one record makes one Company, so the next needs its own');
+ 'the Company attached the Engine record it named');
+-- The named record serves one Company only, and a name that is no record is refused.
+select throws_ok($$insert into public.companies(id,slug,name,engine_id) values ('1fed0000-0000-0000-0000-000000000003','engine-shared','Same Engine','e3820000-0000-4000-8000-000000000001')$$,
+ '55000','companyEngineTaken','a record already serving a Company is not taken by another');
+select throws_ok($$insert into public.companies(id,slug,name,engine_id) values ('1fed0000-0000-0000-0000-000000000004','engine-unknown','Unknown','e3820000-0000-4000-8000-000000000099')$$,
+ '55000','companyEngineUnknown','a Company cannot name an Engine record that does not exist');
 select ok(position('company_id' in pg_get_function_result('public.agent_profile_work()'::regprocedure))>0
  and position('company_id' in pg_get_function_result('public.engine_tools_due()'::regprocedure))>0
  and position('company_id' in pg_get_function_result('public.agent_soul_rules_work()'::regprocedure))>0,
  'the worker keepers name the Company each row belongs to');
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid
- where c.oid='public.companies'::regclass and t.tgname='attach_company_engine' and not t.tgisinternal),'the Company insert claims a waiting record');
+ where c.oid='public.companies'::regclass and t.tgname='attach_company_engine' and not t.tgisinternal),'the Company attaches the record it named');
+select ok(exists(select 1 from pg_trigger t where t.tgrelid='public.companies'::regclass
+ and t.tgname='company_needs_engine' and t.tgdeferrable and t.tginitdeferred),'the missing-Engine check waits for the commit');
 select * from finish();
 rollback;

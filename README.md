@@ -32,8 +32,9 @@ Nothing is built on the server and no source is downloaded. Options go after
 It also puts a `gtmworks` command in `~/.local/bin`, and adds that folder to the
 PATH in your shell profile only when no profile names it yet (`~/.profile`, and
 `~/.zshenv` when your login shell is zsh, which reads no other); open a new shell
-to use it. `gtmworks status` reports each service's health; `gtmworks backup`,
-`gtmworks restore` and `gtmworks update` are described below.
+to use it. `gtmworks status` reports each service's health and every
+Company's Engine; `gtmworks backup`, `gtmworks restore` and `gtmworks update` are
+described below.
 
 Before it changes anything, the line checks for Docker and Docker Compose v2.20+
 and stops with a plain message naming what to install. Running the line again (or
@@ -88,9 +89,24 @@ Engine. No container of the install mounts the server's Docker socket.
 Company's Agents, memory, Skills, Conversations and model sign-in stay in its own
 container and are not reachable from another Company's Engine. The installer makes
 the first Company's Engine; a later Company gets its own Engine from the same
-template when the install owner adds it on the server. Each Engine adds roughly
-the memory measured below for one Engine: 775 MiB before its Agents' profiles and
-825 MiB with twenty of them, so size the server for that much per Company.
+template when the install owner adds it on the server:
+
+```sh
+gtmworks company add --name "Second Company" --owner person@example.com
+gtmworks company list
+```
+
+`--owner` names a Person who already has an account on this install; an email that
+belongs to no Person is refused before anything is made. `company add` makes the
+Engine, waits until it is healthy, registers it and makes the Company with that
+Person as its Owner; the worker then gives the Company its main Agent on its own
+Engine. If the Engine does not become healthy the command says so in one line,
+removes what it made (its container, volume, network and folder, and its record), and
+leaves no Company, so running it again is safe. `gtmworks company list` shows every
+Company with the state of its Engine, and `gtmworks status` reports every Engine.
+Each Engine adds roughly the memory measured below for one Engine: 775 MiB before its
+Agents' profiles and 825 MiB with twenty of them, so size the server for that much per
+Company; the install job prints the memory one idle Engine uses on every run.
 
 **Agent profiles and isolation (ADR 0014).** Inside its Engine a Company keeps the
 shape gtmworks has: the worker gives the Company its own profile (`co-<company
@@ -167,6 +183,20 @@ source (latest `main` by default), migrates, rebuilds and restarts; for private
 source set `GH_TOKEN` to a GitHub token with Contents read access. The `backup` and
 `restore` below run as `sh scripts/install.sh backup` and `sh scripts/install.sh
 restore <archive>` there.
+
+## Companies
+
+```sh
+gtmworks company add --name "Second Company" --owner person@example.com
+gtmworks company list
+```
+
+`company add` makes the Company's own Engine from the same template, waits until it is
+healthy, and makes the Company with that existing Person as its Owner; `company list`
+shows every Company with the state of its Engine. A failed Engine leaves nothing
+behind and the same command can be run again. `gtmworks status` reports every Engine
+beside the services. See **One Engine per Company** under Install for what each
+Engine holds and how much memory it adds.
 
 ## Update
 

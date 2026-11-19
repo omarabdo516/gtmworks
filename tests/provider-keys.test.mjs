@@ -338,8 +338,8 @@ test('the README says a Company\'s API key lives in its own Engine only, never i
 test('the install job sets a key on the pinned Engine for a Company\'s space and both Agent profiles only, then removes it', () => {
  const script=readFileSync('scripts/check-install-profiles.mjs','utf8');
  assert.match(script,/const keyed=\{space:spaceOf\(first\),profiles:\[first\.profile,first\.secondProfile\]\}/);
- assert.match(script,/setProviderKey\(\{\.\.\.engine,profile:first\.profile,key\},\{\.\.\.keyed,provider,value:/);
+ assert.match(script,/setProviderKey\(\{\.\.\.firstEngine,profile:first\.profile\},\{\.\.\.keyed,provider,value:/);
  assert.match(script,/assert\.deepEqual\(keyedStates,\[true,true,true,false,false,false,false\]/);
- assert.match(script,/removeProviderKey\(\{\.\.\.engine,profile:first\.profile,key\},\{\.\.\.keyed,provider\}\)/);
+ assert.match(script,/removeProviderKey\(\{\.\.\.firstEngine,profile:first\.profile\},\{\.\.\.keyed,provider\}\)/);
  assert.match(script,/assert\.deepEqual\(await providerKeys\(\),\[false,false,false,false,false,false,false\]/);
 });

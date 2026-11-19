@@ -9,6 +9,7 @@
 # image and starts gtmworks; nothing is built and no source is downloaded. It keeps a copy of itself in the folder as
 # gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
 #   gtmworks status | update | backup | restore <archive> | install | sign-in claude
+#   gtmworks company add --name <Company> --owner <email> | gtmworks company list
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
 # stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
@@ -49,12 +50,14 @@ Usage:
   gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes]]
   gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
+  gtmworks company add --name <Company> --owner <email>
+  gtmworks company list     (each Company and the state of its Engine)
 USAGE
   exit "${1:-2}"
 }
 wrong() { printf '%s\n' "$*" >&2; usage; }
 
-command_mode=no operation= archive= version= channel= dir= backup=yes yes=no provider= company=
+command_mode=no operation= archive= version= channel= dir= backup=yes yes=no provider= company= company_command=no
 destination=
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -69,7 +72,10 @@ while [ $# -gt 0 ]; do
     --yes) yes=yes;;
     -h|--help|help) usage 0;;
     -*) wrong "Unknown option: $1";;
-    *) if [ -z "$operation" ]; then operation=$1
+    *) if [ -z "$operation" ]; then
+         operation=$1
+         [ "$operation" != company ] || company_command=yes
+       elif [ "$company_command" = yes ]; then break
        elif [ "$operation" = restore ] && [ -z "$archive" ]; then archive=$1
        elif [ "$operation" = backup ] && [ -z "$destination" ]; then destination=$1
        elif [ "$operation" = sign-in ] && [ -z "$provider" ]; then provider=$1
@@ -79,7 +85,7 @@ while [ $# -gt 0 ]; do
 done
 # The line installs; the gtmworks command does what it is told and nothing when told nothing.
 if [ -z "$operation" ]; then [ "$command_mode" = no ] || usage; operation=install; fi
-case "$operation" in install|update|backup|restore|status|sign-in) ;; *) wrong "Unknown command: $operation";; esac
+case "$operation" in install|update|backup|restore|status|company|sign-in) ;; *) wrong "Unknown command: $operation";; esac
 if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+|main@sha256:[a-f0-9]{64}'; then
   wrong "--version takes a release version such as v1.2.3, not $version."
 fi
@@ -619,6 +625,11 @@ op_restore() {
 
 op_backup() { check_prerequisites; in_install; check_project_owner; run_installer backup "${destination:-$dir/backups}"; }
 
+# The Company commands are the installer's own (#382): get.sh keeps the gtmworks command's options, then hands the rest of
+# the line to install.sh, which owns the Engine helpers and the Company scripts. install.sh's own lock serializes it with
+# an install or update on this machine.
+op_company() { check_prerequisites; in_install; run_installer company "$@"; }
+
 op_status() {
   check_prerequisites
   in_install
@@ -639,8 +650,10 @@ op_status() {
     printf '%-8s %s\n' "$service" "$shown"
   done
   if [ -z "$unhealthy" ]; then
-    compose exec -T web node --input-type=module -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://gtmworks-engine-first:8642/health']) { const response=await fetch(url); console.log(url+' '+response.status); if(response.status!==200) process.exitCode=1; }" < /dev/null \
+    compose exec -T web node --input-type=module -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in']) { const response=await fetch(url); console.log(url+' '+response.status); if(response.status!==200) process.exitCode=1; }" < /dev/null \
       || unhealthy=' the app'
+    # Every Engine of the install, each Company's own: a stopped or unhealthy one is named, and status fails (#382).
+    run_installer engines || unhealthy="$unhealthy an Engine"
   fi
   [ -z "$unhealthy" ] || fail "Not healthy:$unhealthy. Repair with: gtmworks install"
   say "All $total services are healthy."
@@ -674,6 +687,7 @@ op_signin() {
 
 case "$operation" in
   sign-in) op_signin;;
+  company) "op_company" "$@";;
   *) "op_$operation";;
 esac
 }

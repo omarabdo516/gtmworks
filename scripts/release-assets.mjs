@@ -46,8 +46,10 @@ export function releaseInstaller(text, app) {
 // Every Company's Engine is made from the template shipped with the release (#381, ADR 0018), so its one image is
 // checked here too: a release never turns its tag into a digest, and an unpinned Engine image stops the release.
 export function releaseEngineTemplate(text) {
- const image = /^\s*image:\s*(\S+)\s*$/m.exec(text)?.[1];
- if (!image || !pinnedPattern.test(image)) throw new Error(`${image} is not pinned to a reviewed tag@sha256 digest in scripts/engine-template.yml`);
+ const raw = /^\s*image:\s*(\S+)\s*$/m.exec(text)?.[1];
+ // The pin is the template's default; ENGINE_IMAGE overrides it only for the install job's forced-failure proof.
+ const image = raw?.replace(/^\$\{ENGINE_IMAGE:-/, '').replace(/\}$/, '');
+ if (!image || !pinnedPattern.test(image)) throw new Error(`${raw} is not pinned to a reviewed tag@sha256 digest in scripts/engine-template.yml`);
  return text;
 }
 

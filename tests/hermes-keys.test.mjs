@@ -59,7 +59,10 @@ test('the install job runs the scan inside the first Engine with the real secret
  const line=install.split('\n').find(text=>text.includes('check-hermes-keys.py'));
  assert.ok(line,'the scan runs');
  for(const name of ['POSTGRES_PASSWORD','PGSODIUM_ROOT_KEY','SUPABASE_JWT_SECRET','SUPABASE_SERVICE_ROLE_KEY','WEBHOOK_ENCRYPTION_KEY','SETUP_CODE']) assert.ok(line.includes(name),name);
- assert.match(line,/\.env\.install \| docker exec -i -u hermes "\$engine_id"/);
+ assert.match(line,/\.env\.install \| docker exec -i -u hermes "\$name"/);
+ // Every Engine's own folder is scanned, the first and each Company's.
+ assert.match(install,/for folder in \.engines\/\*\/; do/);
+ assert.match(install,/\[\[ \$engines_scanned -ge 2 \]\]/);
 });
 
 test('the runtime scan reads large files in chunks, also finding a value split across two chunks', t => {

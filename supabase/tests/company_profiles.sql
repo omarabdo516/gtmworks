@@ -3,7 +3,8 @@ create extension if not exists pgtap with schema extensions;
 select plan(29);
 -- Omar owns every company. R&S Consultations (2) has no Hermes; Aleem (3) is on the shared bundled `default` profile, as
 -- the previous worker left it, and has a Contributor (5); a new company (99) has no Hermes either.
-insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','profiles-new','Profiles new');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-00000000000b','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000099','profiles-new','Profiles new','e3821000-0000-4000-8000-00000000000b');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000099','20000000-0000-0000-0000-000000000001','owner');
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
@@ -27,7 +28,8 @@ select ok((select move and not attach from public.company_profile_work() where c
 -- Companies that only wait to move (a move waits for the company's own sign-in, maybe for long) never hold back one to
 -- provision: a company with no Hermes, whatever its id, comes before them.
 reset role;
-insert into public.companies(id,slug,name) values ('1fffffff-0000-0000-0000-000000000098','profiles-late','Profiles late');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-00000000000c','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('1fffffff-0000-0000-0000-000000000098','profiles-late','Profiles late','e3821000-0000-4000-8000-00000000000c');
 insert into public.members(company_id,person_id,role) values ('1fffffff-0000-0000-0000-000000000098','20000000-0000-0000-0000-000000000001','owner');
 set local role service_role;
 select is((select array_agg(w.company_id::text order by w.n) from public.company_profile_work() with ordinality w(company_id,profile,agent_level,tools_level,tools_policy,tools_pending,attach,move,n) where w.company_id in ('10000000-0000-0000-0000-000000000003','1fffffff-0000-0000-0000-000000000098')),

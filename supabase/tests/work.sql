@@ -1,7 +1,8 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(67);
-insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','work-isolated','Test');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000008','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000099','work-isolated','Test','e3821000-0000-4000-8000-000000000008');
 insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Private' from public.work_stages where company_id='10000000-0000-0000-0000-000000000099' and position=1;
 insert into public.work_creatives(company_id,card_id,name) select company_id,id,'Private' from public.work_cards where company_id='10000000-0000-0000-0000-000000000099';
 insert into storage.objects(bucket_id,name) values ('creatives','10000000-0000-0000-0000-000000000099/private.png');

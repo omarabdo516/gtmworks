@@ -19,7 +19,8 @@ create temporary table sent(label text, id bigint) on commit drop;
 grant select, insert on sent to authenticated, service_role;
 
 select is((select count(*)::int from public.companies c where (select count(*) from public.channels k where k.company_id=c.id and k.kind='general')=1),(select count(*)::int from public.companies),'every Company has exactly one general channel');
-insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000023','channels-new','Channels new');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000003','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000023','channels-new','Channels new','e3821000-0000-4000-8000-000000000003');
 select is((select count(*)::int from public.channels where company_id='10000000-0000-0000-0000-000000000023' and kind='general'),1,'a new Company gets its general channel');
 select throws_ok($$insert into public.channels(company_id,kind) values ('10000000-0000-0000-0000-000000000001','general')$$,'23505',null,'a Company never has a second general channel');
 

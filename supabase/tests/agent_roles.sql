@@ -4,7 +4,8 @@ select plan(35);
 select set_config('test.agent_company',gen_random_uuid()::text,true);
 select set_config('test.agent_one',gen_random_uuid()::text,true);
 select set_config('test.agent_two',gen_random_uuid()::text,true);
-insert into public.companies(id,slug,name) values (current_setting('test.agent_company')::uuid,'agent-role-test','Test');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000001','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values (current_setting('test.agent_company')::uuid,'agent-role-test','Test','e3821000-0000-4000-8000-000000000001');
 insert into auth.users(id,email) values (current_setting('test.agent_one')::uuid,'returning-agent@example.test'),(current_setting('test.agent_two')::uuid,'replacement-agent@example.test');
 insert into public.people(id,name) values (current_setting('test.agent_one')::uuid,'Agent with a different id'),(current_setting('test.agent_two')::uuid,'Another agent');
 insert into public.members(company_id,person_id,role) values

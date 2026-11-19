@@ -21,7 +21,7 @@ COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/worker ./worker
 COPY --from=build --chown=node:node /app/lib ./lib
 # The installer registers the install's Engine record through this script (#380); a release image needs it too.
-COPY --from=build --chown=node:node /app/scripts/install-engine.mjs ./scripts/install-engine.mjs
+COPY --from=build --chown=node:node /app/scripts/install-engine.mjs /app/scripts/company-add.mjs /app/scripts/company-list.mjs ./scripts/
 COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --from=build --chown=node:node /app/THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
 COPY --from=build --chown=node:node /app/components/paperclip/fonts/*.txt /app/components/paperclip/fonts/NOTICE.md ./licenses/paperclip/fonts/

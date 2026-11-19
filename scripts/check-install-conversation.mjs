@@ -43,13 +43,15 @@ try {
  const options={auth:{persistSession:false,autoRefreshToken:false}};
  const service=createClient(origin,process.env.SUPABASE_SERVICE_ROLE_KEY,options);
  const checked=async query=>{const {data,error}=await query; assert.equal(error,null,JSON.stringify(error)); return data;};
- // The Owner and Company first run made, whose Engine record the installer registered and first run attached (#380).
+ // The first-run Owner, who made the Proxy Company.
  const credentials={email:'proxy-owner@example.com',password:'proxy-owner-password'};
  const person=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options);
  const {data:{user}}=await person.auth.signInWithPassword(credentials);
  assert.ok(user,'the first-run Owner signs in');
- const [{company_id:company}]=await checked(service.from('members').select('company_id').eq('person_id',user.id).eq('role','owner').limit(1));
- assert.ok(company,'the first-run Owner owns a Company');
+ // The first-run Company, which the proxy check made: its Engine record is the install's first Engine.
+ const first=await checked(service.from('companies').select('id').eq('name','Proxy Company').single());
+ const company=first.id;
+ assert.ok(company,'first run made the Proxy Company');
  // The record, not the install's environment, is where its Engine comes from.
  const record=await checked(service.from('company_engines').select('address').eq('company_id',company).single());
  assert.equal(record.address,engineAddress,'the first Company has the install Engine record');
