@@ -26,7 +26,7 @@ function databases({has_files=false,files=[],refuse=null}={}) {
   if(name==='queued_conversations') return ok([{conversation}]);
   if(name==='reserve_conversation_turn') return ok(completion);
   if(name==='claim_conversation_turn') return ok([{company:'co',agent:'a',person:'p',send_key:'q',message:'Look at these',connection,profile:'writer',note:null,retry:false,has_files}]);
-  if(['pin_run','pin_run_history','pin_run_model'].includes(name)) return ok(null);
+  if(['pin_run','pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return ok(null);
   if(name==='begin_start') return ok(1);
   if(name==='send_conversation_message') return refuse?{data:null,error:{code:refuse}}:ok(true);
   if(name==='record_conversation_turn') return ok(true);
