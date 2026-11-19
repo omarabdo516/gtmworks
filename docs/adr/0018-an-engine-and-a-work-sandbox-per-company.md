@@ -42,7 +42,7 @@ Read in the pinned Engine (Hermes v0.23.0) for this:
 - It holds no key of any kind: no model credential, no publishing or payment key, not the Engine's key and none of gtmworks's. A paid service (voice, images, video review) is called by a tool of the Engine, never by a key in the shell.
 - Its network is outbound internet only, through one exit that refuses the install's networks, private address ranges and cloud metadata addresses.
 - Its work folder is where the Agents' work files live, and it has no private corners: the Library shows it to every Member who may talk to an Agent. A file becomes a card's Version when it is copied into gtmworks storage; that copy never changes, so an Approval is of a fixed file. A backup includes the work folders and leaves out the tool caches.
-- The first ticket of the build proves on the pinned Engine that terminal, files, code and the screen all work through `ssh`, before anything else is built on it.
+- The first ticket of the build proves on the pinned Engine that terminal, files, code and the screen all work through `ssh`, before anything else is built on it. Measured 2026-11-19: `docs/engine-probes/work-sandbox-ssh.md` (#390).
 
 ### The screen
 
