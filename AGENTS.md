@@ -8,7 +8,7 @@ Work arrives as a spec issue with its tickets as sub-issues; one thread runs `/i
 
 Every build uses Matt Pocock's engineering skills (configured in `docs/agents/`, see the Agent skills section of `CLAUDE.md`) with Ponytail. Money, secrets, deletion, release tags and repo settings stay with Omar: write an `ASK-HERMES:` line and carry on with the rest of the work. Impeccable stays the design tool for screens (Design workflow below).
 
-Merge: every pull request merges itself by GitHub auto-merge once its required check `check` is green and every review thread is fixed or answered; no build waits at merge-ready for a person. Never merge directly, bypass the ruleset, or weaken a test to go green.
+Merge: every pull request merges itself by GitHub auto-merge once its required check `check` is green and every review thread is fixed or answered and resolved; no build waits at merge-ready for a person. Never merge directly, bypass the ruleset, or weaken a test to go green.
 
 ## Before exploring, read these
 
