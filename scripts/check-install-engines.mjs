@@ -11,6 +11,7 @@ import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 const { sendMessage }=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const { engineOf }=await import(`${process.cwd()}/lib/company-engine.mjs`);
+const { companyProfile }=await import(`${process.cwd()}/lib/agent-levels.mjs`);
 const { writeProof }=await import(`${process.cwd()}/lib/install-proof.mjs`);
 
 const origin='http://gateway:8080';
@@ -26,7 +27,8 @@ const until=async(what,read,seconds)=>{
 // is the one the install job wrote in the Company's own Engine before the backup; the job derives it the same way.
 const targets=[];
 for(const company of await checked(service.from('companies').select('id,name').order('name'))) {
- const [agent]=await checked(service.from('hermes_agents').select('id,profile').eq('company_id',company.id).eq('is_default',true));
+ // The main Agent runs on its Company's own profile; the server role reads hermes_agents by these columns only.
+ const [agent]=await checked(service.from('hermes_agents').select('id,profile').eq('company_id',company.id).eq('profile',companyProfile(company.id)));
  const engine=await engineOf(company.id,service);
  if(!agent?.profile||!engine) continue;
  targets.push({company:company.id,name:company.name,agent:agent.id,profile:agent.profile,engine,

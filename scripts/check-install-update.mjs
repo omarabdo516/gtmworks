@@ -9,6 +9,7 @@ import { createServer } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 const { sendMessage }=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const { readCompanySignIns }=await import(`${process.cwd()}/lib/company-sign-in.mjs`);
+const { companyProfile }=await import(`${process.cwd()}/lib/agent-levels.mjs`);
 const { writeProof }=await import(`${process.cwd()}/lib/install-proof.mjs`);
 
 const marker=process.argv[2];
@@ -61,7 +62,7 @@ const model=createServer((request,response)=>{
 });
 await new Promise(resolve=>model.listen(8080,'0.0.0.0',resolve));
 try {
- const [agent]=await checked(service.from('hermes_agents').select('id,profile').eq('company_id',company).eq('is_default',true));
+ const [agent]=await checked(service.from('hermes_agents').select('id,profile').eq('company_id',company).eq('profile',companyProfile(company)));
  assert.ok(agent?.profile,`the Company's main Agent: ${JSON.stringify(agent)}`);
  // The Agent runs on the profile the Engine kept, now pointed at the fake model.
  const pointed=await fetch(`${management}/api/config?profile=${encodeURIComponent(agent.profile)}`,{method:'PUT',
