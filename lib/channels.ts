@@ -1,4 +1,5 @@
 import type { supabase } from './supabase';
+import type { BoardColumn } from './board-columns.mjs';
 import { agentStatus, type AgentStatus } from './agent-details.mjs';
 import type { SessionUsage } from './engine.mjs';
 import { replyCardColumns, replyCardOf, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
@@ -17,13 +18,14 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // `face` is the Agent's, for that turn. A message may call up to three Agents (#152): `mentions` is each of them in the
 // order named, and `mention` the first, which a channel with one Agent called is. An Agent's reply carries its Run's
 // steps, read live from the Agent's Hermes session (#148, #346), and the cards it showed with it (#136, #137, #139). A
-// note is the one quiet line a channel gets that is not a message (#207): nobody writes it, nobody can be mentioned in it, and it
-// starts no Run. Its id is negative, so it is never a message's. The quiet message "Done it" writes to ask an Agent to
-// pick up (#149) is `handDone`: nothing draws a bubble of it, and the card shows the press instead.
+// note is the one quiet line a channel gets that is not a message (#207, #151): nobody writes it, nobody can be mentioned
+// in it, and it starts no Run. Its id is negative, so it is never a message's. The quiet message "Done it" writes to ask
+// an Agent to pick up (#149) is `handDone`: nothing draws a bubble of it, and the card shows the press instead.
 export type ChannelMessage=
  | {id:number,author:'person',mine:boolean,name:string,role:MemberRole|null,body:string,at:string,mention:ChannelMention|null,mentions?:ChannelMention[],handDone?:true}
  | {id:number,author:'agent',name:string,face:string,body:string,at:string,steps?:RunSteps,cards?:ReplyCard[]}
- | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string};
+ | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
+ | {id:number,author:'note',kind:'card',at:string};
 export type ChannelName={kind:'general'}|{kind:'team',name:string};
 export type ChannelSummary=ChannelName&{id:string,unread:number};
 // One row of a channel's members. An invited person who has not joined is a row too (#207): no person yet, their name made
@@ -33,6 +35,9 @@ type ChannelMember={person:string|null,name:string,role:MemberRole,invitation:st
 // `only`: shown to the reader in this channel and hidden from them everywhere else. `state` is the Agent's own state
 // (#206), with a Run started by a call in this channel counting as working; never whom that work is for or on what.
 export type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,only:boolean,state:AgentStatus};
+// The Card a team channel put on the board (#151): its title, the column it stands in now, the line under it, and
+// whether it waits (a review stage or its chat's wait). Read only for a Member who sees its Agent, as the board reads it.
+type ChannelBoard={card:number,title:string,column:BoardColumn,line:string,waiting:boolean};
 export type ChannelRecord={
  channel:{id:string,company:string}&ChannelName,
  members:ChannelMember[],
@@ -46,9 +51,11 @@ export type ChannelRecord={
  open:boolean,
  // The choices the reader's role may send on a request of their own (permission_choices, #163).
  may:PermissionChoice[],
+ // The channel's Card on the board (#151), when it has one the reader may see; absent otherwise.
+ board?:ChannelBoard,
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string};
-type StoredNote={id:number,kind:'invite',invitee_name:string,actor_name:string,created_at:string};
+type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
 type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,agent_name:string,outcome:string|null};
 type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
@@ -96,6 +103,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const {data:writer}=await db.rpc('conversation_can_write',{c:company});
  const {data:manager}=await db.rpc('can_manage_company',{target:company});
  const {data:may}=await db.rpc('permission_choices',{c:company});
+ // The channel's Card on the board (#151): the one Card a team channel has, the column it stands in now and its line,
+ // read only for a Member who sees its Agent. The general channel has none.
+ const {data:board}=await db.rpc('channel_board_card',{ch:channel});
  const asked=runs.length?((await db.from('channel_permissions').select('id,message_id,ordinal,title,content,state,decided_at,created_at').eq('channel_id',channel).gte('message_id',runs.at(-1)!.message_id).order('id')).data||[]) as StoredPermission[]:[];
  // A reply's cards (#136, #137, #139) are kept against the message its Run answers, and a question (#149) against the
  // same message, drawn under it before the reply. Every member of the channel reads them.
@@ -155,7 +165,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
    return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,
     mention:mentions[0]??null,mentions,...(message.hand_card?{handDone:true as const}:{})};
   }),
-  notes.filter(note=>oldest===undefined||note.created_at>=oldest).map((note):ChannelMessage=>({id:-note.id,author:'note',kind:note.kind,actor:note.actor_name,name:note.invitee_name,at:note.created_at})),
+  notes.filter(note=>oldest===undefined||note.created_at>=oldest).map((note):ChannelMessage=>note.kind==='card'
+   ? {id:-note.id,author:'note',kind:'card',at:note.created_at}
+   : {id:-note.id,author:'note',kind:'invite',actor:note.actor_name,name:note.invitee_name??'',at:note.created_at}),
  ];
  // The lines in the order they were written: a note is drawn where it happened, after a message written at the same
  // moment (the sort is stable, and the messages come first).
@@ -175,6 +187,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   messages,
   open:((openRuns||[]) as {agent_id:string|null}[]).length>0,
   may:(may||[]) as PermissionChoice[],
+  ...(board?{board:board as ChannelBoard}:{}),
  };
 }
 

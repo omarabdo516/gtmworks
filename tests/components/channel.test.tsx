@@ -22,7 +22,7 @@ const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): 
  agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true, only: false, state: 'idle' }],
  writer: true, manage: false, managers: [], may: ['once', 'always', 'deny'], messages, open: messages.some(message => message.author === 'person' && message.mention?.state === 'open'), ...more,
 });
-const channel = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-1" initial={initial}/></LanguageProvider>);
+const channel = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-1" initial={initial}/></LanguageProvider>);
 
 test('another member writes on the start side with their first name and role, the reader on the end side, and the called Agent is marked and replies', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
@@ -41,7 +41,7 @@ test('another member writes on the start side with their first name and role, th
 
 test('in Arabic the composer gives the same hint, with the general channel named عام', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await render(<LanguageProvider language="ar"><ChannelView person="p-1" initial={record([peer])}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="ar"><ChannelView slug="rs-learning" person="p-1" initial={record([peer])}/></LanguageProvider>);
  const box = screen.getByRole('textbox', { name: 'اكتب رسالتك في القناة', exact: true });
  await expect.element(box).toHaveAttribute('placeholder', 'اكتب في #عام… والوكيل بيرد بس لو ناديته باسمه');
 });
@@ -90,7 +90,7 @@ const team = (more: Partial<ChannelRecord> = {}): ChannelRecord => record([peer]
  managers: [{ name: 'Omar', role: 'owner' }, { name: 'Sara Adel', role: 'manager' }],
  ...more,
 });
-const reader = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView person="p-3" initial={initial}/></LanguageProvider>);
+const reader = (initial: ChannelRecord) => render(<LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-3" initial={initial}/></LanguageProvider>);
 
 test('a team channel\'s Agent hidden from the reader elsewhere is marked as shown here only, and a reader who cannot change it is told who can', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
@@ -129,7 +129,7 @@ test('each Agent in the channel\'s details shows its state on its face and under
 
 test('in Arabic the details name each Agent\'s state and count the working ones', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await render(<LanguageProvider language="ar"><ChannelView person="p-3" initial={team({ agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'بيظبط الإعلانات.', main: false, only: false, state: 'working' }, { id: 'a-2', connection_id: 'c-2', name: 'SEO', speciality: '', main: false, only: false, state: 'waiting' }] })}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language="ar"><ChannelView slug="rs-learning" person="p-3" initial={team({ agents: [{ id: 'a-1', connection_id: 'c-1', name: 'Ads', speciality: 'بيظبط الإعلانات.', main: false, only: false, state: 'working' }, { id: 'a-2', connection_id: 'c-2', name: 'SEO', speciality: '', main: false, only: false, state: 'waiting' }] })}/></LanguageProvider>);
  const details = screen.getByRole('complementary', { name: 'تفاصيل القناة' });
  expect(details.element().querySelector('.dp-id__role')?.textContent).toBe('3 أعضاء · 2 وكلاء · 1 شغال');
  const rows = Array.from(details.element().querySelectorAll('.panel-row')).filter(row => row.querySelector('.face-wrap'));
@@ -218,7 +218,7 @@ test('the channel draws the line the invitation added where it was written, in b
  expect(line?.className).toBe('note note--icon');
  expect(line?.textContent).toBe('Omar invited Mona, who joined “general” right away');
  expect(line?.querySelector('.note__icon')).not.toBeNull();
- const arabic = await render(<LanguageProvider language="ar"><ChannelView person="p-1" initial={record([note])}/></LanguageProvider>);
+ const arabic = await render(<LanguageProvider language="ar"><ChannelView slug="rs-learning" person="p-1" initial={record([note])}/></LanguageProvider>);
  expect(arabic.container.querySelector('.turns .note')?.textContent).toBe('Omar عزم Mona، ودخل «عام» على طول');
 });
 
@@ -250,7 +250,7 @@ test.each([
  ['ar', 'استخدم 2 أداة · 48 ثانية', 'تم', 'اتخطى', 'تمام', 'يتعدّل', 'القرار'],
 ] as const)('in the %s interface a channel reply draws its steps above the bubble and its review card under it', async (language, used, done, skipped, fine, edit, decision) => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await render(<LanguageProvider language={language}><ChannelView person="p-1" initial={record([called('answered'), replied])}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([called('answered'), replied])}/></LanguageProvider>);
  const turn = screen.getByRole('list', { name: language === 'ar' ? 'الرسايل في #عام' : 'Messages in #general' }).getByRole('listitem').nth(2);
  const button = turn.getByRole('button', { name: used, exact: true });
  await expect.element(button).toBeVisible();
@@ -289,11 +289,11 @@ test.each([
  ['ar', 'SEO يكتب الرد…', 'SEO مقدرش يرد على الرسالة دي.'],
 ] as const)('in the %s interface a message that called two Agents marks both names, names the one working, and gives the one that failed its own line', async (language, working, failed) => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await render(<LanguageProvider language={language}><ChannelView person="p-1" initial={record([two('open'), adsReply])}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([two('open'), adsReply])}/></LanguageProvider>);
  await expect.element(screen.getByRole('status')).toHaveTextContent(working);
  expect([...screen.container.querySelectorAll('.bubble .mention')].map(mark => mark.textContent)).toEqual(['@Ads', '@SEO']);
  expect([...screen.container.querySelectorAll('.bubble--agent')].map(bubble => bubble.textContent)).toEqual(['Two scripts are in.']);
- const stopped = await render(<LanguageProvider language={language}><ChannelView person="p-1" initial={record([two('unanswered'), adsReply])}/></LanguageProvider>);
+ const stopped = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([two('unanswered'), adsReply])}/></LanguageProvider>);
  await expect.element(stopped.getByRole('alert')).toHaveTextContent(failed);
  expect([...stopped.container.querySelectorAll('.bubble--agent')].map(bubble => bubble.textContent)).toEqual(['Two scripts are in.']);
  expect(stopped.container.querySelector('[role="status"]'), 'no Agent is working').toBeNull();
@@ -339,7 +339,7 @@ const namedBoth: ChannelMessage = { id: 8, author: 'person', mine: false, name: 
 
 test.each(['en', 'ar'] as const)('in the %s interface a Member\'s name in a message is marked as the called Agent\'s name is', async (language) => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await render(<LanguageProvider language={language}><ChannelView person="p-3" initial={team({ messages: [namedBoth] })}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-3" initial={team({ messages: [namedBoth] })}/></LanguageProvider>);
  expect([...screen.container.querySelectorAll('.bubble .mention')].map(mark => mark.textContent)).toEqual(['@Sara Adel', '@Ads']);
 });
 
@@ -358,4 +358,45 @@ test('opened from a mention the message rings once and the read names that menti
  const again = await channel(record([{ ...peer, id: 42 }]));
  expect(again.container.querySelector('.is-spot')).toBeNull();
  await expect.poll(() => asked[1]).toBe('/api/channels?company=co-1&channel=ch-1');
+});
+
+// #151: a channel whose Card is on the board shows it in its details as "On the board", with the Card's title, its line
+// and the column it stands in, and opens the board at that Card. The channel's top corner carries the pill of #144.
+test('a channel with a Card shows "On the board" with its title, its line and its column, and opens the board at it', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const board = { card: 41, title: 'Launch week', column: 'progress' as const, line: 'Write the launch post · 40%', waiting: false };
+ const screen = await reader(team({ board }));
+ const details = screen.getByRole('complementary', { name: 'Channel details' });
+ await expect.element(details.getByRole('heading', { name: 'On the board' })).toBeVisible();
+ const row = details.getByRole('link', { name: /Launch week/ });
+ await expect.element(row).toHaveAttribute('href', '/c/rs-learning/work/board?show=41');
+ expect(row.element().textContent).toBe('Launch weekWrite the launch post · 40%In progress');
+ await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toHaveAttribute('href', '/c/rs-learning/work/board?show=41');
+});
+
+test('a channel with no Card has no "On the board" section and no pill', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await reader(team());
+ const details = screen.getByRole('complementary', { name: 'Channel details' });
+ await expect.element(details.getByRole('heading', { name: 'On the board' })).not.toBeInTheDocument();
+ await expect.element(screen.getByRole('link', { name: /On the board:/ })).not.toBeInTheDocument();
+});
+
+test('in Arabic the section and the pill carry the approved words, and a Viewer reads the waiting column as the team\'s', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await render(<LanguageProvider language="ar"><ChannelView slug="rs-learning" person="p-3" initial={team({ writer: false, board: { card: 41, title: 'إطلاق الأسبوع', column: 'waiting', line: 'مراجعة', waiting: true } })}/></LanguageProvider>);
+ const details = screen.getByRole('complementary', { name: 'تفاصيل القناة' });
+ await expect.element(details.getByRole('heading', { name: 'على اللوحة' })).toBeVisible();
+ expect(details.getByRole('link', { name: /إطلاق الأسبوع/ }).element().textContent).toBe('إطلاق الأسبوعمراجعةمستني الفريق');
+ const pill = screen.getByRole('link', { name: 'على اللوحة: مستني الفريق' });
+ await expect.element(pill).toHaveAttribute('href', '/c/rs-learning/work/board?show=41');
+ expect(pill.element().querySelector('.dot')?.className).toContain('dot--waiting');
+});
+
+// #151: the quiet line a channel's Card adds says where it went, in both languages.
+test.each([['en', 'This card was added to the board under “In progress”'], ['ar', 'البطاقة دي اتضافت للوحة في «شغالين عليه»']] as const)('in the %s channel the Card\'s quiet line says where it went', async (language, words) => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const note: ChannelMessage = { id: -9, author: 'note', kind: 'card', at };
+ const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([note])}/></LanguageProvider>);
+ await expect.element(screen.getByText(words)).toBeVisible();
 });
