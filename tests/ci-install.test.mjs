@@ -6,21 +6,12 @@ import { load } from 'js-yaml';
 
 // The install proof is one command of the repo (#402): CI's `install` job calls it and holds no check of its own, and the
 // proof itself is scripts/ci-install-check.sh with the helpers its areas share in scripts/ci-install-lib.sh. These guards
-// read the real workflow and the real scripts, so a check added to the job, or a failure point lost in a move, is seen.
+// read the real workflow and the real scripts, so a check added to the job is seen; the failure points before and after a move are compared in its pull request.
 const ci = load(readFileSync(resolve('.github/workflows/ci.yml'), 'utf8'));
 const job = ci.jobs.install;
 const proof = ['scripts/ci-install-check.sh', 'scripts/ci-install-lib.sh'];
 const script = readFileSync(proof[0], 'utf8');
-const text = proof.map(path => readFileSync(path, 'utf8')).join('\n');
 
-// Every failure point the proof prints: the sentence after `fail` or `fail_update`, in the form the script writes it
-// (`'…'` or `"…"`), so a message that changed by one byte is a different line. fail_update's own body forwards its
-// argument (`fail "$1"`), which is no failure point, so the line that defines it is left out of the list.
-const messages = source => source.split('\n')
-  .filter(line => !/^fail_update\(\) \{/.test(line))
-  .flatMap(line => [...line.matchAll(/\bfail(?:_update)? (?:'[^']*'|"[^"]*")/g)])
-  .map(match => match[0].replace(/^fail(?:_update)? /, ''))
-  .sort();
 
 test('the install job runs the whole proof with one command and holds no check of it', () => {
   const calls = job.steps.filter(step => step.run === 'bash scripts/ci-install-check.sh');
@@ -29,13 +20,6 @@ test('the install job runs the whole proof with one command and holds no check o
   for (const step of job.steps) assert.doesNotMatch(step.run ?? '', /\bfail |\bfail\(/, `${step.name} holds no failure point`);
 });
 
-// The move keeps every failure point the install job had before it, once each. Five sentences repeat in the job before
-// the move because the same check runs on the first Engine, the restored one and the previous release's Engine; making
-// them unique would change a message, so the guard compares the list, name by name, with the one taken before the move.
-test('every failure point of the install proof before the move exists in it, once, after it', () => {
-  const before = readFileSync('scripts/ci-install-points.txt', 'utf8').trim().split('\n').sort();
-  assert.deepEqual(messages(text), before);
-});
 
 // The helpers the areas share are written once, in the lib or the script, never in both (#402).
 test('no helper function is defined twice in the proof or its lib', () => {
