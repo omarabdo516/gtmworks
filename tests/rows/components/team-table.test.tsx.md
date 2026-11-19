@@ -1,0 +1,1 @@
+| `components/team-table.test.tsx` | A Team switch shows the access the table was read with again after an invite or a refresh, not the value it first drew. (#187) | 0.2 s | team-dialog.spec.ts (the same table on the app) | new |

@@ -31,10 +31,13 @@ export const setSkillEnabled=withActionLog('setSkillEnabled',async function setS
 // checks again, and an agent has no way to reach this action.
 export const decideAgentRule=withActionLog('decideAgentRule',async function decideAgentRule(form:FormData) {
  const db=await supabase(); const path=`/c/${String(form.get('slug'))}/approvals`;
- const {error}=!await actionAllowed(db,'decideAgentRule',String(form.get('company')))?{error:{message:'not permitted'}}:await db.rpc('decide_agent_rule',{c:String(form.get('company')),item:Number(form.get('item')),approve:form.get('intent')==='approve'});
+ const company=String(form.get('company')); const item=Number(form.get('item')); const approve=form.get('intent')==='approve';
+ // The board's toast after the item leaves the list names its Agent (#169): the address carries the item's id, never the
+ // Agent's name, and the board reads that name itself.
+ const {error}=!await actionAllowed(db,'decideAgentRule',company)?{error:{message:'not permitted'}}:await db.rpc('decide_agent_rule',{c:company,item,approve});
  revalidatePath(path);
  if(error) logActionFailure('decideAgentRule',error,{form});
- redirect(error?`${path}?failed=rule`:path);
+ redirect(error?`${path}?failed=rule`:`${path}?decided=${approve?'approve':'reject'}&item=${item}`);
 });
 // The reason is never logged: a failure line names only the action, the Company and the answer's state.
 export const answerAgentRequest=withActionLog('answerAgentRequest',async function answerAgentRequest(form:FormData) {

@@ -1,7 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { cdp, userEvent } from 'vitest/browser';
+import { render } from 'vitest-browser-react';
 import type {} from '@vitest/browser-playwright';
+import NewCard from '@/app/c/[slug]/[[...section]]/new-card';
+import { LanguageProvider } from '@/lib/i18n-client';
 import { sent, showWork, workProps } from './work-page';
 
 const push = vi.hoisted(() => vi.fn<(href: string) => void>());
@@ -14,15 +17,14 @@ afterEach(async () => { push.mockReset(); await cdp().send('Emulation.setEmulate
 type Screen = Awaited<ReturnType<typeof showWork>>;
 const dialog = (screen: Screen) => screen.getByRole('dialog');
 
-test('on the board, + New card opens the new-card dialog and Escape closes it; + Add card opens it and Close closes it, and the board stays', async () => {
+test('on the board, + New card opens the new-card dialog and Escape closes it; + on Ideas opens the idea form instead', async () => {
  const screen = await showWork(workProps());
  await screen.getByRole('button', { name: '+ New card' }).click();
  await expect.element(dialog(screen)).toBeVisible();
  await userEvent.keyboard('{Escape}');
  await expect.element(dialog(screen)).not.toBeInTheDocument();
- await screen.getByRole('button', { name: '+ Add card' }).click();
- await expect.element(dialog(screen)).toBeVisible();
- await dialog(screen).getByRole('button', { name: 'Close', exact: true }).click();
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await expect.element(screen.getByLabelText('Idea')).toBeVisible();
  await expect.element(dialog(screen)).not.toBeInTheDocument();
  expect(push).not.toHaveBeenCalled();
 });
@@ -55,10 +57,12 @@ for (const language of ['en', 'ar'] as const) for (const width of [1440, 390]) t
  await expect.element(dialog(screen)).not.toBeInTheDocument();
 });
 
-test('a card started from Ideas with the reel template asks for that template in Ideas', async () => {
+// #174, #188: a Card started in a column's own quick form carries the template it asks for. The board's "+" on Ideas
+// opens the column's idea form since #188, so the quick form is mounted here with the Ideas stage, as the board used to
+// open it: the form is what this guards, and the template's checklist is supabase/tests/work.sql's.
+test('a card started with the reel template asks for that template and sends it', async () => {
  const props = workProps();
- const screen = await showWork(props);
- await screen.getByRole('button', { name: '+ Add card' }).click();
+ const screen = await render(<LanguageProvider language="en"><NewCard slug="rs-learning" company="co-1" agents={[]} members={[{ person_id: 'p-1', people: { name: 'Omar' } }]} stage={1} fromRoute={false} workAction={props.workAction} onClose={() => {}}/></LanguageProvider>);
  await userEvent.fill(screen.getByLabelText('Card title'), 'اختبار ريل');
  await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Template/ }), 'reel');
  await screen.getByRole('button', { name: 'Create card' }).click();

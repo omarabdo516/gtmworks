@@ -14,6 +14,7 @@ import { columnLabel } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
+import { FirstRunToast } from '@/app/first-run-toast';
 
 // The record as the loaded transcript keeps it current, and how it asks for the reply after a send.
 type Live={record:ConversationRecord,asked:()=>void};
@@ -38,13 +39,13 @@ function newLive():LiveStore {
 // has its reply asked for once it is there. `children` is the transcript (ConversationLoaded), drawn by the server once
 // the record is read. `board` is the chat's Card on the board as the page read it, shown in the corner until the record
 // says where the Card is now.
-export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],children:ReactNode}) {
+export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,first,invites,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],first?:'alone'|'team',invites?:number,children:ReactNode}) {
  const panel=useDetailsPanel();
  const composer=useRef<MessageBoxHandle>(null); const [live]=useState(newLive);
  // The same object for the page's life: a new context value reaching a transcript that still streams in would make React
  // draw it again in the browser and leave the streamed copy hidden in the page (#172, #253).
  const view=useMemo(()=>({slug,agent,company,conversation,writer,suggest:(text:string)=>composer.current?.insert(text),live}),[slug,agent,company,conversation,writer,live]);
- return <ChatView value={view}><div className="convo"><div className="chat">
+ return <ChatView value={view}>{first&&<FirstRunToast mode={first} agent={conversation.agent_name} invites={invites}/>}<div className="convo"><div className="chat">
   <ChatHead panel={panel} slug={slug} agent={agent} conversation={conversation} title={title} writer={writer} board={board}/>
   <Transcript>{children}</Transcript>
   <ChatComposer company={company} conversation={conversation} writer={writer} box={composer}/>

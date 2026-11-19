@@ -146,7 +146,7 @@ test('an invited Member sets a password from the invitation and signs in with it
  await page.request.delete(inbox);
  await page.getByLabel('Email').fill(email);
  await page.getByRole('button',{name:'Send invitation'}).click();
- await expect(page.getByRole('status').filter({hasText:'An invitation link was sent'})).toContainText('An invitation link was sent');
+ await expect(page.getByRole('status').filter({hasText:'Invite sent to'})).toContainText('Invite sent to');
  const link=await emailLink(page,email);
  await context.clearCookies();
  await page.goto(link);

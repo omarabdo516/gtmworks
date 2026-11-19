@@ -10,6 +10,7 @@ import { AgentEmptyChat, type EmptyChat } from '@/app/agent-empty-chat';
 import { PrivateLine } from '@/app/private-line';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import { OpenedMark } from '@/app/agent-made';
+import { FirstRunToast } from '@/app/first-run-toast';
 import Link from '@/lib/link';
 import type { ReadyRole } from '@/lib/ready-roles';
 import type { AgentDetailsView } from '@/app/agent-details-server';
@@ -29,10 +30,11 @@ export type ShownAgent={agent:DetailsAgent,empty:EmptyChat,details:AgentDetailsV
 // Conversation with the picked Agent. `newAgent` (design-reference: openLeadForAgent): the composer is focused, its
 // example is an Agent to ask for, and one hint line above it says Lead makes the Agent right away. `isNew`: an Agent Lead
 // made at this person's request, opened by them for the first time (#13). The hint line also links to the ready-made
-// gallery (#14), which `gallery` opens over the chat (?new=ready); leaving it gives the focus back to the composer.
+// gallery (#14), for every Member who may write (#189), which `gallery` opens over the chat (?new=ready); leaving it gives
+// the focus back to the composer.
 // `askOf`: the Owners a Manager or a Contributor asks for an Agent instead (#17). In a team, a line at the top says the
 // chat is between this person and the Agent only (#25).
-export default function AgentChat({slug,company,agent,details,writer,team=false,empty={state:'known',example:null},newAgent=false,askOf=null,isNew=false,gallery=null,agents=[]}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,empty?:EmptyChat,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[]}|null,agents?:ShownAgent[]}) {
+export default function AgentChat({slug,company,agent,details,writer,team=false,empty={state:'known',example:null},newAgent=false,askOf=null,isNew=false,gallery=null,agents=[],first,invites}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,empty?:EmptyChat,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[],owner:boolean,owners:string[]}|null,agents?:ShownAgent[],first?:'alone'|'team',invites?:number}) {
  const {t,language}=useI18n(); const router=useRouter();
  // One Conversation per Agent, made the first time it is needed: coming back to an Agent whose send failed keeps the
  // Conversation and its send key, so a retry is the same send and the Engine starts nothing twice (#355 review).
@@ -61,7 +63,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
   if(chip.current) chip.current.focus(); else transcript.current?.querySelector<HTMLElement>('.empty-chat h2')?.focus();
  },[picked]);
  const opening=newAgent&&!picked;
- return <div className="convo">
+ return <div className="convo">{first&&agent&&<FirstRunToast mode={first} agent={agent.name} invites={invites}/>}
   <div className="chat">
    <HeadPill panel={panel} agent={current?.name} face={current&&<span aria-hidden="true"><CompanyAgentFace agent={current} size={24}/></span>} title={t('newChat')}/>
    <div className="transcript" ref={transcript}><div className="transcript__col">
@@ -69,8 +71,8 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     {current?<AgentEmptyChat agent={current} empty={shown.empty} askOf={askOf} suggest={writer?text=>box.current?.insert(text):undefined} picker={agents.length>1?{agents:agents.map(choice=>({id:choice.agent.id,connection_id:choice.agent.connection_id,name:choice.agent.name})),onPick:pick,disabled:sending,chipRef:element=>{chip.current=element}}:undefined}/>:<div className="empty-chat"><p role="note">{t('conversationNoAgent')}</p></div>}
    </div></div>
    <div className="composer-area" ref={composer}>{current&&writer&&opening&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{!askOf?t('newAgentHint',current.name):askOf.length?t('newAgentHintMember',current.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHintMemberAnyOwner',current.name)}</p>
-    {!askOf&&<Link className="link-btn new-hint__alt" href={`/c/${slug}/chat?new=ready`}>{t('newAgentReadyMade')}</Link>}</div>}
-    {current&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={current.id} companyName={gallery.company} alone={gallery.alone} lead={current.name} roles={gallery.roles}/></Suspense>}
+    <Link className="link-btn new-hint__alt" href={`/c/${slug}/chat?new=ready`}>{t('newAgentReadyMade')}</Link></div>}
+    {current&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={current.id} companyName={gallery.company} alone={gallery.alone} lead={current.name} roles={gallery.roles} owner={gallery.owner} owners={gallery.owners}/></Suspense>}
     {current&&(writer?<MessageBox key={`${opening}`} ref={box} focus={opening&&!gallery} placeholder={opening?t('newAgentExample'):t('writeTo',current.name)} voice={{company,agent:current.id}} send={async(message,sendKey,files)=>{
     setSending(true);
     const failure=files.length?await postMessageWithFiles({company,conversation,agent:current.id,message,sendKey},files):await postMessage({company,conversation,agent:current.id,message,sendKey});

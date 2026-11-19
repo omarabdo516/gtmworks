@@ -2,5 +2,5 @@
 
 ## Cases
 
-| `company-knowledge.spec.ts` "a Manager fills an empty part, cancels and saves with the keyboard, then clears it back to its empty state; each change is logged" | stays | A real save through the server and a report: a Manager's saves, the unchanged save and the clearing are read back from the fake Engine's shared Skill (#344) with who edited them, each is one log row, and the Activity log names the part. |
+| `company-knowledge.spec.ts` "a Manager fills an empty part, cancels and saves with the keyboard, then clears it back to its empty state; each change is logged" | stays | A real save through the server and a report: a Manager's saves, the unchanged save and the clearing each raise their toast while no inline line is left, a changed page keeps the person there with the focus on Save (#169), each save is read back from the fake Engine's shared Skill (#344) with who edited them, each is one log row, and the Activity log names the part. |
 | `company-knowledge.spec.ts` "a Contributor reads the knowledge with no Edit button, and the server refuses their save" | stays | Permissions: a Contributor reads the knowledge with no Edit button, and the server action refuses their save, which stores and logs nothing. |
