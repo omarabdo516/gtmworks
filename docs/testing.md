@@ -62,9 +62,16 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   archive when it is there and otherwise pull for themselves, without waiting; `visual`, on main only, waits for it. A
   warm cache makes no registry call, the job never fails a run, and each job log ends with how many images the registry
   served.
+- `image` builds the app image once per run, when the browser suite is asked for (#403), with its layers kept between
+  runs (`cache-from`/`cache-to: type=gha,mode=max`), so a change that leaves the dependencies alone restores them. It
+  passes `NEXT_SKIP_CHECKS=true`, so `next build` repeats no lint and no type check `fast` already ran
+  (`next.config.mjs`); a release image and a local build keep both. It uploads the image as the `gtmworks-image`
+  artifact, kept for a day and stored uncompressed. `integration` waits for it and loads that image from the artifact:
+  no shard builds an image of its own, and `check` is red when the build failed or was cancelled.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the functional journeys and
-  first run. It runs as 3 shards at the same time (a matrix passing Playwright's `--shard=<i>/3` to `./ci.sh
-  integration`, #335), each on a GitHub-hosted runner with stacks of its own; the proxy suite runs in shard 1 only, and
+  first run, on the image the `image` job built, loaded from its artifact (a shard builds nothing, #403). It runs as 3
+  shards at the same time (a matrix passing Playwright's `--shard=<i>/3` to `./ci.sh integration`, #335), each on a
+  GitHub-hosted runner with stacks of its own; the proxy suite runs in shard 1 only, and
   each shard uploads its screenshots, report and server logs under its own number. `check` is green only when all three
   shards passed: with fail-fast off, the matrix's one result is red when any shard is (`scripts/ci-verdict.mjs`). All of it runs when the journeys' own area changes: a browser spec or
   its helpers, the fake engines, the Playwright configs, the stacks it runs on (migrations, stack configuration, local
@@ -145,8 +152,9 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
 A pull request that changes only screens runs the fast job with its component tests; the compared screens run on `main`
 and on a manual run only (#257), where a failed comparison uploads its expected, actual and difference images in
 `lane-screenshots` and the `visual-regression` issue links them. A change to the journeys'
-area runs the whole browser suite, and `lib/` outside the catalogues and `worker/` also run the install. Screens alone
-get their journeys and install proof on `main`, where every push runs every suite unless every file is a document.
+area builds the app image once and runs the whole browser suite on it, and `lib/` outside the catalogues and `worker/`
+also run the install. Screens alone get their journeys and install proof on `main`, where every push runs every suite
+unless every file is a document.
 
 The tests that guard money, sign-in, permissions and Company isolation run as follows:
 

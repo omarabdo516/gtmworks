@@ -6,10 +6,11 @@ import { resolve } from 'node:path';
 // The required `check` (#76, like Hermes `all-checks-pass`): a suite the first job did not ask for counts as passed only
 // when it was skipped; a suite it asked for, or one whose need is unknown, must succeed; a failed or cancelled stage is
 // always red. The compared screens are not a stage: they run on main only and never judge a pull request (#257).
-// The fast job's steps (scripts/ci-fast.mjs, #258) are listed one by one, and each must succeed; its component
+// The app image is a stage of its own (#403): it follows the browser suite's own answer and the required check waits for
+// it. The fast job's steps (scripts/ci-fast.mjs, #258) are listed one by one, and each must succeed; its component
 // tests may be skipped only when the first job did not ask for them.
 const script = resolve('scripts/ci-verdict.mjs');
-const stages = ['DATABASE', 'INTEGRATION', 'INSTALL'];
+const stages = ['IMAGE', 'DATABASE', 'INTEGRATION', 'INSTALL'];
 const fastSteps = 'discovery=success docs=success i18n=success openapi=success lint=success typecheck=success knip=success node=success components=success';
 const green = {
   CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true', DRAFT: 'false', LIVE_DRAFT: 'false',
@@ -111,6 +112,13 @@ test('the integration job runs as 3 shards, each uploading its own artifacts, an
   assert.match(ci, /npm run test:e2e -- "\$@"\n/);
 });
 
+test('the image build is judged by the browser suite\'s own answer: failed or cancelled is red, skipped passes only when nothing needed it (#403)', () => {
+  assert.equal(verdict({}), 0);
+  for (const result of ['failure', 'cancelled']) assert.equal(verdict({ IMAGE_RESULT: result }), 1, result);
+  assert.equal(verdict({ IMAGE_RUN: 'false', IMAGE_RESULT: 'skipped' }), 0);
+  for (const run of [undefined, '', 'true']) assert.equal(verdict({ IMAGE_RUN: run, IMAGE_RESULT: 'skipped' }), 1, String(run));
+});
+
 test('check passes with no compared screens at all: a pull request never runs them (#257)', () => {
   assert.equal(verdict({ VISUAL_RUN: undefined, VISUAL_RESULT: undefined, LANE_RUN: undefined, LANE_RESULT: undefined }), 0);
   assert.equal(verdict({ VISUAL_RESULT: 'failure', LANE_RESULT: 'failure' }), 0);
@@ -164,18 +172,25 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
   // The fast job's component step reads this output; without it the step would always run and never be skippable.
   assert.equal(jobs.changes.outputs.components, '${{ steps.classify.outputs.components }}');
-  for (const [job, output] of [['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
+  // The image build follows the browser suite's own answer (#403): its files are the files that need the image.
+  for (const [job, output] of [['image', 'integration'], ['database', 'database'], ['install', 'install']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
     assert.deepEqual(jobs[job].needs, ['changes'], job);
     assert.equal(jobs[job].if, `\${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
   }
+  // The browser suite takes the image the image job built, and does not start when that build failed (#403).
+  assert.deepEqual(jobs.integration.needs, ['changes', 'image']);
+  assert.equal(jobs.integration.if, '${{ !cancelled() && needs.image.result == \'success\' && github.event.pull_request.draft != true && (needs.changes.result != \'success\' || needs.changes.outputs.integration != \'false\') }}');
   // The images job only warms a cache: it cannot fail a run, and check, database and integration do not wait for it (#259).
   assert.equal(jobs['supabase-images']['continue-on-error'], true);
   assert.deepEqual(jobs['supabase-images'].needs, ['changes']);
   const step = jobs.check.steps.at(-1);
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
-  assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'database', 'integration', 'install']);
+  assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'install']);
+  // The image build is judged by what the browser suite asked for, and by the job's own result (#403).
+  assert.equal(step.env.IMAGE_RUN, '${{ needs.changes.outputs.integration }}');
+  assert.equal(step.env.IMAGE_RESULT, '${{ needs.image.result }}');
   for (const key of Object.keys(green)) assert.ok(step.env[key], key);
   assert.deepEqual(Object.keys(step.env).filter(key => /VISUAL|LANE/.test(key)), []);
   // The fast job runs on every change; only its component step follows the first job's answer, and an unknown answer

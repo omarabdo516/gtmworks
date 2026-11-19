@@ -2,7 +2,8 @@
 # needs. The fast job (lint, types, catalogues, unit tests and the screen component tests, #258) runs on every change;
 # its component tests run when the app, its components or its library change. The database tests, the whole-app browser
 # suite (`integration`) and the Docker install run on a pull request only when their own files change, and never on a
-# draft: marking it ready (ready_for_review) starts them, and every later push runs them again (#333). The visual
+# draft: marking it ready (ready_for_review) starts them, and every later push runs them again (#333). The app image is
+# built once per run by its own job, and the browser suite loads that build instead of building its own (#403). The visual
 # lane's key screens and the measured navigation budgets (`visual`) run on a push to main and on a
 # manual run only, never on a pull request, and `check` does not wait for them (Omar, 2026-11-17, #257): a failure on main
 # opens or updates one issue labelled visual-regression. A push to main runs every suite unless every file is a document; a manual
@@ -357,12 +358,48 @@ jobs:
             gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
 
-  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 3
-  # shards at the same time (Playwright's --shard, #335), each on a runner and stacks of its own. The proxy suite runs in
-  # shard 1 only (ci.sh).
-  integration:
+  # The app image, built once per run with its own layer cache (#403). The browser suite's shards load this archive
+  # instead of each building the image again, so one run pays for one build; a change that leaves the dependencies alone
+  # restores them from the cache. Next's build repeats no lint and no type check the fast job already ran
+  # (NEXT_SKIP_CHECKS, next.config.mjs). It follows the browser suite's own answer, so no shard ever waits for an image it
+  # did not ask for.
+  image:
     needs: [changes]
     if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: gtmworks:ci
+          build-args: NEXT_SKIP_CHECKS=true
+          # An archive instead of `load`: the shards are other runners, and only a file can travel as an artifact.
+          outputs: type=docker,dest=${{ runner.temp }}/gtmworks-image.tar
+          cache-from: type=gha,mode=max
+          cache-to: type=gha,mode=max
+      - name: upload the image
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtmworks-image
+          path: ${{ runner.temp }}/gtmworks-image.tar
+          # It is one build's image, read by this run's shards and by nothing later.
+          retention-days: 1
+          # Docker's archive is compressed already.
+          compression-level: 0
+
+  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 3
+  # shards at the same time (Playwright's --shard, #335), each on a runner and stacks of its own. The proxy suite runs in
+  # shard 1 only (ci.sh). The image is the one the image job built (#403): a shard loads it, and no shard builds it.
+  integration:
+    needs: [changes, image]
+    if: ${{ !cancelled() && needs.image.result == 'success' && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
     strategy:
       # Every shard runs to the end, so one red shard still shows the others' failures.
@@ -393,16 +430,14 @@ jobs:
         with:
           path: ${{ runner.temp }}/supabase-images
           key: ${{ steps.images.outputs.key }}
-      - uses: docker/setup-buildx-action@v3
-      - name: build image (layer cache)
-        uses: docker/build-push-action@v6
+      # The image the image job built, loaded under the tag scripts/ci-image.sh runs (#403).
+      - name: download the image
+        uses: actions/download-artifact@v4
         with:
-          context: .
-          load: true
-          push: false
-          tags: gtmworks:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: gtmworks-image
+          path: ${{ runner.temp }}
+      - name: load the image
+        run: docker load --input "$RUNNER_TEMP/gtmworks-image.tar"
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
@@ -849,7 +884,7 @@ jobs:
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, fast, database, integration, install]
+    needs: [changes, fast, image, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -880,6 +915,8 @@ jobs:
           DRAFT: ${{ github.event.pull_request.draft }}
           LIVE_DRAFT: ${{ steps.live.outputs.draft }}
           COMPONENTS_RUN: ${{ needs.changes.outputs.components }}
+          IMAGE_RUN: ${{ needs.changes.outputs.integration }}
+          IMAGE_RESULT: ${{ needs.image.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
           INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
