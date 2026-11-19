@@ -6,6 +6,8 @@ cd "$(dirname "$0")"
 lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
 install_chromium() {
+  # The visual lane's browser and its system packages, as it has always installed them (#257); the browser suite's
+  # shards get theirs from the workflow's cache, and install no system package (#404).
   npx playwright install --with-deps chromium
 }
 start_lanes() {
@@ -120,15 +122,15 @@ case "${1:-check}" in
   npm run test:db
   ;;
  integration)
-  # Any further arguments go to the browser suite; CI passes --shard=<i>/3 (#335), and the proxy suite runs in shard 1 only.
+  # Any further arguments go to the browser suite; CI passes --shard=<i>/6 (#335, #404), and the proxy suite runs in
+  # shard 1 only.
   shift
   proxy=true
   [[ " $* " == *' --shard='* && " $* " != *' --shard=1/'* ]] && proxy=false
+  # CI restores the dependencies and the browser from the fast job's caches before this, and installs Chromium alone on
+  # a miss: the runner image has its system packages and fonts, so nothing here reaches a package mirror (#404). A local
+  # run uses the checkout's own node_modules and browser.
   load_images
-  if [[ "${CI:-}" == "true" ]]; then
-    npm ci
-    install_chromium
-  fi
   images_loaded
   start_lanes
   wait_lanes

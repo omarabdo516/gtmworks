@@ -152,11 +152,11 @@ test('the real config retries a failed browser test once on CI and never locally
  }
 });
 
-// CI runs the browser suite as --shard=<i>/3 (#335): together the three shards list every test exactly once.
-test('the three shards together run every browser test exactly once (#335, #319)', () => {
+// CI runs the browser suite as --shard=<i>/6 (#335, #404): together the six shards list every test exactly once.
+test('the six shards together run every browser test exactly once (#335, #319, #404)', () => {
  const whole = listed(list([], true)).sort();
  assert.ok(whole.length > 0);
- const shards = [1, 2, 3].map(shard => listed(list([`--shard=${shard}/3`], true)));
+ const shards = [1, 2, 3, 4, 5, 6].map(shard => listed(list([`--shard=${shard}/6`], true)));
  for (const shard of shards) assert.ok(shard.length > 0, 'every shard has tests');
  assert.deepEqual(shards.flat().sort(), whole);
 });

@@ -357,9 +357,10 @@ jobs:
             gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
 
-  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 3
-  # shards at the same time (Playwright's --shard, #335), each on a runner and stacks of its own. The proxy suite runs in
-  # shard 1 only (ci.sh).
+  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 6
+  # shards at the same time (Playwright's --shard, #335; six since #404), each on a runner and stacks of its own. The
+  # proxy suite runs in shard 1 only (ci.sh). The browser comes from the cache the fast job keeps: a shard never
+  # downloads a browser or a system package during a run.
   integration:
     needs: [changes]
     if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
@@ -368,8 +369,9 @@ jobs:
       # Every shard runs to the end, so one red shard still shows the others' failures.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
-    # main's browser suite already took 24 of 25 minutes on one runner (run 43398274074); a shard takes about a third.
+        shard: [1, 2, 3, 4, 5, 6]
+    # main's browser suite already took 24 of 25 minutes on one runner (run 43398274074); a shard takes about a sixth,
+    # and the limit leaves room for a slow shard and its stack's start.
     timeout-minutes: 40
     permissions:
       contents: read
@@ -381,9 +383,53 @@ jobs:
           sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
           sysctl net.ipv4.ip_local_reserved_ports
       - uses: actions/setup-node@v4
+        id: node
         with:
           node-version: 22
-          cache: npm
+      # The dependencies and the browser the fast job already saved (#404): one cache entry each, keyed alike, so a shard
+      # starts with both and reaches neither a registry nor a package mirror during a run.
+      - name: restore dependencies
+        id: modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            !node_modules/.vite
+            !node_modules/.cache
+          key: node-modules-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - name: install dependencies
+        if: ${{ steps.modules.outputs.cache-hit != 'true' }}
+        run: npm ci
+      - name: save dependencies
+        if: ${{ steps.modules.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            !node_modules/.vite
+            !node_modules/.cache
+          key: node-modules-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - name: browser version
+        id: browser-version
+        # A new runner image downloads the browser again for itself.
+        run: echo "version=$(node -p "require('playwright-core/package.json').version")-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - name: restore the browser
+        id: browser
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
+      - name: install the browser
+        if: ${{ steps.browser.outputs.cache-hit != 'true' }}
+        # The browser alone, as a hit restores it: the image's own system packages and fonts serve every run alike, so
+        # no shard reaches a package mirror.
+        run: npx playwright install chromium
+      - name: save the browser
+        if: ${{ steps.browser.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
       # The stack's images from the cache the supabase-images job keeps (#259).
       - name: Supabase images cache key
         id: images
@@ -409,7 +455,7 @@ jobs:
           # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69).
           GTMWORKS_TEST_LANES: "4"
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
-        run: ./ci.sh integration --shard=${{ matrix.shard }}/3
+        run: ./ci.sh integration --shard=${{ matrix.shard }}/6
       # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
       - name: upload journey screenshots
         if: always()

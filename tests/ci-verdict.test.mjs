@@ -81,22 +81,22 @@ test('a draft is red when any stage that ran failed or was cancelled', () => {
   }
 });
 
-// The browser suite runs in 3 shards (#335) with fail-fast off: GitHub's one result for the matrix is a failure or
+// The browser suite runs in 6 shards (#335, #404) with fail-fast off: GitHub's one result for the matrix is a failure or
 // cancelled when any shard is, so it alone judges them.
 test('integration is red when one shard failed or was cancelled, green when all passed', () => {
   assert.equal(verdict({ INTEGRATION_RESULT: 'success' }), 0);
   for (const result of ['failure', 'cancelled']) assert.equal(verdict({ INTEGRATION_RESULT: result }), 1, result);
 });
 
-test('the integration job runs as 3 shards, each uploading its own artifacts, and check reads the matrix result (#335)', async () => {
+test('the integration job runs as 6 shards, each uploading its own artifacts, and check reads the matrix result (#335, #404)', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
   const { integration, check } = jobs;
-  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3] } });
+  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6] } });
   const steps = integration.steps;
   const suite = steps.findIndex(step => step.name === 'integration');
-  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/3');
+  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/6');
   // Matrix legs share one outputs namespace, so per-shard outputs could overwrite each other: none are written.
   assert.equal(integration.outputs, undefined);
   const env = check.steps.at(-1).env;
