@@ -248,23 +248,32 @@ esac
  }
 });
 
-// The update of an install the previous release made with one Company adopts its Engine (#385, ADR 0018): the volume and
-// the key are the ones it already had, so its Agents' memory and its sign-in stay and its Engine gets a network of its
-// own. An install with more than one Company is refused before anything changes.
-test('the install job updates a previous release install with one Company, and refuses one with two', () => {
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>/release install and update/.test(step.name||'')).run;
+// The update of an install the release before this one made adopts its Engine (#378, S1, S2): the volume and the key
+// are the ones it already had, so its Agents' memory and its sign-in stay and its Engine gets a network of its own. The
+// previous release is a real install of origin/main's code at this pull request's base, not this release's schema.
+// An install with more than one Company on that schema is refused before anything changes.
+test('the install job updates a real previous-release install with one Company, and refuses one with two', () => {
+ const step=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>/release install and update/.test(step.name||''));
+ const run=step.run;
  const lines=run.split('\n');
  const at=text=>lines.findIndex(line=>line.includes(text));
- // The install is put back into the shape the previous release made: one `hermes` container of the install's Compose
- // project holding the Engine's volume, its key in .env.install, and no .engines/.
- const previous=at('docker run -d --name gtmworks-install-hermes-1');
- assert.ok(previous>=0,run);
- // The key goes back into .env.install and .engines/ goes away before the Engine runs from the install's own Compose
- // project; its record names the address the previous release's app reached it at.
- for(const text of ["printf 'HERMES_API_KEY=%s\\n' \"$key\" >> .env.install",'rm -rf .engines']) assert.ok(at(text)>=0&&at(text)<previous,text);
- assert.ok(at("set address='http://hermes:8642'")>previous&&at("set address='http://hermes:8642'")<at('check-install-proxy.mjs'));
+ assert.equal(step.env.BASE_SHA,'${{ github.event.pull_request.base.sha }}');
+ // The previous release is built from origin/main's code at the base commit, and installed from its own two files.
+ const checkout=at('git worktree add "$RUNNER_TEMP/previous-release" "$base"');
+ assert.ok(checkout>=0,run);
+ const built=at('docker build -q -t localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release"');
+ const installed=at("sh \"$dir/install.sh\" || fail 'the previous release install'");
+ for(const [index,name] of [[built,'the previous release image'],[installed,'the previous release install']]) assert.ok(index>=0,`${name}: ${run}`);
+ assert.ok(built>checkout&&installed>built,'the previous release is built and installed before the update');
+ // Its own shape: no .engines/, its Engine key in .env.install, its one `hermes` service.
+ for(const text of [
+  "[[ $key =~ ^[a-f0-9]{64}$ ]] || fail 'the previous release keeps its Engine key in .env.install'",
+  "[[ ! -e .engines ]] || fail 'the previous release has no Engine folders'",
+  "[[ -n $(docker ps -q --filter 'name=^gtmworks-install-hermes-1$') ]] || fail 'the previous release runs its Engine'",
+ ]) assert.ok(run.includes(text),text);
+ assert.equal(run.includes('docker run -d --name gtmworks-install-hermes-1'),false,'the job no longer fakes a previous release');
  // First run on it, then the fact the Agent was told and the sign-in the Company made, both in the Engine's data.
- const memory=at('/memories/MEMORY.md'),signIn=at('.anthropic_oauth.json'),update=at('sh "$dir/install.sh" update || fail \'release update\'');
+ const memory=at('/memories/MEMORY.md'),signIn=at('.anthropic_oauth.json'),update=at("sh install.sh update || fail 'release update'");
  for(const [index,name] of [[memory,'the memory'],[signIn,'the sign-in']]) assert.ok(index>=0,`the job writes ${name}`);
  assert.ok(memory<update&&signIn<update,'both are written before the update');
  // After it: the adopted Engine (its key, its volume, its own network and container), the memory and the sign-in.
@@ -275,6 +284,7 @@ test('the install job updates a previous release install with one Company, and r
   "== gtmworks-engine-first ]] || fail \"the Engine joins its own network only\"",
   'node /check/check-install-engine-network.mjs',
   "fail 'the container the previous release ran the Engine in is retired'",
+  "|| fail \"the updated install's Company answers from its Engine record with the adopted key\"",
   'check-install-update.mjs',
   "|| fail \"the Agent remembers what it was told and the Company's sign-in still serves\"",
   "sh install.sh || fail 'the install command again'",
@@ -283,21 +293,26 @@ test('the install job updates a previous release install with one Company, and r
  ];
  for(const text of adopted) assert.ok(run.includes(text),text);
  for(const text of adopted) assert.ok(run.indexOf(text)>update,text);
- // An install with two Companies: refused, with the reason, and nothing migrated, replaced or restarted.
- const two=at("insert into public.company_engines (address,key_encrypted) values ('http://gtmworks-engine-first:8642','second-company-probe')");
- assert.ok(two>update,run);
+ // #384: the command reaches that Company's Engine and prints the provider's address, without finishing the sign-in.
+ assert.ok(run.includes('--command --dir "$dir" sign-in claude --company "$company"'),run);
+ assert.ok(run.includes("grep -Eq 'https://(claude\\.ai|console\\.anthropic\\.com)'"),run);
+ // Two Companies on the previous release's schema: refused, with the reason, and nothing migrated, replaced or
+ // restarted. The probe Company is made on main's own companies table, before the update.
+ const two=at("insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000239','release-probe','Release probe');");
+ assert.ok(two>=0&&two<update,run);
  for(const text of [
   "if sh install.sh update > \"$RUNNER_TEMP/several-companies.log\" 2>&1; then",
-  "fail 'an update of an install with two Companies must be refused'",
+  "fail 'an update of a previous release install with two Companies must be refused'",
   "grep -F 'This install has 2 Companies on one Engine.'",
   "grep -F 'Each Company now needs its own Engine'",
   "grep -F 'this release has no path for an install with more than one Company'",
-  "fail 'the refused update replaced the web container'",
+  "fail 'the refused update replaced the previous release web container'",
   "fail 'the refused update left the release it runs'",
-  "fail 'the refused update applied no migration'",
+  "[[ $(db -c \"select to_regclass('public.company_engines') is null\") == t ]] || fail 'the refused update applied no migration'",
   "fail \"$path returned HTTP $status after the refused update (expected 200)\"",
+  "delete from public.companies where id='00000000-0000-4000-8000-000000000239'",
  ]) assert.ok(run.includes(text),text);
- assert.ok(run.indexOf("several_companies_probe")>two,'the refused update names a migration of its own');
+ assert.ok(run.indexOf("delete from public.companies")>two,'the probe Company is removed after the refusal');
 });
 
 // The every-Engine check runs inside the installed web container after every Engine was restored and after an update

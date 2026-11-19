@@ -341,19 +341,24 @@ test('CI updates a release install on a real database, applying a new migration 
   /compose down -v \|\| fail/,
   /registry:2\.8\.3/,
   /docker tag gtmworks-local:237 localhost:5000\/gtmworks:0\.0\.0-ci/,
-  // The next release carries one migration more, which the update must read through the running db's /migrations.
-  /FROM gtmworks-local:237\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
+  // The previous release is origin/main's own code at the pull request's base (#378, S2), built and installed from
+  // its own two release files; the next release carries one migration more, which the update must read through the
+  // running db's /migrations.
+  /git worktree add "\$RUNNER_TEMP\/previous-release" "\$base"/,
+  /docker build -q -t localhost:5000\/gtmworks:0\.0\.0-main "\$RUNNER_TEMP\/previous-release"/,
+  /node scripts\/release-assets\.mjs "\$previous" "\$root\/release-previous"/,
+  /FROM localhost:5000\/gtmworks:0\.0\.0-ci\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
   /node scripts\/release-assets\.mjs "\$first" release-first \|\|/,
   /node scripts\/release-assets\.mjs "\$next" release-next \|\|/,
   /\[\[ \$\(ls -A "\$dir" \| wc -l\) == 2 \]\]/,
-  /sh "\$dir\/install\.sh" \|\| fail 'release install'/,
-  /sh "\$dir\/install\.sh" update \|\| fail 'release update'/,
+  /sh "\$dir\/install\.sh" \|\| fail 'the previous release install'/,
+  /sh install\.sh update \|\| fail 'release update'/,
   /to_regclass\('gtmworks_install\.release_update_probe'\)/,
   /exec -T db ls \/migrations/,
   /\.install-release/,
   /\/api\/health \/sign-in/,
  ]) assert.match(run,pattern);
- assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'release install'"));
+ assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'the previous release install'"));
 });
 
 test('the install job keeps one Docker daemon for both install steps and removes it only after the last', () => {

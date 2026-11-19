@@ -1055,4 +1055,8 @@ test('the README installs with the one line, keeps the source route under From s
  // The line on the README is the one get.sh documents and prints.
  assert.ok(getText.includes(`curl -fsSL https://raw.githubusercontent.com/${repo}/main/scripts/get.sh | sh`));
  assert.match(getText,/GTMWORKS_RELEASES/);
+ // #378 S4: memory lives in the Company's Engine, so no agent can repeat another Company's facts; the memory figure
+ // names the install job's idle-Engine measurement as where it comes from.
+ assert.doesNotMatch(readme,/repeat facts from one company/);
+ assert.match(readme,/install job prints the memory one idle Engine uses/);
 });
