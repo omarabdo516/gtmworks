@@ -1292,5 +1292,19 @@
   "logActIdeaAdded": "added an idea",
   "addedAnIdea": "Added an idea",
   "settingsModelsNotReached": "The new default did not reach {0}.",
-  "settingsModelsRetry": "Send it again"
+  "settingsModelsRetry": "Send it again",
+  "chatDictationSetProvider": "Choose a speech-to-text provider in Settings.",
+  "chatDictationAskOwner": "The Owner can choose one in Settings.",
+  "settingsSpeech": "Speech-to-text",
+  "settingsSpeechHint": "Every Agent writes down what you dictate with this provider, each in its own speaking language. The key goes to the agent engine and isn’t shown again.",
+  "settingsSpeechInUse": "In use · a key is set",
+  "settingsSpeechDeepgram": "Recommended for Arabic: Egyptian Arabic, with the other Arabic dialects to choose from.",
+  "settingsSpeechGroq": "Uses the same key as Groq’s models: it stays for them when you stop using it here, and is removed under Model provider keys.",
+  "settingsSpeechUse": "Use this",
+  "settingsSpeechNone": "No provider yet, so voice dictation is off.",
+  "settingsSpeechOwnerOnly": "Only the Owner chooses the provider and gives its key.",
+  "settingsSpeechMissing": "Not on this provider yet; give the key again to reach:",
+  "settingsSpeechUnread": "Couldn’t read the speech-to-text provider right now.",
+  "settingsVoiceArabicEgypt": "Arabic (Egypt)",
+  "settingsSpeechNotReached": "The change did not reach {0}. Try again."
 }

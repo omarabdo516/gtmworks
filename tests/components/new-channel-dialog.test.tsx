@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import NewChannelDialog from '@/app/new-channel-dialog';
@@ -7,6 +8,8 @@ import { channelChoices, createChannel } from '@/app/channel-actions';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn() }) }));
+// The composer's settings link is the app's Link, which needs Next's router; a plain link stands in.
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/channel-actions', () => ({ channelChoices: vi.fn(), createChannel: vi.fn() }));
 const choices = {
  people: [{ person: 'p-1', name: 'Omar', role: 'owner' as const, invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'manager' as const, invitation: null, email: null }, { person: 'p-4', name: 'Mona', role: 'viewer' as const, invitation: null, email: null }],

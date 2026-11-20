@@ -53,6 +53,9 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
    await audio.play?.()?.catch?.(()=>{});
   } catch { setMissing('noSpeech'); } finally { setLoading(false); }
  };
+ // Arabic on Deepgram is Egyptian (#430); its other Arabic variants are named in the page's own language.
+ const languageLabel=(value:string)=>value==='ar'?t(voice.speech==='deepgram'?'settingsVoiceArabicEgypt':'settingsVoiceArabic'):value==='en'?t('settingsVoiceEnglish'):!value?t('settingsVoiceDetect')
+  :(()=>{ try { return new Intl.DisplayNames([language],{type:'language'}).of(value)||value; } catch { return value; } })();
  const nameOfVoice=(id:string)=>choices?.find(choice=>choice.id===id)?.name||choices?.find(choice=>choice.id===id)?.label||id;
  const shownVoice=(choices&&chosen?nameOfVoice(chosen):null)||voice.voiceName||chosen||null;
  const hint=playing?t('settingsVoiceSays',shownVoice||'—',sample,speed)
@@ -75,8 +78,8 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
    <div className="set-field"><label className="set-label" htmlFor="set-voice-lang">{t('settingsVoiceLang')}</label>
     <select className="set-input vc-select" id="set-voice-lang" value={speaking} aria-describedby="set-voice-lang-hint"
      onChange={event=>{ stop(); setDraftValue('voice.language',event.target.value); }}>
-     {[['ar',t('settingsVoiceArabic')],['en',t('settingsVoiceEnglish')],['',t('settingsVoiceDetect')]].map(([value,label])=><option key={value||'detect'} value={value}>{label}</option>)}
-     {!['ar','en',''].includes(speaking)&&<option value={speaking}>{speaking}</option>}
+     {voice.languages.map(value=><option key={value||'detect'} value={value}>{languageLabel(value)}</option>)}
+     {!voice.languages.includes(speaking)&&<option value={speaking}>{languageLabel(speaking)}</option>}
     </select>
     <span className="set-hint" id="set-voice-lang-hint">{t('settingsVoiceLangHint')}</span></div>
    <div className="set-field"><label className="set-label" htmlFor="set-voice">{t('settingsVoice')}</label>

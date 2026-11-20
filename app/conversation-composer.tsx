@@ -210,7 +210,7 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
    :<button type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!canSend||busy} onClick={()=>void submit()}><ShellIcon name="send"/></button>}
   </div>
   {error&&<p role="alert" className="composer-error">{t(error,maxFiles)}</p>}
-  {dictation.error&&<p role="alert" className="composer-error">{t(dictation.error)}</p>}
+  {dictation.error&&<p role="alert" className="composer-error">{t(dictation.error)}{dictation.help}</p>}
  </div>;
 }
 

@@ -92,6 +92,54 @@ export function ProviderKeys({company,owner,data}:{company:string,owner:boolean,
  </section>;
 }
 
+// The Company's speech-to-text provider (#430): the Owner picks one and pastes its key once, and every Agent transcribes
+// with it in its own speaking language. Deepgram comes first, for Arabic. As with model keys, the value is never drawn
+// back: the field starts empty and is cleared after it is sent. Provider names are their own brands, in either language.
+export type SpeechData={provider:string|null,missing:Named[]|null};
+const speechRows=[['deepgram','Deepgram Nova-3','settingsSpeechDeepgram'],['elevenlabs','ElevenLabs',''],['openai','OpenAI',''],['groq','Groq','settingsSpeechGroq']] as const;
+export function SpeechToText({company,owner,data}:{company:string,owner:boolean,data:SpeechData|null}) {
+ const {t}=useI18n(); const router=useRouter();
+ const [open,setOpen]=useState(''); const [value,setValue]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+ const [missed,setMissed]=useState<string[]>([]);
+ const act=async(provider:string,intent:'set'|'remove')=>{
+  if(busy) return;
+  if(intent==='set'&&value.trim().length<8) { setError('speechInvalid'); return; }
+  setBusy(true); setError('');
+  const answer=await send('/api/speech-provider',{company,provider,intent,...(intent==='set'?{value:value.trim()}:{})});
+  setBusy(false);
+  if(!answer.ok) { setError(answer.error||'speechFailed'); return; }
+  setOpen(''); setValue('');
+  // Agents a write did not reach are named, with no success toast, so the Owner tries again.
+  const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as Named[]).map(item=>item.name||t('settingsModelsAnAgent')):[];
+  setMissed(failed);
+  if(!failed.length) toast(t(intent==='set'?'settingsModelsKeySaved':'settingsModelsKeyRemoved'));
+  router.refresh();
+ };
+ const missing=data?.provider&&data.missing?.length?data.missing.map(item=>item.name||t('settingsModelsAnAgent')):[];
+ return <section className="dp-sec" aria-labelledby="md-h-stt" id="md-stt"><h4 className="dp-label" id="md-h-stt"><span>{t('settingsSpeech')}</span></h4>
+  {data?.missing?<div className="panel-card md-keys">{speechRows.map(([id,label,note])=>{ const on=data.provider===id; return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
+   <div className="panel-row"><ProviderLogo provider={id} name={label} label={label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{label}</bdi></span>
+    <span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):note?t(note):''}</span></span>
+    {owner&&on&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',label)} onClick={()=>act(id,'remove')}>{t('settingsModelsKeyRemove')}</button>}
+    {owner&&<button type="button" className="link-btn" aria-expanded={open===id} aria-controls={`mdl-stt-${id}-form`} onClick={()=>{ setOpen(open===id?'':id); setValue(''); setError(''); }}>{t(on?'settingsModelsKeyReplace':'settingsSpeechUse')}</button>}
+   </div>
+   {owner&&open===id&&<div className="sub-step" id={`mdl-stt-${id}-form`}>
+    <label className="set-label" htmlFor={`mdl-stt-${id}-value`}>{t('settingsModelsKeyValue')}</label>
+    <input className="set-input" id={`mdl-stt-${id}-value`} type="password" dir="ltr" autoComplete="new-password" spellCheck={false} value={value} disabled={busy}
+     onChange={event=>setValue(event.target.value)} onKeyDown={event=>{ if(event.key==='Enter') act(id,'set'); }}/>
+    <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={()=>act(id,'set')}>{t('settingsModelsKeySave')}</button></div>
+   </div>}
+  </div>; })}</div>
+  :<div className="panel-card"><p className="panel-empty">{t(data?'settingsSpeechUnread':'settingsModelsKeyNoEngine')}</p></div>}
+  {data?.missing&&!data.provider&&<p className="set-hint" id="mdl-stt-none">{t('settingsSpeechNone')}</p>}
+  {error&&<p className="set-err" role="alert">{t(error==='speechNotAllowed'?'settingsSpeechOwnerOnly':'settingsModelsKeyError')}</p>}
+  {missed.length>0&&<p className="set-err" role="alert">{t('settingsSpeechNotReached',missed.join(', '))}</p>}
+  {!owner&&<p className="set-hint">{t('settingsSpeechOwnerOnly')}</p>}
+  {owner&&missing.length>0&&<ul className="set-hint md-waiting">{missing.map((name,at)=><li key={at}>{t('settingsSpeechMissing')} <bdi>{name}</bdi></li>)}</ul>}
+  <p className="set-hint">{t('settingsSpeechHint')}</p>
+ </section>;
+}
+
 // The Company's default model: the Engine's list for the Company's shared space. The Owner chooses one; every other
 // member reads the choice with the default marked.
 export function DefaultModel({company,owner,models}:{company:string,owner:boolean,models:ModelsData['default']}) {

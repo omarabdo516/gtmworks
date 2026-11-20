@@ -21,6 +21,7 @@ import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { readCompanyModels } from '@/lib/engine-settings.mjs';
 import { readCompanyKeys } from '@/lib/provider-keys.mjs';
+import { readCompanySpeech } from '@/lib/company-speech.mjs';
 import { readAgentAbout, type AgentAbout } from '@/lib/agent-about.mjs';
 import { readAgentSkills } from '@/lib/company-skills.mjs';
 import { readCompanyLearning } from '@/lib/company-learning.mjs';
@@ -29,7 +30,7 @@ import { LearningSection } from './settings-learning';
 import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, DefaultEffort, ProviderKeys, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
+import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -79,6 +80,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
  const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;
  const keys=section==='models'?await (async()=>{ try { return await readCompanyKeys(db,service(),{company:company.id}); } catch { return null; } })():null;
+ const speech=section==='models'?await readCompanySpeech(db,{company:company.id}).catch(()=>({provider:null,missing:null})):null;
  // The token use of the period, read from each Company's Agents' profiles in the bundled Engine (#347, #32): the
  // Owner and the Managers see every Company they manage, the same read the database checks.
  const usageRows=section==='usage'?await managedUsage(userId,query.period==='30'?30:7):[];
@@ -124,7 +126,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
   :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} companyName={company.name} owner={owner} subscriptions={subscriptions}/>}
-    keys={<ProviderKeys company={company.id} owner={owner} data={keys}/>}
+    keys={<><ProviderKeys company={company.id} owner={owner} data={keys}/><SpeechToText company={company.id} owner={owner} data={speech}/></>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}
     defaultEffort={<DefaultEffort/>}/>;

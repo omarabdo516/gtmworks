@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import { ProviderKeys, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
+import { ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { ToastHost } from '@/app/toast';
 import en from '@/lib/messages/en.json';
@@ -58,6 +58,44 @@ test('the Owner gives a provider key: it is sent once and never drawn, and each 
   expect(document.querySelector('#mdl-key-row-openrouter button')).toBeNull();
   await expect.element(page.getByText(ar.settingsModelsKeyOwnerOnly)).toBeVisible();
   await expect.element(page.getByText(ar.settingsModelsKeySet, { exact: true })).toBeVisible();
+});
+
+// #430: the Company's speech-to-text provider. Deepgram is first; the Owner picks one and pastes its key, which is sent
+// once and never drawn; the provider in use can be removed; a member reads which one is in use with no control.
+test('the Owner picks a speech-to-text provider with its key, Deepgram first; a member only reads it', async () => {
+  const sent = stub({ provider: 'deepgram', missing: [] });
+  const screen = await renderNode(<SpeechToText company={company} owner data={{ provider: null, missing: [] }}/>);
+  expect([...document.querySelectorAll('#md-stt .md-key')].map(row => row.id)).toEqual(['mdl-stt-row-deepgram', 'mdl-stt-row-elevenlabs', 'mdl-stt-row-openai', 'mdl-stt-row-groq']);
+  await expect.element(screen.getByText(en.settingsSpeechNone)).toBeVisible();
+  await expect.element(screen.getByText(en.settingsSpeechDeepgram)).toBeVisible();
+  await page.elementLocator(document.querySelector('#mdl-stt-row-deepgram .link-btn')!).click();
+  await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
+  await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toEqual({ url: '/api/speech-provider', body: { company, provider: 'deepgram', intent: 'set', value: key } });
+  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  expect(document.body.textContent).not.toContain(key);
+  await screen.unmount();
+  const used = await renderNode(<SpeechToText company={company} owner data={{ provider: 'deepgram', missing: [{ agent: 'a-1', name: 'Writer' }] }}/>);
+  await expect.element(used.getByText(en.settingsSpeechInUse)).toBeVisible();
+  await expect.element(used.getByText(new RegExp(en.settingsSpeechMissing))).toBeVisible();
+  await used.getByRole('button', { name: 'Remove the Deepgram Nova-3 key' }).click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toEqual({ url: '/api/speech-provider', body: { company, provider: 'deepgram', intent: 'remove' } });
+  await used.unmount();
+  await renderNode(<SpeechToText company={company} owner={false} data={{ provider: 'deepgram', missing: [] }}/>, 'ar');
+  expect(document.querySelector('#md-stt input')).toBeNull();
+  expect(document.querySelector('#md-stt button')).toBeNull();
+  await expect.element(page.getByText(ar.settingsSpeechOwnerOnly)).toBeVisible();
+  await expect.element(page.getByText(ar.settingsSpeechInUse)).toBeVisible();
+});
+
+test('a speech-to-text change that misses an Agent names it and says to try again, with no success toast', async () => {
+  stub({ provider: 'deepgram', missing: [], failed: [{ agent: 'a-1', name: 'Writer' }] });
+  const screen = await renderNode(<><ToastHost/><SpeechToText company={company} owner data={{ provider: 'deepgram', missing: [] }}/></>);
+  await screen.getByRole('button', { name: 'Remove the Deepgram Nova-3 key' }).click();
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(en.settingsSpeechNotReached.replace('{0}', 'Writer'));
+  expect(screen.container.textContent).not.toContain(en.settingsModelsKeyRemoved);
 });
 
 test('the Company default is the Engine\'s list for its space: the Owner picks one, every other member reads it', async () => {
