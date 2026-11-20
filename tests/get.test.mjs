@@ -58,6 +58,7 @@ esac
 [ -f .env.install ] || echo "SECRET=$$" > .env.install
 rm -f .install-release
 if [ "$release_image" = "\${DIE_REF:-}" ]; then cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"; kill -9 "$PPID"; kill -9 $$; fi
+if [ "$release_image" = "\${LATE_FAIL_REF:-}" ]; then cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"; printf '%s\\n' "$release_image" > .install-release; echo 'setup_is_open returned 502' >&2; exit 5; fi
 if [ "$op" = update ] && [ "$release_image" = "\${PUT_BACK_FAIL_REF:-}" ]; then echo 'Error: http://gateway:8080/api/health returned 503' >&2; exit 4; fi
 if [ "$release_image" = "\${FAIL_REF:-}" ]; then
  [ -z "\${FAIL_AFTER_MIGRATE:-}" ] || cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"
@@ -1229,6 +1230,15 @@ test('the line puts the updater in cron where systemd user units are missing, on
  assert.match(m.gtmworks(['status']).stdout,/^Updater: cron, every minute$/m);
 });
 
+test('a PATH with spaces and % reaches cron and systemd whole, each value quoted and % escaped', t => {
+ const m=machine(t);
+ const path=`${m.env.PATH}:/mnt/c/Program Files/Docker 100%`;
+ ok(m.line(['--version','v1.2.3'],{extra:{PATH:path}}));
+ assert.equal(m.crontab().trim(),`* * * * * 'PATH=${path.replace('%','\\%')}' '${join(m.home,'.local/bin/gtmworks')}' updater > /dev/null 2>&1 # gtmworks updater`);
+ ok(m.gtmworks(['install'],{extra:{PATH:path,SYSTEMD_USER:'1'}}));
+ assert.match(readFileSync(join(m.home,'.config/systemd/user/gtmworks-updater.service'),'utf8'),new RegExp(`^Environment="PATH=${path.replace('%','%%').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}"$`,'m'));
+});
+
 test('where systemd user units exist the updater is a user timer, and the line says how to keep it running signed out', t => {
  const m=machine(t);
  const installed=m.line(['--version','v1.2.3'],{extra:{SYSTEMD_USER:'1'}});
@@ -1353,6 +1363,15 @@ test('a failed update shows the version still running: put back by the update, o
  assert.deepEqual(m.updates(),['read ','updating ','failed v1.2.3']);
  assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
  assert.equal(m.file('.install-release'),`${ref('v1.2.3')}\n`);
+ // The new version came up healthy and recorded itself, then a later step failed: it stays, and no backup goes back.
+ m.setRow('button=t auto=f state=requested due=t');
+ m.clear(); m.clearUpdates();
+ const late=m.gtmworks(['updater'],{extra:{LATE_FAIL_REF:ref('v1.10.0')}});
+ assert.equal(late.status,1);
+ assert.ok(!m.installer().some(line=>/ restore /.test(line)),m.installer().join('\n'));
+ assert.deepEqual(m.updates(),['read ','updating ','updated v1.10.0']);
+ assert.match(late.stderr,/came up healthy, then the update stopped on a later step/);
+ ok(m.gtmworks(['restore',join(m.dir,'backups/gtmworks-test.tgz'),'--version','v1.2.3','--yes']),'back to v1.2.3 for the next case');
  // An update still marked running when an updater starts was stopped with the machine: it is failed, nothing runs.
  m.setRow('button=t auto=f state=updating due=f');
  m.clear(); m.clearUpdates();

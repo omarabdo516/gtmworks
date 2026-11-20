@@ -817,9 +817,16 @@ ROW
     fi
     return 0
   fi
-  # The update records the release it runs only once it serves healthy: another record means the new version started and
-  # did not come up, after its migrations may have run, so the backup it took goes back with the version from before.
-  if [ "$(cat .install-release 2> /dev/null || true)" != "$before" ]; then
+  # The update records the release it runs only once it serves healthy. A new record means the new version came up and
+  # something after it failed: it stays. No record means it started and did not come up, after its migrations may have
+  # run, so the backup it took goes back with the version from before.
+  after=$(cat .install-release 2> /dev/null || true)
+  if [ -n "$after" ] && [ "$after" != "$before" ]; then
+    updates updated "$(running_version)" > /dev/null || true
+    say "gtmworks $(running_version) came up healthy, then the update stopped on a later step: see $log." >&2
+    return 1
+  fi
+  if [ -z "$after" ]; then
     archive=$(sed -n 's/^Backup: //p' "$log" | tail -n 1)
     if [ -n "$archive" ] && [ -n "$back" ] \
       && sh "$dir/gtmworks.sh" --command --dir "$dir" restore "$archive" --version "$back" --yes >> "$log" 2>&1; then
@@ -857,14 +864,15 @@ updater_kind() {
 # every install and update, removed by nothing.
 install_updater() {
   command=$HOME/.local/bin/gtmworks
-  environment="PATH=$PATH"
-  [ -z "${DOCKER_HOST:-}" ] || environment="$environment DOCKER_HOST=$DOCKER_HOST"
+  # Each value whole, one per line: a PATH may hold spaces (WSL's /mnt/c/Program Files) or `%`, which cron reads as a
+  # newline and systemd as a specifier.
+  environment=$(printf 'PATH=%s\n' "$PATH"; [ -z "${DOCKER_HOST:-}" ] || printf 'DOCKER_HOST=%s\n' "$DOCKER_HOST")
   if systemctl --user show-environment > /dev/null 2>&1; then
     units=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
     mkdir -p "$units"
     {
       printf '%s\n' '[Unit]' 'Description=gtmworks updater: Update now and automatic updates' '' '[Service]' 'Type=oneshot'
-      for pair in $environment; do printf 'Environment="%s"\n' "$pair"; done
+      printf '%s\n' "$environment" | sed 's/%/%%/g; s/["\\]/\\&/g; s/.*/Environment="&"/'
       printf 'ExecStart="%s" updater\n' "$command"
     } > "$units/gtmworks-updater.service"
     printf '%s\n' '[Unit]' 'Description=Run the gtmworks updater every minute' '' '[Timer]' 'OnBootSec=1min' 'OnUnitActiveSec=1min' '' \
@@ -879,7 +887,7 @@ install_updater() {
     fi
     say 'The gtmworks updater runs every minute (a systemd user timer): Update now, and automatic updates (gtmworks auto-update on).'
   elif command -v crontab > /dev/null 2>&1; then
-    entry="* * * * * $(for pair in $environment; do printf '%s ' "$(quote "$pair")"; done)$(quote "$command") updater > /dev/null 2>&1 # gtmworks updater"
+    entry="* * * * * $(printf '%s\n' "$environment" | while IFS= read -r pair; do printf '%s ' "$(quote "$pair")"; done | sed 's/%/\\%/g')$(quote "$command") updater > /dev/null 2>&1 # gtmworks updater"
     # The table is read whole before it is written back: the other lines in it stay as they were.
     table=$(crontab -l 2> /dev/null | grep -vF '# gtmworks updater' || true)
     if ! { [ -z "$table" ] || printf '%s\n' "$table"; printf '%s\n' "$entry"; } | crontab - > /dev/null 2>&1; then

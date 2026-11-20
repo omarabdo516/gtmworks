@@ -26,7 +26,9 @@ create function public.install_update() returns json language sql stable securit
    from (select 1) one left join public.install_updates u on u.singleton)
  end;
 $$;
--- An Owner asks for an update while the button is on; asking again while one is waiting or running changes nothing.
+-- An Owner asks for an update while the button is on; asking again while one is waiting or running changes nothing. For
+-- an hour after a failed update a new request is refused: each failure that ran migrations puts the backup back, and
+-- clicking again should not repeat that cycle while the same release is still the newest.
 -- Nothing of the request but its time and its Owner is kept: the updater never reads a version from here.
 create function public.request_install_update() returns text language plpgsql security definer set search_path='' as $$
 declare now_state text;
@@ -36,6 +38,9 @@ begin
  end if;
  insert into public.install_updates default values on conflict do nothing;
  if not (select button from public.install_updates) then raise exception 'updateButtonOff' using errcode='42501'; end if;
+ if exists(select 1 from public.install_updates where state='failed' and changed_at > now() - interval '1 hour') then
+  raise exception 'updateFailedRecently' using errcode='42501';
+ end if;
  update public.install_updates set state='requested', requested_by=auth.uid(), changed_at=now()
   where state not in ('requested','updating');
  select state into now_state from public.install_updates;

@@ -18,6 +18,6 @@ export async function POST(request:NextRequest) {
  if(!user||!await routeAllowed(db,'app/api/install-update/route.ts','POST',undefined,user.id)) return reply({error:'updateNotAllowed'},401);
  if(crossSiteWrite(request.headers)) return reply({error:'updateNotAllowed'},403);
  const {data,error}=await db.rpc('request_install_update');
- if(error) return error.code==='42501'?reply({error:error.message==='updateButtonOff'?'updateButtonOff':'updateNotAllowed'},403):reply({error:'updateRequestFailed'},503);
+ if(error) return error.code==='42501'?reply({error:['updateButtonOff','updateFailedRecently'].includes(error.message)?error.message:'updateNotAllowed'},403):reply({error:'updateRequestFailed'},503);
  return reply({state:data});
 }

@@ -1329,5 +1329,6 @@
   "updateFailedUnknown": "التحديث منجحش. اطلب من اللي مثبّت gtmworks يشغّل: gtmworks status",
   "updateReload": "حمّل الصفحة تاني",
   "updateRequestFailed": "مقدرناش نطلب التحديث. جرّب تاني.",
-  "updateButtonOff": "زرار التحديث مقفول على السيرفر ده. اطلب من اللي مثبّت gtmworks يشغّل: gtmworks update"
+  "updateButtonOff": "زرار التحديث مقفول على السيرفر ده. اطلب من اللي مثبّت gtmworks يشغّل: gtmworks update",
+  "updateFailedRecently": "آخر تحديث منجحش من أقل من ساعة. جرّب تاني بعدين، أو اطلب من اللي مثبّت gtmworks يشغّل: gtmworks status"
 }

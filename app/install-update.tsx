@@ -28,7 +28,7 @@ export default function InstallUpdate({offer=false,initial}:{offer?:boolean,init
  const [seen,setSeen]=useState<string|null>(()=>{ try { return localStorage.getItem(seenKey); } catch { return null; } });
  const [asking,setAsking]=useState(false);
  const [pending,setPending]=useState(false);
- const [problem,setProblem]=useState<'updateRequestFailed'|'updateButtonOff'|null>(null);
+ const [problem,setProblem]=useState<'updateRequestFailed'|'updateButtonOff'|'updateFailedRecently'|null>(null);
  // Read on mount, and on a steady beat while an update runs: a read that fails while gtmworks is down changes nothing, and
  // the next one asks again.
  useEffect(()=>{
@@ -51,7 +51,7 @@ export default function InstallUpdate({offer=false,initial}:{offer?:boolean,init
    const response=await fetch('/api/install-update',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
    const body=await response.json().catch(()=>({})) as {state?:InstallUpdateState['state'],error?:string};
    if(response.ok&&body.state) { setAsking(false); setUpdate({...update,state:body.state,changedAt:new Date().toISOString()}); }
-   else setProblem(body.error==='updateButtonOff'?'updateButtonOff':'updateRequestFailed');
+   else setProblem(body.error==='updateButtonOff'||body.error==='updateFailedRecently'?body.error:'updateRequestFailed');
   } catch { setProblem('updateRequestFailed'); }
   setPending(false);
  };

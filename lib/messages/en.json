@@ -1329,5 +1329,6 @@
   "updateFailedUnknown": "The update failed. Ask whoever installed gtmworks to run: gtmworks status",
   "updateReload": "Reload",
   "updateRequestFailed": "The update couldn’t be asked for. Try again.",
-  "updateButtonOff": "Update now is turned off on this server. Ask whoever installed gtmworks to run: gtmworks update"
+  "updateButtonOff": "Update now is turned off on this server. Ask whoever installed gtmworks to run: gtmworks update",
+  "updateFailedRecently": "The last update failed less than an hour ago. Try again later, or ask whoever installed gtmworks to run: gtmworks status"
 }
