@@ -100,7 +100,7 @@ test('a project is created, a card is filed into it, and the board and list show
    await expect(page.getByRole('form',{name,exact:true})).toBeVisible();
    await shoot(page,`projects-page-${language}`);
    await page.goto('/c/rs-learning/work/board');
-   await page.locator('.work-filters select[data-toolbar-control]').selectOption({label:name});
+   await page.locator('.work-filters').getByLabel({en:'Project',ar:'المشروع'}[language],{exact:true}).selectOption({label:name});
    await expect(page.locator('.card')).toHaveCount(1);
    await shoot(page,`projects-board-${language}`);
    await page.locator('.card a').first().click();

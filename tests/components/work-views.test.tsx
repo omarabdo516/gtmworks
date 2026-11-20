@@ -12,28 +12,52 @@ vi.mock('@/lib/link', () => ({ default: ({ prefetch: _prefetch, scroll: _scroll,
 vi.mock('@/app/c/[slug]/[[...section]]/skill-actions', () => ({ decideAgentRule: vi.fn(), answerAgentRequest: vi.fn() }));
 vi.mock('@/app/note-actions', () => ({ editNote: vi.fn() }));
 
-// Card 1 is dated in November 2026; card 2 has no date, and a month filter keeps it.
-const cards = [card({ go_live: '2026-11-12T12:00:00+00:00' }), card({ id: 2, title: 'Undated', go_live: null })];
+// Card 1 is dated in November 2026, card 3 in December 2026; card 2 has no date, and a month filter keeps it.
+const cards = [card({ go_live: '2026-11-12T12:00:00+00:00' }), card({ id: 2, title: 'Undated', go_live: null }), card({ id: 3, title: 'December card', go_live: '2026-12-01T12:00:00+00:00' })];
 
 test('the board\'s month filter hides a Card dated in another month and keeps an undated one; clearing it brings the Card back', async () => {
  const screen = await showWork(workProps({ cards }));
  const dated = () => document.querySelectorAll('#board-cols .kcard[data-card-id="1"]').length;
  expect(dated()).toBe(1);
- await userEvent.fill(screen.getByLabelText('Month'), '2000-01');
+ await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
  await expect.poll(dated).toBe(0);
  expect(document.querySelectorAll('#board-cols .kcard[data-card-id="2"]')).toHaveLength(1);
- await userEvent.fill(screen.getByLabelText('Month'), '');
+ expect(document.querySelectorAll('#board-cols .kcard[data-card-id="3"]')).toHaveLength(1);
+ await userEvent.selectOptions(screen.getByLabelText('Month'), '');
  await expect.poll(dated).toBe(1);
+});
+
+// #453: the empty Month filter reads All months in the board's own style, not the browser's raw month placeholder.
+test('the board\'s Month filter, with no month chosen, reads "All months" in English', async () => {
+ const screen = await showWork(workProps({ cards }));
+ const select = screen.getByRole('combobox', { name: 'Month' }).element() as HTMLSelectElement;
+ await expect.element(screen.getByRole('combobox', { name: 'Month' })).toHaveValue('');
+ expect(select.selectedOptions[0].textContent).toBe('All months');
+});
+
+test('the board\'s Month filter, with no month chosen, reads "كل الشهور" in Arabic', async () => {
+ const screen = await showWork(workProps({ cards }), { language: 'ar' });
+ const select = screen.getByRole('combobox', { name: 'الشهر' }).element() as HTMLSelectElement;
+ await expect.element(screen.getByRole('combobox', { name: 'الشهر' })).toHaveValue('');
+ expect(select.selectedOptions[0].textContent).toBe('كل الشهور');
+});
+
+test('the board\'s Month filter lists each month of the Cards, newest first, after All months', async () => {
+ const screen = await showWork(workProps({ cards }));
+ const select = screen.getByRole('combobox', { name: 'Month' });
+ await expect.element(select).toBeVisible();
+ expect([...(select.element() as HTMLSelectElement).options].map(option => option.textContent)).toEqual(['All months', 'December 2026', 'November 2026']);
 });
 
 test('the List filters by month too, and a row\'s title opens its Card', async () => {
  const screen = await showWork(workProps({ section: 'work/list', cards }));
- const row = () => document.querySelectorAll('.table tbody tr a[href="/c/rs-learning/work/board/1"]').length;
+ const row = (id: number) => document.querySelectorAll(`.table tbody tr a[href="/c/rs-learning/work/board/${id}"]`).length;
  await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' })).toHaveAttribute('href', '/c/rs-learning/work/board/1');
- await userEvent.fill(screen.getByLabelText('Month'), '2000-01');
- await expect.poll(row).toBe(0);
- await userEvent.fill(screen.getByLabelText('Month'), '');
- await expect.poll(row).toBe(1);
+ await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
+ await expect.poll(() => row(1)).toBe(0);
+ expect(row(3)).toBe(1);
+ await userEvent.selectOptions(screen.getByLabelText('Month'), '');
+ await expect.poll(() => row(1)).toBe(1);
 });
 
 test('the Calendar shows a Card on its publishing day in its month, linking to the Card', async () => {
@@ -283,17 +307,17 @@ test('the reader\'s own Waiting on you draws a Card whose chat waits once, in pl
 
 // A filter that leaves the Card out leaves its chat's step drawn on its own, as before #146, and counted once.
 test('a hand whose Card a filter leaves off the board is drawn as its own row, and every count names what is drawn once', async () => {
- const screen = await showWork(workProps({ cards: [chatCard()], members, waiting: [handed] }));
+ const screen = await showWork(workProps({ cards: [chatCard(), card({ id: 7, title: 'December card', stage_id: 1, go_live: '2026-12-01T12:00:00+00:00' })], members, waiting: [handed] }));
  const column = () => document.querySelector('.col[data-column="waiting"]')!;
  const rows = () => [...column().querySelectorAll('a.mcard')].map(item => item.getAttribute('href'));
  const counts = () => [column().querySelector('.col__count')!.textContent, document.querySelector('.board-tools__summary')!.textContent];
  expect(column().querySelectorAll('.kcard[data-card-id="9"]')).toHaveLength(1);
  expect([rows(), counts()]).toEqual([[], ['1', '1 things waiting on you']]);
- await userEvent.fill(screen.getByLabelText('Month'), '2000-01');
+ await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
  await expect.poll(rows).toEqual(['/c/rs-learning/conversations/c-9#hand-42']);
  expect(document.querySelectorAll('#board-cols .kcard[data-card-id="9"]')).toHaveLength(0);
  expect(counts()).toEqual(['1', '1 things waiting on you']);
- await userEvent.fill(screen.getByLabelText('Month'), '');
+ await userEvent.selectOptions(screen.getByLabelText('Month'), '');
  await expect.poll(rows).toEqual([]);
  expect(column().querySelectorAll('.kcard[data-card-id="9"]')).toHaveLength(1);
  expect(counts()).toEqual(['1', '1 things waiting on you']);
@@ -326,11 +350,11 @@ test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop 
 test('the badge of a Card that starts waiting on the reader shakes once, and not on the first read or the next', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  try {
-  const before = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 }), card({ id: 5, title: 'Review the reel', stage_id: 4 })], members, approvableIds: [5] });
+  const before = workProps({ cards: [card({ id: 9, title: 'مقال المحاسبة', stage_id: 3 }), card({ id: 5, title: 'Review the reel', stage_id: 4 }), card({ id: 7, title: 'December card', stage_id: 1, go_live: '2026-12-01T12:00:00+00:00' })], members, approvableIds: [5] });
   const screen = await showWork(before);
   const badge = (id: number) => document.querySelector(`.kcard[data-card-id="${id}"] .badge`)!;
   expect(badge(5).className).toBe('badge badge--wait');
-  const after = { ...before, cards: [chatCard(), before.cards[1]], waiting: [handed] };
+  const after = { ...before, cards: [chatCard(), before.cards[1], before.cards[2]], waiting: [handed] };
   await screen.rerender(workView(after));
   await expect.poll(() => badge(9)?.className).toBe('badge badge--wait is-new');
   expect(getComputedStyle(badge(9)).animationName).toBe('gw-nudge');
@@ -339,9 +363,9 @@ test('the badge of a Card that starts waiting on the reader shakes once, and not
   await expect.poll(() => badge(9).className).toBe('badge badge--wait');
   await screen.rerender(workView({ ...after, items: [] }));
   expect(badge(9).className).toBe('badge badge--wait');
-  await userEvent.fill(screen.getByLabelText('Month'), '2000-01');
+  await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
   await expect.poll(() => document.querySelector('.kcard[data-card-id="9"]')).toBeNull();
-  await userEvent.fill(screen.getByLabelText('Month'), '');
+  await userEvent.selectOptions(screen.getByLabelText('Month'), '');
   await expect.poll(() => badge(9)?.className).toBe('badge badge--wait');
  } finally { vi.useRealTimers(); }
 });
