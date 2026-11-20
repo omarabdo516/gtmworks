@@ -11,6 +11,8 @@ import { installJob } from './install-job.mjs';
 // Every release publishes one tested image and a GitHub Release whose compose file and install script are all an
 // install needs (#49). The source install keeps building from a checkout until a later ticket switches it.
 const app='ghcr.io/omarabdo516/gtmworks:1.2.3@sha256:'+'a'.repeat(64);
+// The work sandbox image every Company's sandbox runs (#392): a second image of the same release, pinned the same way.
+const sandbox='ghcr.io/omarabdo516/gtmworks-sandbox:1.2.3@sha256:'+'b'.repeat(64);
 const sourceCompose=readFileSync('docker-compose.install.yml','utf8');
 const sourceInstaller=readFileSync('scripts/install.sh','utf8');
 const pinnedImages=load(sourceCompose).services;
@@ -76,26 +78,45 @@ test('the release compose file refuses an app reference without a digest', () =>
 test('the release files are written together from the source files alone', t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-assets-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
- writeReleaseAssets(app,directory);
+ writeReleaseAssets(app,directory,sandbox);
  assert.deepEqual(readdirSync(directory).sort(),['docker-compose.install.yml','install.sh']);
  assert.equal(readFileSync(join(directory,'docker-compose.install.yml'),'utf8'),releaseCompose(sourceCompose,app));
- assert.equal(readFileSync(join(directory,'install.sh'),'utf8'),releaseInstaller(sourceInstaller,app));
+ assert.equal(readFileSync(join(directory,'install.sh'),'utf8'),releaseInstaller(sourceInstaller,app,sandbox));
+});
+
+// The work sandbox image is fetched with the release, the way the app image is (#392, ADR 0020): a release names it by
+// tag and a digest, so a tag pushed again cannot change what every Company's sandbox runs. A source checkout builds it.
+test('a release pins the work sandbox image every Company runs, by tag and digest', t => {
+ const script=releaseInstaller(sourceInstaller,app,sandbox);
+ assert.match(script,/^sandbox_image=ghcr\.io\/omarabdo516\/gtmworks-sandbox:1\.2\.3@sha256:b{64}$/m);
+ assert.throws(()=>releaseInstaller(sourceInstaller,app,'ghcr.io/omarabdo516/gtmworks-sandbox:1.2.3'),/digest/);
+ assert.throws(()=>releaseInstaller(sourceInstaller,app),/digest/);
+ const local='localhost:5000/gtmworks-sandbox@sha256:'+'d'.repeat(64);
+ assert.match(releaseInstaller(sourceInstaller,app,local),new RegExp(`^sandbox_image=${local.replace(/[.]/g,'\\.')}$`,'m'));
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-assets-sandbox-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ assert.throws(()=>writeReleaseAssets(app,directory,'gtmworks-sandbox:latest'),/digest/);
+ assert.equal(readdirSync(directory).length,0,'nothing is written when the sandbox image is not pinned');
 });
 
 test('a release can name a registry with a port', () => {
  const local='localhost:5000/gtmworks@sha256:'+'d'.repeat(64);
+ const localSandbox='localhost:5000/gtmworks-sandbox@sha256:'+'d'.repeat(64);
  assert.match(releaseCompose(sourceCompose,local),new RegExp(`image: ${local.replace(/[.]/g,'\\.')}\\n`));
- assert.match(releaseInstaller(sourceInstaller,local),new RegExp(`^release_image=${local.replace(/[.]/g,'\\.')}$`,'m'));
+ assert.match(releaseInstaller(sourceInstaller,local,localSandbox),new RegExp(`^release_image=${local.replace(/[.]/g,'\\.')}$`,'m'));
+ assert.match(releaseInstaller(sourceInstaller,local,localSandbox),new RegExp(`^sandbox_image=${localSandbox.replace(/[.]/g,'\\.')}$`,'m'));
  assert.throws(()=>releaseCompose(sourceCompose,'gtmworks@sha256:'+'d'.repeat(64)),/digest/);
 });
 
-test('the release install script is the source installer with the released image set, and nothing else', () => {
- const script=releaseInstaller(sourceInstaller,app);
+test('the release install script is the source installer with the released image and its work sandbox image set, and nothing else', () => {
+ const script=releaseInstaller(sourceInstaller,app,sandbox);
  const changed=script.split('\n').filter((line,index)=>line!==sourceInstaller.split('\n')[index]);
- assert.deepEqual(changed,[`release_image=${app}`]);
+ assert.deepEqual(changed,[`release_image=${app}`,`sandbox_image=${sandbox}`]);
  assert.match(sourceInstaller,/^release_image=$/m);
- assert.throws(()=>releaseInstaller(sourceInstaller.replace(/^release_image=$/m,''),app),/release_image/);
- assert.throws(()=>releaseInstaller(sourceInstaller,'ghcr.io/omarabdo516/gtmworks:latest'),/digest/);
+ assert.match(sourceInstaller,/^sandbox_image=$/m);
+ assert.throws(()=>releaseInstaller(sourceInstaller.replace(/^release_image=$/m,''),app,sandbox),/release_image/);
+ assert.throws(()=>releaseInstaller(sourceInstaller.replace(/^sandbox_image=$/m,''),app,sandbox),/sandbox_image/);
+ assert.throws(()=>releaseInstaller(sourceInstaller,'ghcr.io/omarabdo516/gtmworks:latest',sandbox),/digest/);
 });
 
 // Every path the source installer and its compose file read from the checkout (relative mounts, the lib folder the
@@ -148,11 +169,11 @@ case "$*" in
  *'exec -T db psql'*) cat > "$MIGRATION_SQL"; exit "\${MIGRATION_EXIT:-0}";;
 esac
 `;
-function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app)}={}) {
+function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app),sandboxImage=sandbox}={}) {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-release-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  writeFileSync(join(directory,'docker-compose.install.yml'),compose);
- writeFileSync(join(directory,'install.sh'),releaseInstaller(sourceInstaller,app));
+ writeFileSync(join(directory,'install.sh'),releaseInstaller(sourceInstaller,app,sandboxImage));
  const bin=mkdtempSync(join(tmpdir(),'gtmworks-release-bin-'));
  t.after(()=>rmSync(bin,{recursive:true,force:true}));
  writeFileSync(join(bin,'docker'),dockerShim,{mode:0o755});
@@ -161,9 +182,10 @@ function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app)}={}) {
  return {directory,imageRoot:env.IMAGE_ROOT,run:(...args)=>runWith({},...args),runWith,clear:()=>rmSync(env.COMMANDS,{force:true}),
   commands:()=>existsSync(env.COMMANDS)?readFileSync(env.COMMANDS,'utf8'):'',sql:()=>readFileSync(env.MIGRATION_SQL,'utf8'),
   installed:()=>existsSync(join(directory,'.install-release'))?readFileSync(join(directory,'.install-release'),'utf8'):null,
+  sandboxImage:()=>existsSync(join(directory,'.work-sandbox-image'))?readFileSync(join(directory,'.work-sandbox-image'),'utf8'):null,
   use:image=>{
    writeFileSync(join(directory,'docker-compose.install.yml'),releaseCompose(sourceCompose,image));
-   writeFileSync(join(directory,'install.sh'),releaseInstaller(sourceInstaller,image));
+   writeFileSync(join(directory,'install.sh'),releaseInstaller(sourceInstaller,image,sandboxImage));
   }};
 }
 
@@ -178,6 +200,10 @@ test('a release install pulls the image by digest, takes its install files from 
  assert.equal(commands[0],'ps -aq --filter label=com.docker.compose.project=gtmworks-install --filter label=com.docker.compose.service=hermes');
  assert.equal(commands[1],`pull ${app}`);
  assert.match(result.stdout,/Digest: sha256:a{64}/);
+ // The work sandbox image of the release is pulled the same way and recorded as the one every Company's sandbox runs.
+ const sandboxPull=index(new RegExp(`^pull ${sandbox.replace(/[.]/g,'\\.')}$`));
+ assert.ok(sandboxPull>0,commands.join('\n'));
+ assert.equal(release.sandboxImage(),`${sandbox}\n`);
  const extract=index(/cp -R \/app\/install\/\. \/install\//);
  assert.ok(extract>0);
  assert.ok(commands[extract].startsWith(`run --rm --user ${process.getuid()}:${process.getgid()} -v ${release.directory}:/install ${app} sh -ec `),commands[extract]);
@@ -285,7 +311,7 @@ test('a release install backs up and restores only with the files of the release
  }
  assert.equal(readdirSync(join(release.directory,'backups')).length,1);
  // Only the compose file replaced: the install script still matches what runs, the compose file does not.
- writeFileSync(join(release.directory,'install.sh'),releaseInstaller(sourceInstaller,app));
+ writeFileSync(join(release.directory,'install.sh'),releaseInstaller(sourceInstaller,app,sandbox));
  release.clear();
  assert.equal(release.run('backup').status,1);
  assert.equal(release.commands(),'');
@@ -345,6 +371,9 @@ test('CI updates a release install on a real database, applying a new migration 
   /compose down -v \|\| fail/,
   /registry:2\.8\.3/,
   /docker tag gtmworks-local:237 localhost:5000\/gtmworks:0\.0\.0-ci/,
+  // The work sandbox image the source install built is pushed beside the app image and pinned in every release file (#392).
+  /docker tag gtmworks-work-sandbox:local localhost:5000\/gtmworks-sandbox:0\.0\.0-ci/,
+  /sandbox=\$\(publish_sandbox 0\.0\.0-ci\)/,
   // The previous release is the last one before the Engines, a fixed commit rather than this pull request's base or
   // origin/main (#378, C1), built and installed from its own two release files; the next release carries one migration
   // more, which the update must read through the running db's /migrations.
@@ -353,8 +382,8 @@ test('CI updates a release install on a real database, applying a new migration 
   /docker build -q -t localhost:5000\/gtmworks:0\.0\.0-main "\$RUNNER_TEMP\/previous-release"/,
   /node scripts\/release-assets\.mjs "\$previous" "\$root\/release-previous"/,
   /FROM localhost:5000\/gtmworks:0\.0\.0-ci\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
-  /node scripts\/release-assets\.mjs "\$first" release-first \|\|/,
-  /node scripts\/release-assets\.mjs "\$next" release-next \|\|/,
+  /node scripts\/release-assets\.mjs "\$first" release-first "\$sandbox" \|\|/,
+  /node scripts\/release-assets\.mjs "\$next" release-next "\$sandbox" \|\|/,
   /\[\[ \$\(ls -A "\$dir" \| wc -l\) == 2 \]\]/,
   /sh "\$dir\/install\.sh" \|\| fail 'the previous release install'/,
   /sh install\.sh update \|\| fail 'release update'/,
@@ -383,9 +412,11 @@ test('the install job keeps one Docker daemon for both install steps and removes
  for(const step of steps.slice(0,-1)) assert.doesNotMatch(step.run||'',/trap .*install-docker/,step.name);
 });
 
-test('the source installer still builds from its checkout', () => {
+test('the source installer still builds from its checkout, the work sandbox image included', () => {
  assert.match(sourceInstaller,/^release_image=$/m);
+ assert.match(sourceInstaller,/^sandbox_image=$/m);
  assert.match(sourceInstaller,/compose build web/);
+ assert.match(sourceInstaller,/docker build --tag "\$work_sandbox_tag" sandbox/);
  assert.equal(load(sourceCompose).services.web.build,'.');
 });
 
@@ -428,7 +459,17 @@ test('a vX.Y.Z tag only requests a release; the publishing workflow runs from ma
  assert.equal(build.with.tags,'${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}');
  assert.equal(build.with.platforms,'linux/amd64,linux/arm64');
  assert.equal(build.with.push,true);
+ // The work sandbox image of the same release is built and pushed beside it (#392, ADR 0020), from its one build file.
+ const builds=workflow.jobs.image.steps.filter(step=>step.uses?.startsWith('docker/build-push-action@'));
+ assert.equal(builds.length,2);
+ assert.equal(builds[1].with.context,'sandbox');
+ assert.equal(builds[1].with.file,'sandbox/Dockerfile');
+ assert.equal(builds[1].with.tags,'${{ env.IMAGE }}-sandbox:${{ needs.provenance.outputs.tag }}');
+ assert.equal(builds[1].with.platforms,'linux/amd64,linux/arm64');
+ assert.equal(builds[1].with.push,true);
+ assert.equal(workflow.jobs.image.outputs['sandbox-digest'],'${{ steps.sandbox.outputs.digest }}');
  assert.match(runs('image'),/docker manifest inspect "\$IMAGE:\$TAG"/);
+ assert.match(runs('image'),/docker manifest inspect "\$IMAGE-sandbox:\$TAG"/);
  for(const arch of ['amd64','arm64']) assert.match(runs('image'),new RegExp(arch));
 });
 
@@ -439,10 +480,13 @@ test('the install test pulls with no login and stable moves only afterwards, to 
  assert.equal(install.steps.some(step=>/login/.test(step.uses||'')||/docker login/.test(step.run||'')),false);
  assert.match(runs('install-test'),/sh install\.sh/);
  assert.match(runs('install-test'),/ls -A/);
+ // The two release files name the work sandbox image of this release, by tag and digest, as they name the app image.
+ assert.match(runs('install-test'),/release-assets\.mjs "\$IMAGE:\$TAG@\$DIGEST" release "\$IMAGE-sandbox:\$TAG@\$SANDBOX_DIGEST"/);
  // The first push creates the package private; an anonymous read names the one-time fix before the install fails on it.
  const anonymous=install.steps.findIndex(step=>/docker manifest inspect "\$IMAGE@\$DIGEST"/.test(step.run||''));
  const installing=install.steps.findIndex(step=>/sh install\.sh/.test(step.run||''));
  assert.ok(anonymous>=0&&anonymous<installing);
+ assert.match(install.steps[anonymous].run,/docker manifest inspect "\$IMAGE-sandbox@\$SANDBOX_DIGEST"/);
  assert.match(install.steps[anonymous].run,/::error::/);
  assert.match(install.steps[anonymous].run,/packages\/container\/.*\/settings/);
  assert.match(install.steps[anonymous].run,/Public/);

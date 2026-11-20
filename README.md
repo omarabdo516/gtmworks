@@ -85,6 +85,14 @@ The app and the worker join the Engine's network; the Engine joins nothing else,
 so it cannot reach the database, the sign-in service, REST, Storage or another
 Engine. No container of the install mounts the server's Docker socket.
 
+**The work sandbox image (ADR 0020).** Every Company's work sandbox runs it: one image,
+built on the Engine's own sandbox image with ffmpeg, Chromium, Node, Python and the
+Arabic fonts added and an ordinary user to work as. A release pins it by tag and digest
+and the install pulls it, so a release install builds nothing; a source checkout builds
+it from `sandbox/Dockerfile`. It takes about **4.70 GB** on disk (the install job prints
+the measured size on every run). A Company's work folder is a volume, not a copy of the
+image, so the image is fetched once for the whole install.
+
 **One Engine per Company (ADR 0018).** Every Company runs on its own Engine, so one
 Company's Agents, memory, Skills, Conversations and model sign-in stay in its own
 container and are not reachable from another Company's Engine. The installer makes

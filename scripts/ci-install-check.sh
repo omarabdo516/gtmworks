@@ -14,6 +14,12 @@ set -o pipefail
 # exists; the status is kept. The last step removes the Docker machine.
 trap 'status=$?; if [ "$status" -ne 0 ]; then bash scripts/install-diagnostics.sh || true; fi; exit "$status"' EXIT
 { sh scripts/install.sh || fail 'first install'; } 2>&1 | tee first-install.log
+# The work sandbox image every Company's sandbox runs (#392, ADR 0020): the source install built it from
+# sandbox/Dockerfile, and the release's own check proves in a container of it what an install owner and an Agent see.
+[[ -f .work-sandbox-image ]] || fail 'the install names the work sandbox image it got'
+sandbox_image=$(cat .work-sandbox-image)
+node scripts/check-work-sandbox.mjs --image "$sandbox_image" | tee work-sandbox.log || fail 'the work sandbox image'
+grep -qx 'work sandbox: ok' work-sandbox.log || fail 'the work sandbox image prints "work sandbox: ok"'
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
 db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
 # Each install service's own address on the install network, so the Engine-network probe checks addresses as well
@@ -500,6 +506,9 @@ remove_engine
 docker run -d --name install-registry -p 127.0.0.1:5000:5000 registry:2.8.3 > /dev/null || fail 'local registry'
 for attempt in $(seq 1 30); do docker run --rm --network host curlimages/curl:8.12.1 -sf http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
+# The work sandbox image the source install built is pushed beside the app image, so a release file can pin it as the app
+# image is pinned (#392, ADR 0020).
+publish_sandbox() { docker push -q "localhost:5000/gtmworks-sandbox:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks-sandbox:$1"; }
 # The previous release is the last one before each Company got its own Engine (spec #378): its own schema (no Engine
 # record, no companies.engine_id), its own one `hermes` service, and its own key in .env.install. It is a fixed commit,
 # not this pull request's base or origin/main: after this release merges, main has the Engines, and the update proof would
@@ -512,13 +521,16 @@ previous=$(publish 0.0.0-main) || fail 'push the previous release image'
 ( cd "$RUNNER_TEMP/previous-release" && node scripts/release-assets.mjs "$previous" "$root/release-previous" ) || fail 'previous release files'
 docker tag gtmworks-local:237 localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'
 first=$(publish 0.0.0-ci) || fail 'push this release image'
-node scripts/release-assets.mjs "$first" release-first || fail 'this release files'
+# The work sandbox image the source install built, pushed beside the app image: every release file below pins it (#392).
+docker tag gtmworks-work-sandbox:local localhost:5000/gtmworks-sandbox:0.0.0-ci || fail 'tag the work sandbox image'
+sandbox=$(publish_sandbox 0.0.0-ci) || fail 'push the work sandbox image'
+node scripts/release-assets.mjs "$first" release-first "$sandbox" || fail 'this release files'
 docker build -q -t localhost:5000/gtmworks:0.0.1-ci - > /dev/null <<'DOCKERFILE' || fail 'build the next release image'
 FROM localhost:5000/gtmworks:0.0.0-ci
 RUN echo 'create table gtmworks_install.release_update_probe(id integer);' > /app/install/supabase/migrations/99999999999998_release_update_probe.sql
 DOCKERFILE
 next=$(publish 0.0.1-ci) || fail 'push the next release image'
-node scripts/release-assets.mjs "$next" release-next || fail 'next release files'
+node scripts/release-assets.mjs "$next" release-next "$sandbox" || fail 'next release files'
 echo "previous release: $previous; this release: $first; next release: $next"
 dir="$PWD/release-install"
 mkdir "$dir" && cp release-previous/docker-compose.install.yml release-previous/install.sh "$dir/" || fail 'release install directory'
@@ -725,7 +737,7 @@ FROM localhost:5000/gtmworks:0.0.1-ci
 RUN sed -i 's#^\( *image:\).*#\1 gtmworks-engine-check:0.0.2#' /app/install/scripts/engine-template.yml
 DOCKERFILE
 fourth=$(publish 0.0.2-ci) || fail 'push the release that pins another Engine image'
-( cd "$root" && node scripts/release-assets.mjs "$fourth" release-engines ) || fail 'the release files that pin another Engine image'
+( cd "$root" && node scripts/release-assets.mjs "$fourth" release-engines "$sandbox" ) || fail 'the release files that pin another Engine image'
 cp "$root/release-engines/docker-compose.install.yml" "$root/release-engines/install.sh" . || fail 'the release files that pin another Engine image in place'
 sh install.sh update || fail 'update every Company Engine'
 [[ $(cat .install-release) == "$fourth" ]] || fail 'the update records the release that pins another Engine image'
@@ -797,6 +809,7 @@ mkdir "$HOME"
 dir="$HOME/gtmworks"
 first=$(sed -n 's/^release_image=//p' release-first/install.sh)
 next=$(sed -n 's/^release_image=//p' release-next/install.sh)
+sandbox=$(sed -n 's/^sandbox_image=//p' release-first/install.sh)
 line() { curl -fsSL "$GTMWORKS_GET" | sh -s -- "$@"; }
 # The one line in an empty folder installs the latest release (v0.0.0 while it is the only one).
 { line || fail 'the one line in an empty folder'; } 2>&1 | tee one-line.log
@@ -865,7 +878,7 @@ FROM localhost:5000/gtmworks:0.0.1-ci
 RUN printf '%s\n' 'create table public.update_should_rollback(value integer);' 'select 1 / 0;' > /app/install/supabase/migrations/99999999999999_failure.sql
 DOCKERFILE
 failing=$(publish 0.0.2-ci) || fail 'push the failing release image'
-(cd "$workspace" && node scripts/release-assets.mjs "$failing" "$releases/v0.0.2") || fail 'failing release files'
+(cd "$workspace" && node scripts/release-assets.mjs "$failing" "$releases/v0.0.2" "$sandbox") || fail 'failing release files'
 old_web=$(compose ps -q web)
 if gtmworks update --version v0.0.2 --no-backup > "$RUNNER_TEMP/failed-update.log" 2>&1; then cat "$RUNNER_TEMP/failed-update.log"; fail 'the failing update must exit non-zero'; fi
 cat "$RUNNER_TEMP/failed-update.log"

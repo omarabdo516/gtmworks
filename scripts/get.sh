@@ -14,7 +14,7 @@
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
 # stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
 # its two files are written by scripts/release-assets.mjs from inside that image (Dockerfile, /app/release-source), for
-# the digest just pulled.
+# the digest just pulled and the work sandbox image pushed by the same run.
 #
 # Tests only: GTMWORKS_RELEASES replaces GitHub Releases with a base URL (file:// in CI) that holds releases.json (a list
 # of {"tag_name": "vX.Y.Z"}) and <tag>/<file> for each release; GTMWORKS_GET replaces the address this script copies
@@ -25,6 +25,9 @@ set -eu
 main() {
 repository=omarabdo516/gtmworks
 image=ghcr.io/$repository
+# The work sandbox image every Company's sandbox runs (#392, ADR 0020), published beside the app image from the same
+# source and pushed by the same release run.
+work_sandbox=$image-sandbox
 marker='# gtmworks get.sh: the one-line installer, and the gtmworks command it leaves behind (#51, #52).'
 releases=${GTMWORKS_RELEASES:-}
 # The folder of the last install the line made on this machine, named when another folder finds its data.
@@ -293,8 +296,15 @@ download_release() {
       | sed -n "s#^$image@\(sha256:[a-f0-9]\{64\}\)\$#\1#p" | head -n 1)
     [ -n "$digest" ] || fail "Could not read the digest of $image:main."
     ref=$image:main@$digest
+    # The work sandbox image of the same main build (#392, ADR 0020), pinned by its own digest beside the app image.
+    say "Pulling the newest main work sandbox image: $work_sandbox:main"
+    docker pull "$work_sandbox:main"
+    sandbox_digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$work_sandbox:main" \
+      | sed -n "s#^$work_sandbox@\(sha256:[a-f0-9]\{64\}\)\$#\1#p" | head -n 1)
+    [ -n "$sandbox_digest" ] || fail "Could not read the digest of $work_sandbox:main."
+    sandbox_ref=$work_sandbox:main@$sandbox_digest
     docker run --rm --user "$(id -u):$(id -g)" -v "$2:/out" -w /app/release-source "$ref" \
-      node scripts/release-assets.mjs "$ref" /out \
+      node scripts/release-assets.mjs "$ref" /out "$sandbox_ref" \
       || fail "The main build $ref cannot write its install files (it predates the main channel). Install a release instead."
   else
     base=${releases:-https://github.com/$repository/releases/download}
