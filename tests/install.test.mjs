@@ -818,6 +818,9 @@ esac
  for(const [label,listing] of [
   ['a symbolic link','lrwxrwxrwx root/root 0 var/lib/storage/link -> /etc/passwd'],
   ['a hard link','hrw-r--r-- root/root 0 var/lib/storage/link link to var/lib/storage/saved'],
+  // BusyBox tar in Alpine 3.21, which the restore lists with, shows a hard link as a regular member with ` -> target`
+  // (seen with `tar -tvzf` on a real archive).
+  ['a hard link as BusyBox lists it','-rw-rw-r-- root/root 0 2026-11-20 05:15:50 var/lib/storage/link -> var/lib/storage/saved'],
  ]) {
   const refused=run(`${base}\nvar/lib/storage/link`,{listing});
   assert.equal(refused.status,1,`${label}: ${refused.stderr}`);

@@ -478,7 +478,9 @@ check_backup() {
   # volumes it replaces, so the archive is listed with its modes and any link member is refused (#378, C15).
   docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
     tar -tvzf /backup/backup.tgz > .install-lock/listing || { echo 'Could not read the backup.' >&2; return 1; }
-  if grep -Eq '^(l|h)' .install-lock/listing; then echo 'Unsafe backup path.' >&2; return 1; fi
+  # BusyBox (Alpine 3.21) lists a symbolic link as `l... name -> target` and a hard link as a regular `-...` member with
+  # ` -> target`; GNU tar marks a hard link `h` or `link to`. Any of these is refused.
+  if grep -Eq '^(l|h)| -> | link to ' .install-lock/listing; then echo 'Unsafe backup path.' >&2; return 1; fi
   while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..) echo 'Unsafe backup path.' >&2; return 1;; esac
     case "$entry" in .env.install|engines.list|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) echo 'Unrecognised backup.' >&2; return 1;; esac
