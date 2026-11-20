@@ -1,13 +1,13 @@
 'use client';
 import { useI18n } from '@/lib/i18n-client';
-import { placeMove, workAction, undoMove } from './work-actions';
+import { addIdea, placeMove, workAction, undoMove } from './work-actions';
 import Work, { type WorkProps } from './work';
 export type Step={id:number,name:string,position:number,person_id:string|null,role:string|null};
 export type ApprovalCard={id:number,title:string,caption:string,offering:string,segment:string,hook:string,goal:string,go_live:string|null,approval_step_id:number|null,review_entered_at:string|null,rejection_reason:string|null};
 type Member={person_id:string,role:string,people:{name:string}|null};
 // "Waiting on you" (#16, ADR 0013) is the board's first column: the Inbox opens the board on it. One list for this
 // person, newest first: the approvals they hold and anything else addressed to them, each opening its Card or Conversation.
-export function Approvals(props:Omit<WorkProps,'workAction'|'placeMove'|'undoMove'|'section'|'focus'|'initialCreating'|'cardId'>) {
- return <Work {...props} workAction={workAction} placeMove={placeMove} undoMove={undoMove} section="work/board" focus="waiting" initialCreating={false}/>;
+export function Approvals(props:Omit<WorkProps,'workAction'|'placeMove'|'addIdea'|'undoMove'|'section'|'focus'|'initialCreating'|'cardId'>) {
+ return <Work {...props} workAction={workAction} placeMove={placeMove} addIdea={addIdea} undoMove={undoMove} section="work/board" focus="waiting" initialCreating={false}/>;
 }
 export function ApprovalSettings({slug,company,steps,members,manage}:{slug:string,company:string,steps:Step[],members:Member[],manage:boolean}) { const {t}=useI18n();const hidden=<><input type="hidden" name="slug" value={slug}/><input type="hidden" name="company" value={company}/></>; const options=<><option value="role:owner">{t('owners')}</option><option value="role:manager">{t('managers')}</option>{members.filter(m=>['owner','manager'].includes(m.role)).map(m=><option dir="auto" key={m.person_id} value={`person:${m.person_id}`}>{m.people?.name}</option>)}</>;return <section className="panel approval-settings"><h2>{t('approvals')}</h2><p>{t('cardsAreReviewedInTheOrderBelow')}</p>{steps.map(s=><form action={workAction} className="settings-row" key={s.id}>{hidden}<input type="hidden" name="step" value={s.id}/><input dir="auto" name="name" aria-label={t('approvalStepName')} defaultValue={s.name} required disabled={!manage}/><input name="position" aria-label={t('approvalStepOrder')} type="number" defaultValue={s.position} required disabled={!manage}/><select name="approver" aria-label={t('approver')} defaultValue={s.person_id?`person:${s.person_id}`:`role:${s.role}`} disabled={!manage}>{options}</select>{manage&&<><button name="op" value="save-step">{t('save')}</button><button name="op" value="remove-step" formNoValidate>{t('delete')}</button></>}</form>)}{manage&&<form action={workAction} className="settings-row">{hidden}<input dir="auto" name="name" placeholder={t('stepName')} aria-label={t('newStepName')} required/><input name="position" aria-label={t('newStepOrder')} type="number" defaultValue={Math.max(0,...steps.map(s=>s.position))+1}/><select name="approver" aria-label={t('newApprover')}>{options}</select><button name="op" value="save-step">{t('addStep')}</button></form>}</section>}

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(21);
 -- #188. RS Learning's Agents: Lead (main), Ads (shown to the Contributor) and Hidden (shown to nobody but an Owner);
 -- Aleem has an Agent of its own. The seed's Roles are the same as the board's.
 insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values
@@ -36,6 +36,13 @@ select throws_ok($$select public.create_work_card('10000000-0000-0000-0000-00000
 
 -- The newest idea sits at the top of Ideas (#174's order): above every Card already in the column.
 select ok((select board_order from public.work_cards where title='Contributor main idea')<(select min(w.board_order) from public.work_cards w join public.work_stages t on t.company_id=w.company_id and t.id=w.stage_id where w.company_id='10000000-0000-0000-0000-000000000001' and t.board_column='ideas' and w.title<>'Contributor main idea'),'a new idea goes to the top of Ideas');
+
+-- #452: the board sends an idea under a request key; Add pressed twice, or a retry, is one Card.
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is((public.agent_write('10000000-0000-0000-0000-000000000001','idea-1','fp-idea-1','create',null,jsonb_build_object('stage',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'title','Keyed idea','agent','a1880000-0000-0000-0000-000000000001'))->>'id')::bigint,(select id from public.work_cards where title='Keyed idea'),'a keyed idea answers with its new Card');
+select is((public.agent_write('10000000-0000-0000-0000-000000000001','idea-1','fp-idea-1','create',null,jsonb_build_object('stage',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'title','Keyed idea','agent','a1880000-0000-0000-0000-000000000001'))->>'id')::bigint,(select id from public.work_cards where title='Keyed idea'),'the same key again answers with the same Card');
+select is((select count(*)::int from public.work_cards where title='Keyed idea'),1,'the same key makes one Card');
+select is((select agent_id from public.work_cards where title='Keyed idea'),'a1880000-0000-0000-0000-000000000001'::uuid,'the keyed idea carries its Agent');
 
 -- A Viewer adds nothing.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);

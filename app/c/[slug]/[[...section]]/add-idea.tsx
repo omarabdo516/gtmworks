@@ -1,13 +1,16 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
-import type { WorkAction } from './work';
+import type { AddIdeaAction } from './work';
 
 // The Ideas column's own form (#188; design-reference: renderBoard's .add-idea): one line for the idea, the Company's
 // Agents the reader sees with the main Agent first, and Add and Cancel. It sits above the Cards in the column and closes
 // back onto the column's "+".
-export default function AddIdea({company,slug,stage,agents,preferred,workAction,onClose}:{company:string,slug:string,stage:number,agents:{id:string,name:string}[],preferred?:string,workAction:WorkAction,onClose:()=>void}) {
- const {t}=useI18n();
+export default function AddIdea({company,slug,stage,agents,preferred,addIdea,onClose}:{company:string,slug:string,stage:number,agents:{id:string,name:string}[],preferred?:string,addIdea:AddIdeaAction,onClose:()=>void}) {
+ const {t}=useI18n(); const router=useRouter();
+ // One request key per opened form: Add pressed twice, or a retry after a lost answer, is one Card (#452).
+ const [key]=useState(()=>crypto.randomUUID());
  const [title,setTitle]=useState('');
  const [agent,setAgent]=useState(preferred&&agents.some(choice=>choice.id===preferred)?preferred:agents[0]?.id||'');
  const [error,setError]=useState(false);
@@ -24,11 +27,15 @@ export default function AddIdea({company,slug,stage,agents,preferred,workAction,
   if(!agent) return;
   setPending(true); setFailed(false);
   const form=new FormData();
-  form.set('op','idea'); form.set('company',company); form.set('slug',slug); form.set('stage',String(stage));
+  form.set('key',key); form.set('company',company); form.set('slug',slug); form.set('stage',String(stage));
   form.set('title',idea); form.set('agent',agent);
   // A form that could not be sent says so under the Idea it kept, and Add works again; one that was added closes back onto
-  // the column's "+", so no Add is left disabled in a form still open (#188).
-  void workAction(form).then(()=>{ setPending(false); close(); },()=>{ setPending(false); setFailed(true); });
+  // the column's "+" and the board comes back on its Card (#188).
+  const failure=()=>{ setPending(false); setFailed(true); };
+  void addIdea(form).then(result=>{
+   if(!('card' in result)) return failure();
+   close(); router.replace(`/c/${slug}/work/board?show=${result.card}&idea=1`,{scroll:false});
+  },failure);
  };
  return <form className="add-idea" id="add-idea" onSubmit={event=>{ event.preventDefault(); send(); }}
   onKeyDown={event=>{ if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); close(); } }}>
