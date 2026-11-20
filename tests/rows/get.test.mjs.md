@@ -1,1 +1,1 @@
-| `get.test.mjs` | The one-line install and the gtmworks command: options, versions, update, rollback. (#51, #52) | 14.9 s | install job | keep (decision 0015) |
+| `get.test.mjs` | The one-line install and the gtmworks command: options, versions, update, rollback, and `sign-in claude` running the Engine's own Claude sign-in in the Company's Engine named by its record. (#51, #52, #384) | 15.1 s | install job | keep (decision 0015) |

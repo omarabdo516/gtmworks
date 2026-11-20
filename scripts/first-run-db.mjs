@@ -1,8 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { lane, originOf, portOf } from '../tests/lane.mjs';
+import { encryptSecret } from '../lib/agent-crypto.mjs';
+import { hermesHostOf, lane, originOf, portOf } from '../tests/lane.mjs';
 const root=process.cwd();
+// The local stacks point the waiting Engine record at their own fake Hermes (#380): the record is the only place the app
+// and worker read its address and key, and a first-run reset starts from an install the installer would have registered.
+const localEncryptionKey='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+const engineAddress=()=>`http://${hermesHostOf(lane)}:8642`;
+// One ciphertext for this local process: the same reset run twice builds the same SQL, and both decrypt to the fake's key.
+const localEngineCipher=encryptSecret('test-only-key',process.env.WEBHOOK_ENCRYPTION_KEY||localEncryptionKey);
+const quote=value=>`'${value.replaceAll("'","''")}'`;
 // A browser test worker runs on its own local stack (tests/lane.mjs, #69): lane n has the app on port 3000+n and every
 // Supabase port moved by 100*n. Outside a worker the lane is 0, the stack every other script uses.
 const database=`postgresql://postgres:postgres@127.0.0.1:${portOf('db')}/postgres`;
@@ -45,6 +53,7 @@ export function resetFirstRun(baseURL,seed=false) {
  end $$;
  truncate auth.users cascade;
  insert into public.setup_claim(closed) values(false);
+ insert into public.company_engines(address,key_encrypted) values (${quote(engineAddress())},${quote(localEngineCipher)});
  ${seed?readFileSync(join(root,'supabase/seed.sql'),'utf8'):''}
  `;
  for(let attempt=1;;attempt++) {

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { load } from 'js-yaml';
+import { installJob } from './install-job.mjs';
 
 // Marker secrets the summary has never been told about: a long unknown one, a short one, and other encodings of both.
 // None sits in an env file, so only a summary that prints no arbitrary text can keep them out.
@@ -103,7 +104,7 @@ test('the summary prints nothing when it cannot read what it checks against', t 
 
 test('a failed install check prints the web and gateway summaries before teardown and keeps its exit status', t => {
  const {commands,run,directory}=sandbox(t);
- const step=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF);
+ const step=installJob().steps.find(step=>step.env?.INSTALL_REF);
  const lines=step.run.split('\n'), trap=lines.findIndex(line=>line.startsWith('trap '));
  assert.ok(trap>0,'the install step sets an EXIT trap');
  const until=code=>`${lines.slice(0,trap+1).join('\n')}\nexit ${code}\n`;
@@ -119,7 +120,7 @@ test('a failed install check prints the web and gateway summaries before teardow
  // The install and release steps share one Docker machine (#49); a later step removes it, also after a failure, so the
  // logs the trap reads always come before the teardown.
  assert.equal(at(/rm -fv install-docker/),-1,'the install step leaves the machine to the teardown step');
- const steps=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps;
+ const steps=installJob().steps;
  const teardown=steps.findIndex(s=>/docker rm -fv install-docker/.test(s.run||''));
  assert.ok(teardown>steps.indexOf(step),'logs are read before the install is torn down');
  assert.match(String(steps[teardown].if),/always\(\)/,'the teardown runs after a failure too');

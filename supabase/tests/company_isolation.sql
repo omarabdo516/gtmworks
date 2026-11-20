@@ -85,7 +85,7 @@ begin
   where att.attrelid = format('public.%I', t)::regclass and att.attnum > 0 and not att.attisdropped
   order by att.attnum
  loop
-  if a.name = 'company_id' then v := quote_literal(company);
+  if a.name = 'company_id' then v := coalesce(fixed->>'company_id', quote_literal(company));
   elsif fixed ? a.name then v := fixed->>a.name;
   elsif a.person and a.type = 'uuid' then v := quote_literal(person);
   elsif a.needed then v := case

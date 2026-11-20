@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { load } from 'js-yaml';
+import { installJob } from './install-job.mjs';
 
 // scripts/check-install-proxy.mjs runs in the install job against a real install behind an HTTPS proxy (issue #40).
 // Here it runs against a stand-in for that install, once as the app now answers and once with the reported fault.
@@ -130,7 +131,7 @@ test('the gateway drops a client X-Forwarded-Host on its way to Auth', () => {
 });
 
 test('the install job runs first run and sign-in through an HTTPS proxy whose origin is APP_ORIGIN', () => {
- const step=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF);
+ const step=installJob().steps.find(step=>step.env?.INSTALL_REF);
  const run=step.run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
  const origin=run.match(/^\s*public=(https:\/\/[^\s]+)$/m)?.[1];

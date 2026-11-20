@@ -67,16 +67,17 @@ test('only an Owner connects, follows or disconnects an app; a Member reads the 
   const install={address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'};
   await provideProfile(install,{name:companyProfile(company),soul:'',config:levelConfig(1),forbidden:alwaysOff});
   const driver=driverAt(fake);
+  const hermes={address:fake.address,key:'test-only-key'};
   const signIns=[];
   const someone=sessions(fake,{person:member,isOwner:false,signIns});
   for(const action of ['connect','poll','cancel','disconnect']) {
-   assert.deepEqual(await changeCompanyApp(someone.db,{company,agent:lead,person:member,app:'klaviyo',action,driver}),{status:403,body:{error:'appsNotAllowed'}});
+   assert.deepEqual(await changeCompanyApp(someone.db,{company,agent:lead,person:member,app:'klaviyo',action,driver,hermes}),{status:403,body:{error:'appsNotAllowed'}});
   }
   assert.equal(fake.settings.appFlows.size,0,'a member never reaches the Engine');
-  assert.equal((await readCompanyApps(someone.db,{company,driver}))?.find(app=>app.key==='klaviyo')?.state,'off');
+  assert.equal((await readCompanyApps(someone.db,{company,driver,hermes}))?.find(app=>app.key==='klaviyo')?.state,'off');
 
   const omar=sessions(fake,{person:owner,isOwner:true,signIns});
-  const change=(action,app='klaviyo')=>changeCompanyApp(omar.db,{company,agent:lead,person:owner,app,action,driver});
+  const change=(action,app='klaviyo')=>changeCompanyApp(omar.db,{company,agent:lead,person:owner,app,action,driver,hermes});
   assert.deepEqual(await change('connect','figma'),{status:400,body:{error:'appsInvalid'}});
   const started=await change('connect');
   assert.equal(started.status,200);
@@ -89,19 +90,19 @@ test('only an Owner connects, follows or disconnects an app; a Member reads the 
   assert.equal([...fake.settings.appFlows.values()].filter(flow=>flow.status==='authorization_required').length,1,'a sign-in left open gives way to the new one');
   const vendorState=new URL(String(again.body.url)).searchParams.get('state');
 
-  assert.deepEqual(await finishCompanyAppSignIn(someone.db,{person:member,app:'klaviyo',answer:{code:'c',state:vendorState},driver}),{slug:null,outcome:'failed'});
+  assert.deepEqual(await finishCompanyAppSignIn(someone.db,{person:member,app:'klaviyo',answer:{code:'c',state:vendorState},driver,hermes}),{slug:null,outcome:'failed'});
   assert.equal(fake.settings.appCallbacks.length,0,'nothing reaches the Engine without the person\'s own sign-in');
-  assert.deepEqual(await finishCompanyAppSignIn(omar.db,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},driver}),{slug:'rs-consultations',outcome:'connected'});
+  assert.deepEqual(await finishCompanyAppSignIn(omar.db,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},driver,hermes}),{slug:'rs-consultations',outcome:'connected'});
   assert.deepEqual(await change('poll'),{status:200,body:{status:'connected'}});
-  assert.deepEqual(await finishCompanyAppSignIn(omar.db,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},driver}),{slug:null,outcome:'failed'},'a finished sign-in\'s answer is never applied to another one');
+  assert.deepEqual(await finishCompanyAppSignIn(omar.db,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},driver,hermes}),{slug:null,outcome:'failed'},'a finished sign-in\'s answer is never applied to another one');
   assert.equal(fake.settings.appCallbacks.length,1,'the second way back reaches the Engine for no sign-in');
   assert.equal(omar.asked.filter(name=>name==='finish_app_sign_in').length,1);
-  assert.equal((await readCompanyApps(omar.db,{company,driver}))?.find(app=>app.key==='klaviyo')?.state,'connected');
+  assert.equal((await readCompanyApps(omar.db,{company,driver,hermes}))?.find(app=>app.key==='klaviyo')?.state,'connected');
 
   assert.deepEqual(await change('disconnect'),{status:200,body:{status:'off'}});
   assert.deepEqual(omar.asked.filter(name=>name==='record_app_disconnected'),['record_app_disconnected']);
   assert.deepEqual(omar.logged,[['app_connected','klaviyo',lead],['app_disconnected','klaviyo',lead]]);
-  assert.equal((await readCompanyApps(omar.db,{company,driver}))?.find(app=>app.key==='klaviyo')?.state,'off');
+  assert.equal((await readCompanyApps(omar.db,{company,driver,hermes}))?.find(app=>app.key==='klaviyo')?.state,'off');
   assert.doesNotMatch(JSON.stringify([started,again]),/flow|hermes|opt\//i);
  } finally { await fake.close(); }
 });
@@ -110,6 +111,7 @@ test('each Agent\'s state is read from its own profile: connected, needing atten
  const fake=await fakeHermes();
  try {
   const driver=driverAt(fake);
+  const hermes={address:fake.address,key:'test-only-key'};
   for(const name of [companyProfile(company),agentProfile(writer),agentProfile(analyst)]) makeProfile(fake,name);
   // Klaviyo was connected in the Company's profile before any Agent moved; Writer's sign-in never finished.
   fake.settings.profiles.get(companyProfile(company)).config.mcp_servers={klaviyo:installed('klaviyo')};
@@ -118,7 +120,7 @@ test('each Agent\'s state is read from its own profile: connected, needing atten
   const missing={agent:'3a000000-0000-0000-0000-000000000051',name:'Designer',connection:'f0000000-0000-0000-0000-000000000051',profile:'ag-3a000000000000000000000000000051',main:false,own:true};
   const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents:[leadRow,writerRow,analystRow,helperRow,missing]});
   const read=fake.settings.managementRequests.length;
-  const apps=await readCompanyApps(someone.db,{company,driver});
+  const apps=await readCompanyApps(someone.db,{company,driver,hermes});
   const klaviyo=apps?.find(app=>app.key==='klaviyo');
   assert.deepEqual(klaviyo?.agents.map(agent=>[agent.name,agent.state]),[['Lead','connected'],['Writer','attention'],['Analyst','off'],['Helper','connected'],['Designer',null]]);
   assert.equal(klaviyo?.state,'connected');
@@ -136,19 +138,20 @@ test('one Agent\'s apps are read from its own profile alone, by key; an Agent th
  const fake=await fakeHermes();
  try {
   const driver=driverAt(fake);
+  const hermes={address:fake.address,key:'test-only-key'};
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
   fake.settings.profiles.get(companyProfile(company)).config.mcp_servers={amplitude:installed('amplitude')};
   fake.settings.appTokens.add(`${companyProfile(company)}:amplitude`);
   fake.settings.profiles.get(agentProfile(writer)).config.mcp_servers={klaviyo:installed('klaviyo')};
   const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents:[leadRow,writerRow]});
   const read=fake.settings.managementRequests.length;
-  const apps=await readAgentApps(someone.db,{company,agent:writer,driver});
+  const apps=await readAgentApps(someone.db,{company,agent:writer,driver,hermes});
   assert.equal(apps?.klaviyo,'attention');
   assert.equal(apps?.amplitude,'off','connected for Lead is not connected for Writer');
   assert.deepEqual(fake.settings.managementRequests.slice(read).filter(request=>request.path?.startsWith('/api/mcp/catalog')).map(request=>profileOf(request.path)),[agentProfile(writer)]);
-  assert.equal((await readAgentApps(someone.db,{company,agent:lead,driver}))?.amplitude,'connected');
-  assert.equal(await readAgentApps(someone.db,{company,agent:analyst,driver}),null,'an Agent not listed for the person');
-  assert.equal(await readAgentApps(someone.db,{company,agent:writer,driver:{read:async()=>({state:'unreachable',apps:null})}}),null);
+  assert.equal((await readAgentApps(someone.db,{company,agent:lead,driver,hermes}))?.amplitude,'connected');
+  assert.equal(await readAgentApps(someone.db,{company,agent:analyst,driver,hermes}),null,'an Agent not listed for the person');
+  assert.equal(await readAgentApps(someone.db,{company,agent:writer,hermes:{address:fake.address,key:'test-only-key'},driver:{read:async()=>({state:'unreachable',apps:null})}}),null);
  } finally { await fake.close(); }
 });
 
@@ -159,6 +162,7 @@ test('an Agent\'s connected tools are its own profile\'s apps with their states,
  const fake=await fakeHermes();
  try {
   const driver=driverAt(fake);
+  const hermes={address:fake.address,key:'test-only-key'};
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
   fake.settings.profiles.get(companyProfile(company)).config.mcp_servers={amplitude:installed('amplitude')};
   fake.settings.appTokens.add(`${companyProfile(company)}:amplitude`);
@@ -171,7 +175,7 @@ test('an Agent\'s connected tools are its own profile\'s apps with their states,
    let id=''; const chain={select:()=>chain,eq:(column,value)=>{ if(column==='id') id=value; return chain; },maybeSingle:async()=>({data:{apps:made[id]},error:null})};
    return chain;
   }};
-  const tools=agent=>readAgentTools(db,{company,agent,driver});
+  const tools=agent=>readAgentTools(db,{company,agent,driver,hermes});
   assert.deepEqual(await tools(writer),[
    {key:'klaviyo',name:'Klaviyo',mark:'K',state:'attention'},
    {key:'canva',name:'Canva',mark:'Ca',state:'connected'},
@@ -180,7 +184,7 @@ test('an Agent\'s connected tools are its own profile\'s apps with their states,
   ]);
   assert.deepEqual(await tools(lead),[{key:'amplitude',name:'Amplitude',mark:'Am',state:'connected'}],'two Agents of one Company, two lists');
   assert.equal(await tools(analyst),null,'an Agent not listed for the person');
-  assert.equal(await readAgentTools(db,{company,agent:writer,driver:{read:async()=>({state:'unreachable',apps:null})}}),null);
+  assert.equal(await readAgentTools(db,{company,agent:writer,hermes:{address:fake.address,key:'test-only-key'},driver:{read:async()=>({state:'unreachable',apps:null})}}),null);
  } finally { await fake.close(); }
 });
 
@@ -196,15 +200,16 @@ test('an app turned on for one Agent is in that Agent\'s profile and no other, a
  const fake=await fakeHermes();
  try {
   const driver=driverAt(fake);
+  const hermes={address:fake.address,key:'test-only-key'};
   for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
   const signIns=[];
   const omar=sessions(fake,{person:owner,isOwner:true,signIns,agents:[leadRow,writerRow,helperRow]});
-  const change=(action,agent)=>changeCompanyApp(omar.db,{company,agent,person:owner,app:'klaviyo',action,driver});
+  const change=(action,agent)=>changeCompanyApp(omar.db,{company,agent,person:owner,app:'klaviyo',action,driver,hermes});
   const mark=fake.settings.managementRequests.length;
   const started=await change('connect',writer);
   assert.equal(started.status,200);
   const vendorState=new URL(String(started.body.url)).searchParams.get('state');
-  assert.deepEqual(await finishCompanyAppSignIn(omar.db,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},driver}),{slug:'rs-consultations',outcome:'connected'});
+  assert.deepEqual(await finishCompanyAppSignIn(omar.db,{person:owner,app:'klaviyo',answer:{code:'c',state:vendorState},driver,hermes}),{slug:'rs-consultations',outcome:'connected'});
   assert.deepEqual(await change('poll',writer),{status:200,body:{status:'connected'}});
   const scoped=fake.settings.managementRequests.slice(mark).filter(request=>/^\/api\/(config|mcp\/(catalog|servers))/.test(request.path||''));
   assert.ok(scoped.length>=4,'the catalogue, the config and the sign-in were asked');
@@ -212,7 +217,7 @@ test('an app turned on for one Agent is in that Agent\'s profile and no other, a
   assert.deepEqual(serversOf(fake,agentProfile(writer)).klaviyo.tools,{include:[...appByKey('klaviyo').readTools],prompts:false,resources:false});
   assert.equal(serversOf(fake,companyProfile(company)).klaviyo,undefined,'Lead\'s profile has none of it');
   assert.ok(fake.settings.appTokens.has(`${agentProfile(writer)}:klaviyo`));
-  assert.deepEqual((await readCompanyApps(omar.db,{company,driver}))?.find(app=>app.key==='klaviyo')?.agents.map(agent=>[agent.name,agent.state]),
+  assert.deepEqual((await readCompanyApps(omar.db,{company,driver,hermes}))?.find(app=>app.key==='klaviyo')?.agents.map(agent=>[agent.name,agent.state]),
    [['Lead','off'],['Writer','connected'],['Helper','off']]);
 
   const off=fake.settings.managementRequests.length;
@@ -234,17 +239,18 @@ test('only an Agent whose profile is its own is changed: one on the main profile
  const fake=await fakeHermes();
  try {
   const driver=driverAt(fake);
+  const hermes={address:fake.address,key:'test-only-key'};
   makeProfile(fake,companyProfile(company));
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,helperRow]});
   const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents:[leadRow]});
   const mark=fake.settings.managementRequests.length;
   for(const action of ['connect','poll','cancel','disconnect']) {
-   assert.deepEqual(await changeCompanyApp(omar.db,{company,agent:helper,person:owner,app:'klaviyo',action,driver}),{status:409,body:{error:'appsAgentNotOwn'}},`${action}: Helper shares Lead's profile`);
-   assert.deepEqual(await changeCompanyApp(omar.db,{company,agent:writer,person:owner,app:'klaviyo',action,driver}),{status:409,body:{error:'appsAgentNotOwn'}},`${action}: an Agent not listed`);
-   assert.deepEqual(await changeCompanyApp(someone.db,{company,agent:lead,person:member,app:'klaviyo',action,driver}),{status:403,body:{error:'appsNotAllowed'}},`${action}: a Member`);
+   assert.deepEqual(await changeCompanyApp(omar.db,{company,agent:helper,person:owner,app:'klaviyo',action,driver,hermes}),{status:409,body:{error:'appsAgentNotOwn'}},`${action}: Helper shares Lead's profile`);
+   assert.deepEqual(await changeCompanyApp(omar.db,{company,agent:writer,person:owner,app:'klaviyo',action,driver,hermes}),{status:409,body:{error:'appsAgentNotOwn'}},`${action}: an Agent not listed`);
+   assert.deepEqual(await changeCompanyApp(someone.db,{company,agent:lead,person:member,app:'klaviyo',action,driver,hermes}),{status:403,body:{error:'appsNotAllowed'}},`${action}: a Member`);
   }
-  for(const agent of ['not-an-id',42,null]) assert.deepEqual(await changeCompanyApp(omar.db,{company,agent,person:owner,app:'klaviyo',action:'connect',driver}),{status:400,body:{error:'appsInvalid'}});
-  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,app:'klaviyo',action:'connect',driver}),{status:400,body:{error:'appsInvalid'}},'a connect names its Agent');
+  for(const agent of ['not-an-id',42,null]) assert.deepEqual(await changeCompanyApp(omar.db,{company,agent,person:owner,app:'klaviyo',action:'connect',driver,hermes}),{status:400,body:{error:'appsInvalid'}});
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,app:'klaviyo',action:'connect',driver,hermes}),{status:400,body:{error:'appsInvalid'}},'a connect names its Agent');
   assert.equal(fake.settings.managementRequests.length,mark,'the Engine was never asked');
   assert.deepEqual([omar.logged,someone.asked.filter(name=>name!=='is_company_owner')],[[],[]]);
  } finally { await fake.close(); }
@@ -262,19 +268,20 @@ test('an Owner or a Manager reads each Agent\'s token use from its own profile w
   fake.settings.sessions.set('s-writer',{profile:agentProfile(writer),messages:[],input_tokens:5000,output_tokens:60,model:'openai/gpt-5.5',started_at:now-60});
   fake.settings.sessions.set('s-old',{profile:agentProfile(writer),messages:[],input_tokens:9,output_tokens:9,model:'openai/gpt-5.5',started_at:now-40*86400});
   const driver={usage:(target,days)=>readUsage({...target,managementAddress:target.profile===agentProfile(analyst)?'http://8.8.8.8:2':fake.managementAddress},days)};
+  const hermes={address:fake.address,key:'test-only-key'};
   const agents=[leadRow,writerRow,analystRow,helperRow];
   const owner_=sessions(fake,{person:owner,isOwner:true,signIns:[],agents});
   const expected=[
    {agents:[{id:lead,name:'Lead'},{id:helper,name:'Helper'}],input:1200,output:34,sessions:1,models:[{model:'anthropic/claude-opus-4.6',input:1200,output:34,sessions:1}]},
    {agents:[{id:writer,name:'Writer'}],input:5000,output:60,sessions:1,models:[{model:'openai/gpt-5.5',input:5000,output:60,sessions:1}]},
    {agents:[{id:analyst,name:'Analyst'}],input:null,output:null,sessions:null,models:null}];
-  assert.deepEqual(await readCompanyUsage(owner_.db,{company,days:30,driver}),expected);
+  assert.deepEqual(await readCompanyUsage(owner_.db,{company,days:30,driver,hermes}),expected);
   // The database function is named by its own parameter: a call it cannot resolve answers no role at all (#32).
   assert.deepEqual(owner_.calls.find(([name])=>name==='can_manage_company')?.[1],{target:company});
   const manager=sessions(fake,{person:member,isOwner:false,canManage:true,signIns:[],agents});
-  assert.deepEqual(await readCompanyUsage(manager.db,{company,days:30,driver}),expected,'a Manager reads their Company\'s usage');
+  assert.deepEqual(await readCompanyUsage(manager.db,{company,days:30,driver,hermes}),expected,'a Manager reads their Company\'s usage');
   const someone=sessions(fake,{person:member,isOwner:false,signIns:[],agents});
-  assert.equal(await readCompanyUsage(someone.db,{company,days:30,driver}),null);
+  assert.equal(await readCompanyUsage(someone.db,{company,days:30,driver,hermes}),null);
   assert.ok(!someone.asked.includes('company_app_agents'),'nothing is read for someone who is neither Owner nor Manager');
  } finally { await fake.close(); }
 });

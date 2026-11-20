@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { answerQuestion, closeOpenRuns, decidePermission, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
-import { onProfile } from '@/lib/bundled-hermes.mjs';
+import { engineOf, onProfile } from '@/lib/company-engine.mjs';
 import { engineFor } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
@@ -158,7 +158,7 @@ async function models(db:Database,person:string,company:string,conversation:stri
  const {data:found}=await db.from('conversations').select('model,hermes_agents(profile)').eq('id',conversation).eq('company_id',company).eq('person_id',person).maybeSingle();
  const pinned=(found?.hermes_agents as {profile?:string}|null)?.profile;
  if(!found||!pinned) return refuse('conversationNotFound',404);
- const connection=onProfile(pinned,company);
+ const connection=onProfile(pinned,company,await engineOf(company,service()));
  const read=connection&&await engineFor(connection).models?.()||{state:'unreachable',current:null,models:[]};
  return reply({state:read.state,models:read.models,current:found.model??read.current});
 }

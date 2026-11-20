@@ -37,7 +37,7 @@ function database({owner=true,rowsFor=rows(),refuse={}}={}) {
   calls.push({name,args});
   if(refuse[name]) return {data:null,error:{code:refuse[name],message:name}};
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{profile:companyProfileName,one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:companyProfileName,profiles:[]}],error:null};
   if(name==='company_app_agents') return {data:rowsFor.filter(row=>row.agent!==lead),error:null};
   if(name==='company_agent_models') return {data:rowsFor,error:null};
   if(name==='company_key_profiles') return {data:[{profile:space,kind:'space',agent:null,name:null},

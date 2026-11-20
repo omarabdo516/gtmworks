@@ -41,6 +41,12 @@ existing=false
 if docker volume inspect "supabase_db_$project" > /dev/null 2>&1; then existing=true; fi
 npx --no-install supabase start --workdir "$tmp_dir"
 if [[ $existing == true ]]; then npx --no-install supabase db reset --workdir "$tmp_dir"; fi
+# Each seeded Company's Engine record points at this lane's fake Hermes, with the key scripts/web.sh gives the app (#380):
+# the record is the only place the app and worker read them, and the snapshot below keeps the same records for every file.
+engine_address="http://127.0.0.$((110 + lane)):8642"
+engine_sql=$(ENGINE_ADDRESS="$engine_address" ENGINE_KEY=test-only-key \
+  WEBHOOK_ENCRYPTION_KEY="${WEBHOOK_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}" node scripts/local-engine-sql.mjs)
+docker exec "supabase_db_$project" psql -X -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q -c "$engine_sql"
 # The seeded data as one script that puts it back: browser spec files start from it (tests/fresh-seed.ts, #69), so no
 # file sees what an earlier one left. Migration records and the realtime service's own tables are not data and stay.
 snapshot="$PWD/supabase/.temp/lanes/$lane/seed-data.sql"

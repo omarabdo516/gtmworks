@@ -3,6 +3,7 @@
 node_modules
 .next
 .env*
+.engines
 .install-lock
 .install.lock
 .install-gateway

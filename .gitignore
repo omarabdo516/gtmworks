@@ -9,6 +9,7 @@ prod.env
 .env.production.local
 .env.install
 .env.install.tmp
+.engines/
 .install-lock/
 .install.lock
 .install-gateway
