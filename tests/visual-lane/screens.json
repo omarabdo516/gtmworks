@@ -1,7 +1,7 @@
 {
   "sign-in": { "path": "/sign-in", "anonymous": true, "ready": "input[name=email]" },
   "first-run": { "path": "/first-run", "anonymous": true, "ready": "input[name=company]" },
-  "home": { "path": "/c/rs-learning/home", "ready": ".home-dashboard" },
+  "home": { "path": "/c/rs-learning/home", "state": "agent-details", "ready": ".home-dashboard" },
   "board": { "path": "/c/rs-learning/work/board", "ready": ".board" },
   "card": { "path": "/c/rs-learning/work/board/1", "ready": ".modal" },
   "chat": { "path": "/c/rs-learning/chat", "ready": ".chat" },

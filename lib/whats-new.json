@@ -1,5 +1,11 @@
 [
  {
+  "issue": 460,
+  "date": "2026-11-20",
+  "en": { "title": "Home shows your real Agents", "body": "Home lists the same Agents as the sidebar, Lead first, each with the Card it is working on now." },
+  "ar": { "title": "الرئيسية بتعرض وكلاءك الحقيقيين", "body": "الرئيسية بقت بتعرض نفس الوكلاء اللي في القايمة الجانبية، الوكيل الرئيسي الأول، وكل واحد معاه البطاقة اللي شغال عليها دلوقتي." }
+ },
+ {
   "issue": 457,
   "date": "2026-11-20",
   "en": { "title": "A model error says why", "body": "When the model key has no credit, the provider refuses it, or the Agent’s model is not available, the chat says so and points to the Agent’s model settings instead of working on a reply forever." },
