@@ -107,6 +107,16 @@ test('a no-sign-in app answers with its state alone: connected at the press, wit
  expect(opened.location.href).toBe('');
 });
 
+test('a no-sign-in app the engine cannot reach is not connected: the card says it failed, with no window', async () => {
+ const opened = vendor();
+ const fetch = vi.fn(() => answer({ status: 'attention' }));
+ vi.stubGlobal('fetch', fetch);
+ await expect(signInToApp({ ...given, app: 'context7' })).resolves.toEqual({ error: 'connectFailed' });
+ expect(actions(fetch.mock.calls)).toEqual(['connect']);
+ expect(opened.close).toHaveBeenCalled();
+ expect(opened.location.href).toBe('');
+});
+
 test('an app that needs a token or a declared field opens the apps sheet and connects nothing', async () => {
  const opened = vendor();
  const openApp = vi.fn();

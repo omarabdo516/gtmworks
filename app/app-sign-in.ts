@@ -41,8 +41,10 @@ export async function signInToApp({company,agent,app,signal,openApp}:{company:st
   if(signal?.aborted) { stop(); return {error:'connectFailed'}; }
   // A token or a declared field is typed in the app's own page, not guessed here.
   if(started.ok&&started.body.needs==='details') { opened.close(); openApp?.(app); return {state:'manual'}; }
-  // A token or no-sign-in app is turned on at the press: its answer is the state, and no vendor window follows.
-  if(started.ok&&(started.body.status==='connected'||started.body.status==='attention')) { opened.close(); return {state:'connected'}; }
+  // A token or no-sign-in app is turned on at the press: its answer is the state, and no vendor window follows. One the
+  // Engine cannot reach (attention) did not connect, so it says so.
+  if(started.ok&&started.body.status==='connected') { opened.close(); return {state:'connected'}; }
+  if(started.ok&&started.body.status==='attention') { opened.close(); return {error:'connectFailed'}; }
   if(!started.ok||typeof started.body.url!=='string') { stop(); return {error:'connectFailed'}; }
   opened.opener=null; opened.location.href=started.body.url;
   // The last wait and poll are cut to the time left, so the caller settles at fifteen minutes, not after.

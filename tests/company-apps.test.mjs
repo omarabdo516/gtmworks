@@ -460,10 +460,24 @@ test('Test probes under a temporary key, leaving an existing server of that name
   const probe=url=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name:'My CRM',url,kind:'none',hermes});
   assert.equal((await probe('https://two.example/mcp')).body.state,'connected');
   assert.equal(JSON.stringify(serversOf(fake,companyProfile(company))),before,'the real server is untouched');
-  assert.equal(serversOf(fake,companyProfile(company))['my-crm-test'],undefined,'the probe key is removed');
-  fake.settings.appsUnreachable.add('my-crm-test');
+  assert.equal(serversOf(fake,companyProfile(company))['my-crm_probe'],undefined,'the probe key is removed');
+  fake.settings.appsUnreachable.add('my-crm_probe');
   assert.equal((await probe('https://two.example/mcp')).body.state,'attention');
   assert.equal(JSON.stringify(serversOf(fake,companyProfile(company))),before,'a failed probe leaves it untouched too');
+ } finally { await fake.close(); }
+});
+
+test('Test never removes another server: one named like the old probe, or a 64-character key, stays', async () => {
+ const fake=await fakeHermes();
+ try {
+  makeProfile(fake,companyProfile(company));
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  const long='a'.repeat(64);
+  for(const name of ['CRM test',long]) await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name,url:'https://one.example/mcp',kind:'none',hermes});
+  const before=JSON.stringify(serversOf(fake,companyProfile(company)));
+  for(const name of ['CRM',long]) assert.equal((await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name,url:'https://two.example/mcp',kind:'none',hermes})).body.state,'connected');
+  assert.equal(JSON.stringify(serversOf(fake,companyProfile(company))),before,'crm-test and the 64-character server are untouched');
  } finally { await fake.close(); }
 });
 
