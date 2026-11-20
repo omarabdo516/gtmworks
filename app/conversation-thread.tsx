@@ -19,6 +19,7 @@ import { ReplyCard } from '@/app/reply-card';
 import type { DecidePermission, PermissionOutcome } from '@/app/permission-card';
 import type { ConnectApps } from '@/app/connect-card';
 import { signInToApp } from '@/app/app-sign-in';
+import { useAppsSheet } from '@/app/apps-sheet-open';
 import { appsChanged } from '@/app/company-apps-read';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
@@ -125,6 +126,7 @@ export function ChatPlaceholder() {
 // send, and the record is asked for again at once; while it waits, the Agent is still working. A Viewer sees the wait
 // line.
 export function ConversationTurns({slug,company,record,writer,asked}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void}) {
+ const openSheet=useAppsSheet();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
  const answer=async(card:number,choice:number,answerKey:string)=>{
@@ -160,7 +162,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
  const connect:ConnectApps|undefined=record.connect&&{...record.connect,
   start:async(app,signal)=>{
    if(!agent) return {error:'connectFailed'};
-   const result=await signInToApp({company,agent,app,signal});
+   const result=await signInToApp({company,agent,app,signal,openApp:key=>openSheet?.(null,key,agent)});
    if('state' in result) void appsChanged(company,language);
    return result;
   },

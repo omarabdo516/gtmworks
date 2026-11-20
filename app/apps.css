@@ -96,3 +96,15 @@
 :root[data-theme="dark"] .gw .apps-sheet .switch[aria-checked="true"]::after { background: #121212; }
 .gw .apps-sheet .switch[aria-disabled="true"] { opacity: .55; }
 @media (hover: hover) { .gw .apps-sheet button.panel-row:hover:not([aria-disabled="true"]) { background: var(--gw-bg-hover); } }
+
+/* #458: the care note on an app that reaches customer records or money, and the Owner's own-server form in the sheet. */
+.gw :is(.sov-apps, .apps-sheet) .app__care { margin-top: 2px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .apps-sheet .set-field { display: grid; gap: 6px; }
+.gw .apps-sheet .set-field > span { font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
+.gw .apps-sheet .set-field input, .gw .apps-sheet .set-field select {
+  width: 100%; min-height: 40px; padding: 8px 12px; border-radius: var(--gw-r-sm); border: 1px solid var(--gw-border-1);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit;
+}
+.gw .apps-sheet .own-form { display: grid; gap: 12px; padding: var(--s3); }
+.gw .apps-sheet .own-tools { display: grid; gap: 4px; margin: 0; padding: var(--s2); list-style: none; }
+.gw .apps-sheet .own-tools code { font-size: var(--gw-fs-xs); color: var(--gw-text-2); overflow-wrap: anywhere; }

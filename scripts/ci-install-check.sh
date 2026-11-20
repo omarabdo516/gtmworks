@@ -274,10 +274,11 @@ grep -q hermesProfileNotShared profile-refusal.log || { cat profile-refusal.log 
 marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 docker exec -i "$engine_id" sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
 engine_node "$engine_key" - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer, and a company's memory and approved lessons stay in its own runs"
-# Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
-# catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
-# expired, and disconnecting turns the app off.
-engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps write only their read tools and come back through gtmworks'
+# Apps (#30, #458), on the first company's profile with no vendor sign-in: every entry of the pinned Engine's catalogue is
+# offered; connecting a catalogue app writes no tool filter and comes back through gtmworks; and the Owner's own server is
+# added, tested, turned on for one Agent and removed through the same driver, for no sign-in, a token and OAuth, against a
+# fake MCP server the check starts inside this container (the Engine reaches it as http://web:9123).
+engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps come with all their tools, and any remote MCP server is added and removed'
 # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
 # read are scanned for the real values in .env.install, passed on stdin; only names and paths are printed. Every
 # Engine of the install is scanned, the first and each Company's own (#382).

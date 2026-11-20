@@ -42,7 +42,7 @@ export function ConnectCard({card,fresh,connect}:{card:Connect,fresh:boolean,con
   stopping.current=null;
   if(controller.signal.aborted) return;
   setConnecting(false); busy.current=false;
-  if('state' in result) { setState('connected'); toast(t('connectConnected',card.title)); }
+  if('state' in result) { if(result.state==='manual') { setConnecting(false); busy.current=false; return; } setState('connected'); toast(t('connectConnected',card.title)); }
   else setError(result.error);
  };
  const later=async()=>{

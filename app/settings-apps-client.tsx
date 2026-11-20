@@ -26,7 +26,7 @@ const sayer=(text:Text)=>(key:string,...values:string[])=>values.reduce((line,va
 // Search reads Arabic as the reference does (arNorm): the hamza forms of alef as alef, alef maksura as ya, ta marbuta as
 // ha, and no diacritics.
 const fold=(value:string)=>value.toLowerCase().normalize('NFKD').replace(/[ً-ٕ]/g,'').replace(/[ةى]/g,letter=>String.fromCharCode(letter.charCodeAt(0)===0x629?0x647:0x64A));
-const order:AppCategory[]=['content','communication','analytics','sales'];
+const order:AppCategory[]=['ads','content','communication','analytics','sales','more'];
 // A line naming the app or an Agent keeps each name in its own direction.
 const named=(line:string,...names:string[])=>line.split(/(\{\d\})/).map((part,index)=>{ const at=/^\{(\d)\}$/.exec(part); return at?<bdi key={index}>{names[Number(at[1])]}</bdi>:part; });
 type Say=(key:string,...values:string[])=>string;
@@ -63,10 +63,11 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
  const needle=fold(query.trim());
  const shown=items.filter(item=>(category==='all'||item.category===category)&&fold(item.words).includes(needle));
  const card=(item:AppItem)=>{
-  const action=item.state==='connected'?'manage':item.state==='attention'?'reconnect':'connect';
+  const action=item.state==='connected'||item.source==='custom'?'manage':item.state==='attention'?'reconnect':'connect';
   return <article key={item.key} className="app-card" aria-labelledby={`app-t-${item.key}`}>
    <div className="app__top"><AppTile app={item} size="lg"/><div className="app__titles"><h5 className="app__name" id={`app-t-${item.key}`}><bdi>{item.name}</bdi></h5><span className="app__cat">{say(`category.${item.category}`)}</span></div></div>
    <p className="app__use od-clamp-2">{item.use}</p>
+   {item.care&&<p className="app__care">{say(item.care==='money'?'careMoney':'careCustomers')}</p>}
    <div className="app__foot"><State app={item} say={say}/>
     {owner&&<To place={place} step={{open:item.key}} className="btn btn--secondary btn--sm" id={`app-btn-${item.key}`} aria-label={say(`${action}Label`,item.name)}>{say(action)}</To>}</div>
   </article>;
@@ -90,9 +91,15 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
  </>;
 }
 
-async function ask(body:Record<string,string|undefined>) {
+async function ask(body:Record<string,unknown>) {
  try {
   const response=await fetch('/api/company-apps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return {ok:response.ok,body:await response.json().catch(()=>({})) as Record<string,unknown>};
+ } catch { return {ok:false,body:{}}; }
+}
+async function askServer(body:Record<string,unknown>) {
+ try {
+  const response=await fetch('/api/company-servers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   return {ok:response.ok,body:await response.json().catch(()=>({})) as Record<string,unknown>};
  } catch { return {ok:false,body:{}}; }
 }
@@ -104,14 +111,23 @@ const pollEvery=2000, pollFor=15*60*1000;
 type Run={queue:string[],following:string|null,done:string[],one:boolean};
 const idle:Run={queue:[],following:null,done:[],one:false};
 
-export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean}) {
+export function AppDetail(props:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean,agent?:string}) {
+ // The card that adds a server is a form, not a connection: it has no Agent state yet. Each view keeps its own hooks.
+ return props.item.source==='own'?<OwnTool place={props.place} company={props.company} owner={props.owner} rtl={props.rtl} item={props.item} text={props.text}/>:<CatalogueDetail {...props}/>;
+}
+function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFor}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean,agent?:string}) {
  const say=sayer(text); const router=useRouter(); const {language}=useI18n();
  const [run,setRun]=useState<Run>(idle); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
+ const [token,setToken]=useState(''); const [values,setValues]=useState<Record<string,string>>({});
  const own=item.agents.filter(agent=>agent.own);
- const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [pickError,setPickError]=useState(false);
+ // The Agent that asked for the app (a connect card, its Connected tools) is the one picked, else the main Agent.
+ const [picks,setPicks]=useState<string[]>(()=>own.some(agent=>agent.id===askedFor)?[askedFor!]:own.filter(agent=>agent.main).map(agent=>agent.id)); const [pickError,setPickError]=useState(false);
  const [pending,startTransition]=useTransition();
  const focusNext=useRef<string|null>(null);
  const state=item.state; const on=state!=='off'; const waiting=run.following!==null;
+ // A server with no sign-in, or a token, is turned on at the click: no vendor window opens.
+ const direct=item.auth==='none'||item.auth==='header';
+ const custom=item.source==='custom';
  const nameOf=(id:string)=>item.agents.find(agent=>agent.id===id)?.name??'';
  const names=(ids:string[])=>ids.map(nameOf).join(say('namesSep'));
  // After a refresh draws the page again, the keyboard goes where the step left it.
@@ -163,14 +179,35 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
  useEffect(()=>{ leaving.current={done:run.done.length,refreshApps}; });
  useEffect(()=>()=>{ if(leaving.current.done) leaving.current.refreshApps(); },[]);
  // The vendor's window is opened at the click, before the answer, so the browser lets it open; it is pointed at the
- // vendor once gtmworks has the sign-in page, and never knows this page.
+ // vendor once gtmworks has the sign-in page, and never knows this page. A token or no-sign-in server turns on without a
+ // window: its reach is the answer.
+ const ready=()=>{
+  if(item.auth==='header'&&!token.trim()) { setError('tokenNeeded'); return false; }
+  const missing=(item.fields||[]).find(field=>field.required&&!values[field.name]?.trim());
+  if(missing) { setError('envRequired'); return false; }
+  return true;
+ };
  const connect=(queue:string[],one:boolean,done:string[]=[])=>startTransition(async()=>{
-  const agent=queue[0]; if(!agent) return;
+  const agent=queue[0]; if(!agent||!ready()) return;
   setError('');
+  const body={company,app:item.key,action:'connect',...(item.fields?.length?{fields:values}:{}),...(item.auth==='header'?{token}:{})};
+  if(direct) {
+   const doneNow:string[]=[];
+   for(const id of queue) {
+    const answer=await ask({...body,agent:id});
+    if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); if(doneNow.length) refreshApps(); return; }
+    if(answer.body.status!=='connected') { setError('connectAttention'); if(doneNow.length) refreshApps(); return; }
+    doneNow.push(id);
+   }
+   setToken(''); setRun(idle); refreshApps();
+   if(one&&queue.length===1) { toast(say('agentCanUse',nameOf(agent),item.name)); focusNext.current=`app-ag-${agent}`; }
+   else { toast(say('connectedNames',item.name,names([...done,...doneNow]))); focusNext.current='apps-done'; }
+   return;
+  }
   // A blocked window starts no sign-in, and the page stays where it is.
   const opened=window.open('about:blank','_blank');
   if(!opened) { setError('popupBlocked'); return; }
-  const answer=await ask({company,agent,app:item.key,action:'connect'});
+  const answer=await ask({...body,agent});
   if(!answer.ok) { opened.close(); setError(`error.${String(answer.body.error||'appsFailed')}`); setRun(done.length?{queue,following:null,done,one}:idle); return; }
   opened.opener=null; opened.location.href=String(answer.body.url); vendor.current=opened; setRun({queue,following:agent,done,one});
  });
@@ -189,7 +226,7 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
  const disconnect=()=>startTransition(async()=>{
   const answer=await ask({company,app:item.key,action:'disconnect'});
   if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
-  toast(say('disconnected',item.name),{icon:'x'});
+  toast(say(custom?'removed':'disconnected',item.name),{icon:'x'});
   if(place.kind==='address') router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
   void appsChanged(company,language); if(address) router.refresh();
  });
@@ -213,18 +250,24 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
   <header className="apps-head">
    <div className="sheet__top"><To place={place} step={{back:item.key}} stay={busy} className="circle-btn" id="apps-back" aria-label={say('back')}><SettingsIcon name="back" rtl={rtl}/></To>
     <h3 {...titled(place)} tabIndex={-1}>{on?<bdi>{item.name}</bdi>:named(say('connectTitle'),item.name)}</h3><Close place={place}/></div>
-   <div className="sheet__meta"><span>{say(`category.${item.category}`)}</span><span aria-hidden="true">·</span><span>{say('readOnly')}</span>
+   <div className="sheet__meta"><span>{say(`category.${item.category}`)}</span><span aria-hidden="true">·</span><span>{say('allTools')}</span>
     {state==='connected'&&<span className="badge"><SettingsIcon name="check"/>{say('stateConnected')}</span>}
     {state==='attention'&&<span className="badge badge--warn">{say('stateAttention')}</span>}</div>
   </header>
   <div className="apps-body apps-detail">
    <div className="app-hero"><AppTile app={item} size="lg"/><p>{item.use}</p></div>
+   {item.care&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{say(item.care==='money'?'careMoney':'careCustomers')}</span></p>}
    {state==='attention'&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{say('attentionNote')}</span></p>}
    <dl className="kv app-kv">
     <div className="kv__row"><dt>{say('can')}</dt><dd>{item.can}</dd></div>
-    <div className="kv__row"><dt>{say('cant')}</dt><dd>{say('cantAll')}</dd></div>
-    <div className="kv__row"><dt>{say('signIn')}</dt><dd>{named(say('signInLine'),item.name)}</dd></div>
+    <div className="kv__row"><dt>{say('kindTitle')}</dt><dd>{say(item.auth==='header'?'kindHeader':item.auth==='oauth'?'kindOauth':'kindNone')}</dd></div>
+    {item.auth==='oauth'&&<div className="kv__row"><dt>{say('signIn')}</dt><dd>{named(say('signInLine'),item.name)}</dd></div>}
    </dl>
+   {owner&&item.auth==='header'&&<section className="apps-sec" aria-labelledby="app-token-h"><h4 className="apps-sec__h" id="app-token-h">{say('token')}</h4>
+    <label className="panel-card set-field"><span>{say('tokenHint')}</span><input id="app-token" type="password" autoComplete="off" value={token} onChange={event=>setToken(event.target.value)}/><span className="set-hint">{say('tokenNote')}</span></label></section>}
+   {owner&&Boolean(item.fields?.length)&&<section className="apps-sec" aria-labelledby="app-env-h"><h4 className="apps-sec__h" id="app-env-h">{say('env')}</h4>
+    <div className="panel-card">{item.fields!.map(field=><label key={field.name} className="set-field"><span>{field.prompt||field.name}{field.required&&<span aria-hidden="true"> *</span>}</span>
+     <input id={`app-env-${field.name}`} type={/(SECRET|KEY|TOKEN)$/.test(field.name)?'password':'text'} autoComplete="off" value={values[field.name]??''} onChange={event=>setValues({...values,[field.name]:event.target.value})}/></label>)}</div></section>}
    {on?<section className="apps-sec" aria-labelledby="app-who-h"><h4 className="apps-sec__h" id="app-who-h">{say('whoUses')}</h4>
      <ul className="panel-card">{item.agents.map(agent=><li key={agent.id} className="panel-row">{face(agent)}
       <span className="panel-row__text"><span className="panel-row__t" id={`app-ag-t-${agent.id}`}><bdi>{agent.name}</bdi></span><span className="panel-row__d">{line(agent)}</span></span>
@@ -239,10 +282,11 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
      <span className="set-err" id="app-pick-err" hidden={!pickError}>{say('pickOne')}</span></section>}
    {waiting&&<p className="set-hint" role="status">{named(say('waiting'),item.name)}</p>}
    {error&&<p className="set-err" role="alert">{say(error)}</p>}
-   {owner&&on&&(asking?<div className="app-off" role="group" aria-labelledby="app-off-t"><p id="app-off-t">{named(say(having.length>1?'disconnectAskMany':'disconnectAsk'),item.name,names(having.map(agent=>agent.id)))}</p>
+   {/* A server the Owner added keeps Remove while it is off for every Agent: it is still in their profiles. */}
+   {owner&&(on||custom)&&(asking?<div className="app-off" role="group" aria-labelledby="app-off-t"><p id="app-off-t">{named(say(custom?'removeAsk':having.length>1?'disconnectAskMany':'disconnectAsk'),item.name,names(having.map(agent=>agent.id)))}</p>
      <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--secondary btn--sm" id="app-off-cancel" disabled={pending} onClick={()=>setAsking(false)}>{say('cancel')}</button>
-      <button type="button" className="btn btn--primary btn--sm" id="app-off-go" disabled={pending} onClick={disconnect}>{say('disconnect')}</button></div></div>
-    :<div><button type="button" className="link-btn" id="app-off" onClick={()=>setAsking(true)}>{say('disconnect')} <bdi>{item.name}</bdi></button></div>)}
+      <button type="button" className="btn btn--primary btn--sm" id="app-off-go" disabled={pending} onClick={disconnect}>{say(custom?'remove':'disconnect')}</button></div></div>
+    :<div><button type="button" className="link-btn" id="app-off" onClick={()=>setAsking(true)}>{say(custom?'remove':'disconnect')} <bdi>{item.name}</bdi></button></div>)}
   </div>
   <footer className="modal__foot modal__foot--end">
    {owner&&(state!=='connected'||waiting||next)?<>{waiting?<button type="button" className="btn btn--secondary" id="app-wait-cancel" disabled={pending} onClick={cancel}>{say('cancel')}</button>:back}
@@ -253,6 +297,123 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
      else connect(own.filter(agent=>agent.state==='attention').map(agent=>agent.id),false);
     }}>{busy?say('connecting'):next?named(say('connectFor'),nameOf(next)):say(state==='attention'?'reconnect':'connect')}</button></>
    :<To place={place} step={{back:item.key}} stay={busy} className="btn btn--primary" id="apps-done">{say('done')}</To>}
+  </footer>
+ </>;
+}
+
+// The Owner's own server (#458): a name, an address, the sign-in kind and, for a token, the token itself. Test adds it to
+// the chosen Agent's profile and reads back the tools the server lists (names only); Add turns it on, and an OAuth server
+// then opens the vendor's window as every app does. The token is kept in this form until the answer and cleared at once;
+// gtmworks never stores or returns it.
+function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text}) {
+ const say=sayer(text); const router=useRouter(); const {language}=useI18n();
+ const own=item.agents.filter(agent=>agent.own);
+ const [name,setName]=useState(''); const [address,setAddress]=useState('');
+ const [kind,setKind]=useState<'oauth'|'header'|'none'>('oauth'); const [token,setToken]=useState('');
+ const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [queue,setQueue]=useState<string[]>([]);
+ const [tools,setTools]=useState<string[]|null>(null); const [tested,setTested]=useState('');
+ const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
+ const [following,setFollowing]=useState<{key:string,agent:string}|null>(null);
+ const nameOf=(id:string)=>item.agents.find(agent=>agent.id===id)?.name??'';
+ const vendor=useRef<Window|null>(null); const left=useRef(following);
+ const addressPage=place.kind==='address';
+ const refreshApps=()=>{ void appsChanged(company,language); if(addressPage) router.refresh(); };
+ useEffect(()=>{ left.current=following; });
+ // Closing the page under an OAuth sign-in cancels it, as every app's page does.
+ useEffect(()=>()=>{
+  const gone=left.current; if(!gone) return;
+  void fetch('/api/company-apps',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent:gone.agent,app:gone.key,action:'cancel'})}).catch(()=>{});
+  vendor.current?.close();
+ },[]);
+ useEffect(()=>{
+  const agent=following?.agent, key=following?.key;
+  if(!agent||!key) return;
+  let stopped=false, timer:ReturnType<typeof setTimeout>|undefined; const until=Date.now()+pollFor;
+  const poll=async()=>{
+   const answer=await ask({company,agent,app:key,action:'poll'});
+   if(stopped) return;
+   const status=String(answer.body.status||'');
+   if(answer.ok&&status==='waiting'&&Date.now()<until) { timer=setTimeout(poll,pollEvery); return; }
+   setFollowing(null);
+   if(answer.ok&&status==='connected') {
+    toast(say('ownAdded',name.trim()||key));
+    // The Agent stays first until its sign-in is connected; only then does the queue move on, and the form finishes
+    // only when every picked Agent has connected.
+    const rest=queue.slice(1);
+    if(rest.length) { setQueue(rest); setToken(''); return; }
+    setQueue([]); refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
+   } else setError('connectAttention');
+  };
+  timer=setTimeout(poll,pollEvery);
+  return ()=>{ stopped=true; clearTimeout(timer); };
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[following,company,queue]);
+ const pick=(id:string)=>{ if(busy) return; setPicks(picks.includes(id)?picks.filter(other=>other!==id):[...picks,id]); };
+ const submit=(action:'add'|'test')=>{
+  if(busy) return;
+  if(!name.trim()||!address.trim()) { setError('ownRequired'); return; }
+  if(kind==='header'&&!token.trim()) { setError('tokenNeeded'); return; }
+  if(!picks.length) { setError('pickOne'); return; }
+  const popup=action==='add'&&kind==='oauth'?window.open('about:blank','_blank'):null;
+  if(action==='add'&&kind==='oauth'&&!popup) { setError('popupBlocked'); return; }
+  void (async()=>{
+   setBusy(true); setError(''); setTools(null); setTested('');
+   const targets=action==='test'||kind!=='oauth'?picks:(queue.length?queue:picks);
+   if(action==='test') {
+    let shown:{state?:unknown,tools?:unknown}|null=null;
+    for(const agent of targets) {
+     const answer=await askServer({company,agent,action,name,url:address,kind,token:kind==='header'?token:''});
+     if(!answer.ok) { setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+     if(!shown||(shown.state!=='connected'&&answer.body.state==='connected')) shown=answer.body;
+    }
+    setTools(Array.isArray(shown?.tools)?shown.tools as string[]:[]);
+    setTested(String(shown?.state||'')); setToken(''); setBusy(false); return;
+   }
+   for(const agent of targets) {
+    const answer=await askServer({company,agent,action,name,url:address,kind,token:kind==='header'?token:''});
+    if(!answer.ok) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+    // Added, but the engine did not reach it (an address that does not answer, a token it refused): the form stays with
+    // the reason, and its card shows Needs attention.
+    if(kind!=='oauth'&&answer.body.state!=='connected') { setBusy(false); setError('connectAttention'); refreshApps(); return; }
+    if(kind==='oauth') {
+     const url=typeof answer.body.url==='string'?answer.body.url:null;
+     if(!url) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+     const key=String(answer.body.key||''); popup!.opener=null; popup!.location.href=url; vendor.current=popup; setToken('');
+     setQueue(targets); setFollowing({key,agent}); setBusy(false); return;
+    }
+   }
+   setQueue([]); setToken(''); setBusy(false);
+   toast(say('ownAdded',name.trim())); refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
+  })();
+ };
+ return <>
+  <header className="apps-head">
+   <div className="sheet__top"><To place={place} step={{back:item.key}} stay={busy} className="circle-btn" id="apps-back" aria-label={say('back')}><SettingsIcon name="back" rtl={rtl}/></To>
+    <h3 {...titled(place)} tabIndex={-1}>{say('ownName')}</h3><Close place={place}/></div>
+   <p className="apps-sub">{say('ownIntro')}</p>
+  </header>
+  <div className="apps-body apps-detail">
+   <div className="panel-card own-form">
+    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={error==='ownRequired'&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
+    <label className="set-field"><span>{say('address')}</span><input id="own-url" type="url" inputMode="url" autoComplete="off" placeholder={say('addressHint')} aria-invalid={error==='ownRequired'&&!address.trim()||undefined} aria-describedby="own-err" value={address} onChange={event=>setAddress(event.target.value)}/></label>
+    <label className="set-field"><span>{say('kind')}</span><select id="own-kind" value={kind} onChange={event=>setKind(event.target.value as 'oauth'|'header'|'none')}>
+     <option value="oauth">{say('kindOauth')}</option><option value="header">{say('kindHeader')}</option><option value="none">{say('kindNone')}</option></select></label>
+    {kind==='header'&&<label className="set-field"><span>{say('token')}</span><input id="own-token" type="password" autoComplete="off" aria-invalid={error==='tokenNeeded'||undefined} aria-describedby="own-token-hint own-err" value={token} onChange={event=>setToken(event.target.value)}/><span className="set-hint" id="own-token-hint">{say('tokenNote')}</span></label>}
+   </div>
+   {owner&&<section className="apps-sec" aria-labelledby="own-pick-h"><h4 className="apps-sec__h" id="own-pick-h">{say('whoGets')} <span className="num muted">{picks.length}</span></h4>
+    <div className="panel-card" role="group" aria-labelledby="own-pick-h">{own.map(agent=>{ const picked=picks.includes(agent.id);
+     return <button key={agent.id} type="button" className="panel-row tm-pick" role="checkbox" id={`own-pick-${agent.id}`} aria-checked={picked} aria-disabled={busy||undefined} onClick={()=>pick(agent.id)}>
+      {face(agent)}<span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span></span>
+      <span className="tm-check" aria-hidden="true">{picked&&<ShellIcon name="check"/>}</span></button>; })}</div></section>}
+   {following&&<p className="set-hint" role="status">{say('waiting',name.trim())}</p>}
+   {error&&<p className="set-err" role="alert" id="own-err">{say(error)}</p>}
+   {tools&&<section className="apps-sec" aria-labelledby="own-tools-h"><h4 className="apps-sec__h" id="own-tools-h">{say('toolsListed')} <span className="num muted">{tools.length}</span></h4>
+    <div className="panel-card">{tools.length?<ul className="own-tools">{tools.map(tool=><li key={tool}><code>{tool}</code></li>)}</ul>
+     :<p className="panel-empty">{tested==='connected'?say('toolsNone'):say('toolsFailed')}</p>}</div></section>}
+  </div>
+  <footer className="modal__foot modal__foot--end">
+   <button type="button" className="btn btn--secondary" id="own-test" aria-disabled={busy||following!==null||undefined} onClick={()=>{ if(!busy&&!following) submit('test'); }}>{busy?say('testing'):say('test')}</button>
+   <button type="button" className="btn btn--primary" id="own-add" aria-disabled={busy||following!==null||undefined} onClick={()=>{ if(!busy&&!following) submit('add'); }}>{busy?say('adding'):queue.length?named(say('addFor'),nameOf(queue[0])):say('add')}</button>
   </footer>
  </>;
 }
