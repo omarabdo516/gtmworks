@@ -21,8 +21,11 @@ const releases={
  'v1.10.0':{hex:hex('c'),migrations:['001.sql','002.sql','003.sql']},
 };
 const mainHex=hex('e');
+const sandboxHex=hex('9');
 const ref=tag=>`ghcr.io/${repo}:${tag.slice(1)}@sha256:${releases[tag].hex}`;
+const sandboxRef=tag=>`ghcr.io/${repo}-sandbox:${tag.slice(1)}@sha256:${releases[tag].hex}`;
 const mainRef=`ghcr.io/${repo}:main@sha256:${mainHex}`;
+const mainSandboxRef=`ghcr.io/${repo}-sandbox:main@sha256:${sandboxHex}`;
 
 // Every system tool but docker and curl, so a test can take Docker away without taking sh, sed or node with it.
 const tools=mkdtempSync(join(tmpdir(),'gtmworks-get-tools-'));
@@ -45,6 +48,7 @@ const lockBlock=installText.slice(lockStart,installText.indexOf(lockEnd)+lockEnd
 assert.ok(installText.includes('opt/data/*'),'install.sh restores opt/data/* entries, as get.sh looks for');
 const installerTemplate=`#!/bin/sh
 release_image=@REF@
+sandbox_image=@SANDBOX@
 # restore accepts opt/data/* (the Agents' data, #349)
 # restore accepts .engines/* (each Engine's key, #385)
 # restore accepts engines|engines/* (each Company's Engine data, #386)
@@ -95,15 +99,23 @@ case "$*" in
   cat > /dev/null; [ -z "\${ARCHIVE_UNREADABLE:-}" ] || { echo 'ERROR:  relation "gtmworks_install.schema_migrations" does not exist'; exit 0; }
   printf '\\t 1: migrations = "%s"\\t(typeid = 25, len = -1, typmod = -1, byval = f)\\n' "\${ARCHIVE_MIGRATIONS-001.sql}"; exit 0;;
  pull\\ *) echo "Digest: \${2##*@}"; exit 0;;
- 'image inspect'*) printf 'mirror.example/gtmworks@sha256:%s\\nghcr.io/${repo}@sha256:%s\\n' "$MAIN_HEX" "$MAIN_HEX"; exit 0;;
+ 'image inspect'*)
+  case "$*" in
+   *-sandbox*) printf 'ghcr.io/${repo}-sandbox@sha256:%s\\n' "$SANDBOX_HEX";;
+   *) printf 'mirror.example/gtmworks@sha256:%s\\nghcr.io/${repo}@sha256:%s\\n' "$MAIN_HEX" "$MAIN_HEX";;
+  esac; exit 0;;
  *release-assets.mjs*)
-  out= wd= ref= prev=
-  for arg; do
-   case "$prev" in -v) out=\${arg%:/out};; -w) wd=$arg;; scripts/release-assets.mjs) ref=$arg;; esac
-   prev=$arg
+  out= wd= ref= sandbox=
+  while [ $# -gt 0 ]; do
+   case "$1" in
+    -v) out=\${2%:/out}; shift 2;;
+    -w) wd=$2; shift 2;;
+    scripts/release-assets.mjs) ref=$2; sandbox=$4; shift 4;;
+    *) shift;;
+   esac
   done
   [ "$wd" = /app/release-source ] || exit 9
-  sed "s#@REF@#$ref#g" "$FIXTURE/template-install.sh" > "$out/install.sh"
+  sed -e "s#@REF@#$ref#g" -e "s#@SANDBOX@#$sandbox#g" "$FIXTURE/template-install.sh" > "$out/install.sh"
   sed "s#@REF@#$ref#g" "$FIXTURE/template-compose.yml" > "$out/docker-compose.install.yml"; exit 0;;
  *' ls /app/install/supabase/migrations') cat "$FIXTURE/migrations/\${3##*:}";;
  *'exec -T db psql'*) [ ! -f "$DB_FILE" ] || cat "$DB_FILE";;
@@ -150,7 +162,7 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
  writeFileSync(join(fixture,'releases.json'),JSON.stringify(list.map(tag=>({url:'x',name:`Release ${tag}`,tag_name:tag,draft:false,immutable:false,prerelease:prerelease.includes(tag),body:'notes, "tag_name": "v9.9.9", "prerelease": true'})),null,2));
  for(const [tag,release] of Object.entries(releases)) {
   mkdirSync(join(fixture,tag));
-  writeFileSync(join(fixture,tag,'install.sh'),installerTemplate.replaceAll('@REF@',ref(tag)));
+  writeFileSync(join(fixture,tag,'install.sh'),installerTemplate.replaceAll('@REF@',ref(tag)).replaceAll('@SANDBOX@',sandboxRef(tag)));
   writeFileSync(join(fixture,tag,'docker-compose.install.yml'),composeTemplate.replaceAll('@REF@',ref(tag)));
   writeFileSync(join(fixture,'migrations',release.hex),release.migrations.join('\n')+'\n');
  }
@@ -159,7 +171,7 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
  writeFileSync(join(bin,'curl'),fakeCurl,{mode:0o755});
  writeFileSync(join(bin,'mv'),fakeMv,{mode:0o755});
  const logs={DOCKER_LOG:join(root,'docker.log'),CURL_LOG:join(root,'curl.log'),INSTALLER_LOG:join(root,'installer.log'),RESTORE_LOG:join(root,'restore.log'),DB_FILE:join(root,'database')};
- const env={HOME:home,PATH:`${bin}:${tools}`,REAL_MV:join(tools,'mv'),FIXTURE:fixture,GET_SOURCE:getScript,MAIN_HEX:mainHex,...logs};
+ const env={HOME:home,PATH:`${bin}:${tools}`,REAL_MV:join(tools,'mv'),FIXTURE:fixture,GET_SOURCE:getScript,MAIN_HEX:mainHex,SANDBOX_HEX:sandboxHex,...logs};
  const spawn=(args,{extra={},input,cwd=work}={})=>spawnSync('/bin/sh',args,{cwd,env:{...env,...extra},encoding:'utf8',input});
  const read=path=>existsSync(path)?readFileSync(path,'utf8'):'';
  const dir=join(home,'gtmworks');
@@ -200,7 +212,7 @@ test('gtmworks sign-in claude runs the Engine\'s own Claude sign-in in the Compa
  assert.doesNotMatch(getText,/engine_row|company_engines/);
  assert.match(getText,/sh \.\/install\.sh sign-in "\$provider" --company "\$company"/);
  // The real installer runs here, because it owns the lookup and the container the sign-in runs in.
- writeFileSync(join(m.dir,'install.sh'),readFileSync('scripts/install.sh','utf8').replace('release_image=',`release_image=${ref('v1.10.0')}`));
+ writeFileSync(join(m.dir,'install.sh'),readFileSync('scripts/install.sh','utf8').replace('release_image=',`release_image=${ref('v1.10.0')}`).replace('sandbox_image=',`sandbox_image=${sandboxRef('v1.10.0')}`));
  const row='http://gtmworks-engine-first:8642|RS Learning\n';
  // By the Company's name: the record names the Engine, and the Engine's own sign-in runs in it on its root profile.
  writeFileSync(m.env.DB_FILE,row);
@@ -291,9 +303,12 @@ test('--channel main installs the main image by its digest, with the two files w
  ok(m.line(['--channel','main']));
  const docker=m.docker();
  assert.match(docker,new RegExp(`^pull ghcr\\.io/${repo}:main$`,'m'));
- assert.match(docker,new RegExp(`^run --rm --user \\d+:\\d+ -v ${m.dir}/\\.gtmworks-download\\.\\w+:/out -w /app/release-source ${mainRef.replace(/[.]/g,'\\.')} node scripts/release-assets\\.mjs ${mainRef.replace(/[.]/g,'\\.')} /out$`,'m'));
+ // The work sandbox image of the same main build is pulled and pinned by its own digest beside the app image (#392).
+ assert.match(docker,new RegExp(`^pull ghcr\\.io/${repo}-sandbox:main$`,'m'));
+ assert.match(docker,new RegExp(`^run --rm --user \\d+:\\d+ -v ${m.dir}/\\.gtmworks-download\\.\\w+:/out -w /app/release-source ${mainRef.replace(/[.]/g,'\\.')} node scripts/release-assets\\.mjs ${mainRef.replace(/[.]/g,'\\.')} /out ${mainSandboxRef.replace(/[.]/g,'\\.')}$`,'m'));
  assert.equal(m.curl().includes('releases'),false);
  assert.match(m.file('install.sh'),new RegExp(`^release_image=${mainRef.replace(/[.]/g,'\\.')}$`,'m'));
+ assert.match(m.file('install.sh'),new RegExp(`^sandbox_image=${mainSandboxRef.replace(/[.]/g,'\\.')}$`,'m'));
  assert.equal(m.file('.gtmworks-version'),'main\n');
  // A repair keeps the main build it runs: moving to a newer one is an update, which backs up first.
  m.clear();
@@ -311,9 +326,10 @@ test('the main image holds what --channel main runs, and release-assets.mjs writ
  mkdirSync(join(source,'scripts'));
  cpSync('docker-compose.install.yml',join(source,'docker-compose.install.yml'));
  for(const file of ['install.sh','release-assets.mjs','engine-template.yml']) cpSync(join('scripts',file),join(source,'scripts',file));
- const result=spawnSync(process.execPath,['scripts/release-assets.mjs',mainRef,join(source,'out')],{cwd:source,encoding:'utf8'});
+ const result=spawnSync(process.execPath,['scripts/release-assets.mjs',mainRef,join(source,'out'),mainSandboxRef],{cwd:source,encoding:'utf8'});
  assert.equal(result.status,0,result.stderr);
  assert.match(readFileSync(join(source,'out/install.sh'),'utf8'),new RegExp(`^release_image=${mainRef.replace(/[.]/g,'\\.')}$`,'m'));
+ assert.match(readFileSync(join(source,'out/install.sh'),'utf8'),new RegExp(`^sandbox_image=${mainSandboxRef.replace(/[.]/g,'\\.')}$`,'m'));
  assert.match(readFileSync(join(source,'out/docker-compose.install.yml'),'utf8'),new RegExp(`image: ${mainRef.replace(/[.]/g,'\\.')}`));
 });
 
@@ -587,7 +603,7 @@ test('a first install the machine stopped in is finished with the build it began
  assert.equal(stopped.signal,'SIGKILL',stopped.stderr);
  assert.equal(m.file('.gtmworks-version'),'','the installer stopped before it could be recorded after the run');
  assert.equal(m.file('.gtmworks-pending'),`main@sha256:${mainHex}\n`);
- assert.equal(m.file('.gtmworks-pending.d/install.sh'),readFileSync(join(m.env.FIXTURE,'template-install.sh'),'utf8').replaceAll('@REF@',mainRef));
+ assert.equal(m.file('.gtmworks-pending.d/install.sh'),readFileSync(join(m.env.FIXTURE,'template-install.sh'),'utf8').replaceAll('@REF@',mainRef).replaceAll('@SANDBOX@',mainSandboxRef));
  const newer=hex('9');
  writeFileSync(join(m.env.FIXTURE,'migrations',newer),'001.sql\n002.sql\n003.sql\n004.sql\n');
  m.clear();
@@ -680,7 +696,7 @@ test('a main install goes back to the exact main build it ran, by its digest and
  const updated=m.gtmworks(['update'],{extra:{MAIN_HEX:newer}});
  ok(updated);
  assert.equal(updated.stdout.trim().split('\n').at(-1),`To go back to main@sha256:${mainHex}: gtmworks update --version main@sha256:${mainHex}`);
- assert.equal(m.file(`.gtmworks-main/${mainHex}/install.sh`),readFileSync(join(m.env.FIXTURE,'template-install.sh'),'utf8').replaceAll('@REF@',mainRef));
+ assert.equal(m.file(`.gtmworks-main/${mainHex}/install.sh`),readFileSync(join(m.env.FIXTURE,'template-install.sh'),'utf8').replaceAll('@REF@',mainRef).replaceAll('@SANDBOX@',mainSandboxRef));
  m.clear();
  // main has moved on (MAIN_HEX is still the newer build): the command goes back to the exact one before.
  ok(m.gtmworks(updated.stdout.trim().split('\n').at(-1).split(': gtmworks ')[1].split(' '),{extra:{MAIN_HEX:newer}}));

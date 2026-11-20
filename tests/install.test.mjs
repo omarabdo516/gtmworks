@@ -101,6 +101,10 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
  const moved=readFileSync(join(directory,'.env.install'),'utf8');
  assert.equal(moved,'existing secrets\n');
  assert.match(readFileSync(join(directory,'.engines/first/.env'),'utf8'),/^ENGINE_KEY=k{64}$/m);
+ // The work sandbox image every Company's sandbox runs (#392): a source checkout builds it from sandbox/Dockerfile and
+ // records the reference the installer's later runs and every Company's sandbox read.
+ assert.match(readFileSync(commands,'utf8'),/^build --tag gtmworks-work-sandbox:local sandbox$/m);
+ assert.equal(readFileSync(join(directory,'.work-sandbox-image'),'utf8'),'gtmworks-work-sandbox:local\n');
  for(const [failure,status,lastStage] of [
   [{DOWNLOAD_EXIT:'8'},8,/Downloading update source/],
   [{EXTRACTION_EXIT:'9'},9,/Extracting update source/],
@@ -208,7 +212,8 @@ esac
   if(mode==='release') {
    // A release install runs from its own folder, whose install.sh names its image by digest.
    const image=`ghcr.io/omarabdo516/gtmworks:1.2.3@sha256:${'a'.repeat(64)}`;
-   writeFileSync(join(directory,'install.sh'),installer.replace('release_image=','release_image='+image));
+   const sandboxImage=`ghcr.io/omarabdo516/gtmworks-sandbox:1.2.3@sha256:${'b'.repeat(64)}`;
+   writeFileSync(join(directory,'install.sh'),installer.replace('release_image=','release_image='+image).replace('sandbox_image=','sandbox_image='+sandboxImage));
    writeFileSync(join(directory,'docker-compose.install.yml'),`name: gtmworks-install\nservices:\n  db:\n    image: ${image}\n`);
    command=['install.sh','update'];
   } else {

@@ -4,8 +4,10 @@ set -eu
 # Read the function before an update replaces this script on disk.
 main() {
 # A release's install script names its image by digest (scripts/release-assets.mjs) and sits beside its compose file;
-# in a source checkout this stays empty and the image is built from the checkout.
+# in a source checkout this stays empty and the image is built from the checkout. The work sandbox image every Company's
+# sandbox runs (#392, ADR 0020) is named the same way: a release's pinned one, or one this checkout builds.
 release_image=
+sandbox_image=
 if [ -n "$release_image" ]; then cd "$(dirname "$0")"; else cd "$(dirname "$0")/.."; fi
 umask 077
 # One install at a time, held on a file descriptor of .install.lock: the kernel releases it when this process ends,
@@ -42,6 +44,21 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 node_image=node:22.14.0-alpine3.21
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+# The image every Company's work sandbox runs (#392, ADR 0020): a release names it by tag and digest and the install
+# pulls it; a source checkout builds it from its one build file. Its reference is kept in .work-sandbox-image, the one
+# place whatever makes a Company's sandbox reads it, so every sandbox of an install runs the same image.
+work_sandbox_tag=gtmworks-work-sandbox:local
+work_sandbox_image() {
+  if [ -n "$sandbox_image" ]; then
+    echo "Pulling the work sandbox image: $sandbox_image"
+    docker pull "$sandbox_image" || return 1
+    printf '%s\n' "$sandbox_image" > .install-lock/work-sandbox-image
+  else
+    echo "Building the work sandbox image: $work_sandbox_tag"
+    docker build --tag "$work_sandbox_tag" sandbox || return 1
+    printf '%s\n' "$work_sandbox_tag" > .install-lock/work-sandbox-image
+  fi
+}
 # A Company's Engine (ADR 0018) is made from the template shipped with the release, as its own Compose project: the pinned
 # official Hermes image, its own data volume, its own key and its own network. The app and the worker join that network;
 # the Engine joins nothing else. The installer makes the first Company's Engine; `gtmworks company add` (#382, #383) makes
@@ -567,6 +584,10 @@ if [ -n "$release_image" ]; then
   # A compose file from another release would migrate one version and start another.
   grep -qF "image: $release_image" docker-compose.install.yml || {
     echo "docker-compose.install.yml is not from the release of $release_image: download both files of one release." >&2; exit 1; }
+  # The work sandbox image is part of the release too: one written without it would leave every Company's sandbox
+  # with an image the release did not pin (#392).
+  test -n "$sandbox_image" || {
+    echo "This release names no work sandbox image: download both files of one release." >&2; exit 1; }
   # Backup and restore restart the stack without migrating, so they run only with the files of the release it runs.
   case "$operation" in backup|restore)
     test "$(cat .install-release 2>/dev/null)" = "$release_image" || {
@@ -794,6 +815,9 @@ if [ -z "$release_image" ]; then
     mv .install-lock/gateway .install-gateway
   fi
 fi
+# The image every Company's work sandbox runs (#392, ADR 0020): pulled from the release's pin or built from this
+# checkout, and recorded before anything can make a Company's sandbox.
+work_sandbox_image || exit 1
 # Every Engine is made from the template before the app and the worker start, recreated when the release pins a new
 # image, and left running otherwise.
 engines_up
@@ -821,6 +845,7 @@ ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e E
 # fail naming the address and its last answer when 200 never comes.
 compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','$engine_address/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
 if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
+mv .install-lock/work-sandbox-image .work-sandbox-image
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
 echo 'Mail: http://localhost:8025'
