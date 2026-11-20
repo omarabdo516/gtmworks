@@ -479,15 +479,22 @@ engine_node "$engine_key" - sandbox-key "$key_marker" runs < scripts/check-insta
 # the Engine's session teardown neither edit nor the planted file is in any Skills folder on the Engine (the Engine's own,
 # the profiles' and the Company's shared one).
 engine_change() {
-  docker exec "$engine_id" sh -ec 'for folder in /opt/data/skills /opt/data/profiles/*/skills; do [ -d "$folder" ] || continue; grep -rl -- "EDIT-$1" "$folder" 2> /dev/null; find "$folder" -name "planted-$1.md" 2> /dev/null; done; true' sh "$1"
+  docker exec "$engine_id" sh -c 'for folder in /opt/data/skills /opt/data/profiles/*/skills; do [ -d "$folder" ] || continue; grep -rl -- "EDIT-$1" "$folder" 2> /dev/null; find "$folder" -name "planted-$1.md" 2> /dev/null; done; true' sh "$1"
 }
 sync_marker="sandbox-sync-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 engine_node "$engine_key" - sandbox-sync "$sync_marker" < scripts/check-install-profiles.mjs | tee sandbox-sync.log \
   || fail 'an Agent edits and plants a Skill in its sandbox home'
 before_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills before the sandbox session ended"
 [[ -z $before_sync ]] || fail "an Agent's edit reached the Engine before its session ended: $before_sync"
-docker restart "$engine_id" > /dev/null || fail 'restart the Engine to tear the sandbox session down'
+# The teardown's own log line says the cap did its work, so a stop that never reached it cannot pass for one that did.
+sync_back_skips() {
+  docker exec "$engine_id" sh -c "find /opt/data -name '*.log' -path '*logs*' | xargs grep -h 'skipping extraction' 2> /dev/null | wc -l" || echo 0
+}
+skips_before=$(sync_back_skips)
+docker restart -t 60 "$engine_id" > /dev/null || fail 'restart the Engine to tear the sandbox session down'
 engine_healthy "$engine_id" 180 || fail 'the Engine is healthy after the sandbox session teardown'
+skips_after=$(sync_back_skips)
+[[ ${skips_after:-0} -gt ${skips_before:-0} ]] || fail 'the Engine did not run the sandbox session teardown'
 after_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills after the sandbox session teardown"
 [[ -z $after_sync ]] || fail "what an Agent changed in the sandbox came back to the Engine: $after_sync"
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
