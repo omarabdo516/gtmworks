@@ -78,7 +78,7 @@ engine_id=$(first_engine_id) || fail 'the first Engine container'
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine_id") == $(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1) ]] || fail 'the Engine runs the template image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine_id") != *HostPort* ]] || fail 'the Engine publishes no host port'
 # The Engine joins the install network and its Company's work network, and nothing else (#393).
-engine_networks=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine_id" | sort)
+engine_networks=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine_id" | grep . | sort)
 [[ $engine_networks == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only (got: $engine_networks)"
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \
@@ -194,7 +194,7 @@ second_company=$(db -c "select id from public.companies where name='Second Compa
 # app and the worker join its network.
 [[ $(docker inspect -f '{{.Config.Image}}' "$second_container") == *'nousresearch/hermes-agent:v0.23.0@sha256:'* ]] || fail 'the second Engine runs the pinned Hermes image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$second_container") != *HostPort* ]] || fail 'the second Engine publishes no host port'
-[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container" | sort) == $(printf '%s\n' "$second_network" "gtmworks-work-second-company" | sort) ]] || fail 'the second Engine joins its own network and its work network only'
+[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container" | grep . | sort) == $(printf '%s\n' "$second_network" "gtmworks-work-second-company" | sort) ]] || fail 'the second Engine joins its own network and its work network only'
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx "$second_network" \
     || fail "the $service joins the second Engine's network"
@@ -475,7 +475,7 @@ for folder in .engines/*/; do
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine ]] || fail "the restored install runs the Engine $name"
   [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume"
-  [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only"
+  [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only"
   # The lifecycle seed's two Companies (restore-one, restore-two) hold records of their own at the first Engine's address.
   [[ $(db -c "select count(*) from public.companies c join public.company_engines e on e.id=c.engine_id where e.address='http://$name:8642'") -ge 1 ]] || fail "a Company's record names the Engine $name"
   for service in web worker; do
@@ -703,7 +703,7 @@ engine=$(first_engine_id)
 hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine") != *HostPort* ]] || fail 'the Engine publishes no host port'
-[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine" | sort) == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only"
+[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine" | grep . | sort) == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only"
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \
     || fail "the $service joins the Engine's network"
@@ -837,7 +837,7 @@ for folder in .engines/*/; do
   [[ -n $engine && $(docker inspect -f '{{.Id}}' "$engine") != "$before" ]] || fail "the update recreated the Engine $name"
   [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == gtmworks-engine-check:0.0.2 ]] || fail "the Engine $name runs the image the release pins"
   [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
-  [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
+  [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done
 # A Run on each Company answers on its own Engine, and the code word its own Engine kept reaches its own Run only.
 compose exec -T web node --input-type=module - < "$root/scripts/check-install-engines.mjs" || fail 'a Run on each Company answers after the update'
