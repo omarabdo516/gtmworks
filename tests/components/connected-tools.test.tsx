@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { ConnectedTools, type AgentToolItem } from '@/app/connected-tools';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { appsChanged } from '@/app/company-apps-read';
 import '@/app/shell.css';
 
 const { toast, signInToApp } = vi.hoisted(() => ({ toast: vi.fn(), signInToApp: vi.fn() }));
@@ -91,4 +92,33 @@ test('a read of the tools that fails shows the apps\' line', async () => {
   await expect.element(screen.getByText('The apps can’t be read right now. Try again in a minute.')).toBeVisible();
   expect(screen.container.querySelectorAll('button, .panel-row')).toHaveLength(0);
  } finally { fetch.mockRestore(); }
+});
+
+// #458: an app that needs a token or a declared field is typed in the apps sheet, not connected from this row; the row
+// stays Connect and no toast says it connected.
+test('Connect on a row opens the app\'s page in the sheet when it needs a value typed there', async () => {
+ signInToApp.mockReset(); signInToApp.mockResolvedValue({ state: 'manual' }); toast.mockReset();
+ const screen = await drawn({ owner: true });
+ await screen.getByRole('button', { name: 'Connect' }).click();
+ await expect.poll(() => signInToApp.mock.calls.length).toBe(1);
+ expect(signInToApp.mock.calls[0][0]).toMatchObject({ company: 'co-1', agent: 'ag-1', app: 'mixpanel', openApp: expect.any(Function) });
+ await expect.element(screen.getByRole('button', { name: 'Connect' })).toBeVisible();
+ expect(toast).not.toHaveBeenCalled();
+});
+
+// #458: once the Owner connects that app on its page in the sheet, the sheet's store changes and the row is read again.
+test('after a handoff to the sheet, a connect there is read back into the row', async () => {
+ signInToApp.mockReset(); signInToApp.mockResolvedValue({ state: 'manual' });
+ let connected = false;
+ vi.stubGlobal('fetch', (url: string) => Promise.resolve(new Response(JSON.stringify(url.includes('agent=')
+  ? { tools: [{ ...tools[3], state: connected ? 'connected' : 'missing' }] } : { apps: [] }), { status: 200 })));
+ try {
+  const screen = await drawn({ owner: true, company: 'co-handoff', tools: undefined });
+  await screen.getByRole('button', { name: 'Connect' }).click();
+  await expect.poll(() => signInToApp.mock.calls.length).toBe(1);
+  connected = true;
+  await appsChanged('co-handoff', 'en');
+  await expect.element(screen.getByText('Connected')).toBeVisible();
+  await expect.element(screen.getByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
+ } finally { vi.unstubAllGlobals(); }
 });

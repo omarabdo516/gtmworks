@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { provideProfile, readApps, prepareApp, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/hermes.mjs';
+import { provideProfile, readApps, prepareApp, prepareServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer } from '../lib/hermes.mjs';
 import { levelConfig, alwaysOff, companyProfile } from '../lib/agent-levels.mjs';
-import { apps, appByKey } from '../lib/app-catalogue.mjs';
+import { apps } from '../lib/app-catalogue.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
-// The app driver (#30) against a fake of the pinned release's MCP routes: the Company's own profile, its apps' states,
-// the sign-in that comes back through gtmworks, and removal. Nothing it answers carries the Engine's text, a path or a
-// token.
+// The app driver (#30, #458) against a fake of the pinned release's MCP routes: the catalogued apps, a ready-made remote
+// server, a server the Owner added, the three sign-in kinds and removal. No config it writes carries a tool filter, and
+// nothing it answers carries the Engine's text, a path or a token.
 const company='10000000-0000-0000-0000-000000000002';
 const back=key=>`http://127.0.0.1:3000/api/apps/callback/${key}`;
 async function companyEngine() {
@@ -19,20 +19,25 @@ async function companyEngine() {
 }
 const states=async target=>Object.fromEntries((await readApps(target)).apps.map(app=>[app.key,app.state]));
 const signInState=url=>new URL(url).searchParams.get('state');
+const engineKeys=fake=>apps.filter(app=>app.source==='engine'&&fake.settings.catalog.includes(app.key)).map(app=>app.key);
+const remoteKeys=apps.filter(app=>app.source==='remote').map(app=>app.key);
 
-test('the apps listed are the registry apps the Engine offers, each off until connected', async () => {
+test('the apps listed are the pinned Engine entries it offers, the ready-made servers and the card that adds one', async () => {
  const {fake,target}=await companyEngine();
  try {
   fake.settings.catalog=fake.settings.catalog.filter(name=>name!=='gamma');
   const read=await readApps(target);
   assert.equal(read.state,'found');
-  assert.deepEqual(read.apps.map(app=>app.key),apps.map(app=>app.key).filter(key=>key!=='gamma'));
-  assert.deepEqual(read.apps[0],{key:'klaviyo',name:'Klaviyo',mark:'K',category:'communication',installed:false,state:'off'});
-  assert.ok(!read.apps.some(app=>['figma','webflow','wordpress-com'].includes(app.key)),'a catalogue entry outside the registry is never listed');
+  assert.deepEqual(read.apps.filter(app=>app.source==='engine').map(app=>app.key),engineKeys(fake));
+  assert.ok(!read.apps.some(app=>app.key==='gamma'),'an entry the Engine does not offer is not listed');
+  assert.deepEqual(read.apps.filter(app=>app.source==='remote').map(app=>app.key),remoteKeys);
+  assert.equal(read.apps.find(app=>app.key==='own')?.source,'own');
+  assert.equal(read.apps.find(app=>app.key==='klaviyo')?.state,'off');
+  assert.equal(read.apps[0].installed,false);
  } finally { await fake.close(); }
 });
 
-test('connecting writes only the read tools and the way back before the sign-in, and the sign-in comes back through gtmworks', async () => {
+test('connecting installs the catalogue entry, writes it on with its way back and no tool filter, and the sign-in comes back through gtmworks', async () => {
  const {fake,target,servers}=await companyEngine();
  try {
   fake.settings.managementRequests.length=0;
@@ -41,11 +46,10 @@ test('connecting writes only the read tools and the way back before the sign-in,
   assert.equal(new URL(started.url).protocol,'https:');
   assert.equal(new URL(started.url).searchParams.get('redirect_uri'),back('klaviyo'));
   const steps=fake.settings.managementRequests.map(request=>`${request.method} ${request.path?.split('?')[0]}`);
-  assert.deepEqual(steps,['GET /api/mcp/catalog','POST /api/mcp/catalog/install','PUT /api/config','POST /api/mcp/servers/klaviyo/auth']);
-  assert.equal(fake.settings.managementRequests[1].body.enable,false,'installed off, and turned on only with its list');
-  assert.equal(servers().klaviyo.enabled,true);
-  assert.deepEqual(servers().klaviyo.tools,{include:[...appByKey('klaviyo').readTools],prompts:false,resources:false});
-  assert.equal(servers().klaviyo.oauth.redirect_uri,back('klaviyo'));
+  assert.deepEqual(steps,['GET /api/mcp/catalog','POST /api/mcp/catalog/install','GET /api/config','PUT /api/config','POST /api/mcp/servers/klaviyo/auth']);
+  assert.equal(fake.settings.managementRequests[1].body.enable,false,'installed off, and turned on only with its config');
+  assert.deepEqual(servers().klaviyo,{url:'https://mcp.klaviyo.example/mcp',auth:'oauth',enabled:true,oauth:{redirect_uri:back('klaviyo')}});
+  assert.equal('tools' in servers().klaviyo,false,'no tool filter is written');
   assert.equal((await states(target)).klaviyo,'attention','on, but not signed in yet');
   assert.deepEqual(await pollAppSignIn(target,started.flow),{state:'waiting'});
 
@@ -53,46 +57,119 @@ test('connecting writes only the read tools and the way back before the sign-in,
   assert.deepEqual(finished,{state:'approved'});
   assert.deepEqual(fake.settings.appCallbacks.map(search=>[...new URLSearchParams(search).keys()]),[['code','state','iss']],'only what OAuth returns goes on');
   assert.equal((await states(target)).klaviyo,'connected');
-  assert.deepEqual(await pollAppSignIn(target,started.flow),{state:'approved'});
  } finally { await fake.close(); }
 });
 
-test('an app on with any other tool list, or whose server does not answer, needs attention', async () => {
+test('a server the previous version limited is cleared of its tool filter the next time it is turned on', async () => {
  const {fake,target,servers}=await companyEngine();
  try {
-  for(const key of ['notion','canva']) {
-   const started=await startAppSignIn(target,key,back(key));
-   assert.equal((await finishAppSignIn(target,{key,flow:started.flow,answer:{code:'c',state:signInState(started.url)}})).state,'approved');
-  }
-  assert.deepEqual([(await states(target)).notion,(await states(target)).canva],['connected','connected']);
-  servers().notion.tools.include=[...appByKey('notion').readTools,'notion-update-page'];
-  delete servers().canva.tools.prompts;
-  assert.deepEqual([(await states(target)).notion,(await states(target)).canva],['attention','attention']);
-  const again=await startAppSignIn(target,'notion',back('notion'));
-  assert.equal(again.state,'started');
-  assert.deepEqual(servers().notion.tools.include,[...appByKey('notion').readTools],'connecting again writes the list back');
-  await cancelAppSignIn(target,again.flow);
-  assert.equal((await states(target)).notion,'connected');
-  fake.settings.appsUnreachable.add('notion');
-  const read=await readApps(target);
-  assert.equal(read.apps.find(app=>app.key==='notion').state,'attention');
-  assert.doesNotMatch(JSON.stringify(read),/opt|secret|hermes|token/i);
+  fake.settings.profiles.get(target.profile).config.mcp_servers={klaviyo:{url:'https://mcp.klaviyo.example/mcp',auth:'oauth',enabled:true,tools:{include:['get_campaigns'],prompts:false,resources:false}}};
+  fake.settings.appTokens.add(`${target.profile}:klaviyo`);
+  fake.settings.managementRequests.length=0;
+  assert.equal(await prepareApp(target,'klaviyo',back('klaviyo')),null);
+  assert.equal('tools' in servers().klaviyo,false);
+  assert.deepEqual(fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/mcp/servers')&&request.method==='PUT').length,1,'the whole-map replace clears it');
+  assert.equal((await states(target)).klaviyo,'connected');
  } finally { await fake.close(); }
 });
 
-test('a server installed without its list is removed again when the list cannot be written', async () => {
+test('an app with no sign-in is installed and turned on with no vendor window, and its state is the Engine’s reach', async () => {
  const {fake,target,servers}=await companyEngine();
  try {
-  fake.settings.failStep='config';
-  assert.equal(await prepareApp(target,'airtable',back('airtable')),'failed');
-  assert.equal(servers().airtable,undefined);
-  assert.deepEqual(await startAppSignIn(target,'airtable',back('airtable')),{state:'failed',flow:null,url:null});
-  assert.equal(servers().airtable,undefined);
+  fake.settings.catalog.push('alltrails'); fake.settings.catalogAuth.alltrails='none';
+  assert.equal(await prepareApp(target,'alltrails',null),null);
+  assert.deepEqual(servers().alltrails,{url:'https://mcp.alltrails.example/mcp',enabled:true},'the catalogue install then the turn-on, with no OAuth block');
+  const tested=await testServer(target,'alltrails');
+  assert.equal(tested.state,'connected');
+  assert.deepEqual(tested.tools,['get_alltrails','delete_alltrails']);
+  assert.equal((await states(target)).alltrails,'connected');
   assert.equal(fake.settings.appFlows.size,0,'no sign-in starts');
-  fake.settings.failStep='';
-  assert.equal(await prepareApp(target,'airtable',back('airtable')),null);
-  assert.deepEqual(servers().airtable.tools.include,[...appByKey('airtable').readTools]);
-  assert.equal(fake.settings.appFlows.size,0,'preparing starts no sign-in');
+ } finally { await fake.close(); }
+});
+
+test('a catalogue entry’s declared fields come from the Engine and their values go only to its install', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  fake.settings.catalog.push('asana');
+  fake.settings.catalogEnv.asana=[{name:'ASANA_CLIENT_ID',prompt:'Client ID',required:true},{name:'ASANA_CLIENT_SECRET',prompt:'Client secret',required:true}];
+  const listed=(await readApps(target)).apps.find(app=>app.key==='asana');
+  assert.deepEqual(listed?.fields,[{name:'ASANA_CLIENT_ID',prompt:'Client ID',required:true},{name:'ASANA_CLIENT_SECRET',prompt:'Client secret',required:true}]);
+  assert.equal(JSON.stringify(listed).includes('value'),false,'a field holds no value');
+  const started=await startAppSignIn(target,'asana',back('asana'),{fields:{ASANA_CLIENT_ID:'id',ASANA_CLIENT_SECRET:'secret'}});
+  assert.equal(started.state,'started');
+  const install=fake.settings.managementRequests.find(request=>request.path?.startsWith('/api/mcp/catalog/install'));
+  assert.deepEqual(install.body.env,{ASANA_CLIENT_ID:'id',ASANA_CLIENT_SECRET:'secret'});
+  // A reconnect with new values installs the entry again with them; without values the installed entry is kept as it is.
+  fake.settings.managementRequests.length=0;
+  await cancelAppSignIn(target,started.flow);
+  const rotated=await startAppSignIn(target,'asana',back('asana'),{fields:{ASANA_CLIENT_ID:'id',ASANA_CLIENT_SECRET:'rotated'}});
+  assert.equal(rotated.state,'started');
+  const again=fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/mcp/catalog/install'));
+  assert.deepEqual(again.map(request=>request.body.env),[{ASANA_CLIENT_ID:'id',ASANA_CLIENT_SECRET:'rotated'}]);
+  await cancelAppSignIn(target,rotated.flow);
+  fake.settings.managementRequests.length=0;
+  assert.equal((await startAppSignIn(target,'asana',back('asana'))).state,'started');
+  assert.equal(fake.settings.managementRequests.some(request=>request.path?.startsWith('/api/mcp/catalog/install')||request.method==='DELETE'),false);
+ } finally { await fake.close(); }
+});
+
+test('a ready-made remote server is added through the Engine’s server route, signed in, and a token server keeps its token out of the config', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  fake.settings.managementRequests.length=0;
+  const started=await startAppSignIn(target,'meta-ads',back('meta-ads'));
+  assert.equal(started.state,'started');
+  const added=fake.settings.managementRequests.find(request=>request.path?.startsWith('/api/mcp/servers?')&&request.method==='POST');
+  assert.deepEqual(added.body,{name:'meta-ads',url:'https://mcp.facebook.com/ads',auth:'oauth',profile:target.profile});
+  assert.deepEqual(servers()['meta-ads'],{url:'https://mcp.facebook.com/ads',auth:'oauth',enabled:true,oauth:{redirect_uri:back('meta-ads')}});
+  assert.equal('tools' in servers()['meta-ads'],false);
+
+  assert.equal(await prepareApp(target,'x',null,{token:'x-token-value'}),null);
+  assert.deepEqual(servers().x,{url:'https://api.x.com/mcp',headers:{Authorization:'Bearer MCP_BEARER_TOKEN'},enabled:true});
+  assert.equal(JSON.stringify(servers()).includes('x-token-value'),false,'the token is not in the profile config');
+  assert.equal(fake.settings.serverTokens.get(`${target.profile}:x`),'x-token-value');
+ } finally { await fake.close(); }
+});
+
+test('Test answers the tools the server lists, by name only', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  fake.settings.appTools['meta-ads']=['get_campaigns','create_campaign'];
+  fake.settings.appTokens.add(`${target.profile}:meta-ads`);
+  await prepareApp(target,'meta-ads',back('meta-ads'));
+  assert.deepEqual(await testServer(target,'meta-ads'),{state:'connected',tools:['get_campaigns','create_campaign']});
+  fake.settings.appsUnreachable.add('meta-ads');
+  assert.deepEqual(await testServer(target,'meta-ads'),{state:'attention',tools:[]});
+  assert.deepEqual(await testServer(target,'not a key'),{state:'failed',tools:null});
+ } finally { await fake.close(); }
+});
+
+test('a server the Owner added is removed from its profile, and an unknown key changes nothing', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  await prepareApp(target,'meta-ads',back('meta-ads'));
+  servers()['my-crm']={url:'https://crm.example/mcp',enabled:true};
+  assert.deepEqual(await disconnectApp(target,'my-crm'),{state:'disconnected'});
+  assert.equal(servers()['my-crm'],undefined);
+  servers()['my-crm']={url:'https://crm.example/mcp',enabled:true};
+  const read=await readApps(target);
+  assert.equal(read.apps.find(app=>app.key==='my-crm')?.source,'custom');
+  assert.equal(read.apps.find(app=>app.key==='my-crm')?.name,'my-crm');
+ } finally { await fake.close(); }
+});
+
+test('a space the profile is not, the form’s own card and a refused key are refused before the Engine is asked', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  const before=fake.settings.managementRequests.length;
+  assert.deepEqual(await readApps({...target,profile:'default'}),{state:'failed',apps:null});
+  assert.equal(await prepareApp(target,'own',null),'failed');
+  assert.equal(await prepareApp(target,'not a key',null),'failed');
+  assert.equal((await startAppSignIn(target,'own',back('own'))).state,'failed');
+  assert.equal((await disconnectApp(target,'not a key')).state,'failed');
+  assert.equal((await startAppSignIn({...target,profile:'default'},'klaviyo',back('klaviyo'))).state,'failed');
+  assert.equal((await startAppSignIn(target,'klaviyo','javascript:alert(1)')).state,'failed');
+  assert.equal(fake.settings.managementRequests.length,before,'the Engine was never asked');
  } finally { await fake.close(); }
 });
 
@@ -114,27 +191,83 @@ test('a second sign-in waits for the first, a cancelled or unknown one never fin
  } finally { await fake.close(); }
 });
 
-test('disconnecting turns the app off for the Company, and again changes nothing', async () => {
- const {fake,target,servers}=await companyEngine();
+test('an own server may sign in over http, while a catalogue app still signs in over https only', async () => {
+ const {fake,target}=await companyEngine();
  try {
-  const started=await startAppSignIn(target,'mixpanel',back('mixpanel'));
-  await finishAppSignIn(target,{key:'mixpanel',flow:started.flow,answer:{code:'c',state:signInState(started.url)}});
-  assert.deepEqual(await disconnectApp(target,'mixpanel'),{state:'disconnected'});
-  assert.equal(servers().mixpanel,undefined);
-  assert.equal((await states(target)).mixpanel,'off');
-  assert.deepEqual(await disconnectApp(target,'mixpanel'),{state:'disconnected'});
+  fake.settings.appAuthScheme='http';
+  const https=await startAppSignIn(target,'my-oauth','http://127.0.0.1:3000/api/apps/callback/my-oauth',{url:'https://mcp.my-oauth.example/mcp',auth:'oauth'});
+  assert.equal(https.state,'failed','an https server needs an https sign-in page');
+  fake.settings.appFlows.clear();
+  const started=await startAppSignIn(target,'my-oauth','http://127.0.0.1:3000/api/apps/callback/my-oauth',{url:'http://mcp.my-oauth.example/mcp',auth:'oauth'});
+  assert.equal(started.state,'started','an http server on the Company network may sign in over http');
+  assert.equal(new URL(started.url).protocol,'http:');
+  const catalogue=await startAppSignIn(target,'klaviyo',back('klaviyo'));
+  assert.equal(catalogue.state,'failed','a vendor page is https only');
  } finally { await fake.close(); }
 });
 
-test('only a Company profile, a registry app and an http way back are used; a refused key is refused', async () => {
+test('a server added again with a new address or token replaces the old one; the same OAuth server keeps its sign-in', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  await prepareServer(target,{key:'my-crm',url:'https://one.example/mcp',auth:'none',redirectUri:null});
+  assert.equal(servers()['my-crm'].url,'https://one.example/mcp');
+  const mark=fake.settings.managementRequests.length;
+  await prepareServer(target,{key:'my-crm',url:'https://two.example/mcp',auth:'none',redirectUri:null});
+  assert.equal(servers()['my-crm'].url,'https://two.example/mcp');
+  assert.deepEqual(fake.settings.managementRequests.slice(mark).filter(request=>request.path?.startsWith('/api/mcp/servers')).map(request=>request.method),['DELETE','POST']);
+
+  await prepareServer(target,{key:'my-oauth',url:'https://oauth.example/mcp',auth:'oauth',redirectUri:back('my-oauth')});
+  const kept=fake.settings.managementRequests.length;
+  await prepareServer(target,{key:'my-oauth',url:'https://oauth.example/mcp',auth:'oauth',redirectUri:back('my-oauth')});
+  assert.equal(fake.settings.managementRequests.slice(kept).filter(request=>request.path?.startsWith('/api/mcp/servers')&&request.method==='DELETE').length,0,'the same OAuth server keeps its sign-in');
+ } finally { await fake.close(); }
+});
+
+test('a server key that is an Object prototype name is added like any other', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  fake.settings.profiles.get(target.profile).config.mcp_servers={};
+  assert.equal(await prepareServer(target,{key:'constructor',url:'https://crm.example/mcp',auth:'none',redirectUri:null}),null);
+  assert.equal(servers().constructor.url,'https://crm.example/mcp');
+  assert.ok(fake.settings.managementRequests.some(request=>request.path?.startsWith('/api/mcp/servers?')&&request.method==='POST'));
+ } finally { await fake.close(); }
+});
+
+test('clearing one server\'s tool filter leaves another server in the profile unchanged', async () => {
  const {fake,target}=await companyEngine();
  try {
-  assert.deepEqual(await readApps({...target,profile:'default'}),{state:'failed',apps:null});
-  for(const [key,redirect,profile] of [['figma',back('figma'),target.profile],['klaviyo','javascript:alert(1)',target.profile],['klaviyo',back('klaviyo'),'default']])
-   assert.equal((await startAppSignIn({...target,profile},key,redirect)).state,'failed',`${key} ${redirect} ${profile}`);
-  assert.equal((await disconnectApp(target,'stripe')).state,'failed');
-  assert.deepEqual(await readApps({...target,key:'wrong'}),{state:'refused',apps:null});
-  assert.equal((await startAppSignIn({...target,key:'wrong'},'klaviyo',back('klaviyo'))).state,'refused');
-  assert.equal(fake.settings.appFlows.size,0);
+  const canva={url:'https://mcp.canva.example/mcp',auth:'oauth',enabled:false,oauth:{redirect_uri:back('canva')}};
+  fake.settings.profiles.get(target.profile).config.mcp_servers={klaviyo:{url:'https://mcp.klaviyo.example/mcp',auth:'oauth',enabled:true,tools:{include:['get_campaigns']}},canva};
+  fake.settings.appTokens.add(`${target.profile}:klaviyo`);
+  assert.equal(await prepareApp(target,'klaviyo',back('klaviyo')),null);
+  const read=fake.settings.profiles.get(target.profile).config.mcp_servers;
+  assert.equal('tools' in read.klaviyo,false);
+  assert.deepEqual(read.canva,canva,'the other server is untouched');
+ } finally { await fake.close(); }
+});
+
+test('a state never carries the Engine\'s error text, a path or a token', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  fake.settings.appsUnreachable.add('klaviyo');
+  await prepareApp(target,'klaviyo',back('klaviyo'));
+  const read=await readApps(target);
+  assert.equal(read.apps.find(app=>app.key==='klaviyo').state,'attention');
+  assert.doesNotMatch(JSON.stringify(read),/opt|secret|hermes|token/i);
+ } finally { await fake.close(); }
+});
+
+test('a server installed for a sign-in is removed again when its config cannot be written, and no sign-in starts', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  fake.settings.failStep='config';
+  assert.equal(await prepareApp(target,'airtable',back('airtable')),'failed');
+  assert.equal(servers().airtable,undefined);
+  assert.deepEqual(await startAppSignIn(target,'airtable',back('airtable')),{state:'failed',flow:null,url:null});
+  assert.equal(servers().airtable,undefined);
+  assert.equal(fake.settings.appFlows.size,0,'no sign-in starts');
+  fake.settings.failStep='';
+  assert.equal(await prepareApp(target,'airtable',back('airtable')),null);
+  assert.equal('tools' in servers().airtable,false);
  } finally { await fake.close(); }
 });

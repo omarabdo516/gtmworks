@@ -129,3 +129,12 @@ test('the connect card\'s Connect is the Owner\'s alone: a Manager, a Contributo
   for (const role of ['owner', 'manager', 'contributor', 'viewer']) outcomes.push([role, await permitted(members([role]).db, level, company)]);
   assert.deepEqual(outcomes, [['owner', true], ['manager', false], ['contributor', false], ['viewer', false]]);
 });
+
+// #458: adding, testing or removing the Owner's own MCP server is the Owner's alone, before the Engine is asked.
+test('the own-server route refuses a Manager, a Contributor and a Viewer', async () => {
+ const company = '10000000-0000-0000-0000-000000000001';
+ const level = requiredFor(routePermissions, 'app/api/company-servers/route.ts', 'POST');
+ const outcomes = [];
+ for (const role of ['owner', 'manager', 'contributor', 'viewer']) outcomes.push([role, await permitted(members([role]).db, level, company)]);
+ assert.deepEqual(outcomes, [['owner', true], ['manager', false], ['contributor', false], ['viewer', false]]);
+});
