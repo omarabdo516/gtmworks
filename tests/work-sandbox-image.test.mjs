@@ -53,6 +53,6 @@ test('the install job checks the work sandbox image the install got and requires
 test('the README states the image size on disk and that every Company\'s sandbox runs it', () => {
   const readme = readFileSync('README.md', 'utf8').replace(/\s+/g, ' ');
   const install = readme.split(/^### From source$/m)[0];
-  assert.match(install, /4\.70 GB/);
+  assert.match(install, /3\.26 GB/);
   assert.match(install, /every Company's (work )?sandbox runs it/i);
 });
