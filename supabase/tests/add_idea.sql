@@ -39,7 +39,10 @@ select ok((select board_order from public.work_cards where title='Contributor ma
 
 -- #452: the board sends an idea under a request key; Add pressed twice, or a retry, is one Card.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is((public.agent_write('10000000-0000-0000-0000-000000000001','idea-1','fp-idea-1','idea',null,jsonb_build_object('stage',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'title','Keyed idea','agent','a1880000-0000-0000-0000-000000000001'))->>'id')::bigint,(select id from public.work_cards where title='Keyed idea'),'a keyed idea answers with its new Card');
+-- The answer and the Card it names are read in separate statements: one statement's snapshot
+-- predates the Card its own agent_write call inserts, so the subquery would see no row.
+select set_config('test.idea_card',(public.agent_write('10000000-0000-0000-0000-000000000001','idea-1','fp-idea-1','idea',null,jsonb_build_object('stage',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'title','Keyed idea','agent','a1880000-0000-0000-0000-000000000001'))->>'id'),true);
+select is(current_setting('test.idea_card')::bigint,(select id from public.work_cards where title='Keyed idea'),'a keyed idea answers with its new Card');
 select is((public.agent_write('10000000-0000-0000-0000-000000000001','idea-1','fp-idea-1','idea',null,jsonb_build_object('stage',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'title','Keyed idea','agent','a1880000-0000-0000-0000-000000000001'))->>'id')::bigint,(select id from public.work_cards where title='Keyed idea'),'the same key again answers with the same Card');
 select is((select count(*)::int from public.work_cards where title='Keyed idea'),1,'the same key makes one Card');
 select is((select agent_id from public.work_cards where title='Keyed idea'),'a1880000-0000-0000-0000-000000000001'::uuid,'the keyed idea carries its Agent');
