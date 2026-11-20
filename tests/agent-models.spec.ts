@@ -130,9 +130,9 @@ test('every provider and subscription shows its logo from the install, in both t
  const origin=new URL(testInfo.project.use.baseURL!).origin;
  const outside:string[]=[];
  page.on('request',request=>{ if(request.resourceType()==='image'&&new URL(request.url()).origin!==origin) outside.push(request.url()); });
+ await openModels(page,'omar@example.com');
  for(const theme of ['light','dark'] as const) {
   await page.emulateMedia({colorScheme:theme});
-  await openModels(page,'omar@example.com');
   const rows=page.locator('#md-keys .md-key');
   await expect(rows.first()).toBeVisible();
   for(const row of await rows.all()) {
@@ -142,7 +142,7 @@ test('every provider and subscription shows its logo from the install, in both t
   for(const name of ['ChatGPT','Claude']) await expect(page.locator('#md-subscriptions').getByRole('img',{name,exact:true}).locator('.tool-logo')).toBeVisible();
   await expect.poll(()=>page.locator('#md-keys img.tool-logo').evaluateAll(images=>images.length>0&&images.every(image=>(image as HTMLImageElement).complete&&(image as HTMLImageElement).naturalWidth>0))).toBe(true);
   await page.locator('#md-subscriptions').scrollIntoViewIfNeeded();
-  await testInfo.attach(`models-${theme}`,{body:await page.locator('.sov').screenshot(),contentType:'image/png'});
+  await testInfo.attach(`models-${theme}`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
  }
  expect(outside).toEqual([]);
 });
