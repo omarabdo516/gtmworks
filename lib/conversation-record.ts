@@ -98,12 +98,12 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const {data:ownsIt}=ended==='no_model'||reason?await db.rpc('is_company_owner',{c:company}):{data:false};
  // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
  // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
- // of a Run no message of the person started. A job command's answer (#358) is no Run of the chat's Agent either, so it
- // is never taken for that answer.
+ // of a Run no message of the person started. A job command's answer (#358) is a message from an Agent the chat handed
+ // work to, never the chat's Agent's, so it is never taken for that answer.
  const first=messages.find(message=>message.author==='person');
  const firstReply=card&&first&&card.created_at>first.created_at
   ?(lead
-   ?messages.find(message=>message.author==='agent'&&!commandRuns.has(message.run_id)&&!messages.some(own=>own.author==='person'&&own.run_id===message.run_id))
+   ?messages.find(message=>message.author==='agent'&&!(message.agent_id&&faces.has(message.agent_id))&&!messages.some(own=>own.author==='person'&&own.run_id===message.run_id))
    :messages.find(message=>message.author==='agent'&&message.run_id===first.run_id))?.id
   :undefined;
  return {

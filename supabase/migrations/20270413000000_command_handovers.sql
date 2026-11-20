@@ -97,9 +97,12 @@ begin
  select * into r from public.agent_handovers where id=h for update;
  if r.id is null or r.state not in ('waiting','returning') then return; end if;
  if r.attempted_at is not null and r.attempted_at > now()-interval '30 seconds' then return; end if;
- -- A command's target works in one session per chat: a second job to the same Agent waits for the open one to be read.
+ -- A command's target works in one session per chat: a second job to the same Agent waits while the first may still be
+ -- running — an open Run, or a start whose answer was lost (target_attempts above zero, as #354 reads one). The row
+ -- itself is left out, so a lost start still retries.
  if r.answers_person and exists(select 1 from public.agent_handovers o
-  where o.conversation_id=r.conversation_id and o.to_agent=r.to_agent and o.state='target') then return; end if;
+  where o.id<>h and o.conversation_id=r.conversation_id and o.to_agent=r.to_agent
+   and (o.state='target' or o.state='waiting' and o.target_attempts>0)) then return; end if;
  select * into target from public.hermes_agents where id=r.to_agent;
  if r.conversation_id is not null then
   select * into talk from public.conversations where id=r.conversation_id;

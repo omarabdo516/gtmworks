@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(39);
 -- #358. RS Learning: Lead on the Company's own profile, Reach (made from the meta role) and Faye on profiles of their
 -- own. The Owner and the Manager see every Agent; the Contributor (…03) sees only the ones given to them; the Viewer
 -- (…04) writes nothing.
@@ -44,12 +44,6 @@ select is(public.command_handover('c3580000-0000-0000-0000-000000000001','100000
  'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000003','/campaign Launch','numbers','Launch'),false,
  'a role no Agent of the Company was made from is no command, and the message is then sent as typed');
 reset role;
-
--- The job is the person's own message, so a brief longer than the handover row's 500-character label reaches its Agent
--- whole, with the command itself dropped since it names the job and not the work.
-create temporary table long_job as select * from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000002'));
-select is((select input from long_job) like '%'||repeat('x',600)||'%' and (select input from long_job) not like '%/campaign%',true,
- 'the whole job reaches its Agent, without the command');
 
 -- A Contributor hands a command to only the Agents they see; a Viewer writes nothing; and another Agent's chat hands none.
 set local role authenticated;
@@ -116,6 +110,13 @@ select is((select count(*)::int from public.handovers_due(null,0,null) where id=
 select is(public.close_handover_target((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000001'),'run-target','completed','Again'),false,
  'closing it again keeps nothing');
 
+-- The job is the person's own message, so a brief longer than the handover row's 500-character label reaches its Agent
+-- whole, with the command itself dropped since it names the job and not the work.
+create temporary table long_job as select * from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000002'));
+select is((select input from long_job) like '%'||repeat('x',600)||'%' and (select input from long_job) not like '%/campaign%',true,
+ 'the whole job reaches its Agent, without the command');
+
+
 -- A target that fails still ends the person's Run, so the chat says the reply did not come, and keeps no message.
 insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person,state,target_run)
  values('10000000-0000-0000-0000-000000000001','c3580000-0000-0000-0000-000000000001','command:'||'d3580000-0000-0000-0000-000000000006',
@@ -148,5 +149,22 @@ select is((select state||':'||target_outcome||':'||(closed_at is not null)::text
  'failed:failed:true','as a handover that could not start');
 select is((select outcome from public.conversation_run_ends where run_id='command:'||'d3580000-0000-0000-0000-000000000005'),'failed',
  'with the person''s Run ended as failed');
+-- Two jobs to one Agent in one chat share its session there, so the second waits while the first may still be running:
+-- an open target Run, or a start whose answer was lost (target_attempts above zero). The row retrying its own start goes on.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c3580000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a3580000-0000-0000-0000-000000000011','Lead');
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person,state,target_attempts,attempted_at) values
+ ('10000000-0000-0000-0000-000000000001','c3580000-0000-0000-0000-000000000006','command:d3580000-0000-0000-0000-000000000009',
+  'd3580000-0000-0000-0000-000000000009','a3580000-0000-0000-0000-000000000011','a3580000-0000-0000-0000-000000000012','Launch',true,'waiting',1,now()-interval '1 minute');
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person) values
+ ('10000000-0000-0000-0000-000000000001','c3580000-0000-0000-0000-000000000006','command:d3580000-0000-0000-0000-000000000010',
+  'd3580000-0000-0000-0000-000000000010','a3580000-0000-0000-0000-000000000011','a3580000-0000-0000-0000-000000000012','Launch',true);
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000010'))),0,
+ 'a second job to the same Agent in one chat waits while the first may still be running');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000009'))),1,
+ 'while the handover whose start answer was lost still retries its own');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000010'))),0,
+ 'and the job behind it still waits');
+
 select * from finish();
 rollback;
