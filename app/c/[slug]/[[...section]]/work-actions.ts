@@ -10,7 +10,7 @@ import { filesProblem } from '@/lib/attachments.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
-import type { PlaceResult, UndoResult } from './work';
+import type { IdeaResult, PlaceResult, UndoResult } from './work';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
 // start that fails is left to the worker and logged without the note.
 async function startNoteRun(note:number) {
@@ -56,6 +56,17 @@ export const placeMove=withActionLog('placeMove',async function placeMove(form: 
  const reason=String(error.message||'');
  return {error:reason.includes('not permitted')||reason.includes('contributors cannot move')?t('youCannotMoveTheCardToThisStage'):reason.includes('approval required')?t('boardNeedsApproval'):reason.includes('decision required')?t('boardDecideFirst'):t('couldNotSaveTheChangeCheckPermissionsAnd')};
 });
+// An idea from the Ideas column (#188): made once per request key, so Add pressed twice or a retry is one Card (#452). It
+// answers the form with its Card instead of redirecting, since a redirect rejects the promise the form waits on.
+export const addIdea=withActionLog('addIdea',async function addIdea(form: FormData): Promise<IdeaResult> {
+ const db=await supabase(); const company=String(form.get('company'));
+ if(!await actionAllowed(db,'addIdea',company)) return {failed:true};
+ const payload={stage:Number(form.get('stage')),title:String(form.get('title')||''),agent:String(form.get('agent')||'')};
+ const {data,error}=await db.rpc('agent_write',{c:company,request_key:String(form.get('key')||''),fingerprint:fingerprint('POST','ideas',JSON.stringify(payload)),op:'idea',card:null,payload});
+ if(error||!data?.id) { logActionFailure('addIdea',error||{message:'no card'},{form}); return {failed:true}; }
+ revalidatePath(`/c/${String(form.get('slug'))}`,'layout');
+ return {card:Number(data.id)};
+});
 export const workAction=withActionLog('workAction',async function workAction(form: FormData) { const {t}=await getI18n();
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const op=String(form.get('op')); const card=Number(form.get('card')); const base=`/c/${slug}/work/board`; const evidence=String(form.get('evidence')||'').trim() || null;
  let error: {message:string}|null=null; let created: number|undefined;
@@ -66,8 +77,6 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='save-step') { const [kind,value]=String(form.get('approver')).split(':'); ({error}=await db.rpc('save_approval_step',{c:company,step:Number(form.get('step'))||null,step_name:String(form.get('name')),step_position:Number(form.get('position')),member:kind==='person'?value:null,member_role:kind==='role'?value:null})); }
  else if(op==='remove-step') ({error}=await db.rpc('remove_approval_step',{c:company,step:Number(form.get('step'))}));
  else if(op==='create') { const result=await db.rpc('create_work_card',{c:company,s:Number(form.get('stage')),card_title:String(form.get('title')),template:String(form.get('template')||''),evidence}); error=result.error; created=result.data; }
- // An idea from the Ideas column (#188): the one overload that names its Agent, and comes back to the board on it.
- else if(op==='idea') { const result=await db.rpc('create_work_card',{c:company,s:Number(form.get('stage')),card_title:String(form.get('title')||''),agent:String(form.get('agent')||'')}); error=result.error; created=result.data; }
  else if(op==='request') {
   // One card, its first message and its assignment, once per key: a double click or a retry returns the same card.
   const key=String(form.get('key')||''); const stored=await storeFiles(db,company,form,/^[0-9a-f-]{36}$/.test(key)?key:crypto.randomUUID()); error=stored.error;
@@ -111,5 +120,5 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else error={message:'unknown operation'};
  revalidatePath(`/c/${slug}`,'layout');
  if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:(op.endsWith('settings')||op.endsWith('step'))?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')?t('youCannotMoveTheCardToThisStage'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
- if(created) redirect(op==='idea'?`${base}?show=${created}&idea=1`:`${base}/${created}`);
+ if(created) redirect(`${base}/${created}`);
 });

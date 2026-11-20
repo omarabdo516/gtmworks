@@ -46,7 +46,9 @@ export type UndoMove=(form:FormData)=>Promise<UndoResult>;
 // A place (#174) is answered in place: the board keeps its Cards and says in words why the Card stayed where it is.
 export type PlaceResult={ok:true}|{error:string};
 export type PlaceCard=(form:FormData)=>Promise<PlaceResult>;
-export type WorkProps={workAction:WorkAction,placeMove:PlaceCard,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[]};
+export type IdeaResult={card:number}|{failed:true};
+export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
+export type WorkProps={workAction:WorkAction,placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[]};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
 export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
@@ -101,7 +103,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  useEffect(()=>{ if(p.focus==='waiting') document.querySelector('#board-cols > [data-column="waiting"]')?.scrollIntoView({block:'nearest',inline:'nearest'}); },[p.focus]);
  // An idea just added comes back on the board with the card it made (#188): the reference confirms it with a toast,
  // while useShowCard flashes that Card and puts the focus on it.
- useEffect(()=>{ if(p.ideaAdded) toast(t('ideaAdded')); },[p.ideaAdded,t]);
+ // Each idea added says so, the second one on the same board included.
+ useEffect(()=>{ if(p.ideaAdded) toast(t('ideaAdded')); },[p.ideaAdded,p.show,t]);
  // A decided learning suggestion comes back to the board with its outcome in the address (#169): the item has left the
  // list, and the toast names the Agent it was for, read by the page from the item the address names. Shown once; a reload
  // does not say it again.
@@ -285,7 +288,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add} data-stage-name={stages.length===1?stages[0].name:undefined}>
      {extra.filter(answeredHere).map(itemView)}
      {groups.map((group,n)=><div key={group.id} className="mn-group" role="group" aria-labelledby={group.id}><h3 className="mn-h" id={group.id}><BoardIcon name="at"/><span>{t(group.label)}</span> <span className="num">{group.items.length}</span></h3>{group.items.map(itemView)}{(list.length>0||n<groups.length-1)&&<div className="mn-sep" role="separator"/>}</div>)}
-     {column==='ideas'&&addingIdea&&ideasStage&&<AddIdea company={p.company} slug={p.slug} stage={ideasStage} agents={companyAgents} preferred={filter==='all'?'':filter} workAction={workAction} onClose={closeIdea}/>}
+     {column==='ideas'&&addingIdea&&ideasStage&&<AddIdea company={p.company} slug={p.slug} stage={ideasStage} agents={companyAgents} preferred={filter==='all'?'':filter} addIdea={p.addIdea} onClose={closeIdea}/>}
      {list.map(c=><div key={c.id} className="column" data-stage-id={c.stage_id} data-stage-name={stageName(c)}>{cardView(c)}</div>)}
      {!list.length&&!extra.length&&!(column==='ideas'&&addingIdea)&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
     </KanbanColumn>; })}

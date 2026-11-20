@@ -1,5 +1,11 @@
 [
  {
+  "issue": 452,
+  "date": "2026-11-20",
+  "en": { "title": "Adding an idea closes its form", "body": "An idea you add closes the form and shows its new Card, and pressing Add twice or trying again still makes one Card." },
+  "ar": { "title": "إضافة فكرة بتقفل الفورم", "body": "الفكرة اللي بتضيفها بتقفل الفورم وبتوريك البطاقة الجديدة بتاعتها، ولو دوست إضافة مرتين أو جربت تاني بتتعمل بطاقة واحدة بس." }
+ },
+ {
   "issue": 442,
   "date": "2026-11-20",
   "en": { "title": "Update ready", "body": "When a newer gtmworks is out, Owners see it at the foot of the sidebar with what it brings and the one command that installs it." },

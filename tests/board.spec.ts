@@ -102,6 +102,9 @@ test('+ on Ideas adds an idea with its Agent, flashes and focuses the Card, rais
   await ideas.getByLabel('Agent',{exact:true}).selectOption({label:'Ads'});
   await ideas.getByRole('button',{name:'Add',exact:true}).click();
   await expect(page.locator('.toast')).toHaveText('Idea added');
+  // The idea the server made closes its form with no failure line (#452): no form is left to press Add in again.
+  await expect(page.locator('#add-idea')).toHaveCount(0);
+  await expect(ideas.getByRole('alert')).toHaveCount(0);
   const card=ideas.locator('.kcard').filter({hasText:title});
   await expect(card).toBeVisible();
   await expect(card.locator('.kcard__foot')).toContainText('Ads');
