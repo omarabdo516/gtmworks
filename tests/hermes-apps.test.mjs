@@ -99,6 +99,17 @@ test('a catalogue entry’s declared fields come from the Engine and their value
   assert.equal(started.state,'started');
   const install=fake.settings.managementRequests.find(request=>request.path?.startsWith('/api/mcp/catalog/install'));
   assert.deepEqual(install.body.env,{ASANA_CLIENT_ID:'id',ASANA_CLIENT_SECRET:'secret'});
+  // A reconnect with new values installs the entry again with them; without values the installed entry is kept as it is.
+  fake.settings.managementRequests.length=0;
+  await cancelAppSignIn(target,started.flow);
+  const rotated=await startAppSignIn(target,'asana',back('asana'),{fields:{ASANA_CLIENT_ID:'id',ASANA_CLIENT_SECRET:'rotated'}});
+  assert.equal(rotated.state,'started');
+  const again=fake.settings.managementRequests.filter(request=>request.path?.startsWith('/api/mcp/catalog/install'));
+  assert.deepEqual(again.map(request=>request.body.env),[{ASANA_CLIENT_ID:'id',ASANA_CLIENT_SECRET:'rotated'}]);
+  await cancelAppSignIn(target,rotated.flow);
+  fake.settings.managementRequests.length=0;
+  assert.equal((await startAppSignIn(target,'asana',back('asana'))).state,'started');
+  assert.equal(fake.settings.managementRequests.some(request=>request.path?.startsWith('/api/mcp/catalog/install')||request.method==='DELETE'),false);
  } finally { await fake.close(); }
 });
 

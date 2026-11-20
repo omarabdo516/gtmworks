@@ -370,6 +370,9 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
    for(const agent of targets) {
     const answer=await askServer({company,agent,action,name,url:address,kind,token:kind==='header'?token:''});
     if(!answer.ok) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+    // Added, but the engine did not reach it (an address that does not answer, a token it refused): the form stays with
+    // the reason, and its card shows Needs attention.
+    if(kind!=='oauth'&&answer.body.state!=='connected') { setBusy(false); setError('connectAttention'); refreshApps(); return; }
     if(kind==='oauth') {
      const url=typeof answer.body.url==='string'?answer.body.url:null;
      if(!url) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }

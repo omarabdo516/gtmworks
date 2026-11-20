@@ -268,6 +268,23 @@ test('the own-tool card tests a server and adds it with no sign-in', async () =>
   expect(toast.mock.calls).toEqual([['My CRM added']]);
 });
 
+// #458: a server added but not reached (an address that does not answer, a refused token) keeps the form, with the reason.
+test('the own-tool card keeps its form when the engine cannot reach the server it added', async () => {
+  vi.stubGlobal('fetch', (url: string) => {
+    if (url === '/api/company-servers') return Promise.resolve(new Response(JSON.stringify({ key: 'my-crm', state: 'attention' }), { status: 200 }));
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await screen.getByRole('textbox', { name: /Name/ }).fill('My CRM');
+  await screen.getByRole('textbox', { name: /Address/ }).fill('https://crm.example/mcp');
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sign-in' }).element() as HTMLSelectElement, 'none');
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.element(screen.getByText(text.connectAttention)).toBeVisible();
+  expect(toast).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+  await expect.element(screen.getByRole('heading', { name: 'Your own tool (MCP)' })).toBeVisible();
+});
+
 // #458: a server the Owner added is an app like any other: its own page has the per-Agent switches and Reconnect, and
 // turning it on for another Agent sends the key alone (the service reads the address from the Engine).
 test('a made server has the per-Agent switches and turns on for another Agent', async () => {
