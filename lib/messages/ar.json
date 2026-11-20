@@ -1305,5 +1305,6 @@
   "settingsSpeechOwnerOnly": "المالك بس هو اللي بيختار المزوّد ويحط مفتاحه.",
   "settingsSpeechMissing": "لسه مش على المزوّد ده؛ حط المفتاح تاني عشان يوصل لـ:",
   "settingsSpeechUnread": "مقدرناش نقرا مزوّد تحويل الكلام لنص دلوقتي.",
-  "settingsVoiceArabicEgypt": "عربي (مصري)"
+  "settingsVoiceArabicEgypt": "عربي (مصري)",
+  "settingsSpeechNotReached": "التغيير موصلش لـ {0}. جرّب تاني."
 }

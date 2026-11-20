@@ -1305,5 +1305,6 @@
   "settingsSpeechOwnerOnly": "Only the Owner chooses the provider and gives its key.",
   "settingsSpeechMissing": "Not on this provider yet; give the key again to reach:",
   "settingsSpeechUnread": "Couldn’t read the speech-to-text provider right now.",
-  "settingsVoiceArabicEgypt": "Arabic (Egypt)"
+  "settingsVoiceArabicEgypt": "Arabic (Egypt)",
+  "settingsSpeechNotReached": "The change did not reach {0}. Try again."
 }

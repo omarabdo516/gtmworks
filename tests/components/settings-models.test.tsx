@@ -90,6 +90,14 @@ test('the Owner picks a speech-to-text provider with its key, Deepgram first; a 
   await expect.element(page.getByText(ar.settingsSpeechInUse)).toBeVisible();
 });
 
+test('a speech-to-text change that misses an Agent names it and says to try again, with no success toast', async () => {
+  stub({ provider: 'deepgram', missing: [], failed: [{ agent: 'a-1', name: 'Writer' }] });
+  const screen = await renderNode(<><ToastHost/><SpeechToText company={company} owner data={{ provider: 'deepgram', missing: [] }}/></>);
+  await screen.getByRole('button', { name: 'Remove the Deepgram Nova-3 key' }).click();
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(en.settingsSpeechNotReached.replace('{0}', 'Writer'));
+  expect(screen.container.textContent).not.toContain(en.settingsModelsKeyRemoved);
+});
+
 test('the Company default is the Engine\'s list for its space: the Owner picks one, every other member reads it', async () => {
   const sent = stub();
   const models = { model: 'openrouter/openai/gpt-5.5', options };

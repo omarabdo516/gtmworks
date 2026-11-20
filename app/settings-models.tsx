@@ -100,6 +100,7 @@ const speechRows=[['deepgram','Deepgram Nova-3','settingsSpeechDeepgram'],['elev
 export function SpeechToText({company,owner,data}:{company:string,owner:boolean,data:SpeechData|null}) {
  const {t}=useI18n(); const router=useRouter();
  const [open,setOpen]=useState(''); const [value,setValue]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+ const [missed,setMissed]=useState<string[]>([]);
  const act=async(provider:string,intent:'set'|'remove')=>{
   if(busy) return;
   if(intent==='set'&&value.trim().length<8) { setError('speechInvalid'); return; }
@@ -108,7 +109,10 @@ export function SpeechToText({company,owner,data}:{company:string,owner:boolean,
   setBusy(false);
   if(!answer.ok) { setError(answer.error||'speechFailed'); return; }
   setOpen(''); setValue('');
-  toast(t(intent==='set'?'settingsModelsKeySaved':'settingsModelsKeyRemoved'));
+  // Agents a write did not reach are named, with no success toast, so the Owner tries again.
+  const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as Named[]).map(item=>item.name||t('settingsModelsAnAgent')):[];
+  setMissed(failed);
+  if(!failed.length) toast(t(intent==='set'?'settingsModelsKeySaved':'settingsModelsKeyRemoved'));
   router.refresh();
  };
  const missing=data?.provider&&data.missing?.length?data.missing.map(item=>item.name||t('settingsModelsAnAgent')):[];
@@ -129,6 +133,7 @@ export function SpeechToText({company,owner,data}:{company:string,owner:boolean,
   :<div className="panel-card"><p className="panel-empty">{t(data?'settingsSpeechUnread':'settingsModelsKeyNoEngine')}</p></div>}
   {data?.missing&&!data.provider&&<p className="set-hint" id="mdl-stt-none">{t('settingsSpeechNone')}</p>}
   {error&&<p className="set-err" role="alert">{t(error==='speechNotAllowed'?'settingsSpeechOwnerOnly':'settingsModelsKeyError')}</p>}
+  {missed.length>0&&<p className="set-err" role="alert">{t('settingsSpeechNotReached',missed.join(', '))}</p>}
   {!owner&&<p className="set-hint">{t('settingsSpeechOwnerOnly')}</p>}
   {owner&&missing.length>0&&<ul className="set-hint md-waiting">{missing.map((name,at)=><li key={at}>{t('settingsSpeechMissing')} <bdi>{name}</bdi></li>)}</ul>}
   <p className="set-hint">{t('settingsSpeechHint')}</p>
