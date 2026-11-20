@@ -9,6 +9,7 @@
 # image and starts gtmworks; nothing is built and no source is downloaded. It keeps the get.sh of the build it installs
 # (the image carries it, #437) in the folder as gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
 #   gtmworks status | update | backup | restore <archive> | install | sign-in claude
+#   gtmworks update-button on|off | gtmworks auto-update on|off | gtmworks updater (one run of the updater, #443)
 #   gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
@@ -43,18 +44,21 @@ Usage:
   gtmworks status
   gtmworks update [--version vX.Y.Z | --version main@sha256:<digest> | --channel main] [--no-backup]
   gtmworks backup [directory]
-  gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes]]
+  gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes] [--no-backup]]
   gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
   gtmworks company add --name <Company> [--owner <email>]
   gtmworks company link <Company>  (a fresh first-Owner link for a Company still waiting)
   gtmworks company list     (each Company and the state of its Engine)
+  gtmworks update-button on|off  (the Update now button Owners see; on by default)
+  gtmworks auto-update on|off    (install each newer version of this channel by itself; off by default)
+  gtmworks updater          (one run of the updater; its timer runs it every minute)
 USAGE
   exit "${1:-2}"
 }
 wrong() { printf '%s\n' "$*" >&2; usage; }
 
-command_mode=no operation= archive= version= channel= dir= backup=yes yes=no provider= company= company_command=no
+command_mode=no operation= archive= version= channel= dir= backup=yes yes=no provider= company= company_command=no setting=
 destination=
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -76,13 +80,15 @@ while [ $# -gt 0 ]; do
        elif [ "$operation" = restore ] && [ -z "$archive" ]; then archive=$1
        elif [ "$operation" = backup ] && [ -z "$destination" ]; then destination=$1
        elif [ "$operation" = sign-in ] && [ -z "$provider" ]; then provider=$1
+       elif { [ "$operation" = update-button ] || [ "$operation" = auto-update ]; } && [ -z "$setting" ]; then setting=$1
        else wrong "Unexpected argument: $1"; fi;;
   esac
   shift
 done
 # The line installs; the gtmworks command does what it is told and nothing when told nothing.
 if [ -z "$operation" ]; then [ "$command_mode" = no ] || usage; operation=install; fi
-case "$operation" in install|update|backup|restore|status|company|sign-in) ;; *) wrong "Unknown command: $operation";; esac
+case "$operation" in install|update|backup|restore|status|company|sign-in|updater|update-button|auto-update) ;; *) wrong "Unknown command: $operation";; esac
+case "$operation" in update-button|auto-update) case "$setting" in on|off) ;; *) wrong "gtmworks $operation takes on or off.";; esac;; esac
 if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+|main@sha256:[a-f0-9]{64}'; then
   wrong "--version takes a release version such as v1.2.3, not $version."
 fi
@@ -91,7 +97,9 @@ case "$version" in main@*) [ "$operation" = update ] || [ "$operation" = restore
   || wrong "--version $version names a main build this install kept; it belongs to gtmworks update and gtmworks restore.";; esac
 case "$channel" in ''|stable|main) ;; *) wrong "--channel is stable or main, not $channel.";; esac
 [ -z "$version" ] || [ "$channel" != main ] || wrong '--version names a stable release; it cannot be combined with --channel main.'
-[ "$backup" = yes ] || [ "$operation" = update ] || wrong '--no-backup belongs to gtmworks update.'
+# A go-back may skip its backup of the current data: the updater's, right after the update's own backup (#443).
+[ "$backup" = yes ] || [ "$operation" = update ] || { [ "$operation" = restore ] && [ -n "$version" ]; } \
+  || wrong '--no-backup belongs to gtmworks update and gtmworks restore --version.'
 [ "$yes" = no ] || [ "$operation" = restore ] || wrong '--yes belongs to gtmworks restore.'
 if [ "$operation" = sign-in ]; then
   [ "$provider" = claude ] || wrong "gtmworks sign-in signs in claude. Run: gtmworks sign-in claude --company <id-or-name>"
@@ -424,6 +432,7 @@ op_install() {
       previous=
       update_to
       install_command
+      install_updater
       own_data
       return
     fi
@@ -431,6 +440,7 @@ op_install() {
   fi
   [ "$keep" = yes ] || place_release "$stage"
   install_command
+  install_updater
   data_created > /dev/null || claim_data
   # The target and its two files (now in place) are recorded before the installer runs, so an install that stops in the
   # middle is finished with the build it began with: a first install's version is recorded even when it stops after
@@ -465,6 +475,7 @@ op_update() {
     say "gtmworks $target ($release_ref) already runs in $dir: nothing to update."
     return
   fi
+  install_updater
   update_to
   own_data
 }
@@ -668,10 +679,15 @@ op_restore() {
   carried=$(carried_by "$release_ref") || fail "Could not read the migrations of $release_ref. Nothing was changed."
   missing=$(missing_from "$carried" "$archived" | tr '\n' ' ')
   [ -z "$missing" ] || fail "$archive holds migrations that gtmworks $version does not carry (${missing% }): a later release made it. Restore it with that release or a newer one. Nothing was changed."
-  confirm "This replaces the data of the gtmworks install in $dir (its database, its files, and .env.install with its keys and settings) with the data in $archive, and runs gtmworks $version on it. The current data is backed up first; the agent engine's data is kept."
-  say "Going back to gtmworks $version with the data of $archive. The current data is backed up first."
-  take_backup || fail 'The backup of the current data failed, so nothing was changed.'
-  say "Backup of the current data: $archive_made"
+  first=' The current data is backed up first.'
+  [ "$backup" = yes ] || first=' The current data is not backed up first (--no-backup).'
+  confirm "This replaces the data of the gtmworks install in $dir (its database, its files, and .env.install with its keys and settings) with the data in $archive, and runs gtmworks $version on it.$first The agent engine's data is kept."
+  say "Going back to gtmworks $version with the data of $archive.$first"
+  archive_made=
+  if [ "$backup" = yes ]; then
+    take_backup || fail 'The backup of the current data failed, so nothing was changed.'
+    say "Backup of the current data: $archive_made"
+  fi
   claim_data
   compose down
   docker volume rm gtmworks-install_database gtmworks-install_database-config gtmworks-install_files
@@ -683,7 +699,7 @@ op_restore() {
   record_target "$version"
   place_command
   own_data
-  say "gtmworks $version is running with the data of $archive. The data from before is in $archive_made."
+  say "gtmworks $version is running with the data of $archive.${archive_made:+ The data from before is in $archive_made.}"
 }
 
 op_backup() { check_prerequisites; in_install; check_project_owner; run_installer backup "${destination:-$dir/backups}"; }
@@ -699,6 +715,13 @@ op_status() {
   in_install
   say "gtmworks $(recorded | grep . || echo '(unrecorded version)') in $dir: $(cat .install-release 2> /dev/null || echo 'no finished install')"
   [ -z "$(pending)" ] || say "An update to gtmworks $(pending) did not finish: run gtmworks install to finish it."
+  if row=$(updates read 2> /dev/null); then
+    IFS='|' read -r button auto _ <<ROW
+$row
+ROW
+    say "Update now button: $( [ "$button" = t ] && echo on || echo off). Automatic updates: $( [ "$auto" = t ] && echo on || echo off)."
+  fi
+  say "Updater: $(updater_kind | grep . || echo 'not installed (run gtmworks install)')"
   services=$(compose config --services) || fail 'Could not read the install compose file.'
   total=0 unhealthy=
   for service in $services; do
@@ -734,8 +757,162 @@ op_signin() {
   sh ./install.sh sign-in "$provider" --company "$company"
 }
 
+# Update now and automatic updates (#443, ADR 0020). The web app never controls Docker: an Owner's click only records a
+# request in the database (public.install_updates), and the updater, this command run every minute by a systemd user
+# timer or cron as the user who installed, reads it and runs `gtmworks update` exactly as a person would, under the same
+# lock. The request names nothing: the update always goes to the newest version of the install's own channel. The row is
+# read and written here as postgres inside the database container, by one fixed statement per step.
+updates() {
+  case "$1" in
+    read) sql="select button, auto, state, coalesce(auto_checked_at < now() - interval '1 hour', true) from public.install_updates;";;
+    button-on|button-off|auto-on|auto-off)
+      column=${1%-*} value=false
+      [ "${1#*-}" = off ] || value=true
+      sql="insert into public.install_updates($column) values($value) on conflict (singleton) do update set $column=excluded.$column;";;
+    ignore) sql="update public.install_updates set state='idle', changed_at=now() where state='requested';";;
+    updating) sql="update public.install_updates set state='updating', changed_at=now(), auto_checked_at=now();";;
+    checked) sql="update public.install_updates set auto_checked_at=now();";;
+    idle) sql="update public.install_updates set state='idle', changed_at=now() where state in ('requested','updating');";;
+    updated|failed) sql="update public.install_updates set state='$1', version=nullif(:'version',''), changed_at=now(), auto_checked_at=now();";;
+    *) echo "gtmworks knows no updater step $1." >&2; return 2;;
+  esac
+  # step names the statement in psql's own log (and to the tests' stand-in for the database); no statement reads it.
+  printf '%s\n' "$sql" | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v "step=$1" -v "version=${2:-}"
+}
+# The version running, as the updater reports it: a release's tag, or a main build by its digest.
+running_version() {
+  case "$(cat .install-release 2> /dev/null || true)" in
+    "$image:main@sha256:"*) printf 'main@%s\n' "$(sed -n 's/.*@//p' .install-release)";;
+    *) recorded;;
+  esac
+}
+op_updater() {
+  in_install
+  mkdir -p "${update_lock%/*}" 2> /dev/null || return 0
+  # One updater at a time; cron starts one every minute whether the last one finished or not.
+  exec 7>"${update_lock%/*}/updater.lock"
+  flock -n 7 || return 0
+  # No database, or one from before #443: nothing to read, nothing to do.
+  row=$(updates read 2> /dev/null) || return 0
+  IFS='|' read -r button auto state due <<ROW
+$row
+ROW
+  # This updater holds its lock, so an update still marked running belongs to one the machine stopped.
+  if [ "$state" = updating ]; then updates failed "$(running_version)" > /dev/null; return 0; fi
+  if [ "$state" = requested ] && [ "$button" != t ]; then
+    updates ignore > /dev/null
+    say 'An update was asked for while the Update now button is off (gtmworks update-button off): ignored.'
+    return 0
+  fi
+  if [ "$state" = requested ]; then why=request
+  elif [ "$auto" = t ] && [ "$due" = t ]; then why=auto
+  else return 0; fi
+  # A person's own update or install holds the update lock: the request waits for the next run.
+  flock -n "$update_lock" true || return 0
+  before=$(cat .install-release 2> /dev/null || true)
+  back=$(running_version)
+  if [ "$why" = request ]; then updates updating > /dev/null; else updates checked > /dev/null; fi
+  log=$dir/.gtmworks-updater.log
+  # The update's output can hold the one-time setup link while first run is open: the log is the install user's alone.
+  ( umask 077; : > "$log" )
+  say "The updater runs gtmworks update ($why), from gtmworks ${back:-(unrecorded)}; its output is in $log."
+  if sh "$dir/gtmworks.sh" --command --dir "$dir" update >> "$log" 2>&1; then
+    if [ "$(cat .install-release 2> /dev/null || true)" = "$before" ]; then
+      [ "$why" = auto ] || updates idle > /dev/null
+      say "gtmworks ${back:-(unrecorded)} is the newest of its channel: nothing to update."
+    else
+      updates updated "$(running_version)" > /dev/null
+      say "Updated to gtmworks $(running_version)."
+    fi
+    return 0
+  fi
+  # The update records the release it runs only once it serves healthy. A new record means the new version came up and
+  # something after it failed: it stays. No record means it started and did not come up, after its migrations may have
+  # run, so the backup it took goes back with the version from before.
+  after=$(cat .install-release 2> /dev/null || true)
+  if [ -n "$after" ] && [ "$after" != "$before" ]; then
+    updates updated "$(running_version)" > /dev/null || true
+    say "gtmworks $(running_version) came up healthy, then the update stopped on a later step: see $log." >&2
+    return 1
+  fi
+  if [ -z "$after" ]; then
+    archive=$(sed -n 's/^Backup: //p' "$log" | tail -n 1)
+    if [ -n "$archive" ] && [ -n "$back" ] \
+      && sh "$dir/gtmworks.sh" --command --dir "$dir" restore "$archive" --version "$back" --yes --no-backup >> "$log" 2>&1; then
+      say "The new version did not come up healthy: gtmworks $back is back, with the data from before the update."
+    else
+      say "The new version did not come up healthy, and putting gtmworks ${back:-(unrecorded)} back did not finish: run gtmworks install." >&2
+    fi
+  fi
+  updates failed "$(running_version)" > /dev/null || true
+  say "The update failed; gtmworks $(running_version | grep . || echo '(unrecorded)') runs. See $log." >&2
+  return 1
+}
+op_switch() {
+  check_prerequisites
+  in_install
+  check_project_owner
+  case "$operation" in update-button) step=button-$setting;; *) step=auto-$setting;; esac
+  updates "$step" > /dev/null \
+    || fail "Could not change it: the database of $dir is not running (see gtmworks status), or comes from before Update now (gtmworks update brings it). Nothing was changed."
+  case "$step" in
+    button-on) say 'Update now is on: Owners see the button when a newer gtmworks is out, and the updater installs it when one of them asks.';;
+    button-off) say 'Update now is off: Owners see no button, and the updater ignores any request. Update with: gtmworks update';;
+    auto-on) say "Automatic updates are on: the updater installs each newer gtmworks of this install's channel by itself, backing up first.";;
+    auto-off) say 'Automatic updates are off: a newer gtmworks waits for an Owner to click Update now, or for gtmworks update.';;
+  esac
+  [ -n "$(updater_kind)" ] || say 'The updater is not installed on this machine yet: run gtmworks install.'
+}
+# How the updater runs here: a systemd user timer, cron, or nothing yet.
+updater_kind() {
+  if systemctl --user is-enabled gtmworks-updater.timer > /dev/null 2>&1; then echo 'a systemd user timer, every minute'
+  elif crontab -l 2> /dev/null | grep -qF '# gtmworks updater'; then echo 'cron, every minute'; fi
+}
+# The updater's timer, as the user who installs: a systemd user timer, or cron where systemd user units are missing. It
+# runs the gtmworks command with the PATH and DOCKER_HOST of this run, so it reaches the same Docker. Written again by
+# every install and update, removed by nothing.
+install_updater() {
+  command=$HOME/.local/bin/gtmworks
+  # Each value whole, one per line: a PATH may hold spaces (WSL's /mnt/c/Program Files) or `%`, which cron reads as a
+  # newline and systemd as a specifier.
+  environment=$(printf 'PATH=%s\n' "$PATH"; [ -z "${DOCKER_HOST:-}" ] || printf 'DOCKER_HOST=%s\n' "$DOCKER_HOST")
+  if systemctl --user show-environment > /dev/null 2>&1; then
+    units=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+    mkdir -p "$units"
+    {
+      printf '%s\n' '[Unit]' 'Description=gtmworks updater: Update now and automatic updates' '' '[Service]' 'Type=oneshot'
+      printf '%s\n' "$environment" | sed 's/%/%%/g; s/["\\]/\\&/g; s/.*/Environment="&"/'
+      printf 'ExecStart="%s" updater\n' "$command"
+    } > "$units/gtmworks-updater.service"
+    printf '%s\n' '[Unit]' 'Description=Run the gtmworks updater every minute' '' '[Timer]' 'OnBootSec=1min' 'OnUnitActiveSec=1min' '' \
+      '[Install]' 'WantedBy=timers.target' > "$units/gtmworks-updater.timer"
+    if ! { systemctl --user daemon-reload && systemctl --user enable --now gtmworks-updater.timer; } > /dev/null 2>&1; then
+      say "Could not start the gtmworks updater's systemd timer, so Update now and automatic updates wait for it: run gtmworks install again. gtmworks update still works."
+      return 0
+    fi
+    # A user's timers run only while they are signed in, unless systemd keeps their services running (linger).
+    if [ "$(loginctl show-user "$(id -un)" -p Linger --value 2> /dev/null)" != yes ] && ! loginctl enable-linger > /dev/null 2>&1; then
+      say "The gtmworks updater runs while $(id -un) is signed in to this server. To keep it running always: sudo loginctl enable-linger $(id -un)"
+    fi
+    say 'The gtmworks updater runs every minute (a systemd user timer): Update now, and automatic updates (gtmworks auto-update on).'
+  elif command -v crontab > /dev/null 2>&1; then
+    # env runs the command with each quoted NAME=value: a quoted assignment alone would be read as the command's name.
+    entry="* * * * * env $(printf '%s\n' "$environment" | while IFS= read -r pair; do printf '%s ' "$(quote "$pair")"; done | sed 's/%/\\%/g')$(quote "$command") updater > /dev/null 2>&1 # gtmworks updater"
+    # The table is read whole before it is written back: the other lines in it stay as they were.
+    table=$(crontab -l 2> /dev/null | grep -vF '# gtmworks updater' || true)
+    if ! { [ -z "$table" ] || printf '%s\n' "$table"; printf '%s\n' "$entry"; } | crontab - > /dev/null 2>&1; then
+      say "Could not add the gtmworks updater to cron, so Update now and automatic updates wait for it: run gtmworks install again. gtmworks update still works."
+      return 0
+    fi
+    say 'The gtmworks updater runs every minute (cron): Update now, and automatic updates (gtmworks auto-update on).'
+  else
+    say 'This machine has no systemd user timers and no cron, so the gtmworks updater is not installed: Update now and automatic updates need it. gtmworks update still works.'
+  fi
+}
+
 case "$operation" in
   sign-in) op_signin;;
+  update-button|auto-update) op_switch;;
   company) "op_company" "$@";;
   *) "op_$operation";;
 esac

@@ -11,11 +11,13 @@ const entry = (issue: number) => ({ issue, date: '2026-11-21', en: { title: `Tit
 const update = { version: 'v1.3.0', date: new Date(Date.now() - 3 * 86400000).toISOString(), entries: [1, 2, 3, 4, 5, 6, 7].map(entry) };
 const seenAll = () => localStorage.setItem(seenKey(person), JSON.stringify(whatsNew.map(item => item.issue)));
 let answer: () => Promise<Response>;
-const asked = vi.fn();
+const asked = vi.fn(), fetched = vi.fn();
 beforeEach(() => {
  localStorage.clear();
  asked.mockReset();
- vi.stubGlobal('fetch', async (url: string) => { asked(url); return answer(); });
+ // The notice's own check is counted; Update now's state, read once the notice opens (#443), is fetched apart.
+ fetched.mockReset();
+ vi.stubGlobal('fetch', async (url: string) => { fetched(url); if (url.startsWith('/api/update')) asked(url); return answer(); });
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 const answering = (body: object) => { answer = async () => new Response(JSON.stringify(body), { status: 200 }); };
@@ -57,7 +59,7 @@ test('anyone but an Owner sees nothing and asks nothing', async () => {
  answering({ joined: '2026-01-01T00:00:00Z', update });
  const screen = await shown(false);
  await new Promise(resolve => setTimeout(resolve, 50));
- expect(asked).not.toHaveBeenCalled();
+ expect(fetched).not.toHaveBeenCalled();
  expect(screen.container.textContent).toBe('');
 });
 
@@ -136,4 +138,38 @@ test('What\'s new lists every entry that arrived, none left counted', async () =
  await expect.element(dialog).toBeVisible();
  expect(dialog.element().querySelectorAll('.upd-lines li')).toHaveLength(whatsNew.length);
  expect(dialog.element().textContent).not.toMatch(/more improvement/);
+});
+
+// #443: Update now joins the command in the notice while the install owner leaves it on. Clicking warns first; the
+// request closes the notice, and the line at the foot of the sidebar then says Updating (app/install-update.tsx).
+test('the notice offers Update now beside the command, and a request closes it', async () => {
+ seenAll();
+ const posted = vi.fn();
+ vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+  if (url === '/api/install-update' && init?.method === 'POST') { posted(); return Response.json({ state: 'requested' }); }
+  if (url === '/api/install-update') return Response.json({ button: true, state: 'idle', version: null, changedAt: '2026-11-20T10:00:00Z' });
+  return Response.json({ joined: '2026-01-01T00:00:00Z', update });
+ });
+ const screen = await shown(true);
+ await screen.getByRole('button', { name: 'Update ready' }).click();
+ const dialog = screen.getByRole('dialog', { name: 'Update ready' });
+ await dialog.getByRole('button', { name: 'Update now' }).click();
+ await expect.element(dialog).toMatchTextContent(/stops for about a minute while it updates/);
+ expect(posted).not.toHaveBeenCalled();
+ await dialog.getByRole('group').getByRole('button', { name: 'Update now' }).click();
+ await vi.waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
+ await expect.element(dialog).not.toBeInTheDocument();
+});
+
+test('with the button off the notice shows the command alone', async () => {
+ seenAll();
+ vi.stubGlobal('fetch', async (url: string) => url === '/api/install-update'
+  ? Response.json({ button: false, state: 'idle', version: null, changedAt: '2026-11-20T10:00:00Z' })
+  : Response.json({ joined: '2026-01-01T00:00:00Z', update }));
+ const screen = await shown(true);
+ await screen.getByRole('button', { name: 'Update ready' }).click();
+ const dialog = screen.getByRole('dialog', { name: 'Update ready' });
+ await expect.element(dialog.getByRole('button', { name: 'Copy the command gtmworks update' })).toBeVisible();
+ await new Promise(resolve => setTimeout(resolve, 100));
+ await expect.element(dialog.getByRole('button', { name: 'Update now' })).not.toBeInTheDocument();
 });
