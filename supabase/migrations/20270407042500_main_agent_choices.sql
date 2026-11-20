@@ -22,6 +22,13 @@ create function public.is_profile_keeper(c uuid, agent uuid) returns boolean lan
   and agent=public.company_profile_keeper(c);
 $$;
 revoke all on function public.is_profile_keeper(uuid,uuid) from public,anon,authenticated,service_role;
+-- The keeper may change its profile only while no other Agent still runs on it (one the worker is moving off it): a write
+-- for one would change both, so until the move finishes the keeper is refused as shared, as every other per-Agent write is.
+create function public.keeps_profile_alone(c uuid, agent uuid) returns boolean language sql stable security definer set search_path='' as $$
+ select public.is_profile_keeper(c,agent)
+  and not exists(select 1 from public.hermes_agents o where o.company_id=c and o.id<>agent and o.profile=public.company_engine_profile(c));
+$$;
+revoke all on function public.keeps_profile_alone(uuid,uuid) from public,anon,authenticated,service_role;
 
 -- #29's rows, with the keeper choosable and its choices read from the Company profile's record. An Agent with a record of
 -- its own is read from that record, as the writers below write it there first; one the worker is still moving (its record
@@ -31,7 +38,7 @@ returns table(agent uuid, name text, profile text, own boolean, choosable boolea
 language sql stable security definer set search_path='' as $$
  select a.id,a.name,a.profile,
   public.is_profile_keeper(c,a.id) or exists(select 1 from public.agent_profiles ap where ap.agent_id=a.id and ap.company_id=c and ap.profile=a.profile),
-  case when g.agent_id is not null then g.profile=a.profile else public.is_profile_keeper(c,a.id) end,
+  case when g.agent_id is not null then g.profile=a.profile else public.keeps_profile_alone(c,a.id) end,
   case when g.agent_id is not null then g.model_choice when public.is_profile_keeper(c,a.id) then p.model_choice end,
   case when g.agent_id is not null then g.subagents when public.is_profile_keeper(c,a.id) then p.subagents else false end
  from public.hermes_agents a
@@ -53,8 +60,8 @@ language sql stable security definer set search_path='' as $$
  order by a.is_default desc,a.name,a.id;
 $$;
 
--- The three writers: an Agent with its own record as before, else the keeper on the Company profile; any other Agent on
--- that profile shares it and is refused.
+-- The three writers: an Agent with its own record as before, else the keeper on the Company profile while it runs there
+-- alone; any other Agent on that profile, or the keeper while one still shares it, is refused as shared.
 create or replace function public.set_agent_model(agent uuid, model text) returns void
 language plpgsql security definer set search_path='' as $$
 declare c uuid;
@@ -66,7 +73,7 @@ begin
  if not public.is_company_owner(c) then raise exception 'settingNotAllowed' using errcode='42501'; end if;
  update public.agent_profiles p set model_choice=set_agent_model.model where p.agent_id=set_agent_model.agent and p.company_id=c;
  if found then return; end if;
- update public.company_profiles p set model_choice=set_agent_model.model where p.company_id=c and public.is_profile_keeper(c,set_agent_model.agent);
+ update public.company_profiles p set model_choice=set_agent_model.model where p.company_id=c and public.keeps_profile_alone(c,set_agent_model.agent);
  if not found then raise exception 'settingAgentShared' using errcode='42501'; end if;
 end $$;
 
@@ -82,7 +89,7 @@ begin
  if not public.is_company_owner(c) then raise exception 'settingNotAllowed' using errcode='42501'; end if;
  update public.agent_profiles p set subagents=set_agent_subagents.enabled,tools_pending=true where p.agent_id=set_agent_subagents.agent and p.company_id=c;
  if found then return; end if;
- update public.company_profiles p set subagents=set_agent_subagents.enabled,tools_pending=true where p.company_id=c and public.is_profile_keeper(c,set_agent_subagents.agent);
+ update public.company_profiles p set subagents=set_agent_subagents.enabled,tools_pending=true where p.company_id=c and public.keeps_profile_alone(c,set_agent_subagents.agent);
  if not found then raise exception 'settingAgentShared' using errcode='42501'; end if;
 end $$;
 
@@ -96,7 +103,7 @@ begin
  if not public.is_company_owner(c) then raise exception 'settingNotAllowed' using errcode='42501'; end if;
  update public.agent_profiles p set learning_mode_choice=set_agent_learning_mode.mode where p.agent_id=set_agent_learning_mode.agent and p.company_id=c;
  if found then return; end if;
- update public.company_profiles p set learning_mode_choice=set_agent_learning_mode.mode where p.company_id=c and public.is_profile_keeper(c,set_agent_learning_mode.agent);
+ update public.company_profiles p set learning_mode_choice=set_agent_learning_mode.mode where p.company_id=c and public.keeps_profile_alone(c,set_agent_learning_mode.agent);
  if not found then raise exception 'settingAgentShared' using errcode='42501'; end if;
 end $$;
 
@@ -138,7 +145,9 @@ begin
  if subagents_written is not null and exists(select 1 from public.company_profiles p where p.company_id=c and p.subagents is distinct from subagents_written) then
   raise exception 'companyProfileChanged' using errcode='40001'; end if;
  insert into public.company_profiles(company_id,profile,tools_level,tools_policy,tools_pending) values (c,engine_profile,level,policy,false)
-  on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+  -- A worker from before #425 names no switch and writes no delegation: its read-back never clears a switch that is on.
+  on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,
+   tools_pending=record_company_profile.subagents_written is null and public.company_profiles.subagents;
 end $$;
 revoke all on function public.record_company_profile(uuid,text,integer,integer,boolean) from public,anon,authenticated;
 grant execute on function public.record_company_profile(uuid,text,integer,integer,boolean) to service_role;
