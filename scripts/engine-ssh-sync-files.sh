@@ -60,6 +60,9 @@ patches = [
 ]
 for path, old, new in patches:
     text = path.read_text(encoding="utf-8")
+    # A restarted container keeps its patched copy and runs this hook again: a text already patched stays as it is.
+    if text.count(new) == 1:
+        continue
     if text.count(old) != 1:
         sys.exit("engine-ssh-sync-files: the pinned Engine's " + str(path) +
                  " does not hold the expected text once; refusing to start without the file-sync switch")

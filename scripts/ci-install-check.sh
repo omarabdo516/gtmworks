@@ -34,11 +34,26 @@ install_source first-install.log || fail 'first install'
 node scripts/check-work-sandbox.mjs --image "$(cat .work-sandbox-image)" | tee work-sandbox.log || fail 'the work sandbox image'
 grep -qx 'work sandbox: ok' work-sandbox.log || fail 'the work sandbox image prints "work sandbox: ok"'
 # The pinned Engine's file-sync switch (#393): its cont-init hook patches the Engine's own copy to take
-# terminal.ssh_sync_files, and fails the start loudly when the pinned text is not there. Run the same hook in a throwaway
-# container of the pinned image, so a pin bump that moves the text is caught here as well as at the Engine's start.
+# terminal.ssh_sync_files, and fails when the pinned text is not there. In a throwaway container of the pinned image with
+# the managed configuration, the hook runs twice (as a restarted Engine runs it) and the ssh environment a profile's
+# terminal builds gets sync_files off, even when the profile's own config asks for it on.
 engine_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
-docker run --rm -v "$PWD/scripts/engine-ssh-sync-files.sh:/hook:ro" --entrypoint /bin/sh "$engine_image" /hook \
-  || fail 'the pinned Engine holds the text the file-sync switch replaces'
+docker run --rm -v "$PWD/scripts/engine-ssh-sync-files.sh:/hook:ro" -v "$PWD/scripts/engine-managed.yml:/etc/hermes/config.yaml:ro" \
+  --entrypoint /bin/sh "$engine_image" -ec '/hook; /hook; cd /opt/hermes; exec python - <<"PY"
+import pathlib, tempfile
+from unittest.mock import MagicMock
+home = pathlib.Path(tempfile.mkdtemp())
+(home / "config.yaml").write_text("terminal: {ssh_sync_files: true}\n")
+from tools.terminal_scope import build_profile_terminal_scope, set_terminal_scope
+set_terminal_scope(build_profile_terminal_scope(home))
+from tools import terminal_tool_backends
+from tools.terminal_tool import _get_env_config
+from tools.terminal_tool_lifecycle import _create_configured_env
+terminal_tool_backends._SSHEnvironment = built = MagicMock()
+config = _get_env_config()
+_create_configured_env(config, config["env_type"], image="", cwd="/work", timeout=30, task_id="sync-check", host_cwd=None)
+assert config["env_type"] == "ssh" and built.call_args.kwargs["sync_files"] is False, built.call_args
+PY' || fail 'the pinned Engine builds its ssh sandbox with file sync off'
 [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
 # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
 # other line, and a repeat install while setup is still open prints the same link. The code travels after `#`
@@ -504,10 +519,14 @@ docker exec "$engine_id" sh -ec 'install -d -m 700 -o hermes -g hermes "/opt/dat
 sync_marker="sandbox-sync-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 engine_node "$engine_key" - sandbox-sync "$sync_marker" < scripts/check-install-profiles.mjs | tee sandbox-sync.log \
   || fail 'an Agent works in its sandbox with the file sync off'
-grep -q '"uploaded":0' sandbox-sync.log || fail 'the Engine copied its files into the sandbox'
-if docker exec "$sandbox" test -e /home/pn/.hermes/sandbox-check-credentials/credential.json; then
-  fail 'a credential file of the Engine profile is in the sandbox'
-fi
+grep -q '"count":0' sandbox-sync.log || fail 'the Engine copied its files into the sandbox'
+# The settings file a sync would map, planted as the sandbox's user: an Agent's own redirect into ~/.hermes/config.yaml
+# is a command the Engine holds for a person's approval, so the Run would wait for one and never reply.
+docker exec "$sandbox" sh -ec 'printf "# EDIT-%s\n" "$1" > /home/pn/.hermes/config.yaml' sh "$sync_marker" \
+  || fail "plant the settings file in the sandbox's Engine home"
+# No copy of the profile's credential file anywhere an Agent can write in its sandbox, under any name.
+leaked=$(docker exec --user 0 "$sandbox" sh -c 'grep -rl -- "CHECK-$1" /home /work /tmp 2> /dev/null; find / -xdev -name credential.json -path "*sandbox-check-credentials*" 2> /dev/null; true' sh "$credential_marker")
+[[ -z $leaked ]] || fail "a credential file of the Engine profile is in the sandbox: $leaked"
 before_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills before the sandbox session ended"
 [[ -z $before_sync ]] || fail "an Agent's edit reached the Engine before its session ended: $before_sync"
 # The Engine's own process tears the session down at a restart: a stop that never happened cannot pass for one that did.

@@ -24,9 +24,10 @@
 //     (refused) or put it back (runs): the Engine's ssh client trusts a host it has not seen but refuses a changed key, and
 //     the install pre-seeds known_hosts with the sandbox's, so a swapped sandbox is refused.
 //   sandbox-sync <marker>: one Agent counts the files under /home/pn/.hermes in its sandbox (none, with file sync off) and
-//     writes the paths a sync would map (its own Skills, the Company's shared folder, its memories, its settings); the
-//     profile names a credential file the job puts in the profile's home too. The job checks that none of it, the
-//     credential file included, reaches the Engine or the sandbox, and that the Run still works.
+//     writes the paths a sync would map (its own Skills, the Company's shared folder, its memories); the job plants the
+//     settings file there itself, and the profile names a credential file the job puts in the profile's home too. The
+//     job checks that none of it, the credential file included, reaches the Engine or the sandbox, and that the Run
+//     still works.
 // The companies and their Owner's sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -517,9 +518,10 @@ try {
 } else if(step==='sandbox-sync') {
 // Nothing is copied between the Engine and the sandbox (#393): the ssh backend runs with file sync off, so the sandbox's
 // /home/pn/.hermes holds no file when an Agent's command starts, and nothing an Agent writes there comes back. The Agent
-// counts the files it finds and writes the paths a sync would map (its own Skills, the shared Skills folder, its memories,
-// its settings); the install job checks the Engine's own Skills, shared folder, memory and settings after the teardown and
-// asserts none of it arrived, and that a Run still works.
+// counts the files it finds and writes the paths a sync would map (its own Skills, the shared Skills folder, its memories;
+// a redirect into ~/.hermes/config.yaml is a command the Engine holds for a person's approval, so the install job plants
+// the settings file itself); the install job checks the Engine's own Skills, shared folder, memory and settings after
+// the teardown and asserts none of it arrived, and that a Run still works.
 assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
 const first=JSON.parse(readFileSync(state,'utf8'))[0];
 const firstEngine=await engineFor(first.company);
@@ -535,7 +537,6 @@ const command=[
  `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/skills/agent-made/SKILL.md`,
  `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/external_skills/0/shared-made/SKILL.md`,
  `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/memories/MEMORY.md`,
- `printf '# EDIT-${marker}\\n' > /home/pn/.hermes/config.yaml`,
  `printf 'uploaded=%s\\n' "$uploaded"`,
 ].join('\n');
 const plan=messages=>{
@@ -561,7 +562,8 @@ try {
  const terminal=(()=>{ try { return JSON.parse(String(results[0])); } catch { return null; } })();
  assert.equal(terminal?.exit_code,0,String(results[0]));
  const output=String(terminal?.output??'');
- assert.match(output,/uploaded=0/,'the sandbox holds no file the Engine copied in');
- writeProof({step:'sandbox-sync',marker,uploaded:0,ran:true});
+ const uploaded=Number(output.match(/uploaded=(\d+)/)?.[1]);
+ assert.equal(uploaded,0,'the sandbox holds no file the Engine copied in');
+ writeProof({step:'sandbox-sync',marker,count:uploaded});
 } finally { model.close(); model.closeAllConnections(); }
 } else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker>');
