@@ -4,7 +4,8 @@
 # used here but its conclusion and event (job conditions), its identifiers in the concurrency group, and the identifiers
 # provenance checks (no inline expression in a script, no artifact). Before anything is published,
 # provenance proves the exact commit: a tag must name a commit on main whose required CI check passed on a push to main;
-# main publishes only its current head, once that check passed.
+# main publishes the newest commit whose check passed, even after main moved on, and never one older than the commit
+# its published image records (#448).
 # A release builds linux/amd64 and linux/arm64 and pushes X.Y.Z, installs on a fresh runner from the two release files
 # alone, and only then uploads both files to a draft GitHub Release, publishes it (published releases are immutable) and
 # moves stable and latest, one promotion at a time, to the highest published release (so an older or hotfix tag
@@ -20,9 +21,11 @@ on:
     workflows: [CI, Release tag]
     types: [completed]
 
-# Main runs one at a time in CI's push order (a newer pending run replaces an older one); each tag runs on its own.
+# Main runs one at a time in CI's push order (a newer pending run replaces an older one); each tag runs on its own. Only a
+# CI run of a push to main enters main's group: a pull request's CI, which publishes nothing, has a group of its own and
+# never replaces a pending main release (#448).
 concurrency:
-  group: release-${{ github.event.workflow_run.path == '.github/workflows/ci.yml' && 'main' || github.event.workflow_run.head_branch }}
+  group: release-${{ github.event.workflow_run.path == '.github/workflows/ci.yml' && (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && 'main' || format('ci-{0}-{1}-{2}', github.event.workflow_run.event, github.event.workflow_run.head_branch, github.event.workflow_run.head_sha)) || github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 env:
@@ -36,11 +39,18 @@ jobs:
     permissions:
       contents: read
       actions: read
+      # Read the published main image, to compare its commit with this one (#448).
+      packages: read
     outputs:
       sha: ${{ steps.provenance.outputs.sha }}
       tag: ${{ steps.provenance.outputs.tag }}
       release: ${{ steps.provenance.outputs.release }}
     steps:
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
       - name: the exact commit is reviewed and passed the required CI check
         id: provenance
         env:
@@ -56,13 +66,26 @@ jobs:
           case "$WORKFLOW_PATH" in
             .github/workflows/ci.yml)
               [[ "$HEAD_BRANCH" == main ]] || fail "CI ran for $HEAD_BRANCH, not main"
-              # A re-run of an old main run, or an older commit whose CI finished late, must not move main back.
-              # Main runs are serialised (concurrency above), so the head checked here is the newest a run can publish.
-              main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-              if [[ "$main" != "$HEAD_SHA" ]]; then
-                echo "::notice::$HEAD_SHA is no longer the head of main ($main); main is not published from it."
-                printf '%s\n' sha= tag= release= >> "$GITHUB_OUTPUT"
-                exit 0
+              # A re-run of an old main run, or an older commit whose CI finished late, must not move main back: the
+              # commit the published main image records is compared with this one, and only a newer one is published.
+              # Main runs are serialised (concurrency above), so the image read here is the last one a run published. A
+              # commit that is not main's head is still published when it is the newest one released (#448): with
+              # merges minutes apart, main rarely stands still for a whole CI run.
+              if index=$(docker buildx imagetools inspect --raw "$IMAGE:main" 2> registry-error); then
+                published=$(jq -r '.annotations["org.opencontainers.image.revision"] // empty' <<< "$index")
+              elif grep -q 'not found' registry-error; then
+                published=
+              else
+                cat registry-error >&2; fail "the published main image cannot be read"
+              fi
+              if [[ -n "$published" ]]; then
+                [[ "$published" =~ ^[0-9a-f]{40}$ ]] || fail "the published main image records no commit SHA: $published"
+                status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$published...$HEAD_SHA" --jq .status) || fail "cannot compare $published with $HEAD_SHA"
+                if [[ "$status" != ahead ]]; then
+                  echo "::notice::main already publishes $published, which $HEAD_SHA is not newer than ($status); nothing is published."
+                  printf '%s\n' sha= tag= release= >> "$GITHUB_OUTPUT"
+                  exit 0
+                fi
               fi
               tag=main release=
               ;;
@@ -141,6 +164,8 @@ jobs:
           push: true
           tags: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          # The commit the image is built from, which the next main release reads back (#448).
+          annotations: index:org.opencontainers.image.revision=${{ needs.provenance.outputs.sha }}
           # The image knows its own version (X.Y.Z or main) and so its channel, for Update ready (#442).
           build-args: GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}
           cache-from: type=gha,scope=release
