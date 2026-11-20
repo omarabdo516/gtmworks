@@ -44,7 +44,7 @@ Usage:
   gtmworks status
   gtmworks update [--version vX.Y.Z | --version main@sha256:<digest> | --channel main] [--no-backup]
   gtmworks backup [directory]
-  gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes]]
+  gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes] [--no-backup]]
   gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
   gtmworks company add --name <Company> [--owner <email>]
@@ -97,7 +97,9 @@ case "$version" in main@*) [ "$operation" = update ] || [ "$operation" = restore
   || wrong "--version $version names a main build this install kept; it belongs to gtmworks update and gtmworks restore.";; esac
 case "$channel" in ''|stable|main) ;; *) wrong "--channel is stable or main, not $channel.";; esac
 [ -z "$version" ] || [ "$channel" != main ] || wrong '--version names a stable release; it cannot be combined with --channel main.'
-[ "$backup" = yes ] || [ "$operation" = update ] || wrong '--no-backup belongs to gtmworks update.'
+# A go-back may skip its backup of the current data: the updater's, right after the update's own backup (#443).
+[ "$backup" = yes ] || [ "$operation" = update ] || { [ "$operation" = restore ] && [ -n "$version" ]; } \
+  || wrong '--no-backup belongs to gtmworks update and gtmworks restore --version.'
 [ "$yes" = no ] || [ "$operation" = restore ] || wrong '--yes belongs to gtmworks restore.'
 if [ "$operation" = sign-in ]; then
   [ "$provider" = claude ] || wrong "gtmworks sign-in signs in claude. Run: gtmworks sign-in claude --company <id-or-name>"
@@ -677,10 +679,15 @@ op_restore() {
   carried=$(carried_by "$release_ref") || fail "Could not read the migrations of $release_ref. Nothing was changed."
   missing=$(missing_from "$carried" "$archived" | tr '\n' ' ')
   [ -z "$missing" ] || fail "$archive holds migrations that gtmworks $version does not carry (${missing% }): a later release made it. Restore it with that release or a newer one. Nothing was changed."
-  confirm "This replaces the data of the gtmworks install in $dir (its database, its files, and .env.install with its keys and settings) with the data in $archive, and runs gtmworks $version on it. The current data is backed up first; the agent engine's data is kept."
-  say "Going back to gtmworks $version with the data of $archive. The current data is backed up first."
-  take_backup || fail 'The backup of the current data failed, so nothing was changed.'
-  say "Backup of the current data: $archive_made"
+  first=' The current data is backed up first.'
+  [ "$backup" = yes ] || first=' The current data is not backed up first (--no-backup).'
+  confirm "This replaces the data of the gtmworks install in $dir (its database, its files, and .env.install with its keys and settings) with the data in $archive, and runs gtmworks $version on it.$first The agent engine's data is kept."
+  say "Going back to gtmworks $version with the data of $archive.$first"
+  archive_made=
+  if [ "$backup" = yes ]; then
+    take_backup || fail 'The backup of the current data failed, so nothing was changed.'
+    say "Backup of the current data: $archive_made"
+  fi
   claim_data
   compose down
   docker volume rm gtmworks-install_database gtmworks-install_database-config gtmworks-install_files
@@ -692,7 +699,7 @@ op_restore() {
   record_target "$version"
   place_command
   own_data
-  say "gtmworks $version is running with the data of $archive. The data from before is in $archive_made."
+  say "gtmworks $version is running with the data of $archive.${archive_made:+ The data from before is in $archive_made.}"
 }
 
 op_backup() { check_prerequisites; in_install; check_project_owner; run_installer backup "${destination:-$dir/backups}"; }
@@ -829,7 +836,7 @@ ROW
   if [ -z "$after" ]; then
     archive=$(sed -n 's/^Backup: //p' "$log" | tail -n 1)
     if [ -n "$archive" ] && [ -n "$back" ] \
-      && sh "$dir/gtmworks.sh" --command --dir "$dir" restore "$archive" --version "$back" --yes >> "$log" 2>&1; then
+      && sh "$dir/gtmworks.sh" --command --dir "$dir" restore "$archive" --version "$back" --yes --no-backup >> "$log" 2>&1; then
       say "The new version did not come up healthy: gtmworks $back is back, with the data from before the update."
     else
       say "The new version did not come up healthy, and putting gtmworks ${back:-(unrecorded)} back did not finish: run gtmworks install." >&2

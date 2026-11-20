@@ -19,7 +19,7 @@ Owners should take each new gtmworks version with one click, as T3 Code's "Updat
 - **Who can click:** active Owners of any Company of the install. `gtmworks update-button off` hides the button and makes the updater ignore any request; it is on by default.
 - **Automatic updates:** `gtmworks auto-update on` makes the updater run the same update by itself, at most once an hour; off by default.
 - **One failure, then a pause:** for an hour after a failed update a new request is refused, so clicking again does not repeat a backup-and-restore cycle while the same release is still the newest.
-- **Safety:** every update takes the backup it already takes. When the new version does not come up healthy, the update puts the previous release back itself if no migration ran; if one ran and the new version never recorded itself as running, the updater restores the update's own backup with the previous version (`gtmworks restore <archive> --version <previous> --yes`). The row then says `failed` with the version still running, and the app shows it.
+- **Safety:** every update takes the backup it already takes. When the new version does not come up healthy, the update puts the previous release back itself if no migration ran; if one ran and the new version never recorded itself as running, the updater restores the update's own backup with the previous version (`gtmworks restore <archive> --version <previous> --yes --no-backup`: that backup is the data from before, and the half-started install cannot be backed up again). The row then says `failed` with the version still running, and the app shows it.
 
 ## Considered options
 

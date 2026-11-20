@@ -52,7 +52,8 @@ op=\${1:-install}
 ${lockBlock}[ ! -f .install-restore ] || printf 'held\\n' >> "$RESTORE_LOG"
 printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
 case "$op" in
- backup) mkdir -p "$2"; : > "$2/gtmworks-test.tgz"; echo 'Stopping...'; echo "Backup: $2/gtmworks-test.tgz"; exit 0;;
+ backup) [ -f .install-release ] || { echo 'This install does not run it yet: run sh install.sh update first.' >&2; exit 1; }
+  mkdir -p "$2"; : > "$2/gtmworks-test.tgz"; echo 'Stopping...'; echo "Backup: $2/gtmworks-test.tgz"; exit 0;;
  restore) exit 0;;
 esac
 [ -f .env.install ] || echo "SECRET=$$" > .env.install
@@ -1359,6 +1360,8 @@ test('a failed update shows the version still running: put back by the update, o
  const restored=m.gtmworks(['updater'],{extra:{FAIL_REF:ref('v1.10.0'),FAIL_AFTER_MIGRATE:'1'}});
  assert.equal(restored.status,1,restored.stdout+restored.stderr);
  assert.ok(m.installer().includes(`${hex('a')} restore ${join(m.dir,'backups/gtmworks-test.tgz')}`),m.installer().join('\n'));
+ // The update's own backup is the data from before; the half-started install is not backed up again (it cannot be).
+ assert.equal(m.installer().filter(line=>/ backup /.test(line)).length,1,m.installer().join('\n'));
  assert.match(restored.stdout,/gtmworks v1\.2\.3 is back, with the data from before the update\./);
  assert.deepEqual(m.updates(),['read ','updating ','failed v1.2.3']);
  assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
