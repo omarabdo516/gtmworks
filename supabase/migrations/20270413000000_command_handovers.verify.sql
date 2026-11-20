@@ -7,6 +7,9 @@ select json_build_object(
  'answers_person_default_false',(select pg_get_expr(adbin,adrelid)='false' from pg_attrdef
   where adrelid='public.agent_handovers'::regclass
    and adnum=(select attnum from pg_attribute where attrelid='public.agent_handovers'::regclass and attname='answers_person')),
+ 'start_waited_at_column',exists(select 1 from pg_attribute where attrelid='public.agent_handovers'::regclass and attname='start_waited_at' and not attisdropped),
+ 'session_held_until_column',exists(select 1 from pg_attribute where attrelid='public.agent_handovers'::regclass and attname='session_held_until' and not attisdropped),
+ 'begin_handover_holds_a_lost_start',position('session_held_until' in pg_get_functiondef('public.begin_handover(bigint)'::regprocedure))>0,
  'person_reads_answers_person',has_column_privilege('authenticated','public.agent_handovers','answers_person','select'),
  'command_handover_writes_for_a_member',has_function_privilege('authenticated','public.command_handover(uuid,uuid,uuid,uuid,text,text,text)','execute'),
  'command_handover_kept_from_the_worker',not has_function_privilege('service_role','public.command_handover(uuid,uuid,uuid,uuid,text,text,text)','execute')

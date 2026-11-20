@@ -13,6 +13,12 @@
 -- it did.
 alter table public.agent_handovers add column answers_person boolean not null default false;
 grant select (answers_person) on public.agent_handovers to authenticated;
+-- A target's start that waited behind another job in the same session (begin_handover): its ten minutes to start count
+-- from the last time it was held, not from when it was made, so a job queued behind a long one is never given up for it.
+alter table public.agent_handovers add column start_waited_at timestamptz;
+-- A start whose answer was lost and then given up (its sender may no longer call the target) may still have a Run going
+-- in the target's session: no other job starts there until this, the end of the lost start's one-day window.
+alter table public.agent_handovers add column session_held_until timestamptz;
 
 -- The person's message and the handover, once: whoever writes the Company's Conversations, talking to its Lead, for a
 -- job the Agent of that role takes — the first Agent made from the role this person sees, in the order the composer lists
@@ -101,13 +107,18 @@ begin
  -- be running — an open Run, or a start whose answer was lost (target_attempts above zero, as #354 reads one). Every
  -- handover of that place and Agent is counted, not only a command's, since they share the session: a Conversation's by
  -- its id, a channel's by its channel (the target's session there is the channel's, whatever message made the handover).
- -- The row itself is left out, so a lost start still retries.
- if exists(select 1 from public.agent_handovers o
+ -- The row itself is left out, so a lost start still retries. A lost start given up since may still be running, so it
+ -- holds the session until its window ends (session_held_until). Only the target's start waits: a follow-up leg runs in
+ -- Lead's session. A start held here notes when, so its ten minutes count from the moment it could go.
+ if r.state='waiting' and exists(select 1 from public.agent_handovers o
   where o.id<>h and o.to_agent=r.to_agent
    and (case when r.conversation_id is not null then o.conversation_id=r.conversation_id
      else exists(select 1 from public.channel_messages mine join public.channel_messages theirs on theirs.channel_id=mine.channel_id
       where mine.id=r.channel_message_id and theirs.id=o.channel_message_id) end)
-   and (o.state='target' or o.state='waiting' and o.target_attempts>0)) then return; end if;
+   and (o.state='target' or o.state='waiting' and o.target_attempts>0 or o.session_held_until>now())) then
+  if r.target_attempts=0 then update public.agent_handovers set start_waited_at=now() where id=h; end if;
+  return;
+ end if;
  select * into target from public.hermes_agents where id=r.to_agent;
  if r.conversation_id is not null then
   select * into talk from public.conversations where id=r.conversation_id;
@@ -123,18 +134,22 @@ begin
   -- or one no longer the person's to call (#354): no Run starts. A command's handover ends there, its target never
   -- answering, so the person's own Run ends as failed and the chat says the reply did not come; a #317 or #150 job goes
   -- on to Lead's follow-up, which tells the person.
-  if (r.target_attempts=0 and r.created_at < now()-interval '10 minutes')
-   or (r.target_attempts>0 and r.created_at < now()-interval '1 day')
+  -- Both windows count from when the start could go: when the job was made, or the last time another job held it.
+  -- A lost start given up here keeps the target's session held until its own window would have ended.
+  if (r.target_attempts=0 and coalesce(r.start_waited_at,r.created_at) < now()-interval '10 minutes')
+   or (r.target_attempts>0 and coalesce(r.start_waited_at,r.created_at) < now()-interval '1 day')
    or target.id is null or target.profile is null
    or (r.conversation_id is not null and not public.agent_visible_to(r.company_id, person, target.id))
    or (r.conversation_id is null and not public.channel_agent(chan, person, target.id)) then
    if r.answers_person then
-    update public.agent_handovers set state='failed', target_outcome='failed', attempted_at=null, closed_at=now() where id=h;
+    update public.agent_handovers set state='failed', target_outcome='failed', attempted_at=null, closed_at=now(),
+     session_held_until=case when r.target_attempts>0 then coalesce(r.start_waited_at,r.created_at)+interval '1 day' end where id=h;
     insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome)
      values(r.company_id,r.conversation_id,r.run_id,'failed') on conflict do nothing;
     return;
    end if;
-   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null, return_started_at=now() where id=h; return;
+   update public.agent_handovers set state='returning', target_outcome='failed', attempted_at=null, return_started_at=now(),
+    session_held_until=case when r.target_attempts>0 then coalesce(r.start_waited_at,r.created_at)+interval '1 day' end where id=h; return;
   end if;
   -- ADR 0014: a Company profile serves its own Company, and no Run starts while its tools are pending. Waits.
   if target.profile ~ '^co-[0-9a-f]{32}$'

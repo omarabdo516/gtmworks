@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(39);
+select plan(42);
 -- #358. RS Learning: Lead on the Company's own profile, Reach (made from the meta role) and Faye on profiles of their
 -- own. The Owner and the Manager see every Agent; the Contributor (…03) sees only the ones given to them; the Viewer
 -- (…04) writes nothing.
@@ -165,6 +165,24 @@ select is((select count(*)::int from public.begin_handover((select id from publi
  'while the handover whose start answer was lost still retries its own');
 select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000010'))),0,
  'and the job behind it still waits');
+
+-- A job held behind another one in the same session gets its ten minutes to start from the moment it could go: one made
+-- twenty minutes ago that waited for a long job starts once that job ends, and is never given up for having waited.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c3580000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a3580000-0000-0000-0000-000000000011','Lead');
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person,state,target_attempts,target_run,created_at) values
+ ('10000000-0000-0000-0000-000000000001','c3580000-0000-0000-0000-000000000007','command:d3580000-0000-0000-0000-000000000011',
+  'd3580000-0000-0000-0000-000000000011','a3580000-0000-0000-0000-000000000011','a3580000-0000-0000-0000-000000000012','Launch',true,'target',1,'run-long',now()-interval '30 minutes');
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person,created_at) values
+ ('10000000-0000-0000-0000-000000000001','c3580000-0000-0000-0000-000000000007','command:d3580000-0000-0000-0000-000000000012',
+  'd3580000-0000-0000-0000-000000000012','a3580000-0000-0000-0000-000000000011','a3580000-0000-0000-0000-000000000012','Report',true,now()-interval '20 minutes');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000012'))),0,
+ 'a job made twenty minutes ago waits while a long job runs in its session');
+update public.agent_handovers set state='done', target_outcome='completed', summary='Done.', closed_at=now() where call_id='d3580000-0000-0000-0000-000000000011';
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000012'))),1,
+ 'and starts once that job ends, its ten minutes counted from when it could go');
+select is((select state||':'||target_attempts from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000012'),'waiting:1',
+ 'rather than being given up for the time it waited');
 
 select * from finish();
 rollback;
