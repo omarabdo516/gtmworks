@@ -23,6 +23,10 @@ services:
       API_SERVER_KEY: ${ENGINE_KEY:?Run scripts/install.sh}
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_SESSION_TOKEN: ${ENGINE_KEY:?Run scripts/install.sh}
+      # The dashboard refuses a Host header that is not the address it bound to (DNS-rebinding guard), and the app and
+      # the worker reach it by this Engine's container name: the name is declared here as its public host, so the
+      # listener still binds the install network's address alone and the name answers there.
+      HERMES_DASHBOARD_PUBLIC_URL: http://${ENGINE_NAME:?Run scripts/install.sh}:9119
       HERMES_WRITE_SAFE_ROOT: /work
     volumes:
       - data:/opt/data

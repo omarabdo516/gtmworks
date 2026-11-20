@@ -54,6 +54,10 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.equal(engine.environment.API_SERVER_KEY,'${ENGINE_KEY:?Run scripts/install.sh}');
  assert.equal(engine.environment.HERMES_DASHBOARD,'1');
  assert.equal(engine.environment.HERMES_DASHBOARD_SESSION_TOKEN,'${ENGINE_KEY:?Run scripts/install.sh}');
+ // The dashboard refuses a Host header that is not the address it bound (DNS-rebinding guard), and the app and the
+ // worker reach it by this Engine's container name: the name is declared as the one public host, so the name answers on
+ // the install address and the sandbox's network leg still refuses.
+ assert.equal(engine.environment.HERMES_DASHBOARD_PUBLIC_URL,'http://${ENGINE_NAME:?Run scripts/install.sh}:9119');
  // The file tools write only under the work folder, which is the sandbox's (#390).
  assert.equal(engine.environment.HERMES_WRITE_SAFE_ROOT,'/work');
  assert.ok(engine.volumes.includes('data:/opt/data'));
