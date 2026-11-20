@@ -190,6 +190,7 @@ printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
  *'count(*) from public.companies'*) echo "$COMPANIES";;
+ *'label=com.docker.compose.service=hermes'*) echo "\${OLD_HERMES:-}";;
  *'exec -T db psql'*) cat > "$MIGRATION_SQL";;
  *install-env.mjs*) :;;
 esac
@@ -213,12 +214,26 @@ esac
   } else {
    mkdirSync(join(directory,'scripts'));
    for(const file of ['install.sh','install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
-   command=['scripts/install.sh','update','main'];
+   command=mode==='install'?['scripts/install.sh']:['scripts/install.sh','update','main'];
   }
   const commands=join(directory,'commands');
   const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,MIGRATION_SQL:join(directory,'migration.sql'),GH_TOKEN:''};
   return {directory,run:extra=>{ writeFileSync(commands,''); const result=spawnSync('sh',command,{cwd:directory,env:{...env,...extra},encoding:'utf8'}); return {...result,commands:readFileSync(commands,'utf8'),file:()=>readFileSync(join(directory,'.env.install'),'utf8'),migrated:()=>existsSync(env.MIGRATION_SQL)}; }};
  };
+ // A plain install run on an install the previous release made (its `hermes` container, no Engine folder) moves it as an
+ // update does, so two Companies on its one Engine are refused the same way before anything changes (#378); a run with no
+ // such container counts nothing.
+ {
+  const install=fixture('install');
+  const refused=install.run({COMPANIES:'2',OLD_HERMES:'old-hermes-id'});
+  assert.equal(refused.status,1,refused.stderr);
+  assert.match(refused.stderr,/This install has 2 Companies on one Engine\./);
+  assert.equal(refused.migrated(),false);
+  assert.equal(refused.file(),existing);
+  assert.doesNotMatch(refused.commands,/--single-transaction|compose .* up /);
+  const fresh=install.run({COMPANIES:'2',OLD_HERMES:''});
+  assert.doesNotMatch(fresh.commands,/count\(\*\) from public\.companies/);
+ }
  for(const mode of ['source','release']) {
   const install=fixture(mode);
   for(const companies of ['2','7']) {

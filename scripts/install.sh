@@ -703,6 +703,10 @@ elif [ "$operation" = engines ]; then
 elif [ "$operation" != install ]; then
   echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] | company link <Company> | company list | engines]' >&2; exit 1
 fi
+# A plain install run on an install the previous release made (its `hermes` container, no Engine folder) moves it to this
+# release as an update does, so it is refused the same way when that install holds several Companies on its one Engine,
+# before anything is pulled, migrated or replaced.
+if [ "$operation" = install ] && previous_release_engine; then refuse_several_companies || exit 1; fi
 if [ -n "$release_image" ]; then
   docker pull "$release_image"
   # From here the files on disk belong to this release until the run finishes, so backup and restore wait for that.
