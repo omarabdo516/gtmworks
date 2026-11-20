@@ -13,13 +13,13 @@ async function Bars({values}:{values:{label:string,value:number}[]|null}) { cons
  const max=Math.max(1,...values.map(row=>row.value));
  return <ul className="chart-bars">{values.map(row=><li key={row.label}><span dir="auto">{/^\d{4}-\d{2}-\d{2}$/.test(row.label)?workDate(row.label,language):row.label}</span><span className="bar-track"><i style={{width:`${row.value/max*100}%`}}/></span><strong>{row.value}</strong></li>)}</ul>;
 }
-export default async function Home({slug,companyId,cards,stages,activity,members,approvalCount}:{slug:string,companyId:string,cards:HomeCard[]|null,stages:HomeStage[]|null,activity:WorkActivity[]|null,members:WorkMember[],approvalCount:number|null}) { const {t,language}=await getI18n();
+export default async function Home({slug,companyId,agentCards,cards,stages,activity,members,approvalCount}:{slug:string,companyId:string,agentCards:HomeCard[]|null,cards:HomeCard[]|null,stages:HomeStage[]|null,activity:WorkActivity[]|null,members:WorkMember[],approvalCount:number|null}) { const {t,language}=await getI18n();
  const [[agents]]=await sidebarReads(companyId);
  const charts=homeCharts(cards,stages,activity);
  const recent=cards?.slice().sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.id-a.id).slice(0,5);
  return <div className="home-dashboard">
   <section className="home-agents" aria-label={t('agents')}>{agents.map(agent=>{
-   const current=currentAgentCard(cards,stages,agent.id);
+   const current=currentAgentCard(agentCards,stages,agent.id);
    return <article className="panel role-agent" key={agent.id}><h2 aria-label={agent.name}><CompanyAgentFace agent={agent} size={32}/><bdi>{agent.name}</bdi></h2>{current?<AuthoredTitle className="link" href={`/c/${slug}/work/board/${current.id}`}>{current.title}</AuthoredTitle>:<p>{cards && stages?t('notWorkingNow'):t('unavailable')}</p>}</article>;
   })}</section>
   <section className="stats" aria-label={t('workFigures')}>{([[t('awaitingYourApproval'),approvalCount],[t('publishedThisWeek'),null],[t('bookingsThisWeek'),null],[t('stoppedCards'),null]] as const).map(([label,value])=><article className="stat" key={label}><MetricCard icon={CircleDot} label={label} value={metricValue(value,language)} valueClassName={value===null?"unavailable text-base sm:text-xl tracking-normal":undefined}/></article>)}</section>
