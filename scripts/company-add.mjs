@@ -79,7 +79,8 @@ try {
    } catch(error) {
     // Nothing half made: the one function made no Company, so the waiting record (and any link on it) is all to remove.
     if(made) { try { await removeEngine(service,{id:made.id}); } catch {} }
-    sayError(`The Company "${name}" was not made: ${error.message}. Nothing was left behind; run the same command again.`);
+    // A record a Company names is kept by removeEngine, so the outcome is not known here: the installer reads it and says.
+    sayError(`The Company "${name}" could not be confirmed: ${error.message}.`);
    }
   }
  } else if(mode==='link') {

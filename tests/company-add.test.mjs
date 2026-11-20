@@ -242,3 +242,60 @@ test('an interrupt while the Engine starts removes the container, volume, networ
  assert.doesNotMatch(interrupted.stdout,/is made on its own Engine/);
  assert.equal(commands.includes('company-add.mjs add'),false,'the interrupted add made no Company');
 });
+
+// An interrupt that comes after the Company was made never takes its Engine back (#378, C10/C11 follow-up): the rollback
+// asks whether a Company holds the record, keeps the Engine when one does or when it cannot tell, and says so.
+test('an interrupt after the Company is made keeps its Engine and says so', t => {
+ for(const answer of ['held','']) {
+  const installDir=install(t,{env:{KILL_ON_UP:'1',DROP_OUTPUT:answer,...(answer?{}:{DROP_EXIT:'1'})}});
+  const interrupted=installDir.run('company','add','--name','Second Company','--owner','person@example.com');
+  assert.notEqual(interrupted.status,0,interrupted.stdout);
+  const commands=installDir.lines().join('\n');
+  assert.match(commands,/company-add\.mjs drop --address/);
+  assert.doesNotMatch(commands,/down -v --remove-orphans|volume rm |network rm /,answer||'unknown');
+  assert.match(interrupted.stderr,/The Engine gtmworks-engine-second-company-0000abcd stays: a Company may already be made on it\./);
+ }
+});
+
+// A first-Owner link written between a restore's safety backup and its replacement would stop working, or bring back an
+// older one from the archive (#378, C5 follow-up): `company link` refuses while a restore holds its marker, as add does.
+test('company link refuses while a restore runs, before it writes anything', async t => {
+ const installDir=install(t);
+ const holder=spawn('sh',['-c','exec 8>>.install-restore; flock -n 8 || exit 1; echo held; exec sleep 60'],{cwd:installDir.directory});
+ t.after(()=>{ holder.kill('SIGKILL'); holder.stdout.destroy(); holder.unref(); });
+ await new Promise(resolve=>holder.stdout.once('data',resolve));
+ const refused=installDir.run('company','link','Second Company');
+ assert.equal(refused.status,1,refused.stderr);
+ assert.match(refused.stderr,/^A restore is running: wait for it to finish, then run this again\.$/m);
+ assert.deepEqual(installDir.lines(),[],'the refused link asked Docker for nothing');
+});
+
+// A lost answer from the call that makes the Company may hide a Company that was made, so the script never says nothing
+// was made: it says the outcome could not be confirmed, and the installer reads the record and says what is there.
+test('company-add.mjs says an add it cannot confirm is unconfirmed, never that nothing was made', async t => {
+ const server=createServer((request,response)=>{
+  response.setHeader('Content-Type','application/json');
+  const url=String(request.url);
+  if(url.startsWith('/auth/v1/admin/users')) return response.end(JSON.stringify({users:[{id:'u1',email:'person@example.com'}]}));
+  if(url.startsWith('/rest/v1/people')) return response.end(JSON.stringify({id:'u1'}));
+  if(url.startsWith('/rest/v1/rpc/create_company_with_owner')) { response.writeHead(502); return response.end(JSON.stringify({message:'upstream lost'})); }
+  if(request.method==='POST'&&url.startsWith('/rest/v1/company_engines')) { response.writeHead(201); return response.end(JSON.stringify({id:'e1',address:'http://gtmworks-engine-second-company:8642'})); }
+  if(url.startsWith('/rest/v1/companies')) return response.end('[]');
+  if(request.method==='DELETE') { response.writeHead(204); return response.end(); }
+  return response.end('[]');
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>{ server.closeAllConnections(); server.close(resolve); }));
+ const url=`http://127.0.0.1:${server.address().port}`;
+ const result=await new Promise(resolve=>{
+  const child=spawn(process.execPath,['scripts/company-add.mjs','add','--name','Second Company','--owner','person@example.com','--address','http://gtmworks-engine-second-company:8642','--slug','second-company'],
+   {env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:url,SUPABASE_SERVICE_ROLE_KEY:'service-role',WEBHOOK_ENCRYPTION_KEY:Buffer.alloc(32,7).toString('base64'),ENGINE_KEY:'a1'.repeat(32)}});
+  let stdout='',stderr='';
+  child.stdout.on('data',chunk=>{ stdout+=chunk; });
+  child.stderr.on('data',chunk=>{ stderr+=chunk; });
+  child.on('exit',status=>resolve({status,stdout,stderr}));
+ });
+ assert.notEqual(result.status,0,result.stdout);
+ assert.match(result.stderr,/The Company "Second Company" could not be confirmed:/);
+ assert.doesNotMatch(result.stderr+result.stdout,/was not made|Nothing was left behind/);
+});

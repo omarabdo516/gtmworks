@@ -794,10 +794,13 @@ esac
   ['a second Engine before this release',`${base}\nopt/data/\n.engines/first/.env\n.engines/second-company/.env`],
   // Every Engine layout without the first Engine, which every install has.
   ['no first Engine',`${base}\nengines/second-company/\n.engines/second-company/.env`],
+  // The every Engine layout without engines.list, which this release always writes with it (#378, C4): an archive that
+  // lost its list and a second Engine's data and key looks complete otherwise.
+  ['the every Engine layout without its list',`${base}\nengines/first/\n.engines/first/.env`],
  ]) {
   const refused=run(entries);
   assert.equal(refused.status,1,`${label}: ${refused.stderr}`);
-  assert.match(refused.stderr,/The backup does not hold an Engine for every Company\.|Unrecognised backup\./,label);
+  assert.match(refused.stderr,/The backup does not hold an Engine for every Company\.|Unrecognised backup\.|Incomplete backup\./,label);
   refusedBefore(refused,label);
  }
  // A backup of this release names every Engine its Companies name in engines.list (#378, C4): one it lists without its
@@ -823,11 +826,12 @@ esac
  }
  // A key folder or key the installer will not trust is refused the same way, before anything stops or changes (#378,
  // X2): a name that is not an Engine folder, and a key that is not 64 hex characters.
- for(const [label,extra,key,message] of [
-  ['an Engine folder name that is not usable','.engines/first/.env\nengines/first/data\n.engines/Second_Engine/.env\nengines/Second_Engine/data',undefined,/not usable/],
-  ['an Engine key that is not usable','.engines/first/.env\nengines/first/data','not-a-key',/has no usable key/],
+ for(const [label,extra,key,message,manifest] of [
+  ['an Engine folder name that is not usable','.engines/first/.env\nengines/first/\nengines/first/data\n.engines/Second_Engine/.env\nengines/Second_Engine/\nengines/Second_Engine/data',undefined,/not usable/,'first\nSecond_Engine'],
+  ['an Engine key that is not usable','.engines/first/.env\nengines/first/\nengines/first/data','not-a-key',/has no usable key/,'first'],
  ]) {
-  const refused=run(`${base}\n${extra}`,{key});
+  // An archive of this release carries its engines.list, so these reach the checks of each folder's name and key.
+  const refused=run(`${base}\n${extra}\nengines.list`,{key,manifest});
   assert.equal(refused.status,1,`${label}: ${refused.stderr}`);
   assert.match(refused.stderr,message,label);
   assert.doesNotMatch(refused.commands,/stop|force-recreate|--volumes-from/,label);
@@ -1366,7 +1370,8 @@ test('a backup stops before an Engine that did not stop and writes no archive', 
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
- *'inspect -f {{.State.Running}}'*) echo true;;
+ *'ps -aq --filter name=^gtmworks-engine-'*) echo engine-id;;
+ *'inspect -f {{.State.Running}}'*) [ -z "\${INSPECT_FAILS:-}" ] || exit 1; echo true;;
  *' ps -q web'*) echo web-id;;
  *' ps -q worker'*) echo worker-id;;
  *'network inspect '*) exit 1;;
@@ -1375,8 +1380,15 @@ case "$*" in
 esac
 `,{mode:0o755});
  const commands=join(directory,'commands');
- const result=spawnSync('sh',['scripts/install.sh','backup'],{cwd:directory,
-  env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands},encoding:'utf8'});
+ const backup=extra=>spawnSync('sh',['scripts/install.sh','backup'],{cwd:directory,
+  env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,...extra},encoding:'utf8'});
+ // An Engine whose state Docker cannot report is not known to be stopped: the backup stops the same way (#378, C9).
+ const unknown=backup({INSPECT_FAILS:'1'});
+ assert.notEqual(unknown.status,0,unknown.stdout);
+ assert.match(unknown.stderr,/This Engine did not stop: gtmworks-engine-first\./);
+ assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');
+ writeFileSync(commands,'');
+ const result=backup({});
  assert.notEqual(result.status,0,result.stdout);
  assert.match(result.stderr,/This Engine did not stop: gtmworks-engine-first\. Nothing was archived, and what was stopped starts again\./);
  assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');

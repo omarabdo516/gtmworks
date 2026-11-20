@@ -226,9 +226,10 @@ engines_stopped() {
   running=
   for name in $(engine_names); do
     container=$(engine_project "$name")
-    case "$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null || true)" in
-      true) running="$running $container";;
-    esac
+    # A container Docker does not list is stopped; one it lists but cannot report on is not known to be stopped.
+    [ -n "$(docker ps -aq --filter "name=^${container}$" 2> /dev/null)" ] || continue
+    state=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null) || state=unknown
+    [ "$state" = false ] || running="$running $container"
   done
   [ -z "$running" ] || {
     echo "This Engine did not stop:$running. Nothing was archived, and what was stopped starts again." >&2
@@ -324,10 +325,16 @@ company_add() {
   # C10): the Engine's container, volume, network and folder, and any record waiting for a Company. The Engine's folder is
   # the first thing made, so the rollback is in place before it. The interrupt trap is set back once the Company is made.
   add_slug=$slug add_address=$address add_volume=$volume add_network=$network
+  # An Engine a Company already names is never taken back: a signal after the Company was made, or a record that cannot
+  # be read, keeps it and says so; only a record no Company holds goes with its Engine.
   rollback_add() {
     [ -n "$add_slug" ] || return 0
-    compose exec -T web node scripts/company-add.mjs drop --address "$add_address" > /dev/null 2>&1 || true
-    engine_destroy "$add_slug" "$add_volume" "$add_network" || true
+    held=$(compose exec -T web node scripts/company-add.mjs drop --address "$add_address" 2> /dev/null) || held=unknown
+    if [ "$held" = removed ]; then
+      engine_destroy "$add_slug" "$add_volume" "$add_network" || true
+    else
+      echo "The Engine $(engine_project "$add_slug") stays: a Company may already be made on it. Run gtmworks company list to see its state." >&2
+    fi
     add_slug=
   }
   trap 'rollback_add; exit 1' HUP INT TERM
@@ -378,6 +385,11 @@ company_link() {
   company_name=${1:-}
   test -n "$company_name" || company_usage
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
+  # A link written between a restore's safety backup and its replacement would stop working, or bring back an older one.
+  if [ -f .install-restore ] && ! flock -n .install-restore true > /dev/null 2>&1; then
+    echo 'A restore is running: wait for it to finish, then run this again.' >&2
+    return 1
+  fi
   compose exec -T web node scripts/company-add.mjs link --name "$company_name"
 }
 company() {
@@ -477,6 +489,11 @@ check_backup() {
   # A backup of this release names in engines.list every Engine its Companies name (#378, C4): each must be in the archive
   # with its data and its key, or a Company would come back without its own Engine. An archive without that list was made
   # by a release before it, and keeps the rules below.
+  # Only this release writes the per-Engine layout, and it always writes engines.list with it: such an archive without its
+  # list has lost part of itself and is refused. The one-Engine layout of earlier releases has no list.
+  if grep -q '^engines/' .install-lock/entries && ! grep -Fxq 'engines.list' .install-lock/entries; then
+    echo 'Incomplete backup.' >&2; return 1
+  fi
   if grep -Fxq 'engines.list' .install-lock/entries; then
     docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
       tar -xOzf /backup/backup.tgz engines.list > .install-lock/engines.list || { echo 'Could not read the backup.' >&2; return 1; }
