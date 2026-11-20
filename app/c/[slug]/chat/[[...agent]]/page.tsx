@@ -9,6 +9,10 @@ import { madeColumns, madeOf } from '@/lib/agent-made';
 import { readyRoles, roleSentence, roleStart } from '@/lib/ready-roles';
 import { emptyChatFacts, type EmptyChatFacts } from '@/lib/empty-chat.mjs';
 import { agentDetails } from '@/app/agent-details-server';
+import { companyHasModel } from '@/lib/provider-keys.mjs';
+import { openOnVisit } from '@/lib/lead-opening.mjs';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 import AgentChat from './agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
 
@@ -47,6 +51,20 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const asks=!owner&&(newAgent||(fresh&&!!writer));
  const factsRead=agent?emptyChatFacts(db,{company:company.id,agent:agent.id,me:user.id,main,fresh,alone,owner,asks}):Promise.resolve(null);
  const detailsRead=agent?agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}):Promise.resolve(null);
+ // A Company with no model at all says so above the composer before anyone writes (#422); only a writer has a composer,
+ // and only a read that tells "none" for certain draws the line.
+ const modelRead=agent&&writer?companyHasModel(db,{company:company.id}).catch(()=>null):Promise.resolve(null);
+ // #434: on a Company with a model and no Conversation yet, the Owner opening Lead finds the first Conversation, which
+ // Lead opened with its questions (lib/lead-opening.mjs). The database opens it once per Company; any later visit draws
+ // the empty chat. Without a model the #422 notice shows instead, and the opening waits for one. The Owner's empty
+ // Conversation from first run is opened the same way (app/c/[slug]/conversations/[id]/page.tsx). Until anyone writes,
+ // a visit goes back to the opening, so one written by a link's prefetch (which renders this page too) is still found.
+ if(agent&&owner&&main&&!mode) {
+  const opened=await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
+   {model:modelRead,company:company.id,person:user.id,language,owner:person?.name||'',lead:agent.name,companyName:company.name});
+  // The reads already on their way are not awaited once the page moves.
+  if(opened) { factsRead.catch(()=>{}); detailsRead.catch(()=>{}); redirect(`/c/${slug}/conversations/${opened}${first?`?first=${encodeURIComponent(first)}${invites?`&invites=${encodeURIComponent(invites)}`:''}`:''}`); }
+ }
  const facts=await factsRead;
  const askOf=asks?facts?.owners??[]:null;
  const emptyOf=(own:EmptyChatFacts,row:AgentRow):EmptyChat=>own.state==='known'?{state:'known',example:roleSentence(language,row.template)}
@@ -67,7 +85,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone),owner,owners:facts?.owners??[]}:null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={agent?.id}>
-  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)} agents={pickers??[]} first={first==='alone'||first==='team'?first:undefined} invites={Number.parseInt(invites||'0',10)||0}/></main>
+  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)} agents={pickers??[]} first={first==='alone'||first==='team'?first:undefined} invites={Number.parseInt(invites||'0',10)||0} noModel={await modelRead===false?{owner}:null}/></main>
  </Shell>;
 }
 

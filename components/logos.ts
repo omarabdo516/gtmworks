@@ -1,0 +1,53 @@
+// Each provider's and app's logo (#424): a static file of this install under public/logos, never fetched from outside.
+// lobe/ is Lobe Icons (lobehub/lobe-icons, MIT), simple/ is Simple Icons (CC0), each with its licence beside the files.
+// Keyed by the Engine's provider id or the app's key; a new provider gets its logo with one line here. An id with no
+// logo in those sets is left out and keeps its letters.
+const files:Record<string,string>={
+ 'ai-gateway':'lobe/vercel.svg',
+ alibaba:'lobe/qwen-color.svg',
+ 'alibaba-cn':'lobe/alibabacloud-color.svg',
+ 'alibaba-coding-plan':'lobe/alibabacloud-color.svg',
+ 'alibaba-coding-plan-cn':'lobe/alibabacloud-color.svg',
+ 'alibaba-token-plan':'lobe/alibabacloud-color.svg',
+ 'alibaba-token-plan-cn':'lobe/alibabacloud-color.svg',
+ anthropic:'lobe/anthropic.svg',
+ arcee:'lobe/arcee-color.svg',
+ 'azure-foundry':'lobe/azureai-color.svg',
+ bedrock:'lobe/bedrock-color.svg',
+ commandcode:'lobe/commandcode.svg',
+ 'commandcode-anthropic':'lobe/commandcode.svg',
+ deepinfra:'lobe/deepinfra-color.svg',
+ deepseek:'lobe/deepseek-color.svg',
+ fireworks:'lobe/fireworks-color.svg',
+ gmi:'lobe/gmicloud.svg',
+ huggingface:'lobe/huggingface-color.svg',
+ kilocode:'lobe/kilocode.svg',
+ 'kimi-coding':'lobe/kimi-color.svg',
+ 'kimi-coding-cn':'lobe/kimi-color.svg',
+ lmstudio:'lobe/lmstudio.svg',
+ 'meta-ai':'lobe/meta-color.svg',
+ minimax:'lobe/minimax-color.svg',
+ 'minimax-cn':'lobe/minimax-color.svg',
+ 'nebius-token-factory':'lobe/nebius.svg',
+ novita:'lobe/novita-color.svg',
+ nvidia:'lobe/nvidia-color.svg',
+ 'ollama-cloud':'lobe/ollama.svg',
+ 'openai-api':'lobe/openai.svg',
+ 'opencode-go':'lobe/opencode.svg',
+ 'opencode-zen':'lobe/opencode.svg',
+ openrouter:'lobe/openrouter-color.svg',
+ stepfun:'lobe/stepfun-color.svg',
+ 'tencent-tokenhub':'lobe/tencent-color.svg',
+ 'tencent-tokenplan':'lobe/tencent-color.svg',
+ upstage:'lobe/upstage-color.svg',
+ vertex:'lobe/vertexai-color.svg',
+ xai:'lobe/xai.svg',
+ xiaomi:'lobe/xiaomimimo.svg',
+ zai:'lobe/zai.svg',
+ airtable:'simple/airtable.svg',
+ mixpanel:'simple/mixpanel.svg',
+ notion:'simple/notion.svg',
+};
+
+/** The address of the logo for a provider id or app key, or null when it has none. */
+export const logoOf=(id:string)=>Object.hasOwn(files,id)?`/logos/${files[id]}`:null;

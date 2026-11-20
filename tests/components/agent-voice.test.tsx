@@ -36,7 +36,7 @@ class FakeAudio {
 }
 
 const read = (over: Record<string, unknown> = {}) => ({ state: 'found', own: true, language: 'en', speed: 1, provider: 'edge',
- voice: 'en-US-AriaNeural', voiceName: 'en-US-AriaNeural', list: null, ...over });
+ voice: 'en-US-AriaNeural', voiceName: 'en-US-AriaNeural', list: null, speech: null, languages: ['ar', 'en', ''], ...over });
 
 // The Agent page as the server draws it: the Voice section in its draft, the bar after the panel, the toasts the page
 // raises. Each test takes a new Agent, so the page's one draft starts from the read.
@@ -173,4 +173,18 @@ test('an Engine that cannot speak says so where the sample is described', async 
  await screen.getByRole('button', { name: 'Listen' }).click();
  await expect.element(screen.getByText('The agent engine has no working speech provider right now, so there’s no sound to play.')).toBeVisible();
  expect(FakeAudio.made.length).toBe(0);
+});
+
+// #430: on Deepgram, Arabic reads as Egyptian and the other Arabic variants are named in the page's language; there is
+// no "detect".
+test('an Agent on Deepgram picks Egyptian Arabic or another Arabic variant, named in the page\'s language', async () => {
+ const languages = ['ar', 'ar-SA', 'en'];
+ const screen = await voicePage(read({ speech: 'deepgram', language: 'ar', languages }));
+ const options = () => [...document.querySelectorAll<HTMLOptionElement>('#set-voice-lang option')].map(option => [option.value, option.textContent]);
+ await expect.element(screen.getByLabelText('Speaking language')).toHaveValue('ar');
+ expect(options()).toEqual([['ar', 'Arabic (Egypt)'], ['ar-SA', 'Arabic (Saudi Arabia)'], ['en', 'English']]);
+ await screen.unmount();
+ await voicePage(read({ speech: 'deepgram', language: 'ar', languages }), 'ar');
+ expect(options()[0]).toEqual(['ar', 'عربي (مصري)']);
+ expect(options()[1][1]).toContain('السعودية');
 });

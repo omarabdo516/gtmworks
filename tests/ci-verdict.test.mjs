@@ -12,7 +12,7 @@ import { resolve } from 'node:path';
 // when any area failed or was cancelled. The fast job's steps (scripts/ci-fast.mjs, #258) are listed one by one, and
 // each must succeed; its component tests may be skipped only when the first job did not ask for them.
 const script = resolve('scripts/ci-verdict.mjs');
-const stages = ['IMAGE', 'DATABASE', 'INTEGRATION', 'INSTALL'];
+const stages = ['IMAGE', 'DATABASE', 'INTEGRATION', 'CHAT_OPEN', 'INSTALL'];
 const fastSteps = 'discovery=success docs=success i18n=success openapi=success lint=success typecheck=success knip=success node=success components=success';
 const green = {
   CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true',
@@ -104,6 +104,22 @@ test('the integration job runs as 6 shards, each uploading its own artifacts, an
   assert.match(ci, /npm run test:e2e -- "\$@"\n/);
 });
 
+// #421: the chat's open time runs in a job of its own, on the pull request too, so the browser shards no longer share
+// its machine; `check` judges it by the browser suite's own answer and the job's one result.
+test('the chat-open job runs the one command and check reads its result (#421)', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  const chatOpen = jobs['chat-open'];
+  assert.ok(chatOpen, 'the workflow has a chat-open job');
+  assert.deepEqual(chatOpen.needs, ['changes']);
+  assert.equal(chatOpen.if, "${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}");
+  assert.equal(chatOpen.steps.find(step => step.name === 'chat open').run, './ci.sh chat-open');
+  const env = jobs.check.steps.at(-1).env;
+  assert.equal(env.CHAT_OPEN_RUN, '${{ needs.changes.outputs.integration }}');
+  assert.equal(env.CHAT_OPEN_RESULT, '${{ needs.chat-open.result }}');
+});
+
 // #410: a job that runs past its `timeout-minutes` ends as a failure or as cancelled, the two ways GitHub ends it, and
 // either turns the required check red for the install proof and the browser suite alike.
 test('a job that ran past its limit turns check red', () => {
@@ -127,7 +143,7 @@ test('the install job runs as one matrix of nine areas on a fresh Docker machine
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
   const { install, check } = jobs;
   assert.equal(install.name, 'install-${{ matrix.area }}');
-  assert.deepEqual(install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'engines-update', 'one-line'] } });
+  assert.deepEqual(install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'engines-update', 'one-line', 'updater'] } });
   assert.deepEqual(install.needs, ['changes', 'image']);
   assert.ok(check.needs.includes('install'), 'the required check waits for the proof');
   const env = check.steps.at(-1).env;
@@ -239,7 +255,7 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const step = jobs.check.steps.at(-1);
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
-  assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'install']);
+  assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'chat-open', 'install']);
   // The image build is judged by what the browser suite or the install proof asked for, by the job's own result, and by
   // the manual run the measurement always makes (#403, #411).
   assert.equal(step.env.IMAGE_RUN, "${{ needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}");

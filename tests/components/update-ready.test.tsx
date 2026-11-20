@@ -1,0 +1,175 @@
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { render } from 'vitest-browser-react';
+import { LanguageProvider } from '@/lib/i18n-client';
+import UpdateReady, { hiddenKey, seenKey } from '@/app/update-ready';
+import { whatsNew } from '@/lib/updates.mjs';
+
+// Update ready and What's new (#442), at the foot of the sidebar (app/shell.tsx).
+const company = '10000000-0000-0000-0000-000000000001';
+const person = '20000000-0000-0000-0000-000000000001';
+const entry = (issue: number) => ({ issue, date: '2026-11-21', en: { title: `Title ${issue}`, body: `Sentence ${issue}.` }, ar: { title: `عنوان ${issue}`, body: `جملة ${issue}.` } });
+const update = { version: 'v1.3.0', date: new Date(Date.now() - 3 * 86400000).toISOString(), entries: [1, 2, 3, 4, 5, 6, 7].map(entry) };
+const seenAll = () => localStorage.setItem(seenKey(person), JSON.stringify(whatsNew.map(item => item.issue)));
+let answer: () => Promise<Response>;
+const asked = vi.fn(), fetched = vi.fn();
+beforeEach(() => {
+ localStorage.clear();
+ asked.mockReset();
+ // The notice's own check is counted; Update now's state, read once the notice opens (#443), is fetched apart.
+ fetched.mockReset();
+ vi.stubGlobal('fetch', async (url: string) => { fetched(url); if (url.startsWith('/api/update')) asked(url); return answer(); });
+});
+afterEach(() => { vi.unstubAllGlobals(); });
+const answering = (body: object) => { answer = async () => new Response(JSON.stringify(body), { status: 200 }); };
+const tree = (owner: boolean, language: 'en' | 'ar' = 'en', key = 0) => <LanguageProvider key={key} language={language}><div className="gw"><UpdateReady company={company} person={person} owner={owner}/></div></LanguageProvider>;
+const shown = (owner: boolean, language: 'en' | 'ar' = 'en') => render(tree(owner, language));
+// Opening gtmworks again: the same place drawn anew, which asks again.
+const reopened = async (screen: Awaited<ReturnType<typeof shown>>, times: number) => {
+ await screen.rerender(tree(true, 'en', times));
+ await vi.waitFor(() => expect(asked).toHaveBeenCalledTimes(times));
+ await new Promise(resolve => setTimeout(resolve, 50));
+};
+
+test('an Owner on an older version sees Update ready, with its version, the lines since, and the command to copy', async () => {
+ seenAll(); answering({ joined: '2026-01-01T00:00:00Z', update });
+ const screen = await shown(true);
+ await screen.getByRole('button', { name: 'Update ready' }).click();
+ const dialog = screen.getByRole('dialog', { name: 'Update ready' });
+ await expect.element(dialog).toBeVisible();
+ await expect.element(dialog).toMatchTextContent(/gtmworks v1\.3\.0 came out 3 days ago\./);
+ await expect.element(dialog).toMatchTextContent(/Title 1 Sentence 1\./);
+ await expect.element(dialog).toMatchTextContent(/Title 5 Sentence 5\./);
+ await expect.element(dialog).not.toMatchTextContent(/Title 6/);
+ await expect.element(dialog).toMatchTextContent(/And 2 more improvements and fixes\./);
+ await expect.element(screen.getByText('gtmworks update', { exact: true })).toBeVisible();
+ await expect.element(screen.getByRole('button', { name: 'Copy the command gtmworks update' })).toBeVisible();
+ await expect.element(dialog).toMatchTextContent(/If you didn’t install gtmworks, send this command to whoever did\./);
+ expect(asked).toHaveBeenCalledWith(`/api/update?company=${company}`);
+});
+
+test('the notice reads in Arabic too', async () => {
+ seenAll(); answering({ joined: '2026-01-01T00:00:00Z', update: { ...update, entries: [entry(1)] } });
+ const screen = await shown(true, 'ar');
+ await screen.getByRole('button', { name: 'في تحديث جاهز' }).click();
+ await expect.element(screen.getByRole('dialog')).toMatchTextContent(/عنوان 1 جملة 1\./);
+ await expect.element(screen.getByRole('dialog')).toMatchTextContent(/على السيرفر، شغّل:/);
+});
+
+test('anyone but an Owner sees nothing and asks nothing', async () => {
+ answering({ joined: '2026-01-01T00:00:00Z', update });
+ const screen = await shown(false);
+ await new Promise(resolve => setTimeout(resolve, 50));
+ expect(fetched).not.toHaveBeenCalled();
+ expect(screen.container.textContent).toBe('');
+});
+
+const failing: [string, () => Promise<Response>][] = [
+ ['up to date', async () => new Response(JSON.stringify({ joined: '2026-01-01T00:00:00Z', update: null }), { status: 200 })],
+ ['offline', async () => { throw new TypeError('Failed to fetch'); }],
+ ['the check failing', async () => new Response('{}', { status: 502 })],
+];
+test.each(failing)('%s: nothing shows', async (_, reply) => {
+ seenAll(); answer = reply;
+ const screen = await shown(true);
+ await vi.waitFor(() => expect(asked).toHaveBeenCalled());
+ await new Promise(resolve => setTimeout(resolve, 50));
+ expect(screen.container.textContent).toBe('');
+ await expect.element(screen.getByRole('button')).not.toBeInTheDocument();
+});
+
+test('hidden stays hidden until a newer version appears', async () => {
+ seenAll(); answering({ joined: '2026-01-01T00:00:00Z', update });
+ const first = await shown(true);
+ await first.getByRole('button', { name: 'Update ready' }).click();
+ await first.getByRole('button', { name: 'Hide until the next version' }).click();
+ await expect.element(first.getByRole('button', { name: 'Update ready' })).not.toBeInTheDocument();
+ await reopened(first, 2);
+ await expect.element(first.getByRole('button', { name: 'Update ready' })).not.toBeInTheDocument();
+ answering({ joined: '2026-01-01T00:00:00Z', update: { ...update, version: 'v1.4.0' } });
+ await reopened(first, 3);
+ await expect.element(first.getByRole('button', { name: 'Update ready' })).toBeVisible();
+ expect(localStorage.getItem(hiddenKey(person))).toBe('v1.3.0');
+});
+
+test('after an update What\'s new shows what arrived, once', async () => {
+ const before = whatsNew.slice(1).map(item => item.issue);
+ localStorage.setItem(seenKey(person), JSON.stringify(before));
+ answering({ joined: '2026-01-01T00:00:00Z', update: null });
+ const first = await shown(true);
+ const dialog = first.getByRole('dialog', { name: 'What’s new' });
+ await expect.element(dialog).toBeVisible();
+ expect(dialog.element().textContent).toContain(`${whatsNew[0].en.title} ${whatsNew[0].en.body}`);
+ expect(dialog.element().textContent).not.toContain(whatsNew[1].en.body);
+ await first.getByRole('button', { name: 'Got it' }).click();
+ await expect.element(dialog).not.toBeInTheDocument();
+ await reopened(first, 2);
+ await expect.element(first.getByRole('dialog')).not.toBeInTheDocument();
+});
+
+test('a new Owner on a fresh install is shown no What\'s new', async () => {
+ answering({ joined: new Date().toISOString(), update: null });
+ const screen = await shown(true);
+ await vi.waitFor(() => expect(asked).toHaveBeenCalled());
+ await new Promise(resolve => setTimeout(resolve, 50));
+ await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
+ expect(JSON.parse(localStorage.getItem(seenKey(person)) || '[]')).toEqual(whatsNew.map(item => item.issue));
+});
+
+test('one line past the five is counted as one', async () => {
+ seenAll(); answering({ joined: '2026-01-01T00:00:00Z', update: { ...update, entries: update.entries.slice(0, 6) } });
+ const screen = await shown(true);
+ await screen.getByRole('button', { name: 'Update ready' }).click();
+ await expect.element(screen.getByRole('dialog')).toMatchTextContent(/And one more improvement or fix\./);
+});
+
+test('What\'s new seen by one Owner is still shown to another Owner in the same browser', async () => {
+ localStorage.setItem(seenKey('20000000-0000-0000-0000-000000000009'), JSON.stringify(whatsNew.map(item => item.issue)));
+ localStorage.setItem(seenKey(person), JSON.stringify(whatsNew.slice(1).map(item => item.issue)));
+ answering({ joined: '2026-01-01T00:00:00Z', update: null });
+ const screen = await shown(true);
+ await expect.element(screen.getByRole('dialog', { name: 'What’s new' })).toBeVisible();
+});
+
+test('What\'s new lists every entry that arrived, none left counted', async () => {
+ localStorage.setItem(seenKey(person), JSON.stringify([]));
+ answering({ joined: '2026-01-01T00:00:00Z', update: null });
+ const screen = await shown(true);
+ const dialog = screen.getByRole('dialog', { name: 'What’s new' });
+ await expect.element(dialog).toBeVisible();
+ expect(dialog.element().querySelectorAll('.upd-lines li')).toHaveLength(whatsNew.length);
+ expect(dialog.element().textContent).not.toMatch(/more improvement/);
+});
+
+// #443: Update now joins the command in the notice while the install owner leaves it on. Clicking warns first; the
+// request closes the notice, and the line at the foot of the sidebar then says Updating (app/install-update.tsx).
+test('the notice offers Update now beside the command, and a request closes it', async () => {
+ seenAll();
+ const posted = vi.fn();
+ vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+  if (url === '/api/install-update' && init?.method === 'POST') { posted(); return Response.json({ state: 'requested' }); }
+  if (url === '/api/install-update') return Response.json({ button: true, state: 'idle', version: null, changedAt: '2026-11-20T10:00:00Z' });
+  return Response.json({ joined: '2026-01-01T00:00:00Z', update });
+ });
+ const screen = await shown(true);
+ await screen.getByRole('button', { name: 'Update ready' }).click();
+ const dialog = screen.getByRole('dialog', { name: 'Update ready' });
+ await dialog.getByRole('button', { name: 'Update now' }).click();
+ await expect.element(dialog).toMatchTextContent(/stops for about a minute while it updates/);
+ expect(posted).not.toHaveBeenCalled();
+ await dialog.getByRole('group').getByRole('button', { name: 'Update now' }).click();
+ await vi.waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
+ await expect.element(dialog).not.toBeInTheDocument();
+});
+
+test('with the button off the notice shows the command alone', async () => {
+ seenAll();
+ vi.stubGlobal('fetch', async (url: string) => url === '/api/install-update'
+  ? Response.json({ button: false, state: 'idle', version: null, changedAt: '2026-11-20T10:00:00Z' })
+  : Response.json({ joined: '2026-01-01T00:00:00Z', update }));
+ const screen = await shown(true);
+ await screen.getByRole('button', { name: 'Update ready' }).click();
+ const dialog = screen.getByRole('dialog', { name: 'Update ready' });
+ await expect.element(dialog.getByRole('button', { name: 'Copy the command gtmworks update' })).toBeVisible();
+ await new Promise(resolve => setTimeout(resolve, 100));
+ await expect.element(dialog.getByRole('button', { name: 'Update now' })).not.toBeInTheDocument();
+});

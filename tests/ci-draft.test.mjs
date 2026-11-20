@@ -91,9 +91,9 @@ test('the change touches database, app and install files', () => {
   for (const suite of heavy) assert.equal(outputs[suite], 'true', suite);
 });
 
-test('a draft that changes database, app and install files starts the image, database, integration and install jobs', () => {
+test('a draft that changes database, app and install files starts the image, database, integration, chat-open and install jobs', () => {
   assert.deepEqual(started({ event: 'pull_request', draft: true, files: heavyFiles }),
-    ['changes', 'check', 'database', 'fast', 'image', 'install', 'integration', 'supabase-images']);
+    ['changes', 'chat-open', 'check', 'database', 'fast', 'image', 'install', 'integration', 'supabase-images']);
 });
 
 test('a draft that changes only screens starts only changes, fast and check', () => {
@@ -120,7 +120,7 @@ test('a draft and a ready pull request start the same jobs for the same files', 
 
 test('a push to main runs every suite for a code change, and none of the heavy ones for documents only', () => {
   const code = started({ event: 'push', files: ['scripts/ci-fast.mjs'] });
-  for (const job of ['changes', 'fast', 'check', 'visual', 'image', 'database', 'integration', ...installJobs]) assert.ok(code.includes(job), job);
+  for (const job of ['changes', 'fast', 'check', 'visual', 'image', 'database', 'integration', 'chat-open', ...installJobs]) assert.ok(code.includes(job), job);
   assert.deepEqual(started({ event: 'push', files: documentFiles }), ['changes', 'check', 'fast']);
 });
 
@@ -173,7 +173,7 @@ test('a pull request that changes install files starts the install proof as one 
   const run = started({ event: 'pull_request', draft: false, files: ['scripts/install.sh'] });
   for (const job of installJobs) assert.ok(run.includes(job), job);
   // One matrix job: each entry's name is the area that failed, and one area's fault leaves the rest running.
-  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'engines-update', 'one-line'] } });
+  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'engines-update', 'one-line', 'updater'] } });
   assert.equal(ci.jobs.install.name, 'install-${{ matrix.area }}');
 });
 

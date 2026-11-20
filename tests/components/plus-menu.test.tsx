@@ -1,4 +1,5 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import { CallableAgentsProvider, MessageBox, type CallableAgent } from '@/app/conversation-composer';
@@ -6,6 +7,8 @@ import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
 import '@/app/tokens.css';
 import '@/app/shell.css';
+// The composer's settings link is the app's Link, which needs Next's router; a plain link stands in.
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 // #153, the composer's "+" menu (design-reference: plusMenuHTML, togglePlus, insertAtCaret, the menu's keys).
 const agents = [{ id: 'a1', connection_id: 'c1', name: 'Lead' }, { id: 'a2', connection_id: 'c2', name: 'Reach' }];

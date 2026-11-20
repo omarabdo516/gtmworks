@@ -27,13 +27,13 @@ const sandboxRef=tag=>`ghcr.io/${repo}-sandbox:${tag.slice(1)}@sha256:${releases
 const mainRef=`ghcr.io/${repo}:main@sha256:${mainHex}`;
 const mainSandboxRef=`ghcr.io/${repo}-sandbox:main@sha256:${sandboxHex}`;
 
-// Every system tool but docker and curl, so a test can take Docker away without taking sh, sed or node with it.
+// Every system tool but docker, curl and the schedulers the updater is put in (#443), so a test can take Docker away without taking sh, sed or node with it.
 const tools=mkdtempSync(join(tmpdir(),'gtmworks-get-tools-'));
 process.on('exit',()=>rmSync(tools,{recursive:true,force:true}));
 for(const folder of ['/usr/local/bin','/usr/bin','/bin']) {
  if(!existsSync(folder)) continue;
  for(const name of readdirSync(folder)) {
-  if(/^(docker|docker-compose|curl)$/.test(name)||existsSync(join(tools,name))) continue;
+  if(/^(docker|docker-compose|curl|systemctl|crontab|loginctl)$/.test(name)||existsSync(join(tools,name))) continue;
   try { symlinkSync(join(folder,name),join(tools,name)); } catch { /* a name another folder already gave */ }
  }
 }
@@ -56,12 +56,14 @@ op=\${1:-install}
 ${lockBlock}[ ! -f .install-restore ] || printf 'held\\n' >> "$RESTORE_LOG"
 printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
 case "$op" in
- backup) mkdir -p "$2"; : > "$2/gtmworks-test.tgz"; echo 'Stopping...'; echo "Backup: $2/gtmworks-test.tgz"; exit 0;;
+ backup) [ -f .install-release ] || { echo 'This install does not run it yet: run sh install.sh update first.' >&2; exit 1; }
+  mkdir -p "$2"; : > "$2/gtmworks-test.tgz"; echo 'Stopping...'; echo "Backup: $2/gtmworks-test.tgz"; exit 0;;
  restore) exit 0;;
 esac
 [ -f .env.install ] || echo "SECRET=$$" > .env.install
 rm -f .install-release
 if [ "$release_image" = "\${DIE_REF:-}" ]; then cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"; kill -9 "$PPID"; kill -9 $$; fi
+if [ "$release_image" = "\${LATE_FAIL_REF:-}" ]; then cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"; printf '%s\\n' "$release_image" > .install-release; echo 'setup_is_open returned 502' >&2; exit 5; fi
 if [ "$op" = update ] && [ "$release_image" = "\${PUT_BACK_FAIL_REF:-}" ]; then echo 'Error: http://gateway:8080/api/health returned 503' >&2; exit 4; fi
 if [ "$release_image" = "\${FAIL_REF:-}" ]; then
  [ -z "\${FAIL_AFTER_MIGRATE:-}" ] || cp "$FIXTURE/migrations/\${release_image##*:}" "$DB_FILE"
@@ -117,7 +119,27 @@ case "$*" in
   [ "$wd" = /app/release-source ] || exit 9
   sed -e "s#@REF@#$ref#g" -e "s#@SANDBOX@#$sandbox#g" "$FIXTURE/template-install.sh" > "$out/install.sh"
   sed "s#@REF@#$ref#g" "$FIXTURE/template-compose.yml" > "$out/docker-compose.install.yml"; exit 0;;
+ *' cat /app/release-source/scripts/get.sh')
+  # Each image carries its own get.sh (#437): a fixture one when the test wrote it, this branch's otherwise; an image
+  # from before #437 carries none.
+  [ -z "\${IMAGE_WITHOUT_GET:-}" ] || exit 1
+  src=$FIXTURE/get/\${3##*:}; [ -f "$src" ] || src=$GET_SOURCE; cat "$src";;
  *' ls /app/install/supabase/migrations') cat "$FIXTURE/migrations/\${3##*:}";;
+ *'exec -T db psql'*' -v step='*)
+  # The updater's row (#443): each step of get.sh is one fixed statement, played here on a file of four values.
+  cat > /dev/null
+  [ -z "\${UPDATES_MISSING:-}" ] || { echo 'ERROR:  relation "public.install_updates" does not exist' >&2; exit 3; }
+  step= version=
+  for arg; do case "$arg" in step=*) step=\${arg#step=};; version=*) version=\${arg#version=};; esac; done
+  printf '%s %s\n' "$step" "$version" >> "$UPDATES_LOG"
+  button=t auto=f state=idle due=t
+  [ ! -f "$UPDATES_FILE" ] || . "$UPDATES_FILE"
+  case "$step" in
+   read) if [ -n "\${READ_ROW:-}" ]; then printf '%s\n' "$READ_ROW"; else echo "$button|$auto|$state|$due"; fi;;
+   button-on) button=t;; button-off) button=f;; auto-on) auto=t;; auto-off) auto=f;;
+   ignore|idle) state=idle;; updating) state=updating due=f;; checked) due=f;; updated|failed) state=$step due=f;;
+  esac
+  printf 'button=%s auto=%s state=%s due=%s\n' "$button" "$auto" "$state" "$due" > "$UPDATES_FILE";;
  *'exec -T db psql'*) [ ! -f "$DB_FILE" ] || cat "$DB_FILE";;
  *'config --services') printf 'db\\nweb\\nworker\\n';;
  *' ps -aq '*) eval "service=\\\${$#}"; echo "id-$service";;
@@ -126,6 +148,24 @@ case "$*" in
  *'exec -i -u hermes gtmworks-engine-'*'hermes auth add anthropic'*) echo 'Open this address in a browser: https://claude.example/oauth';;
 esac
 exit 0
+`;
+// The schedulers the updater goes in (#443): systemctl answers only when the test gives the user a systemd manager,
+// crontab keeps its table in a file, and loginctl says linger is off and cannot turn it on.
+const fakeSystemctl=`#!/bin/sh
+printf '%s\\n' "$*" >> "$SCHEDULER_LOG"
+[ -n "\${SYSTEMD_USER:-}" ] || exit 1
+case "$*" in
+ '--user is-enabled gtmworks-updater.timer') [ -f "$SCHEDULER_LOG.enabled" ]; exit $?;;
+ '--user enable --now gtmworks-updater.timer') : > "$SCHEDULER_LOG.enabled";;
+esac
+exit 0
+`;
+const fakeCrontab=`#!/bin/sh
+case "$1" in -l) cat "$CRONTAB_FILE" 2> /dev/null;; -) cat > "$CRONTAB_FILE";; *) exit 2;; esac
+`;
+const fakeLoginctl=`#!/bin/sh
+printf 'loginctl %s\\n' "$*" >> "$SCHEDULER_LOG"
+case "$1" in show-user) echo no;; *) exit 1;; esac
 `;
 const fakeMv=`#!/bin/sh
 case "$#:\${CUT_BEFORE:-}:$1" in
@@ -141,7 +181,8 @@ case "$url" in
  'https://api.github.com/repos/${repo}/releases?per_page=100&page=1'|'https://api.github.com/repos/${repo}/releases?per_page=100') src=$FIXTURE/releases.json;;
  'https://api.github.com/repos/${repo}/releases?per_page=100&page='*) src=$FIXTURE/releases-\${url##*page=}.json; [ -f "$src" ] || { echo '[]'; exit 0; };;
  https://github.com/${repo}/releases/download/*) src=$FIXTURE/\${url#https://github.com/${repo}/releases/download/};;
- https://raw.githubusercontent.com/${repo}/main/scripts/get.sh) src=$GET_SOURCE;;
+ https://raw.githubusercontent.com/${repo}/*/scripts/get.sh)
+  at=\${url#https://raw.githubusercontent.com/${repo}/}; src=$FIXTURE/raw/\${at%%/*}; [ -f "$src" ] || src=$GET_SOURCE;;
  file://*) src=\${url#file://};;
  *) exit 6;;
 esac
@@ -150,11 +191,11 @@ if [ -n "$out" ]; then cp "$src" "$out"; else cat "$src"; fi
 `;
 
 // A machine with fake docker and curl, an empty home, and GitHub Releases served from a fixture folder.
-function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1.3.1'],prerelease=[],docker=true}={}) {
+function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1.3.1'],prerelease=[],docker=true,cron=true}={}) {
  const root=mkdtempSync(join(tmpdir(),'gtmworks-get-'));
  t.after(()=>rmSync(root,{recursive:true,force:true}));
  const [home,fixture,bin,work]=['home','fixture','bin','work'].map(name=>join(root,name));
- for(const folder of [home,join(fixture,'migrations'),bin,work]) mkdirSync(folder,{recursive:true});
+ for(const folder of [home,join(fixture,'migrations'),join(fixture,'get'),join(fixture,'raw'),bin,work]) mkdirSync(folder,{recursive:true});
  writeFileSync(join(fixture,'template-install.sh'),installerTemplate);
  writeFileSync(join(fixture,'template-compose.yml'),composeTemplate);
  // The API answers pretty-printed objects with many fields; only tag_name names a release, and a release GitHub marks
@@ -170,7 +211,11 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
  if(docker) writeFileSync(join(bin,'docker'),fakeDocker,{mode:0o755});
  writeFileSync(join(bin,'curl'),fakeCurl,{mode:0o755});
  writeFileSync(join(bin,'mv'),fakeMv,{mode:0o755});
- const logs={DOCKER_LOG:join(root,'docker.log'),CURL_LOG:join(root,'curl.log'),INSTALLER_LOG:join(root,'installer.log'),RESTORE_LOG:join(root,'restore.log'),DB_FILE:join(root,'database')};
+ writeFileSync(join(bin,'systemctl'),fakeSystemctl,{mode:0o755});
+ writeFileSync(join(bin,'loginctl'),fakeLoginctl,{mode:0o755});
+ if(cron) writeFileSync(join(bin,'crontab'),fakeCrontab,{mode:0o755});
+ const logs={DOCKER_LOG:join(root,'docker.log'),CURL_LOG:join(root,'curl.log'),INSTALLER_LOG:join(root,'installer.log'),RESTORE_LOG:join(root,'restore.log'),DB_FILE:join(root,'database'),
+  UPDATES_LOG:join(root,'updates.log'),UPDATES_FILE:join(root,'updates'),SCHEDULER_LOG:join(root,'scheduler.log'),CRONTAB_FILE:join(root,'crontab')};
  const env={HOME:home,PATH:`${bin}:${tools}`,REAL_MV:join(tools,'mv'),FIXTURE:fixture,GET_SOURCE:getScript,MAIN_HEX:mainHex,SANDBOX_HEX:sandboxHex,...logs};
  const spawn=(args,{extra={},input,cwd=work}={})=>spawnSync('/bin/sh',args,{cwd,env:{...env,...extra},encoding:'utf8',input});
  const read=path=>existsSync(path)?readFileSync(path,'utf8'):'';
@@ -183,7 +228,10 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
   docker:()=>read(logs.DOCKER_LOG),curl:()=>read(logs.CURL_LOG),installer:()=>read(logs.INSTALLER_LOG).split('\n').filter(Boolean),
   file:name=>read(join(dir,name)),
   clear:()=>{ for(const path of [logs.DOCKER_LOG,logs.CURL_LOG,logs.INSTALLER_LOG,logs.RESTORE_LOG]) rmSync(path,{force:true}); },
-  restoreLog:()=>read(logs.RESTORE_LOG)};
+  restoreLog:()=>read(logs.RESTORE_LOG),
+  updates:()=>read(logs.UPDATES_LOG).split('\n').filter(Boolean),row:()=>read(logs.UPDATES_FILE).trim(),
+  setRow:row=>writeFileSync(logs.UPDATES_FILE,row+'\n'),crontab:()=>read(logs.CRONTAB_FILE),scheduler:()=>read(logs.SCHEDULER_LOG),
+  clearUpdates:()=>rmSync(logs.UPDATES_LOG,{force:true})};
 }
 const ok=(result,label='')=>assert.equal(result.status,0,`${label}\n${result.stdout}\n${result.stderr}`);
 
@@ -319,7 +367,7 @@ test('--channel main installs the main image by its digest, with the two files w
 test('the main image holds what --channel main runs, and release-assets.mjs writes the two files from it', t => {
  const dockerfile=readFileSync('Dockerfile','utf8');
  assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/docker-compose\.install\.yml \.\/release-source\/$/m);
- assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \/app\/scripts\/engine-managed\.yml \/app\/scripts\/engine-listener-address\.py \/app\/scripts\/engine-listener-address\.sh \.\/release-source\/scripts\/$/m);
+ assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/get\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \/app\/scripts\/engine-managed\.yml \/app\/scripts\/engine-listener-address\.py \/app\/scripts\/engine-listener-address\.sh \.\/release-source\/scripts\/$/m);
  // /app/release-source laid out as the image holds it, run as get.sh runs it there.
  const source=mkdtempSync(join(tmpdir(),'gtmworks-release-source-'));
  t.after(()=>rmSync(source,{recursive:true,force:true}));
@@ -402,10 +450,11 @@ test('the line adds ~/.local/bin to a shell profile only when no profile names i
  ok(m.gtmworks(['status']));
 });
 
-test('the line run from a pipe copies the command from its address, and run again repairs the same release', t => {
+test('the line run from a pipe takes the command from the image it installs, and run again repairs the same release', t => {
  const m=machine(t);
  ok(m.piped(['--version','v1.2.3']));
- assert.match(m.curl(),new RegExp(`^https://raw\\.githubusercontent\\.com/${repo}/main/scripts/get\\.sh$`,'m'));
+ assert.match(m.docker(),new RegExp(`^run --rm ${ref('v1.2.3').replace(/[.]/g,'\\.')} cat /app/release-source/scripts/get\\.sh$`,'m'));
+ assert.doesNotMatch(m.curl(),/raw\.githubusercontent/);
  assert.equal(m.file('gtmworks.sh'),getText);
  const secrets=m.file('.env.install');
  m.clear();
@@ -448,6 +497,63 @@ test('gtmworks update backs up first, then prints the backup path and the exact 
  ok(same);
  assert.match(same.stdout,/already runs/);
  assert.deepEqual(m.installer(),[]);
+});
+
+// #437: the command an install keeps is the get.sh of the build it runs, so a command added later reaches it on update.
+const olderCommand=getText.replace(/^ +elif \[ "\$operation" = sign-in \][^\n]*\n/m,'');
+test('gtmworks update replaces an older gtmworks command with the one the new release carries', t => {
+ assert.notEqual(olderCommand,getText,'the older copy knows no sign-in');
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ writeFileSync(join(m.dir,'gtmworks.sh'),olderCommand);
+ assert.match(m.gtmworks(['sign-in','claude']).stderr,/^Unexpected argument: claude$/m);
+ ok(m.gtmworks(['update']));
+ assert.equal(m.file('gtmworks.sh'),getText);
+ const signIn=m.gtmworks(['sign-in','claude']);
+ assert.equal(signIn.status,2);
+ assert.match(signIn.stderr,/^gtmworks sign-in claude needs --company <id-or-name>\.$/m);
+ // Already on the latest release: the command is still made to match it.
+ writeFileSync(join(m.dir,'gtmworks.sh'),olderCommand);
+ ok(m.gtmworks(['update']));
+ assert.equal(m.file('gtmworks.sh'),getText);
+});
+
+test('a release image without its get.sh: the command comes from the release tag, or main for a main build', t => {
+ const m=machine(t);
+ writeFileSync(join(m.env.FIXTURE,'raw/v1.2.3'),getText+'# v1.2.3\n');
+ ok(m.line(['--version','v1.2.3'],{extra:{IMAGE_WITHOUT_GET:'1'}}));
+ assert.match(m.curl(),new RegExp(`^https://raw\\.githubusercontent\\.com/${repo}/v1\\.2\\.3/scripts/get\\.sh$`,'m'));
+ assert.equal(m.file('gtmworks.sh'),getText+'# v1.2.3\n');
+ m.clear();
+ ok(m.gtmworks(['update','--channel','main'],{extra:{IMAGE_WITHOUT_GET:'1'}}));
+ assert.match(m.curl(),new RegExp(`^https://raw\\.githubusercontent\\.com/${repo}/main/scripts/get\\.sh$`,'m'));
+ assert.equal(m.file('gtmworks.sh'),getText);
+});
+
+test('a fetched command that is not the gtmworks installer is refused before anything changes, and the old copy stays', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ writeFileSync(join(m.env.FIXTURE,'get',hex('c')),'<html>Not Found</html>\n');
+ const kept=m.file('gtmworks.sh');
+ m.clear();
+ const refused=m.gtmworks(['update']);
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,/^The gtmworks command of gtmworks v1\.10\.0 is not the gtmworks installer\. Nothing was changed\.$/m);
+ assert.equal(m.file('gtmworks.sh'),kept);
+ assert.deepEqual(m.installer(),[]);
+ assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
+ assert.deepEqual(readdirSync(m.dir).filter(name=>/^gtmworks\.sh\.|\.gtmworks-download/.test(name)),[]);
+});
+
+test('gtmworks restore --version leaves the command of the release it went back to', t => {
+ const m=machine(t);
+ ok(m.line());
+ const archive=join(m.root,'old.tgz');
+ writeFileSync(archive,'archive');
+ const older=getText+'# v1.2.3\n';
+ writeFileSync(join(m.env.FIXTURE,'get',hex('a')),older);
+ ok(m.gtmworks(['restore',archive,'--version','v1.2.3','--yes']));
+ assert.equal(m.file('gtmworks.sh'),older);
 });
 
 test('gtmworks update --no-backup with no new migration goes back with an update, and takes no backup', t => {
@@ -1042,6 +1148,9 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
   /env -i HOME="\$HOME" [^\n]*\\\n\s+sh -lc 'command -v gtmworks && gtmworks status'/,
   /All \[0-9\]\+ services are healthy/,
   /gtmworks update \|\| fail 'gtmworks update'/,
+  /git -C "\$workspace" show "\$older_command:scripts\/get\.sh" \| sed '\/\^ \*elif \\\[ "\$operation" = sign-in \\\]\/d' > gtmworks\.sh\.older/,
+  /grep -Fx 'Unexpected argument: claude' "\$RUNNER_TEMP\/older-command\.log"/,
+  /grep -Fx 'gtmworks sign-in claude needs --company <id-or-name>\.' "\$RUNNER_TEMP\/updated-command\.log"/,
   /\^Backup: /,
   /To go back to v0\.0\.0: gtmworks restore '\$archive' --version v0\.0\.0/,
   /gtmworks v0\.0\.1 is running: \$next/,
@@ -1068,6 +1177,8 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
  const versionRun=run.indexOf('line --version v0.0.0 --dir "$fresh"');
  assert.ok(versionRun>run.lastIndexOf('compose down -v'));
  assert.ok(run.lastIndexOf(`'[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]'`,versionRun)>run.indexOf('eval "$back --yes"'));
+ // #437: the older command is swapped in before the update, and sign-in is run after it.
+ assert.ok(run.indexOf('older-command.log')<run.indexOf("gtmworks update || fail")&&run.indexOf("gtmworks update || fail")<run.indexOf('updated-command.log'));
  // The failing update runs after the successful one, and the refusal reads back the running image and migrations.
  assert.ok(run.indexOf('--version v0.0.2')>run.indexOf("gtmworks update || fail"));
  assert.match(run,/\[\[ \$\(web_image\) == "\$image" && \$\(cat \.install-release\) == "\$next"/);
@@ -1116,4 +1227,218 @@ test('the README installs with the one line, keeps the source route under From s
  // names the install job's idle-Engine measurement as where it comes from.
  assert.doesNotMatch(readme,/repeat facts from one company/);
  assert.match(readme,/install job prints the memory one idle Engine uses/);
+});
+
+// #443: Update now and automatic updates, through the updater on the host (ADR 0020). The web app only records a request
+// in public.install_updates; the updater reads it and runs `gtmworks update` itself, to the newest of the channel.
+test('the line puts the updater in cron where systemd user units are missing, once, with this run\'s PATH', t => {
+ const m=machine(t);
+ const installed=m.line(['--version','v1.2.3'],{extra:{DOCKER_HOST:'unix:///run/user/1000/docker.sock'}});
+ ok(installed);
+ assert.match(installed.stdout,/^The gtmworks updater runs every minute \(cron\)/m);
+ const command=join(m.home,'.local/bin/gtmworks');
+ const lines=m.crontab().split('\n').filter(Boolean);
+ assert.equal(lines.length,1);
+ assert.equal(lines[0],`* * * * * env 'PATH=${m.env.PATH}' 'DOCKER_HOST=unix:///run/user/1000/docker.sock' '${command}' updater > /dev/null 2>&1 # gtmworks updater`);
+ // Run again, other lines of the table stay and the updater's is not doubled.
+ writeFileSync(m.env.CRONTAB_FILE,`0 3 * * * backup-me\n${lines[0]}\n`);
+ ok(m.gtmworks(['install']));
+ assert.deepEqual(m.crontab().split('\n').filter(Boolean).map(line=>line.endsWith('# gtmworks updater')?'updater':line),['0 3 * * * backup-me','updater']);
+ assert.match(m.gtmworks(['status']).stdout,/^Updater: cron, every minute$/m);
+ // The line runs: its command, as cron's shell runs it (with `%` unescaped), reaches the updater, which reads the row.
+ m.clearUpdates();
+ const cronCommand=m.crontab().split('\n').find(line=>line.endsWith('# gtmworks updater')).replace(/^(\S+ ){5}/,'').replace(/\\%/g,'%');
+ ok(spawnSync('/bin/sh',['-c',cronCommand],{env:{...m.env,PATH:'/usr/bin:/bin'},encoding:'utf8'}),'the cron line runs');
+ assert.deepEqual(m.updates(),['read ']);
+});
+
+test('a PATH with spaces and % reaches cron and systemd whole, each value quoted and % escaped', t => {
+ const m=machine(t);
+ const path=`${m.env.PATH}:/mnt/c/Program Files/Docker 100%`;
+ ok(m.line(['--version','v1.2.3'],{extra:{PATH:path}}));
+ assert.equal(m.crontab().trim(),`* * * * * env 'PATH=${path.replace('%','\\%')}' '${join(m.home,'.local/bin/gtmworks')}' updater > /dev/null 2>&1 # gtmworks updater`);
+ ok(m.gtmworks(['install'],{extra:{PATH:path,SYSTEMD_USER:'1'}}));
+ assert.match(readFileSync(join(m.home,'.config/systemd/user/gtmworks-updater.service'),'utf8'),new RegExp(`^Environment="PATH=${path.replace('%','%%').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}"$`,'m'));
+});
+
+test('where systemd user units exist the updater is a user timer, and the line says how to keep it running signed out', t => {
+ const m=machine(t);
+ const installed=m.line(['--version','v1.2.3'],{extra:{SYSTEMD_USER:'1'}});
+ ok(installed);
+ const units=join(m.home,'.config/systemd/user');
+ const service=readFileSync(join(units,'gtmworks-updater.service'),'utf8');
+ assert.match(service,new RegExp(`^ExecStart="${join(m.home,'.local/bin/gtmworks')}" updater$`,'m'));
+ assert.match(service,/^Type=oneshot$/m);
+ assert.match(readFileSync(join(units,'gtmworks-updater.timer'),'utf8'),/^OnUnitActiveSec=1min$/m);
+ assert.match(m.scheduler(),/^--user enable --now gtmworks-updater\.timer$/m);
+ assert.match(installed.stdout,/sudo loginctl enable-linger /);
+ assert.equal(m.crontab(),'','no cron line next to the timer');
+ assert.match(m.gtmworks(['status'],{extra:{SYSTEMD_USER:'1'}}).stdout,/^Updater: a systemd user timer, every minute$/m);
+});
+
+test('a machine with neither systemd user units nor cron installs gtmworks and says the updater is missing', t => {
+ const m=machine(t,{cron:false});
+ const installed=m.line(['--version','v1.2.3']);
+ ok(installed);
+ assert.match(installed.stdout,/no systemd user timers and no cron, so the gtmworks updater is not installed/);
+ assert.match(m.gtmworks(['status']).stdout,/^Updater: not installed \(run gtmworks install\)$/m);
+});
+
+test('gtmworks updater: an Owner\'s request runs gtmworks update to the newest of the channel and records it', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ m.clear(); m.clearUpdates();
+ // Nothing asked, automatic updates off: the updater reads and does nothing.
+ ok(m.gtmworks(['updater']));
+ assert.deepEqual(m.updates(),['read ']);
+ assert.deepEqual(m.installer(),[]);
+ m.setRow('button=t auto=f state=requested due=t');
+ m.clearUpdates();
+ const run=m.gtmworks(['updater']);
+ ok(run);
+ assert.deepEqual(m.installer(),[`${hex('a')} backup ${join(m.dir,'backups')}`,`${hex('c')} update`]);
+ assert.deepEqual(m.updates(),['read ','updating ','updated v1.10.0']);
+ assert.match(run.stdout,/^Updated to gtmworks v1\.10\.0\.$/m);
+ assert.equal(m.file('.gtmworks-version'),'v1.10.0\n');
+ assert.match(m.file('.gtmworks-updater.log'),/gtmworks v1\.10\.0 is running/);
+ // The log can hold the setup link while first run is open: it is the install user's alone.
+ assert.equal(spawnSync('stat',['-c','%a',join(m.dir,'.gtmworks-updater.log')],{encoding:'utf8'}).stdout.trim(),'600');
+ // Done once: the next run does nothing.
+ m.clear(); m.clearUpdates();
+ ok(m.gtmworks(['updater']));
+ assert.deepEqual(m.installer(),[]);
+ // Asked while already on the newest: nothing to update, and the state goes back to idle.
+ m.setRow('button=t auto=f state=requested due=f');
+ m.clear(); m.clearUpdates();
+ ok(m.gtmworks(['updater']));
+ assert.deepEqual(m.updates(),['read ','updating ','idle ']);
+ assert.deepEqual(m.installer(),[]);
+});
+
+test('a request that names a version or anything else changes nothing beyond the normal update', t => {
+ // The updater reads four values and passes none of them to the update: it runs `gtmworks update` with no option.
+ assert.match(getText,/read\) sql="select button, auto, state, coalesce\(auto_checked_at < now\(\) - interval '1 hour', true\) from public\.install_updates;";;/);
+ assert.match(getText,/sh "\$dir\/gtmworks\.sh" --command --dir "\$dir" update >> "\$log" 2>&1/);
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ for(const row of ['t|f|requested|t|v1.2.3|--channel main','t|f|requested|--version v1.3.0','t|f|requested; --version v1.3.0|t','t|f|requested`touch hacked`|t']) {
+  m.clear(); m.clearUpdates();
+  writeFileSync(join(m.dir,'.gtmworks-version'),'v1.2.3\n');
+  const run=m.gtmworks(['updater'],{extra:{READ_ROW:row}});
+  ok(run,row);
+  const updates=m.installer().filter(line=>line.endsWith(' update'));
+  if(/^t\|f\|requested\|/.test(row)) assert.deepEqual(updates,[`${hex('c')} update`],row);
+  else assert.deepEqual(updates,[],row);
+  assert.doesNotMatch(m.docker(),/main@|:main/,row);
+  assert.equal(existsSync(join(m.work,'hacked'))||existsSync(join(m.dir,'hacked')),false,row);
+  // Back to v1.2.3 for the next row.
+  writeFileSync(join(m.dir,'install.sh'),readFileSync(join(m.env.FIXTURE,'v1.2.3/install.sh'),'utf8'));
+  writeFileSync(join(m.dir,'.install-release'),`${ref('v1.2.3')}\n`);
+ }
+});
+
+test('with the button off a request is ignored; with automatic updates on the updater updates by itself, once an hour', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ m.setRow('button=f auto=f state=requested due=t');
+ m.clear(); m.clearUpdates();
+ const ignored=m.gtmworks(['updater']);
+ ok(ignored);
+ assert.match(ignored.stdout,/Update now button is off .*: ignored\./);
+ assert.deepEqual(m.updates(),['read ','ignore ']);
+ assert.deepEqual(m.installer(),[]);
+ m.setRow('button=t auto=t state=idle due=t');
+ m.clear(); m.clearUpdates();
+ ok(m.gtmworks(['updater']));
+ assert.deepEqual(m.updates(),['read ','checked ','updated v1.10.0']);
+ assert.deepEqual(m.installer().map(line=>line.split(' ')[1]),['backup','update']);
+ // Checked a moment ago: the next run waits for the hour.
+ m.clear(); m.clearUpdates();
+ ok(m.gtmworks(['updater']));
+ assert.deepEqual(m.updates(),['read ']);
+ // Due again with nothing newer: the update finds nothing and the state the Owners read stays as it was.
+ m.setRow('button=t auto=t state=updated due=t');
+ m.clear(); m.clearUpdates();
+ ok(m.gtmworks(['updater']));
+ assert.deepEqual(m.updates(),['read ','checked ']);
+ assert.equal(m.row(),'button=t auto=t state=updated due=f');
+});
+
+test('a failed update shows the version still running: put back by the update, or by the updater from the backup', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ // Its migrations rolled back: the update put v1.2.3 back itself.
+ m.setRow('button=t auto=f state=requested due=t');
+ m.clear(); m.clearUpdates();
+ const rolled=m.gtmworks(['updater'],{extra:{FAIL_REF:ref('v1.10.0')}});
+ assert.equal(rolled.status,1);
+ assert.deepEqual(m.updates(),['read ','updating ','failed v1.2.3']);
+ assert.match(rolled.stderr,/The update failed; gtmworks v1\.2\.3 runs\./);
+ assert.ok(!m.installer().some(line=>/ restore /.test(line)));
+ // Its migrations ran before the new version failed to come up: the updater restores the update's backup with v1.2.3.
+ m.setRow('button=t auto=f state=requested due=t');
+ m.clear(); m.clearUpdates();
+ const restored=m.gtmworks(['updater'],{extra:{FAIL_REF:ref('v1.10.0'),FAIL_AFTER_MIGRATE:'1'}});
+ assert.equal(restored.status,1,restored.stdout+restored.stderr);
+ assert.ok(m.installer().includes(`${hex('a')} restore ${join(m.dir,'backups/gtmworks-test.tgz')}`),m.installer().join('\n'));
+ // The update's own backup is the data from before; the half-started install is not backed up again (it cannot be).
+ assert.equal(m.installer().filter(line=>/ backup /.test(line)).length,1,m.installer().join('\n'));
+ assert.match(restored.stdout,/gtmworks v1\.2\.3 is back, with the data from before the update\./);
+ assert.deepEqual(m.updates(),['read ','updating ','failed v1.2.3']);
+ assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
+ assert.equal(m.file('.install-release'),`${ref('v1.2.3')}\n`);
+ // The new version came up healthy and recorded itself, then a later step failed: it stays, and no backup goes back.
+ m.setRow('button=t auto=f state=requested due=t');
+ m.clear(); m.clearUpdates();
+ const late=m.gtmworks(['updater'],{extra:{LATE_FAIL_REF:ref('v1.10.0')}});
+ assert.equal(late.status,1);
+ assert.ok(!m.installer().some(line=>/ restore /.test(line)),m.installer().join('\n'));
+ assert.deepEqual(m.updates(),['read ','updating ','updated v1.10.0']);
+ assert.match(late.stderr,/came up healthy, then the update stopped on a later step/);
+ ok(m.gtmworks(['restore',join(m.dir,'backups/gtmworks-test.tgz'),'--version','v1.2.3','--yes']),'back to v1.2.3 for the next case');
+ // An update still marked running when an updater starts was stopped with the machine: it is failed, nothing runs.
+ m.setRow('button=t auto=f state=updating due=f');
+ m.clear(); m.clearUpdates();
+ ok(m.gtmworks(['updater']));
+ assert.deepEqual(m.updates(),['read ','failed v1.2.3']);
+ assert.deepEqual(m.installer(),[]);
+});
+
+test('gtmworks update-button and auto-update write the switch, gtmworks status shows them, and an old database refuses', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ const off=m.gtmworks(['update-button','off']);
+ ok(off);
+ assert.match(off.stdout,/^Update now is off: Owners see no button/m);
+ const on=m.gtmworks(['auto-update','on']);
+ ok(on);
+ assert.match(on.stdout,/^Automatic updates are on:/m);
+ assert.equal(m.row(),'button=f auto=t state=idle due=t');
+ assert.match(m.gtmworks(['status']).stdout,/^Update now button: off\. Automatic updates: on\.$/m);
+ ok(m.gtmworks(['update-button','on'])); ok(m.gtmworks(['auto-update','off']));
+ assert.match(m.gtmworks(['status']).stdout,/^Update now button: on\. Automatic updates: off\.$/m);
+ const old=m.gtmworks(['auto-update','on'],{extra:{UPDATES_MISSING:'1'}});
+ assert.equal(old.status,1);
+ assert.match(old.stderr,/comes from before Update now \(gtmworks update brings it\)\. Nothing was changed\./);
+ for(const args of [['update-button'],['update-button','maybe'],['auto-update','on','extra'],['updater','now'],['auto-update','on','--version','v1.2.3']]) {
+  assert.equal(m.gtmworks(args).status,2,args.join(' '));
+ }
+});
+
+test('the web app\'s container has no Docker socket and no host access: the updater outside it is the only way to update', () => {
+ const compose=load(readFileSync('docker-compose.install.yml','utf8'));
+ for(const name of ['web','worker']) {
+  const service=compose.services[name];
+  assert.ok(service,name);
+  // No mount at all: no Docker socket, no host folder, no volume.
+  assert.equal(service.volumes,undefined,`${name} mounts nothing`);
+  for(const key of ['privileged','cap_add','devices','pid','ipc','network_mode','userns_mode','security_opt','group_add']) {
+   assert.equal(service[key],undefined,`${name} has no ${key}`);
+  }
+  assert.doesNotMatch(JSON.stringify(service),/docker\.sock|DOCKER_HOST/,`${name} names no Docker daemon`);
+ }
+ // No service of the install, nor any Engine, mounts the Docker socket.
+ for(const file of ['docker-compose.install.yml','scripts/engine-template.yml']) {
+  assert.doesNotMatch(readFileSync(file,'utf8'),/docker\.sock/,file);
+ }
 });

@@ -969,6 +969,20 @@ ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e E
 # configuration), and the app's health answers 503 meanwhile: the probes try again once a second, 60 tries in all, and
 # fail naming the address and its last answer when 200 never comes.
 compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','$engine_address/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
+# The gtmworks command (#437): a folder the one line made keeps get.sh as gtmworks.sh, and the release now running leaves
+# the one its image carries. A command from before #437 never replaced itself, but its update runs this, so the update
+# brings the new command too. The new file is moved over the old one, never written into it: the old one may be the
+# script running this. A file that is not the installer is refused and the old copy kept; the release itself runs.
+if [ -n "$release_image" ] && [ -f gtmworks.sh ]; then
+  if docker run --rm "$release_image" cat /app/release-source/scripts/get.sh > gtmworks.sh.tmp 2> /dev/null \
+    && [ "$(sed -n 2p gtmworks.sh.tmp)" = '# gtmworks get.sh: the one-line installer, and the gtmworks command it leaves behind (#51, #52).' ]; then
+    chmod 755 gtmworks.sh.tmp
+    mv gtmworks.sh.tmp gtmworks.sh
+  else
+    rm -f gtmworks.sh.tmp
+    echo "The gtmworks command in $release_image is not the gtmworks installer: gtmworks.sh is kept." >&2
+  fi
+fi
 if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)

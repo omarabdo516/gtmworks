@@ -9,7 +9,7 @@ import { signIn } from './sign-in';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const hex=company.replaceAll('-','');
-const space=`cs-${hex}`; const co=`co-${hex}`; const writer='e9100000-0000-0000-0000-000000000002'; const writerProfile=`ag-${writer.replaceAll('-','')}`;
+const space=`cs-${hex}`; const co=`co-${hex}`; const lead='e9100000-0000-0000-0000-000000000001'; const writer='e9100000-0000-0000-0000-000000000002'; const writerProfile=`ag-${writer.replaceAll('-','')}`;
 const key='sk-ant-playwright-never-drawn-0123456789abcdef';
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 
@@ -90,11 +90,32 @@ test('the Owner chooses the Company default and one Agent\'s own model, each rea
  expect(rows.map(row=>row.setting)).toContain('model');
 });
 
+test('the Owner changes the main Agent\'s model from its own page; the Engine holds it on `co-` and a new default leaves it', async({page})=>{
+ language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ // #425: Lead keeps the Company's `co-` profile, and that profile is its own (ADR 0016).
+ await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${lead}`);
+ const models=page.getByRole('radiogroup',{name:/Lead/});
+ await expect(models).toBeVisible();
+ await expect(async()=>{
+  await models.getByRole('radio',{name:/^openai\/gpt-5\.5/}).click();
+  await expect.poll(()=>fake.settings.profiles.get(co)?.model,{timeout:3000}).toBe('openai/gpt-5.5');
+ }).toPass({timeout:30000});
+ await expect.poll(()=>JSON.parse(query(`select coalesce(model_choice,'-') as choice from public.company_profiles where company_id='${company}'`))[0].choice).toBe('openrouter/openai/gpt-5.5');
+ // A new Company default reaches the shared space and leaves Lead on its own choice.
+ await page.goto('/c/rs-learning/settings?section=models');
+ await hydrated(page);
+ await page.getByRole('radiogroup',{name:/default/i}).getByRole('radio',{name:/^anthropic\/claude-opus-4\.6/}).click();
+ await expect(page.locator(`#mdl-agent-${lead}-model`)).toContainText('Its own choice');
+ await expect.poll(()=>fake.settings.profiles.get(space)?.model).toBe('anthropic/claude-opus-4.6');
+ expect(fake.settings.profiles.get(co)?.model).toBe('openai/gpt-5.5');
+});
+
 test('the Owner turns sub-agents on for one Agent; the profile waits for the toolset and a member reads the switch', async({page,browser})=>{
  language(`update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000004')`);
  await openModels(page,'omar@example.com');
  await hydrated(page);
- const toggle=page.getByRole('switch',{name:'Sub-agents'});
+ // The main Agent has its own switch now (#425): the Writer's is the one this test turns on.
+ const toggle=page.locator(`#mdl-sub-${writer}`);
  await expect(toggle).toHaveAttribute('aria-checked','false');
  await toggle.click();
  await expect(toggle).toHaveAttribute('aria-checked','true');
@@ -121,4 +142,29 @@ test('the Owner turns sub-agents on for one Agent; the profile waits for the too
  await expect(see.getByRole('combobox',{name:'Model for Writer'})).toHaveCount(0);
  await expect(see.locator('#mdl-agent-'+writer+'-model')).toContainText('Its own choice');
  await contributor.close();
+});
+
+// #424: each provider key row and both subscriptions show their logo, drawn from this install only, in the light and the
+// dark theme, the dark one in Arabic so the mirrored rows are seen too; the screenshots are attached to the run.
+test('every provider and subscription shows its logo from the install, in both themes', async({page},testInfo)=>{
+ language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ const origin=new URL(testInfo.project.use.baseURL!).origin;
+ const outside:string[]=[];
+ page.on('request',request=>{ if(request.resourceType()==='image'&&new URL(request.url()).origin!==origin) outside.push(request.url()); });
+ await openModels(page,'omar@example.com');
+ for(const theme of ['light','dark'] as const) {
+  await page.emulateMedia({colorScheme:theme});
+  if(theme==='dark') { language(`update public.people set language='ar' where id='20000000-0000-0000-0000-000000000001'`); await page.reload(); }
+  const rows=page.locator('#md-keys .md-key');
+  await expect(rows.first()).toBeVisible();
+  for(const row of await rows.all()) {
+   const name=await row.locator('.panel-row__t').textContent();
+   await expect(row.getByRole('img',{name:name!,exact:true})).toBeVisible();
+  }
+  for(const name of ['ChatGPT','Claude']) await expect(page.locator('#md-subscriptions').getByRole('img',{name,exact:true}).locator('.tool-logo')).toBeVisible();
+  await expect.poll(()=>page.locator('#md-keys img.tool-logo').evaluateAll(images=>images.length>0&&images.every(image=>(image as HTMLImageElement).complete&&(image as HTMLImageElement).naturalWidth>0))).toBe(true);
+  await page.locator('#md-subscriptions').scrollIntoViewIfNeeded();
+  await testInfo.attach(`models-${theme}`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+ }
+ expect(outside).toEqual([]);
 });

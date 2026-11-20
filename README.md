@@ -234,6 +234,19 @@ gtmworks update --version v1.2.3             # or to that release
 gtmworks update --channel stable             # a main install back to the latest stable release
 ```
 
+Owners can also update from the app: **Update now** asks the install's updater, a
+small timer the install puts on the server (a systemd user timer, or cron), which
+runs `gtmworks update` within a minute and shows "Updated to <version>", or that
+the update failed and which version still runs (ADR 0020). The app never reaches
+Docker and never names the version: the updater always takes the newest of the
+install's channel.
+
+```sh
+gtmworks update-button off                   # hide Update now; the updater ignores requests (on by default)
+gtmworks auto-update on                      # install each newer version by itself, once an hour at most (off by default)
+gtmworks status                              # shows both switches and how the updater runs
+```
+
 Update backs up first and prints the archive's path (`--no-backup` skips it),
 downloads the new release's two files, pulls its images by digest, applies its
 migrations from inside the new image and recreates the containers whose image
@@ -290,8 +303,12 @@ back only while install.sh itself runs, by its lock on `.install.lock`, so run
 updates of one install as one user. An install
 on the `main` channel updates to the newest main build; the update keeps the two
 files of the build it ran (`.gtmworks-main/`), so its go-back command names that
-exact build, `--version main@sha256:<digest>`. `gtmworks update` does not replace
-the `gtmworks` command itself; run the line again for a newer one.
+exact build, `--version main@sha256:<digest>`. The `gtmworks` command itself is
+the `get.sh` of the build the folder runs, which each image carries: an install,
+an update or a `restore --version` leaves the command of the release or channel it
+installed, checked to be the gtmworks installer before anything changes. A release's
+`install.sh` leaves its command too, so an update run by an older command, one that
+never replaced itself, still ends with the new one.
 
 ## Backup
 
@@ -357,7 +374,7 @@ nor re-tags its image `X.Y.Z`; it only runs the promotion of `stable` and
 takes the migrations and install files from it; nothing is built on the server.
 `stable` and `latest` move only after a release's install passes on its exact image,
 and always to the highest published release, so an older or hotfix tag never moves
-them back; `main` follows the head of main once its CI passed. A release install
+them back; `main` follows the newest commit of main whose CI passed, never an older one. A release install
 updates when both files are replaced with the next release's and `sh install.sh
 update` runs; it applies the new migrations, then recreates every service whose
 image changed. Back up before replacing them: backup and restore refuse to run with
@@ -369,7 +386,7 @@ take the latest stable release to be the highest published `vX.Y.Z`, the one
 `stable` names, read from every page of the GitHub Releases list, and download
 its two files from that release. CI points both at local test releases instead with the test-only
 `GTMWORKS_RELEASES` (a base URL holding `releases.json` and `<tag>/<file>`) and
-`GTMWORKS_GET` (where the piped script copies itself from); `scripts/get.sh`
+`GTMWORKS_GET` (the address of main's `get.sh`, read for a build whose image carries none); `scripts/get.sh`
 describes them.
 
 The first push creates the package `ghcr.io/omarabdo516/gtmworks` **private**, and

@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
+import { overlayHref } from '@/lib/settings-overlay.mjs';
+import Link from '@/lib/link';
 
 // Voice dictation in the composer (#160). A hold of the microphone longer than 400 ms records until it is released; a
 // quick click starts and a second click finishes; Escape and the cross cancel. While it records, 28 bars take the place
@@ -42,6 +44,9 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const [writing,setWriting]=useState(false);
  const [error,setError]=useState('');
  const [unavailable,setUnavailable]=useState(false);
+ // Who reads the unavailable line (#430): an Owner is linked to the Company's speech-to-text setting, anyone else is told
+ // the Owner sets it. The route says which, with the Company's address.
+ const [noProvider,setNoProvider]=useState<{owner:boolean,slug:string}|null>(null);
  // The language read with the Agent it was read for, so another Agent's language never shows here.
  const placeKeyOf=(place?:DictationTarget)=>place?`${place.company}:${place.agent??''}:${place.channel??''}`:'';
  const placeKey=placeKeyOf(target);
@@ -179,7 +184,7 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
    // this composer's to put in.
    if(!mounted.current||id!==sessionNo.current||place.key!==placeKeyNow.current) return;
    if(response.ok&&typeof body?.text==='string') { const words=body.text.trim(); if(words) place.insert(words); return; }
-   if(response.ok&&body?.state==='unavailable') { setUnavailable(true); setError('chatDictationUnavailable'); return; }
+   if(response.ok&&body?.state==='unavailable') { setUnavailable(true); setNoProvider({owner:body.owner===true,slug:typeof body.slug==='string'?body.slug:''}); setError('chatDictationUnavailable'); return; }
    setError('chatDictationFailed');
   } catch { if(mounted.current&&id===sessionNo.current&&place.key===placeKeyNow.current) setError('chatDictationFailed'); }
   finally { if(mounted.current) setWriting(false); focusField.current(); }
@@ -283,5 +288,8 @@ export function useComposerDictation({target,insert,field,onStart}:{target?:Dict
  const button=<button type="button" className="composer__btn composer__mic" aria-pressed={!!session} aria-disabled={disabled} aria-label={label}
   title={session?t('chatDictationFinish'):unavailable?t('chatDictationUnavailable'):t('chatDictationTitle')}
   onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} onClick={onClick}><ShellIcon name={session?'stop':'mic'}/></button>;
- return {recording:!!session,writing,error,unavailable,cancel:cancelButton,wave,clock:rec,button,finish};
+ const help=error==='chatDictationUnavailable'&&noProvider?(noProvider.owner&&noProvider.slug
+  ?<> <Link className="composer-error__link" href={`${overlayHref(noProvider.slug,'models')}#md-stt`}>{t('chatDictationSetProvider')}</Link></>
+  :!noProvider.owner?<> {t('chatDictationAskOwner')}</>:null):null;
+ return {recording:!!session,writing,error,help,unavailable,cancel:cancelButton,wave,clock:rec,button,finish};
 }

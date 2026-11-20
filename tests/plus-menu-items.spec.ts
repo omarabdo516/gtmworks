@@ -20,6 +20,7 @@ const manager='20000000-0000-0000-0000-000000000002';
 const contributor='20000000-0000-0000-0000-000000000003';
 const profile=`co-${company.replaceAll('-','')}`;
 const lead=randomUUID();
+const inUse=randomUUID();
 // The management listener is on port 9119 beside the Engine's address, as in the install, on a loopback address of
 // this file's own on each lane.
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
@@ -44,6 +45,12 @@ test.beforeAll(async({browser},testInfo)=>{
    insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
    insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${manager}','${lead}'),('${company}','${contributor}','${lead}');
+   -- The Company is in use (a Manager wrote to Lead), so Lead's chat is the empty chat these tests open, not the
+   -- first Conversation Lead opens on a new Company (#434).
+   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${inUse}','${company}','${manager}','${lead}','Lead');
+   insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+    ('${company}','${inUse}','person','${manager}','مدير','Plan the week','${randomUUID()}','in-use-run');
+   insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('${company}','${inUse}','in-use-run','completed');
   end $$;`);
  } finally { await page.close(); }
 });

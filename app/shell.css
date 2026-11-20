@@ -441,6 +441,7 @@
 .gw .composer__send:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); }
 @media (hover: hover) { .gw .composer__send:hover:not(:disabled) { background: var(--gw-primary-hover); } }
 .gw .composer-error { margin: 0; padding: 0 16px 10px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
+.gw .composer-error__link { color: inherit; text-decoration: underline; }
 .gw .chat-usage { max-width: var(--gw-chat-col); margin: 8px auto 0; text-align: center; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 
 /* ---------- the Agent's details (design-reference: #details) ---------- */
@@ -1007,3 +1008,9 @@
 .gw .fstack .agent-face { border-radius: 50%; box-shadow: 0 0 0 2px var(--gw-bg-pane); }
 .gw .fstack .agent-face + .agent-face { margin-inline-start: -5px; }
 @media (prefers-reduced-motion: reduce) { .gw .sidebar, .gw .details { transition: none; } .gw.modal { animation: none; } }
+
+/* Update now (#443): the state of an update an Owner asked for, above the account, in the conversation's note style. */
+.gw .install-update { display: grid; gap: 8px; padding: 8px 12px; }
+.gw .install-update__line { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
+.gw .install-update__ask { display: grid; gap: 8px; }
+.gw .install-update .set-err { color: var(--gw-danger-text); }

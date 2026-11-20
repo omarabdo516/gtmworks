@@ -9,7 +9,8 @@
 # (`install-measure`) is no check a pull request needs: it runs on a push to main and on a manual run only, like the
 # visual lane (#408). The visual lane's key screens and the measured navigation budgets (`visual`) run on a push to main
 # and on a manual run only, never on a pull request, and `check` does not wait for them
-# (Omar, 2026-11-17, #257): a failure on main opens or updates one issue labelled visual-regression. A push to main runs
+# (Omar, 2026-11-17, #257): a failure on main opens or updates one issue labelled visual-regression. The chat's open
+# time runs in its own job (`chat-open`) with a machine to itself, on a pull request too (#421). A push to main runs
 # every suite unless every file is a document; a manual run starts the browser and install suites only through inputs that
 # default to off. Required `check` (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was
 # skipped, and is red on any failed or cancelled stage.
@@ -553,9 +554,97 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # The chat's open time (project `alone`, #346) with a machine to itself (#421), on a pull request too: one browser
+  # lane, one build of the app, and the one measured test, in a job no shard shares. The budget is one second
+  # (decision 0042) and is never raised.
+  chat-open:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
+    runs-on: ubuntu-latest
+    # 5 min estimated for one lane's stack, one build and the one test; 8 min is 1.5 times that, and the first run that
+    # starts this job says the real minutes (#421, #410).
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: reserve the stack's ports
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
+          sysctl net.ipv4.ip_local_reserved_ports
+      - uses: actions/setup-node@v4
+        id: node
+        with:
+          node-version: 22
+      # The dependencies and the browser the fast job already saved, exactly as the shards restore them (#404): a miss
+      # installs the browser alone, on the runner image's own system packages and fonts.
+      - name: restore dependencies
+        id: modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            !node_modules/.vite
+            !node_modules/.cache
+          key: node-modules-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - name: install dependencies
+        if: ${{ steps.modules.outputs.cache-hit != 'true' }}
+        run: npm ci
+      - name: save dependencies
+        if: ${{ steps.modules.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            !node_modules/.vite
+            !node_modules/.cache
+          key: node-modules-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - name: browser version
+        id: browser-version
+        run: echo "version=$(node -p "require('playwright-core/package.json').version")-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - name: restore the browser
+        id: browser
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
+      - name: install the browser
+        if: ${{ steps.browser.outputs.cache-hit != 'true' }}
+        run: npx playwright install chromium
+      - name: save the browser
+        if: ${{ steps.browser.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
+      # The stack's images from the cache the supabase-images job keeps (#259).
+      - name: Supabase images cache key
+        id: images
+        run: echo "key=$(bash scripts/supabase-images.sh key)" >> "$GITHUB_OUTPUT"
+      - name: restore the Supabase images
+        id: restore-images
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/supabase-images
+          key: ${{ steps.images.outputs.key }}
+      - name: chat open
+        env:
+          GTMWORKS_TEST_LANES: "1"
+          SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
+        run: ./ci.sh chat-open
+      - name: upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-chat-open
+          path: playwright-report/html/
+          if-no-files-found: ignore
+          retention-days: 30
+
   # The install proof is one job, one matrix entry per area, each on a fresh isolated Docker machine of its own (#406):
   # the first install and its repeat; Companies and their Engines; Agents on their Engines; backup and restore; the
-  # public address behind a proxy; the update between releases (`./ci.sh install update`); a release that pins another Engine image (`./ci.sh install engines-update`); and the one-line install. A fault in one area cannot
+  # public address behind a proxy; the update between releases (`./ci.sh install update`); a release that pins another Engine image (`./ci.sh install engines-update`); the one-line install; and Update now's updater (#443). A fault in one area cannot
   # hide or cause another's: fail-fast is off, so one red area leaves the others running to their end, and the job's name
   # is the area that failed. An area adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing
   # else (#407–#409).
@@ -574,7 +663,7 @@ jobs:
       # Every area runs to its end, so one red area still shows the others' faults (#406).
       fail-fast: false
       matrix:
-        area: [first-install, companies, agents, backup, proxy, rollback, update, engines-update, one-line]
+        area: [first-install, companies, agents, backup, proxy, rollback, update, engines-update, one-line, updater]
     # 10.7 min measured for its slowest area, update, on run 44726291691 (#389): 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:
@@ -638,7 +727,7 @@ jobs:
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, fast, image, database, integration, install]
+    needs: [changes, fast, image, database, integration, chat-open, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     # 0.1 min measured on run 44636876755: 3 min is 1.5 times it, floored at 3 (#410).
@@ -659,6 +748,8 @@ jobs:
           DATABASE_RESULT: ${{ needs.database.result }}
           INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
+          CHAT_OPEN_RUN: ${{ needs.changes.outputs.integration }}
+          CHAT_OPEN_RESULT: ${{ needs.chat-open.result }}
           INSTALL_RUN: ${{ needs.changes.outputs.install }}
           INSTALL_RESULT: ${{ needs.install.result }}
         run: node scripts/ci-verdict.mjs

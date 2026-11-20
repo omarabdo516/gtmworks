@@ -5,7 +5,7 @@ import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { selfHosted as isSelfHosted } from '../lib/company-engine.mjs';
 import { engineFor } from '../lib/engine.mjs';
-import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, checkAgentTools, abandonConversationReservations } from '../lib/company-profiles.mjs';
+import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, checkAgentTools, abandonConversationReservations, keepLeadSouls } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
 checkSettings();
@@ -24,7 +24,7 @@ for(let tries=60;tries>0&&!stopping;tries--) { const {error}=await db.rpc('setup
 const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work(); } catch(error) { console.error(`${name} worker:`,error.message); } await pause(every); } };
 // A self-hosted install gives each company its own profile in the bundled Hermes and keeps its tools, and those of each
 // Agent's own profile, in step with the company's Agent level (ADR 0014, ADR 0016), gives each company one shared Skills
-// folder that every one of its Agent profiles reads, holding the lessons its team approved (#122), writes each Agent's team rules into its profile's SOUL.md (#345), and moves each Agent
+// folder that every one of its Agent profiles reads, holding the lessons its team approved (#122), writes each Agent's team rules into its profile's SOUL.md (#345), gives a main Agent still holding the old default soul the manager's (#434), and moves each Agent
 // still on its company's profile to its own once that profile reads the folder (#121); a hosted one has none. Every
 // Company and Agent profile is read, so one the Engine lost is made again. Each call asks the one module for the Engine
 // of the Company it serves (lib/company-engine.mjs), and Runs go to that Engine on each Agent's profile (#342, ADR 0018).
@@ -34,7 +34,7 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  loop('Channel runs',()=>driveChannelRuns(db,{})),
  loop('Note runs',()=>driveNoteRuns(db,{})),
  loop('Handovers',()=>driveHandovers(db,{})),
- selfHosted&&loop('Hermes',()=>keepCompanyProfiles(db,{waiting}),2000),
+ selfHosted&&loop('Hermes',async()=>{ await keepCompanyProfiles(db,{waiting}); await keepLeadSouls(db,{}); },2000),
  selfHosted&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{}); await keepSharedSkills(db,{}); await keepAgentRules(db,{}); await moveAgentProfiles(db,{waiting:moving,driverFor:connection=>engineFor(connection)}); },2000),
  selfHosted&&loop('Agent tools',()=>checkAgentTools(db,{}),300000),
  loop('Reserved runs',()=>abandonConversationReservations(db),60000)]);

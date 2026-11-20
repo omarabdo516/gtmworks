@@ -14,13 +14,16 @@ const budgets = {
   database: { limit: 4, measured: 2.1 },
   integration: { limit: 12, measured: 10.6 }, // its slowest shard
   install: { limit: 12, measured: 10.7 }, // its slowest area, update, run 44726291691 (#389)
+  // One lane's stack, one build and the one chat-open test, with the machine to itself (#421). The first estimate for
+  // the run that starts it; the job says its measured minutes in the pull request that adds it.
+  'chat-open': { limit: 8, measured: 5 },
   check: { limit: 3, measured: 0.1 },
 };
 const MAX = 12;
 // What the full check runs. `visual` and `install-measure` are not part of it: they run on main and on a manual run.
 // `supabase-images` is not part of it either: it only warms a cache, never fails a run, and after a cache-key change it
 // pulls every Supabase image, so its limit is not one of the check's.
-const fullCheck = ['changes', 'fast', 'image', 'database', 'integration', 'install', 'check'];
+const fullCheck = ['changes', 'fast', 'image', 'database', 'integration', 'chat-open', 'install', 'check'];
 
 const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
 

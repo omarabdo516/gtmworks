@@ -1,10 +1,13 @@
 import { afterEach, expect, test, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import { Frame } from '@/app/frame';
 import NewChatKey from '@/app/new-chat-key';
 import { MessageBox } from '@/app/conversation-composer';
 import { LanguageProvider } from '@/lib/i18n-client';
+// The composer's settings link is the app's Link, which needs Next's router; a plain link stands in.
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 const push = vi.hoisted(() => vi.fn());
 const address = vi.hoisted(() => ({ pathname: '/c/rs-learning/work/board', search: '' }));

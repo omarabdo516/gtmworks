@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { effortDefault, effortHintKey, effortLabelKey } from '@/lib/engine-effort.mjs';
 import { toast } from './toast';
+import { AppTile } from '@/components/app-tile';
 
 // The "Subscription and models" section (#29) and an Agent's "Thinks with" rows: the Engine's model options for the
 // Company's space and for each Agent's own profile, the model written to that profile and read back, and the Owner's
@@ -27,6 +28,9 @@ async function send(path:string,body:object):Promise<Answer> {
  } catch { return {ok:false,error:'',data:null}; }
 }
 const modelOf=(option:ModelOption)=>`${option.provider}/${option.model}`;
+// A provider's logo, or its first letter where it has none (#424). A key row names it (label); a model choice already
+// says its provider in words, so there it has no label and stays out of the radio's name.
+const ProviderLogo=({provider,name,label}:{provider:string,name:string,label?:string})=><AppTile app={{key:provider,mark:Array.from(name.trim())[0]?.toUpperCase()||'·'}} label={label}/>;
 // The arrow keys move through a list of model choices as the reference's other radio groups do: down or right forward in
 // English, down or left forward in Arabic; the first and last stop the arrow, and a group with no choice marked starts
 // from the focused row. Moving selects, as the effort control does (#179).
@@ -68,7 +72,7 @@ export function ProviderKeys({company,owner,data}:{company:string,owner:boolean,
   ...names(data?.leftover??null).map(name=>['settingsModelsKeyLeftover',name])];
  return <section className="dp-sec" aria-labelledby="md-h-keys" id="md-keys"><h4 className="dp-label" id="md-h-keys"><span>{t('settingsModelsProviderKeys')}</span></h4>
   {rows?<div className="panel-card md-keys">{rows.map(row=><div className="md-key" key={row.provider} id={`mdl-key-row-${row.provider}`}>
-   <div className="panel-row"><span className="panel-row__text"><span className="panel-row__t"><bdi>{row.label}</bdi></span>
+   <div className="panel-row"><ProviderLogo provider={row.provider} name={row.label} label={row.label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{row.label}</bdi></span>
     <span className="panel-row__d" id={`mdl-key-${row.provider}-state`}>{t(row.set?'settingsModelsKeySet':'settingsModelsKeyUnset')}</span></span>
     {owner&&row.set&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',row.label)} onClick={()=>act(row.provider,'remove')}>{t('settingsModelsKeyRemove')}</button>}
     {owner&&<button type="button" className="link-btn" aria-expanded={open===row.provider} aria-controls={`mdl-key-${row.provider}-form`} onClick={()=>{ setOpen(open===row.provider?'':row.provider); setValue(''); setError(''); }}>{t(row.set?'settingsModelsKeyReplace':'settingsModelsKeyGive')}</button>}
@@ -84,7 +88,55 @@ export function ProviderKeys({company,owner,data}:{company:string,owner:boolean,
   {error&&<p className="set-err" role="alert">{t(reasonKey(error,'key'))}</p>}
   {!owner&&<p className="set-hint">{t('settingsModelsKeyOwnerOnly')}</p>}
   {owner&&notes.length>0&&<ul className="set-hint md-waiting">{notes.map(([label,name],at)=><li key={`${label}-${at}`}>{t(label)} <bdi>{name}</bdi></li>)}</ul>}
-  <p className="set-hint">{t('settingsModelsProviderKeysHint')}</p>
+  <p className="set-hint">{t('settingsModelsKeyWhat')} {t('settingsModelsProviderKeysHint')}</p>
+ </section>;
+}
+
+// The Company's speech-to-text provider (#430): the Owner picks one and pastes its key once, and every Agent transcribes
+// with it in its own speaking language. Deepgram comes first, for Arabic. As with model keys, the value is never drawn
+// back: the field starts empty and is cleared after it is sent. Provider names are their own brands, in either language.
+export type SpeechData={provider:string|null,missing:Named[]|null};
+const speechRows=[['deepgram','Deepgram Nova-3','settingsSpeechDeepgram'],['elevenlabs','ElevenLabs',''],['openai','OpenAI',''],['groq','Groq','settingsSpeechGroq']] as const;
+export function SpeechToText({company,owner,data}:{company:string,owner:boolean,data:SpeechData|null}) {
+ const {t}=useI18n(); const router=useRouter();
+ const [open,setOpen]=useState(''); const [value,setValue]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+ const [missed,setMissed]=useState<string[]>([]);
+ const act=async(provider:string,intent:'set'|'remove')=>{
+  if(busy) return;
+  if(intent==='set'&&value.trim().length<8) { setError('speechInvalid'); return; }
+  setBusy(true); setError('');
+  const answer=await send('/api/speech-provider',{company,provider,intent,...(intent==='set'?{value:value.trim()}:{})});
+  setBusy(false);
+  if(!answer.ok) { setError(answer.error||'speechFailed'); return; }
+  setOpen(''); setValue('');
+  // Agents a write did not reach are named, with no success toast, so the Owner tries again.
+  const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as Named[]).map(item=>item.name||t('settingsModelsAnAgent')):[];
+  setMissed(failed);
+  if(!failed.length) toast(t(intent==='set'?'settingsModelsKeySaved':'settingsModelsKeyRemoved'));
+  router.refresh();
+ };
+ const missing=data?.provider&&data.missing?.length?data.missing.map(item=>item.name||t('settingsModelsAnAgent')):[];
+ return <section className="dp-sec" aria-labelledby="md-h-stt" id="md-stt"><h4 className="dp-label" id="md-h-stt"><span>{t('settingsSpeech')}</span></h4>
+  {data?.missing?<div className="panel-card md-keys">{speechRows.map(([id,label,note])=>{ const on=data.provider===id; return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
+   <div className="panel-row"><ProviderLogo provider={id} name={label} label={label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{label}</bdi></span>
+    <span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):note?t(note):''}</span></span>
+    {owner&&on&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',label)} onClick={()=>act(id,'remove')}>{t('settingsModelsKeyRemove')}</button>}
+    {owner&&<button type="button" className="link-btn" aria-expanded={open===id} aria-controls={`mdl-stt-${id}-form`} onClick={()=>{ setOpen(open===id?'':id); setValue(''); setError(''); }}>{t(on?'settingsModelsKeyReplace':'settingsSpeechUse')}</button>}
+   </div>
+   {owner&&open===id&&<div className="sub-step" id={`mdl-stt-${id}-form`}>
+    <label className="set-label" htmlFor={`mdl-stt-${id}-value`}>{t('settingsModelsKeyValue')}</label>
+    <input className="set-input" id={`mdl-stt-${id}-value`} type="password" dir="ltr" autoComplete="new-password" spellCheck={false} value={value} disabled={busy}
+     onChange={event=>setValue(event.target.value)} onKeyDown={event=>{ if(event.key==='Enter') act(id,'set'); }}/>
+    <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={()=>act(id,'set')}>{t('settingsModelsKeySave')}</button></div>
+   </div>}
+  </div>; })}</div>
+  :<div className="panel-card"><p className="panel-empty">{t(data?'settingsSpeechUnread':'settingsModelsKeyNoEngine')}</p></div>}
+  {data?.missing&&!data.provider&&<p className="set-hint" id="mdl-stt-none">{t('settingsSpeechNone')}</p>}
+  {error&&<p className="set-err" role="alert">{t(error==='speechNotAllowed'?'settingsSpeechOwnerOnly':'settingsModelsKeyError')}</p>}
+  {missed.length>0&&<p className="set-err" role="alert">{t('settingsSpeechNotReached',missed.join(', '))}</p>}
+  {!owner&&<p className="set-hint">{t('settingsSpeechOwnerOnly')}</p>}
+  {owner&&missing.length>0&&<ul className="set-hint md-waiting">{missing.map((name,at)=><li key={at}>{t('settingsSpeechMissing')} <bdi>{name}</bdi></li>)}</ul>}
+  <p className="set-hint">{t('settingsSpeechHint')}</p>
  </section>;
 }
 
@@ -116,7 +168,7 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
   document.getElementById(idOf(models.options[next]))?.focus();
  };
  const row=(option:ModelOption,index:number)=>{
-  const choice=modelOf(option); const on=choice===models.model; const text=<span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span>;
+  const choice=modelOf(option); const on=choice===models.model; const text=<><ProviderLogo provider={option.provider} name={option.providerName}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span></>;
   const meta=on?<span className="panel-row__meta"><span aria-hidden="true">✓</span>{t('settingsModelsDefaultMark')}</span>:null;
   return owner
    ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
@@ -148,8 +200,8 @@ export function DefaultEffort() {
   </div></div></section>;
 }
 
-// One Agent's model rows, for its "Thinks with" section (#29): the Engine's choices for that Agent's own profile. An Agent
-// that runs on the Company profile has no model of its own and says so.
+// One Agent's model rows, for its "Thinks with" section (#29): the Engine's choices for that Agent's own profile, the main
+// Agent's `co-` one included (#425). An Agent that shares a profile it does not keep has no model of its own and says so.
 export function AgentModel({company,agent,name,model,options,choosable,owner}:{company:string,agent:string,name:string,model:string|null,options:ModelOption[],choosable:boolean,owner:boolean}) {
  const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
  const [busy,setBusy]=useState(false); const [error,setError]=useState('');

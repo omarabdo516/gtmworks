@@ -6,7 +6,7 @@ select json_build_object(
  'ready_needs_confirmation',position('tools_confirmed' in pg_get_functiondef('public.company_profile_ready(uuid)'::regprocedure))>0
   and position('tools_pending' in pg_get_functiondef('public.company_profile_ready(uuid)'::regprocedure))>0,
  'worker_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.record_company_profile(uuid,text)','public.begin_company_tools(uuid)','public.abandon_conversation_reservations()','public.company_profile_work()']) f),
+  from unnest(array['public.record_company_profile(uuid,text,boolean)','public.begin_company_tools(uuid)','public.abandon_conversation_reservations()','public.company_profile_work()']) f),
  'reserve_by_sender',has_function_privilege('authenticated','public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)','execute') and not has_function_privilege('service_role','public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)','execute'),
  'old_signatures_gone',to_regprocedure('public.record_company_profile(uuid,text,integer)') is null
   and to_regprocedure('public.record_company_profile(uuid,text,integer,integer)') is null

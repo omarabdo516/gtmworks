@@ -16,7 +16,9 @@ Every job runs on a GitHub-hosted `ubuntu-latest` runner (decision 0038, #334). 
 job, followed by the measured navigation budgets, which need a machine no other job shares; `ci.sh
 integration` leaves the `measured` project empty (`GTMWORKS_HOSTED_ELSEWHERE`). The visual lane and the measured budgets
 run on a push to `main` and on a manual run only, never on a pull request, and `check` does not wait for them (Omar,
-2026-11-17, #257). When they fail on `main`, the `visual` job opens
+2026-11-17, #257). The chat's open time needs a machine no shard shares too, so it runs in its own `chat-open` job, on a
+pull request too (#421): `ci.sh integration` leaves the `alone` project empty (`GTMWORKS_HOSTED_ELSEWHERE`), and
+`./ci.sh chat-open` runs it with one lane, one build and the one test. When they fail on `main`, the `visual` job opens
 or updates one issue labelled `visual-regression` that names each failed screen and links the difference images
 (`scripts/visual-regression.mjs`); no pull request is blocked by it. A job that
 starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs reserved-ports`, #225).
@@ -89,9 +91,16 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   each lane is a whole local Supabase stack and an app server of its own (`tests/lane.mjs`, `scripts/local-db.sh`,
   `scripts/web.sh`), so spec files run side by side and never share data.
   Each functional spec file starts from the seed (`tests/fresh-seed.ts`); tests inside one file still run in order.
-  The order is functional, then the chat's open time (project `alone`, `chat-steps.spec.ts`, one worker and no other
-  browser beside it, #346), then the navigation time budgets (project `measured`, empty here: they run in `visual`)
-  with the machine to themselves, then first run last; a failure in one group skips none of the next.
+  The order is functional, then first run; the chat's open time (project `alone`, `chat-steps.spec.ts`, one worker and
+  no other browser beside it, #346) and the navigation time budgets (project `measured`) are empty here: they run in
+  their own jobs with the machine to themselves (`chat-open`, #421, and `visual`), and a failure in one group skips none
+  of the next.
+- `chat-open` is the chat's open time (#346, #421) with a machine to itself, on a pull request too: `./ci.sh chat-open`
+  starts one lane's stack, builds the app, and runs `npx playwright test --project=alone --no-deps`, so the one test in
+  `tests/chat-steps.spec.ts` measures the click-to-steps time with no other browser, stack or worker beside it. The
+  budget is one second (decision 0042) and is never raised. A change to it runs it with the browser suite's own area,
+  on a draft as on a ready pull request, and `check` is red when its job failed or was cancelled or was skipped while
+  the browser suite was asked for (`scripts/ci-verdict.mjs`).
 - `visual` is the visual lane (#257), on `main` and on a manual run only: the twelve key screens in
   `tests/visual-lane/screens.json` (sign-in, first run, Home, the board, a Card, the chat, a channel, Agents, an
   Agent's details, Members, Numbers and Approvals; the list is capped at 15), each in Arabic at 1440 and 390 in the
@@ -150,7 +159,8 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red; it lists each step of the fast job
   and every step must succeed (`scripts/ci-verdict.mjs`). The install proof is one stage (#406): its matrix is red when
-  any area failed or was cancelled, and it passes skipped only when the install proof was not asked for. The
+  any area failed or was cancelled, and it passes skipped only when the install proof was not asked for. The chat's open
+  time is one stage too (#421): it passes skipped only when the browser suite was not asked for. The
   profile-size measurement is no stage: `check` never waits for it (#408).
 - Every test runs offline (#266). `tests/offline.mjs` holds one table of what is local: `localhost`, the special-use
   names `.localhost`, `.test`, `.example` and `.invalid` (RFC 6761, never delegated), loopback and unspecified
@@ -182,8 +192,9 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   zone. A change to the workflow or its test runs it on its own pull request.
 
 Every job of the full check has a time limit near its budget: one and a half times the minutes measured on run 44636876755,
-the first run with every other ticket of spec #401, kept between 3 and 12 minutes; `visual` and `install-measure` are no
-part of it and keep the limits they had. A job that runs past its limit ends as cancelled or failed, and `check` is red
+the first run with every other ticket of spec #401, kept between 3 and 12 minutes; `chat-open` is new in #421, and its
+first run confirms the 5 minutes estimated for one lane's stack, one build and the one test. `visual` and `install-measure`
+are no part of it and keep the limits they had. A job that runs past its limit ends as cancelled or failed, and `check` is red
 either way. `tests/ci-budgets.test.mjs` reads the limits from `.github/workflows/ci.yml` and fails when one rises without
 the table changing.
 
@@ -195,6 +206,7 @@ the table changing.
 | `image` | 3.7 min | 6 min |
 | `database` | 2.1 min | 4 min |
 | `integration` | 10.6 min, its slowest shard | 12 min |
+| `chat-open` | 5 min, an estimate until its first run | 8 min |
 | `install` | 9.5 min, its slowest area (backup) | 12 min |
 | `check` | 0.1 min | 3 min |
 
@@ -230,7 +242,7 @@ the parts are timed from run 43642299138.
 | static: lint, types, knip, catalogues, OpenAPI, node --test (about 540 tests) | fast, unit | rules in `lib/`, routes and permissions tables, wording, workflow and release files; no unused file, export or dependency (knip, #81) | 1.6 min, every run | 1.6 min, every run | keep |
 | database: *.verify.sql, check-rls.sql, tests/db.sh (pgTAP, migration replays) | database | row-level security, grants, company isolation, migrations on legacy data | 1.5 min inside `integration` (plus the stack start), every non-document PR | own `database` job, when `supabase/` or a database test changes; every `main` push | moved to its own job; never removed (isolation and permissions) |
 | proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: the journeys' area, `main`, or `e2e` input; not for screens alone (#213) | gated |
-| browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: the journeys' area, `main`, or `e2e` input; screens alone run only the screens (`visual`, #213) | gated; screens alone run the comparisons only (#213) |
+| browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run; the chat's open time in its own `chat-open` job, #421) | whole-app browser | journeys, the 72 approved screens, the chat's open time, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: the journeys' area, `main`, or `e2e` input; screens alone run only the screens (`visual`, #213); the chat's open time in `chat-open` | gated; screens alone run the comparisons only (#213) |
 | image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration`, not for screens alone (#213) | gated with it |
 | install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback, Agents and their profiles | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files and `lib/` outside the catalogues, `worker/`, `next.config.mjs`, `server.js` (the code it drives against the real Hermes); every `main` push; or `install` input | gated as before on a PR; `app/` and `components/` alone still skip it |
 | install-measure | install measurement | the disk and memory twenty Agent profiles take, printed for the README | inside `install`, 85 s of every install run | its own job on a push to `main` and on a manual run only, never a pull request, no stage of `check` (#408) | moved off the pull request's path (Omar, 2026-11-19) |

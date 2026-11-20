@@ -100,3 +100,26 @@ test('ci.sh installs no system package for the CI integration run, and the visua
   assert.match(text, /npx playwright install --with-deps chromium/);
   assert.match(arm('visual'), /install_chromium/);
 });
+
+// #421: the chat's open time (project `alone`, #346) runs in a job of its own with a machine to itself, on the pull
+// request too. The browser shards leave the project empty (`GTMWORKS_HOSTED_ELSEWHERE`), so none of them runs the test,
+// and the job runs the one command of the repo.
+test('the chat-open job runs the chat test with a machine to itself, and no shard runs it (#421)', () => {
+  const { jobs } = workflow();
+  const chatOpen = jobs['chat-open'];
+  assert.ok(chatOpen, 'the workflow has a chat-open job');
+  assert.deepEqual(chatOpen.needs, ['changes']);
+  assert.equal(chatOpen.if, "${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}");
+  assert.equal(chatOpen.steps.find(step => step.name === 'chat open').run, './ci.sh chat-open');
+  // The `alone` project is empty where the shards run, as the measured budgets already are.
+  const config = readFileSync('playwright.config.ts', 'utf8');
+  assert.match(config, /\{ name: 'alone', testMatch: hostedElsewhere \? \/\^\$\/ : 'chat-steps\.spec\.ts', workers: 1 \}/);
+  const ci = readFileSync('ci.sh', 'utf8');
+  assert.match(ci, /GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=\$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e/);
+  const start = ci.indexOf('\n chat-open)');
+  assert.ok(start >= 0, 'ci.sh has a chat-open arm');
+  const arm = ci.slice(start, ci.indexOf('\n  ;;', start));
+  assert.match(arm, /GTMWORKS_TEST_LANES=1 npx playwright test --project=alone --no-deps/);
+  assert.match(arm, /LANE=0 bash scripts\/web\.sh build/);
+  assert.match(arm, /GTMWORKS_WEB_PREBUILT=true/);
+});

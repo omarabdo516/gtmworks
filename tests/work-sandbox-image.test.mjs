@@ -55,3 +55,12 @@ test('the README states the image size on disk and that every Company\'s sandbox
   assert.match(install, /3\.26 GB/);
   assert.match(install, /every Company's (work )?sandbox runs it/i);
 });
+
+// Every release file the install proof writes for this release pins the work sandbox image (#392): a call that names
+// none makes release files the installer refuses. Only the previous release, built from its own older script, names none.
+test('every release file the install proof writes for this release names the work sandbox image', () => {
+  const run = installJob().steps.map(step => step.run || '').join('\n');
+  const calls = [...run.matchAll(/node scripts\/release-assets\.mjs ([^|]*)\)? \|\|/g)].map(([, args]) => args);
+  assert.ok(calls.length >= 5, 'the proof writes release files');
+  for (const args of calls.filter(args => !args.startsWith('"$previous"'))) assert.match(args, /"\$sandbox"/, args);
+});

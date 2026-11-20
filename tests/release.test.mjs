@@ -164,6 +164,7 @@ case "$*" in
   # Runs the installer's own extraction script, with the image's /app/install and the mounted /install mapped here.
   eval "script=\\\${$#}"
   umask 022; sh -ec "$(printf '%s' "$script" | sed -e "s#/app/install/#$IMAGE_ROOT/#g" -e 's#/install/#./#g')";;
+ *' cat /app/release-source/scripts/get.sh') cat "$IMAGE_GET";;
  *install-env.mjs\\ engine-key*) printf 'a1%.0s' $(seq 1 32);;
  *install-env.mjs\\ generate*) printf 'GENERATED=1\\n';;
  *'count(*) from public.companies'*) echo 1;;
@@ -178,7 +179,7 @@ function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app),sandboxIm
  const bin=mkdtempSync(join(tmpdir(),'gtmworks-release-bin-'));
  t.after(()=>rmSync(bin,{recursive:true,force:true}));
  writeFileSync(join(bin,'docker'),dockerShim,{mode:0o755});
- const env={...process.env,PATH:`${bin}:${process.env.PATH}`,COMMANDS:join(bin,'commands'),MIGRATION_SQL:join(bin,'migration.sql'),IMAGE_ROOT:imageFolder(t)};
+ const env={...process.env,PATH:`${bin}:${process.env.PATH}`,COMMANDS:join(bin,'commands'),MIGRATION_SQL:join(bin,'migration.sql'),IMAGE_ROOT:imageFolder(t),IMAGE_GET:join(process.cwd(),'scripts/get.sh')};
  const runWith=(extra,...args)=>spawnSync('sh',['install.sh',...args],{cwd:directory,env:{...env,...extra},encoding:'utf8'});
  return {directory,imageRoot:env.IMAGE_ROOT,run:(...args)=>runWith({},...args),runWith,clear:()=>rmSync(env.COMMANDS,{force:true}),
   commands:()=>existsSync(env.COMMANDS)?readFileSync(env.COMMANDS,'utf8'):'',sql:()=>readFileSync(env.MIGRATION_SQL,'utf8'),
@@ -360,6 +361,31 @@ test('a release update replaces the mounted install files in place, so the runni
  assert.ok(readdirSync(seen('supabase/migrations')).length>0);
 });
 
+// #437: a gtmworks command from before #437 never replaces itself, but its update runs the new release's install.sh, which
+// leaves the get.sh its image carries. The running command is the old file: the new one is moved over it, never written in.
+test('a release install or update leaves the gtmworks command its image carries, and refuses one that is not the installer', t => {
+ const release=releaseDirectory(t);
+ assert.equal(release.run().status,0);
+ assert.equal(existsSync(join(release.directory,'gtmworks.sh')),false,'a folder without the command (install.sh run by hand) gets none');
+ const command=join(release.directory,'gtmworks.sh');
+ writeFileSync(command,'#!/bin/sh\n# an older gtmworks command\n');
+ const held=openSync(command,'r');
+ t.after(()=>closeSync(held));
+ const updated=release.run('update');
+ assert.equal(updated.status,0,updated.stderr);
+ assert.equal(readFileSync(command,'utf8'),readFileSync('scripts/get.sh','utf8'));
+ assert.equal(statSync(command).mode & 0o111,0o111);
+ assert.equal(readFileSync(`/proc/self/fd/${held}`,'utf8'),'#!/bin/sh\n# an older gtmworks command\n','the running copy is not written into');
+ const bad=join(release.directory,'not-get.sh');
+ writeFileSync(bad,'<html>Not Found</html>\n');
+ writeFileSync(command,'#!/bin/sh\n# an older gtmworks command\n');
+ const refused=release.runWith({IMAGE_GET:bad},'update');
+ assert.equal(refused.status,0,refused.stderr);
+ assert.match(refused.stderr,/^The gtmworks command in .* is not the gtmworks installer: gtmworks\.sh is kept\.$/m);
+ assert.equal(readFileSync(command,'utf8'),'#!/bin/sh\n# an older gtmworks command\n');
+ assert.equal(existsSync(join(release.directory,'gtmworks.sh.tmp')),false);
+});
+
 test('CI updates a release install on a real database, applying a new migration through the running bind mount', () => {
  const install=installJob();
  const step=install.steps.find(step=>step.env?.INSTALL_REF);
@@ -444,7 +470,7 @@ test('a vX.Y.Z tag only requests a release; the publishing workflow runs from ma
  // github.ref and github.sha name main on workflow_run; the commit and tag come only from the checked provenance.
  assert.doesNotMatch(workflowText,/github\.(sha|ref|ref_name)\b/);
  const provenance=workflow.jobs.provenance;
- assert.deepEqual(provenance.permissions,{contents:'read',actions:'read'});
+ assert.deepEqual(provenance.permissions,{contents:'read',actions:'read',packages:'read'});
  assert.match(provenance.if,/workflow_run\.conclusion == 'success'/);
  assert.match(provenance.if,/workflow_run\.event == 'push'/);
  // Every job that writes waits on it, and every checkout takes the exact commit it proved.
@@ -459,6 +485,9 @@ test('a vX.Y.Z tag only requests a release; the publishing workflow runs from ma
  assert.equal(workflow.jobs['install-test'].if,"${{ needs.provenance.outputs.release != '' }}");
  const build=workflow.jobs.image.steps.find(step=>step.uses?.startsWith('docker/build-push-action@'));
  assert.equal(build.with.tags,'${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}');
+ // The image carries the version it is published as, which Update ready compares with the newest (#442).
+ assert.equal(build.with['build-args'],'GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}');
+ assert.match(readFileSync('Dockerfile','utf8'),/ARG GTMWORKS_VERSION=\n.*GTMWORKS_VERSION=\$GTMWORKS_VERSION/);
  assert.equal(build.with.platforms,'linux/amd64,linux/arm64');
  assert.equal(build.with.push,true);
  // The work sandbox image of the same release is built and pushed beside it (#392, ADR 0020), from its one build file.
@@ -791,7 +820,6 @@ const ghShim=`gh() {
  [[ $1 == --paginate ]] && shift
  local url=$1 file; shift
  case "$url" in
-  */commits/main) file=main;;
   */git/ref/tags/*) file=ref;;
   */git/tags/*) file=annotated;;
   */compare/*) file=compare;;
@@ -803,6 +831,15 @@ const ghShim=`gh() {
  [[ -f $STUB/$file ]] || { echo "gh: HTTP 404 $url" >&2; return 1; }
  if [[ \${1:-} == --jq ]]; then jq -r "$2" "$STUB/$file"; else cat "$STUB/$file"; fi
 }`;
+// The registry's answer for the published main image: its raw index, `not found`, or another error.
+const registryShim=`docker() {
+ [[ "$1 $2 $3 $4" == "buildx imagetools inspect --raw" ]] || return 1
+ printf '%s\\n' "$*" >> "$STUB/calls"
+ if [[ -f $STUB/published ]]; then cat "$STUB/published"; return; fi
+ if [[ -f $STUB/registry-error ]]; then cat "$STUB/registry-error" >&2; return 1; fi
+ echo "ERROR: $5: not found" >&2; return 1
+}`;
+const publishedIndex=revision=>JSON.stringify({mediaType:'application/vnd.oci.image.index.v1+json',manifests:[],...(revision?{annotations:{'org.opencontainers.image.revision':revision}}:{})});
 const ciRun=(id,changes={})=>({id,head_sha:sha,event:'push',head_branch:'main',head_repository:{full_name:repo},conclusion:'success',...changes});
 const pages=(...list)=>list.map(page=>JSON.stringify(page)).join('\n');
 function reviewedTag() {
@@ -827,8 +864,8 @@ function provenance(t,{path='.github/workflows/release-tag.yml',branch='v1.2.3',
  const output=join(directory,'output');
  writeFileSync(output,'');
  const step=workflow.jobs.provenance.steps.find(step=>step.id==='provenance');
- const result=spawnSync('bash',['-c',`set -eo pipefail\n${ghShim}\n${step.run}`],{encoding:'utf8',env:{...process.env,STUB:directory,
-  GITHUB_OUTPUT:output,GITHUB_REPOSITORY:repo,GH_TOKEN:'',WORKFLOW_PATH:path,EVENT:'push',HEAD_BRANCH:branch,HEAD_SHA:head}});
+ const result=spawnSync('bash',['-c',`set -eo pipefail\n${ghShim}\n${registryShim}\n${step.run}`],{encoding:'utf8',env:{...process.env,STUB:directory,
+  GITHUB_OUTPUT:output,GITHUB_REPOSITORY:repo,GH_TOKEN:'',WORKFLOW_PATH:path,EVENT:'push',HEAD_BRANCH:branch,HEAD_SHA:head,IMAGE:'ghcr.io/omarabdo516/gtmworks'}});
  const outputs=Object.fromEntries(readFileSync(output,'utf8').split('\n').filter(Boolean).map(line=>line.split(/=(.*)/s).slice(0,2)));
  const calls=existsSync(join(directory,'calls'))?readFileSync(join(directory,'calls'),'utf8'):'';
  return {result,outputs,calls};
@@ -881,21 +918,60 @@ test('an unreviewed, moved, unchecked or malformed tag publishes nothing', t => 
  refused('short sha',{head:'abc123'});
 });
 
-test('main publishes only the reviewed head of main whose required CI check passed', t => {
- const mainFiles=head=>({...reviewedTag(),main:{sha:head}});
- const proven=provenance(t,{path:'.github/workflows/ci.yml',branch:'main',files:mainFiles(sha)});
+test('main publishes the newest commit whose required CI check passed, even after main moved on, and never an older one over a newer (#448)', t => {
+ const ci={path:'.github/workflows/ci.yml',branch:'main'};
+ // main has moved on since this commit (main: other); the published image is older than it (compare: ahead).
+ const files=changes=>({...reviewedTag(),main:{sha:other},compare:{status:'ahead'},published:publishedIndex('3'.repeat(40)),...changes});
+ const proven=provenance(t,{...ci,files:files()});
  assert.equal(proven.result.status,0,proven.result.stderr);
  assert.deepEqual(proven.outputs,{sha,tag:'main',release:''});
- // A re-run of an old main run, or an older commit whose CI finished late: nothing is published, without failing.
- const stale=provenance(t,{path:'.github/workflows/ci.yml',branch:'main',files:mainFiles(other)});
- assert.equal(stale.result.status,0,stale.result.stderr);
- assert.deepEqual(stale.outputs,{sha:'',tag:'',release:''});
- assert.match(stale.result.stdout,/::notice::/);
- const failed=provenance(t,{path:'.github/workflows/ci.yml',branch:'main',files:{...mainFiles(sha),'jobs-7':pages({jobs:[{name:'check',conclusion:'failure'}]})}});
+ assert.match(proven.calls,new RegExp(`compare/${'3'.repeat(40)}\\.\\.\\.${sha}`),'the published commit is compared with this one');
+ assert.match(proven.calls,/buildx imagetools inspect --raw ghcr\.io\/omarabdo516\/gtmworks:main/);
+ // Nothing published yet, or an image from before the revision was recorded: this commit is published.
+ for(const [name,changes] of [['no image',{published:undefined}],['no revision',{published:publishedIndex(null)}]]) {
+  const run=provenance(t,{...ci,files:files(changes)});
+  assert.equal(run.result.status,0,`${name}: ${run.result.stderr}`);
+  assert.deepEqual(run.outputs,{sha,tag:'main',release:''},name);
+ }
+ // The same commit again (a re-run), or one older than the published one: nothing is published, without failing.
+ for(const [name,changes] of [['identical',{published:publishedIndex(sha),compare:{status:'identical'}}],['older',{compare:{status:'behind'}}],['diverged',{compare:{status:'diverged'}}]]) {
+  const run=provenance(t,{...ci,files:files(changes)});
+  assert.equal(run.result.status,0,`${name}: ${run.result.stderr}`);
+  assert.deepEqual(run.outputs,{sha:'',tag:'',release:''},name);
+  assert.match(run.result.stdout,/::notice::/,name);
+ }
+ // A registry answer that cannot be read stops the release rather than reading as unpublished.
+ const unreadable=provenance(t,{...ci,files:files({published:undefined,'registry-error':'ERROR: unauthorized'})});
+ assert.notEqual(unreadable.result.status,0);
+ assert.deepEqual(unreadable.outputs,{});
+ const failed=provenance(t,{...ci,files:files({'jobs-7':pages({jobs:[{name:'check',conclusion:'failure'}]})})});
  assert.notEqual(failed.result.status,0);
  assert.deepEqual(failed.outputs,{});
- const branch=provenance(t,{path:'.github/workflows/ci.yml',branch:'feature',files:mainFiles(sha)});
+ const branch=provenance(t,{path:'.github/workflows/ci.yml',branch:'feature',files:files()});
  assert.notEqual(branch.result.status,0);
+});
+
+test('the main image records its commit, which the next main release reads back (#448)', () => {
+ const build=workflow.jobs.image.steps.find(step=>step.id==='build');
+ assert.equal(build.with.annotations,'index:org.opencontainers.image.revision=${{ needs.provenance.outputs.sha }}');
+ // Provenance reads the published main image, so it logs in to read packages and nothing more.
+ assert.deepEqual(workflow.jobs.provenance.permissions,{contents:'read',actions:'read',packages:'read'});
+ assert.ok(workflow.jobs.provenance.steps.some(step=>step.uses?.startsWith('docker/login-action@')));
+});
+
+// GitHub's expression syntax for the concurrency group, read as JavaScript: && and || return a value, as GitHub's do.
+const groupOf=run=>new Function('github','format',`return ${workflow.concurrency.group.replace(/^release-\$\{\{|\}\}$/g,'').trim()};`)(
+ {event:{workflow_run:run}},(text,...values)=>text.replace(/\{(\d+)\}/g,(_,index)=>values[index]));
+test('a CI run on another branch never enters the main release group, so it never replaces a pending main release (#448)', () => {
+ const ci={path:'.github/workflows/ci.yml',event:'push',head_branch:'main',head_sha:sha};
+ assert.equal(groupOf(ci),'main');
+ for(const run of [{...ci,event:'pull_request',head_branch:'fix/one'},{...ci,event:'pull_request',head_branch:'main'},{...ci,event:'workflow_dispatch'},{...ci,head_branch:'spec/x'}])
+  assert.notEqual(groupOf(run),'main',JSON.stringify(run));
+ // Two pull requests' runs never share a group either, so neither waits for the other.
+ assert.notEqual(groupOf({...ci,event:'pull_request',head_branch:'a'}),groupOf({...ci,event:'pull_request',head_branch:'b'}));
+ // A tag's release keeps its own group.
+ assert.equal(groupOf({path:'.github/workflows/release-tag.yml',event:'push',head_branch:'v1.2.3',head_sha:sha}),'v1.2.3');
+ assert.equal(workflow.concurrency['cancel-in-progress'],false);
 });
 
 test('the README names the one-time step that makes the private package public, and backing up before an update', () => {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeHermes } from './fake-hermes.mjs';
+import { fakeHermes, noProviderError } from './fake-hermes.mjs';
 import { startRun, readRun, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 
@@ -109,6 +109,18 @@ test('a run Hermes no longer knows is read as lost, not as unreachable',async()=
  globalThis.fetch=async()=>new Response('<html>Not Found</html>',{status:404});
  try { assert.deepEqual(await readRun({address:'http://127.0.0.1:9',profile:'writer',key:'k',run:'run_1'}),{status:'unreachable',output:null,session:null,usage:null}); }
  finally { globalThis.fetch=real; }
+});
+
+test('a run that failed because the Engine has no model provider says so; any other failure does not',async()=>{
+ const fake=await fakeHermes(); fake.settings.ending='failed'; fake.settings.failure=noProviderError;
+ try {
+  const run=await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'});
+  assert.deepEqual(await readRun({...connection(fake),run}),{status:'failed',output:null,session:'s',usage:{input:14000,output:12},noModel:true});
+  assert.equal((await engineFor(connection(fake)).read(run)).noModel,true);
+  fake.settings.failure='⚠️ Provider authentication failed: HTTP 401: invalid x-api-key';
+  assert.equal((await readRun({...connection(fake),run})).noModel,undefined);
+  assert.equal((await engineFor(connection(fake)).read(run)).noModel,undefined);
+ } finally { await fake.close(); }
 });
 
 test('a Hermes answer larger than the limit is not read to its end, and its run is failed',async()=>{

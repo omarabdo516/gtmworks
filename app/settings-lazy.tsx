@@ -3,7 +3,7 @@ import { lazy, Suspense, type ComponentProps } from 'react';
 import type { CompanySubscriptions as Subscriptions } from './company-engine-client';
 import type Knowledge from './company-knowledge-client';
 import type { CompanyLearningMode as CompanyMode, AgentLearningMode as AgentMode, RuleActions as RuleAction } from './settings-learning-client';
-import type { ProviderKeys as Keys, DefaultModel as Default, EachAgent as Each, AgentModel as Model } from './settings-models';
+import type { ProviderKeys as Keys, SpeechToText as Speech, DefaultModel as Default, EachAgent as Each, AgentModel as Model } from './settings-models';
 
 // Parts of the settings overlay that only one of its sections shows, loaded on demand so they stay out of the page chunk
 // every company route loads (page weight, #55): the company sign-in (Company section), the member's
@@ -22,6 +22,7 @@ const LazySaveBar=lazy(()=>import('./settings-agent-form').then(module=>({defaul
 const LazyVoice=lazy(()=>import('./settings-agent-voice').then(module=>({default:module.AgentVoice})));
 const LazyEffort=lazy(()=>import('./settings-agent-effort').then(module=>({default:module.AgentEffort})));
 const LazyKeys=lazy(()=>import('./settings-models').then(module=>({default:module.ProviderKeys})));
+const LazySpeech=lazy(()=>import('./settings-models').then(module=>({default:module.SpeechToText})));
 const LazyDefault=lazy(()=>import('./settings-models').then(module=>({default:module.DefaultModel})));
 const LazyEach=lazy(()=>import('./settings-models').then(module=>({default:module.EachAgent})));
 const LazyModel=lazy(()=>import('./settings-models').then(module=>({default:module.AgentModel})));
@@ -48,6 +49,7 @@ export function AgentVoice(props:{company:string,agent:string,personName:string,
 /** @param {{agent:string,effort:string|null,editable:boolean}} props */
 export function AgentEffort(props:{agent:string,effort:string|null,editable:boolean}) { return <Suspense fallback={null}><LazyEffort {...props}/></Suspense>; }
 export function ProviderKeys(props:ComponentProps<typeof Keys>) { return <Suspense fallback={null}><LazyKeys {...props}/></Suspense>; }
+export function SpeechToText(props:ComponentProps<typeof Speech>) { return <Suspense fallback={null}><LazySpeech {...props}/></Suspense>; }
 export function DefaultModel(props:ComponentProps<typeof Default>) { return <Suspense fallback={null}><LazyDefault {...props}/></Suspense>; }
 export function EachAgent(props:ComponentProps<typeof Each>) { return <Suspense fallback={null}><LazyEach {...props}/></Suspense>; }
 export function AgentModel(props:ComponentProps<typeof Model>) { return <Suspense fallback={null}><LazyModel {...props}/></Suspense>; }

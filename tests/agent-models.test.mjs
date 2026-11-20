@@ -24,10 +24,10 @@ const seed=fake=>{
  for(const name of [space,companyProfileName,own(writer)]) Object.assign(fake.settings.profiles.get(name),{provider:'openrouter',model:'openai/gpt-5.5'});
  Object.assign(fake.settings.profiles.get(own(critic)),{provider:'anthropic',model:'claude-opus-4-6'});
 };
-// The rows the database answers with (company_agent_models): the main Agent keeps the Company profile, the writer and the
-// critic their own; only the critic chose a model of its own.
+// The rows the database answers with (company_agent_models): the main Agent keeps the Company profile, which is still its
+// own and choosable (#425, ADR 0016), the writer and the critic their own; only the critic chose a model of its own.
 const rows=({choices={[critic]:'anthropic/claude-opus-4-6'}}={})=>[
- {agent:lead,name:'Lead',profile:companyProfileName,own:true,choosable:false,model_choice:null,subagents:false},
+ {agent:lead,name:'Lead',profile:companyProfileName,own:true,choosable:true,model_choice:choices[lead]??null,subagents:false},
  {agent:writer,name:'Writer',profile:own(writer),own:true,choosable:true,model_choice:null,subagents:false},
  {agent:critic,name:'Critic',profile:own(critic),own:true,choosable:true,model_choice:choices[critic]??null,subagents:false},
 ];
@@ -119,12 +119,13 @@ test('a Company reads its default model and each Agent\'s own, with the Engine\'
   assert.equal(read.models.default.model,'openrouter/openai/gpt-5.5');
   assert.deepEqual(read.models.default.options.map(option=>`${option.provider}/${option.model}`),['openrouter/anthropic/claude-opus-4.6','openrouter/openai/gpt-5.5']);
   assert.deepEqual(read.models.agents.map(agent=>({name:agent.name,model:agent.model,choice:agent.choice,choosable:agent.choosable})),[
-   {name:'Lead',model:'openrouter/openai/gpt-5.5',choice:null,choosable:false},
+   {name:'Lead',model:'openrouter/openai/gpt-5.5',choice:null,choosable:true},
    {name:'Writer',model:'openrouter/openai/gpt-5.5',choice:null,choosable:true},
    {name:'Critic',model:'anthropic/claude-opus-4-6',choice:'anthropic/claude-opus-4-6',choosable:true},
   ]);
   assert.ok(read.models.agents.filter(agent=>agent.choosable).every(agent=>agent.options.length>0),'each Agent that can choose gets the choices its own profile lists');
-  assert.deepEqual(read.models.agents.find(agent=>agent.name==='Lead').options,[],'an Agent on the Company profile has no model of its own to choose');
+  // The main Agent's `co-` profile is its own (#425): its Owner gets the choices that profile lists.
+  assert.ok(read.models.agents.find(agent=>agent.name==='Lead').options.length>0);
   assert.ok(calls.some(call=>call.name==='company_agent_models'&&call.args.c===company));
   // A member who is not the Owner gets the values and no choices to make.
   const member=await readCompanyModels(database({owner:false}).db,{company,hermes:install(fake),driver:driver(fake),owner:false});
@@ -161,6 +162,25 @@ test('the Company default reaches the shared space and every Agent without its o
    [writer,'model','openrouter/openai/gpt-5.5','openrouter/anthropic/claude-opus-4.6'],
   ]);
   assert.equal(fake.settings.profiles.get(own(critic)).model,'claude-opus-4-6');
+ } finally { await fake.close(); }
+});
+
+test('a Company default leaves a main Agent that chose its own model on its choice, though another Agent still shares its profile', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake); schema(fake);
+  Object.assign(fake.settings.profiles.get(companyProfileName),{provider:'anthropic',model:'claude-fable-5-1'});
+  // Lead chose its own model; Mover still runs on Lead's `co-` profile while the worker moves it, and follows the default.
+  const mover='3a000000-0000-0000-0000-000000000041';
+  const {db,logged}=database({rowsFor:[...rows({choices:{[lead]:'anthropic/claude-fable-5-1',[critic]:'anthropic/claude-opus-4-6'}}),
+   {agent:mover,name:'Mover',profile:companyProfileName,own:false,choosable:false,model_choice:null,subagents:false}]});
+  const result=await changeCompanySetting(db,{company,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
+  assert.equal(result.state,'written',JSON.stringify(result));
+  assert.deepEqual(requestsTo(fake,'/model').map(request=>request.path),[`/api/profiles/${space}/model`,`/api/profiles/${own(writer)}/model`]);
+  assert.equal(fake.settings.profiles.get(companyProfileName).model,'claude-fable-5-1','the main Agent keeps its own choice');
+  assert.deepEqual(result.agents.map(agent=>[agent.name,agent.written]),[['Lead',false],['Writer',true],['Critic',false],['Mover',false]]);
+  assert.deepEqual(result.failed,[],'a profile left alone for its chooser is no failure');
+  assert.deepEqual(logged().map(row=>row.agent),[writer]);
  } finally { await fake.close(); }
 });
 
@@ -222,9 +242,12 @@ test('one Agent\'s model is written to its own profile and remembered as its cho
   assert.equal(follow.state,'written',JSON.stringify(follow));
   assert.equal(fake.settings.profiles.get(own(writer)).model,'openai/gpt-5.5');
   assert.deepEqual(calls.filter(call=>call.name==='set_agent_model').at(-1).args,{agent:writer,model:null});
-  // An Agent that keeps the Company profile has no model of its own, and one that chose is never overwritten by the default.
-  const shared=await changeCompanySetting(db,{company,agent:lead,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
-  assert.equal(shared.state,'shared');
+  // The main Agent on the Company profile chooses its own as well (#425): written to `co-` and remembered as its choice.
+  const main=await changeCompanySetting(db,{company,agent:lead,setting:'model',value:'openrouter/anthropic/claude-opus-4.6',hermes:install(fake),driver:driver(fake)});
+  assert.equal(main.state,'written',JSON.stringify(main));
+  assert.equal(requestsTo(fake,'/model').at(-1).path,`/api/profiles/${companyProfileName}/model`);
+  assert.equal(fake.settings.profiles.get(companyProfileName).model,'anthropic/claude-opus-4.6');
+  assert.deepEqual(calls.filter(call=>call.name==='set_agent_model').at(-1).args,{agent:lead,model:'openrouter/anthropic/claude-opus-4.6'});
   // An Agent the worker is still moving holds a record but runs on the Company profile: it is not choosable either.
   const moving=rows(); moving[1]={...moving[1],own:false};
   const mid=await changeCompanySetting(database({rowsFor:moving}).db,{company,agent:writer,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)});
@@ -255,8 +278,16 @@ test('the Owner turns sub-agents on for one Agent, logged, and its settings are 
   assert.deepEqual(on,{state:'written',setting:'subagents',agent:writer,subagents:true});
   assert.deepEqual(calls.filter(call=>call.name==='set_agent_subagents').map(call=>call.args),[{agent:writer,enabled:true}]);
   assert.deepEqual(logged().map(row=>[row.agent,row.setting,row.old_value,row.new_value]),[[writer,'subagents',false,true]]);
-  // An Agent on the Company profile has no sub-agents switch of its own; only a boolean is a value.
-  assert.equal((await changeCompanySetting(db,{company,agent:lead,setting:'subagents',value:true})).state,'shared');
+  // The main Agent on the Company profile has its own switch too (#425); an Agent sharing a profile it does not keep has
+  // none; only a boolean is a value.
+  assert.deepEqual(await changeCompanySetting(db,{company,agent:lead,setting:'subagents',value:true}),{state:'written',setting:'subagents',agent:lead,subagents:true});
+  const sharing=rows(); sharing[1]={...sharing[1],own:false,choosable:false};
+  assert.equal((await changeCompanySetting(database({rowsFor:sharing}).db,{company,agent:writer,setting:'subagents',value:true})).state,'shared');
+  // While the worker still moves another Agent off the main Agent's profile, the profile is shared: refused, as every
+  // other per-Agent write is, until the move finishes.
+  const moving=[...rows(),{agent:'3a000000-0000-0000-0000-000000000041',name:'Mover',profile:companyProfileName,own:false,choosable:false,model_choice:null,subagents:false}];
+  assert.equal((await changeCompanySetting(database({rowsFor:moving}).db,{company,agent:lead,setting:'subagents',value:true})).state,'shared');
+  assert.equal((await changeCompanySetting(database({rowsFor:moving}).db,{company,agent:lead,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)})).state,'shared');
   assert.equal((await changeCompanySetting(db,{company,agent:writer,setting:'subagents',value:'yes'})).state,'invalid');
   assert.equal((await changeCompanySetting(database({owner:false}).db,{company,agent:writer,setting:'subagents',value:true})).state,'notAllowed');
   // A delegation setting is refused while sub-agents are off, and written through #125's route when they are on.
