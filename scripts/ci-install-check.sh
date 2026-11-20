@@ -79,7 +79,7 @@ engine_id=$(first_engine_id) || fail 'the first Engine container'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine_id") != *HostPort* ]] || fail 'the Engine publishes no host port'
 # The Engine joins the install network and its Company's work network, and nothing else (#393).
 engine_networks=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine_id" | sort)
-[[ $engine_networks == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail 'the Engine joins its install network and its work network only'
+[[ $engine_networks == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only (got: $engine_networks)"
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \
     || fail "the $service joins the Engine's network"
