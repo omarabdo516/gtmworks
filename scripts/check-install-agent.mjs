@@ -27,14 +27,17 @@ assert.equal((await engineFor({...connection,key:randomBytes(32).toString('hex')
 const agent=engineFor({...connection,profile:name});
 const run=await agent.start({conversation:randomUUID(),input:'مرحباً، اكتب عنواناً قصيراً.',idempotencyKey:randomUUID()});
 assert.equal(typeof run,'string','a Run started for the new Agent');
-// The Engine knows the Run under that profile; it is read until it ends or a minute passes.
+// The Engine knows the Run under that profile; it is read until it ends or a minute passes. Unreachable is the contract's
+// "could not be asked this time, the run may still finish" (lib/engine.mjs), so it is read again like a running Run, and
+// a Run still unreachable when the minute ends fails the check.
 let read;
 for(let left=60;left>0;left--) {
  read=await agent.read(run);
- assert.ok(['running','completed','failed','stopped'].includes(read.state),`run read back as ${read.state}`);
- if(read.state!=='running') break;
+ assert.ok(['running','unreachable','completed','failed','stopped'].includes(read.state),`run read back as ${read.state}`);
+ if(read.state!=='running'&&read.state!=='unreachable') break;
  await new Promise(resolve=>setTimeout(resolve,1000));
 }
+assert.notEqual(read.state,'unreachable','the Engine answers for the Run within a minute');
 // The profile's gateway may still hold it just after its Run: the Engine then answers 500, read as unreachable, and the
 // removal is asked again for up to half a minute.
 let removed;
