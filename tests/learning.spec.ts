@@ -59,13 +59,13 @@ test.afterAll(async()=>{ await fake?.close(); });
 const learning=(email:string,page:import('@playwright/test').Page)=>signIn(page,email,'/c/rs-learning/settings?section=learning');
 const group=(page:import('@playwright/test').Page,name:string)=>page.getByRole('dialog',{name:'Settings'}).getByRole('radiogroup',{name});
 const ruleRow=(page:import('@playwright/test').Page,text:string)=>page.locator('.ln-row').filter({hasText:text});
-// The server writes both write approvals to a profile, memory first: wait for each exact value the test reads.
-// The Engine holds a saved mode before the page does: the radio is marked only once the whole Settings page is read again,
-// which asks the Company's Engine for every section and can take longer than the default 5 s on a loaded runner (#420).
+// The server writes both write approvals to a profile, memory first: wait for each exact value the test reads. The save,
+// and then the radio, which is marked only once the whole Settings page is read again, each ask the Company's Engine and
+// can take longer than the default 5 s on a loaded runner (#420).
 const reread={timeout:15000};
 const wrote=async(name:string,value:boolean)=>{
- await expect.poll(()=>fake.settings.profiles.get(name)!.config.memory?.write_approval).toBe(value);
- await expect.poll(()=>fake.settings.profiles.get(name)!.config.skills?.write_approval).toBe(value);
+ await expect.poll(()=>fake.settings.profiles.get(name)!.config.memory?.write_approval,reread).toBe(value);
+ await expect.poll(()=>fake.settings.profiles.get(name)!.config.skills?.write_approval,reread).toBe(value);
 };
 const choice=(agent:string)=>JSON.parse(query(`select learning_mode_choice as choice from public.agent_profiles where agent_id='${agent}'`))[0].choice;
 
@@ -102,7 +102,7 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  expect(fake.settings.profiles.get(profile)!.config.skills?.write_approval).toBe(true);
  await expect(overlay.locator('.ln-ag').filter({hasText:'Writer'})).toContainText('Learns on its own');
  await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Asks first');
- await expect.poll(()=>choice(writer)).toBe('auto');
+ await expect.poll(()=>choice(writer),reread).toBe('auto');
  // The Writer pins "Asks first", then the Company turns by itself: the Writer's own choice stands. The group reads
  // mixed once the page has re-read the profiles, and only then do the Engine's profiles hold the Company's turn.
  await writerModes.getByRole('radio',{name:'Asks first',exact:true}).click();
@@ -123,7 +123,7 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  await expect(following.getByRole('radio',{name:'Follow the company'})).toHaveAttribute('aria-checked','true',reread);
  expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(false);
  expect(fake.settings.profiles.get(writerProfile)!.config.skills?.write_approval).toBe(false);
- await expect.poll(()=>choice(writer)).toBe(null);
+ await expect.poll(()=>choice(writer),reread).toBe(null);
 });
 
 test('the Owner forgets a rule and brings it back, both written in the log, and a learned Skill has no restore', async ({page}) => {
