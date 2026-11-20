@@ -125,5 +125,6 @@ test('an app connected in Settings reads connected on every open card for it aft
  await expect(page.getByRole('group',{name:'Notion connected',exact:true}).locator('.card__outcome')).toHaveText('Notion connected');
  await expect(page.getByRole('group',{name:'Notion postponed',exact:true}).locator('.card__outcome')).toHaveText('Postponed · you can connect it from the details any time');
  await expect(page.getByRole('group',{name:'Connect Notion',exact:true})).toHaveCount(0);
- expect(fake.settings.profiles.get(profile)!.config.mcp_servers.notion).toMatchObject({enabled:true,tools:installed('notion').tools});
+ expect(fake.settings.profiles.get(profile)!.config.mcp_servers.notion).toMatchObject({enabled:true});
+ expect('tools' in fake.settings.profiles.get(profile)!.config.mcp_servers.notion).toBe(false);
 });

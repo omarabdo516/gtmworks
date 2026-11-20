@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { apps, appByKey, appKey, appState, appConfig, knownApp, serverKeyOf } from '../lib/app-catalogue.mjs';
 
@@ -71,4 +72,15 @@ test('a server key is the name’s own words, and a known app is found by its na
  assert.equal(serverKeyOf(42),'');
  assert.equal(knownApp('hugging face')?.key,'hugging_face');
  assert.equal(appByKey('own')?.source,'own','the form is a card, never a server');
+});
+
+// #458: every offered app says what it is for, what it can do and its search words, in both catalogues.
+test('every catalogue key has use, can and alias lines in English and Arabic', () => {
+ const en=JSON.parse(readFileSync(new URL('../lib/messages/apps.en.json',import.meta.url),'utf8'));
+ const ar=JSON.parse(readFileSync(new URL('../lib/messages/apps.ar.json',import.meta.url),'utf8'));
+ for (const app of apps) for (const key of [`use.${app.key}`,`can.${app.key}`,`alias.${app.key}`]) {
+  assert.equal(typeof en[key],'string',`en ${key}`);
+  assert.equal(typeof ar[key],'string',`ar ${key}`);
+  assert.ok(en[key].trim()&&ar[key].trim(),key);
+ }
 });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { provideProfile, readApps, prepareApp, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer } from '../lib/hermes.mjs';
+import { provideProfile, readApps, prepareApp, prepareServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer } from '../lib/hermes.mjs';
 import { levelConfig, alwaysOff, companyProfile } from '../lib/agent-levels.mjs';
 import { apps } from '../lib/app-catalogue.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -177,5 +177,83 @@ test('a second sign-in waits for the first, a cancelled or unknown one never fin
   fake.settings.approveApps=false;
   const third=await startAppSignIn(target,'airtable',back('airtable'));
   assert.deepEqual(await finishAppSignIn(target,{key:'airtable',flow:third.flow,answer:{code:'c',state:signInState(third.url)},settle:2}),{state:'waiting'});
+ } finally { await fake.close(); }
+});
+
+test('an own server may sign in over http, while a catalogue app still signs in over https only', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  fake.settings.appAuthScheme='http';
+  const started=await startAppSignIn(target,'my-oauth','http://127.0.0.1:3000/api/apps/callback/my-oauth',{url:'https://mcp.my-oauth.example/mcp',auth:'oauth'});
+  assert.equal(started.state,'started');
+  assert.equal(new URL(started.url).protocol,'http:');
+  const catalogue=await startAppSignIn(target,'klaviyo',back('klaviyo'));
+  assert.equal(catalogue.state,'failed','a vendor page is https only');
+ } finally { await fake.close(); }
+});
+
+test('a server added again with a new address or token replaces the old one; the same OAuth server keeps its sign-in', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  await prepareServer(target,{key:'my-crm',url:'https://one.example/mcp',auth:'none',redirectUri:null});
+  assert.equal(servers()['my-crm'].url,'https://one.example/mcp');
+  const mark=fake.settings.managementRequests.length;
+  await prepareServer(target,{key:'my-crm',url:'https://two.example/mcp',auth:'none',redirectUri:null});
+  assert.equal(servers()['my-crm'].url,'https://two.example/mcp');
+  assert.deepEqual(fake.settings.managementRequests.slice(mark).filter(request=>request.path?.startsWith('/api/mcp/servers')).map(request=>request.method),['DELETE','POST']);
+
+  await prepareServer(target,{key:'my-oauth',url:'https://oauth.example/mcp',auth:'oauth',redirectUri:back('my-oauth')});
+  const kept=fake.settings.managementRequests.length;
+  await prepareServer(target,{key:'my-oauth',url:'https://oauth.example/mcp',auth:'oauth',redirectUri:back('my-oauth')});
+  assert.equal(fake.settings.managementRequests.slice(kept).filter(request=>request.path?.startsWith('/api/mcp/servers')&&request.method==='DELETE').length,0,'the same OAuth server keeps its sign-in');
+ } finally { await fake.close(); }
+});
+
+test('a server key that is an Object prototype name is added like any other', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  fake.settings.profiles.get(target.profile).config.mcp_servers={};
+  assert.equal(await prepareServer(target,{key:'constructor',url:'https://crm.example/mcp',auth:'none',redirectUri:null}),null);
+  assert.equal(servers().constructor.url,'https://crm.example/mcp');
+  assert.ok(fake.settings.managementRequests.some(request=>request.path?.startsWith('/api/mcp/servers?')&&request.method==='POST'));
+ } finally { await fake.close(); }
+});
+
+test('clearing one server\'s tool filter leaves another server in the profile unchanged', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  const canva={url:'https://mcp.canva.example/mcp',auth:'oauth',enabled:false,oauth:{redirect_uri:back('canva')}};
+  fake.settings.profiles.get(target.profile).config.mcp_servers={klaviyo:{url:'https://mcp.klaviyo.example/mcp',auth:'oauth',enabled:true,tools:{include:['get_campaigns']}},canva};
+  fake.settings.appTokens.add(`${target.profile}:klaviyo`);
+  assert.equal(await prepareApp(target,'klaviyo',back('klaviyo')),null);
+  const read=fake.settings.profiles.get(target.profile).config.mcp_servers;
+  assert.equal('tools' in read.klaviyo,false);
+  assert.deepEqual(read.canva,canva,'the other server is untouched');
+ } finally { await fake.close(); }
+});
+
+test('a state never carries the Engine\'s error text, a path or a token', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  fake.settings.appsUnreachable.add('klaviyo');
+  await prepareApp(target,'klaviyo',back('klaviyo'));
+  const read=await readApps(target);
+  assert.equal(read.apps.find(app=>app.key==='klaviyo').state,'attention');
+  assert.doesNotMatch(JSON.stringify(read),/opt|secret|hermes|token/i);
+ } finally { await fake.close(); }
+});
+
+test('a server installed for a sign-in is removed again when its config cannot be written, and no sign-in starts', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  fake.settings.failStep='config';
+  assert.equal(await prepareApp(target,'airtable',back('airtable')),'failed');
+  assert.equal(servers().airtable,undefined);
+  assert.deepEqual(await startAppSignIn(target,'airtable',back('airtable')),{state:'failed',flow:null,url:null});
+  assert.equal(servers().airtable,undefined);
+  assert.equal(fake.settings.appFlows.size,0,'no sign-in starts');
+  fake.settings.failStep='';
+  assert.equal(await prepareApp(target,'airtable',back('airtable')),null);
+  assert.equal('tools' in servers().airtable,false);
  } finally { await fake.close(); }
 });

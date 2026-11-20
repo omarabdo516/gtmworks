@@ -83,7 +83,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   catalogAuth:/** @type {Record<string,'oauth'|'none'>} */({}),catalogEnv:/** @type {Record<string,{name:string,prompt:string,required:boolean}[]>} */({}),
   serverTokens:/** @type {Map<string,string>} */(new Map()),
   appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
-  appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
+  appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),appAuthScheme:/** @type {'https'|'http'} */('https'),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
   // The provenance `GET /api/skills` reports for a profile's own Skill (`hub`, `bundled` or `agent`), as `profile:name`;
@@ -632,7 +632,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     }
     const name=(body?.name||'').trim();
     if(!name||body?.command) return send(response,400,{detail:'Provide exactly one of URL or command'});
-    if(servers[name]) return send(response,409,{detail:`Server '${name}' already exists`});
+    if(Object.hasOwn(servers,name)) return send(response,409,{detail:`Server '${name}' already exists`});
     const auth=(body.auth||'none').toLowerCase();
     if(!['none','oauth','header'].includes(auth)) return send(response,400,{detail:'Unsupported auth mode'});
     if(auth==='header'&&!body.bearer_token) return send(response,400,{detail:'Bearer token is required'});
@@ -657,7 +657,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const id=randomUUID().replaceAll('-',''); const state=randomUUID();
      const redirect=servers[name].oauth?.redirect_uri||`http://${request.headers.host}/api/mcp/oauth/callback/${name}`;
      settings.appFlows.set(id,{server:name,profile:scoped,status:'authorization_required',state,redirect});
-     return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`https://auth.${name}.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
+     return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`${settings.appAuthScheme}://auth.${name}.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
     }
    }
    // Model sign-in (hermes_cli/web_routers/oauth.py): ChatGPT through a device code, Claude from the command line only.

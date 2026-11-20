@@ -246,7 +246,7 @@
  "use.twilio-docs": "Search Twilio developer docs.",
  "can.twilio-docs": "Every tool it offers, reads and writes",
  "alias.twilio-docs": "twilio docs",
- "use.unreal-engine": "Drive the Unreal Engine 5.8 editor over its local server.",
+ "use.unreal-engine": "Drive the Unreal Engine 5.8 editor over its local MCP server; it must be running where the engine can reach it.",
  "can.unreal-engine": "Every tool it offers, reads and writes",
  "alias.unreal-engine": "unreal engine",
  "use.vercel": "Deployments, logs and projects via Vercel.",
@@ -367,5 +367,6 @@
  "error.appsTokenInvalid": "That token can’t be used.",
  "error.appsServerInvalid": "That name or address can’t be used.",
  "error.appsCommandRefused": "A server that runs a command can’t be added here.",
- "connectAttention": "It was added, but the engine did not reach it. Check the address or the token, or sign in again."
+ "connectAttention": "It was added, but the engine did not reach it. Check the address or the token, or sign in again.",
+ "addFor": "Add for {0}"
 }

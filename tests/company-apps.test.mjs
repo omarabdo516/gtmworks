@@ -369,3 +369,69 @@ test('a server the Owner added is one card across the profiles it is on, and Rem
   assert.deepEqual(omar.logged,[['app_connected','my-crm',lead],['app_connected','my-crm',writer],['app_disconnected','my-crm',lead],['app_disconnected','my-crm',writer]]);
  } finally { await fake.close(); }
 });
+
+test('Test probes a new server without leaving it in the profile', async () => {
+ const fake=await fakeHermes();
+ try {
+  makeProfile(fake,companyProfile(company));
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  const before=JSON.stringify(serversOf(fake,companyProfile(company)));
+  const result=await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name:'My CRM',url:'https://crm.example/mcp',kind:'none',hermes});
+  assert.equal(result.status,200);
+  assert.equal(result.body.state,'connected');
+  assert.equal(JSON.stringify(serversOf(fake,companyProfile(company))),before,'the profile is unchanged');
+  assert.deepEqual(omar.logged,[],'a probe is not a connect');
+ } finally { await fake.close(); }
+});
+
+test('adding the same OAuth server again cancels its open sign-in and starts a new one, through the real drivers', async () => {
+ const fake=await fakeHermes();
+ try {
+  makeProfile(fake,companyProfile(company));
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const signIns=[];
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns,agents:[leadRow]});
+  const add=()=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My OAuth',url:'https://oauth.example/mcp',kind:'oauth',hermes});
+  const first=await add();
+  assert.equal(first.status,200);
+  const second=await add();
+  assert.equal(second.status,200);
+  assert.equal(signIns.length,1,'the old sign-in gave way to the new one');
+  assert.equal([...fake.settings.appFlows.values()].filter(flow=>flow.status==='authorization_required').length,1);
+ } finally { await fake.close(); }
+});
+
+test('a made server is turned on for another Agent from the address its own profile records, and a token server asks for the token again', async () => {
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow]});
+  const add=extra=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:extra.name,url:extra.url,kind:extra.kind,token:extra.token,hermes});
+  assert.equal((await add({name:'My CRM',url:'https://crm.example/mcp',kind:'none'})).status,200);
+  const onWriter=extra=>changeCompanyApp(omar.db,{company,person:owner,agent:writer,app:'my-crm',action:'connect',hermes,...extra});
+  assert.deepEqual(await onWriter({}),{status:200,body:{status:'connected'}});
+  assert.equal(serversOf(fake,agentProfile(writer))['my-crm'].url,'https://crm.example/mcp','the address comes from the Engine record');
+
+  assert.equal((await add({name:'Token CRM',url:'https://token-crm.example/mcp',kind:'header',token:'token-one'})).status,200);
+  const tokenWriter=extra=>changeCompanyApp(omar.db,{company,person:owner,agent:writer,app:'token-crm',action:'connect',hermes,...extra});
+  assert.deepEqual(await tokenWriter({}),{status:400,body:{error:'appsTokenInvalid'}},'gtmworks has no copy of the token');
+  assert.deepEqual(await tokenWriter({token:'token-two'}),{status:200,body:{status:'connected'}});
+  assert.equal(fake.settings.serverTokens.get(`${agentProfile(writer)}:token-crm`),'token-two');
+ } finally { await fake.close(); }
+});
+
+test('Remove takes a switched-off copy off its Agent too', async () => {
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow]});
+  for(const agent of [lead,writer]) assert.equal((await changeCompanyServer(omar.db,{company,person:owner,agent,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none',hermes})).status,200);
+  serversOf(fake,agentProfile(writer))['my-crm'].enabled=false;
+  const driver={read:target=>readApps({...target,managementAddress:fake.managementAddress}),disconnect:(target,key)=>disconnectApp({...target,managementAddress:fake.managementAddress},key)};
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,app:'my-crm',action:'disconnect',hermes,driver}),{status:200,body:{status:'off'}});
+  assert.equal(serversOf(fake,agentProfile(writer))['my-crm'],undefined,'the switched-off copy is gone');
+ } finally { await fake.close(); }
+});

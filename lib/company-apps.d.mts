@@ -9,5 +9,9 @@ export type AgentsUsage={agents:{id:string,name:string}[],input:number|null,outp
 export function readCompanyUsage(db:SupabaseClient,request:{company:string,days:number,hermes?:{address:string,key:string}|null,driver?:object}):Promise<AgentsUsage[]|null>;
 export type AgentTool={key:string,name:string,mark:string,state:'connected'|'attention'|'turnedOff'|'missing'};
 export function readAgentTools(db:SupabaseClient,request:{company:string,agent:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<AgentTool[]|null>;
-export function changeCompanyApp(db:SupabaseClient,request:{company:string,agent?:unknown,person:string,app:unknown,action:unknown,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{status:number,body:Record<string,unknown>}>;
+export const uuid:RegExp;
+export const callbackOf:(key:string)=>string;
+export const badToken:(token:unknown)=>boolean;
+export function latestSignIn(db:SupabaseClient,filter:{app:string,person?:string,company?:string,agent?:string,open?:boolean}):Promise<any>;
+export function changeCompanyApp(db:SupabaseClient,request:{company:string,agent?:unknown,person:string,app:unknown,action:unknown,fields?:unknown,token?:unknown,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{status:number,body:Record<string,unknown>}>;
 export function finishCompanyAppSignIn(db:SupabaseClient,request:{person:string,app:string,answer:Record<string,string>,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{slug:string|null,outcome:'connected'|'waiting'|'failed'}>;

@@ -246,7 +246,7 @@
  "use.twilio-docs": "بحث وثائق Twilio للمطورين.",
  "can.twilio-docs": "كل الأدوات اللي بيقدمها، قراية وكتابة",
  "alias.twilio-docs": "تويليو وثائق",
- "use.unreal-engine": "شغّل محرر Unreal Engine 5.8 من سيرفر MCP المحلي.",
+ "use.unreal-engine": "شغّل محرر Unreal Engine 5.8 من سيرفر MCP المحلي؛ لازم المحرر يكون شغال في مكان المحرك يقدر يوصله.",
  "can.unreal-engine": "كل الأدوات اللي بيقدمها، قراية وكتابة",
  "alias.unreal-engine": "انريل انجن محرك",
  "use.vercel": "النشر واللوجز والمشاريع من Vercel.",
@@ -367,5 +367,6 @@
  "error.appsTokenInvalid": "التوكن ده مينفعش.",
  "error.appsServerInvalid": "الاسم أو العنوان ده مينفعش.",
  "error.appsCommandRefused": "سيرفر بيشغّل أمر مينفعش يتضاف من هنا.",
- "connectAttention": "اتضاف، بس المحرك موصلوش. اتأكد من العنوان أو التوكن، أو سجّل دخول تاني."
+ "connectAttention": "اتضاف، بس المحرك موصلوش. اتأكد من العنوان أو التوكن، أو سجّل دخول تاني.",
+ "addFor": "ضيف لـ{0}"
 }

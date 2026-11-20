@@ -111,9 +111,11 @@ const pollEvery=2000, pollFor=15*60*1000;
 type Run={queue:string[],following:string|null,done:string[],one:boolean};
 const idle:Run={queue:[],following:null,done:[],one:false};
 
-export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean}) {
- // The card that adds a server is a form, not a connection: it has no Agent state yet.
- if(item.source==='own') return <OwnTool place={place} company={company} owner={owner} rtl={rtl} item={item} text={text}/>;
+export function AppDetail(props:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean}) {
+ // The card that adds a server is a form, not a connection: it has no Agent state yet. Each view keeps its own hooks.
+ return props.item.source==='own'?<OwnTool place={props.place} company={props.company} owner={props.owner} rtl={props.rtl} item={props.item} text={props.text}/>:<CatalogueDetail {...props}/>;
+}
+function CatalogueDetail({place,company,owner,rtl,item,text,failed}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean}) {
  const say=sayer(text); const router=useRouter(); const {language}=useI18n();
  const [run,setRun]=useState<Run>(idle); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
  const [token,setToken]=useState(''); const [values,setValues]=useState<Record<string,string>>({});
@@ -260,16 +262,16 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
     <div className="kv__row"><dt>{say('kindTitle')}</dt><dd>{say(item.auth==='header'?'kindHeader':item.auth==='oauth'?'kindOauth':'kindNone')}</dd></div>
     {item.auth==='oauth'&&<div className="kv__row"><dt>{say('signIn')}</dt><dd>{named(say('signInLine'),item.name)}</dd></div>}
    </dl>
-   {(!on||state==='attention')&&owner&&item.auth==='header'&&<section className="apps-sec" aria-labelledby="app-token-h"><h4 className="apps-sec__h" id="app-token-h">{say('token')}</h4>
+   {owner&&item.auth==='header'&&<section className="apps-sec" aria-labelledby="app-token-h"><h4 className="apps-sec__h" id="app-token-h">{say('token')}</h4>
     <label className="panel-card set-field"><span>{say('tokenHint')}</span><input id="app-token" type="password" autoComplete="off" value={token} onChange={event=>setToken(event.target.value)}/><span className="set-hint">{say('tokenNote')}</span></label></section>}
-   {(!on||state==='attention')&&owner&&Boolean(item.fields?.length)&&<section className="apps-sec" aria-labelledby="app-env-h"><h4 className="apps-sec__h" id="app-env-h">{say('env')}</h4>
+   {owner&&Boolean(item.fields?.length)&&<section className="apps-sec" aria-labelledby="app-env-h"><h4 className="apps-sec__h" id="app-env-h">{say('env')}</h4>
     <div className="panel-card">{item.fields!.map(field=><label key={field.name} className="set-field"><span>{field.prompt||field.name}{field.required&&<span aria-hidden="true"> *</span>}</span>
      <input id={`app-env-${field.name}`} type={/(SECRET|KEY|TOKEN)$/.test(field.name)?'password':'text'} autoComplete="off" value={values[field.name]??''} onChange={event=>setValues({...values,[field.name]:event.target.value})}/></label>)}</div></section>}
    {on?<section className="apps-sec" aria-labelledby="app-who-h"><h4 className="apps-sec__h" id="app-who-h">{say('whoUses')}</h4>
      <ul className="panel-card">{item.agents.map(agent=><li key={agent.id} className="panel-row">{face(agent)}
       <span className="panel-row__text"><span className="panel-row__t" id={`app-ag-t-${agent.id}`}><bdi>{agent.name}</bdi></span><span className="panel-row__d">{line(agent)}</span></span>
-      {owner&&!custom&&agent.own&&agent.state==='attention'&&<button type="button" className="btn btn--secondary btn--sm" id={`app-ag-re-${agent.id}`} aria-label={say('reconnectFor',agent.name)} aria-disabled={busy} onClick={()=>{ if(!busy) connect([agent.id],true); }}>{say('reconnect')}</button>}
-      {owner&&!custom&&agent.own&&agent.state!==null&&<button type="button" className="switch" role="switch" id={`app-ag-${agent.id}`} aria-checked={agent.state!=='off'} aria-labelledby={`app-ag-t-${agent.id}`} aria-disabled={busy}
+      {owner&&agent.own&&agent.state==='attention'&&<button type="button" className="btn btn--secondary btn--sm" id={`app-ag-re-${agent.id}`} aria-label={say('reconnectFor',agent.name)} aria-disabled={busy} onClick={()=>{ if(!busy) connect([agent.id],true); }}>{say('reconnect')}</button>}
+      {owner&&agent.own&&agent.state!==null&&<button type="button" className="switch" role="switch" id={`app-ag-${agent.id}`} aria-checked={agent.state!=='off'} aria-labelledby={`app-ag-t-${agent.id}`} aria-disabled={busy}
        onClick={()=>{ if(busy) return; if(agent.state==='off') connect([agent.id],true); else turnOff(agent); }}/>}</li>)}</ul></section>
     :owner&&<section className="apps-sec" aria-labelledby="app-pick-h"><h4 className="apps-sec__h" id="app-pick-h">{say('whoGets')} <span className="num muted">{picks.length}</span></h4>
      <div className="panel-card" role="group" aria-labelledby="app-pick-h" aria-describedby="app-pick-err">{own.map(agent=>{ const picked=picks.includes(agent.id);
@@ -285,7 +287,7 @@ export function AppDetail({place,company,owner,rtl,item,text,failed}:{place:Apps
     :<div><button type="button" className="link-btn" id="app-off" onClick={()=>setAsking(true)}>{say(custom?'remove':'disconnect')} <bdi>{item.name}</bdi></button></div>)}
   </div>
   <footer className="modal__foot modal__foot--end">
-   {owner&&!custom&&(state!=='connected'||waiting||next)?<>{waiting?<button type="button" className="btn btn--secondary" id="app-wait-cancel" disabled={pending} onClick={cancel}>{say('cancel')}</button>:back}
+   {owner&&(state!=='connected'||waiting||next)?<>{waiting?<button type="button" className="btn btn--secondary" id="app-wait-cancel" disabled={pending} onClick={cancel}>{say('cancel')}</button>:back}
     <button type="button" className="btn btn--primary" id="app-connect" aria-disabled={busy} onClick={()=>{
      if(busy) return;
      if(next) connect(run.queue,run.one,run.done);
@@ -306,10 +308,11 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
  const own=item.agents.filter(agent=>agent.own);
  const [name,setName]=useState(''); const [address,setAddress]=useState('');
  const [kind,setKind]=useState<'oauth'|'header'|'none'>('oauth'); const [token,setToken]=useState('');
- const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id));
+ const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [queue,setQueue]=useState<string[]>([]);
  const [tools,setTools]=useState<string[]|null>(null); const [tested,setTested]=useState('');
  const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
  const [following,setFollowing]=useState<{key:string,agent:string}|null>(null);
+ const nameOf=(id:string)=>item.agents.find(agent=>agent.id===id)?.name??'';
  const vendor=useRef<Window|null>(null); const left=useRef(following);
  const addressPage=place.kind==='address';
  const refreshApps=()=>{ void appsChanged(company,language); if(addressPage) router.refresh(); };
@@ -330,13 +333,16 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
    const status=String(answer.body.status||'');
    if(answer.ok&&status==='waiting'&&Date.now()<until) { timer=setTimeout(poll,pollEvery); return; }
    setFollowing(null);
-   if(answer.ok&&status==='connected') { toast(say('ownAdded',key)); refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key); }
-   else setError('connectAttention');
+   if(answer.ok&&status==='connected') {
+    toast(say('ownAdded',name.trim()||key));
+    if(queue.length) { setToken(''); return; }
+    refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
+   } else setError('connectAttention');
   };
   timer=setTimeout(poll,pollEvery);
   return ()=>{ stopped=true; clearTimeout(timer); };
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[following,company]);
+ },[following,company,queue]);
  const pick=(id:string)=>{ if(busy) return; setPicks(picks.includes(id)?picks.filter(other=>other!==id):[...picks,id]); };
  const submit=(action:'add'|'test')=>{
   if(busy) return;
@@ -347,18 +353,28 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
   if(action==='add'&&kind==='oauth'&&!popup) { setError('popupBlocked'); return; }
   void (async()=>{
    setBusy(true); setError(''); setTools(null); setTested('');
-   const targets=action==='test'||kind==='oauth'?[picks[0]]:picks;
+   const targets=action==='test'||kind!=='oauth'?picks:(queue.length?queue:picks);
+   if(action==='test') {
+    let shown:{state?:unknown,tools?:unknown}|null=null;
+    for(const agent of targets) {
+     const answer=await askServer({company,agent,action,name,url:address,kind,token:kind==='header'?token:''});
+     if(!answer.ok) { setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
+     if(!shown||(shown.state!=='connected'&&answer.body.state==='connected')) shown=answer.body;
+    }
+    setTools(Array.isArray(shown?.tools)?shown.tools as string[]:[]);
+    setTested(String(shown?.state||'')); setToken(''); setBusy(false); return;
+   }
    for(const agent of targets) {
     const answer=await askServer({company,agent,action,name,url:address,kind,token:kind==='header'?token:''});
     if(!answer.ok) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
-    if(action==='test') { setTools(Array.isArray(answer.body.tools)?answer.body.tools as string[]:[]); setTested(String(answer.body.state||'')); setToken(''); setBusy(false); return; }
     if(kind==='oauth') {
      const url=typeof answer.body.url==='string'?answer.body.url:null;
      if(!url) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
-     const key=String(answer.body.key||''); popup!.opener=null; popup!.location.href=url; vendor.current=popup; setToken(''); setFollowing({key,agent}); setBusy(false); return;
+     const key=String(answer.body.key||''); popup!.opener=null; popup!.location.href=url; vendor.current=popup; setToken('');
+     setQueue(targets.slice(targets.indexOf(agent)+1)); setFollowing({key,agent}); setBusy(false); return;
     }
    }
-   setToken(''); setBusy(false);
+   setQueue([]); setToken(''); setBusy(false);
    toast(say('ownAdded',name.trim())); refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
   })();
  };
@@ -370,11 +386,11 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
   </header>
   <div className="apps-body apps-detail">
    <div className="panel-card own-form">
-    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} value={name} onChange={event=>setName(event.target.value)}/></label>
-    <label className="set-field"><span>{say('address')}</span><input id="own-url" type="url" inputMode="url" autoComplete="off" placeholder={say('addressHint')} value={address} onChange={event=>setAddress(event.target.value)}/></label>
+    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={error==='ownRequired'&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
+    <label className="set-field"><span>{say('address')}</span><input id="own-url" type="url" inputMode="url" autoComplete="off" placeholder={say('addressHint')} aria-invalid={error==='ownRequired'&&!address.trim()||undefined} aria-describedby="own-err" value={address} onChange={event=>setAddress(event.target.value)}/></label>
     <label className="set-field"><span>{say('kind')}</span><select id="own-kind" value={kind} onChange={event=>setKind(event.target.value as 'oauth'|'header'|'none')}>
      <option value="oauth">{say('kindOauth')}</option><option value="header">{say('kindHeader')}</option><option value="none">{say('kindNone')}</option></select></label>
-    {kind==='header'&&<label className="set-field"><span>{say('token')}</span><input id="own-token" type="password" autoComplete="off" value={token} onChange={event=>setToken(event.target.value)}/><span className="set-hint">{say('tokenNote')}</span></label>}
+    {kind==='header'&&<label className="set-field"><span>{say('token')}</span><input id="own-token" type="password" autoComplete="off" aria-invalid={error==='tokenNeeded'||undefined} aria-describedby="own-token-hint own-err" value={token} onChange={event=>setToken(event.target.value)}/><span className="set-hint" id="own-token-hint">{say('tokenNote')}</span></label>}
    </div>
    {owner&&<section className="apps-sec" aria-labelledby="own-pick-h"><h4 className="apps-sec__h" id="own-pick-h">{say('whoGets')} <span className="num muted">{picks.length}</span></h4>
     <div className="panel-card" role="group" aria-labelledby="own-pick-h">{own.map(agent=>{ const picked=picks.includes(agent.id);
@@ -382,14 +398,14 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
       {face(agent)}<span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span></span>
       <span className="tm-check" aria-hidden="true">{picked&&<ShellIcon name="check"/>}</span></button>; })}</div></section>}
    {following&&<p className="set-hint" role="status">{say('waiting',name.trim())}</p>}
-   {error&&<p className="set-err" role="alert">{say(error)}</p>}
+   {error&&<p className="set-err" role="alert" id="own-err">{say(error)}</p>}
    {tools&&<section className="apps-sec" aria-labelledby="own-tools-h"><h4 className="apps-sec__h" id="own-tools-h">{say('toolsListed')} <span className="num muted">{tools.length}</span></h4>
     <div className="panel-card">{tools.length?<ul className="own-tools">{tools.map(tool=><li key={tool}><code>{tool}</code></li>)}</ul>
      :<p className="panel-empty">{tested==='connected'?say('toolsNone'):say('toolsFailed')}</p>}</div></section>}
   </div>
   <footer className="modal__foot modal__foot--end">
-   <button type="button" className="btn btn--secondary" id="own-test" disabled={busy||following!==null} onClick={()=>submit('test')}>{busy?say('testing'):say('test')}</button>
-   <button type="button" className="btn btn--primary" id="own-add" aria-disabled={busy||following!==null||undefined} onClick={()=>{ if(!busy&&!following) submit('add'); }}>{busy?say('adding'):say('add')}</button>
+   <button type="button" className="btn btn--secondary" id="own-test" aria-disabled={busy||following!==null||undefined} onClick={()=>{ if(!busy&&!following) submit('test'); }}>{busy?say('testing'):say('test')}</button>
+   <button type="button" className="btn btn--primary" id="own-add" aria-disabled={busy||following!==null||undefined} onClick={()=>{ if(!busy&&!following) submit('add'); }}>{busy?say('adding'):queue.length?named(say('addFor'),nameOf(queue[0])):say('add')}</button>
   </footer>
  </>;
 }

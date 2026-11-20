@@ -13,7 +13,6 @@ export type CompanyApp={key:string,name:string,mark:string,category:AppCategory,
 export const appKey:RegExp;
 export const apps:readonly App[];
 export const appByKey:(key:unknown)=>App|undefined;
-export const isCatalogueKey:(key:unknown)=>boolean;
 export const customApp:(key:string)=>App;
 export const serverKeyOf:(name:unknown)=>string;
 export function knownApp(name:string):{key:string,name:string,mark:string}|undefined;

@@ -267,3 +267,22 @@ test('the own-tool card tests a server and adds it with no sign-in', async () =>
   await expect.poll(() => replace.mock.calls.map(([href]) => href)).toEqual(['/c/rs-learning/settings?section=apps']);
   expect(toast.mock.calls).toEqual([['My CRM added']]);
 });
+
+// #458: a server the Owner added is an app like any other: its own page has the per-Agent switches and Reconnect, and
+// turning it on for another Agent sends the key alone (the service reads the address from the Engine).
+test('a made server has the per-Agent switches and turns on for another Agent', async () => {
+  const custom: AppItem = { key: 'my-crm', name: 'my-crm', mark: 'MY', category: 'more', source: 'custom', auth: 'none', state: 'connected',
+    use: text['use.custom'], can: text['can.custom'], words: 'my-crm',
+    agents: [agent(lead, 'Lead', true, 'connected'), agent(writer, 'Writer', true, 'off'), agent(helper, 'Helper', false, 'connected')] };
+  const sent = answers([200, { status: 'connected' }]);
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={custom} text={text} failed={false}/>);
+  await expect.element(screen.getByRole('switch', { name: 'Writer' })).toHaveAttribute('aria-checked', 'false');
+  await expect.element(screen.getByRole('link', { name: 'Done' })).toBeVisible();
+  await screen.getByRole('switch', { name: 'Writer' }).click();
+  await expect.poll(() => sent.at(-1)).toEqual({ company: 'c-1', agent: writer, app: 'my-crm', action: 'connect' });
+  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  await screen.unmount();
+  const attention: AppItem = { ...custom, state: 'attention', agents: [agent(lead, 'Lead', true, 'connected'), agent(writer, 'Writer', true, 'attention'), agent(helper, 'Helper', false, 'connected')] };
+  const again = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={attention} text={text} failed={false}/>);
+  await expect.element(again.getByRole('button', { name: 'Reconnect for Writer' })).toBeVisible();
+});
