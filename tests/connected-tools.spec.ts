@@ -6,6 +6,7 @@ import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
 import { appOrigin } from './lane.mjs';
+import appsEn from '../lib/messages/apps.en.json';
 
 // #204, an Agent's "Connected tools" in its details. RS Learning runs on its own profile in a fake Engine whose MCP
 // catalogue and sign-ins answer as the pinned release's do: Lead keeps that profile, and Writer has a profile of its
@@ -54,7 +55,8 @@ const section=(page:Page,name:string)=>page.getByRole('complementary',{name:`Det
 const rowsOf=(page:Page,name:string)=>section(page,name).locator('.panel-row').evaluateAll(rows=>rows.map(row=>[row.querySelector('.panel-row__t')!.textContent,
  row.querySelector('.panel-row__d')!.textContent,row.querySelector(':scope > .panel-row__meta, :scope > button')!.textContent]));
 const appLog=()=>JSON.parse(query(`select actor_id,action,details->>'app' as app,details->>'agent_name' as agent from public.company_log where company_id='${company}' and action in ('app_connected','app_disconnected') order by id`));
-const use=(key:string)=>({canva:'Agents find your designs and templates and read what’s in them.',notion:'Agents search and read your pages, databases and meeting notes.',mixpanel:'Agents query your events, funnels and cohorts to explain the numbers.'})[key]!;
+// What each app is for, as the reader sees it (lib/messages/apps.en.json).
+const use=(key:string)=>(appsEn as Record<string,string>)[`use.${key}`];
 
 test('each Agent lists its own profile\'s apps with their states, and the apps it was made to use as Not connected',async({page})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${writer}`);
