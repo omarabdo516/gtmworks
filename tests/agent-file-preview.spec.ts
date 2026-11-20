@@ -5,16 +5,17 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
-// #195: a file's row in an Agent's Library opens a read-only preview — the picture, the text, the CSV's rows, or its icon
-// and Download — with the keyboard on Download. The close button, Escape and a press on the backdrop each close it and
-// give the keyboard back to the row, the download is the row's same file with the toast drawn inside the dialog, and a
+// #195, #395: a file's row in an Agent's Library opens a read-only preview — the picture, the text, the CSV's rows, or
+// its icon and Download — with the keyboard on Download. The Library is the Agent's folder in the Company's work folder,
+// as the Engine sees it read-only. The close button, Escape and a press on the backdrop each close it and give the
+// keyboard back to the row, the download is the row's same file with the toast drawn inside the dialog, and a
 // Contributor and a Viewer get no content from the read route. Nothing of an SVG or a page is ever drawn.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const companyProfile=`co-${company.replaceAll('-','')}`;
 const agent=randomUUID();
 const profile=`ag-${agent.replaceAll('-','')}`;
-const work=`/opt/data/profiles/${profile}/workspace`;
+const work=`/opt/data/work/${profile}`;
 const at=Date.parse('2026-11-18T09:37:00Z')/1000;
 const brief='# Brief\n\nSell more.\n';
 const long='a'.repeat(600*1024);

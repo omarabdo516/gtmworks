@@ -624,7 +624,7 @@ for folder in .engines/*/; do
   network=$(engine_value "$folder" NETWORK)
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine ]] || fail "the restored install runs the Engine $name"
-  [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume"
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only"
   # The lifecycle seed's two Companies (restore-one, restore-two) hold records of their own at the first Engine's address.
   [[ $(db -c "select count(*) from public.companies c join public.company_engines e on e.id=c.engine_id where e.address='http://$name:8642'") -ge 1 ]] || fail "a Company's record names the Engine $name"
@@ -867,7 +867,7 @@ sh install.sh update || fail 'release update'
 if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi
 engine=$(first_engine_id)
 [[ -n $engine ]] || fail "the updated install runs the Company's Engine"
-[[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
+[[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
 hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine") != *HostPort* ]] || fail 'the Engine publishes no host port'
@@ -1020,7 +1020,7 @@ for folder in .engines/*/; do
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine && $(docker inspect -f '{{.Id}}' "$engine") != "$before" ]] || fail "the update recreated the Engine $name"
   [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == gtmworks-engine-check:0.0.2 ]] || fail "the Engine $name runs the image the release pins"
-  [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done
 # A Run on each Company answers on its own Engine, and the code word its own Engine kept reaches its own Run only.
