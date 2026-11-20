@@ -1,16 +1,17 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import type { ComponentProps } from 'react';
+import { StrictMode, type ComponentProps } from 'react';
 import { userEvent } from 'vitest/browser';
+import { render } from 'vitest-browser-react';
 import type {} from '@vitest/browser-playwright';
-import { card, sent, showWork, workProps } from './work-page';
+import { card, ideasSent, sent, showWork, workProps, workView } from './work-page';
 
-const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
+const { toast, replace } = vi.hoisted(() => ({ toast: vi.fn(), replace: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace, prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
 vi.mock('@/app/toast', () => ({ toast }));
 vi.mock('@/lib/link', () => ({ default: ({ prefetch: _prefetch, scroll: _scroll, ...props }: ComponentProps<'a'> & { prefetch?: unknown, scroll?: unknown }) => <a {...props}/> }));
 vi.mock('@/app/c/[slug]/[[...section]]/skill-actions', () => ({ decideAgentRule: vi.fn(), answerAgentRequest: vi.fn() }));
 vi.mock('@/app/note-actions', () => ({ editNote: vi.fn() }));
-afterEach(() => { toast.mockReset(); });
+afterEach(() => { toast.mockReset(); replace.mockReset(); });
 
 // The Company's Agents as the board reads them (#190): the main Agent first. Both are shown to the reader.
 const lead = { id: 'h-lead', connection_id: 'c-lead', name: 'Lead', speciality: 'General', is_default: true };
@@ -47,7 +48,7 @@ test('an empty Idea shows the reference error and sends nothing; the error leave
  await screen.getByRole('button', { name: 'Add', exact: true }).click();
  await expect.element(screen.getByText('Write the idea first, even a short sentence.')).toBeVisible();
  await expect.element(screen.getByLabelText('Idea')).toHaveAttribute('aria-invalid', 'true');
- expect(sent(props)).toEqual([]);
+ expect(ideasSent(props)).toEqual([]);
  await userEvent.fill(screen.getByLabelText('Idea'), 'A');
  await expect.element(screen.getByText('Write the idea first, even a short sentence.')).not.toBeVisible();
  await expect.element(screen.getByLabelText('Idea')).not.toHaveAttribute('aria-invalid');
@@ -60,7 +61,8 @@ test('Add sends one idea with its title, the Ideas stage and the chosen Agent', 
  await userEvent.fill(screen.getByLabelText('Idea'), 'LinkedIn post about the new cohort');
  await userEvent.selectOptions(screen.getByLabelText('Agent'), 'h-ads');
  await screen.getByRole('button', { name: 'Add', exact: true }).click();
- await expect.poll(() => sent(props)).toEqual([{ op: 'idea', company: 'co-1', slug: 'rs-learning', stage: '1', title: 'LinkedIn post about the new cohort', agent: 'h-ads' }]);
+ await expect.poll(() => ideasSent(props)).toEqual([{ key: expect.stringMatching(/^[0-9a-f-]{36}$/), company: 'co-1', slug: 'rs-learning', stage: '1', title: 'LinkedIn post about the new cohort', agent: 'h-ads' }]);
+ expect(sent(props)).toEqual([]);
 });
 
 test('Enter in the Idea field sends one idea with the main Agent chosen first', async () => {
@@ -69,7 +71,7 @@ test('Enter in the Idea field sends one idea with the main Agent chosen first', 
  await screen.getByRole('button', { name: 'Add an idea' }).click();
  await userEvent.fill(screen.getByLabelText('Idea'), 'A short idea');
  await userEvent.keyboard('{Enter}');
- await expect.poll(() => sent(props)).toEqual([{ op: 'idea', company: 'co-1', slug: 'rs-learning', stage: '1', title: 'A short idea', agent: 'h-lead' }]);
+ await expect.poll(() => ideasSent(props)).toEqual([{ key: expect.stringMatching(/^[0-9a-f-]{36}$/), company: 'co-1', slug: 'rs-learning', stage: '1', title: 'A short idea', agent: 'h-lead' }]);
 });
 
 test('Enter that confirms an input method\'s composition sends nothing; the idea stays to be finished', async () => {
@@ -80,7 +82,7 @@ test('Enter that confirms an input method\'s composition sends nothing; the idea
  const field = document.querySelector<HTMLInputElement>('#idea-title')!;
  field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true }));
  await new Promise(resolve => setTimeout(resolve, 100));
- expect(sent(props)).toEqual([]);
+ expect(ideasSent(props)).toEqual([]);
  await expect.element(screen.getByLabelText('Idea')).toHaveValue('فكرة لسه');
 });
 
@@ -120,15 +122,15 @@ test('the toast says the idea was added once the board comes back with it', asyn
 });
 
 test('an idea that could not be sent says so under it with its words kept, and Add works again', async () => {
- const workAction = vi.fn(async () => { throw new Error('down'); });
- const screen = await showWork(withAgents({ workAction }));
+ const addIdea = vi.fn(async (): Promise<{ card: number }> => { throw new Error('down'); });
+ const screen = await showWork(withAgents({ addIdea }));
  await screen.getByRole('button', { name: 'Add an idea' }).click();
  await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
  await screen.getByRole('button', { name: 'Add', exact: true }).click();
  await expect.element(screen.getByRole('alert')).toHaveTextContent('Could not add the idea. Try again.');
  await expect.element(screen.getByLabelText('Idea')).toHaveValue('A post about the new cohort');
  expect(screen.getByRole('button', { name: 'Add', exact: true }).element()).toBeEnabled();
- expect(workAction).toHaveBeenCalledTimes(1);
+ expect(addIdea).toHaveBeenCalledTimes(1);
  // The failure leaves when the person writes again, and the form is still the one they were in.
  await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the next cohort');
  await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
@@ -145,4 +147,105 @@ test('an idea the server took closes the form back onto the column\'s "+", so no
  await expect.poll(() => document.querySelector('#idea-title')).toBeNull();
  await expect.element(add).toHaveAttribute('aria-expanded', 'false');
  await expect.element(add).toHaveFocus();
+ expect(document.querySelector('[role="alert"]')).toBeNull();
+ // The board comes back on the new Card, which says the idea was added (#452: the action answers, it does not redirect).
+ expect(replace).toHaveBeenCalledWith('/c/rs-learning/work/board?show=9&idea=1', { scroll: false });
+});
+
+test('an idea the server refused says so under it and leaves the form open', async () => {
+ const props = withAgents({ addIdea: vi.fn(async () => ({ failed: true as const })) });
+ const screen = await showWork(props);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Could not add the idea. Try again.');
+ await expect.element(screen.getByLabelText('Idea')).toHaveValue('A post about the new cohort');
+ expect(replace).not.toHaveBeenCalled();
+});
+
+test('a retry after an answer that never came sends the same request key, so the server makes one Card (#452)', async () => {
+ const addIdea = vi.fn<(form: FormData) => Promise<{ card: number }>>().mockRejectedValueOnce(new Error('lost')).mockResolvedValueOnce({ card: 9 });
+ const props = withAgents({ addIdea });
+ const screen = await showWork(props);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.element(screen.getByRole('alert')).toBeVisible();
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.poll(() => document.querySelector('#idea-title')).toBeNull();
+ const [first, second] = ideasSent(props);
+ expect(second.key).toBe(first.key);
+});
+
+test('an idea edited after an answer that never came is sent again under a new request key (#452)', async () => {
+ const addIdea = vi.fn<(form: FormData) => Promise<{ card: number }>>().mockRejectedValueOnce(new Error('lost')).mockResolvedValueOnce({ card: 9 });
+ const props = withAgents({ addIdea });
+ const screen = await showWork(props);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.element(screen.getByRole('alert')).toBeVisible();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the next cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.poll(() => ideasSent(props).length).toBe(2);
+ const [first, second] = ideasSent(props);
+ expect(second.key).not.toBe(first.key);
+ expect(second.title).toBe('A post about the next cohort');
+});
+
+test('another Agent after an answer that never came is sent again under a new request key (#452)', async () => {
+ const addIdea = vi.fn<(form: FormData) => Promise<{ card: number }>>().mockRejectedValueOnce(new Error('lost')).mockResolvedValueOnce({ card: 9 });
+ const props = withAgents({ addIdea });
+ const screen = await showWork(props);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.element(screen.getByRole('alert')).toBeVisible();
+ await userEvent.selectOptions(screen.getByLabelText('Agent'), 'h-ads');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.poll(() => ideasSent(props).length).toBe(2);
+ const [first, second] = ideasSent(props);
+ expect(second.key).not.toBe(first.key);
+ expect(second.agent).toBe('h-ads');
+});
+
+test('an answer that comes after its form closed leaves the form now open alone, with its idea and no move to the board (#452)', async () => {
+ let answer!: (result: { card: number }) => void;
+ const props = withAgents({ addIdea: vi.fn(() => new Promise<{ card: number }>(resolve => { answer = resolve; })) });
+ const screen = await showWork(props);
+ const add = screen.getByRole('button', { name: 'Add an idea' });
+ await add.click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await screen.getByRole('button', { name: 'Cancel' }).click();
+ await add.click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'idea B');
+ answer({ card: 9 });
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(document.querySelector('#idea-title')).not.toBeNull();
+ await expect.element(screen.getByLabelText('Idea')).toHaveValue('idea B');
+ expect(replace).not.toHaveBeenCalled();
+});
+
+test('under React Strict Mode an idea the server took still closes the form and moves the board to its Card', async () => {
+ const props = withAgents();
+ const screen = await render(<StrictMode>{workView(props, 'en')}</StrictMode>);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.poll(() => document.querySelector('#idea-title')).toBeNull();
+ expect(replace).toHaveBeenCalledWith('/c/rs-learning/work/board?show=9&idea=1', { scroll: false });
+});
+
+test('Add pressed twice while the first is on its way sends one idea', async () => {
+ let answer!: (result: { card: number }) => void;
+ const props = withAgents({ addIdea: vi.fn(() => new Promise<{ card: number }>(resolve => { answer = resolve; })) });
+ const screen = await showWork(props);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await userEvent.keyboard('{Enter}');
+ await userEvent.keyboard('{Enter}');
+ expect(ideasSent(props)).toHaveLength(1);
+ answer({ card: 9 });
+ await expect.poll(() => document.querySelector('#idea-title')).toBeNull();
 });
