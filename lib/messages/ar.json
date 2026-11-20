@@ -1320,5 +1320,14 @@
   "whatsNew": "الجديد",
   "whatsNewSub": "gtmworks اتحدّث. ده اللي وصل.",
   "whatsNewDone": "تمام",
-  "updateReadyMoreOne": "وكمان تحسين أو إصلاح تاني."
+  "updateReadyMoreOne": "وكمان تحسين أو إصلاح تاني.",
+  "updateNow": "حدّث دلوقتي",
+  "updateNowAsk": "gtmworks هيقف حوالي دقيقة وهو بيتحدّث، وبعدين هيرجع لوحده. كل اللي شغّالين عليه هيلاقوه واقف الدقيقة دي.",
+  "updating": "بنحدّث gtmworks… هيقف حوالي دقيقة ويرجع لوحده.",
+  "updatedTo": "اتحدّث لـ gtmworks {0}.",
+  "updateFailed": "التحديث منجحش؛ إنت لسه على gtmworks {0}.",
+  "updateFailedUnknown": "التحديث منجحش. اطلب من اللي مثبّت gtmworks يشغّل: gtmworks status",
+  "updateReload": "حمّل الصفحة تاني",
+  "updateRequestFailed": "مقدرناش نطلب التحديث. جرّب تاني.",
+  "updateButtonOff": "زرار التحديث مقفول على السيرفر ده. اطلب من اللي مثبّت gtmworks يشغّل: gtmworks update"
 }

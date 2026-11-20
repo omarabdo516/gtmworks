@@ -1381,3 +1381,21 @@ test('gtmworks update-button and auto-update write the switch, gtmworks status s
   assert.equal(m.gtmworks(args).status,2,args.join(' '));
  }
 });
+
+test('the web app\'s container has no Docker socket and no host access: the updater outside it is the only way to update', () => {
+ const compose=load(readFileSync('docker-compose.install.yml','utf8'));
+ for(const name of ['web','worker']) {
+  const service=compose.services[name];
+  assert.ok(service,name);
+  // No mount at all: no Docker socket, no host folder, no volume.
+  assert.equal(service.volumes,undefined,`${name} mounts nothing`);
+  for(const key of ['privileged','cap_add','devices','pid','ipc','network_mode','userns_mode','security_opt','group_add']) {
+   assert.equal(service[key],undefined,`${name} has no ${key}`);
+  }
+  assert.doesNotMatch(JSON.stringify(service),/docker\.sock|DOCKER_HOST/,`${name} names no Docker daemon`);
+ }
+ // No service of the install, nor any Engine, mounts the Docker socket.
+ for(const file of ['docker-compose.install.yml','scripts/engine-template.yml']) {
+  assert.doesNotMatch(readFileSync(file,'utf8'),/docker\.sock/,file);
+ }
+});

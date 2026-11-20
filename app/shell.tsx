@@ -26,6 +26,7 @@ import { Frame } from './frame';
 import { markOpen } from '@/lib/chat-open-timing';
 import { AppsSheetProvider, AppsButton } from './apps-sheet';
 import UpdateReady from './update-ready';
+import InstallUpdate from './install-update';
 import type { ReactNode } from 'react';
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from '@/components/paperclip/ui/breadcrumb';
 import { Fragment, cache } from 'react';
@@ -108,6 +109,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </section>
   </>}</nav>
   {/* The apps are read by the browser (app/company-apps-read.ts): the page is drawn with no Engine read and the count lands after. */}
+  {/* Update now (#443): the update an Owner asked for, and how it ended, read by the browser so the page waits for nothing. */}
+  {owner&&<InstallUpdate/>}
   <div className="sb-foot sidebar-bottom">{company?<><UpdateReady company={company.id} person={personId} owner={owner}/><AppsButton/>{account}</>:account}</div>
  </SidebarSearchProvider>;
  // Paperclip BreadcrumbBar: a trail of two or more crumbs replaces the single page title. Rendered on the server so it adds no route JavaScript.
