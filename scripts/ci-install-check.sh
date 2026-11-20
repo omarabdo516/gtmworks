@@ -277,19 +277,23 @@ docker exec "$engine_id" test -f /opt/data/ssh/id_ed25519 || fail "the first Eng
 [[ $(docker exec "$engine_id" stat -c %u /opt/data/ssh/id_ed25519) == 10000 ]] || fail "the sandbox key belongs to the Engine's own user"
 [[ $(docker exec "$engine_id" stat -c %a /opt/data/ssh/id_ed25519) == 600 ]] || fail "the sandbox key is owner-only"
 if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')" | grep -q 'PRIVATE KEY'; then fail 'the sandbox holds no private key in its environment'; fi
-docker exec "$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')" sh -ec 'test -s /home/pn/.ssh/authorized_keys && grep -q "^ssh-ed25519 " /home/pn/.ssh/authorized_keys' || fail 'the sandbox takes its Engine\'s public key'
+docker exec "$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')" sh -ec 'test -s /home/pn/.ssh/authorized_keys && grep -q "^ssh-ed25519 " /home/pn/.ssh/authorized_keys' || fail "the sandbox takes its Engine's public key"
 if docker exec "$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')" sh -ec 'grep -rl "PRIVATE KEY" /home/pn /work /tmp 2> /dev/null | grep -v "^/home/pn/.ssh-host/" | grep .'; then fail 'the sandbox holds no private key of any Engine'; fi
-docker exec "$engine_id" cat /opt/data/ssh/id_ed25519 | docker run --rm -i --network gtmworks-work-first --entrypoint sh "$sandbox_image" -ec '
+# The sandbox's own address on its work network: the Engine dials the alias `sandbox`, which the Agent's Run proves; a
+# throwaway container asks the same Docker DNS for it, and a momentary failure there must not read as a refused key.
+first_sandbox=$(docker ps -q --filter "name=^gtmworks-sandbox-first$")
+sandbox_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-work-first").IPAddress}}' "$first_sandbox")
+docker exec "$engine_id" cat /opt/data/ssh/id_ed25519 | docker run --rm -i -e SANDBOX_IP="$sandbox_ip" --network gtmworks-work-first --entrypoint sh "$sandbox_image" -ec '
   set -e
   cat > /tmp/key; chmod 600 /tmp/key
   ssh-keygen -q -t ed25519 -N "" -f /tmp/wrong
   options="-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
-  test "$(ssh -i /tmp/key $options -p 2222 pn@sandbox id -un)" = pn
-  if ssh -i /tmp/wrong $options -p 2222 pn@sandbox true 2> /tmp/wrong.err; then echo "a wrong key was accepted" >&2; exit 1; fi
+  test "$(ssh -i /tmp/key $options -p 2222 pn@$SANDBOX_IP id -un)" = pn
+  if ssh -i /tmp/wrong $options -p 2222 pn@$SANDBOX_IP true 2> /tmp/wrong.err; then echo "a wrong key was accepted" >&2; exit 1; fi
   grep -q "Permission denied (publickey)" /tmp/wrong.err
-  if ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no $options -p 2222 pn@sandbox true 2> /tmp/password.err; then echo "a password was accepted" >&2; exit 1; fi
+  if ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no $options -p 2222 pn@$SANDBOX_IP true 2> /tmp/password.err; then echo "a password was accepted" >&2; exit 1; fi
   grep -q "Permission denied (publickey)" /tmp/password.err
-' || fail 'the sandbox accepts its Engine\'s key and no password'
+' || fail "the sandbox accepts its Engine's key and no password"
 # `gtmworks company list` and `gtmworks status` report each Company's own Engine and its state.
 sh scripts/install.sh company list | tee company-list.log || fail 'company list'
 grep -F '"Proxy Company": Engine http://gtmworks-engine-first:8642 (healthy)' company-list.log || fail 'company list names the first Company and its healthy Engine'
