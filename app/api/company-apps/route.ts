@@ -31,12 +31,12 @@ export async function POST(request:NextRequest) {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
   if(!user) return reply({error:'appsNotAllowed'},401);
   if(!request.headers.get('content-type')?.startsWith('application/json')||crossSiteWrite(request.headers)) return reply({error:'appsNotAllowed'},403);
-  const raw=await request.text(); if(raw.length>1000) return reply({error:'appsInvalid'},400);
+  const raw=await request.text(); if(raw.length>32768) return reply({error:'appsInvalid'},400);
   const body=JSON.parse(raw);
   if(typeof body?.company!=='string'||!uuid.test(body.company)) return reply({error:'appsInvalid'},400);
   if(body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return reply({error:'appsInvalid'},400);
   if(!await routeAllowed(db,'app/api/company-apps/route.ts','POST',body.company,user.id)) return reply({error:'appsNotAllowed'},403);
-  const result=await changeCompanyApp(db,{company:body.company,agent:body.agent,person:user.id,app:body.app,action:body.action});
+  const result=await changeCompanyApp(db,{company:body.company,agent:body.agent,person:user.id,app:body.app,action:body.action,fields:body.fields,token:body.token});
   return reply(result.body,result.status);
  } catch { return reply({error:'appsFailed'},500); }
 }

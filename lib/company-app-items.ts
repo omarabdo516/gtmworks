@@ -21,8 +21,13 @@ export const companyAppItems=cache(async(company:string,language:Language):Promi
   const apps=await readCompanyApps(await supabase(),{company});
   if(!apps) return null;
   const text:Text=language==='ar'?ar:en;
-  return apps.map(entry=>({...entry,use:text[`use.${entry.key}`],can:text[`can.${entry.key}`],
-   words:[entry.name,...catalogues.flatMap(words=>[`use.${entry.key}`,`can.${entry.key}`,`alias.${entry.key}`,`category.${entry.category}`].map(key=>words[key]))].join(' ')}));
+  return apps.map(entry=>{
+   const style=entry.source==='custom'?'custom':entry.key;
+   const name=entry.source==='own'?text.ownName:entry.name;
+   const use=text[`use.${style}`], can=text[`can.${style}`];
+   return {...entry,name,use,can,
+    words:[name,...catalogues.flatMap(words=>[`use.${style}`,`can.${style}`,`alias.${style}`,`category.${entry.category}`].map(key=>words[key]))].join(' ')};
+  });
  } catch { return null; }
 });
 
@@ -49,7 +54,7 @@ export const agentToolItems=cache(async(company:string,agent:string,language:Lan
  try {
   const tools=await readAgentTools(await supabase(),{company,agent});
   const text:Text=language==='ar'?ar:en;
-  return tools&&tools.map(tool=>({...tool,use:text[`use.${tool.key}`]}));
+  return tools&&tools.map(tool=>({...tool,use:text[`use.${tool.key}`]??text['use.custom']}));
  } catch { return null; }
 });
 
