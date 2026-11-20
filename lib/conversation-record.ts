@@ -2,7 +2,7 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, latestEnded, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
+import { faceOf, handTurn, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
@@ -88,6 +88,9 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
  const board=card&&{card:card.card,column:card.column};
+ // A reply that failed for want of any model provider (#422) says so: the Owner connects one, a Member asks the Owner.
+ const ended=latestEnd(messages,ends);
+ const {data:ownsIt}=ended==='no_model'?await db.rpc('is_company_owner',{c:company}):{data:false};
  // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
  // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
  // of a Run no message of the person started.
@@ -107,7 +110,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),
   ...(permit?{permit:permit as PermissionChoice[]}:{}),
   ...(connect?{connect}:{}),
-  failed:latestEnded(messages,ends),
+  failed:ended!==null,
+  ...(ended==='no_model'?{noModel:{owner:ownsIt===true}}:{}),
   working:runner?.name??null,
   canStop:!!runner&&(runner.person===person||manages===true),
   ...(board?{board}:{}),

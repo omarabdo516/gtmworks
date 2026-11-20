@@ -12,6 +12,7 @@ import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/ap
 import { OpenedMark } from '@/app/agent-made';
 import { FirstRunToast } from '@/app/first-run-toast';
 import Link from '@/lib/link';
+import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ReadyRole } from '@/lib/ready-roles';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 
@@ -33,8 +34,10 @@ export type ShownAgent={agent:DetailsAgent,empty:EmptyChat,details:AgentDetailsV
 // gallery (#14), for every Member who may write (#189), which `gallery` opens over the chat (?new=ready); leaving it gives
 // the focus back to the composer.
 // `askOf`: the Owners a Manager or a Contributor asks for an Agent instead (#17). In a team, a line at the top says the
-// chat is between this person and the Agent only (#25).
-export default function AgentChat({slug,company,agent,details,writer,team=false,empty={state:'known',example:null},newAgent=false,askOf=null,isNew=false,gallery=null,agents=[],first,invites}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,empty?:EmptyChat,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[],owner:boolean,owners:string[]}|null,agents?:ShownAgent[],first?:'alone'|'team',invites?:number}) {
+// chat is between this person and the Agent only (#25). `noModel` (#422): the Company has no model at all, so one line
+// above the composer says so before anyone writes, with the way to Settings for the Owner (`owner`) and the Owner to
+// ask for anyone else.
+export default function AgentChat({slug,company,agent,details,writer,team=false,empty={state:'known',example:null},newAgent=false,askOf=null,isNew=false,gallery=null,agents=[],first,invites,noModel=null}:{slug:string,company:string,agent:DetailsAgent|null,details:AgentDetailsView|null,writer:boolean,team?:boolean,empty?:EmptyChat,newAgent?:boolean,askOf?:string[]|null,isNew?:boolean,gallery?:{company:string,alone:boolean,roles:ReadyRole[],owner:boolean,owners:string[]}|null,agents?:ShownAgent[],first?:'alone'|'team',invites?:number,noModel?:{owner:boolean}|null}) {
  const {t,language}=useI18n(); const router=useRouter();
  // One Conversation per Agent, made the first time it is needed: coming back to an Agent whose send failed keeps the
  // Conversation and its send key, so a retry is the same send and the Engine starts nothing twice (#355 review).
@@ -70,7 +73,9 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     {current&&team&&<PrivateLine agent={current.name}/>}
     {current?<AgentEmptyChat agent={current} empty={shown.empty} askOf={askOf} suggest={writer?text=>box.current?.insert(text):undefined} picker={agents.length>1?{agents:agents.map(choice=>({id:choice.agent.id,connection_id:choice.agent.connection_id,name:choice.agent.name})),onPick:pick,disabled:sending,chipRef:element=>{chip.current=element}}:undefined}/>:<div className="empty-chat"><p role="note">{t('conversationNoAgent')}</p></div>}
    </div></div>
-   <div className="composer-area" ref={composer}>{current&&writer&&opening&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{!askOf?t('newAgentHint',current.name):askOf.length?t('newAgentHintMember',current.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHintMemberAnyOwner',current.name)}</p>
+   <div className="composer-area" ref={composer}>{current&&writer&&noModel&&<div className="new-hint" role="note" data-no-model><ShellIcon name="cpu" className="new-hint__ic"/><p className="new-hint__t">{t('noModelLine')}{!noModel.owner&&` ${t('noModelAskOwner')}`}</p>
+    {noModel.owner&&<Link className="link-btn new-hint__alt" href={overlayHref(slug,'models')}>{t('noModelConnect')}</Link>}</div>}
+    {current&&writer&&opening&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{!askOf?t('newAgentHint',current.name):askOf.length?t('newAgentHintMember',current.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHintMemberAnyOwner',current.name)}</p>
     <Link className="link-btn new-hint__alt" href={`/c/${slug}/chat?new=ready`}>{t('newAgentReadyMade')}</Link></div>}
     {current&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={current.id} companyName={gallery.company} alone={gallery.alone} lead={current.name} roles={gallery.roles} owner={gallery.owner} owners={gallery.owners}/></Suspense>}
     {current&&(writer?<MessageBox key={`${opening}`} ref={box} focus={opening&&!gallery} placeholder={opening?t('newAgentExample'):t('writeTo',current.name)} voice={{company,agent:current.id}} send={async(message,sendKey,files)=>{
