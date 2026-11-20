@@ -392,6 +392,10 @@ assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
 const pair=JSON.parse(readFileSync(state,'utf8'));
 const first=pair[0];
 const firstEngine=await engineFor(first.company);
+// The verify step ends by setting and removing a provider's key, which leaves both profiles' model on that provider and
+// no key to reach it: each profile is pointed at the fake model again for this step's Runs.
+await pointAtFakeModel(firstEngine,first.profile);
+await pointAtFakeModel(firstEngine,first.secondProfile);
 const calls=[
  {name:'terminal',arguments:{command:`id -un; hostname; pwd; printf '%s' '${marker}-terminal' > /work/${marker}-terminal.txt`}},
  {name:'write_file',arguments:{path:`/work/${marker}-file.txt`,content:`${marker}-file`}},
