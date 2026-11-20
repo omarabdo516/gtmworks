@@ -523,7 +523,7 @@ assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
 const first=JSON.parse(readFileSync(state,'utf8'))[0];
 const firstEngine=await engineFor(first.company);
 await pointAtFakeModel(firstEngine,first.profile);
-const command=`folder=$(find /home/pn/.hermes/skills -mindepth 1 -maxdepth 1 -type d | head -n 1); test -n "$folder"; printf '\\nEDIT-${marker}\\n' >> "$folder/SKILL.md"; printf '${marker}' > "$folder/planted-${marker}.md"; printf '%s\\n' "$folder"`;
+const command=`folder=$(find /home/pn/.hermes/skills -mindepth 1 -maxdepth 1 -type d | head -n 1); test -n "$folder"; printf '\\nEDIT-${marker}\\n' >> "$folder/SKILL.md"; printf '${marker}' > "$folder/planted-${marker}.md"; shared=$(find /home/pn/.hermes/external_skills -name SKILL.md -type f | head -n 1); [ -z "$shared" ] || printf '\\nEDIT-${marker}\\n' >> "$shared"; printf '%s\\n' "$folder"`;
 const plan=messages=>{
  const text=messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
  const done=messages.filter(message=>message.role==='tool').length;
