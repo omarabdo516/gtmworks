@@ -656,9 +656,20 @@ sh install.sh restore "$previous_backup" || fail 'restore the archive the previo
 [[ $(db -c 'select count(*) from public.companies') == 1 ]] || fail 'the previous release archive restores its one Company'
 [[ $(engine_key) == "$key" ]] || fail 'the previous release archive keeps the key it held in .env.install'
 if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the restored install keeps no Engine key in .env.install'; fi
+# The key left the app's and the worker's environment before they were recreated (#378, X3): a pre-#385 archive's key is
+# never in their environment for even one start, and the restored Engine answers on its own.
+for service in web worker; do
+  if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(compose ps -q "$service")" | grep -q '^HERMES_API_KEY='; then
+    fail "the $service starts with no Engine key in its environment"
+  fi
+done
+[[ -n $(engine_id) ]] || fail 'the restored install runs its one Engine'
 company=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the Company the archive restored'
 [[ $(db -c "select count(*) from public.company_engines e join public.companies c on c.engine_id=e.id where c.id='$company'") == 1 ]] \
   || fail 'the Company the previous release archive restored names its own Engine'
+ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS=http://gtmworks-engine-first:8642 -e HERMES_MANAGEMENT_ADDRESS=http://gtmworks-engine-first:9119 web \
+  node --input-type=module - < "$root/scripts/check-install-conversation.mjs" \
+  || fail 'the Company the previous release archive restored answers on its own Engine'
 ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
   || fail 'the Company the previous release archive restored answers on its own Engine and its Agent remembers'
 # An install this release made, with two Companies after `company add`, updates to a release that pins another

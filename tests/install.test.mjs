@@ -333,9 +333,17 @@ test('the install job updates a real previous-release install with one Company, 
   "fail 'the previous release archive restores its one Company'",
   "fail 'the previous release archive keeps the key it held in .env.install'",
   "fail 'the restored install keeps no Engine key in .env.install'",
+  // The key left the app's and the worker's environment before they were recreated (X3): the archive's key never
+  // reaches either container's environment, the restored Engine runs, and a Conversation answers on it.
+  "fail \"the $service starts with no Engine key in its environment\"",
+  "|| fail 'the restored install runs its one Engine'",
   "|| fail 'the Company the previous release archive restored names its own Engine'",
+  "|| fail 'the Company the previous release archive restored answers on its own Engine'",
   "|| fail 'the Company the previous release archive restored answers on its own Engine and its Agent remembers'",
  ]) assert.ok(run.includes(text),text);
+ // The security check sits after the archive was restored, not only in the install part (#378, X3).
+ assert.ok(run.indexOf('the $service starts with no Engine key in its environment')>previousArchive);
+ assert.ok(run.indexOf('check-install-conversation.mjs')>previousArchive);
  // #384: the command reaches that Company's Engine and prints the provider's address, without finishing the sign-in.
  assert.ok(run.includes('--command --dir "$dir" sign-in claude --company "$company"'),run);
  assert.ok(run.includes("grep -Eq 'https://(claude\\.ai|console\\.anthropic\\.com)'"),run);
@@ -385,8 +393,8 @@ test('the install job backs up and restores every Company Engine, refuses an inc
   'tar -czf /install/before-engines.tgz',
   'before-engines.tgz',
   'HERMES_API_KEY=%s',
-  "fail \"the $service starts with no Engine key in its environment\"",
  ]) assert.equal(run.includes(text),false,`the install part holds no repacked archive: ${text}`);
+ assert.equal(run.includes("before_engines_key"),false,'the install part keeps no repacked archive key');
  // The two-Company proof starts from the profiles the job has just proven on two Engines, writes a code word into each
  // Company's own Engine, and backs up once.
  const verify=at('- verify "$marker" < scripts/check-install-profiles.mjs');
@@ -1401,4 +1409,34 @@ echo 'cp: cannot copy' >&2; exit 8
  assert.match(uncopied.stderr,/^Could not read the backup\.$/m);
  assert.equal(uncopied.file,'original-private-key');
  assert.doesNotMatch(uncopied.commands,/tar -tzf|stop|--volumes-from/);
+});
+
+// The Engines a backup names come from the install's own records, so a read that fails must stop the backup before it
+// stops anything (#378, C4): an empty list would quietly leave a restore's manifest check with nothing to require.
+test('a backup that cannot read the Engine records stops before it stops anything', t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-engine-records-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ for(const folder of ['scripts','bin','.engines/first']) mkdirSync(join(directory,folder),{recursive:true});
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ const secrets=`KEYS=kept\nHERMES_API_KEY=${'k'.repeat(64)}\n`;
+ writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
+ writeFileSync(join(directory,'.engines/first/.env'),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`,{mode:0o600});
+ writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
+printf '%s\\n' "$*" >> "$COMMANDS"
+case "$*" in
+  *'from public.company_engines'*) echo 'ERROR: relation "public.company_engines" does not exist' >&2; exit 3;;
+esac
+`,{mode:0o755});
+ const commands=join(directory,'commands');
+ const result=spawnSync('sh',['scripts/install.sh','backup'],{cwd:directory,
+  env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands},encoding:'utf8'});
+ assert.equal(result.status,1,result.stdout);
+ assert.match(result.stderr,/^Could not read this install's Engine records: start gtmworks \(sh scripts\/install\.sh\), then run this again\. Nothing was archived\.$/m);
+ const run=readFileSync(commands,'utf8');
+ assert.match(run,/from public\.company_engines/,'the records were asked for');
+ // Nothing stopped, nothing started again and nothing was archived.
+ assert.doesNotMatch(run,/ stop|stop |tar -czf|up -d/);
+ assert.deepEqual(readdirSync(join(directory,'backups')),[]);
+ assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
+ assert.equal(existsSync(join(directory,'.install-lock')),false);
 });

@@ -532,14 +532,15 @@ if [ "$operation" = backup ]; then
   # The stack starts again after the copy, every Engine included, and an install the previous release made has its
   # Engine key moved into the Engine's own file then (#385).
   complete_env "$PWD/.env.install"
-  resume=yes
   # The Engines this install's Companies name, read while the database still runs (#378, C4): a restore needs every one of
-  # them, so the archive carries their folders in engines.list. An install from before the Engine records has no list, and
-  # its archive keeps the rules of the releases that made it.
+  # them, so the archive carries their folders in engines.list. The read must succeed: an empty list here would quietly
+  # leave the restore's check with nothing to require. An install from before the Engine records was refused above.
   compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \
     'select e.address from public.company_engines e join public.companies c on c.engine_id=e.id order by e.address;' \
-    > .install-lock/addresses 2> /dev/null || : > .install-lock/addresses
+    > .install-lock/addresses \
+    || { echo "Could not read this install's Engine records: start gtmworks (sh scripts/install.sh), then run this again. Nothing was archived." >&2; exit 1; }
   sed -n 's#^http://gtmworks-engine-\([a-z0-9-]*\):8642$#\1#p' .install-lock/addresses | sort -u > .install-lock/engines.list || exit 1
+  resume=yes
   engine_stop
   engines_stopped || exit 1
   compose stop
