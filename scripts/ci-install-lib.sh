@@ -151,6 +151,12 @@ owned_by_others() {
   find "$1" ! -user "$(id -u)"
 }
 web_image() { docker inspect -f '{{.Image}}' "$(compose ps -q web)"; }
+# The public half of the key an Engine dials its Company's sandbox with (#393): read from the Engine's own data volume in a
+# throwaway container of the sandbox image, as root because the key belongs to the Engine's user (uid 10000).
+sandbox_public_of() { docker run --rm --user 0 --entrypoint sh -v "$1:/data:ro" "$(cat .work-sandbox-image)" -ec 'ssh-keygen -y -f /data/ssh/id_ed25519'; }
+# One Engine's own work network, derived from its container name, and its sandbox name.
+work_network_of() { printf '%s' "$1" | sed 's/^gtmworks-engine-/gtmworks-work-/'; }
+sandbox_of() { printf '%s' "$1" | sed 's/^gtmworks-engine-/gtmworks-sandbox-/'; }
 probe() {
   for path in /api/health /sign-in; do
     status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request ($1)"
