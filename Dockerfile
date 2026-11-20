@@ -21,6 +21,8 @@ ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
+# The providers' and apps' logos with their licences (#424): a standalone build does not carry public/.
+COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/worker ./worker
 COPY --from=build --chown=node:node /app/lib ./lib
 # The installer registers the install's Engine record through this script (#380); a release image needs it too.

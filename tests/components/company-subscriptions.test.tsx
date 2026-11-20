@@ -85,3 +85,11 @@ test('a member who is not the Owner reads each state and gets no button and no c
     await screen.unmount();
   }
 });
+
+// #424: ChatGPT and Claude each show their own logo, named, not the shared glyph.
+test('each subscription row shows its own logo, named', async () => {
+  await section({ owner: true, available: true, signIns: signIns('notConnected', 'notConnected') });
+  const logos = ['openai-codex', 'anthropic'].map(provider => document.querySelector(`#sub-${provider} .tool-tile[role=img]`));
+  expect(logos.map(logo => [logo?.getAttribute('aria-label'), !!logo?.querySelector('.tool-logo')])).toEqual([['ChatGPT', true], ['Claude', true]]);
+  expect(document.querySelector('#md-subscriptions .panel-row__icon')).toBeNull();
+});

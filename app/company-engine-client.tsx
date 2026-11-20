@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useTransition, type KeyboardEvent } from '
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { SettingsIcon } from './settings-icons';
+import { AppTile } from '@/components/app-tile';
 import type { CompanySignIns, SubscriptionState } from '@/lib/company-sign-in.mjs';
 
 // Arrow keys move between the choices of one radio group (WAI-ARIA radio pattern); the choice is made with Enter or Space.
@@ -39,6 +40,8 @@ export function AgentLevel({company,level,owner}:{company:string,level:number,ow
 }
 
 type Provider='openai-codex'|'anthropic';
+// Each subscription shows its product's mark, the reference's ChatGPT and Claude (#424).
+const subscriptionLogo:Record<Provider,string>={'openai-codex':'openai',anthropic:'claude'};
 type Started={provider:Provider,session:string,code:string,link:string,interval:number};
 async function ask(body:object):Promise<{ok:boolean,body:Record<string,unknown>}> {
  try {
@@ -98,7 +101,7 @@ export function CompanySubscriptions({company,companyName,owner,available,signIn
   const disconnect=owner&&(state==='connected'||partial); const connect=owner&&(state==='notConnected'||partial);
   const label=name;
   return <div className="sub-row" key={provider} id={`sub-${provider}`}>
-   <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="cpu"/></span>
+   <div className="panel-row"><AppTile app={{key:subscriptionLogo[provider],mark:''}} label={name}/>
     <span className="panel-row__text"><span className="panel-row__t"><bdi>{name}</bdi></span>
      <span className="panel-row__d" id={`sub-${provider}-state`}>{t(state?stateText[state]:'signInUnknown')}</span></span>
     {disconnect&&<button type="button" className="btn btn--secondary btn--sm" disabled={pending||waiting} aria-label={t('signInDisconnectLabel',label)} onClick={()=>act(provider,'disconnect')}>{t('signInDisconnect')}</button>}

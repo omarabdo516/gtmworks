@@ -241,3 +241,26 @@ test('a sub-agent model is one choice that saves the provider and the bare model
  await expect.poll(() => sent.length).toBe(3);
  expect(sent[2].body).toEqual({ company, agent: 'a-1', settings: { 'delegation.provider': '', 'delegation.model': '' } });
 });
+
+// #424: each provider row shows its company's logo, a file of this install, named by the provider; a provider with no
+// logo in Lobe Icons keeps its first letter.
+const tileOf = (row: Element | null) => {
+  const tile = row?.querySelector('.tool-tile');
+  return [tile?.getAttribute('aria-label'), tile?.querySelector('img.tool-logo')?.getAttribute('src') ?? tile?.textContent];
+};
+test('every provider key row and default model row shows its provider\'s logo, named, or its first letter', async () => {
+  const keys = [{ provider: 'openrouter', label: 'OpenRouter', set: false }, { provider: 'anthropic', label: 'Anthropic', set: true },
+    { provider: 'nvidia', label: 'NVIDIA NIM', set: false }, { provider: 'moa', label: 'Mixture of Agents', set: false }];
+  await renderNode(<ProviderKeys company={company} owner data={{ ...keysData, keys }}/>);
+  expect(keys.map(row => tileOf(document.getElementById(`mdl-key-row-${row.provider}`)))).toEqual([
+    ['OpenRouter', '/logos/lobe/openrouter-color.svg'], ['Anthropic', '/logos/lobe/anthropic.svg'],
+    ['NVIDIA NIM', '/logos/lobe/nvidia-color.svg'], ['Mixture of Agents', 'M']]);
+  // A model choice shows its provider's logo too, out of the radio's name, which says the provider in words already.
+  const screen = await renderNode(<DefaultModel company={company} owner models={{ model: null, options }}/>);
+  expect(options.map(option => tileOf(document.getElementById(`mdl-def-${option.provider}-${option.model}`)))).toEqual([
+    [null, '/logos/lobe/openrouter-color.svg'], [null, '/logos/lobe/anthropic.svg']]);
+  await expect.element(screen.getByRole('radio', { name: /^openai\/gpt-5\.5/ })).toBeVisible();
+  const loaded = [...document.querySelectorAll<HTMLImageElement>('img.tool-logo')];
+  await expect.poll(() => loaded.every(image => image.complete && image.naturalWidth > 0)).toBe(true);
+});
+
