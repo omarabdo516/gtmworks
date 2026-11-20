@@ -359,6 +359,7 @@
   "conversationWith": "with {0} · {1}",
   "conversationMessages": "Messages",
   "conversationWorking": "{0} is working on a reply…",
+  "leadOpening": "Hi {0}, I’m {1}, and I manage {2}’s team of agents. I hand each job to the agent on the team who does it, I suggest making a new agent for work that keeps coming back and that no one covers yet, and I do small one-off jobs myself. Nothing is published or spent without your approval.\n\nTo put the right team together, tell me:\n\n1. What does {2} sell?\n2. Who buys it?\n3. What’s the goal right now?",
   "conversationReplyFailed": "The agent could not finish this reply. Send the message again to retry.",
   "noModelLine": "This company has no AI subscription or model key connected yet, so its agents can’t reply.",
   "noModelConnect": "Connect one in Subscription and models",

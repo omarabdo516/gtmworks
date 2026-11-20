@@ -1,0 +1,7 @@
+| `lead-opening.spec.ts` | On the app (#434): a Company with no model shows the #422 notice and Lead opens nothing; once a key is there, the Owner opening Lead finds the first Conversation with Lead's message already in it (it manages the team, then what the Company sells, to whom and the goal now), in English for an English Owner and in Egyptian Arabic for an Arabic one; a reload, Lead's chat again and a new sign-in open nothing more; the Owner's answer is met with the first Agent to make and the "Make it" chips, and "Make it" makes it. | — | supabase/tests/lead_opening.sql (once per Company, Owner only, into first run's Conversation), lead-offer.test.mjs (the words the answer's Run is given) | new (#434) |
+
+## Cases
+
+| `lead-opening.spec.ts` "without a model the notice shows and nothing opens; once a key is there, Lead has opened the first Conversation, in English, and only once" | stays | A journey across the Engine and the database: only the whole app reads the Company's model from the Engine, writes the opening once and moves the Owner to it. |
+| `lead-opening.spec.ts` "the Owner's answer is met with the first Agent to make and the Make it chips; Make it makes the Agent" | stays | The answer's Run carries the opening through the database's pinned brief, and its question and tool call go through the worker and the Engine. |
+| `lead-opening.spec.ts` "an Arabic Owner finds the opening in Egyptian Arabic" | stays | The Owner's language is read on the server from their account when the opening is written. |

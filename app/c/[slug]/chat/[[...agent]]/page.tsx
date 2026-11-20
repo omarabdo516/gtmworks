@@ -10,6 +10,9 @@ import { readyRoles, roleSentence, roleStart } from '@/lib/ready-roles';
 import { emptyChatFacts, type EmptyChatFacts } from '@/lib/empty-chat.mjs';
 import { agentDetails } from '@/app/agent-details-server';
 import { companyHasModel } from '@/lib/provider-keys.mjs';
+import { openOnVisit } from '@/lib/lead-opening.mjs';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 import AgentChat from './agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
 
@@ -51,6 +54,16 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  // A Company with no model at all says so above the composer before anyone writes (#422); only a writer has a composer,
  // and only a read that tells "none" for certain draws the line.
  const modelRead=agent&&writer?companyHasModel(db,{company:company.id}).catch(()=>null):Promise.resolve(null);
+ // #434: on a Company with a model and no Conversation yet, the Owner opening Lead finds the first Conversation, which
+ // Lead opened with its questions (lib/lead-opening.mjs). The database opens it once per Company; any later visit draws
+ // the empty chat. Without a model the #422 notice shows instead, and the opening waits for one. The Owner's empty
+ // Conversation from first run is opened the same way (app/c/[slug]/conversations/[id]/page.tsx).
+ if(agent&&owner&&main&&!mode) {
+  const opened=await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
+   {model:modelRead,company:company.id,person:user.id,language,owner:person?.name||'',lead:agent.name,companyName:company.name});
+  // The reads already on their way are not awaited once the page moves.
+  if(opened) { factsRead.catch(()=>{}); detailsRead.catch(()=>{}); redirect(`/c/${slug}/conversations/${opened}${first?`?first=${encodeURIComponent(first)}${invites?`&invites=${encodeURIComponent(invites)}`:''}`:''}`); }
+ }
  const facts=await factsRead;
  const askOf=asks?facts?.owners??[]:null;
  const emptyOf=(own:EmptyChatFacts,row:AgentRow):EmptyChat=>own.state==='known'?{state:'known',example:roleSentence(language,row.template)}
