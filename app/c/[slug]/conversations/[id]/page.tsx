@@ -12,6 +12,10 @@ import { madeColumns, madeOf } from '@/lib/agent-made';
 import { agentDetails } from '@/app/agent-details-server';
 import { pickTab } from '@/lib/agent-details.mjs';
 import { logOpen, markOpen, startOpen } from '@/lib/chat-open-timing';
+import { openOnVisit } from '@/lib/lead-opening.mjs';
+import { companyHasModel } from '@/lib/provider-keys.mjs';
+import { createClient } from '@supabase/supabase-js';
+import { supabaseConfig } from '@/lib/supabase-config';
 
 // Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
 // ?tab=<key> opens the Agent's details on that tab.
@@ -20,7 +24,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const db=await supabase();
  // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
  // and the Conversation is then held to the Company in the address.
- const [{t},{data:{user}},{data:companies},{data:found}]=await Promise.all([getI18n(),db.auth.getUser(),
+ const [{t,language},{data:{user}},{data:companies},{data:found}]=await Promise.all([getI18n(),db.auth.getUser(),
   db.from('companies').select('id,slug,name,work_mode').order('name'),
   uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id`).eq('id',id).maybeSingle():{data:null}]);
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
@@ -37,7 +41,8 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  after(()=>logOpen(timing,company.id,id));
  // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts). The
  // page is drawn without waiting for it; the chat shows its placeholder until it arrives (#172).
- const record=conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session).finally(()=>markOpen('session',timing)));
+ const readRecord=()=>conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session).finally(()=>markOpen('session',timing)));
+ let record=readRecord();
  // Awaited only by the transcript: a read of the frame that fails first must not leave its failure unhandled.
  record.then(()=>markOpen('record',timing),()=>{});
  // Its Card on the board, in the corner from the start (design-reference: renderChat's corner pill): read beside the
@@ -64,6 +69,15 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
   db.rpc('conversation_can_write',{c:company.id}),
  ]);
  markOpen('reads',timing);
+ // #434: the Owner's empty Conversation with Lead (first run makes one) is where Lead opens the Company's first
+ // Conversation, once the Company has a model (lib/lead-opening.mjs); the record is then read again with its message.
+ // Only a Conversation with nothing in it asks, so every other open costs nothing more.
+ if(!first&&agent?.is_default&&membership?.role==='owner') {
+  const {count}=await db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',id);
+  const opened=count===0?await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
+   {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:person?.name||'',lead:agent.name,companyName:company.name}):null;
+  if(opened===id) { record.catch(()=>{}); record=readRecord(); }
+ }
  // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
  // for them, and each takes its place when read (decision 0042).
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
