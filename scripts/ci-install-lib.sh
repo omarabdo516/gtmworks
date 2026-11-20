@@ -134,6 +134,13 @@ DOCKERFILE
   next=$(publish 0.0.1-ci) || fail 'push the next release image'
   node scripts/release-assets.mjs "$next" release-next || fail 'next release files'
 }
+# Every file of an install belongs to the user who ran it. Only a Docker whose `--user $(id -u)` is that same user can show
+# it: ./ci.sh install, whose Docker machine sits inside rootless Docker, sets INSTALL_LANE_FOREIGN_OWNER and the check is
+# left to CI.
+owned_by_others() {
+  if [[ -n ${INSTALL_LANE_FOREIGN_OWNER:-} ]]; then echo "file owners not checked here (INSTALL_LANE_FOREIGN_OWNER)" >&2; return 0; fi
+  find "$1" ! -user "$(id -u)"
+}
 web_image() { docker inspect -f '{{.Image}}' "$(compose ps -q web)"; }
 probe() {
   for path in /api/health /sign-in; do

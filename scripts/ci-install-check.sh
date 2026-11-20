@@ -666,7 +666,8 @@ cmp .env.install .env.install.before || fail 'the install command again leaves .
 compose down -v || fail 'remove the previous release install'
 remove_engine
 cd "$root"
-rm -rf release-install
+# The update wrote these files as the install's user from a container; a root container removes them on any Docker.
+docker run --rm -v "$PWD:/work" alpine:3.21 rm -rf /work/release-install || fail 'remove the first release install folder'
 mkdir release-install
 cp release-first/docker-compose.install.yml release-first/install.sh release-install/ || fail 'the first release files again'
 cd release-install
@@ -801,7 +802,7 @@ grep -Fx "To go back to v0.0.0: gtmworks restore '$archive' --version v0.0.0" "$
 [[ $(db -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] || fail 'the v0.0.1 migration applied'
 probe 'after gtmworks update'
 echo "find $dir ! -user $(id -u):"
-owners=$(find "$dir" ! -user "$(id -u)")
+owners=$(owned_by_others "$dir")
 [[ -z $owners ]] || { echo "$owners"; fail 'every file in the install folder belongs to the user who ran the update'; }
 # An older release than the data: refused, nothing changed.
 migrations > "$RUNNER_TEMP/updated-migrations"
@@ -826,7 +827,7 @@ grep -Fq 'Applying migration: 99999999999999_failure.sql' "$RUNNER_TEMP/failed-u
 [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail 'the failed migration rolled back'
 [[ $(cat .install-release) == "$next" && $(cat .gtmworks-version) == v0.0.1 ]] || fail 'the previous release files are back'
 probe 'after the failed update'
-owners=$(find "$dir" ! -user "$(id -u)")
+owners=$(owned_by_others "$dir")
 [[ -z $owners ]] || { echo "$owners"; fail 'every file still belongs to the user after the failed update'; }
 # The printed command goes back to v0.0.0 with the data from before the update; with no terminal to ask on, it
 # replaces the current data only with --yes.
@@ -842,7 +843,7 @@ migrations | diff -u "$RUNNER_TEMP/one-line-migrations" - || fail 'the migration
 [[ $(sha256sum < .env.install) == "$checksum" ]] || fail 'the keys from before the update'
 probe 'after going back'
 gtmworks status || fail 'healthy after going back'
-owners=$(find "$dir" ! -user "$(id -u)")
+owners=$(owned_by_others "$dir")
 [[ -z $owners ]] || { echo "$owners"; fail 'every file belongs to the user after going back'; }
 # One machine runs one install: the line refuses a second folder while this one runs, before changing anything.
 fresh="$workspace/one-line-fresh"
