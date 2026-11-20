@@ -109,8 +109,9 @@ cmp .env.install.before .env.install || fail '.env.install unchanged after repea
 db -c 'select name from gtmworks_install.schema_migrations order by name' > after || fail 'read migrations after repeat install'
 diff -u before after || fail 'migrations unchanged after repeat install'
 [[ $(db -c "select name from public.companies where slug='install-probe'") == 'Keep me' ]] || fail 'company preserved after repeat install'
-for path in /api/health /sign-in; do
-  # The install machine is DinD; its published loopback port lives in that network namespace.
+for path in /api/health /sign-in /favicon.ico /manifest.webmanifest /apple-icon.png /icons/icon-192.png /icons/icon-512.png /icons/icon-maskable-512.png; do
+  # The install machine is DinD; its published loopback port lives in that network namespace. The rest are the
+  # gtmworks mark, its manifest and the icons the manifest names, which a browser asks for with no session (#453).
   status=$(docker run --rm --network host curlimages/curl:8.12.1 \
     -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request on install host port 3000"
   [[ $status == 200 ]] || fail "$path returned HTTP $status (expected 200)"
@@ -278,10 +279,11 @@ grep -q hermesProfileNotShared profile-refusal.log || { cat profile-refusal.log 
 marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 docker exec -i "$engine_id" sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
 engine_node "$engine_key" - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer, and a company's memory and approved lessons stay in its own runs"
-# Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
-# catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
-# expired, and disconnecting turns the app off.
-engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps write only their read tools and come back through gtmworks'
+# Apps (#30, #458), on the first company's profile with no vendor sign-in: every entry of the pinned Engine's catalogue is
+# offered; connecting a catalogue app writes no tool filter and comes back through gtmworks; and the Owner's own server is
+# added, tested, turned on for one Agent and removed through the same driver, for no sign-in, a token and OAuth, against a
+# fake MCP server the check starts inside this container (the Engine reaches it as http://web:9123).
+engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps come with all their tools, and any remote MCP server is added and removed'
 # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
 # read are scanned for the real values in .env.install, passed on stdin; only names and paths are printed. Every
 # Engine of the install is scanned, the first and each Company's own (#382).

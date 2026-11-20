@@ -1,6 +1,6 @@
 # gtmworks
 
-An open-source, self-hosted marketing operating system: people direct, approve and read results; agents never approve, and nothing is published or spent through gtmworks without a person's Approval (ADR 0006, 0008, 0018). Hermes ships inside the install and is the engine behind one engine contract (ADR 0009, 0010); gtmworks writes no model loop itself.
+An open-source, self-hosted marketing operating system: people direct, approve and read results. Agents get Hermes's full power first, publishing and spending included when a Member asks, and a limit is added only after a real problem Omar names (ADR 0020); agents never approve a Version. Hermes ships inside the install and is the engine behind one engine contract (ADR 0009, 0010); gtmworks writes no model loop itself.
 English-first UI with a complete Egyptian Arabic translation worded as in the approved reference (`design-reference/`): every new interface string goes in both message catalogues, direction follows the chosen language, content keeps its own.
 
 ## How work is done

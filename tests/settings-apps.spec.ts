@@ -5,7 +5,6 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 import { appOrigin } from './lane.mjs';
-import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
 
 // #30, Settings, Apps. RS Learning runs on its own profile in a fake Engine whose MCP catalogue and sign-ins answer as the
 // pinned release's do; Lead, its main Agent, keeps that profile. The list and each app's state come from that Engine; the
@@ -23,7 +22,7 @@ const lead=randomUUID();
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
 const servers=()=>fake.settings.profiles.get(profile)!.config.mcp_servers||{};
 // An app as gtmworks leaves it after a sign-in: installed, its read tools and its way back written.
-const installed=(key:string)=>({url:`https://mcp.${key}.example/mcp`,auth:'oauth',...appConfig(appByKey(key)!,`${appOrigin}/api/apps/callback/${key}`).mcp_servers[key]});
+const installed=(key:string)=>({url:`https://mcp.${key}.example/mcp`,auth:'oauth',enabled:true,oauth:{redirect_uri:`${appOrigin}/api/apps/callback/${key}`}});
 
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
@@ -61,7 +60,7 @@ async function sheetMatches(page:Page,section:Awaited<ReturnType<typeof catalogu
  await expect(page.locator('#btn-apps .sb-apps__n')).toHaveText(section.count);
  await page.locator('#btn-apps').click();
  await expect(sheetOf(page).locator('#apps-q')).toBeFocused();
- await expect(sheetOf(page).locator('.app-card')).toHaveCount(6);
+ await expect(sheetOf(page).locator('.app-card')).toHaveCount(33);
  expect(await catalogueOf(sheetOf(page))).toEqual(section);
 }
 
@@ -80,14 +79,13 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  await expect(card(page,'Notion').locator('.app__state')).toHaveText('Needs attention');
  await expect(card(page,'Notion').getByRole('link',{name:'Reconnect Notion'})).toBeVisible();
  await expect(card(page,'Canva').locator('.app__state')).toHaveText('Not connected');
- await expect(page.locator('.app__name'),'only registry apps this catalogue offers').toHaveCount(6);
- for(const absent of ['Gamma','Figma','Webflow','WordPress.com']) await expect(card(page,absent)).toHaveCount(0);
+ await expect(page.locator('.app__name'),'every app the Engine offers, the ready-made ones and the form').toHaveCount(33);
  const section=await catalogueOf(page.locator('.sov'));
  await page.locator('#apps-q').fill('كانفا');
  await expect(page.locator('.app__name')).toHaveText(['Canva']);
  await page.locator('#apps-q').fill('');
  await page.locator('#apps-cat-analytics').click();
- await expect(page.locator('.app__name')).toHaveText(['Amplitude','Mixpanel']);
+ await expect(page.locator('.app__name')).toHaveText(['Amplitude','Mixpanel','Semrush','Ahrefs','Supermetrics','Similarweb','Hootsuite listening']);
  await noEngineText(page);
  await page.locator('#apps-cat-all').click();
  await card(page,'Notion').getByRole('link',{name:'Reconnect Notion'}).click();
@@ -101,7 +99,7 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  await expect(sheet.locator('.app__name')).toHaveText(['Canva']);
  await sheet.locator('#apps-q').fill('');
  await sheet.locator('#apps-cat-analytics').click();
- await expect(sheet.locator('.app__name')).toHaveText(['Amplitude','Mixpanel']);
+ await expect(sheet.locator('.app__name')).toHaveText(['Amplitude','Mixpanel','Semrush','Ahrefs','Supermetrics','Similarweb','Hootsuite listening']);
  await sheet.locator('#apps-cat-all').click();
  await sheet.getByRole('button',{name:'Reconnect Notion'}).click();
  await expect(sheet.locator('.sheet__meta .badge')).toHaveText('Needs attention');
@@ -114,7 +112,7 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  fake.settings.profiles.get(profile)!.config.mcp_servers={};
  await page.goto('/c/rs-learning/settings?section=apps');
  await expect(page.locator('.apps-count')).toHaveText('0 connected');
- await expect(page.locator('.app__state')).toHaveText(Array(6).fill('Not connected'));
+ await expect(page.locator('.app__state')).toHaveText(Array(33).fill('Not connected'));
  await sheetMatches(page,await catalogueOf(page.locator('.sov')));
 
  // An Engine that does not answer: the button stays, with no count, and the sheet says the apps can't be read.
@@ -142,7 +140,7 @@ test('the Owner connects an app through the vendor\'s window and disconnects it;
  await expect(vendor).toHaveURL(new RegExp(`/c/rs-learning/settings\\?section=apps&app=canva$`));
  await expect(vendor.locator('.sheet__meta .badge')).toHaveText('Connected');
  await expect(page.locator('.sheet__meta .badge')).toHaveText('Connected',{timeout:20000});
- expect(servers().canva.tools).toEqual({include:[...appByKey('canva')!.readTools],prompts:false,resources:false});
+ expect('tools' in servers().canva).toBe(false);
  expect(servers().canva.oauth.redirect_uri).toBe(`${appOrigin}/api/apps/callback/canva`);
  expect(fake.settings.appCallbacks.map(search=>[...new URLSearchParams(search).keys()])).toEqual([['code','state']]);
  await noEngineText(vendor);
@@ -178,7 +176,7 @@ test('the Owner connects and disconnects an app from the sheet over a page, thro
  await expect(vendor).toHaveURL(/\/c\/rs-learning\/settings\?section=apps&app=airtable$/);
  await vendor.close();
  await expect(sheet.locator('.sheet__meta .badge')).toHaveText('Connected',{timeout:20000});
- expect(servers().airtable.tools).toEqual({include:[...appByKey('airtable')!.readTools],prompts:false,resources:false});
+ expect('tools' in servers().airtable).toBe(false);
  await sheet.locator('#app-off').click();
  await sheet.locator('#app-off-go').click();
  await expect(sheet.getByRole('button',{name:'Connect Airtable'})).toBeFocused();

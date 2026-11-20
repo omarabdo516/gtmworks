@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi, type Mock } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
+import { userEvent } from 'vitest/browser';
 import { AppsList, AppDetail, type AppItem, type AppsPlace } from '@/app/settings-apps-client';
 import en from '@/lib/messages/apps.en.json';
 import ar from '@/lib/messages/apps.ar.json';
@@ -21,7 +22,7 @@ const states: Record<string, [AppAgent['state'], AppAgent['state']]> = { klaviyo
 const items: AppItem[] = apps.map(app => {
   const [mine, writers] = states[app.key] ?? ['off', 'off'];
   const agents = [agent(lead, 'Lead', true, mine), agent(writer, 'Writer', true, writers), agent(helper, 'Helper', false, mine)];
-  return { key: app.key, name: app.name, mark: app.mark, category: app.category, state: mergedState(agents), agents,
+  return { key: app.key, name: app.name, mark: app.mark, category: app.category, source: app.source, ...(app.url ? { url: app.url } : {}), ...(app.auth ? { auth: app.auth } : {}), ...(app.care ? { care: app.care } : {}), state: mergedState(agents), agents,
     use: text[`use.${app.key}`], can: text[`can.${app.key}`], words: [app.name, ...[en, ar].flatMap(words => [`use.${app.key}`, `alias.${app.key}`].map(key => (words as Record<string, string>)[key]))].join(' ') };
 });
 const item = (key: string) => items.find(entry => entry.key === key)!;
@@ -53,7 +54,7 @@ test('the list groups connected and attention apps apart from the rest, and sear
   await expect.element(screen.getByText('No app matches “zzz”')).toBeVisible();
   await screen.getByRole('button', { name: 'Clear search' }).click();
   await screen.getByRole('button', { name: /^Analytics/ }).click();
-  expect(screen.getByRole('heading', { level: 5 }).elements().map(element => element.textContent)).toEqual(['Amplitude', 'Mixpanel']);
+  expect(screen.getByRole('heading', { level: 5 }).elements().map(element => element.textContent)).toEqual(['Amplitude', 'Better Stack', 'Datadog', 'Grafana', 'Mixpanel', 'Plaid', 'Sentry', 'Twelve Data', 'Semrush', 'Ahrefs', 'Supermetrics', 'Similarweb', 'Hootsuite listening']);
 });
 
 test('a Member who is not the Owner reads the states with no button', async () => {
@@ -235,7 +236,111 @@ test('a blocked sign-in window starts no sign-in, stays on the page and says how
 test('every app card shows its logo or its letters', async () => {
   await render(<AppsList place={settings} owner items={items} text={text}/>);
   const tile = (key: string) => document.getElementById(`app-t-${key}`)?.closest('.app-card')?.querySelector('.tool-tile');
-  expect(apps.map(app => [app.key, tile(app.key)?.querySelector('img.tool-logo')?.getAttribute('src') ?? tile(app.key)?.textContent])).toEqual([
-    ['klaviyo', 'K'], ['canva', 'Ca'], ['notion', '/logos/simple/notion.svg'], ['airtable', '/logos/simple/airtable.svg'],
-    ['gamma', 'G'], ['amplitude', 'Am'], ['mixpanel', '/logos/simple/mixpanel.svg']]);
+  for (const app of apps) expect(tile(app.key), app.key).toBeTruthy();
+  expect(tile('notion')?.querySelector('img.tool-logo')?.getAttribute('src')).toBe('/logos/simple/notion.svg');
+  expect(tile('mixpanel')?.querySelector('img.tool-logo')?.getAttribute('src')).toBe('/logos/simple/mixpanel.svg');
+  expect(tile('klaviyo')?.textContent).toBe('Kl');
+});
+
+// #458: the card that adds the Owner's own server: Test shows the tools the server lists, and Add turns a no-sign-in
+// server on and returns to the list. The form talks to /api/company-servers, which checks the Owner again.
+test('the own-tool card tests a server and adds it with no sign-in', async () => {
+  const sent: Record<string, unknown>[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/company-servers') {
+      const body = JSON.parse(String(init?.body)); sent.push(body);
+      return Promise.resolve(new Response(JSON.stringify(body.action === 'test' ? { key: 'my-crm', state: 'connected', tools: ['get_records', 'create_record'] } : { key: 'my-crm', state: 'connected' }), { status: 200 }));
+    }
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await expect.element(screen.getByRole('heading', { name: 'Your own tool (MCP)' })).toBeVisible();
+  await screen.getByRole('textbox', { name: /Name/ }).fill('My CRM');
+  await screen.getByRole('textbox', { name: /Address/ }).fill('https://crm.example/mcp');
+  await screen.getByRole('button', { name: 'Test' }).click();
+  await expect.element(screen.getByText('get_records')).toBeVisible();
+  await expect.element(screen.getByText('create_record')).toBeVisible();
+  expect(sent[0]).toMatchObject({ company: 'c-1', agent: lead, action: 'test', name: 'My CRM', url: 'https://crm.example/mcp', kind: 'oauth' });
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sign-in' }).element() as HTMLSelectElement, 'none');
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.poll(() => sent.at(-1)).toMatchObject({ company: 'c-1', agent: lead, action: 'add', name: 'My CRM', url: 'https://crm.example/mcp', kind: 'none' });
+  await expect.poll(() => replace.mock.calls.map(([href]) => href)).toEqual(['/c/rs-learning/settings?section=apps']);
+  expect(toast.mock.calls).toEqual([['My CRM added']]);
+});
+
+// #458: a server added but not reached (an address that does not answer, a refused token) keeps the form, with the reason.
+test('the own-tool card keeps its form when the engine cannot reach the server it added', async () => {
+  vi.stubGlobal('fetch', (url: string) => {
+    if (url === '/api/company-servers') return Promise.resolve(new Response(JSON.stringify({ key: 'my-crm', state: 'attention' }), { status: 200 }));
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await screen.getByRole('textbox', { name: /Name/ }).fill('My CRM');
+  await screen.getByRole('textbox', { name: /Address/ }).fill('https://crm.example/mcp');
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sign-in' }).element() as HTMLSelectElement, 'none');
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.element(screen.getByText(text.connectAttention)).toBeVisible();
+  expect(toast).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+  await expect.element(screen.getByRole('heading', { name: 'Your own tool (MCP)' })).toBeVisible();
+});
+
+// #458: a server the Owner added is an app like any other: its own page has the per-Agent switches and Reconnect, and
+// turning it on for another Agent sends the key alone (the service reads the address from the Engine).
+test('a made server has the per-Agent switches and turns on for another Agent', async () => {
+  const custom: AppItem = { key: 'my-crm', name: 'my-crm', mark: 'MY', category: 'more', source: 'custom', auth: 'none', state: 'connected',
+    use: text['use.custom'], can: text['can.custom'], words: 'my-crm',
+    agents: [agent(lead, 'Lead', true, 'connected'), agent(writer, 'Writer', true, 'off'), agent(helper, 'Helper', false, 'connected')] };
+  const sent = answers([200, { status: 'connected' }]);
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={custom} text={text} failed={false}/>);
+  await expect.element(screen.getByRole('switch', { name: 'Writer' })).toHaveAttribute('aria-checked', 'false');
+  await expect.element(screen.getByRole('link', { name: 'Done' })).toBeVisible();
+  await screen.getByRole('switch', { name: 'Writer' }).click();
+  await expect.poll(() => sent.at(-1)).toEqual({ company: 'c-1', agent: writer, app: 'my-crm', action: 'connect' });
+  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  await screen.unmount();
+  const attention: AppItem = { ...custom, state: 'attention', agents: [agent(lead, 'Lead', true, 'connected'), agent(writer, 'Writer', true, 'attention'), agent(helper, 'Helper', false, 'connected')] };
+  const again = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={attention} text={text} failed={false}/>);
+  await expect.element(again.getByRole('button', { name: 'Reconnect for Writer' })).toBeVisible();
+});
+
+// #458: a server the Owner added and switched off for every Agent is still in their profiles, so Remove stays.
+test('a made server off for every Agent still offers Remove', async () => {
+  const off: AppItem = { key: 'my-crm', name: 'my-crm', mark: 'MY', category: 'more', source: 'custom', auth: 'none', state: 'off',
+    use: text['use.custom'], can: text['can.custom'], words: 'my-crm', agents: [agent(lead, 'Lead', true, 'off')] };
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={off} text={text} failed={false}/>);
+  await expect.element(screen.getByRole('button', { name: `${text.remove} my-crm` })).toBeVisible();
+});
+
+// #458: an OAuth add keeps its Agent first until that Agent's sign-in is connected. A failed sign-in leaves it first so
+// the next Add retries it, and the form finishes only when every picked Agent connected.
+test('the own-tool OAuth queue retries a failed Agent first and finishes after every picked Agent', async () => {
+  const polls: Record<string, number> = {};
+  const adds: string[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/company-servers') {
+      const body = JSON.parse(String(init?.body)); adds.push(body.agent);
+      return Promise.resolve(new Response(JSON.stringify({ key: 'my-oauth', url: `https://auth.example/${body.agent}` }), { status: 200 }));
+    }
+    if (url === '/api/company-apps') {
+      const body = JSON.parse(String(init?.body));
+      polls[body.agent] = (polls[body.agent] ?? 0) + 1;
+      const status = body.agent === lead && polls[body.agent] === 1 ? 'failed' : 'connected';
+      return Promise.resolve(new Response(JSON.stringify({ status }), { status: 200 }));
+    }
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  vi.stubGlobal('open', vi.fn(() => ({ opener: {}, location: { href: 'about:blank' }, close: vi.fn() })));
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await screen.getByRole('textbox', { name: /Name/ }).fill('My OAuth');
+  await screen.getByRole('textbox', { name: /Address/ }).fill('https://oauth.example/mcp');
+  await screen.getByRole('checkbox', { name: 'Writer' }).click();
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(text.connectAttention);
+  await expect.element(screen.getByRole('button', { name: 'Add for Lead' })).toBeVisible();
+  await screen.getByRole('button', { name: 'Add for Lead' }).click();
+  await expect.element(screen.getByRole('button', { name: 'Add for Writer' })).toBeVisible();
+  await screen.getByRole('button', { name: 'Add for Writer' }).click();
+  await expect.poll(() => replace.mock.calls.map(([href]) => href), { timeout: 8000 }).toEqual(['/c/rs-learning/settings?section=apps']);
+  expect(adds).toEqual([lead, lead, writer]);
 });

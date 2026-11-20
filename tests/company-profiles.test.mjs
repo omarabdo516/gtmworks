@@ -281,7 +281,7 @@ test('a toolset beside the fixed set whose Apps cannot be read is a difference, 
   const config=toolConfig();
   assert.equal((await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets})).state,'configured');
   const held=fake.settings.profiles.get(name);
-  held.config={...held.config,mcp_servers:{acme:{url:'https://mcp.acme.invalid/mcp',enabled:true}}};
+  held.config={...held.config,mcp_servers:{Acme:{url:'https://mcp.acme.invalid/mcp',enabled:true}}};
   const calls=[];
   const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
   // The Engine answers for the toolsets but not for the profile's config, so which servers are Apps is unknown.
@@ -297,14 +297,30 @@ test('a toolset no gtmworks App put there is a difference: the profile is marked
   const name=companyProfile(two);
   const config=toolConfig();
   assert.equal((await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets})).state,'configured');
-  // A server someone added to the Engine by hand: not an App of the catalogue, so not one gtmworks wrote and not let by.
+  // A server someone added to the Engine by hand under a key no App and no Owner's own server can have (#458 keys are
+  // lowercase): not one gtmworks wrote, so not let by.
   const held=fake.settings.profiles.get(name);
-  held.config={...held.config,mcp_servers:{acme:{url:'https://mcp.acme.invalid/mcp',enabled:true}}};
+  held.config={...held.config,mcp_servers:{Acme:{url:'https://mcp.acme.invalid/mcp',enabled:true}}};
   const calls=[];
   const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
   assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
   assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','begin_profile_tools'],'written, never recorded while the unknown toolset stays on');
   assert.ok(!calls.some(call=>call.rpc==='record_profile_tools'));
+ } finally { await fake.close(); }
+});
+
+test('a server an Owner added by address (#458) is one of the Company\'s Apps: the tool check lets it by', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  const config=toolConfig();
+  assert.equal((await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets})).state,'configured');
+  const held=fake.settings.profiles.get(name);
+  held.config={...held.config,mcp_servers:{acme:{url:'https://mcp.acme.invalid/mcp',enabled:true}}};
+  const calls=[];
+  const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
+  await checkAgentTools(db,{hermes:install(fake)});
+  assert.ok(!calls.some(call=>call.rpc==='begin_profile_tools'),'the profile is not rewritten');
  } finally { await fake.close(); }
 });
 

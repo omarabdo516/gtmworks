@@ -3,6 +3,13 @@ import { createHash, randomUUID } from 'node:crypto';
 // #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
 // failure's user_text around AuthError no_provider_configured in hermes_cli/auth.py).
 export const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
+// #457: the pinned release's lines for a Run whose model call cannot succeed on a retry, in the Run record's output
+// (agent/turn_failure_copy.py, agent/turn_recovery.py). A failed Run carries no error code, only that English text.
+export const creditExhaustedError='Billing or credits exhausted: HTTP 400: Your credit balance is too low to access the Anthropic API. Add credits in the Anthropic Console, then retry.';
+export const apiKeyRefusedError='Anthropic rejected your API key, so the model can\'t be reached. Add a new key with `hermes auth add anthropic`, or sign in again.';
+export const signInRefusedError='Anthropic rejected your sign-in, so the model can\'t be reached. Sign in again with `hermes login`.';
+export const modelMissingError='Model \'claude-fable\' isn\'t available on Anthropic. Pick another model with `hermes model`.';
+export const failedRunText='Something else went wrong while the model was answering.';
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
@@ -80,8 +87,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // server does not answer, and the OAuth sign-ins of apps (hermes_cli/web_routers/mcp.py): a sign-in's token stays on
   // disk when its server is removed, as in the pinned release. approveApps:false keeps a delivered sign-in waiting.
   catalog:['klaviyo','canva','notion','airtable','webflow','wordpress-com','amplitude','mixpanel','attio','close','calendly','figma','gamma','intercom'],
+  catalogAuth:/** @type {Record<string,'oauth'|'none'>} */({}),catalogEnv:/** @type {Record<string,{name:string,prompt:string,required:boolean}[]>} */({}),
+  serverTokens:/** @type {Map<string,string>} */(new Map()),
   appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
-  appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
+  appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),appAuthScheme:/** @type {'https'|'http'} */('https'),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
   skills:/** @type {Map<string,Map<string,string>>} */(new Map()),skillLocks:/** @type {Set<string>} */(new Set()),skillsOff:/** @type {Set<string>} */(new Set()),
   // The provenance `GET /api/skills` reports for a profile's own Skill (`hub`, `bundled` or `agent`), as `profile:name`;
@@ -227,7 +236,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),...(done&&settings.ending==='failed'&&settings.failure?{error:settings.failure}:{}),pending_controls:[]});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
    // The run's own routes (api_server_runs.py): stop, the answer to the question it waits for, which takes exactly
    // request_id, execution_generation and answer, and the choice for the request it waits on (_handle_run_approval).
@@ -614,23 +623,45 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    const keepServers=next=>{ home.config={...home.config,mcp_servers:next}; if(scoped==='default') settings.defaultConfig=home.config; };
    if(url.pathname==='/api/mcp/catalog'&&request.method==='GET') {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
-    return send(response,200,{entries:settings.catalog.map(name=>({name,description:'',transport:'http',auth_type:'oauth',url:`https://mcp.${name}.example/mcp`,default_enabled:null,installed:Boolean(servers[name]),enabled:Boolean(servers[name])&&servers[name].enabled!==false})),diagnostics:[]});
+    return send(response,200,{entries:settings.catalog.map(name=>({name,description:'',transport:'http',auth_type:settings.catalogAuth[name]||'oauth',url:`https://mcp.${name}.example/mcp`,required_env:settings.catalogEnv[name]||[],default_enabled:null,installed:Boolean(servers[name]),enabled:Boolean(servers[name])&&servers[name].enabled!==false})),diagnostics:[]});
    }
    if(url.pathname==='/api/mcp/catalog/install'&&request.method==='POST') {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     if(!settings.catalog.includes(body?.name)) return send(response,404,{detail:`No catalog entry '${body?.name}'`});
-    // As Hermes leaves an OAuth entry it cannot probe yet: no tool filter, every tool on once signed in.
-    keepServers({...servers,[body.name]:{url:`https://mcp.${body.name}.example/mcp`,auth:'oauth',enabled:body.enable!==false}});
+    // As Hermes leaves an entry it cannot probe yet: no tool filter, every tool on once signed in.
+    const auth=settings.catalogAuth[body.name]||'oauth';
+    keepServers({...servers,[body.name]:{url:`https://mcp.${body.name}.example/mcp`,...(auth==='oauth'?{auth:'oauth'}:{}),enabled:body.enable!==false}});
     return send(response,200,{ok:true,name:body.name,background:false});
    }
-   const server=url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)(?:\/(test|auth))?$/);
+   // The dashboard's own server routes (hermes_cli/web_routers/mcp.py): add a remote server by address, replace the whole
+   // map for a filter removal, and a summary shaped like _mcp_server_summary.
+   if(url.pathname==='/api/mcp/servers'&&['POST','PUT'].includes(request.method)) {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    if(request.method==='PUT') {
+     if(!body?.servers||typeof body.servers!=='object'||Array.isArray(body.servers)) return send(response,400,{detail:'servers'});
+     keepServers(body.servers); return send(response,200,{ok:true});
+    }
+    const name=(body?.name||'').trim();
+    if(!name||body?.command) return send(response,400,{detail:'Provide exactly one of URL or command'});
+    if(Object.hasOwn(servers,name)) return send(response,409,{detail:`Server '${name}' already exists`});
+    const auth=(body.auth||'none').toLowerCase();
+    if(!['none','oauth','header'].includes(auth)) return send(response,400,{detail:'Unsupported auth mode'});
+    if(auth==='header'&&!body.bearer_token) return send(response,400,{detail:'Bearer token is required'});
+    const cfg={url:body.url,...(auth==='oauth'?{auth:'oauth'}:{}),...(auth==='header'?{headers:{Authorization:'Bearer MCP_BEARER_TOKEN'}}:{})};
+    if(auth==='header') settings.serverTokens.set(`${scoped}:${name}`,String(body.bearer_token));
+    keepServers({...servers,[name]:cfg});
+    return send(response,200,{name,transport:'http',url:body.url,auth:auth==='none'?null:auth,enabled:true,tools:null,source:'config',plugin:null});
+   }
+   const server=url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)(?:\/(test|auth|enabled))?$/);
    if(server) {
     const name=decodeURIComponent(server[1]);
     if(!home||!servers[name]) return send(response,404,{detail:`Server '${name}' not found`});
+    if(server[2]==='enabled'&&request.method==='PUT') { keepServers({...servers,[name]:{...servers[name],enabled:Boolean(body?.enabled)}}); return send(response,200,{ok:true,name,enabled:Boolean(body?.enabled)}); }
     if(!server[2]&&request.method==='DELETE') { const rest={...servers}; delete rest[name]; keepServers(rest); return send(response,200,{ok:true}); }
     if(server[2]==='test'&&request.method==='POST') {
      if(settings.appsUnreachable.has(name)) return send(response,200,{ok:false,error:'Connection failed: /opt/data/mcp-tokens secret detail',tools:[]});
-     if(!settings.appTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'OAuth authentication required — no token found.',tools:[]});
+     if(servers[name].auth==='oauth'&&!settings.appTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'OAuth authentication required — no token found.',tools:[]});
+     if(servers[name].auth==='header'&&!settings.serverTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'Bearer token required.',tools:[]});
      return send(response,200,{ok:true,tools:(settings.appTools[name]||[`get_${name}`,`delete_${name}`]).map(tool=>({name:tool,description:''})),prompts:0,resources:0});
     }
     if(server[2]==='auth'&&request.method==='POST') {
@@ -638,7 +669,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const id=randomUUID().replaceAll('-',''); const state=randomUUID();
      const redirect=servers[name].oauth?.redirect_uri||`http://${request.headers.host}/api/mcp/oauth/callback/${name}`;
      settings.appFlows.set(id,{server:name,profile:scoped,status:'authorization_required',state,redirect});
-     return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`https://auth.${name}.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
+     return send(response,200,{flow_id:id,server_name:name,status:'authorization_required',authorization_url:`${settings.appAuthScheme}://auth.${name}.example/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirect)}`,error:null});
     }
    }
    // Model sign-in (hermes_cli/web_routers/oauth.py): ChatGPT through a device code, Claude from the command line only.

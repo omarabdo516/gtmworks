@@ -284,7 +284,9 @@ test('ask_for_app shows a card only for a listed app not connected in the Run\'s
  assert.deepEqual(rpcs,[sent('Canva',{app:'canva',reason:'محتاجه عشان أجيب التصميمات.'}),sent('Klaviyo',{app:'klaviyo',reason:'The sign-in stopped working.'})]);
  assert.equal(fake.appReads.count,6,'the Engine is asked only once a call reads');
  const spec=JSON.parse(toolSpecTexts().ask_for_app);
- assert.deepEqual(spec.parameters.properties.app.enum,['klaviyo','canva','notion','airtable','gamma','amplitude','mixpanel']);
+ assert.equal(spec.parameters.properties.app.enum.length,85,'every catalogue app and ready-made server, never the form');
+ for(const key of ['klaviyo','canva','notion','airtable','gamma','amplitude','mixpanel','meta-ads','hugging_face']) assert.ok(spec.parameters.properties.app.enum.includes(key),key);
+ assert.ok(!spec.parameters.properties.app.enum.includes('own'));
  assert.equal(spec.parameters.properties.reason.maxLength,200);
  assert.match(spec.description,/connects it.*approves, publishes and spends nothing/s);
 });

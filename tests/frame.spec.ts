@@ -114,8 +114,8 @@ test('Viewer has the same navigation, New chat included, without new card on eve
 test('Home has four parts in order and missing sources show unavailable, never zero',async({page})=>{
  await signIn(page,'multi@example.com','/c/aleem/home');
  expect(await page.locator('.home-dashboard > section').evaluateAll(parts=>parts.map(part=>part.getAttribute('aria-label')))).toEqual(["Agents","Work figures","Last 14 days","Latest updates"]);
- await expect(page.locator('.home-agents article')).toHaveCount(4);
- await expect(page.locator('.home-agents article p')).toHaveText(Array(4).fill("Not working now"));
+ // Home lists the Company's real Agents: Aleem has none, so its Agents section stays and is simply empty.
+ await expect(page.locator('.home-agents article')).toHaveCount(0);
  await expect(page.locator('.stats .label')).toHaveText(["Awaiting your approval","Published this week","Bookings this week","Stopped cards"]);
  await expect(page.locator('.home-charts h2')).toHaveText(["Delivered work","Cards by stage","First-time acceptance"]);
  await expect(page.locator('.home-recent h2')).toHaveText(["Recent activity","Recent cards"]);
@@ -127,12 +127,12 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await expect(page.locator('.content')).not.toContainText(/Spend|Run count/);
  await chooseCompany(page,'rs-learning');
  await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
- const current=page.locator('.home-agents article').filter({has:page.getByRole('heading',{name:"Writer",exact:true})}).getByRole('link');
- await expect(current).toBeVisible();
- const cardPath=await current.getAttribute('href');
+ // The seed gives RS Learning no real Agents, so Home has none; the Writer's Card still shows in the work list's
+ // Next actor column.
+ await expect(page.locator('.home-agents article')).toHaveCount(0);
  await page.goto('/c/rs-learning/work/list');
- const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
- await expect(assigned.locator('td').last()).toHaveText('وكيل المحتوى');
+ const assigned=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
+ await expect(assigned).toHaveCount(1);
  // The Inbox count sits on the Marketing board entry and opens the Inbox.
  await page.goto('/c/rs-learning/approvals');
  await expect(page.locator('.approvals')).toBeVisible();
@@ -150,12 +150,13 @@ test('Home has four parts in order and missing sources show unavailable, never z
  await expect(page.locator('.stats strong').first()).toHaveText(String(count));
 });
 
-test('owner assigns a new Contributor agent through settings, Home follows renames, and demotion clears the key',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/home');
- const current=page.locator('.home-agents article').filter({has:page.getByRole('heading',{name:"Writer",exact:true})}).getByRole('link');
+test('owner assigns a new Contributor agent through settings, the work list follows its rename, and demotion clears the key',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/list');
+ const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})});
+ await expect(writerRow).toHaveCount(1);
+ const current=writerRow.getByRole('link');
  await expect(current).toBeVisible();
  const cardPath=await current.getAttribute('href');
- const title=await current.textContent();
  const card=Number(cardPath!.split('/').pop());
  const person=randomUUID();
  const initialName=`وكيل اختبار مستقل ${person}`;
@@ -187,15 +188,11 @@ test('owner assigns a new Contributor agent through settings, Home follows renam
   await expect(page.locator('.detail-row').filter({hasText:initialName}).filter({hasText:'Agent role: No agent role to Writer'})).toHaveCount(1);
   const [audit]=JSON.parse(query(`select actor_id,after_data->>'agent_role' as agent_role from public.member_audit where company_id=${quote(writer.company_id)} and person_id=${quote(person)} and action='UPDATE' order by id desc limit 1`));
   expect(audit).toEqual({actor_id:'20000000-0000-0000-0000-000000000001',agent_role:'writer'});
-  await openMoreSection(page,'home');
-  await expect(current).toHaveAttribute('href',cardPath!);
-  await expect(current).toHaveText(title!);
-  expect(query(`update public.people set name=${quote(renamed)} where id=${quote(person)} returning name;`)).toContain(renamed);
-  await page.reload();
-  await expect(current).toHaveAttribute('href',cardPath!);
-  await expect(current).toHaveText(title!);
   await page.goto('/c/rs-learning/work/list');
   const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
+  await expect(assigned.locator('td').last()).toHaveText(initialName);
+  expect(query(`update public.people set name=${quote(renamed)} where id=${quote(person)} returning name;`)).toContain(renamed);
+  await page.reload();
   await expect(assigned.locator('td').last()).toHaveText(renamed);
   await page.goto('/c/rs-learning/settings/members');
   const renamedMember=page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${renamed}$`)})});

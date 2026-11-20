@@ -1,5 +1,5 @@
 ---
-status: accepted, partly superseded by #342
+status: accepted, partly superseded by #342 and ADR 0020
 ---
 
 # gtmworks connects directly to Hermes with encrypted profile keys

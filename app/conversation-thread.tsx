@@ -19,6 +19,7 @@ import { ReplyCard } from '@/app/reply-card';
 import type { DecidePermission, PermissionOutcome } from '@/app/permission-card';
 import type { ConnectApps } from '@/app/connect-card';
 import { signInToApp } from '@/app/app-sign-in';
+import { useAppsSheet } from '@/app/apps-sheet-open';
 import { appsChanged } from '@/app/company-apps-read';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
@@ -31,6 +32,9 @@ type BidiText=(key:string,...values:ReactNode[])=>ReactNode[];
 const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
 const replyCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='reply'?[card.card.id]:[])??[]);
 const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);
+// The words and the recorded outcome for a model error a retry cannot fix (#457).
+const refusalLine={credit:'modelNoCredit',key:'modelKeyRefused',model:'modelMissing'};
+const refusalOutcome={credit:'no-credit',key:'key-refused',model:'model-missing'};
 
 export function useConversationText() {
  const {language}=useI18n(); const own:Record<string,string>=language==='ar'?conversationAr:conversationEn;
@@ -111,8 +115,9 @@ export function ChatPlaceholder() {
 
 // The messages as the reference draws them (design-reference: msgHTML): the Agent's turns on the start side, the
 // person's on the end side, with every card and line the Conversation has; then whether the Agent is working, and for
-// whom, or that the reply failed, and why when the Company has no model to reply with (#422). While the Agent works, a
-// message sent meanwhile waits as its sender's next turn (marked as the reference marks a queued message).
+// whom, or that the reply failed, and why when the Company has no model to reply with (#422) or its model call cannot
+// succeed on a retry (#457). While the Agent works, a message sent meanwhile waits as its sender's next turn (marked as
+// the reference marks a queued message).
 // A question the Agent waits on (#138) is answered from its card: a pick goes to the waiting Run, and the record is asked
 // for again at once. While it waits, the Agent is not shown working. The main Agent's question draws as the reference's
 // chip card, any other Agent's as the lettered card (#143).
@@ -121,6 +126,7 @@ export function ChatPlaceholder() {
 // send, and the record is asked for again at once; while it waits, the Agent is still working. A Viewer sees the wait
 // line.
 export function ConversationTurns({slug,company,record,writer,asked}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void}) {
+ const openSheet=useAppsSheet();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
  const answer=async(card:number,choice:number,answerKey:string)=>{
@@ -156,7 +162,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
  const connect:ConnectApps|undefined=record.connect&&{...record.connect,
   start:async(app,signal)=>{
    if(!agent) return {error:'connectFailed'};
-   const result=await signInToApp({company,agent,app,signal});
+   const result=await signInToApp({company,agent,app,signal,openApp:key=>openSheet?.(null,key,agent)});
    if('state' in result) void appsChanged(company,language);
    return result;
   },
@@ -193,6 +199,8 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
   {failed&&(record.noModel
    // The Company has no model at all (#422): sending again cannot work, so the line says where one is connected.
    ?<p className="note convo-status" role="alert" data-outcome="no-model">{t('noModelLine')} {record.noModel.owner?<Link className="note__link" href={overlayHref(slug,'models')}>{t('noModelConnect')}</Link>:t('noModelAskOwner')}</p>
+   // A model error a retry cannot fix (#457) says its cause, and where the Owner fixes it: the Agent's model.
+   :record.modelRefused?<p className="note convo-status" role="alert" data-outcome={refusalOutcome[record.modelRefused.reason]}>{t(refusalLine[record.modelRefused.reason],conversation.agent_name)} {record.modelRefused.owner?<Link className="note__link" href={overlayHref(slug,'models')}>{t('modelRefusedFix')}</Link>:t('modelRefusedAskOwner')}</p>
    :<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>)}
  </>;
 }

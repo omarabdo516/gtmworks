@@ -222,7 +222,7 @@ test('a hand card with no address shows Done it alone, and an English one is lai
  expect(group.element().matches(':dir(ltr)')).toBe(true);
 });
 
-test.each([['an app gtmworks does not know', 'Stripe', '·', false], ['a known app by its name in any case', 'google search console', '', true], ['a catalogue app', 'Klaviyo', 'K', false]] as const)(
+test.each([['an app gtmworks does not know', 'Not An App', '·', false], ['a known app by its name in any case', 'google search console', '', true], ['a catalogue app', 'Klaviyo', 'Kl', false]] as const)(
  'the tile of %s is drawn as the reference draws it', async (_, app, mark, logo) => {
   const screen = await handDrawn(handed({ app }), 'en', async () => ({ at: '2026-06-10T09:41:00Z', first: true }));
   const tile = screen.getByRole('group').element().querySelector('.card__head .tool-tile.tool-tile--lg');

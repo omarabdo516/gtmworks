@@ -25,7 +25,7 @@ A person's place in one company, carrying the role they hold there. One person c
 _Avoid_: user, seat, staff
 
 **Agent / وكيل**:
-A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile serves one Company only, inside that Company's own Engine (ADR 0018); the bundled Hermes is the only kind of Engine (ADR 0017). Legacy role agents retain their company grants during the transition. An Agent never approves or rejects. Through gtmworks nothing is published or spent without a person's Approval; on its Screen, in an account a person signed in to, an Agent may publish or spend when a Member asks.
+A named worker running in Hermes, attached to a Company with a free name and speciality. On the bundled Engine an Agent is one Engine profile, with its own memory, Skills and settings (ADR 0016); the people who talk to the same Agent share its memory. Each Company has one default Agent for new conversations, its main Agent. A profile serves one Company only, inside that Company's own Engine (ADR 0018); the bundled Hermes is the only kind of Engine (ADR 0017). Legacy role agents retain their company grants during the transition. An Agent never approves or rejects a Version. It gets the Engine's full power: it may publish and spend, through its apps or on its Screen, when a Member asks, with no Approval first (ADR 0020).
 
 **Main Agent / الوكيل الرئيسي**:
 The Company's default Agent, the one people talk to first, and the manager of the Company's team: it hands a job to the Agent that does it, offers to make an Agent for recurring or specialist work no Agent does, and does small one-off jobs itself. On a new Company it opens the first Conversation, with a few questions about the Company and the first Agents it proposes to make (Omar, 2026-11-20). The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
@@ -139,7 +139,7 @@ _Avoid_: upload, evidence file
 One saved revision of a card's output. Editing creates a new version; approving an earlier version never authorizes a later one.
 
 **Approval / موافقة**:
-A permitted person's decision on one exact version, recorded with who approved it. An agent cannot approve its own or another agent's work.
+A permitted person's decision on one exact version, recorded with who approved it. An agent cannot approve its own or another agent's work. It is the team's record, not a gate an agent's tools wait on (ADR 0020).
 
 **Permission request / طلب موافقة**:
 The engine's own stop inside a run before an action: the agent waits until the conversation's person answers "Allow once", "Always allow" or "Don't allow", or the engine stops waiting, which counts as not allowed. It is not an approval of a version. "Always allow" stays with Owners and Managers, and only on an agent's own engine profile.

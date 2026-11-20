@@ -36,7 +36,7 @@ There are two layers of work. The marketing board, stages, dates and named appro
 
 - The dashboard and its worker run no model and hold no model credentials. Hermes executes agent work; gtmworks starts Hermes runs and relays their events. The older agent API remains transitional (ADR 0006, 0007, 0008).
 - A Hermes profile key is a connection credential, not a model credential. gtmworks stores it encrypted and calls Hermes directly; the saved key is never shown again (ADR 0008).
-- Agents never approve, reject, publish or spend. Approval belongs to an authorized person and applies to one exact Version. A changed Version needs a new Approval. No answer is never yes.
+- Agents get Hermes's full power first, publishing and spending included when a Member asks; a limit is added only after a real problem (ADR 0020). Agents never approve or reject. Approval belongs to an authorized person and applies to one exact Version. A changed Version needs a new Approval. No answer is never yes.
 - Terms follow `GLOSSARY.md`: Company, Person, Member, Agent, main Agent, Card, Version and Approval. The permission roles are Owner, Manager, Contributor and Viewer.
 
 ### One owner for each kind of data
