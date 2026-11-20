@@ -152,8 +152,8 @@ export function DefaultEffort() {
   </div></div></section>;
 }
 
-// One Agent's model rows, for its "Thinks with" section (#29): the Engine's choices for that Agent's own profile. An Agent
-// that runs on the Company profile has no model of its own and says so.
+// One Agent's model rows, for its "Thinks with" section (#29): the Engine's choices for that Agent's own profile, the main
+// Agent's `co-` one included (#425). An Agent that shares a profile it does not keep has no model of its own and says so.
 export function AgentModel({company,agent,name,model,options,choosable,owner}:{company:string,agent:string,name:string,model:string|null,options:ModelOption[],choosable:boolean,owner:boolean}) {
  const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
