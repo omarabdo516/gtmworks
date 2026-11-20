@@ -124,7 +124,7 @@ test('the Owner turns sub-agents on for one Agent; the profile waits for the too
 });
 
 // #424: each provider key row and both subscriptions show their logo, drawn from this install only, in the light and the
-// dark theme; the two screenshots are attached to the run for the pull request.
+// dark theme, the dark one in Arabic so the mirrored rows are seen too; the screenshots are attached to the run.
 test('every provider and subscription shows its logo from the install, in both themes', async({page},testInfo)=>{
  language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
  const origin=new URL(testInfo.project.use.baseURL!).origin;
@@ -133,6 +133,7 @@ test('every provider and subscription shows its logo from the install, in both t
  await openModels(page,'omar@example.com');
  for(const theme of ['light','dark'] as const) {
   await page.emulateMedia({colorScheme:theme});
+  if(theme==='dark') { language(`update public.people set language='ar' where id='20000000-0000-0000-0000-000000000001'`); await page.reload(); }
   const rows=page.locator('#md-keys .md-key');
   await expect(rows.first()).toBeVisible();
   for(const row of await rows.all()) {

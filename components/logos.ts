@@ -45,7 +45,6 @@ const files:Record<string,string>={
  xiaomi:'lobe/xiaomimimo.svg',
  zai:'lobe/zai.svg',
  airtable:'simple/airtable.svg',
- github:'simple/github.svg',
  mixpanel:'simple/mixpanel.svg',
  notion:'simple/notion.svg',
 };

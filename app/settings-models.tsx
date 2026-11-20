@@ -28,9 +28,9 @@ async function send(path:string,body:object):Promise<Answer> {
  } catch { return {ok:false,error:'',data:null}; }
 }
 const modelOf=(option:ModelOption)=>`${option.provider}/${option.model}`;
-// A provider's logo, or its first letter where it has none (#424). A key row names it; a model choice already says its
-// provider in words, so there it stays out of the radio's name.
-const ProviderLogo=({provider,name,named=true}:{provider:string,name:string,named?:boolean})=><AppTile app={{key:provider,mark:Array.from(name.trim())[0]?.toUpperCase()||'·'}} label={named?name:undefined}/>;
+// A provider's logo, or its first letter where it has none (#424). A key row names it (label); a model choice already
+// says its provider in words, so there it has no label and stays out of the radio's name.
+const ProviderLogo=({provider,name,label}:{provider:string,name:string,label?:string})=><AppTile app={{key:provider,mark:Array.from(name.trim())[0]?.toUpperCase()||'·'}} label={label}/>;
 // The arrow keys move through a list of model choices as the reference's other radio groups do: down or right forward in
 // English, down or left forward in Arabic; the first and last stop the arrow, and a group with no choice marked starts
 // from the focused row. Moving selects, as the effort control does (#179).
@@ -72,7 +72,7 @@ export function ProviderKeys({company,owner,data}:{company:string,owner:boolean,
   ...names(data?.leftover??null).map(name=>['settingsModelsKeyLeftover',name])];
  return <section className="dp-sec" aria-labelledby="md-h-keys" id="md-keys"><h4 className="dp-label" id="md-h-keys"><span>{t('settingsModelsProviderKeys')}</span></h4>
   {rows?<div className="panel-card md-keys">{rows.map(row=><div className="md-key" key={row.provider} id={`mdl-key-row-${row.provider}`}>
-   <div className="panel-row"><ProviderLogo provider={row.provider} name={row.label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{row.label}</bdi></span>
+   <div className="panel-row"><ProviderLogo provider={row.provider} name={row.label} label={row.label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{row.label}</bdi></span>
     <span className="panel-row__d" id={`mdl-key-${row.provider}-state`}>{t(row.set?'settingsModelsKeySet':'settingsModelsKeyUnset')}</span></span>
     {owner&&row.set&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',row.label)} onClick={()=>act(row.provider,'remove')}>{t('settingsModelsKeyRemove')}</button>}
     {owner&&<button type="button" className="link-btn" aria-expanded={open===row.provider} aria-controls={`mdl-key-${row.provider}-form`} onClick={()=>{ setOpen(open===row.provider?'':row.provider); setValue(''); setError(''); }}>{t(row.set?'settingsModelsKeyReplace':'settingsModelsKeyGive')}</button>}
@@ -120,7 +120,7 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
   document.getElementById(idOf(models.options[next]))?.focus();
  };
  const row=(option:ModelOption,index:number)=>{
-  const choice=modelOf(option); const on=choice===models.model; const text=<><ProviderLogo provider={option.provider} name={option.providerName} named={false}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span></>;
+  const choice=modelOf(option); const on=choice===models.model; const text=<><ProviderLogo provider={option.provider} name={option.providerName}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span></>;
   const meta=on?<span className="panel-row__meta"><span aria-hidden="true">✓</span>{t('settingsModelsDefaultMark')}</span>:null;
   return owner
    ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
