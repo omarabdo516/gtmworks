@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(63);
+select plan(64);
 -- RS Learning (1): Lead on the Company's own profile, an Owner's (Omar's) and a Manager's Conversation with Lead.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('a7000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
 insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true);
@@ -28,15 +28,15 @@ select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000
 select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-1','call-0','You write for {company}.'),
  jsonb_build_object('state','created','agent',(select agent from made where name='own')),'and a repeated call answers the Agent it made, with no profile to make');
 reset role;
-select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),true,
- 'a new Agent''s profile waits for the worker''s first read-back of the fixed tools');
+select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),false,
+ 'a new Agent''s profile is confirmed when the Engine provided it with the fixed set and its read-back matched');
 set local role service_role;
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
   own_profile=>true),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'a closer that raced the one that made it answers the same Agent');
 reset role;
-select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),true,
- 'and the tools it wrote send the profile back to the worker, so no Run starts on it until its read-back is recorded');
-update public.agent_profiles set tools_confirmed=true,tools_pending=false,skills_shared=true where agent_id=(select agent from made where name='own');
+select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),false,
+ 'and the closer that wrote the same fixed set leaves it confirmed');
+update public.agent_profiles set skills_shared=true where agent_id=(select agent from made where name='own');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and not is_default),1,'one Agent is made');
 select ok(exists(select 1 from public.hermes_agents a join made m on m.agent=a.id and m.name='own'
   where a.profile=m.profile and a.instructions='You write for RS Learning.' and a.name='Writer'),
@@ -170,7 +170,14 @@ reset role;
 select ok((select failed_at is not null from public.conversation_queued_turns where send_key='a7300000-0000-0000-0000-000000000021'),'the turn is failed, as on another Company''s profile');
 set local role service_role;
 select public.begin_agent_tools((select agent from own));
+-- A retry whose first start's answer was lost is still not sent to the profile: its tools are changing now.
+reset role;
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile,start_unknown_at)
+ values ('a7200000-0000-0000-0000-000000000002','a7300000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000001',(select connection from own),
+  '20000000-0000-0000-0000-000000000001',(select agent from own),'Hello',(select profile from made where name='own'),now());
+set local role service_role;
 select is((select count(*)::int from public.claim_conversation_turn('a7200000-0000-0000-0000-000000000002')),0,'the Agent''s own turn waits while its tools change');
+select is((select count(*)::int from public.claim_conversation_turn('a7200000-0000-0000-0000-000000000002')),0,'and a retry whose first start was lost waits too, never sent to a profile whose tools are changing');
 select is((select count(*)::int from public.begin_channel_start(-2)),0,'and so does its channel Run');
 select is((select count(*)::int from public.begin_note_start(-2)),0,'and its note Run');
 reset role;

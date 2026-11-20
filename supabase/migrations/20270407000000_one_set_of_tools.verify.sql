@@ -38,6 +38,7 @@ select json_build_object(
    'public.record_agent_profile(uuid,text,boolean)','public.begin_profile_tools(text)','public.record_profile_tools(text,boolean)',
    'public.attach_company_profile(uuid)','public.move_company_profile(uuid)','public.engine_tools_due()',
    'public.forget_company_profile(text)','public.agent_move_work()','public.move_agent_profile(uuid)',
+   'public.agent_soul_rules_work()','public.shared_skills_work()','public.record_shared_skills(uuid,text)',
    'public.lead_create_agent(uuid,text,text,text,text,text[],text,text,boolean,boolean)','public.lead_agent_profile(uuid,text,text,text)']) f),
  'person_entries_unchanged',has_function_privilege('authenticated','public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)','execute')
   and not has_function_privilege('service_role','public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)','execute')

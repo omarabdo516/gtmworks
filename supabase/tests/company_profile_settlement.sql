@@ -24,7 +24,7 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.reserve_conversation_run('c4000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002',(select agent from rs),'c5000000-0000-0000-0000-000000000002','Hi')$$,'55000','agentToolsPending',
- 'a change written but not recorded (1 to 3, then back to 1) starts nothing although the levels agree');
+ 'a change written but not recorded starts nothing, though the tools read back would agree');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;

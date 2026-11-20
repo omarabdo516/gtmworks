@@ -319,6 +319,33 @@ test('the Owner invites a Member from the Team table, the row says Invite sent, 
  await expect(overlay.locator('.ta-table tbody tr').filter({hasText:email})).toHaveCount(0);
 });
 
+// ADR 0018: Agent levels are gone. In place of the level choice the Company section says in one line what every Agent
+// can use, in both languages, and offers nothing to pick.
+test('Company settings say what every agent can use and offer no level choice, in English and Arabic',async({page})=>{
+ query(`update public.people set language='en' where id='${owner}'`);
+ try {
+  await signIn(page,'omar@example.com','/c/rs-learning/settings');
+  const overlay=page.getByRole('dialog',{name:'Settings'});
+  const line=overlay.locator('section[aria-labelledby="co-h-tools"]');
+  await expect(line.locator('#co-h-tools')).toHaveText('What every agent can use');
+  await expect(line).toContainText('Every agent of the company works in its work sandbox with a terminal, files and code.');
+  await expect(line).toContainText('Anything published or spent through gtmworks still waits for a person’s approval.');
+  // One read-only line: no level, policy or switch of any kind is left where the level choice was.
+  await expect(line.locator('input,select,button,[role=radio],[role=combobox],[role=slider]')).toHaveCount(0);
+  await expect(overlay.getByLabel(/level/i)).toHaveCount(0);
+
+  query(`update public.people set language='ar' where id='${owner}'`);
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('lang','ar');
+  const arabic=page.getByRole('dialog',{name:'الإعدادات'});
+  const say=arabic.locator('section[aria-labelledby="co-h-tools"]');
+  await expect(say.locator('#co-h-tools')).toHaveText('كل الوكلاء بيستخدموا إيه');
+  await expect(say).toContainText('كل وكيل في الشركة بيشتغل في صندوق شغل الشركة، ومعاه تيرمنال وملفات وتشغيل كود.');
+  await expect(say).toContainText('لسه بتستنى موافقة حد.');
+  await expect(say.locator('input,select,button,[role=radio],[role=combobox],[role=slider]')).toHaveCount(0);
+ } finally { query(`update public.people set language='en' where id='${owner}'`); }
+});
+
 // #169: a Viewer may do none of what raises these toasts, so their screens raise none, and the routes that would answer a
 // permitted Member refuse them before any change is made.
 test('a Viewer raises none of the toasts, on the screens or through the routes',async({page})=>{

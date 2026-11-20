@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { everyAgentGets, sandboxTools, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, childToolsets, forbiddenOf, companyProfile } from '../lib/agent-toolsets.mjs';
-import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn } from '../lib/hermes.mjs';
+import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, prepareApp } from '../lib/hermes.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
@@ -222,6 +222,43 @@ test('the profile check corrects a profile with the sub-agents variant its Owner
   assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
   assert.deepEqual(calls.filter(call=>call.rpc==='record_profile_tools').map(call=>call.args),[{profile:name,subagents_written:true}]);
   assert.ok((await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets.includes('delegation'));
+ } finally { await fake.close(); }
+});
+
+test('an App the Company connected sits beside the fixed set: the write-back and the check leave the profile confirmed', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  const config=toolConfig();
+  assert.equal((await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets})).state,'configured');
+  // #30: the Owner connected Klaviyo, so its MCP server is in the profile's config, and an Engine that lists it beside the
+  // fixed set names it `mcp-klaviyo` (the registry's toolset for a server, toolsets.py, mcp_tool_registration.py).
+  assert.equal(await prepareApp({...install(fake),profile:name},'klaviyo','https://app.test/api/apps/callback/klaviyo'),null);
+  const written=await configureProfile(install(fake),{name,config,forbidden:config.agent.disabled_toolsets});
+  assert.equal(written.state,'configured','the fixed set with its App beside it is the fixed set');
+  assert.ok(written.toolsets.includes('mcp-klaviyo'),'the App\'s server is on');
+  // The worker reads the same and leaves the profile confirmed: it is not marked as changing and nothing is written.
+  const calls=[];
+  const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
+  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due']);
+ } finally { await fake.close(); }
+});
+
+test('a toolset no gtmworks App put there is a difference: the profile is marked changing and never recorded', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  const config=toolConfig();
+  assert.equal((await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets})).state,'configured');
+  // A server someone added to the Engine by hand: not an App of the catalogue, so not one gtmworks wrote and not let by.
+  const held=fake.settings.profiles.get(name);
+  held.config={...held.config,mcp_servers:{acme:{url:'https://mcp.acme.invalid/mcp',enabled:true}}};
+  const calls=[];
+  const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
+  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','begin_profile_tools'],'written, never recorded while the unknown toolset stays on');
+  assert.ok(!calls.some(call=>call.rpc==='record_profile_tools'));
  } finally { await fake.close(); }
 });
 
@@ -509,7 +546,7 @@ test('a run is reserved on its pinned profile before Hermes is called, and recor
  assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','service pin_run','service pin_run_history','service pin_run_model','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 
-test('a run never starts on another company\'s profile, nor while the profile\'s tools lag behind the level', async () => {
+test('a run never starts on another company\'s profile, nor while the profile\'s tools are not the fixed set', async () => {
  const {sendMessage}=await import('../lib/conversation-runs.mjs');
  const borrowed=conversationDatabases({profile:companyProfile(three)});
  assert.deepEqual(await sendMessage(borrowed.db,borrowed.service,{person:'p',company:two,conversation:'c',sendKey:'k',message:'Hi',hermes:{address:'http://hermes:8642',key:'test-only-key'},...engine(borrowed.order)}),{error:'conversationNotFound',status:404});

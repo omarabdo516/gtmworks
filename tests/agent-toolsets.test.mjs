@@ -59,6 +59,20 @@ test('a read-back is the fixed set only when it is exactly it, with no forbidden
  assert.equal(toolsDiffer(fixedToolsets({sandbox:true}),{sandbox:true}),false);
 });
 
+test('a Company\'s own App is beside the fixed set, and a toolset the Engine adds later is not', () => {
+ // An App (#30) is an MCP server gtmworks wrote into the profile's config, which an Engine may report as a toolset of
+ // its own under the server's name or the registry's `mcp-<server>`. It is not part of the fixed set, and the check lets
+ // it be instead of looping on a Company that connected one. Any other toolset on is a tool the module places nowhere.
+ assert.equal(toolsDiffer([...fixedToolsets(),'klaviyo'],{apps:['klaviyo']}),false);
+ assert.equal(toolsDiffer([...fixedToolsets(),'mcp-klaviyo'],{apps:['klaviyo']}),false);
+ assert.equal(toolsDiffer([...fixedToolsets(),'klaviyo'],{apps:[]}),true,'an App toolset the Company does not have is a difference');
+ assert.equal(toolsDiffer([...fixedToolsets(),'acme'],{apps:['klaviyo']}),true,'a toolset the Engine added later is a difference');
+ assert.equal(toolsDiffer(fixedToolsets().filter(name=>name!=='web').concat('klaviyo'),{apps:['klaviyo']}),true,'and an App covers no fixed tool that is missing');
+ // A toolset no Agent gets is never let through, whatever an App is called.
+ assert.equal(toolsDiffer([...fixedToolsets(),'browser'],{apps:['browser']}),true);
+ assert.equal(toolsDiffer([...fixedToolsets(),'mcp-browser'],{apps:['browser']}),true);
+});
+
 test('the sandbox tools join the fixed set in one place when the sandbox exists', () => {
  const sandboxed=toolConfig({sandbox:true});
  assert.deepEqual(sandboxed.platform_toolsets.api_server,[...everyAgentGets,...sandboxTools]);
@@ -74,13 +88,15 @@ test('a profile name is the Company\'s and an Agent\'s, and nothing else is one'
  for(const bad of ['default','co-a0000000000000000000000000000001','ag-1','']) assert.equal(isAgentProfile(bad),false,bad);
 });
 
-// The names of the old shape are gone from the code that runs, its scripts and its tests. A database migration is history
-// and keeps its own words; the Company's log still reads past level changes by their name (agent_level_changed).
-const sources=directory=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>{
+// The names of the old shape are gone from the code that runs, its scripts, its tests, both message catalogues and the
+// database tests. A database migration is history and keeps its own words; the Company's log still reads past level
+// changes by their name (agent_level_changed), and one database test names the gone column and function to prove they
+// are gone.
+const sources=(directory,pattern=/\.(mjs|js|ts|tsx)$/)=>readdirSync(directory,{withFileTypes:true}).flatMap(entry=>{
  if(entry.name==='node_modules'||entry.name==='ci-logs'||entry.name.startsWith('.')) return [];
  const path=`${directory}/${entry.name}`;
- if(entry.isDirectory()) return sources(path);
- return /\.(mjs|js|ts|tsx)$/.test(entry.name)?[path]:[];
+ if(entry.isDirectory()) return sources(path,pattern);
+ return pattern.test(entry.name)?[path]:[];
 });
 
 test('no level route, level function, policy copy or level setting is left in the code', () => {
@@ -94,8 +110,10 @@ test('no level route, level function, policy copy or level setting is left in th
   [/agentLevel(Title|Hint|OwnerOnly|NotAllowed|Invalid)/, 'the level setting'],
   [/agentLevelPending/, 'the level-pending error'],
  ];
- const files=[...sources('app'),...sources('lib'),...sources('scripts'),...sources('worker'),...sources('tests')]
-  .filter(file=>!file.endsWith('tests/agent-toolsets.test.mjs'));
+ // Both message catalogues are read as text, so a level setting that only survives in one language fails here too.
+ const files=[...sources('app'),...sources('lib'),...sources('scripts'),...sources('worker'),...sources('tests'),
+  ...sources('lib/messages',/\.json$/),...sources('supabase/tests',/\.sql$/)]
+  .filter(file=>!file.endsWith('tests/agent-toolsets.test.mjs')&&file!=='supabase/tests/company_profiles.sql');
  for(const file of files) {
   const text=readFileSync(file,'utf8');
   for(const [pattern,name] of gone) assert.doesNotMatch(text,pattern,`${file} still names ${name}`);

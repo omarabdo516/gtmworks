@@ -6,7 +6,10 @@
 -- Kept on purpose: the Company's log rows of past level changes, and the audit shape that names them, so history still
 -- reads. Nothing else stored is dropped, and no grant changes: every function keeps the role that held it.
 --
--- The previous app version's level route and set_agent_level no longer exist; the update to this version removes them.
+-- The previous app version's level route and set_agent_level are gone, and its eight-argument lead_create_agent call names
+-- own_level and own_policy, which this version replaces. Between the migration and the new app starting, that version's
+-- calls fail; an update applies migrations and then starts the new app (scripts/install.sh), so the window is its own
+-- ordering and no compatibility shim is kept.
 
 -- 1. The functions that read the level, the policy or either profile's tool state. Dropped before the columns so their
 -- dependencies go with them; each is made again below with the same name and, where it changed, the same role.
@@ -133,7 +136,9 @@ begin
   update public.conversation_queued_turns q set failed_at=now() where q.conversation_id=conversation and q.send_key=turn.send_key; return;
  end if;
  if target is null then return; end if;
- if ((target ~ '^co-[0-9a-f]{32}$' and not public.company_profile_ready(turn.company_id)) or refusal='agentToolsPending') and not uncertain then return; end if;
+ -- A retry whose first start's answer was lost still waits for the fixed set: the Run is never sent to a profile whose
+ -- tools are being changed or were never confirmed.
+ if (target ~ '^co-[0-9a-f]{32}$' and not public.company_profile_ready(turn.company_id)) or refusal='agentToolsPending' then return; end if;
  if held.conversation_id is null then
   insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile)
    values(conversation,turn.send_key,turn.company_id,token,turn.person_id,turn.agent_id,turn.message,target)
@@ -246,13 +251,17 @@ revoke all on function public.move_agent_profile(uuid) from public,anon,authenti
 grant execute on function public.move_agent_profile(uuid) to service_role;
 
 -- 20270402's health list, now with the Agent's sub-agents choice, so a profile the Engine reports differently is
--- corrected with the variant its Owner set.
+-- corrected with the variant its Owner set. The list is read a page at a time, so its order turns with the minute (as the
+-- other work lists do): a profile past the page is in the next minute's, and every profile is checked.
 drop function public.engine_tools_due();
 create function public.engine_tools_due() returns table(company_id uuid, profile text, subagents boolean)
 language sql stable security definer set search_path='' as $$
- select distinct a.company_id,a.profile,
-  coalesce((select p.subagents from public.agent_profiles p where p.profile=a.profile and p.agent_id=a.id),false)
- from public.hermes_agents a where a.profile ~ '^(co|ag)-[0-9a-f]{32}$' order by 2 limit 500;
+ select due.company_id,due.profile,due.subagents from (
+  select distinct a.company_id,a.profile,
+   coalesce((select p.subagents from public.agent_profiles p where p.profile=a.profile and p.agent_id=a.id),false) as subagents,
+   md5(a.profile||date_trunc('minute',now())::text) as turn
+  from public.hermes_agents a where a.profile ~ '^(co|ag)-[0-9a-f]{32}$') due
+ order by due.turn limit 500;
 $$;
 revoke all on function public.engine_tools_due() from public,anon,authenticated;
 grant execute on function public.engine_tools_due() to service_role;
@@ -350,8 +359,11 @@ $$;
 revoke all on function public.lead_agent_profile(uuid,text,text,text) from public,anon,authenticated;
 grant execute on function public.lead_agent_profile(uuid,text,text,text) to service_role;
 
--- The one function that makes an Agent for Lead's call, with `own_profile` in place of the level and policy. The
--- previous app version's eight-argument call still reaches it through the defaults.
+-- The one function that makes an Agent for Lead's call, with `own_profile` in place of the level and policy: it is true
+-- only when the Engine provided the profile with the fixed set and the read-back matched it, so the record comes back
+-- confirmed. The previous app version's eight-argument call names own_level and own_policy and does not reach it: between
+-- the migration and the new app starting its calls fail, which an update's ordering already covers (scripts/install.sh),
+-- so no shim is kept.
 create function public.lead_create_agent(conversation uuid, run text, call text, agent_name text, job text, apps text[], template text default null, instructions text default null,
  own_profile boolean default false, own_answers boolean default true) returns jsonb
 language plpgsql security definer set search_path='' as $function$
@@ -361,9 +373,10 @@ begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select l.agent_id into made from public.lead_made_agents l where l.conversation_id=conversation and l.run_id=run and l.call_id=call;
  if found then
-  -- A closer that raced the one that made the Agent wrote its tools to the same profile: the worker writes and reads the
-  -- fixed set back again first.
-  if own_profile then update public.agent_profiles p set tools_pending=true where p.agent_id=made; end if;
+  -- A closer that raced the one that made the Agent wrote the same fixed set to the same profile and the Engine read it
+  -- back (own_profile), so the record it left stays confirmed. One that did not provide it changes nothing: the worker
+  -- makes the profile and records it.
+  if own_profile then update public.agent_profiles p set tools_confirmed=true,tools_pending=false where p.agent_id=made; end if;
   return jsonb_build_object('state','created','agent',made);
  end if;
  select * into talk from public.conversations where id=conversation;
@@ -376,10 +389,12 @@ begin
  held:=public.company_holds_provider_key(talk.company_id);
  if not held and not own_answers then own_profile:=false; end if;
  select a.profile into source from public.hermes_agents a where a.id=talk.agent_id;
- -- The owner record comes first: the Agent on its profile is checked against it. It holds no tools until the worker
- -- reads the fixed set back. A Company holding a provider key gives every Agent its own profile, as before.
+ -- The owner record comes first: the Agent on its profile is checked against it. `own_profile` says the Engine provided
+ -- the profile with the fixed set and the read-back matched, so its tools are confirmed; an Agent the Company's held key
+ -- put on its own profile without that waits for the worker, which provides it. A Company holding a provider key gives
+ -- every Agent its own profile, as before.
  if own_profile or held then
-  insert into public.agent_profiles(agent_id,company_id,tools_pending) values(agent,talk.company_id,true);
+  insert into public.agent_profiles(agent_id,company_id,tools_confirmed,tools_pending) values(agent,talk.company_id,own_profile,not own_profile);
  end if;
  insert into public.hermes_agents(id,company_id,profile,name,speciality,requested_by,apps,template,instructions)
   values(agent,talk.company_id,

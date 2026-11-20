@@ -61,7 +61,7 @@ select is(public.lead_create_agent(conversation=>'e2991000-0000-0000-0000-000000
  'an Agent whose own profile has no model yet is made');
 reset role;
 update made set connection=(select connection_id from public.hermes_agents where id=made.agent) where name='waiting';
-select results_eq($$select profile,tools_confirmed,waits from placed where name='waiting'$$,$$select profile,false,true from made where name='waiting'$$,
+select results_eq($$select profile,tools_confirmed,waits from placed where name='waiting'$$,$$select profile,true,true from made where name='waiting'$$,
  'it is attached to its own profile with its tools, never Lead''s, and waits for the key');
 set local role service_role;
 select is(public.lead_create_agent('e2991000-0000-0000-0000-000000000001','run-1','call-2','Designer','Designs the ads.','{}'),jsonb_build_object('state','created','agent',(select agent from made where name='bare')),
