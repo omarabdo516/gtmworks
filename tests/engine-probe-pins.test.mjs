@@ -9,15 +9,17 @@ import { workSandboxBase } from '../lib/work-sandbox-image.mjs';
 // of either pin without re-running the probe fails this test, which is the moment the boundary has to be re-read.
 
 const probe = readFileSync('docs/engine-probes/work-sandbox-ssh/run.sh', 'utf8');
+// The Engine pin lives in the Company's Engine template since #378; the install's compose file no longer names it.
+const template = readFileSync('scripts/engine-template.yml', 'utf8');
 const compose = readFileSync('docker-compose.install.yml', 'utf8');
 const pinnedIn = name => new RegExp(`^${name}=(\\S+)$`, 'm').exec(probe)?.[1] ?? null;
 
 test('the probe runs on the Engine the install pins', () => {
   const engine = pinnedIn('ENGINE');
   assert.match(engine ?? '', /^nousresearch\/hermes-agent:v\d+\.\d+\.\d+@sha256:[a-f0-9]{64}$/);
-  // The compose file's one image line for it: a bump there without the probe leaves this red.
-  assert.equal(compose.split(`image: ${engine}`).length, 2, 'docker-compose.install.yml pins the probe\'s Engine once');
-  assert.equal(compose.split(engine).length, 2, 'the probe\'s Engine pin appears once in the install');
+  // The Engine template's one image line for it: a bump there without the probe leaves this red.
+  assert.equal(template.split(`image: ${engine}`).length, 2, 'scripts/engine-template.yml pins the probe\'s Engine once');
+  assert.equal((template + compose).split(engine).length, 2, 'the probe\'s Engine pin appears once in the install');
 });
 
 test('the probe\'s second container is the install\'s own work sandbox image', () => {
