@@ -57,7 +57,10 @@ async function ask(body:object):Promise<{ok:boolean,body:Record<string,unknown>}
 const stateText:Record<SubscriptionState,string>={connected:'signInConnected',mainAgentOnly:'signInMainAgentOnly',someAgentsOnly:'signInSomeAgentsOnly',notConnected:'signInNotConnected'};
 // The Company's name in the command as the shell reads it back exactly, with the characters a double quote would expand.
 const quoted=(value:string)=>`"${value.replace(/[\\"$`]/g,char=>`\\${char}`)}"`;
-export function CompanySubscriptions({company,companyName,owner,available,signIns,noEngine=false}:{company:string,companyName:string,owner:boolean,available:boolean,signIns:CompanySignIns['signIns'],noEngine?:boolean}) {
+// `keyed` are the providers the Company has a key for. Claude's subscription and an Anthropic key share one pool in the
+// Engine, which always puts the signed-in subscription first and a key from the settings after it (v0.23.0
+// agent/credential_pool.py _normalize_pool_priorities), so with both the row says which is used first (#438).
+export function CompanySubscriptions({company,companyName,owner,available,signIns,noEngine=false,keyed=[]}:{company:string,companyName:string,owner:boolean,available:boolean,signIns:CompanySignIns['signIns'],noEngine?:boolean,keyed?:string[]}) {
  const {t}=useI18n(); const router=useRouter();
  const [started,setStarted]=useState<Started|null>(null);
  const [note,setNote]=useState<{provider:Provider,key:string,alert?:boolean}|null>(null);
@@ -113,6 +116,7 @@ export function CompanySubscriptions({company,companyName,owner,available,signIn
     <p className="set-hint" role="status">{t('signInWaiting')}</p>
     <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--secondary btn--sm" disabled={pending} onClick={()=>act(provider,'cancel')}>{t('cancel')}</button></div>
    </div>}
+   {provider==='anthropic'&&state==='connected'&&keyed.includes('anthropic')&&<p className="set-hint" id="sub-anthropic-order">{t('signInKeyFallback')}</p>}
    {connect&&provider==='anthropic'&&<div className="sub-step">
     <p>{t('signInTerminalOnly')}</p><code className="sub-code sub-code--cmd" dir="ltr" translate="no">{command}</code><p className="set-hint">{t('signInTerminalWho')}</p></div>}
    {note?.provider===provider&&<p className={note.alert?'set-err':'set-hint'} role={note.alert?'alert':'status'}>{t(note.key)}</p>}
@@ -122,6 +126,6 @@ export function CompanySubscriptions({company,companyName,owner,available,signIn
   {noEngine?<p className="ro-note sov-warn" role="note" id="sub-no-engine"><SettingsIcon name="shield"/><span>{t('noEngine')}</span></p>
    :available?<div className="panel-card">{row('openai-codex',t('signInChatGPT'))}{row('anthropic',t('signInClaude'))}</div>
    :<div className="panel-card"><p className="panel-empty">{t('signInNoProfile')}</p></div>}
-  {!noEngine&&<p className="set-hint">{t('signInHint')} {t('signInOneAccount')}</p>}
+  {!noEngine&&<p className="set-hint">{t('signInWhat')} {t('signInHint')} {t('signInOneAccount')}</p>}
  </section>;
 }

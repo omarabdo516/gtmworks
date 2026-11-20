@@ -313,7 +313,7 @@ test('the sign-in driver passes on states, a code and an https link, never a cre
   assert.deepEqual(await cancelSignIn(root,cancelled.session),{state:'cancelled'});
   assert.deepEqual(fake.settings.managementRequests.map(request=>`${request.method} ${request.path}`),[
    'POST /api/providers/oauth/openai-codex/start',`GET /api/providers/oauth/openai-codex/poll/${atRoot.session}?profile=${name}`,
-   `GET /api/providers/oauth/openai-codex/poll/${atRoot.session}`,'GET /api/providers/oauth','DELETE /api/providers/oauth/openai-codex','DELETE /api/providers/oauth/openai-codex',
+   `GET /api/providers/oauth/openai-codex/poll/${atRoot.session}`,'GET /api/providers/oauth','GET /api/credentials/pool','DELETE /api/providers/oauth/openai-codex','DELETE /api/providers/oauth/openai-codex',
    'POST /api/providers/oauth/openai-codex/start',`DELETE /api/providers/oauth/sessions/${cancelled.session}`]);
  } finally { await fake.close(); }
 });
@@ -401,6 +401,39 @@ test('the Owner signs the Company in once on the root profile of its own Engine,
   const cancelled=await ask(owner,driver,{intent:'start'});
   assert.deepEqual(await ask(owner,driver,{intent:'cancel',session:cancelled.body.session}),{status:200,body:{status:'cancelled'}});
   assert.equal(fake.settings.signInSessions.has(cancelled.body.session),false);
+ } finally { await fake.close(); }
+});
+
+test('a Claude subscription in the root profile\'s credential pool is the Company\'s; an API key is never a sign-in, and each outlives the other\'s removal (#438)', async () => {
+ const fake=await fakeHermes({managementPort:0});
+ try {
+  const driver=pointedAt(fake);
+  for(const name of [companyProfile(two),agentProfile]) await provideProfile(install(fake),{name,soul:'',config:levelConfig(1),forbidden:alwaysOff});
+  const owner=sessions(fake,{owner:true,agents:[agentProfile]});
+  const read=()=>readCompanySignIns(owner.db,{company:two,driver,hermes:{address:fake.address,key:'test-only-key'}});
+  // The API key the Owner gave first: the Engine reports Claude logged in on the Agents' profiles, from env_var.
+  const key='sk-ant-api03-known-key-0123456789';
+  for(const name of [companyProfile(two),agentProfile]) fake.settings.profiles.get(name).env={ANTHROPIC_API_KEY:key};
+  assert.deepEqual(states(await read()),{'openai-codex':'notConnected',anthropic:'notConnected'},'a key is not a subscription');
+  // `gtmworks sign-in claude`: an OAuth row in the root's pool, which the Engine's own Claude status does not see.
+  const token='sk-ant-oat01-known-subscription-0123456789';
+  fake.settings.defaultPool.anthropic=[{id:'a1b2c3',label:'anthropic-oauth-1',auth_type:'oauth',source:'manual:hermes_pkce',priority:0,access_token:token}];
+  const both=await read();
+  assert.deepEqual(states(both),{'openai-codex':'notConnected',anthropic:'connected'});
+  assert.doesNotMatch(JSON.stringify(both),new RegExp(`${token.slice(-4)}|${key.slice(-4)}|hermes_pkce|env_var`),'no credential, preview or source leaves the read');
+  // Removing the key leaves the subscription.
+  for(const name of [companyProfile(two),agentProfile]) fake.settings.profiles.get(name).env={};
+  assert.equal((await read()).signIns.anthropic.state,'connected');
+  // Disconnect removes the subscription and leaves the key: a profile whose Claude is its key has nothing to remove.
+  for(const name of [companyProfile(two),agentProfile]) fake.settings.profiles.get(name).env={ANTHROPIC_API_KEY:key};
+  assert.deepEqual(await ask(owner,driver,{provider:'anthropic',intent:'disconnect'}),{status:200,body:{status:'disconnected'}});
+  assert.equal(fake.settings.defaultPool.anthropic,undefined);
+  assert.equal(fake.settings.profiles.get(companyProfile(two)).env.ANTHROPIC_API_KEY,key);
+  assert.deepEqual(states(await read()),{'openai-codex':'notConnected',anthropic:'notConnected'});
+  assert.deepEqual(owner.logged.map(change=>[change.provider,change.connected]),[['anthropic',false]]);
+  // A pool the Engine cannot read is not taken as no subscription.
+  fake.settings.poolFail=true;
+  assert.equal((await read()).signIns,null);
  } finally { await fake.close(); }
 });
 

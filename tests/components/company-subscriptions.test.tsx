@@ -14,7 +14,7 @@ const companyName = 'RS Learning';
 const command = `gtmworks sign-in claude --company "${companyName}"`;
 const signIns = (chatgpt: SubscriptionState, claude: SubscriptionState): CompanySignIns['signIns'] =>
   ({ 'openai-codex': { state: chatgpt, flow: 'device_code' }, anthropic: { state: claude, flow: 'external' } });
-const section = (props: { owner: boolean, available: boolean, signIns: CompanySignIns['signIns'], noEngine?: boolean }, language: 'en' | 'ar' = 'en') =>
+const section = (props: { owner: boolean, available: boolean, signIns: CompanySignIns['signIns'], noEngine?: boolean, keyed?: string[] }, language: 'en' | 'ar' = 'en') =>
   render(<LanguageProvider language={language}><CompanySubscriptions company="c-1" companyName={companyName} {...props}/></LanguageProvider>);
 const stateOf = (provider: string) => document.querySelector(`#sub-${provider}-state`)?.textContent;
 const buttons = () => [...document.querySelectorAll('#md-subscriptions button')].map(button => button.getAttribute('aria-label'));
@@ -26,7 +26,7 @@ test('a root sign-in is Connected with Disconnect, and the page says one account
   await expect.element(screen.getByText(en.signInConnected, { exact: true })).toBeVisible();
   expect(buttons()).toEqual(['Disconnect ChatGPT']);
   expect(document.querySelector('#sub-shared')).toBeNull();
-  expect(document.querySelector('#md-subscriptions > .set-hint')?.textContent).toBe(`${en.signInHint} ${en.signInOneAccount}`);
+  expect(document.querySelector('#md-subscriptions > .set-hint')?.textContent).toBe(`${en.signInWhat} ${en.signInHint} ${en.signInOneAccount}`);
   expect(document.querySelector('#sub-anthropic code')?.textContent).toBe(command);
   await screen.getByRole('button', { name: 'Disconnect ChatGPT' }).click();
   await expect.poll(() => refresh.mock.calls.length).toBe(1);
@@ -43,7 +43,7 @@ test('a sign-in an earlier version left for the main agent only says so, and off
   await screen.unmount();
   await section({ owner: true, available: true, signIns: signIns('mainAgentOnly', 'connected') }, 'ar');
   await expect.poll(() => stateOf('openai-codex')).toBe(ar.signInMainAgentOnly);
-  expect(document.querySelector('#md-subscriptions > .set-hint')?.textContent).toBe(`${ar.signInHint} ${ar.signInOneAccount}`);
+  expect(document.querySelector('#md-subscriptions > .set-hint')?.textContent).toBe(`${ar.signInWhat} ${ar.signInHint} ${ar.signInOneAccount}`);
 });
 
 test('a sign-in a stopped Disconnect left in an Agent\'s own profile says so, and keeps Disconnect and Connect again', async () => {
@@ -92,4 +92,20 @@ test('each subscription row shows its own logo, named', async () => {
   const logos = ['openai-codex', 'anthropic'].map(provider => document.querySelector(`#sub-${provider} .tool-tile[role=img]`));
   expect(logos.map(logo => [logo?.getAttribute('aria-label'), !!logo?.querySelector('.tool-logo')])).toEqual([['ChatGPT', true], ['Claude', true]]);
   expect(document.querySelector('#md-subscriptions .panel-row__icon')).toBeNull();
+});
+
+test('a Claude subscription with an Anthropic key says the subscription is used first and the key is the paid fallback, in both languages (#438)', async () => {
+  for (const [language, messages] of [['en', en], ['ar', ar]] as const) {
+    const screen = await section({ owner: true, available: true, signIns: signIns('connected', 'connected'), keyed: ['openrouter', 'anthropic'] }, language);
+    await expect.poll(() => document.querySelector('#sub-anthropic-order')?.textContent).toBe(messages.signInKeyFallback);
+    expect(document.querySelector('#sub-openai-codex-order')).toBeNull();
+    await screen.unmount();
+  }
+  // No key, or no subscription, has no order to tell.
+  for (const [claude, keyed] of [['connected', ['openrouter']], ['notConnected', ['anthropic']]] as const) {
+    const screen = await section({ owner: true, available: true, signIns: signIns('connected', claude), keyed: [...keyed] });
+    await expect.poll(() => stateOf('anthropic')).toBe(claude === 'connected' ? en.signInConnected : en.signInNotConnected);
+    expect(document.querySelector('#sub-anthropic-order')).toBeNull();
+    await screen.unmount();
+  }
 });

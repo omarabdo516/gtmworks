@@ -58,6 +58,8 @@ test('the Owner gives a provider key: it is sent once and never drawn, and each 
   expect(document.querySelector('#mdl-key-row-openrouter button')).toBeNull();
   await expect.element(page.getByText(ar.settingsModelsKeyOwnerOnly)).toBeVisible();
   await expect.element(page.getByText(ar.settingsModelsKeySet, { exact: true })).toBeVisible();
+  // The keys box says what a key is: paid per use (#438).
+  expect(document.querySelector('#md-keys > .set-hint:last-child')?.textContent).toBe(`${ar.settingsModelsKeyWhat} ${ar.settingsModelsProviderKeysHint}`);
 });
 
 // #430: the Company's speech-to-text provider. Deepgram is first; the Owner picks one and pastes its key, which is sent
