@@ -30,7 +30,13 @@ test('every what\'s-new entry has an issue, a date, and a title and one sentence
 
 test('a stable install on an older release gets the newest release, its date and the entries it lacks', async () => {
  const fetch = answering({
-  'https://api.test/releases/latest': { tag_name: 'v1.3.0', published_at: '2026-11-18T10:00:00Z' },
+  // A hotfix of an older line published last, a prerelease and a draft are not the newest.
+  'https://api.test/releases?per_page=100': [
+   { tag_name: 'v1.2.1', published_at: '2026-11-19T10:00:00Z' },
+   { tag_name: 'v1.4.0', published_at: '2026-11-19T11:00:00Z', prerelease: true },
+   { tag_name: 'v1.5.0', published_at: '2026-11-19T12:00:00Z', draft: true },
+   { tag_name: 'v1.3.0', published_at: '2026-11-18T10:00:00Z' },
+  ],
   'https://raw.test/v1.3.0/lib/whats-new.json': [entry(3, '2026-11-18'), ...local],
  });
  assert.deepEqual(await checkUpdate({ installed: '1.2.0', local, source, fetch }),
@@ -38,7 +44,7 @@ test('a stable install on an older release gets the newest release, its date and
 });
 
 test('a newer release from before what\'s-new existed is still an update, with no lines', async () => {
- const fetch = answering({ 'https://api.test/releases/latest': { tag_name: 'v2.0.0', published_at: '2026-11-19T00:00:00Z' } });
+ const fetch = answering({ 'https://api.test/releases?per_page=100': [{ tag_name: 'v2.0.0', published_at: '2026-11-19T00:00:00Z' }] });
  assert.deepEqual(await checkUpdate({ installed: 'v1.9.9', local, source, fetch }), { version: 'v2.0.0', date: '2026-11-19T00:00:00Z', entries: [] });
 });
 
@@ -50,12 +56,14 @@ test('a main install gets what main brings since its build, dated by the newest 
 
 test('up to date shows nothing: the same or an older release, or main with nothing new', async () => {
  const fetch = answering({
-  'https://api.test/releases/latest': { tag_name: 'v1.2.0', published_at: '2026-11-01T00:00:00Z' },
+  'https://api.test/releases?per_page=100': [{ tag_name: 'v1.2.0', published_at: '2026-11-01T00:00:00Z' }],
   'https://raw.test/main/lib/whats-new.json': local,
  });
  assert.equal(await checkUpdate({ installed: '1.2.0', local, source, fetch }), null);
  assert.equal(await checkUpdate({ installed: '1.10.0', local, source, fetch }), null);
  assert.equal(await checkUpdate({ installed: 'main', local, source, fetch }), null);
+ // No release published yet.
+ assert.equal(await checkUpdate({ installed: '1.0.0', local, source, fetch: answering({ 'https://api.test/releases?per_page=100': [] }) }), null);
 });
 
 test('a build with no version (a source checkout, a test image) checks nothing', async () => {

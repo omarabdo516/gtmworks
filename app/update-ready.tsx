@@ -12,12 +12,13 @@ type Update={version:string,date:string,entries:Entry[]};
 // Lines shown by title; the rest are counted (#442: "Plus N more").
 const shownLines=5;
 const updateCommand='gtmworks update';
-// Kept in this browser (#442, Decisions): the update hidden until a newer one, and the entries this Owner has seen.
-export const hiddenKey='gtmworks.update.hidden', seenKey='gtmworks.whatsNew.seen';
+// Kept in this browser for each person (#442, Decisions): the update they hid until a newer one, and the entries they saw.
+export const hiddenKey=(person:string)=>`gtmworks.update.hidden:${person}`, seenKey=(person:string)=>`gtmworks.whatsNew.seen:${person}`;
 const read=(key:string)=>{ try { return localStorage.getItem(key); } catch { return null; } };
 const write=(key:string,value:string)=>{ try { localStorage.setItem(key,value); return true; } catch { return false; } };
-const seenList=()=>{ try { const list=JSON.parse(read(seenKey)||'null'); return Array.isArray(list)?list as number[]:null; } catch { return null; } };
-const keyOf=(update:Update)=>`${update.version}:${update.entries.map(item=>item.issue).join(',')}`;
+const seenList=(person:string)=>{ try { const list=JSON.parse(read(seenKey(person))||'null'); return Array.isArray(list)?list as number[]:null; } catch { return null; } };
+// A release is named by its tag; a main build by what it brings, so each newer merge with an entry is a newer version.
+const keyOf=(update:Update)=>update.version==='main'?`main:${update.entries.map(item=>item.issue).join(',')}`:update.version;
 
 function Lines({entries}:{entries:Entry[]}) {
  const {t,language}=useI18n();
@@ -25,7 +26,7 @@ function Lines({entries}:{entries:Entry[]}) {
  return <ul className="upd-lines">
   {entries.slice(0,shownLines).map(item=><li key={item.issue}><b>{item[language].title}</b> {item[language].body}</li>)}
   {!entries.length&&<li>{t('updateReadyFixes')}</li>}
-  {rest>0&&<li className="upd-more">{t('updateReadyMore',rest)}</li>}
+  {rest>0&&<li className="upd-more">{rest===1?t('updateReadyMoreOne'):t('updateReadyMore',rest)}</li>}
  </ul>;
 }
 
@@ -37,8 +38,8 @@ function ago(date:string,locale:string) {
 // Update ready (#442; T3 Code's update notice): for a Company's Owner, a small item at the foot of the sidebar when a
 // newer gtmworks exists on the install's channel. It opens the version, how long ago it came out, the lines it brings
 // and the one command that installs it; the web app never updates the server itself (#442, Decided). After an update,
-// What's new shows once what arrived. A Member sees neither; a failed check shows nothing.
-export default function UpdateReady({company,owner}:{company:string,owner:boolean}) {
+// What's new shows once what arrived. Anyone but an Owner sees neither; a failed check shows nothing.
+export default function UpdateReady({company,person,owner}:{company:string,person:string,owner:boolean}) {
  const {t,locale}=useI18n();
  const [update,setUpdate]=useState<Update|null>(null);
  const [open,setOpen]=useState(false);
@@ -48,15 +49,15 @@ export default function UpdateReady({company,owner}:{company:string,owner:boolea
   let live=true;
   fetch(`/api/update?company=${encodeURIComponent(company)}`,{cache:'no-store'}).then(response=>response.ok?response.json():null).then((body:{joined?:string,update?:Update|null}|null)=>{
    if(!live||!body) return;
-   if(body.update&&read(hiddenKey)!==keyOf(body.update)) setUpdate(body.update);
-   const fresh=unseenEntries(whatsNew,seenList(),body.joined);
+   if(body.update&&read(hiddenKey(person))!==keyOf(body.update)) setUpdate(body.update);
+   const fresh=unseenEntries(whatsNew,seenList(person),body.joined);
    // Shown once: only when the record of having seen it is kept, so a browser that keeps nothing is not shown it each time.
-   if(write(seenKey,JSON.stringify(whatsNew.map(item=>item.issue)))&&fresh.length) setArrived(fresh);
+   if(write(seenKey(person),JSON.stringify(whatsNew.map(item=>item.issue)))&&fresh.length) setArrived(fresh);
   }).catch(()=>{});
   return ()=>{live=false;};
- },[company,owner]);
+ },[company,person,owner]);
  if(!owner) return null;
- const hide=()=>{ if(update) write(hiddenKey,keyOf(update)); setOpen(false); setUpdate(null); };
+ const hide=()=>{ if(update) write(hiddenKey(person),keyOf(update)); setOpen(false); setUpdate(null); };
  return <>
   {update&&<button type="button" className="sb-item sb-update" aria-haspopup="dialog" onClick={()=>setOpen(true)}>
    <ShellIcon name="download"/><span className="od-fill">{t('updateReady')}</span><span className="sb-update__dot" aria-hidden="true"/></button>}

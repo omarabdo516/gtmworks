@@ -6,9 +6,10 @@ import { whatsNew } from '@/lib/updates.mjs';
 
 // Update ready and What's new (#442), at the foot of the sidebar (app/shell.tsx).
 const company = '10000000-0000-0000-0000-000000000001';
+const person = '20000000-0000-0000-0000-000000000001';
 const entry = (issue: number) => ({ issue, date: '2026-11-21', en: { title: `Title ${issue}`, body: `Sentence ${issue}.` }, ar: { title: `عنوان ${issue}`, body: `جملة ${issue}.` } });
 const update = { version: 'v1.3.0', date: new Date(Date.now() - 3 * 86400000).toISOString(), entries: [1, 2, 3, 4, 5, 6, 7].map(entry) };
-const seenAll = () => localStorage.setItem(seenKey, JSON.stringify(whatsNew.map(item => item.issue)));
+const seenAll = () => localStorage.setItem(seenKey(person), JSON.stringify(whatsNew.map(item => item.issue)));
 let answer: () => Promise<Response>;
 const asked = vi.fn();
 beforeEach(() => {
@@ -18,7 +19,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 const answering = (body: object) => { answer = async () => new Response(JSON.stringify(body), { status: 200 }); };
-const tree = (owner: boolean, language: 'en' | 'ar' = 'en', key = 0) => <LanguageProvider key={key} language={language}><div className="gw"><UpdateReady company={company} owner={owner}/></div></LanguageProvider>;
+const tree = (owner: boolean, language: 'en' | 'ar' = 'en', key = 0) => <LanguageProvider key={key} language={language}><div className="gw"><UpdateReady company={company} person={person} owner={owner}/></div></LanguageProvider>;
 const shown = (owner: boolean, language: 'en' | 'ar' = 'en') => render(tree(owner, language));
 // Opening gtmworks again: the same place drawn anew, which asks again.
 const reopened = async (screen: Awaited<ReturnType<typeof shown>>, times: number) => {
@@ -52,7 +53,7 @@ test('the notice reads in Arabic too', async () => {
  await expect.element(screen.getByRole('dialog')).toMatchTextContent(/على السيرفر، شغّل:/);
 });
 
-test('a Member sees nothing and asks nothing', async () => {
+test('anyone but an Owner sees nothing and asks nothing', async () => {
  answering({ joined: '2026-01-01T00:00:00Z', update });
  const screen = await shown(false);
  await new Promise(resolve => setTimeout(resolve, 50));
@@ -85,12 +86,12 @@ test('hidden stays hidden until a newer version appears', async () => {
  answering({ joined: '2026-01-01T00:00:00Z', update: { ...update, version: 'v1.4.0' } });
  await reopened(first, 3);
  await expect.element(first.getByRole('button', { name: 'Update ready' })).toBeVisible();
- expect(localStorage.getItem(hiddenKey)).toMatch(/^v1\.3\.0:/);
+ expect(localStorage.getItem(hiddenKey(person))).toBe('v1.3.0');
 });
 
 test('after an update What\'s new shows what arrived, once', async () => {
  const before = whatsNew.slice(1).map(item => item.issue);
- localStorage.setItem(seenKey, JSON.stringify(before));
+ localStorage.setItem(seenKey(person), JSON.stringify(before));
  answering({ joined: '2026-01-01T00:00:00Z', update: null });
  const first = await shown(true);
  const dialog = first.getByRole('dialog', { name: 'What’s new' });
@@ -109,5 +110,20 @@ test('a new Owner on a fresh install is shown no What\'s new', async () => {
  await vi.waitFor(() => expect(asked).toHaveBeenCalled());
  await new Promise(resolve => setTimeout(resolve, 50));
  await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
- expect(JSON.parse(localStorage.getItem(seenKey) || '[]')).toEqual(whatsNew.map(item => item.issue));
+ expect(JSON.parse(localStorage.getItem(seenKey(person)) || '[]')).toEqual(whatsNew.map(item => item.issue));
+});
+
+test('one line past the five is counted as one', async () => {
+ seenAll(); answering({ joined: '2026-01-01T00:00:00Z', update: { ...update, entries: update.entries.slice(0, 6) } });
+ const screen = await shown(true);
+ await screen.getByRole('button', { name: 'Update ready' }).click();
+ await expect.element(screen.getByRole('dialog')).toMatchTextContent(/And one more improvement or fix\./);
+});
+
+test('What\'s new seen by one Owner is still shown to another Owner in the same browser', async () => {
+ localStorage.setItem(seenKey('20000000-0000-0000-0000-000000000009'), JSON.stringify(whatsNew.map(item => item.issue)));
+ localStorage.setItem(seenKey(person), JSON.stringify(whatsNew.slice(1).map(item => item.issue)));
+ answering({ joined: '2026-01-01T00:00:00Z', update: null });
+ const screen = await shown(true);
+ await expect.element(screen.getByRole('dialog', { name: 'What’s new' })).toBeVisible();
 });

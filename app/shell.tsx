@@ -108,7 +108,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </section>
   </>}</nav>
   {/* The apps are read by the browser (app/company-apps-read.ts): the page is drawn with no Engine read and the count lands after. */}
-  <div className="sb-foot sidebar-bottom">{company?<><UpdateReady company={company.id} owner={owner}/><AppsButton/>{account}</>:account}</div>
+  <div className="sb-foot sidebar-bottom">{company?<><UpdateReady company={company.id} person={personId} owner={owner}/><AppsButton/>{account}</>:account}</div>
  </SidebarSearchProvider>;
  // Paperclip BreadcrumbBar: a trail of two or more crumbs replaces the single page title. Rendered on the server so it adds no route JavaScript.
  const breadcrumb=crumbs&&crumbs.length>1?<div className="heading m-0 min-w-0 flex-1 overflow-hidden"><Breadcrumb aria-label={t('breadcrumb')} className="min-w-0 overflow-hidden"><BreadcrumbList className="flex-nowrap">{crumbs.map((crumb,index)=>{const last=index===crumbs.length-1;return <Fragment key={index}>{index>0&&<BreadcrumbSeparator/>}<BreadcrumbItem className={last?'min-w-0':'shrink-0'}>{last||!crumb.href?<BreadcrumbPage className="truncate"><bdi>{crumb.label}</bdi></BreadcrumbPage>:<Link className="hover:text-foreground transition-colors" href={crumb.href}><bdi>{crumb.label}</bdi></Link>}</BreadcrumbItem></Fragment>;})}</BreadcrumbList></Breadcrumb></div>:undefined;

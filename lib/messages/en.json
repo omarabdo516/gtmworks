@@ -1319,5 +1319,6 @@
   "updateReadyHide": "Hide until the next version",
   "whatsNew": "What’s new",
   "whatsNewSub": "gtmworks was updated. Here is what arrived.",
-  "whatsNewDone": "Got it"
+  "whatsNewDone": "Got it",
+  "updateReadyMoreOne": "And one more improvement or fix."
 }

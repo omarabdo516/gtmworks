@@ -2,4 +2,4 @@
 
 ## Cases
 
-| `update-ready.spec.ts` "an Owner on an older version sees Update ready with what it brings and the command, and can hide it until the next one; a Member sees nothing" | stays | #442: a fake newer release at the lane's update address; the Owner opens Update ready (version, how long ago, the release's entry, `gtmworks update` with Copy), hides it and after a reload the same version stays hidden; a Manager sees no Update ready. |
+| `update-ready.spec.ts` "an Owner on an older version sees Update ready with what it brings and the command, and can hide it until the next one; a Manager sees nothing" | stays | #442: a fake newer release at the lane's update address; the Owner opens Update ready (version, how long ago, the release's entry, `gtmworks update` with Copy), hides it and after a reload the same version stays hidden; a Manager sees no Update ready. |
