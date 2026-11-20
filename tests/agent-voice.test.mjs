@@ -48,11 +48,11 @@ test('the voice is read from the Agent\'s own profile: its speaking language, sp
   profileOn(fake,companyProfile(company),{stt:{language:'ar'},tts:{provider:'edge',edge:{voice:'ar-EG-SalmaNeural'},speed:1.25}});
   const {db}=sessions(fake);
   assert.deepEqual(await readAgentVoice(db,{company,agent:lead,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),{state:'found',own:true,
-   language:'ar',speed:1.25,provider:'edge',voice:'ar-EG-SalmaNeural',voiceName:'ar-EG-SalmaNeural',list:null});
+   language:'ar',speech:null,languages:['ar','en',''],speed:1.25,provider:'edge',voice:'ar-EG-SalmaNeural',voiceName:'ar-EG-SalmaNeural',list:null});
   // A profile that saved nothing reads the Engine's own defaults, and a speed it never set reads as 1.
   profileOn(fake,companyProfile(company),{});
   assert.deepEqual(await readAgentVoice(db,{company,agent:lead,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}}),{state:'found',own:true,
-   language:'en',speed:1,provider:'edge',voice:'en-US-AriaNeural',voiceName:'en-US-AriaNeural',list:null},'the Engine\'s defaults, and no list for a provider that has none');
+   language:'en',speech:null,languages:['ar','en',''],speed:1,provider:'edge',voice:'en-US-AriaNeural',voiceName:'en-US-AriaNeural',list:null},'the Engine\'s defaults, and no list for a provider that has none');
   // An Agent sharing the Company profile is read with the same values and says the profile is not its own.
   profileOn(fake,companyProfile(company),{tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
   assert.equal((await readAgentVoice(db,{company,agent:helper,driver:driverAt(fake),hermes:{address:fake.address,key:'test-only-key'}})).own,false);
@@ -124,6 +124,24 @@ test('a language or speed the Engine does not have is refused before any write',
   assert.deepEqual(voiceSpeeds,[0.7,0.85,1,1.25,1.5]);
   assert.equal(writesTo(fake,'/api/config').length,0);
   assert.equal(logged.length,0);
+ } finally { await fake.close(); }
+});
+
+// #430: on Deepgram, Arabic is Egyptian and the other Arabic variants Deepgram has are choices; another provider has none.
+test('an Agent whose profile transcribes with Deepgram may listen in another Arabic variant, and one on another provider may not', async () => {
+ const fake=await engine();
+ try {
+  profileOn(fake,companyProfile(company),{stt:{provider:'deepgram',language:'ar'},tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
+  const {db}=sessions(fake);
+  const hermes={address:fake.address,key:'test-only-key'};
+  const read=await readAgentVoice(db,{company,agent:lead,driver:driverAt(fake),hermes});
+  assert.equal(read?.speech,'deepgram');
+  assert.deepEqual(read?.languages,['ar','en','','ar-AE','ar-SA','ar-QA','ar-KW','ar-SY','ar-LB','ar-PS','ar-JO','ar-SD','ar-TD','ar-MA','ar-DZ','ar-TN','ar-IQ','ar-IR']);
+  assert.equal((await changeAgentVoice(db,{company,agent:lead,voice:{language:'ar-SA'},driver:driverAt(fake),hermes})).state,'written');
+  assert.equal(saved(fake).stt.language,'ar-SA');
+  assert.equal((await changeAgentVoice(db,{company,agent:lead,voice:{language:'ar-EG'},driver:driverAt(fake),hermes})).state,'invalid','Egyptian is plain Arabic on Deepgram');
+  profileOn(fake,companyProfile(company),{stt:{provider:'openai',language:'ar'},tts:{provider:'edge',edge:{voice:'en-US-AriaNeural'}}});
+  assert.equal((await changeAgentVoice(db,{company,agent:lead,voice:{language:'ar-SA'},driver:driverAt(fake),hermes})).state,'invalid');
  } finally { await fake.close(); }
 });
 

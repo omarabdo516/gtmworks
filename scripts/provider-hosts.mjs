@@ -5,7 +5,9 @@ export const providerHosts = ['openai.com', 'chatgpt.com', 'openai.azure.com', '
   'deepseek.com', 'generativelanguage.googleapis.com', '*aiplatform.googleapis.com', 'bedrock*.*.amazonaws.com', 'mistral.ai',
   'groq.com', 'x.ai', 'z.ai', 'moonshot.ai', 'moonshot.cn', 'minimax.io', 'minimaxi.com', 'dashscope.aliyuncs.com',
   'githubcopilot.com', 'together.xyz', 'together.ai', 'fireworks.ai', 'cohere.com', 'cohere.ai', 'perplexity.ai',
-  'nousresearch.com', 'huggingface.co'];
+  'nousresearch.com', 'huggingface.co',
+  // Speech-to-text providers (#430).
+  'deepgram.com', 'elevenlabs.io'];
 
 // A whole host only: `api.openai.com` matches, `notopenai.com` and `openai.com.example` do not.
 const pattern = new RegExp(`(?<![a-z0-9.-])((?:[a-z0-9-]+\\.)*(?:${providerHosts.map(host => host.replaceAll('.', '\\.').replaceAll('*', '[a-z0-9-]*')).join('|')}))(?![a-z0-9-]|\\.[a-z0-9])`, 'gi');

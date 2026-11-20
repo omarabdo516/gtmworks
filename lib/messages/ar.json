@@ -1292,5 +1292,18 @@
   "logActIdeaAdded": "ضاف فكرة",
   "addedAnIdea": "ضاف فكرة",
   "settingsModelsNotReached": "الافتراضي الجديد موصلش لـ {0}.",
-  "settingsModelsRetry": "ابعتها تاني"
+  "settingsModelsRetry": "ابعتها تاني",
+  "chatDictationSetProvider": "اختار مزوّد تحويل الكلام لنص من الإعدادات.",
+  "chatDictationAskOwner": "المالك يقدر يختار واحد من الإعدادات.",
+  "settingsSpeech": "تحويل الكلام لنص",
+  "settingsSpeechHint": "كل وكيل بيكتب اللي بتمليه بالمزوّد ده، كل واحد بلغته. المفتاح بيروح لمحرّك الوكلاء ومش هيظهر تاني.",
+  "settingsSpeechInUse": "شغّال · في مفتاح",
+  "settingsSpeechDeepgram": "الأحسن للعربي: عربي مصري، ومعاه باقي اللهجات العربية تختار منها.",
+  "settingsSpeechGroq": "بيستخدم نفس مفتاح موديلات Groq: لو مسحته هنا هيتمسح هناك كمان.",
+  "settingsSpeechUse": "استخدمه",
+  "settingsSpeechNone": "لسه مفيش مزوّد، فالإملاء بالصوت مقفول.",
+  "settingsSpeechOwnerOnly": "المالك بس هو اللي بيختار المزوّد ويحط مفتاحه.",
+  "settingsSpeechMissing": "لسه مش على المزوّد ده؛ حط المفتاح تاني عشان يوصل لـ:",
+  "settingsSpeechUnread": "مقدرناش نقرا مزوّد تحويل الكلام لنص دلوقتي.",
+  "settingsVoiceArabicEgypt": "عربي (مصري)"
 }

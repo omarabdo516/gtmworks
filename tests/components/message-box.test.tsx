@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { act, createRef, StrictMode, useState, type Ref } from 'react';
+import { act, createRef, StrictMode, useState, type ComponentProps, type Ref } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
@@ -11,6 +11,8 @@ import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
 import '@/app/tokens.css';
 import '@/app/shell.css';
+// The composer's settings link is the app's Link, which needs Next's router; a plain link stands in.
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 type Send = (text: string, sendKey: string, files: File[]) => Promise<string | null>;
@@ -404,7 +406,7 @@ const mic = (deny = false) => {
  vi.stubGlobal('MediaRecorder', FakeRecorder);
  return { getUserMedia, track };
 };
-type DictationReply = { text?: string, state?: string, language?: string | null, deferred?: boolean };
+type DictationReply = { text?: string, state?: string, language?: string | null, deferred?: boolean, owner?: boolean, slug?: string };
 const dictate = (reply: DictationReply = {}) => {
  const calls: { url: string, body: Record<string, unknown> }[] = [];
  let finish: (value: Response) => void = () => {};
@@ -412,7 +414,7 @@ const dictate = (reply: DictationReply = {}) => {
   if (init?.method !== 'POST') return Response.json(reply.language === null ? {} : { language: reply.language ?? 'en' });
   calls.push({ url, body: JSON.parse(String(init.body)) });
   if (reply.deferred) return new Promise<Response>(resolve => { finish = resolve; });
-  return Response.json(reply.state ? { state: reply.state } : { text: reply.text ?? '' });
+  return Response.json(reply.state ? { state: reply.state, ...(reply.owner === undefined ? {} : { owner: reply.owner, slug: reply.slug }) } : { text: reply.text ?? '' });
  });
  vi.stubGlobal('fetch', fetchMock);
  return { calls, finish: (value: Response) => finish(value), fetchMock };
@@ -684,10 +686,32 @@ test('an Engine with no speech-to-text provider leaves the text untouched, says 
  await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'still here');
  await hold(boxOf(screen));
  await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
- await expect.element(screen.getByRole('alert')).toHaveTextContent('Voice dictation is unavailable: the Engine has no speech-to-text provider.');
+ await expect.element(screen.getByRole('alert')).toHaveTextContent('Voice dictation is unavailable: the Engine has no speech-to-text provider. The Owner can choose one in Settings.');
  await expect.element(screen.getByRole('button', { name: 'Voice dictation is unavailable: the Engine has no speech-to-text provider.' })).toHaveAttribute('aria-disabled', 'true');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('still here');
 });
+
+// #430: with no provider set, an Owner is linked to the Company's speech-to-text setting and anyone else is told the
+// Owner chooses it, in both languages.
+for (const [owner, language, line, link] of [
+ [true, 'en', 'Voice dictation is unavailable: the Engine has no speech-to-text provider. Choose a speech-to-text provider in Settings.', 'Choose a speech-to-text provider in Settings.'],
+ [false, 'en', 'Voice dictation is unavailable: the Engine has no speech-to-text provider. The Owner can choose one in Settings.', null],
+ [true, 'ar', 'الإملاء بالصوت مش متاح: مفيش مزوّد تحويل الكلام لنص على المحرك. اختار مزوّد تحويل الكلام لنص من الإعدادات.', 'اختار مزوّد تحويل الكلام لنص من الإعدادات.'],
+ [false, 'ar', 'الإملاء بالصوت مش متاح: مفيش مزوّد تحويل الكلام لنص على المحرك. المالك يقدر يختار واحد من الإعدادات.', null],
+] as const) {
+ test(`with no provider the line ${link ? 'links an Owner to the setting' : 'tells a Member the Owner sets it'} (${language})`, async () => {
+  vi.useFakeTimers(); mic(); dictate({ state: 'unavailable', owner, slug: 'acme' });
+  const screen = await voiced({ send: async () => null }, language);
+  await hold(boxOf(screen));
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(line);
+  const anchor = screen.container.querySelector('[role="alert"] a');
+  if (link) {
+   expect(anchor?.textContent).toBe(link);
+   expect(anchor?.getAttribute('href')).toBe('/c/acme/settings?section=models#md-stt');
+  } else expect(anchor).toBeNull();
+ });
+}
 
 test('sending a message while recording ends the recording and sends the typed text', async () => {
  const send = vi.fn<Send>(async () => null);
