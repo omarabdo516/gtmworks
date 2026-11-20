@@ -10,10 +10,13 @@ home=$(getent passwd "$user" | cut -d: -f 6)
 keys_file=${SSH_AUTHORIZED_KEYS_FILE:-/run/authorized_keys}
 env_key=${SSH_AUTHORIZED_KEY:-}
 
-# Each container gets a host key of its own, so no host key is baked into an image every install runs.
+# A container gets a host key of its own unless the Company's host-key volume is mounted here, which keeps the key its
+# Engine's known_hosts is pinned to across a recreate. No host key is baked into an image every install runs.
+key_dir="$home/.ssh-host"
+[ -d "$key_dir" ] || install -d -m 700 "$key_dir"
+[ -f "$key_dir/ssh_host_ed25519_key" ] \
+  || ssh-keygen -q -t ed25519 -N '' -C 'gtmworks-work-sandbox' -f "$key_dir/ssh_host_ed25519_key"
 install -d -m 700 "$home/.ssh"
-[ -f "$home/.ssh/ssh_host_ed25519_key" ] \
-  || ssh-keygen -q -t ed25519 -N '' -C 'gtmworks-work-sandbox' -f "$home/.ssh/ssh_host_ed25519_key"
 
 if [ -s "$keys_file" ]; then
   cat "$keys_file" > "$home/.ssh/authorized_keys"

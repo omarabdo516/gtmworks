@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { load } from 'js-yaml';
 import { workSandboxBase } from '../lib/work-sandbox-image.mjs';
 
 // docs/engine-probes/work-sandbox-ssh.md is the live proof the work sandbox rests on (#390): the pinned Engine running an
@@ -26,6 +27,19 @@ test('the probe\'s second container is the install\'s own work sandbox image', (
   // The sandbox's build file names the Engine's sandbox image by tag and digest; the probe names the same reference, so
   // the container it measures is the image every Company's sandbox runs.
   assert.equal(pinnedIn('SANDBOX'), workSandboxBase());
+});
+
+test('the install pins the same backend the probe measured, in the file the Engine template mounts', () => {
+  // scripts/engine-managed.yml is what an install mounts read-only at the managed scope. It must say what the probe
+  // proved works: the `ssh` backend, the network alias, the user and the port the image's sshd listens on. Only the key's
+  // path is the install's own (/opt/data/ssh), not the probe's throwaway folder.
+  const probe = Object.fromEntries([...readFileSync('docs/engine-probes/work-sandbox-ssh/managed-config.yaml', 'utf8')
+    .matchAll(/^\s{2}(\w+):\s*(\S+)$/gm)].map(([, key, value]) => [key, value]));
+  const install = load(readFileSync('scripts/engine-managed.yml', 'utf8')).terminal;
+  for (const key of ['backend', 'ssh_host', 'ssh_user', 'ssh_port']) assert.equal(String(install[key]), probe[key], key);
+  assert.equal(install.ssh_key, '/opt/data/ssh/id_ed25519', 'the Engine\'s own key, in its data volume');
+  // The template mounts it where the managed scope is read from, read-only.
+  assert.match(readFileSync('scripts/engine-template.yml', 'utf8'), /\.\/engine-managed\.yml:\/etc\/hermes\/config\.yaml:ro/);
 });
 
 test('the probe starts the Engine with its backend pinned in the managed configuration', () => {

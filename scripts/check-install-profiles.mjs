@@ -16,6 +16,9 @@
 //   capacity <with-skills|no-skills>: ten more Agent profiles in the first Company on its Engine, each printed with its
 //     name and the seconds it took to be ready. The install job measures that Engine's memory and the volume's disk around
 //     them; the check ends with a Run on the first Agent still answered.
+//   sandbox <marker>: one Agent's command, written file and code run in the Company's work sandbox (#393), a second Agent
+//     starts in the same work folder, and neither a profile write nor a settings write moves where a command runs. The
+//     job reads the host's Docker for where each marker landed, which a tool's own answer cannot fake.
 // The companies and their Owner's sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -23,7 +26,7 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
-const {companyProfile,toolConfig,noAgentGets,sandboxTools,fixedToolsets,forbiddenOf}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
+const {companyProfile,toolConfig,noAgentGets,fixedToolsets,forbiddenOf,profileSettingsDiffer}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
 const {provideProfile}=await import(`${process.cwd()}/lib/hermes.mjs`);
 const {writeProof,writeName}=await import(`${process.cwd()}/lib/install-proof.mjs`);
@@ -56,21 +59,29 @@ const pointAtFakeModel=async(engine,profile)=>{
 const credentials={email:process.env.PROOF_EMAIL||'proxy-owner@example.com',password:process.env.PROOF_PASSWORD||'proxy-owner-password'};
 const signedIn=async(email=credentials.email,password=credentials.password)=>{ const person=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options); await checked(person.auth.signInWithPassword({email,password})); return person; };
 const profileOf=async(person,agent)=>{ const [found]=await checked(person.from('hermes_agents').select('profile').eq('id',agent)); return found?.profile; };
-// A profile's saved config offers the one fixed set of tools every Agent gets, and its Run API agrees; no tool no Agent
-// gets is on, and in this ticket the sandbox's tools are still held back.
+// A profile's saved config offers the one fixed set of tools every Agent gets, and its Run API agrees: the terminal, the
+// files and code execution included (#393), no tool no Agent gets on, and every Agent's commands starting in the Company's
+// work folder with no person needed to approve each code call.
 const checkProfile=async(engine,profile)=>{
  const config=await (await manage(engine,`/api/config?profile=${encodeURIComponent(profile)}`)).json();
- const configOff=[...noAgentGets,...sandboxTools];
- for(const off of configOff) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${profile} disables ${off}`);
+ for(const off of noAgentGets) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${profile} disables ${off}`);
  const toolsets=await (await fetch(`${engine.address}/p/${encodeURIComponent(profile)}/v1/toolsets`,{headers:{Authorization:`Bearer ${engine.key}`}})).json();
  const enabled=toolsets.data.filter(toolset=>toolset.enabled).map(toolset=>toolset.name);
  assert.deepEqual(forbiddenOf(enabled),[],`${profile} offers no tool no Agent gets`);
  assert.deepEqual([...enabled].sort(),[...fixedToolsets()].sort(),`${profile} offers exactly the fixed set`);
+ assert.equal(profileSettingsDiffer(config),false,`${profile} starts in the work folder and needs no approval for code`);
 };
 const spaceOf=entry=>`cs-${entry.company.replaceAll('-','')}`;
 const shown=entry=>({company:entry.company,profile:entry.profile,space:entry.space,agent:entry.agent,second:entry.secondProfile});
-// The fake model: one Arabic reply, streamed or not, and every request it was sent.
-const fakeModel=async(requests,results=[])=>{
+// The fake model: one Arabic reply, streamed or not, the tool calls a step scripts, and every request it was sent. A
+// step that needs a tool call passes its plan; the default is the shared-Skill rewrite the verify step proves is refused.
+const skillCall={id:'call_lessons',type:'function',function:{name:'skill_manage',
+ arguments:JSON.stringify({operations:[{action:'patch',name:'team-lessons',content:'---\nname: team-lessons\ndescription: Changed by an agent\n---\nChanged.\n'}]})}};
+const skillPlan=messages=>{
+ const last=messages.at(-1);
+ return last?.role==='user'&&JSON.stringify(last.content).includes(trigger)?skillCall:null;
+};
+const fakeModel=async(requests,results=[],plan=skillPlan)=>{
  const reply='أهلاً، هذا رد من النموذج التجريبي.';
  const model=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
@@ -78,8 +89,7 @@ const fakeModel=async(requests,results=[])=>{
    const body=JSON.parse(raw||'{}'); requests.push(raw);
    const last=body.messages?.at(-1);
    if(last?.role==='tool') results.push(String(last.content));
-   const call=last?.role==='user'&&JSON.stringify(last.content).includes(trigger)?{id:'call_lessons',type:'function',function:{name:'skill_manage',
-    arguments:JSON.stringify({operations:[{action:'patch',name:'team-lessons',content:'---\nname: team-lessons\ndescription: Changed by an agent\n---\nChanged.\n'}]})}}:null;
+   const call=plan(body.messages||[]);
    const finish=call?'tool_calls':'stop';
    const usage={prompt_tokens:20,completion_tokens:8,total_tokens:28};
    if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message:call?{role:'assistant',content:null,tool_calls:[call]}:{role:'assistant',content:reply},finish_reason:finish}],usage})); }
@@ -373,4 +383,82 @@ try {
  writeFileSync(state,JSON.stringify(pair),{mode:0o600});
  writeProof({step:'capacity',kind:marker,made:made.length,state:'answered',company:first.company});
 } finally { model.close(); model.closeAllConnections(); }
-} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills>');
+} else if(step==='sandbox') {
+// The work sandbox (#393, ADR 0018): a command, a file and code an Agent asks for run in the Company's sandbox and never
+// on its Engine; two Agents start in the Company's work folder; and neither a profile write nor a settings write can move
+// where a command runs. The fake model scripts the calls; the install job reads the host's Docker for where each marker
+// landed, which a tool's own answer cannot fake.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const pair=JSON.parse(readFileSync(state,'utf8'));
+const first=pair[0];
+const firstEngine=await engineFor(first.company);
+const calls=[
+ {name:'terminal',arguments:{command:`id -un; hostname; pwd; printf '%s' '${marker}-terminal' > /work/${marker}-terminal.txt`}},
+ {name:'write_file',arguments:{path:`/work/${marker}-file.txt`,content:`${marker}-file`}},
+ {name:'execute_code',arguments:{code:`from pathlib import Path\nimport os, socket\nPath('/work/${marker}-code.txt').write_text('${marker}-code')\nprint(socket.gethostname(), os.getuid())`}},
+];
+const pwdCall={name:'terminal',arguments:{command:'hostname; pwd'}};
+const textOf=messages=>messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+const plan=messages=>{
+ const text=textOf(messages);
+ const done=messages.filter(message=>message.role==='tool').length;
+ const call=text.includes(`SANDBOX-RUN ${marker}`)?calls[done]:text.includes(`SANDBOX-PWD ${marker}`)&&done<1?pwdCall:null;
+ return call?{id:`call_sandbox_${done}`,type:'function',function:{name:call.name,arguments:JSON.stringify(call.arguments)}}:null;
+};
+const parsed=value=>{ try { return JSON.parse(value); } catch { return null; } };
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const ask=async(agent,label,message)=>{
+  const before=results.length;
+  const conversation=randomUUID();
+  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent,message};
+  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+  assert.deepEqual(sent,{conversation});
+  const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+  assert.ok(answer.body.includes(reply),answer.body);
+  return {conversation,tools:results.slice(before)};
+ };
+ // A command, a file and some code, asked for by name and run by the Engine's pinned backend.
+ const run=await ask(first.agent,first.profile,`SANDBOX-RUN ${marker}: run the sandbox check.`);
+ assert.equal(run.tools.length,3,JSON.stringify(run.tools));
+ const terminal=parsed(run.tools[0]);
+ const written=parsed(run.tools[1]);
+ const code=parsed(run.tools[2]);
+ const lines=String(terminal?.output??'').trim().split('\n');
+ const [userName,host,cwd]=lines;
+ assert.equal(terminal?.exit_code,0,run.tools[0]);
+ assert.equal(userName,'pn','the command runs as the sandbox\'s own user');
+ assert.equal(cwd,'/work','the command starts in the Company\'s work folder');
+ assert.equal(written?.verified,true,run.tools[1]);
+ assert.equal(written?.resolved_path,`/work/${marker}-file.txt`);
+ assert.equal(code?.status,'success',run.tools[2]);
+ const codeOutput=String(code?.output??'').trim().split(/\s+/);
+ assert.equal(codeOutput[0],host,'code runs in the same sandbox as the command');
+ assert.equal(codeOutput[1],'1000','code runs as the sandbox\'s ordinary user, never root');
+ // Two Agents, two commands: both start in the Company's one work folder, which is the fallback #393's own note chose
+ // because the Engine's ssh backend refuses a start folder that does not exist.
+ const second=await ask(first.second,first.secondProfile,`SANDBOX-PWD ${marker}: where do I start?`);
+ const [secondHost,secondPwd]=String(parsed(second.tools[0])?.output??'').trim().split('\n');
+ assert.equal(secondHost,host,'the second Agent\'s command runs in the same sandbox');
+ assert.equal(secondPwd,'/work');
+ // A profile write and a settings write, both answered as the probe measured (200 {"ok":true}), then a command again: it
+ // still runs in the sandbox. The managed scope pins the backend after both (probe section 5, rows 5 and 6).
+ const profileWrite=await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',
+  body:JSON.stringify({config:{terminal:{backend:'local',ssh_host:'127.0.0.1',ssh_user:'root'}}})});
+ assert.equal(profileWrite.status,200,`a profile write is answered as stored (HTTP ${profileWrite.status})`);
+ const settingsWrite=await manage(firstEngine,`/api/env?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',body:JSON.stringify({key:'TERMINAL_ENV',value:'local'})});
+ assert.equal(settingsWrite.status,200,`a settings write is answered as stored (HTTP ${settingsWrite.status})`);
+ const after=await ask(first.agent,first.profile,`SANDBOX-PWD ${marker}: where do I start?`);
+ const [afterHost,afterPwd]=String(parsed(after.tools[0])?.output??'').trim().split('\n');
+ assert.equal(afterHost,host,'a profile write and a settings write cannot move a command off the sandbox');
+ assert.equal(afterPwd,'/work','the command still starts in the work folder');
+ // The profile is put back to the fixed configuration for any later step.
+ const restored=await (await import(`${process.cwd()}/lib/hermes.mjs`)).configureProfile(firstEngine,{name:first.profile,config:toolConfig(),forbidden:toolConfig().agent.disabled_toolsets});
+ assert.equal(restored.state,'configured');
+ writeProof({step:'sandbox',marker,sandbox_host:host,user:userName,cwd,pwd:secondPwd,file:written?.resolved_path,code:code?.status});
+} finally { model.close(); model.closeAllConnections(); }
+} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker>');

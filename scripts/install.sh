@@ -46,13 +46,14 @@ node_image=node:22.14.0-alpine3.21
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
 # The image every Company's work sandbox runs (#392, ADR 0020): a release names it by tag and digest and the install
 # pulls it; a source checkout builds it from its one build file. Its reference is kept in .work-sandbox-image, the one
-# place whatever makes a Company's sandbox reads it, so every sandbox of an install runs the same image.
+# place whatever makes a Company's sandbox reads it, so every sandbox of an install runs the same image. It is written
+# before any Engine starts: the Engine's Compose project starts its sandbox too.
 work_sandbox_tag=gtmworks-work-sandbox:local
 work_sandbox_image() {
   if [ -n "$sandbox_image" ]; then
     echo "Pulling the work sandbox image: $sandbox_image"
     docker pull "$sandbox_image" || return 1
-    printf '%s\n' "$sandbox_image" > .install-lock/work-sandbox-image
+    printf '%s\n' "$sandbox_image" > .work-sandbox-image.tmp
   else
     # Tests only (#401): CI's install areas load the run's one sandbox image under this tag, as they load the app image.
     if [ "${GTMWORKS_IMAGE_PREBUILT:-}" = true ] && docker image inspect "$work_sandbox_tag" > /dev/null 2>&1; then
@@ -61,8 +62,9 @@ work_sandbox_image() {
       echo "Building the work sandbox image: $work_sandbox_tag"
       docker build --tag "$work_sandbox_tag" sandbox || return 1
     fi
-    printf '%s\n' "$work_sandbox_tag" > .install-lock/work-sandbox-image
+    printf '%s\n' "$work_sandbox_tag" > .work-sandbox-image.tmp
   fi
+  mv .work-sandbox-image.tmp .work-sandbox-image || return 1
 }
 # A Company's Engine (ADR 0018) is made from the template shipped with the release, as its own Compose project: the pinned
 # official Hermes image, its own data volume, its own key and its own network. The app and the worker join that network;
@@ -76,6 +78,67 @@ engine_management=http://gtmworks-engine-first:9119
 engine_volume=gtmworks-install_hermes
 engine_project() { printf 'gtmworks-engine-%s' "$1"; }
 engine_folder() { printf '.engines/%s' "$1"; }
+# The work sandbox each Engine works through (#393, ADR 0018): its container, the Company's work folder volume, its own
+# network and the small volume its host key is kept in. Every name comes from the Engine's folder, as its Engine's names
+# do, so a restore needs no other record; none begins with `gtmworks-engine`, so the Engine counts stay what they were.
+sandbox_container() { printf 'gtmworks-sandbox-%s' "$1"; }
+work_volume() { printf 'gtmworks-work-%s' "$1"; }
+work_network() { printf 'gtmworks-work-%s' "$1"; }
+host_key_volume() { printf 'gtmworks-sandbox-hostkey-%s' "$1"; }
+# What one sandbox gets by default, in one place: the RAM and CPU the install gives a Company's sandbox, and the process
+# limit and shared memory it needs for Chromium. #400 replaces the memory figure from its measurement; a person can
+# raise any of them in the environment of the install's own command.
+sandbox_memory=${SANDBOX_MEMORY:-2g}
+sandbox_cpus=${SANDBOX_CPUS:-2.0}
+sandbox_pids=${SANDBOX_PIDS:-2048}
+sandbox_shm=${SANDBOX_SHM:-1gb}
+# The private key an Engine dials its sandbox with, and the sandbox's own host key, both made in the one sandbox image
+# (it has ssh-keygen; the Engine has none) and written into the Engine's data volume and the host-key volume. The Engine's
+# known_hosts is written to the host key's public half at the address its ssh client uses, so a recreated sandbox keeps
+# the host key its Engine trusts: Hermes dials with accept-new, which verifies a host it already knows and refuses a
+# changed one. The public key is printed for the Compose environment and never written to a file of the install.
+sandbox_keys() {
+  slug=$1
+  folder=$(engine_folder "$slug")
+  volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$folder/.env")
+  test -n "$volume" || { echo "The Engine $slug names no data volume: run sh scripts/install.sh." >&2; return 1; }
+  # An Engine the exit handler starts after a run that failed before the image was recorded (a failed update, a backup)
+  # still needs a sandbox image: record it the way an install does, from its release's pin or this checkout's build file.
+  test -f .work-sandbox-image || work_sandbox_image || return 1
+  docker volume create "$volume" > /dev/null || return 1
+  docker volume create "$(host_key_volume "$slug")" > /dev/null || return 1
+  keys=$(docker run --rm --user 0 --entrypoint sh -v "$volume:/data" -v "$(host_key_volume "$slug"):/keys" \
+    "$(cat .work-sandbox-image)" -ec '
+      set -e
+      install -d -m 700 -o 10000 -g 10000 /data/ssh
+      if [ ! -s /data/ssh/id_ed25519 ]; then
+        ssh-keygen -q -t ed25519 -N "" -C "gtmworks-work-sandbox" -f /data/ssh/id_ed25519
+      else
+        ssh-keygen -y -f /data/ssh/id_ed25519 > /data/ssh/id_ed25519.pub
+      fi
+      chown 10000:10000 /data/ssh/id_ed25519 /data/ssh/id_ed25519.pub
+      chmod 600 /data/ssh/id_ed25519
+      chmod 644 /data/ssh/id_ed25519.pub
+      if [ ! -s /keys/ssh_host_ed25519_key ]; then
+        ssh-keygen -q -t ed25519 -N "" -C "gtmworks-work-sandbox-host" -f /keys/ssh_host_ed25519_key
+      else
+        ssh-keygen -y -f /keys/ssh_host_ed25519_key > /keys/ssh_host_ed25519_key.pub
+      fi
+      chown 1000:1000 /keys/ssh_host_ed25519_key /keys/ssh_host_ed25519_key.pub
+      chmod 600 /keys/ssh_host_ed25519_key
+      chmod 644 /keys/ssh_host_ed25519_key.pub
+      install -d -m 700 -o 10000 -g 10000 /data/.ssh
+      { grep -v "^\[sandbox\]:2222 " /data/.ssh/known_hosts 2> /dev/null || true; printf "[sandbox]:2222 %s\n" "$(cat /keys/ssh_host_ed25519_key.pub)"; } > /data/.ssh/known_hosts
+      chown 10000:10000 /data/.ssh/known_hosts
+      chmod 600 /data/.ssh/known_hosts
+      printf "client %s\n" "$(cat /data/ssh/id_ed25519.pub)"
+      printf "host %s\n" "$(cat /keys/ssh_host_ed25519_key.pub)"
+    ') || return 1
+  sandbox_key=$(printf '%s\n' "$keys" | sed -n 's/^client //p')
+  sandbox_host_key=$(printf '%s\n' "$keys" | sed -n 's/^host //p')
+  test -n "$sandbox_key" && test -n "$sandbox_host_key" \
+    || { echo "The work sandbox keys of the Engine $slug could not be made." >&2; return 1; }
+}
 # Every Engine the install has, one folder each under .engines: the first Engine and every Company's own. A backup, a
 # restore and a stop cover each of them (#386); a folder with no .env is not an Engine.
 engine_names() {
@@ -85,9 +148,22 @@ engine_names() {
     printf '%s\n' "${name%/}"
   done
 }
+# The sandbox's names, image and limits reach Compose in its environment only, never in .env.install or the Engine's own
+# file: the names are derived from the folder above, so a restore needs no second record, and the public key that
+# belongs to this Engine's private key is passed here.
 engine() {
   slug=$1
   shift
+  SANDBOX_IMAGE=${SANDBOX_IMAGE:-$(cat .work-sandbox-image 2> /dev/null || printf '%s' "$work_sandbox_tag")} \
+  SANDBOX_NAME=$(sandbox_container "$slug") \
+  SANDBOX_AUTHORIZED_KEY=${sandbox_key:-} \
+  SANDBOX_HOST_KEY_VOLUME=$(host_key_volume "$slug") \
+  SANDBOX_MEMORY=${SANDBOX_MEMORY:-$sandbox_memory} \
+  SANDBOX_CPUS=${SANDBOX_CPUS:-$sandbox_cpus} \
+  SANDBOX_PIDS=${SANDBOX_PIDS:-$sandbox_pids} \
+  SANDBOX_SHM=${SANDBOX_SHM:-$sandbox_shm} \
+  WORK_VOLUME=$(work_volume "$slug") \
+  WORK_NETWORK=$(work_network "$slug") \
   docker compose --project-name "$(engine_project "$slug")" --env-file "$(engine_folder "$slug")/.env" -f "$engine_template" "$@"
 }
 # An Engine's key lives in its own file, never in .env.install, the file the app and the worker read their environment
@@ -179,6 +255,9 @@ join_engine_networks() {
 # releases end it at the timeout with success while the Engine is still starting.
 engine_start() {
   wait=${GTMWORKS_ENGINE_WAIT:-300}
+  # The Engine's own key pair and its sandbox's host key are made or read before anything starts, so the sandbox it
+  # starts with accepts exactly this Engine and its known_hosts already trusts the host key it will meet.
+  sandbox_keys "$1" || return 1
   engine "$1" up -d --wait --wait-timeout "$wait" || return 1
   container=$(engine_project "$1")
   while [ "$(docker inspect -f '{{.State.Health.Status}}' "$container" 2> /dev/null)" != healthy ]; do
@@ -192,8 +271,9 @@ engine_start() {
 engine_destroy() {
   slug=$1 volume=$2 network=$3
   engine "$slug" down -v --remove-orphans > /dev/null 2>&1 || true
-  docker rm -f "$(engine_project "$slug")" > /dev/null 2>&1 || true
-  docker volume rm "$volume" > /dev/null 2>&1 || true
+  docker rm -f "$(engine_project "$slug")" "$(sandbox_container "$slug")" > /dev/null 2>&1 || true
+  docker volume rm "$volume" "$(work_volume "$slug")" "$(host_key_volume "$slug")" > /dev/null 2>&1 || true
+  docker network rm "$(work_network "$slug")" > /dev/null 2>&1 || true
   # The app and the worker may have joined this Engine's network before a later step failed: detach them first, or the
   # network would be left behind and the same command run again would meet it.
   for service in web worker; do
@@ -707,6 +787,9 @@ elif [ "$operation" = restore ]; then
   # first and the containers never start with it in their environment.
   adopt_engine_key || return 1
   compose up -d --force-recreate --wait --wait-timeout 300
+  # Every Engine starts with its Company's sandbox (#393), so the image the restored install's sandboxes run is recorded
+  # first, as an install records it: a release pins it, a checkout builds it once.
+  work_sandbox_image || return 1
   engines_up
   # The database now has this release's schema and every Company names one Engine, or names none (an archive made by an
   # earlier release): the record is settled in one transaction, as an update does (#378).
@@ -763,9 +846,38 @@ elif [ "$operation" = company ]; then
   company "$@"
   return
 elif [ "$operation" = engines ]; then
-  # Every Engine's state, as `gtmworks status` reports it (scripts/get.sh). Non-zero when one does not answer.
-  compose exec -T web node scripts/company-list.mjs engines
-  return
+  # Every Engine's state, as `gtmworks status` reports it (scripts/get.sh), and every Company's work sandbox beside it:
+  # the sandbox state comes from the host's Docker, which the web container does not hold. Non-zero when an Engine or a
+  # sandbox does not answer, so `gtmworks status` names it.
+  report_status=0
+  report=$(compose exec -T web node scripts/company-list.mjs engines) || report_status=$?
+  printf '%s\n' "$report"
+  status=$report_status
+  for name in $(engine_names); do
+    folder=$(engine_folder "$name")
+    [ -f "$folder/.env" ] || continue
+    container=$(sandbox_container "$name")
+    line=$(printf '%s\n' "$report" | grep -F "Engine http://$(engine_project "$name"):8642:" | head -n 1)
+    company=$(printf '%s\n' "$line" | sed -n 's/.*Company "\([^"]*\)".*/\1/p')
+    if ! listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null); then
+      state=unknown
+    elif [ -z "$listed" ]; then
+      state='not created'
+    else
+      running=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null || echo unknown)
+      health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container" 2> /dev/null || echo unknown)
+      if [ "$running" != true ]; then state=stopped
+      elif [ "$health" = healthy ]; then state=running
+      else state="running, not healthy ($health)"; fi
+    fi
+    [ "$state" = running ] || status=1
+    if [ -n "$company" ]; then
+      echo "Sandbox $container: $state (Company \"$company\")"
+    else
+      echo "Sandbox $container: $state"
+    fi
+  done
+  return "$status"
 elif [ "$operation" != install ]; then
   echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] | company link <Company> | company list | engines]' >&2; exit 1
 fi
@@ -858,7 +970,6 @@ ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e E
 # fail naming the address and its last answer when 200 never comes.
 compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','$engine_address/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
 if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
-mv .install-lock/work-sandbox-image .work-sandbox-image
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
 echo 'Mail: http://localhost:8025'

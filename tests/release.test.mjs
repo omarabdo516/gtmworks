@@ -158,6 +158,7 @@ const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  pull*) echo "Digest: \${2#*@}";;
  *' sh -ec '*/app/install/*)
   # Runs the installer's own extraction script, with the image's /app/install and the mounted /install mapped here.

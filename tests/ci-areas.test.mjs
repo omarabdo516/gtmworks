@@ -144,6 +144,14 @@ test('the work sandbox image, its build files and its check run the install suit
   ]) assert.equal(areas('README.md', path).install, 'true', path);
 });
 
+// The Company's sandbox template and the Engine's managed pin (#393): a change to either changes what an install starts,
+// so it runs the install suite.
+test('the work sandbox template and the Engine\'s managed pin run the install suite', () => {
+  for (const path of ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-template.yml']) {
+    assert.equal(areas('README.md', path).install, 'true', path);
+  }
+});
+
 test('the CI definition itself and the dependencies run every suite', () => {
   for (const path of ['.github/workflows/ci.yml', 'ci.sh', 'scripts/ci-areas.mjs', 'scripts/ci-verdict.mjs', 'scripts/ci-runner.mjs', 'scripts/ci-fast.mjs', 'package.json', 'package-lock.json']) {
     assert.deepEqual(areas(path), all, path);

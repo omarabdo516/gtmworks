@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { everyAgentGets, sandboxTools, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, childToolsets, forbiddenOf, companyProfile } from '../lib/agent-toolsets.mjs';
+import { everyAgentGets, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, childToolsets, forbiddenOf, companyProfile } from '../lib/agent-toolsets.mjs';
 import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, prepareApp } from '../lib/hermes.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
@@ -22,7 +22,9 @@ test('an Agent whose Owner turned sub-agents on offers delegation in the Engine\
   const made=await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets});
   assert.equal(made.state,'configured');
   assert.ok(made.toolsets.includes('delegation'));
-  for(const off of [...noAgentGets,...sandboxTools]) assert.ok(!made.toolsets.includes(off),`${off} is off`);
+  for(const off of noAgentGets) assert.ok(!made.toolsets.includes(off),`${off} is off`);
+  // The sandbox's tools are in the fixed set now (#393): the terminal, files and code every Agent works with.
+  for(const name of ['terminal','file','code_execution']) assert.ok(made.toolsets.includes(name),`${name} is offered`);
   assert.deepEqual(forbiddenOf(made.toolsets),[]);
  } finally { await fake.close(); }
 });
@@ -68,7 +70,7 @@ test('the driver makes a company profile with its key and the fixed tools, and r
   assert.deepEqual(forbiddenOf(again.toolsets),[]);
   // A profile that still offers a forbidden toolset (a Hermes that ignored the list) fails closed.
   fake.settings.ignoreDisabled=true;
-  const leaky=await configureProfile(install(fake),{name,config:{platform_toolsets:{api_server:['web','terminal']}},forbidden:toolConfig().agent.disabled_toolsets});
+  const leaky=await configureProfile(install(fake),{name,config:{platform_toolsets:{api_server:['web','browser']}},forbidden:toolConfig().agent.disabled_toolsets});
   assert.equal(leaky.state,'failed');
   fake.settings.ignoreDisabled=false;
   fake.settings.failStep='config';
@@ -113,7 +115,7 @@ function workerDatabase(rows,{failRecord=false}={}) {
 }
 const row=(company,extra={})=>({company_id:company,profile:companyProfile(company),tools_confirmed:false,tools_pending:false,attach:true,move:false,...extra});
 
-test('two companies get two different profiles, each with the sandbox tools and every forbidden one off, before either is attached', async () => {
+test('two companies get two different profiles, each with its work tools and every forbidden one off, before either is attached', async () => {
  const fake=await fakeHermes();
  try {
   const db=workerDatabase([row(two),row(three)]);
@@ -123,7 +125,10 @@ test('two companies get two different profiles, each with the sandbox tools and 
   assert.deepEqual([...fake.settings.profiles.keys()].sort(),profiles.sort());
   for(const name of profiles) {
    const config=fake.settings.profiles.get(name).config;
-   for(const off of [...sandboxTools,...noAgentGets]) assert.ok(config.agent.disabled_toolsets.includes(off),`${off} is off`);
+   for(const off of noAgentGets) assert.ok(config.agent.disabled_toolsets.includes(off),`${off} is off`);
+   for(const name of ['terminal','file','code_execution']) assert.ok(config.platform_toolsets.api_server.includes(name),`${name} is offered`);
+   assert.deepEqual(config.terminal,{cwd:'/work'},'every Agent starts in the Company\'s work folder');
+   assert.deepEqual(config.approvals,{unattended_mode:'approve'},'an Agent\'s code runs with no person to approve each call');
    const read=await readToolsets({address:fake.address,profile:name,key:'test-only-key'});
    assert.equal(toolsDiffer(read.toolsets),false);
   }
@@ -209,6 +214,54 @@ test('the profile check compares what the Engine reports with the fixed set, cor
   assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','begin_profile_tools']);
   assert.ok((await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets.includes('browser'),'the forbidden tool stays on');
   fake.settings.staleConfig=false;
+ } finally { await fake.close(); }
+});
+
+test('a profile that starts its work somewhere else, or asks a person to approve each code call, is written again', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  // The fixed tools, but the Engine's own disk as the start folder and a person needed for each call: the tools read back
+  // exactly the fixed set, so only the saved settings say something moved (#393).
+  const displaced=toolConfig();
+  displaced.terminal={cwd:'/'};
+  displaced.approvals={unattended_mode:'deny'};
+  await provideProfile(install(fake),{name,soul:'',config:displaced,forbidden:displaced.agent.disabled_toolsets});
+  assert.equal(toolsDiffer((await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets),false);
+  const calls=[];
+  const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
+  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','begin_profile_tools','record_profile_tools']);
+  const saved=fake.settings.profiles.get(name).config;
+  assert.deepEqual(saved.terminal,{cwd:'/work'});
+  assert.deepEqual(saved.approvals,{unattended_mode:'approve'});
+  // Once it is the fixed settings and the fixed set, the check has nothing to write.
+  calls.length=0;
+  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
+  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due']);
+ } finally { await fake.close(); }
+});
+
+test('every profile a Company serves, its main Agent and each made Agent included, offers the terminal, files and code', async () => {
+ const fake=await fakeHermes();
+ try {
+  const db=workerDatabase([row(two)]);
+  assert.equal((await keepCompanyProfiles(db,{hermes:install(fake)})).provided,1);
+  const agent='a5000000-0000-4000-8000-000000000001';
+  const own=`ag-${agent.replaceAll('-','')}`;
+  const agents={rows:[{agent_id:agent,company_id:two,profile:own,instructions:'Writes.',subagents:false,tools_confirmed:false,tools_pending:false}],
+   rpc:async(name,args)=>{
+    if(name==='agent_profile_work') return {data:agents.rows.filter(item=>!item.tools_confirmed||item.tools_pending),error:null};
+    if(name==='begin_agent_tools') { agents.rows[0].tools_pending=true; return {data:null,error:null}; }
+    if(name==='record_agent_profile') { Object.assign(agents.rows[0],{tools_confirmed:true,tools_pending:false}); return {data:null,error:null}; }
+    return {data:null,error:{message:`unexpected ${name}`}};
+   }};
+  assert.deepEqual(await keepAgentProfiles(agents,{hermes:install(fake)}),{provided:1,configured:0});
+  for(const profile of [companyProfile(two),own]) {
+   const read=await readToolsets({address:fake.address,profile,key:'test-only-key'});
+   for(const name of ['terminal','file','code_execution']) assert.ok(read.toolsets.includes(name),`${profile} offers ${name}`);
+   assert.deepEqual(fake.settings.profiles.get(profile).config.terminal,{cwd:'/work'});
+  }
  } finally { await fake.close(); }
 });
 
@@ -517,8 +570,15 @@ test('the install job proves profiles per company on the pinned release, after t
  assert.ok(at('scripts/check-install-agent.mjs')<at('- prepare < scripts/check-install-profiles.mjs'));
  assert.ok(at('- prepare < scripts/check-install-profiles.mjs')<at('/opt/data/profiles/$1/memories/MEMORY.md'));
  assert.ok(at('/opt/data/profiles/$1/memories/MEMORY.md')<at('- verify "$marker" < scripts/check-install-profiles.mjs'));
+ // The work sandbox proof (#393) runs after the Agents it reads exist, and the job reads the host's Docker for where the
+ // markers a tool wrote landed: the sandbox's work folder holds them, the Engine's disk does not.
+ const sandbox=at('- sandbox "$sandbox_marker" < scripts/check-install-profiles.mjs');
+ assert.ok(at('- verify "$marker" < scripts/check-install-profiles.mjs')<sandbox);
+ assert.match(install,/docker exec "\$sandbox" cat "\/work\/\$sandbox_marker-file\.txt"/);
+ assert.match(install,/docker exec "\$engine_id" sh -ec "test -e \/work\/\$sandbox_marker-/);
+ assert.match(install,/an Agent's command runs in the work sandbox/);
  const script=readFileSync('scripts/check-install-profiles.mjs','utf8');
- for(const name of ['noAgentGets','sandboxTools','forbiddenOf','fixedToolsets','toolConfig']) assert.ok(script.includes(name),name);
+ for(const name of ['noAgentGets','forbiddenOf','fixedToolsets','toolConfig','profileSettingsDiffer']) assert.ok(script.includes(name),name);
  assert.match(script,/assert\.deepEqual\(forbiddenOf\(enabled\),\[\]/);
  assert.match(script,/own_profile:true/);
  assert.match(script,/assert\.deepEqual\(seen,\[true,false\]\)/);

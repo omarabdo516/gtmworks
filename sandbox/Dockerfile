@@ -35,7 +35,7 @@ RUN rm -f /etc/ssh/ssh_host_*
 # The work user is the base image's own ordinary user: uid 1000, no password, no groups, no sudo. The Engine's ssh
 # backend syncs into this home, and the Company's work folder is mounted at /work.
 RUN set -eux; \
-    install -d -o pn -g pn -m 700 /home/pn/.ssh; \
+    install -d -o pn -g pn -m 700 /home/pn/.ssh /home/pn/.ssh-host; \
     install -d -o pn -g pn -m 755 /work
 
 COPY sshd_config /etc/ssh/sshd_config

@@ -18,7 +18,10 @@ function engineSecretLeaks(template) {
   if(secretNames.includes(key)) leaks.push(key);
   for(const [,name] of String(value).matchAll(/\$\{?([A-Z0-9_]+)/g)) if(secretNames.includes(name)) leaks.push(name);
  }
- for(const volume of engine.volumes||[]) if(!/^data:\/opt\/data$/.test(String(volume))) leaks.push(`volume ${volume}`);
+ // The Engine mounts its data volume and two files gtmworks ships for it (the managed terminal pin and the helper that
+ // resolves the install-network address); anything else could carry a secret in.
+ const allowed=['data:/opt/data','./engine-managed.yml:/etc/hermes/config.yaml:ro','./engine-listener-address.py:/etc/hermes/listener-address.py:ro','./engine-listener-address.sh:/etc/cont-init.d/05-engine-listener-address:ro'];
+ for(const volume of engine.volumes||[]) if(!allowed.includes(String(volume))) leaks.push(`volume ${volume}`);
  return leaks;
 }
 

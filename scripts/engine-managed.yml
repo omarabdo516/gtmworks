@@ -1,0 +1,13 @@
+# The Engine's managed configuration (ADR 0018, #393): the work sandbox's `ssh` backend, pinned. The managed scope is
+# applied after a profile's own config and after both settings routes (hermes_cli/managed_scope.py,
+# tools/terminal_scope.py), so no profile write and no Settings write can move an Agent's terminal, files or code back
+# onto the Engine's own disk. The path is the one scripts/engine-template.yml mounts it at.
+#
+# It is pinned to the values the sandbox image builds (sandbox/Dockerfile, sandbox/sshd_config) and the probe measured
+# (docs/engine-probes/work-sandbox-ssh.md, section 5): user pn, port 2222, the Engine's own key in its data volume.
+terminal:
+  backend: ssh
+  ssh_host: sandbox
+  ssh_user: pn
+  ssh_port: 2222
+  ssh_key: /opt/data/ssh/id_ed25519

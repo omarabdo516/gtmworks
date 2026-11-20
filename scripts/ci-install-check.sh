@@ -75,13 +75,25 @@ if grep -qF "$engine_key" <<< "$logs"; then fail 'the Engine key must not appear
 # network, no host port, and the pinned image. The app and the worker join its network; it joins nothing else.
 engine_id=$(first_engine_id) || fail 'the first Engine container'
 [[ -n $engine_id ]] || fail 'the first Engine container'
-[[ $(docker inspect -f '{{.Config.Image}}' "$engine_id") == $(sed -n 's/^ *image: //p' scripts/engine-template.yml) ]] || fail 'the Engine runs the template image'
+[[ $(docker inspect -f '{{.Config.Image}}' "$engine_id") == $(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1) ]] || fail 'the Engine runs the template image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine_id") != *HostPort* ]] || fail 'the Engine publishes no host port'
-[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine_id") == gtmworks-engine-first ]] || fail 'the Engine joins its own network only'
+# The Engine joins the install network and its Company's work network, and nothing else (#393).
+engine_networks=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine_id" | sort)
+[[ $engine_networks == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail 'the Engine joins its install network and its work network only'
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \
     || fail "the $service joins the Engine's network"
 done
+# The first Company's work sandbox (#393): the image the install recorded, running and healthy, on the Company's own work
+# network, which is internal (no way out until #394's exit service joins it), with its work volume mounted at /work.
+sandbox_id=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$') || fail 'the first sandbox container'
+[[ -n $sandbox_id ]] || fail 'the first sandbox container'
+[[ $(docker inspect -f '{{.Config.Image}}' "$sandbox_id") == "$(cat .work-sandbox-image)" ]] || fail 'the sandbox runs the image the install recorded'
+[[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox_id") == healthy ]] || fail 'the sandbox is healthy'
+[[ $(docker network inspect gtmworks-work-first -f '{{.Internal}}') == true ]] || fail "the sandbox's network has no way out"
+[[ $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$sandbox_id") == 0 ]] || fail 'the sandbox publishes no host port'
+[[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$sandbox_id") == gtmworks-work-first ]] || fail "the Company's work folder is the sandbox's own volume"
+[[ $(docker exec "$sandbox_id" id -un) == pn ]] || fail 'the sandbox runs as its own ordinary user'
 # From the Engine's network nothing else of the install is reachable (db, auth, REST, storage, the gateway), and a
 # request to the app there buys nothing with a forged visitor address.
 docker run --rm --network gtmworks-engine-first -e INSTALL_SERVICE_IPS="$(install_service_ips)" -v "$PWD/scripts:/check:ro" \
@@ -182,7 +194,7 @@ second_company=$(db -c "select id from public.companies where name='Second Compa
 # app and the worker join its network.
 [[ $(docker inspect -f '{{.Config.Image}}' "$second_container") == *'nousresearch/hermes-agent:v0.23.0@sha256:'* ]] || fail 'the second Engine runs the pinned Hermes image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$second_container") != *HostPort* ]] || fail 'the second Engine publishes no host port'
-[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container") == "$second_network" ]] || fail 'the second Engine joins its own network only'
+[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container" | sort) == $(printf '%s\n' "$second_network" "gtmworks-work-second-company" | sort) ]] || fail 'the second Engine joins its own network and its work network only'
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx "$second_network" \
     || fail "the $service joins the second Engine's network"
@@ -195,12 +207,73 @@ docker run --rm --network "$second_network" -e INSTALL_SERVICE_IPS="$(install_se
 key_status() { compose exec -T -e CHECK_KEY="$1" -e CHECK_URL="$2" web node --input-type=module -e "const r=await fetch(process.env.CHECK_URL,{headers:{Authorization:'Bearer '+process.env.CHECK_KEY}}); console.log(r.status); if(![401,403].includes(r.status)) process.exitCode=1;"; }
 key_status "$engine_key" "http://$second_container:9119/api/profiles" || fail "the second Engine refuses the first Engine's key"
 key_status "$second_key" "$engine_management/api/profiles" || fail "the first Engine refuses the second Engine's key"
+# Every Company's work sandbox (#393, ADR 0018), as the installer started it: the image the install recorded, an ordinary
+# user, no capability, no new privilege, its process limit and shared memory, the install's default RAM and CPU, no host
+# port and no Docker socket. The static test pins the template; this reads the containers an install really runs.
+sandbox_image=$(cat .work-sandbox-image)
+for folder in .engines/*/; do
+  [ -f "$folder/.env" ] || continue
+  name=$(engine_value "$folder" NAME)
+  slug=${name#gtmworks-engine-}
+  sandbox=$(docker ps -q --filter "name=^gtmworks-sandbox-$slug$") || fail "the sandbox of $slug"
+  [[ -n $sandbox ]] || fail "the sandbox of $slug runs"
+  [[ $(docker inspect -f '{{.Config.Image}}' "$sandbox") == "$sandbox_image" ]] || fail "the sandbox of $slug runs the image the install recorded"
+  [[ $(docker inspect -f '{{.Config.User}}' "$sandbox") == '' || $(docker inspect -f '{{.Config.User}}' "$sandbox") == pn ]] || fail "the sandbox of $slug runs as the image's own user"
+  [[ $(docker exec "$sandbox" id -u) == 1000 ]] || fail "the sandbox of $slug runs as an ordinary user, never root"
+  [[ $(docker inspect -f '{{join .HostConfig.CapDrop ","}}' "$sandbox") == ALL ]] || fail "the sandbox of $slug drops every capability"
+  [[ -z $(docker inspect -f '{{join .HostConfig.CapAdd ","}}' "$sandbox") ]] || fail "the sandbox of $slug adds no capability"
+  [[ $(docker inspect -f '{{join .HostConfig.SecurityOpt ","}}' "$sandbox") == *no-new-privileges* ]] || fail "the sandbox of $slug has no new privileges"
+  [[ $(docker inspect -f '{{.HostConfig.PidsLimit}}' "$sandbox") == 2048 ]] || fail "the sandbox of $slug has its process limit"
+  [[ $(docker inspect -f '{{.HostConfig.ShmSize}}' "$sandbox") == 1073741824 ]] || fail "the sandbox of $slug has shared memory for Chromium"
+  [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == 2147483648 ]] || fail "the sandbox of $slug has the install's default memory"
+  [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == 2000000000 ]] || fail "the sandbox of $slug has the install's default CPU"
+  [[ $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$sandbox") == 0 ]] || fail "the sandbox of $slug publishes no host port"
+  if docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$sandbox" | grep -q 'docker.sock'; then fail "the sandbox of $slug mounts no Docker socket"; fi
+done
+# The sandbox takes its own Engine's key and no password (#393): the private half is only among that Engine's files, in
+# its data volume, and the sandbox holds no private key at all.
+second_volume=$(engine_value "$second_folder" VOLUME)
+public_of() { docker run --rm --entrypoint sh -v "$1:/data:ro" "$sandbox_image" -ec 'ssh-keygen -y -f /data/ssh/id_ed25519'; }
+first_public=$(public_of "$(engine_value .engines/first VOLUME)") || fail "the first Engine's sandbox key"
+second_public=$(public_of "$second_volume") || fail "the second Engine's sandbox key"
+[[ -n $first_public && -n $second_public && $first_public != "$second_public" ]] || fail 'each Engine has a key pair of its own'
+docker exec "$engine_id" test -f /opt/data/ssh/id_ed25519 || fail "the first Engine holds its sandbox key"
+[[ $(docker exec "$engine_id" stat -c %u /opt/data/ssh/id_ed25519) == 10000 ]] || fail "the sandbox key belongs to the Engine's own user"
+if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')" | grep -q 'PRIVATE KEY'; then fail 'the sandbox holds no private key in its environment'; fi
+docker exec "$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')" sh -ec 'test -s /home/pn/.ssh/authorized_keys && grep -q "^ssh-ed25519 " /home/pn/.ssh/authorized_keys' || fail 'the sandbox takes its Engine\'s public key'
+if docker exec "$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')" sh -ec 'ls /home/pn/.ssh/id_ed25519 /opt/data/ssh/id_ed25519 2> /dev/null | grep .'; then fail 'the sandbox holds no private key of any Engine'; fi
+docker exec "$engine_id" cat /opt/data/ssh/id_ed25519 | docker run --rm -i --network gtmworks-work-first --entrypoint sh "$sandbox_image" -ec '
+  set -e
+  cat > /tmp/key; chmod 600 /tmp/key
+  ssh-keygen -q -t ed25519 -N "" -f /tmp/wrong
+  options="-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+  test "$(ssh -i /tmp/key $options -p 2222 pn@sandbox id -un)" = pn
+  if ssh -i /tmp/wrong $options -p 2222 pn@sandbox true 2> /tmp/wrong.err; then echo "a wrong key was accepted" >&2; exit 1; fi
+  grep -q "Permission denied (publickey)" /tmp/wrong.err
+  if ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no $options -p 2222 pn@sandbox true 2> /tmp/password.err; then echo "a password was accepted" >&2; exit 1; fi
+  grep -q "Permission denied (publickey)" /tmp/password.err
+' || fail 'the sandbox accepts its Engine\'s key and no password'
 # `gtmworks company list` and `gtmworks status` report each Company's own Engine and its state.
 sh scripts/install.sh company list | tee company-list.log || fail 'company list'
 grep -F '"Proxy Company": Engine http://gtmworks-engine-first:8642 (healthy)' company-list.log || fail 'company list names the first Company and its healthy Engine'
 grep -F "\"Second Company\": Engine $second_address (healthy)" company-list.log || fail 'company list names the second Company and its healthy Engine'
 sh scripts/install.sh engines | tee engines.log || fail 'every Engine is reported'
 grep -F "Engine $second_address: healthy (Company \"Second Company\")" engines.log || fail 'the Engine report names the second Engine'
+# `gtmworks status` reports each Company's work sandbox beside its Engine, and fails when one is not running (#393).
+grep -F 'Sandbox gtmworks-sandbox-first: running (Company "Proxy Company")' engines.log || fail 'the report names the first sandbox and its Company'
+grep -F 'Sandbox gtmworks-sandbox-second-company: running (Company "Second Company")' engines.log || fail 'the report names the second sandbox and its Company'
+docker stop gtmworks-sandbox-second-company > /dev/null || fail 'stop the second sandbox'
+if sh scripts/install.sh engines > engines-sandbox-stopped.log 2>&1; then
+  cat engines-sandbox-stopped.log
+  fail 'a stopped sandbox must fail the report'
+fi
+grep -F 'Sandbox gtmworks-sandbox-second-company: stopped (Company "Second Company")' engines-sandbox-stopped.log || fail 'the report says the sandbox is stopped'
+docker start gtmworks-sandbox-second-company > /dev/null || fail 'start the second sandbox'
+for attempt in $(seq 1 60); do
+  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gtmworks-sandbox-second-company) == healthy ]] && break
+  sleep 1
+done
+[[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gtmworks-sandbox-second-company) == healthy ]] || fail 'the second sandbox is healthy again'
 # A Company with no Owner yet is held behind a first-Owner link (#383, ADR 0019): the command prints the link,
 # only its hash is stored, the Company exists nowhere, `company list` shows it waiting for its Owner, and a
 # fresh link ends the earlier one. Sending the fresh link's form then makes the Company with its sender as
@@ -268,7 +341,7 @@ if docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null --max-
 # its Runs' toolsets. A run on each answers across the two Engines, and a memory written in the first Engine
 # reaches its run and never an Agent of the other Company. A lesson its Owner approves reaches the runs of the
 # first Company's Agents only, which cannot change it (#122).
-engine_node "$engine_key" - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles on two Engines with terminal, file and code tools off, each with one shared space'
+engine_node "$engine_key" - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles on two Engines with the work tools on, each with one shared space'
 first=$(tail -n 1 prepare-profiles.log)
 [[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
 # One Company cannot name another's profile (#126): the database refuses the row, whoever writes it.
@@ -278,6 +351,24 @@ grep -q hermesProfileNotShared profile-refusal.log || { cat profile-refusal.log 
 marker="memory-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 docker exec -i "$engine_id" sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$first" "$marker" || fail "write a memory in the first company's profile"
 engine_node "$engine_key" - verify "$marker" < scripts/check-install-profiles.mjs || fail "runs on each company profile answer, and a company's memory and approved lessons stay in its own runs"
+# The work sandbox (#393, ADR 0018): the command, file and code an Agent asks for run in the Company's sandbox and never
+# on its Engine, two Agents start in the Company's one work folder, and a profile write and a settings write cannot move
+# a command off the sandbox. The job reads the host's Docker for where each marker landed: a tool's own answer cannot
+# fake that.
+sandbox_marker="sandbox-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - sandbox "$sandbox_marker" < scripts/check-install-profiles.mjs | tee sandbox-proof.log \
+  || fail 'an Agent runs its command, file and code in the work sandbox'
+sandbox=gtmworks-sandbox-first
+sandbox_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' sandbox-proof.log | tail -n 1)
+[[ -n $sandbox_host && $sandbox_host == "$(docker exec "$sandbox" hostname)" ]] || fail "an Agent's command runs in the work sandbox"
+grep -q '"cwd":"/work"' sandbox-proof.log || fail "an Agent's command starts in the work folder"
+grep -q '"pwd":"/work"' sandbox-proof.log || fail "a second Agent's command starts in the same work folder"
+[[ $(docker exec "$sandbox" cat "/work/$sandbox_marker-terminal.txt") == "$sandbox_marker-terminal" ]] || fail "the Agent's command wrote in the Company's work folder"
+[[ $(docker exec "$sandbox" cat "/work/$sandbox_marker-file.txt") == "$sandbox_marker-file" ]] || fail "the file an Agent wrote is in the Company's work folder"
+[[ $(docker exec "$sandbox" cat "/work/$sandbox_marker-code.txt") == "$sandbox_marker-code" ]] || fail "the code an Agent ran wrote in the work sandbox"
+if docker exec "$engine_id" sh -ec "test -e /work/$sandbox_marker-terminal.txt -o -e /work/$sandbox_marker-file.txt -o -e /work/$sandbox_marker-code.txt"; then
+  fail 'nothing an Agent wrote is on the Engine'
+fi
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.
@@ -384,7 +475,7 @@ for folder in .engines/*/; do
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine ]] || fail "the restored install runs the Engine $name"
   [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume"
-  [[ $(docker inspect -f '{{range $network, $_ := .NetworkSettings.Networks}}{{println $network}}{{end}}' "$engine") == "$network" ]] || fail "the Engine $name joins its own network only"
+  [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only"
   # The lifecycle seed's two Companies (restore-one, restore-two) hold records of their own at the first Engine's address.
   [[ $(db -c "select count(*) from public.companies c join public.company_engines e on e.id=c.engine_id where e.address='http://$name:8642'") -ge 1 ]] || fail "a Company's record names the Engine $name"
   for service in web worker; do
@@ -609,10 +700,10 @@ if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine
 engine=$(first_engine_id)
 [[ -n $engine ]] || fail "the updated install runs the Company's Engine"
 [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
-hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml)
+hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine") != *HostPort* ]] || fail 'the Engine publishes no host port'
-[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine") == gtmworks-engine-first ]] || fail "the Engine joins its own network only"
+[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine" | sort) == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only"
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \
     || fail "the $service joins the Engine's network"
@@ -696,7 +787,7 @@ set +o pipefail
 fail_prefix='release install check failed: '
 start_registry
 publish_releases
-hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml)
+hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 # The update wrote these files as the install's user from a container; a root container removes them on any Docker.
 docker run --rm -v "$PWD:/work" alpine:3.21 rm -rf /work/release-install || fail 'remove the first release install folder'
 mkdir release-install
@@ -730,7 +821,7 @@ done
 docker tag "$hermes_image" gtmworks-engine-check:0.0.2 || fail 'tag the other Engine image'
 docker build -q -t localhost:5000/gtmworks:0.0.2-ci - > /dev/null <<'DOCKERFILE' || fail 'build the release that pins another Engine image'
 FROM localhost:5000/gtmworks:0.0.1-ci
-RUN sed -i 's#^\( *image:\).*#\1 gtmworks-engine-check:0.0.2#' /app/install/scripts/engine-template.yml
+RUN sed -i '0,/^\( *image:\).*/s//\1 gtmworks-engine-check:0.0.2/' /app/install/scripts/engine-template.yml
 DOCKERFILE
 fourth=$(publish 0.0.2-ci) || fail 'push the release that pins another Engine image'
 ( cd "$root" && node scripts/release-assets.mjs "$fourth" release-engines "$sandbox" ) || fail 'the release files that pin another Engine image'
@@ -746,7 +837,7 @@ for folder in .engines/*/; do
   [[ -n $engine && $(docker inspect -f '{{.Id}}' "$engine") != "$before" ]] || fail "the update recreated the Engine $name"
   [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == gtmworks-engine-check:0.0.2 ]] || fail "the Engine $name runs the image the release pins"
   [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
-  [[ $(docker inspect -f '{{range $network, $_ := .NetworkSettings.Networks}}{{println $network}}{{end}}' "$engine") == "$network" ]] || fail "the Engine $name joins its own network only after the update"
+  [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done
 # A Run on each Company answers on its own Engine, and the code word its own Engine kept reaches its own Run only.
 compose exec -T web node --input-type=module - < "$root/scripts/check-install-engines.mjs" || fail 'a Run on each Company answers after the update'

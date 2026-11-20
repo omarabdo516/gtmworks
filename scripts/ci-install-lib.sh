@@ -71,13 +71,14 @@ remove_engine() {
     name=$(engine_value "$folder" NAME)
     volume=$(engine_value "$folder" VOLUME)
     network=$(engine_value "$folder" NETWORK)
-    docker rm -f "$name" > /dev/null 2>&1 || true
-    docker volume rm "$volume" > /dev/null 2>&1 || true
-    docker network rm "$network" > /dev/null 2>&1 || true
+    slug=${name#gtmworks-engine-}
+    docker rm -f "$name" "gtmworks-sandbox-$slug" > /dev/null 2>&1 || true
+    docker volume rm "$volume" "gtmworks-work-$slug" "gtmworks-sandbox-hostkey-$slug" > /dev/null 2>&1 || true
+    docker network rm "$network" "gtmworks-work-$slug" > /dev/null 2>&1 || true
   done
-  docker rm -f gtmworks-engine-first > /dev/null 2>&1 || true
-  docker volume rm gtmworks-install_hermes > /dev/null 2>&1 || true
-  docker network rm gtmworks-engine-first > /dev/null 2>&1 || true
+  docker rm -f gtmworks-engine-first gtmworks-sandbox-first > /dev/null 2>&1 || true
+  docker volume rm gtmworks-install_hermes gtmworks-work-first gtmworks-sandbox-hostkey-first > /dev/null 2>&1 || true
+  docker network rm gtmworks-engine-first gtmworks-work-first > /dev/null 2>&1 || true
   docker rm -f gtmworks-install-hermes-1 > /dev/null 2>&1 || true
   rm -rf .engines
 }
