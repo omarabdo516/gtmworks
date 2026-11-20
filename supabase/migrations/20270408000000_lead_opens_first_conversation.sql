@@ -17,6 +17,14 @@ $$;
 revoke all on function public.record_lead_soul(uuid,text) from public,anon,authenticated,service_role;
 grant execute on function public.record_lead_soul(uuid,text) to service_role;
 
+-- What counts as written in a Company: any message but Lead's opening and a person's message whose Run ended for want of
+-- a model (#422), so an Owner who typed before connecting one still gets the opening once it is connected.
+create function public.written_message(m public.conversation_messages) returns boolean language sql stable set search_path='' as $$
+ select m.run_id<>'lead-opening' and not (m.author='person' and exists(select 1 from public.conversation_run_ends e
+  where e.conversation_id=m.conversation_id and e.run_id=m.run_id and e.outcome='no_model'));
+$$;
+revoke all on function public.written_message(public.conversation_messages) from public,anon,authenticated,service_role;
+
 -- The first Conversation: once per Company, ever. When an active Owner opens the main Agent's chat, or an empty
 -- Conversation with it, while the Company has a model and nothing was written in any of its Conversations yet, the app
 -- asks for Lead's message, in the Owner's language, to be the first one (lib/lead-opening.mjs). It goes into the
@@ -37,10 +45,10 @@ begin
  select m.conversation_id into target from public.conversation_messages m join public.conversations v on v.id=m.conversation_id
   where m.company_id=c and m.run_id='lead-opening' and v.person_id=person;
  if found then
-  return case when not exists(select 1 from public.conversation_messages m where m.company_id=c and m.run_id<>'lead-opening')
+  return case when not exists(select 1 from public.conversation_messages m where m.company_id=c and public.written_message(m))
    and not exists(select 1 from public.conversation_run_reservations r where r.company_id=c) then target end;
  end if;
- if exists(select 1 from public.conversation_messages m where m.company_id=c)
+ if exists(select 1 from public.conversation_messages m where m.company_id=c and public.written_message(m))
   or exists(select 1 from public.conversation_run_reservations r where r.company_id=c) then return null; end if;
  if not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role='owner' and m.removed_at is null) then return null; end if;
  select * into lead from public.hermes_agents a where a.company_id=c and a.is_default;
@@ -58,8 +66,9 @@ end $$;
 revoke all on function public.open_first_conversation(uuid,uuid,uuid,text) from public,anon,authenticated,service_role;
 grant execute on function public.open_first_conversation(uuid,uuid,uuid,text) to service_role;
 
--- 20270323000000's brief, which now also carries Lead's opening message when the Run's Conversation is the one Lead
--- opened, so the answer to its questions is met with the first Agents to make (lib/lead-offer.mjs).
+-- 20270323000000's brief, which now also carries Lead's opening message when the Run answers it: the Run's Conversation
+-- is the one Lead opened and its person has written nothing there yet (the Run's own message is stored once it starts),
+-- so that answer, and no later message, is met with the first Agents to make (lib/lead-offer.mjs).
 create or replace function public.pin_lead_brief(conversation uuid, message_key uuid) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare held public.conversation_run_reservations; kept public.conversation_run_notes;
@@ -76,7 +85,8 @@ begin
    'agents',coalesce((select jsonb_agg(jsonb_build_object('name',a.name,'job',a.speciality) order by a.name,a.id)
      from public.hermes_agents a
      where a.company_id=held.company_id and a.id<>held.agent_id and public.agent_visible_to(held.company_id,held.person_id,a.id)),'[]'::jsonb),
-   'opening',(select m.body from public.conversation_messages m where m.conversation_id=conversation and m.author='agent' and m.run_id='lead-opening'))
+   'opening',(select m.body from public.conversation_messages m where m.conversation_id=conversation and m.author='agent' and m.run_id='lead-opening'
+     and not exists(select 1 from public.conversation_messages p where p.conversation_id=conversation and p.author='person' and public.written_message(p))))
    where n.conversation_id=conversation and n.send_key=message_key returning * into kept;
  end if;
  return kept.lead_brief;

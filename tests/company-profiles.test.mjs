@@ -5,7 +5,7 @@ import { agentLevels, levelToolsets, alwaysOff, riskyToolsets, levelConfig, chil
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, removeProviderKey } from '../lib/hermes.mjs';
-import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools, keepLeadSouls, leadSoul, formerLeadSoul } from '../lib/company-profiles.mjs';
+import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools, keepLeadSouls, leadSoul, baselineSoul } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
@@ -208,7 +208,7 @@ test('the old default soul of a main Agent becomes the manager identity, an edit
   const [old,edited,current,lost]=['10000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000007'].map(companyProfile);
   const rules='<!-- gtmworks:rules -->\n## Rules the team gave you\n- Never use emojis\n<!-- /gtmworks:rules -->\n';
   const profile=soul=>({soul,provider:'auto',model:'',key:'test-only-key',config:{},credentials:{}});
-  fake.settings.profiles.set(old,profile(`${formerLeadSoul}\n${rules}`));
+  fake.settings.profiles.set(old,profile(`${baselineSoul}\n${rules}`));
   fake.settings.profiles.set(edited,profile('You write for a bakery in Cairo.'));
   fake.settings.profiles.set(current,profile(leadSoul));
   const calls=[]; const work=[old,edited,current,lost].map(name=>({company_id:name,profile:name}));
@@ -218,7 +218,7 @@ test('the old default soul of a main Agent becomes the manager identity, an edit
   assert.equal(fake.settings.profiles.get(edited).soul,'You write for a bakery in Cairo.');
   assert.equal(fake.settings.profiles.get(current).soul,leadSoul);
   assert.deepEqual(calls.filter(([name])=>name==='record_lead_soul').map(([,args])=>args),[old,edited,current].map(name=>({c:name,engine_profile:name})));
-  assert.notEqual(leadSoul,formerLeadSoul);
+  assert.notEqual(leadSoul,baselineSoul);
   assert.match(leadSoul,/manage/); assert.match(leadSoul,/hand_to_agent/);
   assert.deepEqual(await keepLeadSouls(db,{hermes:null}),{upgraded:0,checked:0});
  } finally { await fake.close(); }

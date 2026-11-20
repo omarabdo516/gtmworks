@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(17);
 -- #434. A new Company with an Owner (عمر), a Manager and its main Agent: Lead opens the Company's first Conversation once,
 -- for an active Owner only, into the Owner's empty Conversation with it when there is one, and never in a Company where
 -- something was written already. The Run that answers it carries
@@ -28,6 +28,17 @@ select results_eq($$select author,agent_id,author_name,body,run_id,person_id,sen
  $$select 'agent'::text,'f4340000-0000-0000-0000-000000000001'::uuid,'Lead'::text,'Hi عمر, I manage the team.'::text,'lead-opening'::text,null::uuid,null::uuid$$,
  'whose one message is Lead''s, written by no Engine run');
 
+-- The Owner's answer: its Run, pinned before its message is stored, is given Lead's opening.
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile) values
+ ('e4340000-0000-0000-0000-000000000002','d4340000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000434',gen_random_uuid(),'20000000-0000-0000-0000-000000000001','f4340000-0000-0000-0000-000000000001','We sell courses','lead434opening');
+insert into public.conversation_run_notes(conversation_id,send_key,company_id) values ('e4340000-0000-0000-0000-000000000002','d4340000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000434');
+set local role service_role;
+select is(public.pin_lead_brief('e4340000-0000-0000-0000-000000000002','d4340000-0000-0000-0000-000000000003')->>'opening','Hi عمر, I manage the team.',
+ 'the answer''s Run is given Lead''s opening');
+reset role;
+delete from public.conversation_run_notes where send_key='d4340000-0000-0000-0000-000000000003';
+delete from public.conversation_run_reservations where send_key='d4340000-0000-0000-0000-000000000003';
+
 -- Once the Owner answers, a visit finds nothing to open or go back to.
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
  ('10000000-0000-0000-0000-000000000434','e4340000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000001','عمر','We sell courses',gen_random_uuid(),'run-434-answer');
@@ -49,6 +60,23 @@ select is(public.open_first_conversation('10000000-0000-0000-0000-000000000435',
 reset role;
 select is((select count(*) from public.conversations where company_id='10000000-0000-0000-0000-000000000435'),1::bigint,'and no other is made');
 
+-- An Owner who typed before a model was connected: that message's Run ended no_model, so the opening still comes, into
+-- the same Conversation.
+insert into public.company_engines(id,address,key_encrypted) values ('e4340000-0000-4000-8000-000000000003','http://engine-three:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000436','opening-no-model','No model','e4340000-0000-4000-8000-000000000003');
+insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000436','20000000-0000-0000-0000-000000000001','owner');
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default)
+ values('f4340000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000436',gen_random_uuid(),'Lead','General','lead436opening',true);
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('e4340000-0000-0000-0000-000000000010','10000000-0000-0000-0000-000000000436','20000000-0000-0000-0000-000000000001','f4340000-0000-0000-0000-000000000004','Lead');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000436','e4340000-0000-0000-0000-000000000010','person','20000000-0000-0000-0000-000000000001','عمر','Hello?',gen_random_uuid(),'run-436');
+insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome) values ('10000000-0000-0000-0000-000000000436','e4340000-0000-0000-0000-000000000010','run-436','no_model');
+set local role service_role;
+select is(public.open_first_conversation('10000000-0000-0000-0000-000000000436','20000000-0000-0000-0000-000000000001','e4340000-0000-0000-0000-000000000011','Hi'),'e4340000-0000-0000-0000-000000000010'::uuid,
+ 'a message that failed for want of a model does not keep the opening away');
+reset role;
+
 -- A Company where someone already wrote (RS Learning, a Manager's message) is never opened.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default)
  select 'f4340000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'Lead','General','lead434seed',true
@@ -63,15 +91,15 @@ select is(public.open_first_conversation('10000000-0000-0000-0000-000000000001',
  'a Company where someone wrote already, even another person, is not opened');
 reset role;
 
--- The Owner's answer: its Run's brief carries the opening; a Run in any other Conversation carries none.
+-- A later Run in the opened Conversation, once the Owner has answered, carries no opening; nor does one elsewhere.
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile) values
  ('e4340000-0000-0000-0000-000000000002','d4340000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000434',gen_random_uuid(),'20000000-0000-0000-0000-000000000001','f4340000-0000-0000-0000-000000000001','We sell courses','lead434opening'),
  ('e4340000-0000-0000-0000-000000000005','d4340000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000434',gen_random_uuid(),'20000000-0000-0000-0000-000000000001','f4340000-0000-0000-0000-000000000001','Plan the week','lead434opening');
 insert into public.conversation_run_notes(conversation_id,send_key,company_id)
  select conversation_id,send_key,company_id from public.conversation_run_reservations where conversation_id::text like 'e4340000-%';
 set local role service_role;
-select is(public.pin_lead_brief('e4340000-0000-0000-0000-000000000002','d4340000-0000-0000-0000-000000000001')->>'opening','Hi عمر, I manage the team.',
- 'the answer''s Run is given Lead''s opening');
+select is(public.pin_lead_brief('e4340000-0000-0000-0000-000000000002','d4340000-0000-0000-0000-000000000001')->'opening','null'::jsonb,
+ 'a Run after the Owner has answered is not given the opening again');
 select is(public.pin_lead_brief('e4340000-0000-0000-0000-000000000002','d4340000-0000-0000-0000-000000000001')->>'role','owner',
  'beside the brief it always had');
 select is(public.pin_lead_brief('e4340000-0000-0000-0000-000000000005','d4340000-0000-0000-0000-000000000002')->'opening','null'::jsonb,

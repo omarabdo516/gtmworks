@@ -41,7 +41,8 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  after(()=>logOpen(timing,company.id,id));
  // Messages, notes to a person and waiting turns, with who the Agent is working for (lib/conversation-record.ts). The
  // page is drawn without waiting for it; the chat shows its placeholder until it arrives (#172).
- let record=conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session).finally(()=>markOpen('session',timing)));
+ const readRecord=()=>conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session).finally(()=>markOpen('session',timing)));
+ let record=readRecord();
  // Awaited only by the transcript: a read of the frame that fails first must not leave its failure unhandled.
  record.then(()=>markOpen('record',timing),()=>{});
  // Its Card on the board, in the corner from the start (design-reference: renderChat's corner pill): read beside the
@@ -75,7 +76,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
   const {count}=await db.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',id);
   const opened=count===0?await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
    {model:companyHasModel(db,{company:company.id}).catch(()=>null),company:company.id,person:user.id,conversation:id,language,owner:person?.name||'',lead:agent.name,companyName:company.name}):null;
-  if(opened===id) { record.catch(()=>{}); record=conversationRecord(db,user.id,company.id,conversation,agent=>agentAppStates(company.id,agent),(agent,session)=>agentSessionTurns(company.id,agent,session)); }
+  if(opened===id) { record.catch(()=>{}); record=readRecord(); }
  }
  // The Agent's details and the approvals count are handed over unread: the chat and its steps are drawn without waiting
  // for them, and each takes its place when read (decision 0042).
