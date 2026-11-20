@@ -29,7 +29,7 @@ export async function imagesOf(files:File[]):Promise<ChosenImage[]> {
 // reads again, so a waiting turn fails for its sender instead of being claimed on every pass (#368); any other storage
 // failure is thrown as it is and tried again.
 type StorageFailure={statusCode?:string|number,status?:number,code?:string,message?:string};
-const gone=(error:StorageFailure)=>error.statusCode==='404'||error.statusCode===404||error.status===404||error.code==='NoSuchKey'||/not found/i.test(error.message??'');
+const gone=(error:StorageFailure)=>error.statusCode==='404'||error.statusCode===404||error.status===404||error.code==='NoSuchKey';
 export class MessageFileGone extends Error {
  constructor(message:string) { super(message); this.name='MessageFileGone'; }
 }

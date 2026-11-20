@@ -34,8 +34,9 @@ function databases({has_files=false,files=[],refuse=null,download=null}={}) {
    return ok(turn?[{company:'co',agent:'a',person:'p',send_key:turn.send_key,message:turn.message,connection,profile:'writer',note:null,retry:false,has_files:turn.has_files}]:[]); }
   if(['pin_run','pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return ok(null);
   if(name==='begin_start') return ok(1);
-  // The two-argument form fails a turn nobody attempted yet: it leaves the queue, so the next claim gets the next turn.
-  if(name==='fail_conversation_turn') { if(args.attempt===undefined) claimed++; return ok(null); }
+  // The three-argument form fails a turn nobody attempted yet (attempt 0): it leaves the queue, so the next claim gets
+  // the next turn. A retried turn's attempt is above 0 and the database leaves it alone.
+  if(name==='fail_conversation_turn') { if(args.attempt===0) claimed++; return ok(null); }
   if(name==='send_conversation_message') return refuse?{data:null,error:{code:refuse}}:ok(true);
   if(name==='record_conversation_turn') { claimed++; return ok(true); }
   return {data:null,error:{message:`unexpected ${name}`}};
@@ -44,9 +45,9 @@ function databases({has_files=false,files=[],refuse=null,download=null}={}) {
  const db={rpc,from:(/** @type {string} */ table)=>chain(table==='conversation_attachments'?files.map(file=>({content_type:file.content_type,path:file.path})):{id:'a',instructions:null})};
  const service={rpc,from:(/** @type {string} */ table)=>chain(table==='conversation_attachments'?files.map(file=>({content_type:file.content_type,path:file.path})):{id:'a',instructions:null}),
   storage:{from:()=>({download:async(/** @type {string} */ path)=>{ downloads.push(path);
-   if(download==='not found') return {data:null,error:{message:'not found'}};
-   if(transient>0) { transient--; return {data:null,error:{message:'Failed to fetch'}}; }
-   const file=files.find(each=>each.path===path); return file?{data:new Blob([file.bytes]),error:null}:{data:null,error:{message:'not found'}}; }})}};
+   if(download==='not found') return {data:null,error:{statusCode:'404',status:400,error:'not_found',message:'Object not found'}};
+   if(transient>0) { transient--; return {data:null,error:{status:503,statusCode:'503',message:'Service temporarily unavailable'}}; }
+   const file=files.find(each=>each.path===path); return file?{data:new Blob([file.bytes]),error:null}:{data:null,error:{statusCode:'404',status:400,error:'not_found',message:'Object not found'}}; }})}};
  return {db,service,calls,downloads};
 }
 
@@ -102,7 +103,7 @@ test('a queued turn whose stored image is gone fails for its sender, and the nex
  const stand=databases({has_files:true,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes:'the image is gone'}],download:'not found'});
  const failed=()=>stand.calls.filter(([name])=>name==='fail_conversation_turn');
  assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),0,'the turn is failed, not started');
- assert.deepEqual(failed(),[['fail_conversation_turn',{conversation,message_key:'q'}]],'its sender sees the line, and its reservation is released');
+ assert.deepEqual(failed(),[['fail_conversation_turn',{conversation,message_key:'q',attempt:0}]],'its sender sees the line, and its reservation is released');
  assert.equal(fake.runs.length,0,'the Engine never starts the turn whose image is gone');
  assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),1);
  assert.equal(fake.runs.length,1);
