@@ -1,11 +1,13 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0020
 date: 2026-11-16
 ---
 
 # The Engine profile is the Agent, and settings are the Engine's own
 
 Omar's decision of 2026-11-16, ticket #119: «هناخد من الجاهز في هيرمز علطول وطرقة اعداداته نحطه في طريقة اعداداتنا». We take what Hermes already has as it is, and its way of setting things up becomes ours. This supersedes [ADR 0014](0014-one-hermes-profile-per-company.md) where they conflict and returns to the rule of [ADR 0011](0011-agents-are-engine-profiles-made-on-the-management-listener.md) that one Agent is one Engine profile. Isolation between Companies stays as ADR 0014 built it. Everything in ADR 0008 to 0013 and ADR 0015 that this record does not name still holds.
+
+[ADR 0020](0020-full-power-first-limits-only-after-a-real-problem.md): full power first. Sub-agents are on for every Agent by default; the Owner may turn them off.
 
 Partly superseded by [ADR 0018](0018-an-engine-and-a-work-sandbox-per-company.md): the Sign-in section below is replaced (a Company signs in once on its own Engine's root profile), and Agent levels are removed, so an Agent's toolsets are written from its settings.
 

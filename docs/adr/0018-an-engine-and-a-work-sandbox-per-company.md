@@ -1,11 +1,13 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0020
 date: 2026-11-19
 ---
 
 # An Engine and a work sandbox per Company, and no Docker inside the install
 
 Omar's decisions of 2026-11-19. Not built yet: the spec that builds it follows this record. It supersedes, where they conflict, [ADR 0010](0010-hermes-ships-inside-the-gtmworks-install-and-is-the-engine.md) (one bundled Hermes for the whole install), [ADR 0014](0014-one-hermes-profile-per-company.md) (terminal, file, code and desktop tools always off, Agent levels, the sign-in rules), [ADR 0016](0016-the-engine-profile-is-the-agent.md) (its Sign-in section) and [ADR 0017](0017-hermes-keeps-skills-knowledge-rules-steps-and-usage.md) ("One Hermes" as one per install). Everything else in ADR 0008 to 0017 still holds: Hermes ships inside the install unmodified, an Agent is an Engine profile, and gtmworks stores nothing the Engine keeps.
+
+[ADR 0020](0020-full-power-first-limits-only-after-a-real-problem.md): full power first. An Agent may publish and spend when a Member asks, with no Approval first; apps come with all their tools; `delegation` and `connections` are on. The tools that run inside the Engine's container stay off.
 
 ## Context
 
