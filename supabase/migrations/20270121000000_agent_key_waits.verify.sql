@@ -29,7 +29,7 @@ select json_build_object(
   and exists(select 1 from information_schema.columns where table_schema='public' and table_name='company_key_holds' and column_name='changed_at'
    and data_type='timestamp with time zone' and is_nullable='YES' and column_default is null)
   and position('company_audit' in pg_get_functiondef('public.company_holds_provider_key(uuid)'::regprocedure))=0,
- 'one_create',(select pronargs=11 and pronargs-pronargdefaults=6 from pg_proc where oid='public.lead_create_agent'::regproc)
+ 'one_create',(select pronargs=10 and pronargs-pronargdefaults=6 from pg_proc where oid='public.lead_create_agent'::regproc)
   and position('agent_key_waits' in pg_get_functiondef('public.lead_create_agent'::regproc))>0
   and position('company_holds_provider_key' in pg_get_functiondef('public.lead_create_agent'::regproc))>0
   and position('engineNotReady' in pg_get_functiondef('public.lead_create_agent'::regproc))=0

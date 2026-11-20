@@ -11,7 +11,7 @@ import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { engineFor as driverFor } from '../lib/engine.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
-import { levelConfig, toolPolicy } from '../lib/agent-levels.mjs';
+import { toolConfig } from '../lib/agent-toolsets.mjs';
 import { signIn } from './sign-in';
 import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
@@ -123,7 +123,7 @@ function bundledLead() {
  if(made) return {profile,lead:made.id as string};
  const [connection,lead]=[randomUUID(),randomUUID()];
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profile}')`);
- query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${profile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}' on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false,skills_shared=true`);
+ query(`insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) select id,'${profile}',true,true from public.companies where id='${company}' on conflict (company_id) do update set tools_confirmed=true,tools_pending=false,skills_shared=true`);
  return {profile,lead};
 }
 
@@ -916,9 +916,9 @@ async function ownProfiles(profile:string) {
  };
  return {hermes,install:{address:hermes.address,key:'fake-engine-key'},fake,engineFor};
 }
-type MadeAgent={id:string,instructions:string,profile:string,derived:boolean,tools_level:number|null,tools_policy:number|null,tools_pending:boolean|null};
+type MadeAgent={id:string,instructions:string,profile:string,derived:boolean,tools_confirmed:boolean|null,tools_pending:boolean|null};
 const madeBy=(conversation:string,lead:string,call='call-0'):MadeAgent[]=>JSON.parse(query(`select a.id,a.instructions,a.profile,
- a.id=public.lead_agent_id(m.conversation_id,m.run_id,'${call}') as derived,p.tools_level,p.tools_policy,p.tools_pending
+ a.id=public.lead_agent_id(m.conversation_id,m.run_id,'${call}') as derived,p.tools_confirmed,p.tools_pending
  from public.lead_made_agents m join public.hermes_agents a on a.id=m.agent_id
  left join public.agent_profiles p on p.agent_id=a.id where m.conversation_id='${conversation}' order by m.created_at`));
 const managed=(hermes:Awaited<ReturnType<typeof fakeHermes>>)=>hermes.settings.managementRequests.map(request=>`${request.method} ${request.path?.split('?')[0]}`);
@@ -940,10 +940,10 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(made).toHaveLength(1);
   const [agent]=made;
   const own=`ag-${agent.id.replaceAll('-','')}`;
-  expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,derived:true,tools_level:1,tools_policy:toolPolicy,tools_pending:false});
+  expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,derived:true,tools_confirmed:true,tools_pending:false});
   expect([...hermes.settings.profiles.keys()].filter(name=>name.startsWith('ag-'))).toEqual([own]);
   const kept=hermes.settings.profiles.get(own)!;
-  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',levelConfig(1)]);
+  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',toolConfig()]);
   const asked=managed(hermes);
   for(const step of ['POST /api/profiles',`PUT /api/env`,`PUT /api/config`,'GET /api/model/options']) expect([1,2]).toContain(asked.filter(request=>request===step).length);
   expect(asked.filter(request=>request.startsWith('DELETE'))).toEqual([]);
@@ -985,7 +985,7 @@ test('integration: a profile that cannot be made, still offers a toolset that mu
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer',hermes:install,engineFor})).toEqual({conversation});
    expect(await closeOpenRuns(service,{hermes:install,conversation,engineFor})).toBe(1);
    const [agent]=madeBy(conversation,lead);
-   expect(agent,why).toMatchObject({profile,derived:true,tools_level:null});
+   expect(agent,why).toMatchObject({profile,derived:true,tools_confirmed:null});
    expect(managed(hermes).filter(request=>request.startsWith('DELETE')),why).toEqual([]);
    const theirs=randomUUID();
    expect(await sendMessage(person,service,{person:omar,company,conversation:theirs,sendKey:randomUUID(),agent:agent.id,message:'Write about the tax diploma',hermes:install,engineFor})).toEqual({conversation:theirs});
@@ -1011,7 +1011,7 @@ test('integration: an Agent moved to its own profile keeps its Conversation, and
   expect(await sendMessage(person,service,{person:omar,company,conversation:asked,sendKey:randomUUID(),agent:lead,message:'I want the ready-made writer',hermes:install,engineFor})).toEqual({conversation:asked});
   expect(await closeOpenRuns(service,{hermes:install,conversation:asked,engineFor})).toBe(1);
   const [agent]=madeBy(asked,lead);
-  expect(agent).toMatchObject({profile,tools_level:null});
+  expect(agent).toMatchObject({profile,tools_confirmed:null});
   const own=`ag-${agent.id.replaceAll('-','')}`;
   const theirs=randomUUID();
   query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${theirs}','${company}','${omar}','${agent.id}','Writer')`);

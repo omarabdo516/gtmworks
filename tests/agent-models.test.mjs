@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readProfileModels, writeProfileModel, readModels, readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/hermes.mjs';
 import { readSettings, writeSetting, readCompanyModels, changeCompanySetting, changeCompanySettings } from '../lib/engine-settings.mjs';
 import { readCompanyKeys } from '../lib/provider-keys.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #29: the Company's default model and each Agent's own, written to its own Engine profile (ADR 0016, the profile is the

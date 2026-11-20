@@ -144,6 +144,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   const disabled=settings.ignoreDisabled?[]:config?.agent?.disabled_toolsets||[];
   return configurable.filter(name=>listed.includes(name)&&!disabled.includes(name));
  };
+ // An Engine that lists a profile's MCP servers beside the configurable toolsets, as toolsets.py's registry resolves one
+ // to `mcp-<server>` (a server with `enabled:false` is off). The pinned release leaves them out of /v1/toolsets; this is
+ // the shape a later one that lists them answers with (#391).
+ const appToolsets=config=>Object.entries(config?.mcp_servers||{}).filter(([,server])=>server&&typeof server==='object'&&server.enabled!==false).map(([name])=>({name:`mcp-${name}`,enabled:true}));
  const merge=(base,over)=>{ const out={...base}; for(const [key,value] of Object.entries(over||{})) out[key]=value&&typeof value==='object'&&!Array.isArray(value)&&base?.[key]&&typeof base[key]==='object'?merge(base[key],value):value; return out; };
  // The description and category a SKILL.md's front matter gives it, as the Engine lists them.
  const skillHeader=content=>{
@@ -177,7 +181,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(status!==200) return send(response,status,{error:{message:request.headers.authorization}});
    const toolsetsPath=request.url.match(/^\/p\/([^/]+)\/v1\/toolsets$/);
    if(toolsetsPath&&!profileOf(decodeURIComponent(toolsetsPath[1]))&&settings.unknownProfiles.includes(decodeURIComponent(toolsetsPath[1]))) return send(response,404,{error:'Unknown or unconfigured profile'});
-   if(toolsetsPath) { const enabled=enabledToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config); return send(response,200,{object:'list',platform:'api_server',data:configurable.map(name=>({name,enabled:enabled.includes(name)}))}); }
+   if(toolsetsPath) { const enabled=enabledToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config); return send(response,200,{object:'list',platform:'api_server',data:[...configurable.map(name=>({name,enabled:enabled.includes(name)})),...appToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config)]}); }
    const runPath=request.url.match(/^\/p\/[^/]+\/v1\/runs(?:\/([^/]+))?$/);
    if(runPath&&request.method==='POST'&&!runPath[1]) {
     const key=request.headers['idempotency-key'];

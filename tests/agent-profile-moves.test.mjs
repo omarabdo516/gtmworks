@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { levelConfig, toolPolicy, companyProfile } from '../lib/agent-levels.mjs';
+import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
@@ -15,7 +15,7 @@ const company='10000000-0000-0000-0000-000000000001';
 const [writer,critic]=['a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'];
 const own=agent=>`ag-${agent.replaceAll('-','')}`;
 const hermes={address:'http://hermes:8642',profile:'default',key:'test-only-key'};
-const row=(agent,extra={})=>({agent_id:agent,company_id:company,profile:own(agent),agent_level:2,instructions:`You are ${agent}.`,recorded:false,...extra});
+const row=(agent,extra={})=>({agent_id:agent,company_id:company,profile:own(agent),instructions:`You are ${agent}.`,subagents:false,recorded:false,...extra});
 
 // The worker's database: the work it lists, and every call it gets, in order, in `log`, which the driver shares, with
 // its arguments in `calls`. `begun` is what begin_agent_profile_move answers; `fail` names a call refused for one Agent.
@@ -41,9 +41,9 @@ test('the worker begins, has the Agent\'s own profile provided, records its tool
  assert.deepEqual(db.log,['agent_move_work',
   `begin_agent_profile_move ${writer}`,`provideAgent ${own(writer)}`,`record_agent_profile ${writer}`,`move_agent_profile ${writer}`,
   `provideAgent ${own(critic)}`,`record_agent_profile ${critic}`,`move_agent_profile ${critic}`]);
- assert.deepEqual(asked[0],{name:own(writer),instructions:`You are ${writer}.`,level:2});
+ assert.deepEqual(asked[0],{name:own(writer),instructions:`You are ${writer}.`});
  assert.match(asked[1].instructions,/^You are a marketing agent working for one company in gtmworks\./,'an Agent with no instructions gets the Company profile\'s soul');
- assert.deepEqual(db.calls.filter(call=>call.name==='record_agent_profile').map(call=>call.args),[writer,critic].map(agent=>({agent,engine_profile:own(agent),level:2,policy:toolPolicy})));
+ assert.deepEqual(db.calls.filter(call=>call.name==='record_agent_profile').map(call=>call.args),[writer,critic].map(agent=>({agent,engine_profile:own(agent),subagents_written:false})));
  assert.deepEqual(await moveAgentProfiles(db,{hermes:null,driver}),{moved:0});
 });
 
@@ -98,7 +98,7 @@ test('on the Engine server a move asks about the Agent\'s own profile only: noth
   assert.deepEqual(fake.settings.managementRequests.find(request=>request.method==='POST').body,{name:own(writer),soul:`You are ${writer}.`},'made, never cloned');
   assert.ok(requests.includes(`GET /api/model/options?profile=${own(writer)}`),'the Engine is asked whether the Agent\'s own profile can answer');
   assert.deepEqual(fake.settings.profiles.get(kept),before,'the keeper\'s profile is as it was');
-  assert.deepEqual(fake.settings.profiles.get(own(writer)).config,levelConfig(2));
+  assert.deepEqual(fake.settings.profiles.get(own(writer)).config,toolConfig());
  } finally { await fake.close(); }
 });
 

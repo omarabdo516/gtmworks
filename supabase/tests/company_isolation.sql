@@ -40,7 +40,7 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('company_key_unfinished', $${"profiles": "array['co-' || md5('isolation')]"}$$),
  ('company_log', $${"actor_kind": "'person'", "actor_id": "'e3370000-0000-0000-0000-000000000001'", "source": "'company_audit'",
    "subject": "'company'"}$$),
- ('company_profiles', $${"profile": "'co-' || md5('isolation')", "tools_level": "1"}$$),
+ ('company_profiles', $${"profile": "'co-' || md5('isolation')", "tools_confirmed": "true"}$$),
  ('conversation_attachments', $${"conversation_id": "'e3370000-0000-0000-0000-00000000000c'",
    "path": "'10000000-0000-0000-0000-000000000001/conversations/e3370000-0000-0000-0000-00000000000c/isolation'"}$$),
  ('conversation_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),

@@ -23,7 +23,7 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
-const {companyProfile,levelConfig,alwaysOff,riskyToolsets,toolPolicy}=await import(`${process.cwd()}/lib/agent-levels.mjs`);
+const {companyProfile,toolConfig,noAgentGets,sandboxTools,fixedToolsets,forbiddenOf}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
 const {provideProfile}=await import(`${process.cwd()}/lib/hermes.mjs`);
 const {writeProof,writeName}=await import(`${process.cwd()}/lib/install-proof.mjs`);
@@ -56,14 +56,16 @@ const pointAtFakeModel=async(engine,profile)=>{
 const credentials={email:process.env.PROOF_EMAIL||'proxy-owner@example.com',password:process.env.PROOF_PASSWORD||'proxy-owner-password'};
 const signedIn=async(email=credentials.email,password=credentials.password)=>{ const person=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options); await checked(person.auth.signInWithPassword({email,password})); return person; };
 const profileOf=async(person,agent)=>{ const [found]=await checked(person.from('hermes_agents').select('profile').eq('id',agent)); return found?.profile; };
-// A profile's saved config turns the dangerous toolsets off, and its Run API offers none of them; the marketing tools stay.
+// A profile's saved config offers the one fixed set of tools every Agent gets, and its Run API agrees; no tool no Agent
+// gets is on, and in this ticket the sandbox's tools are still held back.
 const checkProfile=async(engine,profile)=>{
  const config=await (await manage(engine,`/api/config?profile=${encodeURIComponent(profile)}`)).json();
- for(const off of ['terminal','file','code_execution']) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${profile} disables ${off}`);
+ const configOff=[...noAgentGets,...sandboxTools];
+ for(const off of configOff) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${profile} disables ${off}`);
  const toolsets=await (await fetch(`${engine.address}/p/${encodeURIComponent(profile)}/v1/toolsets`,{headers:{Authorization:`Bearer ${engine.key}`}})).json();
  const enabled=toolsets.data.filter(toolset=>toolset.enabled).map(toolset=>toolset.name);
- assert.deepEqual(riskyToolsets.filter(name=>enabled.includes(name)),[],`${profile} offers no terminal, file or code tools`);
- assert.ok(enabled.includes('web')&&enabled.includes('memory'),`${profile} keeps its marketing tools`);
+ assert.deepEqual(forbiddenOf(enabled),[],`${profile} offers no tool no Agent gets`);
+ assert.deepEqual([...enabled].sort(),[...fixedToolsets()].sort(),`${profile} offers exactly the fixed set`);
 };
 const spaceOf=entry=>`cs-${entry.company.replaceAll('-','')}`;
 const shown=entry=>({company:entry.company,profile:entry.profile,space:entry.space,agent:entry.agent,second:entry.secondProfile});
@@ -181,7 +183,7 @@ try {
   // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
   // stores nothing, so the same send is made again until it is ready (#282).
   const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message};
-  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(client,service,send); return result.error==='conversationAgentLevelPending'?null:result; },180);
+  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(client,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
   assert.deepEqual(sent,{conversation});
   const answer=await until(`reply on ${label}`,async()=>(await checked(client.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
   assert.ok(answer.body.includes(reply),answer.body);
@@ -210,11 +212,11 @@ try {
  const [{run_id:secondRun}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',other.conversation).eq('author','person'));
  const call='install-second';
  const plan=await checked(service.rpc('lead_agent_profile',{conversation:other.conversation,run:secondRun,call,instructions:null}));
- assert.ok(plan?.profile&&plan.level,JSON.stringify(plan));
- const provided=await provideProfile({...otherEngine},{name:plan.profile,soul:agentSoul(plan.soul),config:levelConfig(plan.level),forbidden:alwaysOff});
+ assert.ok(plan?.profile,JSON.stringify(plan));
+ const provided=await provideProfile({...otherEngine},{name:plan.profile,soul:agentSoul(plan.soul),config:toolConfig(),forbidden:toolConfig().agent.disabled_toolsets});
  assert.equal(provided.state,'configured',plan.profile);
  await pointAtFakeModel(otherEngine,plan.profile);
- const second=await checked(service.rpc('lead_create_agent',{conversation:other.conversation,run:secondRun,call,agent_name:'Install second',job:'Writes the install check.',apps:[],template:null,instructions:null,own_level:plan.level,own_policy:toolPolicy}));
+ const second=await checked(service.rpc('lead_create_agent',{conversation:other.conversation,run:secondRun,call,agent_name:'Install second',job:'Writes the install check.',apps:[],template:null,instructions:null,own_profile:true}));
  assert.equal(second.state,'created');
  await until(`${plan.profile} recorded for its Agent`,async()=>await profileOf(person,second.agent)===plan.profile,180);
  other.second=second.agent; other.secondProfile=plan.profile;
@@ -346,7 +348,7 @@ for(let index=1;index<=10;index++) {
  let profile;
  // The Engine may take a moment to serve a new profile's Run API; each attempt finishes the same profile, never clones.
  for(let attempt=1;attempt<=20;attempt++) {
-  profile=await provideProfile({...firstEngine},{name,soul:'An Agent profile the install check made for capacity.',config:levelConfig(1),forbidden:alwaysOff,noSkills:marker==='no-skills'});
+  profile=await provideProfile({...firstEngine},{name,soul:'An Agent profile the install check made for capacity.',config:toolConfig(),forbidden:toolConfig().agent.disabled_toolsets,noSkills:marker==='no-skills'});
   if(profile.state==='configured') break;
   await new Promise(resolve=>setTimeout(resolve,1000));
  }
@@ -362,7 +364,7 @@ try {
  await pointAtFakeModel(firstEngine,first.profile);
  const person=await signedIn();
  const conversation=randomUUID();
- const sent=await until('the first Agent ready for a run',async()=>{ const result=await sendMessage(person,service,{person:first.person??(await person.auth.getUser()).data.user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:'مرحباً، اكتب عنواناً قصيراً.'}); return result.error==='conversationAgentLevelPending'?null:result; },180);
+ const sent=await until('the first Agent ready for a run',async()=>{ const result=await sendMessage(person,service,{person:first.person??(await person.auth.getUser()).data.user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:'مرحباً، اكتب عنواناً قصيراً.'}); return result.error==='conversationAgentToolsPending'?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until('the first Agent still answers',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);

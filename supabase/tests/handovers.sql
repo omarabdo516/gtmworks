@@ -3,19 +3,19 @@ create extension if not exists pgtap with schema extensions;
 select plan(53);
 -- #317. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor (…03) is
 -- shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads.
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy,skills_shared) values
- ('a3170000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy(),true),
- ('a3170000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy(),true),
- ('a3170000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000003',1,public.engine_tool_policy(),true);
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed,skills_shared) values
+ ('a3170000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',true,true),
+ ('a3170000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',true,true),
+ ('a3170000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000003',true,true);
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile,instructions) values
  ('a3170000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','f3170000-0000-0000-0000-000000000011','Lead','General',true,'co-10000000000000000000000000000001','Lead the team.'),
  ('a3170000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001','f3170000-0000-0000-0000-000000000012','Ads','Ads',false,'ag-a3170000000000000000000000000012','Run the Meta ads.'),
  ('a3170000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001','f3170000-0000-0000-0000-000000000013','Writer','SEO',false,'ag-a3170000000000000000000000000013','Write for search.'),
  ('a3170000-0000-0000-0000-000000000021','10000000-0000-0000-0000-000000000003','f3170000-0000-0000-0000-000000000021','Lead','General',true,'co-10000000000000000000000000000003','Lead another team.'),
  ('a3170000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000003','f3170000-0000-0000-0000-000000000022','Ads','Ads',false,'ag-a3170000000000000000000000000022','Run another team''s ads.');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true),
- ('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true),
+ ('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',true,true);
 insert into public.member_agent_access(company_id,person_id,agent_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000012');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readSkills, writeSkill, setSkillEnabled, readLearningGraph } from '../lib/hermes.mjs';
 import { readCompanySkills, readAgentSkills, changeCompanySkill, changeCompanySkillEnabled } from '../lib/company-skills.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // The service behind the skills screen (#343, ADR 0011, ADR 0016): skills live only in Hermes. Each Agent's skills are

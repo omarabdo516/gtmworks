@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig, readSkills, readLearningGraph } from '../lib/hermes.mjs';
 import { readAgentSettings, changeLearningMode, learningModeOf } from '../lib/engine-settings.mjs';
 import { readCompanyLearning } from '../lib/company-learning.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // The Learning section (#28): the Company's mode is the Engine's memory.write_approval and skills.write_approval written

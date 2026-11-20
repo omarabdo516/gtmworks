@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readConfig, readSavedConfig, writeConfig, readVoices, speakText } from '../lib/hermes.mjs';
 import { readAgentVoice, changeAgentVoice, speakAgentSample, voiceSpeeds, voiceLanguages, voiceSample } from '../lib/agent-voice.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #162: an Agent's voice is its own Engine profile's settings. The database says which profile is the Agent's and whether
