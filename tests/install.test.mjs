@@ -23,7 +23,8 @@ test('CI prints the captured update log on every failed-update assertion', t => 
  const lines=step.run.split('\n');
  const definitions=lines.filter(line=>/^fail\(\) \{|^fail_update\(\) \{/.test(line));
  const start=lines.findIndex(line=>line.startsWith('if sh scripts/install.sh update'));
- const end=lines.findIndex(line=>line.startsWith('trap - EXIT'));
+ // The block is the rollback area's end (#389): it closes at that function's own brace.
+ const end=lines.findIndex((line,index)=>index>start&&line==='}');
  assert.ok(start>=0&&start<end,'the proof has the failed-update block');
  const script=`${definitions.join('\n')}
 fail_prefix='install check failed: '

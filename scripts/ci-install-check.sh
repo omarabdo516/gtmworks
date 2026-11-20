@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # The install proof, one command of the repo (#402): each CI install job runs this file for its area on an isolated
 # Docker machine and holds no check of its own, and `./ci.sh install [area]` starts such a machine here and runs it.
-# Without an area the seven areas of spec #401 run one after another, then the profile-size measurement; with one, only
+# Without an area the eight areas (spec #401's seven and `rollback`, #389) run one after another, then the profile-size measurement; with one, only
 # that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat), `companies` (Companies
 # and their Engines), `agents` (Agents on their Engines), `backup` (backup and restore), `proxy` (the public address
-# behind a proxy), `update` (the update between releases), `one-line` (the one-line install) and `measure` (the
+# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `one-line` (the one-line install) and `measure` (the
 # profile-size measurement, on a push to main and a manual run only, never on a pull request, #408). Every area makes
 # the install, its first run, the Companies, the archives, the local registry and the release files it needs itself
 # (#406–#409), so no area needs another to have run. The helpers the areas share are in scripts/ci-install-lib.sh,
@@ -481,11 +481,12 @@ docker run --rm --network host --add-host app.gtmworks.test:127.0.0.1 -v "$PWD/c
 # and leaves the old release serving, then a release install of the last release before the Engines from its two files,
 # its update to this release and to the next, the backup that release's installer made restored onto this release
 # (#378, C3), and the update that pins another Engine image.
-update() {
+# rollback: this release's installer rolls a failed migration back and leaves the release it was running serving. Its own
+# area since the work sandbox image (#389) made the update area's whole run longer than its 12 minutes: it needs only a
+# source install, none of the releases the update area makes.
+rollback() {
 cd "$root"
 area_setup
-# The area makes its own source install (#406): the failed update at the start proves this release's installer rolls a
-# failed migration back and leaves the release it was running serving.
 reset_install
 install_source source-install.log || fail 'source install before the failed update'
 old_web=$(compose ps -q web)
@@ -496,13 +497,16 @@ grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_upd
 [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail_update 'migration transaction rolled back'
 status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/health) || fail_update 'old version health request'
 [[ $status == 200 ]] || fail_update 'old version healthy after failed update'
-# The failed update ends this area's step: its summary does not print for the release and one-line checks below, which
-# also started in the checkout root and without pipefail, as their own steps did.
+}
+
+# update: the update between releases, from the last release before the Engines to this one and the next. Its summary
+# does not print, and it runs without pipefail, as the release checks always did.
+update() {
+cd "$root"
+reset_install
 trap - EXIT
 set +o pipefail
 fail_prefix='release install check failed: '
-compose down -v || fail 'remove the source install'
-remove_engine
 start_registry
 # The previous release is the last one before each Company got its own Engine (spec #378): its own schema (no Engine
 # record, no companies.engine_id), its own one `hermes` service, and its own key in .env.install. It is a fixed commit,
@@ -919,17 +923,18 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$engine_id" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine holds none of gtmworks's keys and passwords after the capacity profiles"
 }
 
-# The area named by the one argument, or all seven in the order the proof has always run them, then the measurement
+# The area named by the one argument, or all eight in the order the proof has always run them, then the measurement
 # (#406, #408). A CI job names one area; `./ci.sh install` without one still runs the whole proof. Each area of `all` runs
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (update); (one_line); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (one_line); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
  backup) backup;;
  proxy) proxy;;
+ rollback) rollback;;
  update) update;;
  one-line) one_line;;
  measure) measure;;

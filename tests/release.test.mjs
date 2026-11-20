@@ -372,7 +372,7 @@ test('CI updates a release install on a real database, applying a new migration 
   /registry:2\.8\.3/,
   /docker tag "\$\(web_image_tag\)" localhost:5000\/gtmworks:0\.0\.0-ci/,
   // The work sandbox image the source install built is pushed beside the app image and pinned in every release file (#392).
-  /docker tag "\$\(cat \.work-sandbox-image\)" localhost:5000\/gtmworks-sandbox:0\.0\.0-ci/,
+  /docker tag gtmworks-work-sandbox:local localhost:5000\/gtmworks-sandbox:0\.0\.0-ci/,
   /sandbox=\$\(publish_sandbox 0\.0\.0-ci\)/,
   // The previous release is the last one before the Engines, a fixed commit rather than this pull request's base or
   // origin/main (#378, C1), built and installed from its own two release files; the next release carries one migration

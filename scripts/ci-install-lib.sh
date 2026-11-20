@@ -130,7 +130,9 @@ publish_releases() {
   docker tag "$(web_image_tag)" localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'
   first=$(publish 0.0.0-ci) || fail 'push this release image'
   # Every release file below pins the work sandbox image too (#392); `sandbox` stays set for the area's later releases.
-  docker tag "$(cat .work-sandbox-image)" localhost:5000/gtmworks-sandbox:0.0.0-ci || fail 'tag the work sandbox image'
+  # The tag a source install builds the image under, which CI also loads it under (scripts/install.sh work_sandbox_tag):
+  # an area may make its releases before it installs anything.
+  docker tag gtmworks-work-sandbox:local localhost:5000/gtmworks-sandbox:0.0.0-ci || fail 'tag the work sandbox image'
   sandbox=$(publish_sandbox 0.0.0-ci) || fail 'push the work sandbox image'
   node scripts/release-assets.mjs "$first" release-first "$sandbox" || fail 'this release files'
   docker build -q -t localhost:5000/gtmworks:0.0.1-ci - > /dev/null <<'DOCKERFILE' || fail 'build the next release image'

@@ -573,7 +573,7 @@ jobs:
       # Every area runs to its end, so one red area still shows the others' faults (#406).
       fail-fast: false
       matrix:
-        area: [first-install, companies, agents, backup, proxy, update, one-line]
+        area: [first-install, companies, agents, backup, proxy, rollback, update, one-line]
     # 9.5 min measured for its slowest area, backup, on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:

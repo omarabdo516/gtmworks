@@ -114,10 +114,11 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   matrix entry per area of the repo's proof, each on a fresh isolated Docker machine of its own and named for its area
   (#406): `install-first-install` (the first install and its repeat), `install-companies` (Companies and their Engines,
   #407), `install-agents` (Agents on their Engines, #408), `install-backup` (backup and restore, #409),
-  `install-proxy` (the public address behind a proxy), `install-update` (the update between releases) and
+  `install-proxy` (the public address behind a proxy), `install-rollback` (a failed update rolled back, #389),
+  `install-update` (the update between releases) and
   `install-one-line` (the one-line install). Each entry is one command of the repo, `bash scripts/ci-install-check.sh
   <area>`; here `./ci.sh install first-install`, `./ci.sh install companies`, `./ci.sh install agents`,
-  `./ci.sh install backup`, `./ci.sh install proxy`, `./ci.sh install update` and `./ci.sh install one-line` each run one
+  `./ci.sh install backup`, `./ci.sh install proxy`, `./ci.sh install rollback`, `./ci.sh install update` and `./ci.sh install one-line` each run one
   area, and `./ci.sh install` runs the whole proof (`docs/agents/checks.md`) — and holds no check of its own, so a red
   entry's name is the area that failed and fail-fast is off: one red area leaves the others running to their end. A new area is one more
   matrix entry and one more case of the script. Every area is independent: each makes the install, its first run, the

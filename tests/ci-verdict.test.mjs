@@ -121,13 +121,13 @@ test('the install proof is red when one area failed or was cancelled, green when
   for (const run of [undefined, '', 'true']) assert.equal(verdict({ INSTALL_RUN: run, INSTALL_RESULT: 'skipped' }), 1, String(run));
 });
 
-test('the install job runs as one matrix of seven areas on a fresh Docker machine each, and check reads its one result (#406)', async () => {
+test('the install job runs as one matrix of eight areas on a fresh Docker machine each, and check reads its one result (#406)', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
   const { install, check } = jobs;
   assert.equal(install.name, 'install-${{ matrix.area }}');
-  assert.deepEqual(install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'update', 'one-line'] } });
+  assert.deepEqual(install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'one-line'] } });
   assert.deepEqual(install.needs, ['changes', 'image']);
   assert.ok(check.needs.includes('install'), 'the required check waits for the proof');
   const env = check.steps.at(-1).env;
