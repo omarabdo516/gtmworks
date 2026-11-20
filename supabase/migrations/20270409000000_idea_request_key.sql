@@ -1,6 +1,6 @@
 -- #452: an idea from the Ideas column is made once per request key, as a request from New is (20261117000000_card_requests):
--- a second press of Add, or a retry after an answer that never arrived, returns the Card the first one made. The 'create'
--- payload that names an Agent and no message is an idea; everything else in agent_write is as 20270103000000 left it.
+-- a second press of Add, or a retry after an answer that never arrived, returns the Card the first one made. An idea is
+-- op 'idea', with its stage, title and Agent in the payload; everything else in agent_write is as 20270103000000 left it.
 create or replace function public.agent_write(c uuid, request_key text, fingerprint text, op text, card bigint, payload jsonb) returns jsonb language plpgsql security invoker set search_path='' as $$
 declare existing public.agent_requests%rowtype; result jsonb; created bigint; ev text := payload->>'evidence'; begin
  if length(request_key)<1 or length(request_key)>200 then raise exception 'invalid idempotency key'; end if;
@@ -15,9 +15,9 @@ declare existing public.agent_requests%rowtype; result jsonb; created bigint; ev
  case op
  when 'create' then
   if payload ? 'message' then created=public.create_card_request(c,payload->>'message',(payload->>'agent')::uuid,payload->>'mode');
-  elsif payload ? 'agent' then created=public.create_work_card(c,(payload->>'stage')::bigint,payload->>'title',(payload->>'agent')::uuid);
   else created=public.create_work_card(c,(payload->>'stage')::bigint,payload->>'title',coalesce(payload->>'template',''),ev); end if;
   result=jsonb_build_object('id',created);
+ when 'idea' then created=public.create_work_card(c,(payload->>'stage')::bigint,payload->>'title',(payload->>'agent')::uuid); result=jsonb_build_object('id',created);
  when 'move' then perform public.move_work_card(c,card,(payload->>'stage')::bigint,ev); result='{}'::jsonb;
  when 'edit' then perform public.edit_work_card(c,card,payload->'fields',ev); result='{}'::jsonb;
  else

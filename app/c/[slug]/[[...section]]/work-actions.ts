@@ -62,7 +62,7 @@ export const addIdea=withActionLog('addIdea',async function addIdea(form: FormDa
  const db=await supabase(); const company=String(form.get('company'));
  if(!await actionAllowed(db,'addIdea',company)) return {failed:true};
  const payload={stage:Number(form.get('stage')),title:String(form.get('title')||''),agent:String(form.get('agent')||'')};
- const {data,error}=await db.rpc('agent_write',{c:company,request_key:String(form.get('key')||''),fingerprint:fingerprint('POST','ideas',JSON.stringify(payload)),op:'create',card:null,payload});
+ const {data,error}=await db.rpc('agent_write',{c:company,request_key:String(form.get('key')||''),fingerprint:fingerprint('POST','ideas',JSON.stringify(payload)),op:'idea',card:null,payload});
  if(error||!data?.id) { logActionFailure('addIdea',error||{message:'no card'},{form}); return {failed:true}; }
  revalidatePath(`/c/${String(form.get('slug'))}`,'layout');
  return {card:Number(data.id)};

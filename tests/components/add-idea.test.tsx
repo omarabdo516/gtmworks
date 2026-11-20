@@ -176,6 +176,38 @@ test('a retry after an answer that never came sends the same request key, so the
  expect(second.key).toBe(first.key);
 });
 
+test('an idea edited after an answer that never came is sent again under a new request key (#452)', async () => {
+ const addIdea = vi.fn<(form: FormData) => Promise<{ card: number }>>().mockRejectedValueOnce(new Error('lost')).mockResolvedValueOnce({ card: 9 });
+ const props = withAgents({ addIdea });
+ const screen = await showWork(props);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.element(screen.getByRole('alert')).toBeVisible();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the next cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.poll(() => ideasSent(props).length).toBe(2);
+ const [first, second] = ideasSent(props);
+ expect(second.key).not.toBe(first.key);
+ expect(second.title).toBe('A post about the next cohort');
+});
+
+test('another Agent after an answer that never came is sent again under a new request key (#452)', async () => {
+ const addIdea = vi.fn<(form: FormData) => Promise<{ card: number }>>().mockRejectedValueOnce(new Error('lost')).mockResolvedValueOnce({ card: 9 });
+ const props = withAgents({ addIdea });
+ const screen = await showWork(props);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.element(screen.getByRole('alert')).toBeVisible();
+ await userEvent.selectOptions(screen.getByLabelText('Agent'), 'h-ads');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.poll(() => ideasSent(props).length).toBe(2);
+ const [first, second] = ideasSent(props);
+ expect(second.key).not.toBe(first.key);
+ expect(second.agent).toBe('h-ads');
+});
+
 test('Add pressed twice while the first is on its way sends one idea', async () => {
  let answer!: (result: { card: number }) => void;
  const props = withAgents({ addIdea: vi.fn(() => new Promise<{ card: number }>(resolve => { answer = resolve; })) });

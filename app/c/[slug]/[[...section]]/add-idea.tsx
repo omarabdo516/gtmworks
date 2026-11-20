@@ -9,8 +9,9 @@ import type { AddIdeaAction } from './work';
 // back onto the column's "+".
 export default function AddIdea({company,slug,stage,agents,preferred,addIdea,onClose}:{company:string,slug:string,stage:number,agents:{id:string,name:string}[],preferred?:string,addIdea:AddIdeaAction,onClose:()=>void}) {
  const {t}=useI18n(); const router=useRouter();
- // One request key per opened form: Add pressed twice, or a retry after a lost answer, is one Card (#452).
- const [key]=useState(()=>crypto.randomUUID());
+ // The request key belongs to the idea's words and Agent (#452): the same unchanged idea retried, or Add pressed twice,
+ // is one Card, while an idea the person edits is a new one, since the server refuses a key reused with another idea.
+ const [key,setKey]=useState(()=>crypto.randomUUID());
  const [title,setTitle]=useState('');
  const [agent,setAgent]=useState(preferred&&agents.some(choice=>choice.id===preferred)?preferred:agents[0]?.id||'');
  const [error,setError]=useState(false);
@@ -41,12 +42,12 @@ export default function AddIdea({company,slug,stage,agents,preferred,addIdea,onC
   onKeyDown={event=>{ if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); close(); } }}>
   <label htmlFor="idea-title">{t('ideaLabel')}</label>
   <input ref={input} id="idea-title" type="text" autoComplete="off" dir={title?'auto':undefined} placeholder={t('ideaPlaceholder')} aria-describedby="idea-err"
-   aria-invalid={error||undefined} value={title} onChange={event=>{ setTitle(event.target.value); setFailed(false); if(event.target.value.trim()) setError(false); }}
+   aria-invalid={error||undefined} value={title} onChange={event=>{ setTitle(event.target.value); setKey(crypto.randomUUID()); setFailed(false); if(event.target.value.trim()) setError(false); }}
    onKeyDown={event=>{ if(event.key==='Enter'&&!event.nativeEvent.isComposing) { event.preventDefault(); send(); } }}/>
   <span className="add-idea__err" id="idea-err" hidden={!error}>{t('ideaNeedsText')}</span>
   {failed&&<span className="add-idea__err" role="alert">{t('ideaFailed')}</span>}
   <label htmlFor="idea-agent">{t('cardAgent')}</label>
-  <select id="idea-agent" value={agent} onChange={event=>{ setAgent(event.target.value); setFailed(false); }} disabled={!agents.length}>{agents.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
+  <select id="idea-agent" value={agent} onChange={event=>{ setAgent(event.target.value); setKey(crypto.randomUUID()); setFailed(false); }} disabled={!agents.length}>{agents.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
   <div className="add-idea__row">
    <button type="submit" className="btn btn--primary btn--sm" disabled={!agents.length||pending}>{t('ideaAdd')}</button>
    <button type="button" className="btn btn--secondary btn--sm" onClick={close}>{t('cancel')}</button>
