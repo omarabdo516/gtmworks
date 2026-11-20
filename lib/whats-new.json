@@ -1,5 +1,11 @@
 [
  {
+  "issue": 458,
+  "date": "2026-11-20",
+  "en": { "title": "Any tool that speaks MCP", "body": "The apps list now has every app the engine ships and gtmworks's ready-made marketing tools, and an Owner can add any MCP server by its address with no sign-in, a token, or a sign-in. Every app gives an Agent all its tools." },
+  "ar": { "title": "أي أداة بتتكلم MCP", "body": "قايمة التطبيقات بقى فيها كل تطبيق المحرك بيجي بيه وأدوات التسويق الجاهزة من gtmworks، وصاحب الشركة يقدر يضيف أي سيرفر MCP بعنوانه، من غير دخول أو بتوكن أو بتسجيل دخول. وكل تطبيق بيدي الوكيل كل أدواته." }
+ },
+ {
   "issue": 442,
   "date": "2026-11-20",
   "en": { "title": "Update ready", "body": "When a newer gtmworks is out, Owners see it at the foot of the sidebar with what it brings and the one command that installs it." },
