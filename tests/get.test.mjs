@@ -1223,19 +1223,24 @@ test('the line puts the updater in cron where systemd user units are missing, on
  const command=join(m.home,'.local/bin/gtmworks');
  const lines=m.crontab().split('\n').filter(Boolean);
  assert.equal(lines.length,1);
- assert.equal(lines[0],`* * * * * 'PATH=${m.env.PATH}' 'DOCKER_HOST=unix:///run/user/1000/docker.sock' '${command}' updater > /dev/null 2>&1 # gtmworks updater`);
+ assert.equal(lines[0],`* * * * * env 'PATH=${m.env.PATH}' 'DOCKER_HOST=unix:///run/user/1000/docker.sock' '${command}' updater > /dev/null 2>&1 # gtmworks updater`);
  // Run again, other lines of the table stay and the updater's is not doubled.
  writeFileSync(m.env.CRONTAB_FILE,`0 3 * * * backup-me\n${lines[0]}\n`);
  ok(m.gtmworks(['install']));
  assert.deepEqual(m.crontab().split('\n').filter(Boolean).map(line=>line.endsWith('# gtmworks updater')?'updater':line),['0 3 * * * backup-me','updater']);
  assert.match(m.gtmworks(['status']).stdout,/^Updater: cron, every minute$/m);
+ // The line runs: its command, as cron's shell runs it (with `%` unescaped), reaches the updater, which reads the row.
+ m.clearUpdates();
+ const cronCommand=m.crontab().split('\n').find(line=>line.endsWith('# gtmworks updater')).replace(/^(\S+ ){5}/,'').replace(/\\%/g,'%');
+ ok(spawnSync('/bin/sh',['-c',cronCommand],{env:{...m.env,PATH:'/usr/bin:/bin'},encoding:'utf8'}),'the cron line runs');
+ assert.deepEqual(m.updates(),['read ']);
 });
 
 test('a PATH with spaces and % reaches cron and systemd whole, each value quoted and % escaped', t => {
  const m=machine(t);
  const path=`${m.env.PATH}:/mnt/c/Program Files/Docker 100%`;
  ok(m.line(['--version','v1.2.3'],{extra:{PATH:path}}));
- assert.equal(m.crontab().trim(),`* * * * * 'PATH=${path.replace('%','\\%')}' '${join(m.home,'.local/bin/gtmworks')}' updater > /dev/null 2>&1 # gtmworks updater`);
+ assert.equal(m.crontab().trim(),`* * * * * env 'PATH=${path.replace('%','\\%')}' '${join(m.home,'.local/bin/gtmworks')}' updater > /dev/null 2>&1 # gtmworks updater`);
  ok(m.gtmworks(['install'],{extra:{PATH:path,SYSTEMD_USER:'1'}}));
  assert.match(readFileSync(join(m.home,'.config/systemd/user/gtmworks-updater.service'),'utf8'),new RegExp(`^Environment="PATH=${path.replace('%','%%').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}"$`,'m'));
 });

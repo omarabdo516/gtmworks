@@ -896,7 +896,8 @@ install_updater() {
     fi
     say 'The gtmworks updater runs every minute (a systemd user timer): Update now, and automatic updates (gtmworks auto-update on).'
   elif command -v crontab > /dev/null 2>&1; then
-    entry="* * * * * $(printf '%s\n' "$environment" | while IFS= read -r pair; do printf '%s ' "$(quote "$pair")"; done | sed 's/%/\\%/g')$(quote "$command") updater > /dev/null 2>&1 # gtmworks updater"
+    # env runs the command with each quoted NAME=value: a quoted assignment alone would be read as the command's name.
+    entry="* * * * * env $(printf '%s\n' "$environment" | while IFS= read -r pair; do printf '%s ' "$(quote "$pair")"; done | sed 's/%/\\%/g')$(quote "$command") updater > /dev/null 2>&1 # gtmworks updater"
     # The table is read whole before it is written back: the other lines in it stay as they were.
     table=$(crontab -l 2> /dev/null | grep -vF '# gtmworks updater' || true)
     if ! { [ -z "$table" ] || printf '%s\n' "$table"; printf '%s\n' "$entry"; } | crontab - > /dev/null 2>&1; then

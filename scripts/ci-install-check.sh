@@ -941,7 +941,9 @@ grep -Fx 'Updater: cron, every minute' "$RUNNER_TEMP/updater-status.log" || fail
 # v0.0.1 is out: the Owner clicks Update now, and one run of the updater installs it, as the timer would.
 echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]' > "$releases/releases.json"
 [[ $(owner request) == requested ]] || fail "the Owner's request is recorded"
-gtmworks updater || { cat .gtmworks-updater.log; fail 'the updater runs the update'; }
+# The cron line itself runs it, as cron's shell would (its `\%` read back as `%`), not a command typed here.
+cron_command=$(grep -F '# gtmworks updater' "$CRONTAB_FILE" | sed -E 's/^([^ ]+ ){5}//; s/\\%/%/g')
+sh -c "$cron_command" || { cat .gtmworks-updater.log; fail 'the cron line runs the updater, which runs the update'; }
 [[ $(cat .install-release) == "$next" && $(cat .gtmworks-version) == v0.0.1 ]] || fail 'the updater installed the newest release of the channel'
 [[ $(state) == 'updated v0.0.1' ]] || fail 'the updater records the version it installed'
 [[ $(owner read) == 'updated v0.0.1 button-on' ]] || fail 'the Owner reads Updated to v0.0.1'
