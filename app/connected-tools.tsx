@@ -43,7 +43,7 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
   if(stateOf(tool)!=='missing') return;
   setError(''); set(tool.key,'connecting');
   const controller=new AbortController(); following.current.add(controller);
-  const result=await signInToApp({company,agent,app:tool.key,signal:controller.signal,openApp:key=>openSheet?.(null,key)});
+  const result=await signInToApp({company,agent,app:tool.key,signal:controller.signal,openApp:key=>openSheet?.(null,key,agent)});
   following.current.delete(controller);
   if(controller.signal.aborted) return;
   if('state' in result) { if(result.state==='manual') { set(tool.key,'missing'); return; } set(tool.key,'connected'); toast(t('connectConnected',tool.name)); void appsChanged(company,language); }

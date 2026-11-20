@@ -276,3 +276,19 @@ test('the sheet can open at one app\'s page from outside it', async () => {
   await screen.getByRole('button', { name: 'Open Klaviyo' }).click();
   await expect.element(screen.getByRole('heading', { name: 'Klaviyo' })).toBeVisible();
 });
+
+// The Agent that asked (a connect card or Connected tools of a non-main Agent) is the one picked on the app's page.
+function OpenerFor({ agent }: { agent: string }) {
+  const open = useAppsSheet();
+  return <button type="button" onClick={() => open?.(null, 'airtable', agent)}>Open Airtable</button>;
+}
+test('the sheet opened for an Agent picks that Agent on the app\'s page, not the main one', async () => {
+  const writer = '3a000000-0000-0000-0000-000000000012';
+  engine(items.map(item => item.key !== 'airtable' ? item : { ...item, agents: [...item.agents, { id: writer, name: 'Writer', connection: 'f0000000-0000-0000-0000-000000000012', main: false, own: true, state: 'off' as const }] }));
+  const screen = await render(<div className="gw"><LanguageProvider language="en">
+    <AppsSheetProvider company="c-for-agent" owner rtl={false}><OpenerFor agent={writer}/></AppsSheetProvider>
+  </LanguageProvider></div>);
+  await screen.getByRole('button', { name: 'Open Airtable' }).click();
+  await expect.element(screen.getByRole('checkbox', { name: /Writer/ })).toHaveAttribute('aria-checked', 'true');
+  await expect.element(screen.getByRole('checkbox', { name: /Lead/ })).toHaveAttribute('aria-checked', 'false');
+});

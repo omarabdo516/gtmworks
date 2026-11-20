@@ -492,6 +492,24 @@ test('a Test whose temporary server cannot be removed answers a failure, not its
  } finally { await fake.close(); }
 });
 
+test('an own server switched off for its only Agent keeps its address and card, comes back on, and Remove deletes it', async () => {
+ const fake=await fakeHermes();
+ try {
+  makeProfile(fake,companyProfile(company));
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none',hermes});
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'my-crm',action:'disconnect',hermes}),{status:200,body:{status:'off'}});
+  assert.deepEqual(serversOf(fake,companyProfile(company))['my-crm'],{url:'https://crm.example/mcp',enabled:false},'kept, switched off');
+  const card=(await readCompanyApps(omar.db,{company,hermes}))?.find(app=>app.key==='my-crm');
+  assert.equal(card?.state,'off','its card stays, off');
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'my-crm',action:'connect',hermes}),{status:200,body:{status:'connected'}});
+  assert.equal(serversOf(fake,companyProfile(company))['my-crm'].url,'https://crm.example/mcp','back on at the same address');
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,app:'my-crm',action:'disconnect',hermes}),{status:200,body:{status:'off'}});
+  assert.equal(serversOf(fake,companyProfile(company))['my-crm'],undefined,'Remove deletes it');
+ } finally { await fake.close(); }
+});
+
 test('connecting a made server uses its target Agent\'s own address, and refuses when the other profiles disagree', async () => {
  const fake=await fakeHermes();
  try {

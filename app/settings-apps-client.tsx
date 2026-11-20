@@ -111,16 +111,17 @@ const pollEvery=2000, pollFor=15*60*1000;
 type Run={queue:string[],following:string|null,done:string[],one:boolean};
 const idle:Run={queue:[],following:null,done:[],one:false};
 
-export function AppDetail(props:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean}) {
+export function AppDetail(props:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean,agent?:string}) {
  // The card that adds a server is a form, not a connection: it has no Agent state yet. Each view keeps its own hooks.
  return props.item.source==='own'?<OwnTool place={props.place} company={props.company} owner={props.owner} rtl={props.rtl} item={props.item} text={props.text}/>:<CatalogueDetail {...props}/>;
 }
-function CatalogueDetail({place,company,owner,rtl,item,text,failed}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean}) {
+function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFor}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean,agent?:string}) {
  const say=sayer(text); const router=useRouter(); const {language}=useI18n();
  const [run,setRun]=useState<Run>(idle); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
  const [token,setToken]=useState(''); const [values,setValues]=useState<Record<string,string>>({});
  const own=item.agents.filter(agent=>agent.own);
- const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [pickError,setPickError]=useState(false);
+ // The Agent that asked for the app (a connect card, its Connected tools) is the one picked, else the main Agent.
+ const [picks,setPicks]=useState<string[]>(()=>own.some(agent=>agent.id===askedFor)?[askedFor!]:own.filter(agent=>agent.main).map(agent=>agent.id)); const [pickError,setPickError]=useState(false);
  const [pending,startTransition]=useTransition();
  const focusNext=useRef<string|null>(null);
  const state=item.state; const on=state!=='off'; const waiting=run.following!==null;

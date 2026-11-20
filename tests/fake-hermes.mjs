@@ -648,10 +648,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     keepServers({...servers,[name]:cfg});
     return send(response,200,{name,transport:'http',url:body.url,auth:auth==='none'?null:auth,enabled:true,tools:null,source:'config',plugin:null});
    }
-   const server=url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)(?:\/(test|auth))?$/);
+   const server=url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)(?:\/(test|auth|enabled))?$/);
    if(server) {
     const name=decodeURIComponent(server[1]);
     if(!home||!servers[name]) return send(response,404,{detail:`Server '${name}' not found`});
+    if(server[2]==='enabled'&&request.method==='PUT') { keepServers({...servers,[name]:{...servers[name],enabled:Boolean(body?.enabled)}}); return send(response,200,{ok:true,name,enabled:Boolean(body?.enabled)}); }
     if(!server[2]&&request.method==='DELETE') { const rest={...servers}; delete rest[name]; keepServers(rest); return send(response,200,{ok:true}); }
     if(server[2]==='test'&&request.method==='POST') {
      if(settings.appsUnreachable.has(name)) return send(response,200,{ok:false,error:'Connection failed: /opt/data/mcp-tokens secret detail',tools:[]});

@@ -162,7 +162,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
  const connect:ConnectApps|undefined=record.connect&&{...record.connect,
   start:async(app,signal)=>{
    if(!agent) return {error:'connectFailed'};
-   const result=await signInToApp({company,agent,app,signal,openApp:key=>openSheet?.(null,key)});
+   const result=await signInToApp({company,agent,app,signal,openApp:key=>openSheet?.(null,key,agent)});
    if('state' in result) void appsChanged(company,language);
    return result;
   },
