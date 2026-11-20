@@ -87,4 +87,4 @@ export type ProfileKeyRemoval='removed'|'nothing'|'refused'|'unreachable'|'faile
 export function removeProviderKey(connection:import('./engine.mjs').EngineConnection,key:{space:string,profiles:string[],provider:string}):Promise<{state:'removed'|'nothing',profiles:Record<string,ProfileKeyRemoval>}|{state:'unknownProvider'|'refused'|'unreachable'|'failed',profiles:null}>;
 export type SpeechRead={provider:string|null,language:string|null,held:string[]};
 export function readSpeech(connection:import('./engine.mjs').EngineConnection,asked:{profiles:string[],envs:string[]}):Promise<{state:'found',profiles:Record<string,SpeechRead|null>}|{state:'unreachable'|'failed',profiles:null}>;
-export function writeSpeech(connection:import('./engine.mjs').EngineConnection,change:{profile:string,env:string,value?:string,config:object}):Promise<'written'|'invalid'|'refused'|'unreachable'|'failed'>;
+export function writeSpeech(connection:import('./engine.mjs').EngineConnection,change:{profile:string,env:string|null,value?:string,config:object}):Promise<'written'|'invalid'|'refused'|'unreachable'|'failed'>;

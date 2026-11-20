@@ -136,7 +136,7 @@ test('an Agent whose profile transcribes with Deepgram may listen in another Ara
   const hermes={address:fake.address,key:'test-only-key'};
   const read=await readAgentVoice(db,{company,agent:lead,driver:driverAt(fake),hermes});
   assert.equal(read?.speech,'deepgram');
-  assert.deepEqual(read?.languages,['ar','en','','ar-AE','ar-SA','ar-QA','ar-KW','ar-SY','ar-LB','ar-PS','ar-JO','ar-SD','ar-TD','ar-MA','ar-DZ','ar-TN','ar-IQ','ar-IR']);
+  assert.deepEqual(read?.languages,['ar','ar-AE','ar-SA','ar-QA','ar-KW','ar-SY','ar-LB','ar-PS','ar-JO','ar-SD','ar-TD','ar-MA','ar-DZ','ar-TN','ar-IQ','ar-IR','en'],'no detect: the Engine sends Deepgram English for it');
   assert.equal((await changeAgentVoice(db,{company,agent:lead,voice:{language:'ar-SA'},driver:driverAt(fake),hermes})).state,'written');
   assert.equal(saved(fake).stt.language,'ar-SA');
   assert.equal((await changeAgentVoice(db,{company,agent:lead,voice:{language:'ar-EG'},driver:driverAt(fake),hermes})).state,'invalid','Egyptian is plain Arabic on Deepgram');

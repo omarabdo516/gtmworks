@@ -1299,7 +1299,7 @@
   "settingsSpeechHint": "Every Agent writes down what you dictate with this provider, each in its own speaking language. The key goes to the agent engine and isn’t shown again.",
   "settingsSpeechInUse": "In use · a key is set",
   "settingsSpeechDeepgram": "Recommended for Arabic: Egyptian Arabic, with the other Arabic dialects to choose from.",
-  "settingsSpeechGroq": "Uses the same key as Groq’s models: removing it here removes it there too.",
+  "settingsSpeechGroq": "Uses the same key as Groq’s models: it stays for them when you stop using it here, and is removed under Model provider keys.",
   "settingsSpeechUse": "Use this",
   "settingsSpeechNone": "No provider yet, so voice dictation is off.",
   "settingsSpeechOwnerOnly": "Only the Owner chooses the provider and gives its key.",

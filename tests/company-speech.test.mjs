@@ -84,7 +84,9 @@ test('a switch takes the previous key away, except Groq\'s model key, and an Ara
  try {
   madeCompany(fake,one);
   const owner=sessions({owner:true});
+  profileOf(fake,one.main).config={stt:{language:''}};
   await change(owner,fake,{provider:'deepgram',intent:'set',value:key});
+  assert.equal(profileOf(fake,one.main).config.stt.language,'en','"detect" is English on Deepgram, as the Engine sends it');
   profileOf(fake,one.agents[0]).config.stt.language=deepgramArabic[1];
   profileOf(fake,one.agents[1]).config.stt.language='en';
   await change(owner,fake,{provider:'openai',intent:'set',value:key});
@@ -96,6 +98,12 @@ test('a switch takes the previous key away, except Groq\'s model key, and an Ara
   for(const name of all) {
    assert.equal(profileOf(fake,name).env.VOICE_TOOLS_OPENAI_KEY,undefined,name);
    assert.equal(profileOf(fake,name).env.GROQ_API_KEY,key,'Groq\'s key is also its models\' key, so a switch leaves it');
+  }
+  await change(owner,fake,{provider:'groq',intent:'set',value:key});
+  assert.deepEqual(await change(owner,fake,{intent:'remove'}),{status:200,body:{provider:null,missing:[]}});
+  for(const name of all) {
+   assert.equal(profileOf(fake,name).env.GROQ_API_KEY,key,'leaving Groq turns the provider off and keeps the models\' key');
+   assert.equal(profileOf(fake,name).config.stt.provider,'none');
   }
  } finally { await fake.close(); }
 });

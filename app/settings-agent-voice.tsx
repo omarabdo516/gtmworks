@@ -78,8 +78,8 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
    <div className="set-field"><label className="set-label" htmlFor="set-voice-lang">{t('settingsVoiceLang')}</label>
     <select className="set-input vc-select" id="set-voice-lang" value={speaking} aria-describedby="set-voice-lang-hint"
      onChange={event=>{ stop(); setDraftValue('voice.language',event.target.value); }}>
-     {(voice.languages??['ar','en','']).map(value=><option key={value||'detect'} value={value}>{languageLabel(value)}</option>)}
-     {!(voice.languages??['ar','en','']).includes(speaking)&&<option value={speaking}>{speaking}</option>}
+     {voice.languages.map(value=><option key={value||'detect'} value={value}>{languageLabel(value)}</option>)}
+     {!voice.languages.includes(speaking)&&<option value={speaking}>{languageLabel(speaking)}</option>}
     </select>
     <span className="set-hint" id="set-voice-lang-hint">{t('settingsVoiceLangHint')}</span></div>
    <div className="set-field"><label className="set-label" htmlFor="set-voice">{t('settingsVoice')}</label>
