@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { appByKey, appConfig } from '../lib/app-catalogue.mjs';
+import { appByKey } from '../lib/app-catalogue.mjs';
 import { appOrigin } from './lane.mjs';
 
 // #203, an Agent's connect card. RS Learning runs on its own profile in a fake Engine whose MCP catalogue and sign-ins
@@ -21,7 +21,7 @@ const profile=`co-${company.replaceAll('-','')}`;
 const lead=randomUUID();
 const reason='مش متوصل، فمقدرتش أعرف مين من الليدز اشترى فعلاً. لو وصّلته هقدر أحسب العائد بدقة.';
 let fake:Awaited<ReturnType<typeof fakeHermes>>;
-const installed=(key:string)=>({url:`https://mcp.${key}.example/mcp`,auth:'oauth',...appConfig(appByKey(key)!,`${appOrigin}/api/apps/callback/${key}`).mcp_servers[key]});
+const installed=(key:string)=>({url:`https://mcp.${key}.example/mcp`,auth:'oauth',enabled:true,oauth:{redirect_uri:`${appOrigin}/api/apps/callback/${key}`}});
 
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
@@ -80,7 +80,7 @@ test('the Owner connects the app from the card through the vendor\'s window: Con
  await expect(done.locator('.card__outcome')).toHaveText('Amplitude connected',{timeout:20000});
  await expect(page.locator('.toast').filter({hasText:'Amplitude connected'})).toBeVisible();
  await expect(done.getByRole('button')).toHaveCount(0);
- expect(fake.settings.profiles.get(profile)!.config.mcp_servers.amplitude.tools.include).toEqual([...appByKey('amplitude')!.readTools]);
+ expect('tools' in fake.settings.profiles.get(profile)!.config.mcp_servers.amplitude).toBe(false);
  await vendor.close();
  await expect.poll(appLog).toEqual([{actor_id:omar,action:'app_connected',app:'amplitude'}]);
  await page.reload();

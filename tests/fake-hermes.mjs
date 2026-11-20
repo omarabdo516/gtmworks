@@ -80,6 +80,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // server does not answer, and the OAuth sign-ins of apps (hermes_cli/web_routers/mcp.py): a sign-in's token stays on
   // disk when its server is removed, as in the pinned release. approveApps:false keeps a delivered sign-in waiting.
   catalog:['klaviyo','canva','notion','airtable','webflow','wordpress-com','amplitude','mixpanel','attio','close','calendly','figma','gamma','intercom'],
+  catalogAuth:/** @type {Record<string,'oauth'|'none'>} */({}),catalogEnv:/** @type {Record<string,{name:string,prompt:string,required:boolean}[]>} */({}),
+  serverTokens:/** @type {Map<string,string>} */(new Map()),
   appTools:/** @type {Record<string,string[]>} */({}),appsUnreachable:/** @type {Set<string>} */(new Set()),appTokens:/** @type {Set<string>} */(new Set()),approveApps:true,
   appFlows:/** @type {Map<string,{server:string,profile:string,status:string,state:string,redirect:string}>} */(new Map()),appCallbacks:/** @type {string[]} */([]),
   // Each profile's own Skills by name (their SKILL.md text), and the Skills each profile locked, as `profile:name`.
@@ -610,14 +612,34 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    const keepServers=next=>{ home.config={...home.config,mcp_servers:next}; if(scoped==='default') settings.defaultConfig=home.config; };
    if(url.pathname==='/api/mcp/catalog'&&request.method==='GET') {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
-    return send(response,200,{entries:settings.catalog.map(name=>({name,description:'',transport:'http',auth_type:'oauth',url:`https://mcp.${name}.example/mcp`,default_enabled:null,installed:Boolean(servers[name]),enabled:Boolean(servers[name])&&servers[name].enabled!==false})),diagnostics:[]});
+    return send(response,200,{entries:settings.catalog.map(name=>({name,description:'',transport:'http',auth_type:settings.catalogAuth[name]||'oauth',url:`https://mcp.${name}.example/mcp`,required_env:settings.catalogEnv[name]||[],default_enabled:null,installed:Boolean(servers[name]),enabled:Boolean(servers[name])&&servers[name].enabled!==false})),diagnostics:[]});
    }
    if(url.pathname==='/api/mcp/catalog/install'&&request.method==='POST') {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     if(!settings.catalog.includes(body?.name)) return send(response,404,{detail:`No catalog entry '${body?.name}'`});
-    // As Hermes leaves an OAuth entry it cannot probe yet: no tool filter, every tool on once signed in.
-    keepServers({...servers,[body.name]:{url:`https://mcp.${body.name}.example/mcp`,auth:'oauth',enabled:body.enable!==false}});
+    // As Hermes leaves an entry it cannot probe yet: no tool filter, every tool on once signed in.
+    const auth=settings.catalogAuth[body.name]||'oauth';
+    keepServers({...servers,[body.name]:{url:`https://mcp.${body.name}.example/mcp`,...(auth==='oauth'?{auth:'oauth'}:{}),enabled:body.enable!==false}});
     return send(response,200,{ok:true,name:body.name,background:false});
+   }
+   // The dashboard's own server routes (hermes_cli/web_routers/mcp.py): add a remote server by address, replace the whole
+   // map for a filter removal, and a summary shaped like _mcp_server_summary.
+   if(url.pathname==='/api/mcp/servers'&&['POST','PUT'].includes(request.method)) {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    if(request.method==='PUT') {
+     if(!body?.servers||typeof body.servers!=='object'||Array.isArray(body.servers)) return send(response,400,{detail:'servers'});
+     keepServers(body.servers); return send(response,200,{ok:true});
+    }
+    const name=(body?.name||'').trim();
+    if(!name||body?.command) return send(response,400,{detail:'Provide exactly one of URL or command'});
+    if(servers[name]) return send(response,409,{detail:`Server '${name}' already exists`});
+    const auth=(body.auth||'none').toLowerCase();
+    if(!['none','oauth','header'].includes(auth)) return send(response,400,{detail:'Unsupported auth mode'});
+    if(auth==='header'&&!body.bearer_token) return send(response,400,{detail:'Bearer token is required'});
+    const cfg={url:body.url,...(auth==='oauth'?{auth:'oauth'}:{}),...(auth==='header'?{headers:{Authorization:'Bearer MCP_BEARER_TOKEN'}}:{})};
+    if(auth==='header') settings.serverTokens.set(`${scoped}:${name}`,String(body.bearer_token));
+    keepServers({...servers,[name]:cfg});
+    return send(response,200,{name,transport:'http',url:body.url,auth:auth==='none'?null:auth,enabled:true,tools:null,source:'config',plugin:null});
    }
    const server=url.pathname.match(/^\/api\/mcp\/servers\/([^/]+)(?:\/(test|auth))?$/);
    if(server) {
@@ -626,7 +648,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!server[2]&&request.method==='DELETE') { const rest={...servers}; delete rest[name]; keepServers(rest); return send(response,200,{ok:true}); }
     if(server[2]==='test'&&request.method==='POST') {
      if(settings.appsUnreachable.has(name)) return send(response,200,{ok:false,error:'Connection failed: /opt/data/mcp-tokens secret detail',tools:[]});
-     if(!settings.appTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'OAuth authentication required — no token found.',tools:[]});
+     if(servers[name].auth==='oauth'&&!settings.appTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'OAuth authentication required — no token found.',tools:[]});
+     if(servers[name].auth==='header'&&!settings.serverTokens.has(`${scoped}:${name}`)) return send(response,200,{ok:false,error:'Bearer token required.',tools:[]});
      return send(response,200,{ok:true,tools:(settings.appTools[name]||[`get_${name}`,`delete_${name}`]).map(tool=>({name:tool,description:''})),prompts:0,resources:0});
     }
     if(server[2]==='auth'&&request.method==='POST') {

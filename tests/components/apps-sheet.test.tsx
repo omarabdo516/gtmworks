@@ -26,7 +26,7 @@ afterEach(async () => {
 
 const text: Record<string, string> = en;
 const states: Record<string, AppItem['state']> = { klaviyo: 'connected', notion: 'attention' };
-const items: AppItem[] = apps.map(app => ({ key: app.key, name: app.name, mark: app.mark, category: app.category, state: states[app.key] ?? 'off',
+const items: AppItem[] = apps.map(app => ({ key: app.key, name: app.name, mark: app.mark, category: app.category, source: app.source, ...(app.url ? { url: app.url } : {}), ...(app.auth ? { auth: app.auth } : {}), ...(app.care ? { care: app.care } : {}), state: states[app.key] ?? 'off',
  agents: [{ id: '3a000000-0000-0000-0000-000000000011', name: 'Lead', connection: 'f0000000-0000-0000-0000-000000000011', main: true, own: true, state: states[app.key] ?? 'off' }],
  use: text[`use.${app.key}`], can: text[`can.${app.key}`], words: app.name }));
 
@@ -242,7 +242,7 @@ test('on a phone the sheet opened from the drawer holds Tab, and Escape closes t
  await screen.getByRole('button', { name: /^Connect apps/ }).click();
  await expect.element(screen.getByRole('searchbox', { name: 'Search apps' })).toHaveFocus();
  const stayed: string[] = [];
- for (let step = 0; step < 20; step++) { await userEvent.keyboard('{Tab}'); const at = document.activeElement; stayed.push(at === document.body ? 'left the document' : dialog().contains(at) ? 'in the sheet' : `behind it: ${at?.outerHTML.slice(0, 60)}`); }
+ for (let step = 0; step < 120; step++) { await userEvent.keyboard('{Tab}'); const at = document.activeElement; stayed.push(at === document.body ? 'left the document' : dialog().contains(at) ? 'in the sheet' : `behind it: ${at?.outerHTML.slice(0, 60)}`); }
  expect(stayed.slice(0, 11)).toEqual(Array(11).fill('in the sheet'));
  expect(new Set(stayed)).toEqual(new Set(['in the sheet', 'left the document']));
  await userEvent.keyboard('{Escape}');

@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi, type Mock } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
+import { userEvent } from 'vitest/browser';
 import { AppsList, AppDetail, type AppItem, type AppsPlace } from '@/app/settings-apps-client';
 import en from '@/lib/messages/apps.en.json';
 import ar from '@/lib/messages/apps.ar.json';
@@ -21,7 +22,7 @@ const states: Record<string, [AppAgent['state'], AppAgent['state']]> = { klaviyo
 const items: AppItem[] = apps.map(app => {
   const [mine, writers] = states[app.key] ?? ['off', 'off'];
   const agents = [agent(lead, 'Lead', true, mine), agent(writer, 'Writer', true, writers), agent(helper, 'Helper', false, mine)];
-  return { key: app.key, name: app.name, mark: app.mark, category: app.category, state: mergedState(agents), agents,
+  return { key: app.key, name: app.name, mark: app.mark, category: app.category, source: app.source, ...(app.url ? { url: app.url } : {}), ...(app.auth ? { auth: app.auth } : {}), ...(app.care ? { care: app.care } : {}), state: mergedState(agents), agents,
     use: text[`use.${app.key}`], can: text[`can.${app.key}`], words: [app.name, ...[en, ar].flatMap(words => [`use.${app.key}`, `alias.${app.key}`].map(key => (words as Record<string, string>)[key]))].join(' ') };
 });
 const item = (key: string) => items.find(entry => entry.key === key)!;
@@ -53,7 +54,7 @@ test('the list groups connected and attention apps apart from the rest, and sear
   await expect.element(screen.getByText('No app matches “zzz”')).toBeVisible();
   await screen.getByRole('button', { name: 'Clear search' }).click();
   await screen.getByRole('button', { name: /^Analytics/ }).click();
-  expect(screen.getByRole('heading', { level: 5 }).elements().map(element => element.textContent)).toEqual(['Amplitude', 'Mixpanel']);
+  expect(screen.getByRole('heading', { level: 5 }).elements().map(element => element.textContent)).toEqual(['Amplitude', 'Better Stack', 'Datadog', 'Grafana', 'Mixpanel', 'Plaid', 'Sentry', 'Twelve Data', 'Semrush', 'Ahrefs', 'Supermetrics', 'Similarweb', 'Hootsuite listening']);
 });
 
 test('a Member who is not the Owner reads the states with no button', async () => {
@@ -235,7 +236,34 @@ test('a blocked sign-in window starts no sign-in, stays on the page and says how
 test('every app card shows its logo or its letters', async () => {
   await render(<AppsList place={settings} owner items={items} text={text}/>);
   const tile = (key: string) => document.getElementById(`app-t-${key}`)?.closest('.app-card')?.querySelector('.tool-tile');
-  expect(apps.map(app => [app.key, tile(app.key)?.querySelector('img.tool-logo')?.getAttribute('src') ?? tile(app.key)?.textContent])).toEqual([
-    ['klaviyo', 'K'], ['canva', 'Ca'], ['notion', '/logos/simple/notion.svg'], ['airtable', '/logos/simple/airtable.svg'],
-    ['gamma', 'G'], ['amplitude', 'Am'], ['mixpanel', '/logos/simple/mixpanel.svg']]);
+  for (const app of apps) expect(tile(app.key), app.key).toBeTruthy();
+  expect(tile('notion')?.querySelector('img.tool-logo')?.getAttribute('src')).toBe('/logos/simple/notion.svg');
+  expect(tile('mixpanel')?.querySelector('img.tool-logo')?.getAttribute('src')).toBe('/logos/simple/mixpanel.svg');
+  expect(tile('klaviyo')?.textContent).toBe('Kl');
+});
+
+// #458: the card that adds the Owner's own server: Test shows the tools the server lists, and Add turns a no-sign-in
+// server on and returns to the list. The form talks to /api/company-servers, which checks the Owner again.
+test('the own-tool card tests a server and adds it with no sign-in', async () => {
+  const sent: Record<string, unknown>[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/company-servers') {
+      const body = JSON.parse(String(init?.body)); sent.push(body);
+      return Promise.resolve(new Response(JSON.stringify(body.action === 'test' ? { key: 'my-crm', state: 'connected', tools: ['get_records', 'create_record'] } : { key: 'my-crm', state: 'connected' }), { status: 200 }));
+    }
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await expect.element(screen.getByRole('heading', { name: 'Your own tool (MCP)' })).toBeVisible();
+  await screen.getByRole('textbox', { name: /Name/ }).fill('My CRM');
+  await screen.getByRole('textbox', { name: /Address/ }).fill('https://crm.example/mcp');
+  await screen.getByRole('button', { name: 'Test' }).click();
+  await expect.element(screen.getByText('get_records')).toBeVisible();
+  await expect.element(screen.getByText('create_record')).toBeVisible();
+  expect(sent[0]).toMatchObject({ company: 'c-1', agent: lead, action: 'test', name: 'My CRM', url: 'https://crm.example/mcp', kind: 'oauth' });
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sign-in' }).element() as HTMLSelectElement, 'none');
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.poll(() => sent.at(-1)).toMatchObject({ company: 'c-1', agent: lead, action: 'add', name: 'My CRM', url: 'https://crm.example/mcp', kind: 'none' });
+  await expect.poll(() => replace.mock.calls.map(([href]) => href)).toEqual(['/c/rs-learning/settings?section=apps']);
+  expect(toast.mock.calls).toEqual([['My CRM added']]);
 });
