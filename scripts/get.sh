@@ -315,11 +315,12 @@ take_backup() {
 # image carries, so the command on the PATH matches the version installed. An image from before #437 carries none: the
 # release's tag is read instead, or main for a main build.
 stage_command() {
+  from=
   if ! docker run --rm "$release_ref" cat /app/release-source/scripts/get.sh > "$stage/gtmworks.sh" 2> /dev/null; then
     case "$1" in v*) from=https://raw.githubusercontent.com/$repository/$1/scripts/get.sh;; *) from=$get_url;; esac
     fetch "$from" "$stage/gtmworks.sh"
   fi
-  [ "$(sed -n 2p "$stage/gtmworks.sh")" = "$marker" ] || fail "The gtmworks command that gtmworks $1 carries is not the gtmworks installer. Nothing was changed."
+  [ "$(sed -n 2p "$stage/gtmworks.sh")" = "$marker" ] || fail "The gtmworks command of gtmworks $1${from:+ ($from)} is not the gtmworks installer. Nothing was changed."
 }
 place_command() { cp "$stage/gtmworks.sh" gtmworks.sh.tmp; chmod 755 gtmworks.sh.tmp; mv gtmworks.sh.tmp gtmworks.sh; }
 

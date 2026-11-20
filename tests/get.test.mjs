@@ -480,7 +480,7 @@ test('a fetched command that is not the gtmworks installer is refused before any
  m.clear();
  const refused=m.gtmworks(['update']);
  assert.equal(refused.status,1);
- assert.match(refused.stderr,/^The gtmworks command that gtmworks v1\.10\.0 carries is not the gtmworks installer\. Nothing was changed\.$/m);
+ assert.match(refused.stderr,/^The gtmworks command of gtmworks v1\.10\.0 is not the gtmworks installer\. Nothing was changed\.$/m);
  assert.equal(m.file('gtmworks.sh'),kept);
  assert.deepEqual(m.installer(),[]);
  assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
@@ -1090,7 +1090,7 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
   /env -i HOME="\$HOME" [^\n]*\\\n\s+sh -lc 'command -v gtmworks && gtmworks status'/,
   /All \[0-9\]\+ services are healthy/,
   /gtmworks update \|\| fail 'gtmworks update'/,
-  /sed -i '\/\^ \*elif \\\[ "\$operation" = sign-in \\\]\/d' gtmworks\.sh/,
+  /git -C "\$workspace" show "\$older_command:scripts\/get\.sh" \| sed '\/\^ \*elif \\\[ "\$operation" = sign-in \\\]\/d' > gtmworks\.sh\.older/,
   /grep -Fx 'Unexpected argument: claude' "\$RUNNER_TEMP\/older-command\.log"/,
   /grep -Fx 'gtmworks sign-in claude needs --company <id-or-name>\.' "\$RUNNER_TEMP\/updated-command\.log"/,
   /\^Backup: /,

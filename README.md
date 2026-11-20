@@ -280,8 +280,9 @@ files of the build it ran (`.gtmworks-main/`), so its go-back command names that
 exact build, `--version main@sha256:<digest>`. The `gtmworks` command itself is
 the `get.sh` of the build the folder runs, which each image carries: an install,
 an update or a `restore --version` leaves the command of the release or channel it
-installed, checked to be the gtmworks installer before anything changes. A command
-from before this (2026-11-20) cannot update itself: run the line again once.
+installed, checked to be the gtmworks installer before anything changes. A release's
+`install.sh` leaves its command too, so an update run by an older command, one that
+never replaced itself, still ends with the new one.
 
 ## Backup
 

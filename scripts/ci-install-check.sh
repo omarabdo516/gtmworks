@@ -804,8 +804,11 @@ export PATH="$HOME/.local/bin:$PATH"
 # v0.0.1 is published: gtmworks update moves to it, backing up first.
 cp "$workspace/release-next/docker-compose.install.yml" "$workspace/release-next/install.sh" "$releases/v0.0.1/" || fail 'test release v0.0.1'
 echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]' > "$releases/releases.json"
-# #437: the install keeps an older gtmworks command, one without sign-in; the update leaves the one v0.0.1 carries.
-sed -i '/^ *elif \[ "$operation" = sign-in \]/d' gtmworks.sh || fail 'swap in an older gtmworks command'
+# #437: the install keeps an older gtmworks command, one from before #437 (main's, bbd2941a) without sign-in: it never
+# replaced itself, so the update leaves the one v0.0.1 carries through v0.0.1's install.sh.
+older_command=bbd2941a5c8064f496dc29a83c7e8fe251e96e5f
+git -C "$workspace" cat-file -e "$older_command^{commit}" 2> /dev/null || git -C "$workspace" fetch -q --no-tags --depth 1 origin "$older_command" || fail 'the older gtmworks command commit'
+git -C "$workspace" show "$older_command:scripts/get.sh" | sed '/^ *elif \[ "$operation" = sign-in \]/d' > gtmworks.sh.older && mv gtmworks.sh.older gtmworks.sh || fail 'swap in an older gtmworks command'
 if gtmworks sign-in claude > "$RUNNER_TEMP/older-command.log" 2>&1; then fail 'the older command must refuse sign-in'; fi
 grep -Fx 'Unexpected argument: claude' "$RUNNER_TEMP/older-command.log" || fail 'the older command knows no sign-in'
 old_image=$(web_image)
