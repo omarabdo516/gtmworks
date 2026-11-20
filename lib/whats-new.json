@@ -6,6 +6,12 @@
   "ar": { "title": "أي أداة بتتكلم MCP", "body": "قايمة التطبيقات بقى فيها كل تطبيق المحرك بيجي بيه وأدوات التسويق الجاهزة من gtmworks، وصاحب الشركة يقدر يضيف أي سيرفر MCP بعنوانه، من غير دخول أو بتوكن أو بتسجيل دخول. وكل تطبيق بيدي الوكيل كل أدواته." }
  },
  {
+  "issue": 457,
+  "date": "2026-11-20",
+  "en": { "title": "A model error says why", "body": "When the model key has no credit, the provider refuses it, or the Agent’s model is not available, the chat says so and points to the Agent’s model settings instead of working on a reply forever." },
+  "ar": { "title": "خطأ الموديل بيقول سببه", "body": "لما مفتاح الموديل يخلص رصيده، أو المزوّد يرفضه، أو موديل الوكيل مش متاح، الشات بيقول كده وبيوصّلك لإعدادات موديل الوكيل بدل ما يفضل شغّال على رد مش جاي." }
+ },
+ {
   "issue": 453,
   "date": "2026-11-20",
   "en": { "title": "The gtmworks icon", "body": "A browser tab and an installed app show the gtmworks mark, and the Month filter with no month chosen reads All months instead of the browser's raw placeholder." },

@@ -3,6 +3,13 @@ import { createHash, randomUUID } from 'node:crypto';
 // #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
 // failure's user_text around AuthError no_provider_configured in hermes_cli/auth.py).
 export const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
+// #457: the pinned release's lines for a Run whose model call cannot succeed on a retry, in the Run record's output
+// (agent/turn_failure_copy.py, agent/turn_recovery.py). A failed Run carries no error code, only that English text.
+export const creditExhaustedError='Billing or credits exhausted: HTTP 400: Your credit balance is too low to access the Anthropic API. Add credits in the Anthropic Console, then retry.';
+export const apiKeyRefusedError='Anthropic rejected your API key, so the model can\'t be reached. Add a new key with `hermes auth add anthropic`, or sign in again.';
+export const signInRefusedError='Anthropic rejected your sign-in, so the model can\'t be reached. Sign in again with `hermes login`.';
+export const modelMissingError='Model \'claude-fable\' isn\'t available on Anthropic. Pick another model with `hermes model`.';
+export const failedRunText='Something else went wrong while the model was answering.';
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
@@ -225,7 +232,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),...(done&&settings.ending==='failed'&&settings.failure?{error:settings.failure}:{}),pending_controls:[]});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
    // The run's own routes (api_server_runs.py): stop, the answer to the question it waits for, which takes exactly
    // request_id, execution_generation and answer, and the choice for the request it waits on (_handle_run_approval).
