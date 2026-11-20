@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(18);
 -- #434. A new Company with an Owner (عمر), a Manager and its main Agent: Lead opens the Company's first Conversation once,
 -- for an active Owner only, into the Owner's empty Conversation with it when there is one, and never in a Company where
 -- something was written already. The Run that answers it carries
@@ -59,6 +59,12 @@ select is(public.open_first_conversation('10000000-0000-0000-0000-000000000435',
  'the Owner''s empty Conversation from first run is the one Lead opens');
 reset role;
 select is((select count(*) from public.conversations where company_id='10000000-0000-0000-0000-000000000435'),1::bigint,'and no other is made');
+-- A second Owner visiting before anyone writes finds no opening of their own: the Company had its one.
+insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000435','20000000-0000-0000-0000-000000000003','owner');
+set local role service_role;
+select is(public.open_first_conversation('10000000-0000-0000-0000-000000000435','20000000-0000-0000-0000-000000000003','e4340000-0000-0000-0000-000000000012','Hi'),null::uuid,
+ 'another Owner of the same Company gets no second opening');
+reset role;
 
 -- An Owner who typed before a model was connected: that message's Run ended no_model, so the opening still comes, into
 -- the same Conversation.

@@ -48,7 +48,8 @@ begin
   return case when not exists(select 1 from public.conversation_messages m where m.company_id=c and public.written_message(m))
    and not exists(select 1 from public.conversation_run_reservations r where r.company_id=c) then target end;
  end if;
- if exists(select 1 from public.conversation_messages m where m.company_id=c and public.written_message(m))
+ -- Opened for another Owner, or written in: never a second opening.
+ if exists(select 1 from public.conversation_messages m where m.company_id=c and (m.run_id='lead-opening' or public.written_message(m)))
   or exists(select 1 from public.conversation_run_reservations r where r.company_id=c) then return null; end if;
  if not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role='owner' and m.removed_at is null) then return null; end if;
  select * into lead from public.hermes_agents a where a.company_id=c and a.is_default;
