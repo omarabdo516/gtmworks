@@ -96,7 +96,7 @@ test('a job command in the main Agent\'s Conversation is handed to the Agent of 
  const fake = fakeEngine(); const { db, service, calls } = databases({ stored: lead });
  const send = message => sendMessage(db, service, { company, conversation, sendKey: randomUUID(), message, hermes, engineFor: fake.engineFor });
  assert.deepEqual(await send('/campaign Launch the December ads'), { conversation });
- assert.deepEqual(runsNamed(calls, 'command_handover'), [{ conversation, c: company, agent: lead, message_key: runsNamed(calls, 'command_handover')[0].message_key, message: '/campaign Launch the December ads', agent_name: 'Reach', goal: 'Launch the December ads' }]);
+ assert.deepEqual(runsNamed(calls, 'command_handover'), [{ conversation, c: company, agent: lead, message_key: runsNamed(calls, 'command_handover')[0].message_key, message: '/campaign Launch the December ads', role: 'meta', goal: 'Launch the December ads' }]);
  assert.deepEqual(fake.runs, [], 'no Run of the Lead\'s: the command hands the job over itself');
  assert.deepEqual(runsNamed(calls, 'reserve_conversation_turn'), [], 'and nothing is reserved on the Lead');
  assert.deepEqual(runsNamed(calls, 'send_conversation_message'), [], 'the database keeps the person\'s message with the handover');
@@ -190,7 +190,8 @@ function handedDatabases() {
 
 test('on the fake engine a command sent to the Lead hands the job over, and the chat\'s reply comes from that Agent', async () => {
  // #358's check: the command is sent, the handover row is kept, and the answer the person reads is the target Agent's.
- const fake = fakeEngine(); fake.settings.reply = input => `Reach did it: ${input.split('\n').at(-1)}`;
+ // A long article keeps its whole reply in the chat, past the summary a #317 handover carries.
+ const fake = fakeEngine(); fake.settings.reply = input => `Reach did it: ${input.split('\n').at(-1)}`.padEnd(9000,' .');
  const { db, service, kept } = handedDatabases(); const sendKey = randomUUID();
  assert.deepEqual(await sendMessage(db, service, { company, conversation, sendKey, message: '/campaign Launch the December ads', hermes, engineFor: fake.engineFor }), { conversation });
  assert.deepEqual(kept.message, { author: 'person', body: '/campaign Launch the December ads', run_id: `command:${sendKey}` });
@@ -201,6 +202,6 @@ test('on the fake engine a command sent to the Lead hands the job over, and the 
  await driveHandovers(service, { hermes, engineFor: fake.engineFor });
  await driveHandovers(service, { hermes, engineFor: fake.engineFor });
  assert.deepEqual(fake.runs.map(run => [run.conversation, run.input]), [[`d9000000-0000-0000-0000-000000000001`, 'The job:\nLaunch the December ads']]);
- assert.deepEqual(kept.agentMessage, { author: 'agent', agent_id: reach, author_name: 'Reach', body: 'Reach did it: Launch the December ads', run: fake.runs[0].id }, 'the reply comes from that Agent, in this chat');
+ assert.deepEqual(kept.agentMessage, { author: 'agent', agent_id: reach, author_name: 'Reach', body: `Reach did it: Launch the December ads`.padEnd(9000,' .'), run: fake.runs[0].id }, 'the reply comes from that Agent, in this chat, whole');
  assert.deepEqual(kept.end, { run: `command:${sendKey}`, outcome: 'completed' }, 'and the person\'s own message stops waiting');
 });

@@ -15,10 +15,13 @@ alter table public.agent_handovers add column answers_person boolean not null de
 grant select (answers_person) on public.agent_handovers to authenticated;
 
 -- The person's message and the handover, once: whoever writes the Company's Conversations, talking to its Lead, for a
--- job an Agent of the same Company this person sees takes. Anything else answers false and the message is sent as typed.
-create function public.command_handover(conversation uuid, c uuid, agent uuid, message_key uuid, message text, agent_name text, goal text)
+-- job the Agent of that role takes — the first Agent made from the role this person sees, in the order the composer lists
+-- them, on a profile of its own or the Company's. The words before and after the command are the app's business: the
+-- function keeps any job it is given, and a Member could hand the same job to that Agent in its own chat. Anything else
+-- answers false and the message is sent as typed.
+create function public.command_handover(conversation uuid, c uuid, agent uuid, message_key uuid, message text, role text, goal text)
  returns boolean language plpgsql security definer set search_path='' as $$
-declare existing public.conversations; lead public.hermes_agents; target public.hermes_agents; writer text; kept text; job text;
+declare existing public.conversations; lead public.hermes_agents; target public.hermes_agents; writer text; kept text; job text; saved bigint;
 begin
  if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
  if message is null or length(message) not between 1 and 200000 or message_key is null then raise exception 'conversationNotFound' using errcode='22023'; end if;
@@ -31,16 +34,22 @@ begin
  select * into lead from public.hermes_agents where id=agent and company_id=c;
  if not found or not public.may_hand_to_agent(c,lead.id,auth.uid()) then return false; end if;
  select * into target from public.hermes_agents a
-  where a.company_id=c and a.id<>lead.id and a.profile is not null
-   and lower(btrim(a.name))=lower(btrim(agent_name)) and public.agent_visible_to(c,auth.uid(),a.id)
-  order by a.id limit 1;
+  where a.company_id=c and a.id<>lead.id and a.profile is not null and a.template=role
+   and public.agent_visible_to(c,auth.uid(),a.id)
+  order by a.name,a.id limit 1;
  if not found then return false; end if;
  kept:='command:'||message_key::text;
  select name into writer from public.people where id=auth.uid();
  insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
   values(conversation,c,auth.uid(),lead.id,lead.name) on conflict (id) do nothing;
  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
-  values(c,conversation,'person',auth.uid(),coalesce(writer,''),message,message_key,kept) on conflict do nothing;
+  values(c,conversation,'person',auth.uid(),coalesce(writer,''),message,message_key,kept) on conflict do nothing
+  returning id into saved;
+ -- A send key already stored as another Run is no command: nothing is handed over, and the caller sends it as typed.
+ if saved is null then
+  return exists(select 1 from public.conversation_messages m
+   where m.conversation_id=conversation and m.send_key=message_key and m.run_id=kept);
+ end if;
  insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person)
   values(c,conversation,kept,message_key::text,lead.id,target.id,job,true) on conflict do nothing;
  return true;
@@ -75,17 +84,22 @@ $function$;
 revoke all on function public.open_conversation_runs(uuid,uuid,bigint) from public,anon,authenticated;
 grant execute on function public.open_conversation_runs(uuid,uuid,bigint) to service_role;
 
--- 20270329000000's begin_handover, with the job a command hands over: the target writes the person's reply, not a report
--- for Lead, and a leg that cannot start ends the person's Run as failed, so the chat says the reply did not come.
+-- 20270329000000's begin_handover, with the job a command hands over: the whole of the person's own message reaches its
+-- Agent, it writes the reply the person reads rather than a report for Lead, and a leg that cannot start ends the
+-- person's Run as failed, so the chat says the reply did not come. Two jobs to one Agent in one chat never run at once:
+-- they share its session there, so the second waits for the first to settle.
 create or replace function public.begin_handover(h bigint)
  returns table(state text, attempt integer, company uuid, profile text, session uuid, input text, instructions text)
  language plpgsql security definer set search_path='' as $$
-declare r public.agent_handovers; talk public.conversations; chan uuid; person uuid; target public.hermes_agents; lead public.hermes_agents; asking text; began timestamptz;
+declare r public.agent_handovers; talk public.conversations; chan uuid; person uuid; target public.hermes_agents; lead public.hermes_agents; asking text; began timestamptz; job text;
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select * into r from public.agent_handovers where id=h for update;
  if r.id is null or r.state not in ('waiting','returning') then return; end if;
  if r.attempted_at is not null and r.attempted_at > now()-interval '30 seconds' then return; end if;
+ -- A command's target works in one session per chat: a second job to the same Agent waits for the open one to be read.
+ if r.answers_person and exists(select 1 from public.agent_handovers o
+  where o.conversation_id=r.conversation_id and o.to_agent=r.to_agent and o.state='target') then return; end if;
  select * into target from public.hermes_agents where id=r.to_agent;
  if r.conversation_id is not null then
   select * into talk from public.conversations where id=r.conversation_id;
@@ -121,9 +135,13 @@ begin
   if public.agent_profile_refusal(target.profile,r.company_id,target.id) is not null then return; end if;
   update public.agent_handovers set target_attempts=target_attempts+1, attempted_at=now() where id=h returning target_attempts into r.target_attempts;
   if r.answers_person then
+   -- The job is the person's own message, whole: a brief longer than the row's 500-character label still reaches its
+   -- Agent. The command itself is dropped, since it names the job and not the work.
+   select btrim(regexp_replace(m.body,'^\s*/\S+\s*','')) into job from public.conversation_messages m
+    where m.conversation_id=r.conversation_id and m.run_id=r.run_id and m.author='person' limit 1;
    asking := 'The person in this chat used a command that is your job.'
-    || E'\n\nThe job:\n' || r.goal
-    || E'\n\nDo the job now, and write the reply they read, in the language they wrote in: what you did, what you found and anything they must know. Write only the reply.';
+    || E'\n\nThe job:\n' || coalesce(nullif(job,''),r.goal)
+    || E'\n\nDo the job now, and write the reply they read, in the language they wrote in: what you did, what you found and anything they must know. You cannot ask a question or wait for an approval in this chat, so do what you can with what you have and say plainly in your reply anything you could not do. Write only the reply.';
   elsif r.conversation_id is not null then
    asking := 'Lead in the team is handing you a job in one of the team''s chats.'
     || E'\n\nThe job:\n' || r.goal
@@ -232,3 +250,55 @@ begin
 end $$;
 revoke all on function public.close_handover_target(bigint,text,text,text) from public,anon,authenticated;
 grant execute on function public.close_handover_target(bigint,text,text,text) to service_role;
+
+-- 20270331000010's agent_move_blocked, with a command's Run left out: it is no Run of the Conversation's Agent, so a
+-- job a command handed over never holds that Agent's profile move. The handover's own leg still does (the last clause).
+create or replace function public.agent_move_blocked(agent uuid) returns boolean language sql stable security definer set search_path='' as $$
+ select exists(select 1 from public.conversation_messages m join public.conversations cv on cv.id=m.conversation_id
+   where cv.agent_id=agent and m.author='person'
+    and not exists(select 1 from public.conversation_messages r where r.conversation_id=m.conversation_id and r.author='agent' and r.run_id=m.run_id)
+    and not exists(select 1 from public.conversation_run_ends u where u.conversation_id=m.conversation_id and u.run_id=m.run_id)
+    and not exists(select 1 from public.agent_handovers h where h.conversation_id=m.conversation_id and h.run_id=m.run_id and h.answers_person))
+  or exists(select 1 from public.conversation_run_reservations r where r.agent_id=agent and r.abandoned_at is null)
+  or exists(select 1 from public.channel_runs r where r.agent_id=agent and r.outcome is null)
+  or exists(select 1 from public.note_runs r where r.agent_id=agent and r.outcome is null)
+  or exists(select 1 from public.conversation_messages m join public.conversations cv on cv.id=m.conversation_id
+   where cv.agent_id=agent and m.created_at>now()-interval '5 minutes')
+  or exists(select 1 from public.agent_handovers h where h.state not in ('done','failed')
+   and ((h.to_agent=agent and (h.state='target' or h.state='waiting' and h.target_attempts>0))
+    or (h.from_agent=agent and (h.state='follow_up' or h.state='returning' and h.return_attempts>0))));
+$$;
+revoke all on function public.agent_move_blocked(uuid) from public,anon,authenticated,service_role;
+
+-- 20270331000010's move_company_profile, with the same command's Run left out of the messages that hold a Company's move.
+create or replace function public.move_company_profile(c uuid) returns integer language plpgsql security definer set search_path='' as $function$
+declare first_owner uuid; movers uuid[]; agent uuid; moved integer:=0;
+begin
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ if not public.company_profile_ready(c) then return 0; end if;
+ select m.person_id into first_owner from public.members m where m.company_id=c and m.role='owner' and m.removed_at is null order by m.person_id limit 1;
+ if first_owner is null then return 0; end if;
+ movers:=array(select a.id from public.hermes_agents a where a.company_id=c and a.profile<>public.company_engine_profile(c) and a.profile !~ '^ag-[0-9a-f]{32}$');
+ if exists(select 1 from public.conversation_run_reservations r where r.agent_id=any(movers) and r.abandoned_at is null)
+  or exists(select 1 from public.channel_runs r where r.agent_id=any(movers) and r.outcome is null)
+  or exists(select 1 from public.note_runs r where r.agent_id=any(movers) and r.outcome is null)
+  or exists(select 1 from public.conversation_messages m join public.conversations cv on cv.id=m.conversation_id
+   where cv.company_id=c and cv.agent_id=any(movers) and m.created_at>now()-interval '5 minutes')
+  or exists(select 1 from public.conversation_messages m join public.conversations cv on cv.id=m.conversation_id
+   where cv.company_id=c and cv.agent_id=any(movers) and m.author='person'
+    and not exists(select 1 from public.conversation_messages r where r.conversation_id=m.conversation_id and r.author='agent' and r.run_id=m.run_id)
+    and not exists(select 1 from public.conversation_run_ends u where u.conversation_id=m.conversation_id and u.run_id=m.run_id)
+    and not exists(select 1 from public.agent_handovers h where h.conversation_id=m.conversation_id and h.run_id=m.run_id and h.answers_person))
+  or exists(select 1 from public.agent_handovers h where h.state not in ('done','failed')
+   and ((h.to_agent=any(movers) and (h.state='target' or h.state='waiting' and h.target_attempts>0))
+    or (h.from_agent=any(movers) and (h.state='follow_up' or h.state='returning' and h.return_attempts>0)))) then
+  return 0;
+ end if;
+ for agent in update public.hermes_agents set profile=public.company_engine_profile(c),connection_id=gen_random_uuid() where id=any(movers) returning id loop
+  perform public.log_agent_event(c,first_owner,null,agent,'MOVE_COMPANY_PROFILE','{}');
+  moved:=moved+1;
+ end loop;
+ return moved;
+end $function$;
+revoke all on function public.move_company_profile(uuid) from public,anon,authenticated;
+grant execute on function public.move_company_profile(uuid) to service_role;

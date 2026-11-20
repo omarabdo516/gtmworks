@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(33);
+select plan(36);
 -- #358. RS Learning: Lead on the Company's own profile, Reach (made from the meta role) and Faye on profiles of their
 -- own. The Owner and the Manager see every Agent; the Contributor (…03) sees only the ones given to them; the Viewer
 -- (…04) writes nothing.
@@ -13,8 +13,6 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_
  ('a3580000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001','f3580000-0000-0000-0000-000000000013','Faye','Marketing',false,'ag-a3580000000000000000000000000013','Write short.',null);
 insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
  ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
-insert into public.member_agent_access(company_id,person_id,agent_id) values
- ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a3580000-0000-0000-0000-000000000012');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('c3580000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a3580000-0000-0000-0000-000000000011','Lead'),
  ('c3580000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a3580000-0000-0000-0000-000000000013','Faye'),
@@ -25,7 +23,7 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name) va
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.command_handover('c3580000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',
- 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000001','/campaign Launch the December ads','Reach','Launch the December ads'),true,
+ 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000001','/campaign Launch the December ads','meta','Launch the December ads'),true,
  'the Owner''s command in the Lead''s chat is handed to the Agent of its role');
 select is((select author||':'||author_name||':'||body||':'||run_id from public.conversation_messages where conversation_id='c3580000-0000-0000-0000-000000000001'),
  'person:عمر:/campaign Launch the December ads:command:'||'d3580000-0000-0000-0000-000000000001','with the person''s message kept, on the command''s own Run');
@@ -33,38 +31,42 @@ select is((select a.name||'>'||b.name||':'||h.goal||':'||h.answers_person||':'||
  join public.hermes_agents a on a.id=h.from_agent join public.hermes_agents b on b.id=h.to_agent),
  'Lead>Reach:Launch the December ads:true:waiting','and a handover from the Lead to that Agent, the target answering the person');
 select is(public.command_handover('c3580000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',
- 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000001','/campaign Launch the December ads','Reach','Launch the December ads'),true,
+ 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000001','/campaign Launch the December ads','meta','Launch the December ads'),true,
  'the same send key again answers true');
 select is((select count(*)::int from public.conversation_messages where conversation_id='c3580000-0000-0000-0000-000000000001')
   +(select count(*)::int from public.agent_handovers where conversation_id='c3580000-0000-0000-0000-000000000001'),2,
  'and keeps one message and one handover');
 select is(public.command_handover('c3580000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',
- 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000002','/campaign '||repeat('x',600),'Reach',repeat('x',600)),true,
+ 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000002','/campaign '||repeat('x',600),'meta',repeat('x',600)),true,
  'a job longer than a handover holds is cut, never lost');
 select is((select length(goal) from public.agent_handovers where run_id='command:d3580000-0000-0000-0000-000000000002'),500,'to the length its row takes');
 select is(public.command_handover('c3580000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',
- 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000003','/campaign Launch','Lead','Launch'),false,
- 'the Lead never hands a command to itself, and the message is then sent as typed');
+ 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000003','/campaign Launch','numbers','Launch'),false,
+ 'a role no Agent of the Company was made from is no command, and the message is then sent as typed');
 reset role;
+
+-- The job is the person's own message, so a brief longer than the handover row's 500-character label reaches its Agent
+-- whole, with the command itself dropped since it names the job and not the work.
+create temporary table long_job as select * from public.begin_handover((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000002'));
+select is((select input from long_job) like '%'||repeat('x',600)||'%' and (select input from long_job) not like '%/campaign%',true,
+ 'the whole job reaches its Agent, without the command');
 
 -- A Contributor hands a command to only the Agents they see; a Viewer writes nothing; and another Agent's chat hands none.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select is(public.command_handover('c3580000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001',
- 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000004','/campaign Launch','Faye','Launch'),false,
+ 'a3580000-0000-0000-0000-000000000011','d3580000-0000-0000-0000-000000000004','/campaign Launch','meta','Launch'),false,
  'an Agent the person is not given is no target');
 reset role;
-delete from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001'
- and person_id='20000000-0000-0000-0000-000000000003' and agent_id='a3580000-0000-0000-0000-000000000012';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.command_handover('c3580000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000001',
- 'a3580000-0000-0000-0000-000000000011',gen_random_uuid(),'/campaign Launch','Reach','Launch')$$,'42501',null,
+ 'a3580000-0000-0000-0000-000000000011',gen_random_uuid(),'/campaign Launch','meta','Launch')$$,'42501',null,
  'a Viewer''s command hands nothing over');
 reset role;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.command_handover('c3580000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',
- 'a3580000-0000-0000-0000-000000000013',gen_random_uuid(),'/campaign Launch','Reach','Launch'),false,
+ 'a3580000-0000-0000-0000-000000000013',gen_random_uuid(),'/campaign Launch','meta','Launch'),false,
  'a command in another Agent''s Conversation is sent as plain text');
 select set_config('request.jwt.claim.sub','',true);
 reset role;
@@ -125,6 +127,14 @@ select is((select state||':'||target_outcome from public.agent_handovers where c
 select is((select count(*)::int from public.conversation_messages where run_id='run-failed'),0,'and no reply is kept for it');
 select is((select outcome from public.conversation_run_ends where run_id='command:'||'d3580000-0000-0000-0000-000000000006'),'failed',
  'while the person''s Run ends as failed, the line the chat draws');
+
+-- The reply is the chat's message from that Agent and holds more than a #317 summary does.
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person,state,target_run)
+ values('10000000-0000-0000-0000-000000000001','c3580000-0000-0000-0000-000000000001','command:d3580000-0000-0000-0000-000000000007',
+ 'd3580000-0000-0000-0000-000000000007','a3580000-0000-0000-0000-000000000011','a3580000-0000-0000-0000-000000000012','Launch',true,'target','run-many');
+select is(public.close_handover_target((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000007'),'run-many','completed',repeat('y',9000)),true,
+ 'a long reply closes its handover');
+select is((select length(body) from public.conversation_messages where run_id='run-many'),9000,'and is kept whole in the chat, past a summary''s length');
 
 -- A target hidden since the job was kept starts no Run, and the handover ends so the person is told.
 delete from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001'
