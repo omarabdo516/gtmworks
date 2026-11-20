@@ -555,7 +555,13 @@ try {
  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-SYNC ${marker}: write the paths a sync would copy.`};
  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
  assert.deepEqual(sent,{conversation});
- const answer=await until('reply on the sandbox sync check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ let answer;
+ try { answer=await until('reply on the sandbox sync check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),60); }
+ catch(error) {
+  console.error('[DEBUG-393] engine logs:\n'+(await (await manage(firstEngine,'/api/logs')).text()).split('\n').slice(-120).join('\n'));
+  console.error('[DEBUG-393] profile config:\n'+(await (await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`)).text()).slice(0,1200));
+  throw error;
+ }
  assert.ok(answer.body.includes(reply),answer.body);
  assert.ok(results.length>=1,JSON.stringify(results));
  const terminal=(()=>{ try { return JSON.parse(String(results[0])); } catch { return null; } })();
