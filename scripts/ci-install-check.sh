@@ -473,6 +473,24 @@ engine_healthy "$engine_id" 180 || fail 'the Engine is healthy with its sandbox 
 engine_node "$engine_key" - sandbox-key "$key_marker" runs < scripts/check-install-profiles.mjs | tee sandbox-key-runs.log \
   || fail "an Agent's command runs again once the sandbox host key is back"
 [[ $(docker exec "$sandbox" cat "/work/$key_marker-key.txt") == "$key_marker" ]] || fail "the Agent's command wrote in the work folder after the host key returned"
+# The upload into the sandbox is on with no switch, and nothing comes back (#393): the Engine copies an Agent's Skills
+# and caches into /home/pn/.hermes, and every session teardown used to copy what an Agent changed there back onto the
+# Engine's own disk. An Agent edits the copy of a Skill and plants a new one; after the Engine's session teardown the
+# Engine's own Skills and the Company's shared Skills are unchanged, and the planted file is on no Engine.
+engine_skill_sums() {
+  docker exec "$engine_id" sh -ec 'for folder in /opt/data/skills /opt/data/profiles/*/skills; do [ -d "$folder" ] || continue; find "$folder" -type f -exec sha256sum {} +; done | sort -k2'
+}
+skills_before=$(engine_skill_sums) || fail "read the Engine's Skills before the sandbox edit"
+sync_marker="sandbox-sync-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - sandbox-sync "$sync_marker" < scripts/check-install-profiles.mjs | tee sandbox-sync.log \
+  || fail 'an Agent edits and plants a Skill in its sandbox home'
+skills_after_edit=$(engine_skill_sums) || fail "read the Engine's Skills after the sandbox edit"
+[[ $skills_after_edit == "$skills_before" ]] || fail "an Agent's edit reached the Engine before its session ended"
+docker restart "$engine_id" > /dev/null || fail 'restart the Engine to tear the sandbox session down'
+engine_healthy "$engine_id" 180 || fail 'the Engine is healthy after the sandbox session teardown'
+skills_after=$(engine_skill_sums) || fail "read the Engine's Skills after the sandbox session teardown"
+[[ $skills_after == "$skills_before" ]] || fail 'a Skill an Agent changed in its sandbox came back to the Engine'
+if grep -q "planted-$sync_marker" <<< "$skills_after"; then fail 'a file an Agent planted in the sandbox came back to the Engine'; fi
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.

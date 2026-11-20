@@ -11,3 +11,7 @@ terminal:
   ssh_user: pn
   ssh_port: 2222
   ssh_key: /opt/data/ssh/id_ed25519
+  # No write-back from the sandbox to the Engine (#393): the upload into the sandbox is on with no switch, and an Agent
+  # could otherwise plant a Skill in the Engine's own home. 0 makes every teardown's sync-back skip its extraction and
+  # write nothing (probe: docs/engine-probes/work-sandbox-ssh.md, "File sync"); Runs keep working.
+  sync_back_max_bytes: 0

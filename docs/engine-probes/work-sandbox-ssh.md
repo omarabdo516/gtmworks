@@ -237,7 +237,31 @@ the second container, which is what `tools/bot_desktop/placement.py` resolves fo
 The stream itself reaches a viewer through the Engine's management listener (`/api/display/ws`), which the next spec
 builds on.
 
-# 9. Tools that fail the proof with no safe setting
+# 9. File sync: what the sandbox receives, and what it sends back
+
+The `ssh` backend keeps a copy of the Engine's `~/.hermes` per sandbox at `/home/pn/.hermes`
+(`tools/environments/ssh.py`, `file_sync.py`). Measured on 2026-11-20 by `work-sandbox-ssh/file-sync.sh`, whose full
+output is `work-sandbox-ssh/file-sync-output.txt`:
+
+- **Into the sandbox, always on.** On connect the backend uploads the profile's Skills (the bundled ones and its own), the
+  Company's shared Skills folder as `external_skills/<i>`, and the profile's caches (documents, attachments, delegation
+  and the rest in the same code list). No setting turns it off: `sync_files` is not reachable from a config, and no
+  profile or environment variable gates it. Every profile of a Company uploads into the same `~/.hermes`, so an Agent's
+  own Skills and its uploaded documents are readable by every other Agent of that Company. That is inside one Company's
+  sandbox and never across Companies; accepted as it stands (Hermes, 2026-11-20).
+- **Back to the Engine, off.** On cleanup the backend runs `sync_back()`. It maps remote paths by the *launch* home
+  (`/opt/data`), so without a cap an Agent's edit to a Skill copy becomes an edit of the Engine's own `/opt/data/skills`,
+  and a planted file lands beside it. `terminal.sync_back_max_bytes: 0` in the managed configuration makes the extraction
+  skip and write nothing (proven live, runs keep working), and every caller goes through that check. No profile and no
+  Settings write can raise it, because it sits in the managed scope. It is in `scripts/engine-managed.yml`, and the
+  launch profile names no `skills.external_dirs`, so the Company's shared folder is in no sync-back path map either.
+- A profile whose cache holds a file the Engine cannot read breaks that profile's whole upload cycle (a staging failure
+  rolls the transaction back), and every later cycle fails the same way. Noted; it is a failure path, not a setting.
+
+The cap's cost is that the sandbox's `~/.hermes` is still downloaded at every teardown and then thrown away (about 3 MB
+in the probe). Nothing of the upload reaches another Company: each Company has its own sandbox and its own Engine.
+
+# 10. Tools that fail the proof with no safe setting
 
 None. Every tool that runs the Agent's code or touches a path it names in the Engine's own container is either confined
 to the sandbox by the pinned backend and the write root, or is off for every Agent — and the two that stay off because of
@@ -261,3 +285,9 @@ it made. It needs Docker and the two pinned images; the build is a few minutes t
 | `work-sandbox-ssh/provider.py` | the fake model provider that scripts each Run's tool calls and keeps every request |
 | `work-sandbox-ssh/reach.py` | the connection attempts from inside the second container |
 | `work-sandbox-ssh/managed-config.yaml` | what the Engine's managed scope pins: `ssh` backend, address, user, port, key |
+| `work-sandbox-ssh/file-sync.sh` | the file-sync probe (#393): the same environment, with the Engine variants of section 9 |
+| `work-sandbox-ssh/file-sync.py` | the probes the file-sync run makes: the sandbox's `~/.hermes`, the Skill edits, and what the Engine kept |
+| `work-sandbox-ssh/file-sync-output.txt` | the full output of the file-sync probe's final run |
+
+Both scripts take the same shared heavy lock and remove everything they made; the file-sync probe also takes the
+install's managed configuration as it ships, so a change to `scripts/engine-managed.yml` is what it measures.
