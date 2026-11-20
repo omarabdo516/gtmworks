@@ -24,8 +24,8 @@ test('revoking a grant keeps the agent face and name in a company-only member’
   // the signed-in id, auth.uid().
   query(`do $$ begin perform set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
    insert into public.work_comments(company_id,card_id,body,author_id) values ('10000000-0000-0000-0000-000000000001',1,'${body}','30000000-0000-0000-0000-000000000001'); end $$`);
-  await signIn(member,'manager@example.com','/c/rs-learning/home');
-  const before=await faceMarkup(member.locator('.home-agents').getByRole('img',{name:names[1],exact:true}),names[1]);
+  await signIn(member,'manager@example.com','/c/rs-learning/work/board');
+  const before=await faceMarkup(member.locator('.card-avatars').getByRole('img',{name:names[1],exact:true}).first(),names[1]);
   await writer.getByRole('button',{name:'Revoke access from Writer'}).click();
   await expect(writer.getByText('No access',{exact:true})).toBeVisible();
   await member.goto('/c/rs-learning/work/board');
