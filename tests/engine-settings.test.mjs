@@ -224,3 +224,20 @@ test('a change the Engine holds is not called logged when its log row fails, one
   assert.equal(all.logged,false);
  } finally { await fake.close(); }
 });
+
+test('a Company-wide write sends every profile\'s write before the first one answers, so the change waits on one write, not on each in turn (#417)', async () => {
+ const fake=await fakeHermes();
+ try {
+  setup(fake);
+  for(const row of rows) profileOn(fake,row.profile);
+  profileOn(fake,space);
+  const {db}=database();
+  const base=driver(fake);
+  let open=0, most=0;
+  const slow={...base,write:async(target,config)=>{ open++; most=Math.max(most,open); await new Promise(done=>setTimeout(done,50)); try { return await base.write(target,config); } finally { open--; } }};
+  const changed=await changeCompanySetting(db,{company,setting:'memory.memory_char_limit',value:2400,hermes:{address:fake.address,key:fake.settings.key},driver:slow});
+  assert.equal(changed.state,'written',JSON.stringify(changed));
+  const profiles=new Set(rowsByCompany[company].map(row=>row.profile)).size+1;
+  assert.equal(most,profiles,'every Agent profile and the shared space are written at the same time');
+ } finally { await fake.close(); }
+});
