@@ -1,5 +1,5 @@
 ---
-status: accepted, partly superseded by #341
+status: accepted, partly superseded by #341 and ADR 0020
 ---
 
 # Agents have their own identities, company grants and card-scoped runs; the dashboard runs no AI
