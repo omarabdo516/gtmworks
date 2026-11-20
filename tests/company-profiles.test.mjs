@@ -245,6 +245,23 @@ test('an App the Company connected sits beside the fixed set: the write-back and
  } finally { await fake.close(); }
 });
 
+test('a toolset beside the fixed set whose Apps cannot be read is a difference, never let by', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  const config=toolConfig();
+  assert.equal((await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets})).state,'configured');
+  const held=fake.settings.profiles.get(name);
+  held.config={...held.config,mcp_servers:{acme:{url:'https://mcp.acme.invalid/mcp',enabled:true}}};
+  const calls=[];
+  const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
+  // The Engine answers for the toolsets but not for the profile's config, so which servers are Apps is unknown.
+  await checkAgentTools(db,{hermes:install(fake),apps:async()=>({state:'unreachable',apps:null})});
+  assert.ok(calls.some(call=>call.rpc==='begin_profile_tools'),'the profile is marked changing');
+  assert.ok(!calls.some(call=>call.rpc==='record_profile_tools'));
+ } finally { await fake.close(); }
+});
+
 test('a toolset no gtmworks App put there is a difference: the profile is marked changing and never recorded', async () => {
  const fake=await fakeHermes();
  try {
