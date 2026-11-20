@@ -900,6 +900,9 @@ area_setup
 fail_prefix='updater install check failed: '
 set -o pipefail
 workspace=$PWD
+dir="$workspace/updater-home/gtmworks"
+# The install lives in its own folder here, so the summary reads that install with the checkout's script.
+trap 'status=$?; if [ "$status" -ne 0 ]; then (cd "$dir" 2> /dev/null && bash "$workspace/scripts/install-diagnostics.sh") || true; fi; exit "$status"' EXIT
 reset_install
 if [[ ${GTMWORKS_IMAGE_PREBUILT:-} != true ]] && ! docker image inspect "$(web_image_tag)" > /dev/null 2>&1; then
   install_source source-install.log || fail 'source install for the test releases'
@@ -919,13 +922,14 @@ printf '%s\n' '#!/bin/sh' 'exit 1' > "$workspace/updater-bin/systemctl"
 printf '%s\n' '#!/bin/sh' 'case "$1" in -l) cat "$CRONTAB_FILE" 2> /dev/null;; -) cat > "$CRONTAB_FILE";; *) exit 2;; esac' > "$workspace/updater-bin/crontab"
 chmod 755 "$workspace/updater-bin/systemctl" "$workspace/updater-bin/crontab"
 export PATH="$workspace/updater-bin:$HOME/.local/bin:$PATH"
-dir="$HOME/gtmworks"
-first=$(sed -n 's/^release_image=//p' release-first/install.sh)
 next=$(sed -n 's/^release_image=//p' release-next/install.sh)
 { curl -fsSL "$GTMWORKS_GET" | sh -s -- --version v0.0.0 || fail 'the one line installs v0.0.0'; } 2>&1 | tee updater-install.log
 grep -F "'$HOME/.local/bin/gtmworks' updater > /dev/null 2>&1 # gtmworks updater" "$CRONTAB_FILE" || fail 'the line puts the updater in cron'
 cd "$dir"
-complete_setup || fail 'first run makes the Owner who asks for the update'
+# First run as complete_setup makes it, read from the checkout: this area stands in the install folder.
+docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY|SETUP_CODE)=' .env.install) \
+  -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  node:22.14.0-alpine3.21 node --input-type=module - < "$workspace/scripts/check-install-proxy.mjs" || fail 'first run makes the Owner who asks for the update'
 owner() {
   docker run --rm -i --network host --env-file <(grep -E '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.install) \
     node:22.14.0-alpine3.21 node --input-type=module - "$1" < "$workspace/scripts/check-install-update-request.mjs"
