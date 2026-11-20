@@ -57,6 +57,9 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.equal(engine.environment.HERMES_DASHBOARD_PUBLIC_URL,'http://${ENGINE_NAME:?Run scripts/install.sh}:9119');
  // The file tools write only under the work folder, which is the sandbox's (#390).
  assert.equal(engine.environment.HERMES_WRITE_SAFE_ROOT,'/work');
+ // A start hook that fails stops the Engine (s6-overlay's own switch): the file-sync patch and the listener address
+ // either hold or the Engine does not serve, never an Engine that started without them.
+ assert.equal(engine.environment.S6_BEHAVIOUR_IF_STAGE2_FAILS,2);
  assert.ok(engine.volumes.includes('data:/opt/data'));
  assert.ok(engine.volumes.includes('./engine-managed.yml:/etc/hermes/config.yaml:ro'));
  assert.ok(engine.volumes.includes('./engine-listener-address.py:/etc/hermes/listener-address.py:ro'));

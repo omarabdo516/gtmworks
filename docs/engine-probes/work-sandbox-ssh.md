@@ -257,8 +257,9 @@ output is `work-sandbox-ssh/file-sync-output.txt`:
   nothing back. The pinned release never passes it (`tools/terminal_tool_backends.py`, `_build_ssh_env`), so gtmworks adds
   the upstream `terminal.ssh_sync_files` key at the Engine's start with a cont-init hook,
   `scripts/engine-ssh-sync-files.sh`, and sets it false in the managed configuration (`scripts/engine-managed.yml`). The
-  hook fails the start if the pinned text moved, so a pin bump cannot silently drop it; the image stays the pinned
-  official one. With it off an Agent sees only the Company's work folder, and a Run still works (the install job proves
+  hook fails the start if the pinned text moved (`S6_BEHAVIOUR_IF_STAGE2_FAILS: 2`: s6-overlay's default would start
+  the Engine anyway, unpatched), so a pin bump cannot silently drop it; a restarted Engine keeps its patched copy, and
+  the image stays the pinned official one. With it off an Agent sees only the Company's work folder, and a Run still works (the install job proves
   both, and that no credential file of the Engine's profiles is in the sandbox).
 
 # 10. Tools that fail the proof with no safe setting

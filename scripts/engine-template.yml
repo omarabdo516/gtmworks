@@ -28,6 +28,9 @@ services:
       # listener still binds the install network's address alone and the name answers there.
       HERMES_DASHBOARD_PUBLIC_URL: http://${ENGINE_NAME:?Run scripts/install.sh}:9119
       HERMES_WRITE_SAFE_ROOT: /work
+      # A cont-init hook that fails stops the container (s6-overlay's default carries on): an Engine never serves without
+      # the file-sync patch or its listener address (#393).
+      S6_BEHAVIOUR_IF_STAGE2_FAILS: 2
     volumes:
       - data:/opt/data
       # The backend the Engine's terminal, file and code tools use, pinned so no profile and no Settings write can move
