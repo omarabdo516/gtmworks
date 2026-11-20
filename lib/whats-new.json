@@ -1,5 +1,11 @@
 [
  {
+  "issue": 368,
+  "date": "2026-11-20",
+  "en": { "title": "A message whose image is gone says so", "body": "A message sent with an image that is no longer stored is marked as not sent, and the next queued message in that conversation starts." },
+  "ar": { "title": "رسالة صورتها ضاعت بتقولك", "body": "لو رسالة اتبعتت بصورة والصورة دي مش متخزنة تاني، الرسالة بتتحسب إنها ما اتبعتتش، والرسالة اللي بعدها في نفس المحادثة بتكمّل على طول." }
+ },
+ {
   "issue": 453,
   "date": "2026-11-20",
   "en": { "title": "The gtmworks icon", "body": "A browser tab and an installed app show the gtmworks mark, and the Month filter with no month chosen reads All months instead of the browser's raw placeholder." },
