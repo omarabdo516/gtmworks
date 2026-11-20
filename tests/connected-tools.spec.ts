@@ -61,7 +61,7 @@ const use=(key:string)=>(appsEn as Record<string,string>)[`use.${key}`];
 test('each Agent lists its own profile\'s apps with their states, and the apps it was made to use as Not connected',async({page})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${writer}`);
  await expect(section(page,'Writer').getByRole('heading',{name:'Connected tools'})).toBeVisible();
- await expect.poll(()=>rowsOf(page,'Writer')).toEqual([['Canva',use('canva'),'Connected'],['Notion',use('notion'),'Turned off for it'],['Mixpanel',`Not connected · ${use('mixpanel')}`,'Connect']]);
+ await expect.poll(()=>rowsOf(page,'Writer')).toEqual([['Canva',use('canva'),'Connected'],['Mixpanel',`Not connected · ${use('mixpanel')}`,'Connect'],['Notion',use('notion'),'Turned off for it']]);
  await page.goto(`/c/rs-learning/chat/${lead}`);
  await expect.poll(()=>rowsOf(page,'Lead')).toEqual([['Canva',use('canva'),'Connected']]);
 });
@@ -80,7 +80,7 @@ test('the Owner\'s Manage turns rows into Disconnect; Disconnect removes the app
  expect(servers(profile).canva,'Lead still has it').toBeDefined();
  await expect.poll(appLog).toEqual([{actor_id:omar,action:'app_disconnected',app:'canva',agent:'Writer'}]);
  await done.click();
- expect(await rowsOf(page,'Writer')).toEqual([['Canva',`Not connected · ${use('canva')}`,'Connect'],['Notion',use('notion'),'Turned off for it'],['Mixpanel',`Not connected · ${use('mixpanel')}`,'Connect']]);
+ expect(await rowsOf(page,'Writer')).toEqual([['Canva',`Not connected · ${use('canva')}`,'Connect'],['Mixpanel',`Not connected · ${use('mixpanel')}`,'Connect'],['Notion',use('notion'),'Turned off for it']]);
  await page.goto(`/c/rs-learning/chat/${lead}`);
  await expect.poll(()=>rowsOf(page,'Lead')).toEqual([['Canva',use('canva'),'Connected']]);
 });
@@ -89,7 +89,7 @@ for(const [role,email] of [['Manager','manager@example.com'],['Viewer','viewer@e
  await signIn(page,email,`/c/rs-learning/chat/${writer}`);
  const tools=section(page,'Writer');
  await expect(tools.getByRole('heading',{name:'Connected tools'})).toBeVisible();
- await expect.poll(()=>rowsOf(page,'Writer')).toEqual([['Notion',use('notion'),'Turned off for it'],['Mixpanel',`Not connected · ${use('mixpanel')}`,'Not connected']]);
+ await expect.poll(()=>rowsOf(page,'Writer')).toEqual([['Mixpanel',`Not connected · ${use('mixpanel')}`,'Not connected'],['Notion',use('notion'),'Turned off for it']]);
  await expect(tools.getByRole('button')).toHaveCount(0);
  for(const action of ['disconnect','connect']) expect((await page.request.post('/api/company-apps',{data:{company,agent:writer,app:'notion',action}})).status()).toBe(403);
  expect(servers(own).notion).toBeDefined();
