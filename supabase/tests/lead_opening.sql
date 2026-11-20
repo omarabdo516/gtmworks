@@ -1,11 +1,11 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(15);
 -- #434. A new Company with an Owner (عمر), a Manager and its main Agent: Lead opens the Company's first Conversation once,
 -- for an active Owner only, into the Owner's empty Conversation with it when there is one, and never in a Company where
 -- something was written already. The Run that answers it carries
 -- Lead's opening in its brief. Each Company profile is listed for the soul check until it is recorded.
-insert into public.company_engines(id,address,key_encrypted) values ('e4340000-0000-4000-8000-000000000001','http://engine:8642','cipher');
+insert into public.company_engines(id,address,key_encrypted) values ('e4340000-0000-4000-8000-000000000001','http://engine:8642','cipher'),('e4340000-0000-4000-8000-000000000002','http://engine-two:8642','cipher');
 insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000434','opening-test','Opening','e4340000-0000-4000-8000-000000000001');
 insert into public.members(company_id,person_id,role) values
  ('10000000-0000-0000-0000-000000000434','20000000-0000-0000-0000-000000000001','owner'),
@@ -18,18 +18,26 @@ select is(public.open_first_conversation('10000000-0000-0000-0000-000000000434',
  'a Manager is never given the opening');
 select is(public.open_first_conversation('10000000-0000-0000-0000-000000000434','20000000-0000-0000-0000-000000000001','e4340000-0000-0000-0000-000000000002','Hi عمر, I manage the team.'),'e4340000-0000-0000-0000-000000000002'::uuid,
  'the Owner opening Lead with no Conversation gets a new one');
-select is(public.open_first_conversation('10000000-0000-0000-0000-000000000434','20000000-0000-0000-0000-000000000001','e4340000-0000-0000-0000-000000000003','Hi again'),null::uuid,
- 'a second open, from another tab or a later visit, opens nothing');
+select is(public.open_first_conversation('10000000-0000-0000-0000-000000000434','20000000-0000-0000-0000-000000000001','e4340000-0000-0000-0000-000000000003','Hi again'),'e4340000-0000-0000-0000-000000000002'::uuid,
+ 'a second visit before anyone writes, from another tab or a prefetch, finds the same opening and writes nothing');
 reset role;
 select results_eq($$select id,person_id,agent_id,agent_name from public.conversations where company_id='10000000-0000-0000-0000-000000000434'$$,
- $$values('e4340000-0000-0000-0000-000000000002'::uuid,'20000000-0000-0000-0000-000000000001'::uuid,'f4340000-0000-0000-0000-000000000001'::uuid,'Lead'::text)$$,
+ $$select 'e4340000-0000-0000-0000-000000000002'::uuid,'20000000-0000-0000-0000-000000000001'::uuid,'f4340000-0000-0000-0000-000000000001'::uuid,'Lead'::text$$,
  'one Conversation, the Owner''s, with the main Agent');
 select results_eq($$select author,agent_id,author_name,body,run_id,person_id,send_key from public.conversation_messages where conversation_id='e4340000-0000-0000-0000-000000000002'$$,
- $$values('agent'::text,'f4340000-0000-0000-0000-000000000001'::uuid,'Lead'::text,'Hi عمر, I manage the team.'::text,'lead-opening'::text,null::uuid,null::uuid)$$,
+ $$select 'agent'::text,'f4340000-0000-0000-0000-000000000001'::uuid,'Lead'::text,'Hi عمر, I manage the team.'::text,'lead-opening'::text,null::uuid,null::uuid$$,
  'whose one message is Lead''s, written by no Engine run');
 
+-- Once the Owner answers, a visit finds nothing to open or go back to.
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000434','e4340000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000001','عمر','We sell courses',gen_random_uuid(),'run-434-answer');
+set local role service_role;
+select is(public.open_first_conversation('10000000-0000-0000-0000-000000000434','20000000-0000-0000-0000-000000000001','e4340000-0000-0000-0000-000000000008','Hi'),null::uuid,
+ 'after the answer, Lead''s chat is an empty chat again');
+reset role;
+
 -- First run made the Owner an empty Conversation with Lead: the opening goes into it, not into a new one.
-insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000435','opening-first-run','First run','e4340000-0000-4000-8000-000000000001');
+insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000435','opening-first-run','First run','e4340000-0000-4000-8000-000000000002');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000435','20000000-0000-0000-0000-000000000001','owner');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default)
  values('f4340000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000435',gen_random_uuid(),'Lead','General','lead435opening',true);

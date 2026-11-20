@@ -50,6 +50,7 @@ const leadTurns=(page:Page)=>page.locator('.turns > li[data-author="agent"]');
 
 test('without a model the notice shows and nothing opens; once a key is there, Lead has opened the first Conversation, in English, and only once',async({page,browser})=>{
  const {id,slug}=companies.en;
+
  await signIn(page,'omar@example.com',`/c/${slug}/chat`);
  await expect(page.locator('.composer-area [data-no-model]')).toBeVisible();
  await expect(page).toHaveURL(`/c/${slug}/chat`);
@@ -67,17 +68,16 @@ test('without a model the notice shows and nothing opens; once a key is there, L
  await expect(page.locator('.composer-area [data-no-model]')).toHaveCount(0);
  expect(openings(id)).toEqual([{id:conversation,person_id:omar}]);
 
- // A reload, Lead's chat again, and a new sign-in open nothing more.
+ // A reload, Lead's chat again and a new sign-in open nothing more: until the Owner answers, Lead's chat goes back to it.
  await page.reload();
  await expect(leadTurns(page)).toHaveCount(1);
  await page.goto(`/c/${slug}/chat`);
- await expect(page.getByLabel('Message',{exact:true})).toBeVisible();
- await expect(page).toHaveURL(`/c/${slug}/chat`);
+ await expect(page).toHaveURL(`/c/${slug}/conversations/${conversation}`);
  const other=await browser.newContext(); const again=await other.newPage();
  try {
   await signIn(again,'omar@example.com',`/c/${slug}/chat`);
-  await expect(again.getByLabel('Message',{exact:true})).toBeVisible();
-  await expect(again).toHaveURL(`/c/${slug}/chat`);
+  await expect(again).toHaveURL(`/c/${slug}/conversations/${conversation}`);
+  await expect(leadTurns(again)).toHaveCount(1);
  } finally { await other.close(); }
  expect(openings(id)).toEqual([{id:conversation,person_id:omar}]);
  expect(conversationCount(id)).toBe(1);
@@ -100,6 +100,11 @@ test('the Owner\'s answer is met with the first Agent to make and the Make it ch
  await asked.getByRole('button',{name:'Make it'}).click();
  await expect(page.getByRole('group',{name:'Agent made: Course Writer'})).toBeVisible({timeout:30000});
  expect(JSON.parse(query(`select name,speciality from public.hermes_agents where company_id='${id}' and name='Course Writer'`))).toEqual([{name:'Course Writer',speciality:'Writes the course posts.'}]);
+ // Answered, Lead's chat is an empty chat again: a second Conversation starts there, and nothing is opened again.
+ await page.goto(`/c/${slug}/chat`);
+ await expect(page).toHaveURL(`/c/${slug}/chat`);
+ await expect(page.getByLabel('Message',{exact:true})).toBeVisible();
+ expect(openings(id)).toEqual([{id:conversation,person_id:omar}]);
 });
 
 test('an Arabic Owner finds the opening in Egyptian Arabic',async({page})=>{

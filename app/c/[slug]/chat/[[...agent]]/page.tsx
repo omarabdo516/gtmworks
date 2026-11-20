@@ -57,7 +57,8 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  // #434: on a Company with a model and no Conversation yet, the Owner opening Lead finds the first Conversation, which
  // Lead opened with its questions (lib/lead-opening.mjs). The database opens it once per Company; any later visit draws
  // the empty chat. Without a model the #422 notice shows instead, and the opening waits for one. The Owner's empty
- // Conversation from first run is opened the same way (app/c/[slug]/conversations/[id]/page.tsx).
+ // Conversation from first run is opened the same way (app/c/[slug]/conversations/[id]/page.tsx). Until anyone writes,
+ // a visit goes back to the opening, so one written by a link's prefetch (which renders this page too) is still found.
  if(agent&&owner&&main&&!mode) {
   const opened=await openOnVisit(createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}),
    {model:modelRead,company:company.id,person:user.id,language,owner:person?.name||'',lead:agent.name,companyName:company.name});

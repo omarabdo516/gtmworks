@@ -22,15 +22,25 @@ grant execute on function public.record_lead_soul(uuid,text) to service_role;
 -- asks for Lead's message, in the Owner's language, to be the first one (lib/lead-opening.mjs). It goes into the
 -- Conversation first run made for the Owner (choose_work_mode) or any other of theirs with the main Agent: the one named
 -- when it is such a one, else the oldest; an Owner with none gets a new one under the given id. Its run id is
--- 'lead-opening': no Engine run made it. Once it is written the Company has a message, so it never happens twice, and a
--- Company where someone wrote first is never opened; the Company row is locked first, so two tabs at once write one.
--- The service role alone writes it, so nobody can put words in Lead's mouth. Answers the Conversation, or null.
+-- 'lead-opening': no Engine run made it. Once it is written the Company has a message, so it is never written twice, and
+-- a Company where someone wrote first is never opened; the Company row is locked first, so two tabs at once write one.
+-- The service role alone writes it, so nobody can put words in Lead's mouth. Answers the Conversation opened, or the
+-- Owner's opening while nobody has written in the Company since, or null.
 create function public.open_first_conversation(c uuid, person uuid, conversation uuid, body text) returns uuid
 language plpgsql security definer set search_path='' as $$
 declare lead public.hermes_agents; target uuid;
 begin
  perform 1 from public.companies where id=c for update;
- if not found or exists(select 1 from public.conversation_messages m where m.company_id=c)
+ if not found then return null; end if;
+ -- Opened already: until anyone writes in the Company, the Owner's visit goes back to it, whichever visit wrote it
+ -- (a link's prefetch renders the page too, and its move to the Conversation goes nowhere).
+ select m.conversation_id into target from public.conversation_messages m join public.conversations v on v.id=m.conversation_id
+  where m.company_id=c and m.run_id='lead-opening' and v.person_id=person;
+ if found then
+  return case when not exists(select 1 from public.conversation_messages m where m.company_id=c and m.run_id<>'lead-opening')
+   and not exists(select 1 from public.conversation_run_reservations r where r.company_id=c) then target end;
+ end if;
+ if exists(select 1 from public.conversation_messages m where m.company_id=c)
   or exists(select 1 from public.conversation_run_reservations r where r.company_id=c) then return null; end if;
  if not exists(select 1 from public.members m where m.company_id=c and m.person_id=person and m.role='owner' and m.removed_at is null) then return null; end if;
  select * into lead from public.hermes_agents a where a.company_id=c and a.is_default;
