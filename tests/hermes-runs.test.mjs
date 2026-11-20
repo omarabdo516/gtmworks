@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeHermes, noProviderError } from './fake-hermes.mjs';
+import { fakeHermes, noProviderError, creditExhaustedError, apiKeyRefusedError, signInRefusedError, modelMissingError, failedRunText } from './fake-hermes.mjs';
 import { startRun, readRun, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 
@@ -120,6 +120,21 @@ test('a run that failed because the Engine has no model provider says so; any ot
   fake.settings.failure='⚠️ Provider authentication failed: HTTP 401: invalid x-api-key';
   assert.equal((await readRun({...connection(fake),run})).noModel,undefined);
   assert.equal((await engineFor(connection(fake)).read(run)).noModel,undefined);
+ } finally { await fake.close(); }
+});
+
+test('a run that failed for no credit, a refused key or sign-in, or a missing model says which; any other failure does not',async()=>{
+ const fake=await fakeHermes(); fake.settings.ending='failed';
+ try {
+  const run=await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'});
+  for(const [sentence,reason] of [[creditExhaustedError,'credit'],[apiKeyRefusedError,'key'],[signInRefusedError,'key'],[modelMissingError,'model']]) {
+   fake.settings.failure=sentence;
+   assert.equal((await readRun({...connection(fake),run})).modelRefused,reason);
+   assert.equal((await engineFor(connection(fake)).read(run)).modelRefused,reason);
+  }
+  fake.settings.failure=failedRunText;
+  assert.equal((await readRun({...connection(fake),run})).modelRefused,undefined);
+  assert.equal((await engineFor(connection(fake)).read(run)).modelRefused,undefined);
  } finally { await fake.close(); }
 });
 
