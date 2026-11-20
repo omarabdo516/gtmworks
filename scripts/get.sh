@@ -6,8 +6,8 @@
 #
 # It downloads one release's two files (docker-compose.install.yml and install.sh, the GitHub Release assets of #49)
 # into the install folder and runs that install.sh, which pulls the images by digest, applies the migrations from the
-# image and starts gtmworks; nothing is built and no source is downloaded. It keeps a copy of itself in the folder as
-# gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
+# image and starts gtmworks; nothing is built and no source is downloaded. It keeps the get.sh of the build it installs
+# (the image carries it, #437) in the folder as gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
 #   gtmworks status | update | backup | restore <archive> | install | sign-in claude
 #   gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list
 #
@@ -17,8 +17,7 @@
 # the digest just pulled.
 #
 # Tests only: GTMWORKS_RELEASES replaces GitHub Releases with a base URL (file:// in CI) that holds releases.json (a list
-# of {"tag_name": "vX.Y.Z"}) and <tag>/<file> for each release; GTMWORKS_GET replaces the address this script copies
-# itself from when it runs from a pipe.
+# of {"tag_name": "vX.Y.Z"}) and <tag>/<file> for each release; GTMWORKS_GET replaces the address of main's get.sh.
 set +x
 set -eu
 # Read whole before anything runs: a pipe that breaks off, or a copy replaced on disk, cannot run half a script.
@@ -34,9 +33,6 @@ owner_record=${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/gtmworks/inst
 update_lock=${owner_record%/*}/update.lock
 get_url=${GTMWORKS_GET:-https://raw.githubusercontent.com/$repository/main/scripts/get.sh}
 line="curl -fsSL https://raw.githubusercontent.com/$repository/main/scripts/get.sh | sh"
-# This script's own file, when it runs from one (the gtmworks command, or sh get.sh); a pipe has none.
-self=$0
-case "$self" in /*) ;; *) self=$PWD/$self;; esac
 
 say() { printf '%s\n' "$*"; }
 fail() { printf '%s\n' "$*" >&2; exit 1; }
@@ -315,12 +311,21 @@ take_backup() {
   [ -f "$archive_made" ] || { echo "The backup wrote no archive." >&2; return 1; }
 }
 
-# The command on the PATH runs the copy of this script kept in the install folder, for that folder.
+# The gtmworks command of the build $1 ($release_ref), into $stage before anything changes (#437): the get.sh that build's
+# image carries, so the command on the PATH matches the version installed. An image from before #437 carries none: the
+# release's tag is read instead, or main for a main build.
+stage_command() {
+  if ! docker run --rm "$release_ref" cat /app/release-source/scripts/get.sh > "$stage/gtmworks.sh" 2> /dev/null; then
+    case "$1" in v*) from=https://raw.githubusercontent.com/$repository/$1/scripts/get.sh;; *) from=$get_url;; esac
+    fetch "$from" "$stage/gtmworks.sh"
+  fi
+  [ "$(sed -n 2p "$stage/gtmworks.sh")" = "$marker" ] || fail "The gtmworks command that gtmworks $1 carries is not the gtmworks installer. Nothing was changed."
+}
+place_command() { cp "$stage/gtmworks.sh" gtmworks.sh.tmp; chmod 755 gtmworks.sh.tmp; mv gtmworks.sh.tmp gtmworks.sh; }
+
+# The command on the PATH runs the copy of get.sh kept in the install folder, for that folder.
 install_command() {
-  if [ -f "$self" ] && [ "$(sed -n 2p "$self")" = "$marker" ]; then cp "$self" gtmworks.sh.tmp; else fetch "$get_url" gtmworks.sh.tmp; fi
-  [ "$(sed -n 2p gtmworks.sh.tmp)" = "$marker" ] || { rm -f gtmworks.sh.tmp; fail "$get_url is not the gtmworks installer."; }
-  chmod 755 gtmworks.sh.tmp
-  mv gtmworks.sh.tmp gtmworks.sh
+  place_command
   bin=$HOME/.local/bin
   mkdir -p "$bin"
   folder=$(quote "$dir")
@@ -409,6 +414,7 @@ op_install() {
   else
     download_release "$target" "$stage"
   fi
+  stage_command "$target"
   say "gtmworks $target: $release_ref"
   if [ "$existing" = yes ]; then
     if [ -z "$current" ] && [ "$finished" = yes ] && [ "$release_ref" != "$running" ]; then
@@ -451,8 +457,10 @@ op_update() {
   else target=$(latest_release); fi
   new_stage
   download_release "$target" "$stage"
+  stage_command "$target"
   if [ "$release_ref" = "$running" ]; then
     record_target "$target"
+    place_command
     say "gtmworks $target ($release_ref) already runs in $dir: nothing to update."
     return
   fi
@@ -511,6 +519,7 @@ update_to() {
     exit "$status"
   fi
   record_target "$target"
+  place_command
   now=$(database_migrations) || now=
   say "gtmworks $target is running: $release_ref"
   [ -z "$archive" ] || say "Backup: $archive"
@@ -638,6 +647,7 @@ op_restore() {
   need_curl
   new_stage
   download_release "$version" "$stage"
+  stage_command "$version"
   check_archive
   # A release from before #349 refuses an archive holding the Agents' data, but only once the volumes are gone: ask its
   # install.sh first.
@@ -670,6 +680,7 @@ op_restore() {
   # The archive may predate migrations $version carries: its update applies them, as an update to it would.
   run_installer update
   record_target "$version"
+  place_command
   own_data
   say "gtmworks $version is running with the data of $archive. The data from before is in $archive_made."
 }

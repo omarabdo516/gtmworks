@@ -105,6 +105,11 @@ case "$*" in
   [ "$wd" = /app/release-source ] || exit 9
   sed "s#@REF@#$ref#g" "$FIXTURE/template-install.sh" > "$out/install.sh"
   sed "s#@REF@#$ref#g" "$FIXTURE/template-compose.yml" > "$out/docker-compose.install.yml"; exit 0;;
+ *' cat /app/release-source/scripts/get.sh')
+  # Each image carries its own get.sh (#437): a fixture one when the test wrote it, this branch's otherwise; an image
+  # from before #437 carries none.
+  [ -z "\${IMAGE_WITHOUT_GET:-}" ] || exit 1
+  src=$FIXTURE/get/\${3##*:}; [ -f "$src" ] || src=$GET_SOURCE; cat "$src";;
  *' ls /app/install/supabase/migrations') cat "$FIXTURE/migrations/\${3##*:}";;
  *'exec -T db psql'*) [ ! -f "$DB_FILE" ] || cat "$DB_FILE";;
  *'config --services') printf 'db\\nweb\\nworker\\n';;
@@ -129,7 +134,8 @@ case "$url" in
  'https://api.github.com/repos/${repo}/releases?per_page=100&page=1'|'https://api.github.com/repos/${repo}/releases?per_page=100') src=$FIXTURE/releases.json;;
  'https://api.github.com/repos/${repo}/releases?per_page=100&page='*) src=$FIXTURE/releases-\${url##*page=}.json; [ -f "$src" ] || { echo '[]'; exit 0; };;
  https://github.com/${repo}/releases/download/*) src=$FIXTURE/\${url#https://github.com/${repo}/releases/download/};;
- https://raw.githubusercontent.com/${repo}/main/scripts/get.sh) src=$GET_SOURCE;;
+ https://raw.githubusercontent.com/${repo}/*/scripts/get.sh)
+  at=\${url#https://raw.githubusercontent.com/${repo}/}; src=$FIXTURE/raw/\${at%%/*}; [ -f "$src" ] || src=$GET_SOURCE;;
  file://*) src=\${url#file://};;
  *) exit 6;;
 esac
@@ -142,7 +148,7 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
  const root=mkdtempSync(join(tmpdir(),'gtmworks-get-'));
  t.after(()=>rmSync(root,{recursive:true,force:true}));
  const [home,fixture,bin,work]=['home','fixture','bin','work'].map(name=>join(root,name));
- for(const folder of [home,join(fixture,'migrations'),bin,work]) mkdirSync(folder,{recursive:true});
+ for(const folder of [home,join(fixture,'migrations'),join(fixture,'get'),join(fixture,'raw'),bin,work]) mkdirSync(folder,{recursive:true});
  writeFileSync(join(fixture,'template-install.sh'),installerTemplate);
  writeFileSync(join(fixture,'template-compose.yml'),composeTemplate);
  // The API answers pretty-printed objects with many fields; only tag_name names a release, and a release GitHub marks
@@ -304,7 +310,7 @@ test('--channel main installs the main image by its digest, with the two files w
 test('the main image holds what --channel main runs, and release-assets.mjs writes the two files from it', t => {
  const dockerfile=readFileSync('Dockerfile','utf8');
  assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/docker-compose\.install\.yml \.\/release-source\/$/m);
- assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \.\/release-source\/scripts\/$/m);
+ assert.match(dockerfile,/^COPY --from=build --chown=node:node \/app\/scripts\/install\.sh \/app\/scripts\/get\.sh \/app\/scripts\/release-assets\.mjs \/app\/scripts\/engine-template\.yml \.\/release-source\/scripts\/$/m);
  // /app/release-source laid out as the image holds it, run as get.sh runs it there.
  const source=mkdtempSync(join(tmpdir(),'gtmworks-release-source-'));
  t.after(()=>rmSync(source,{recursive:true,force:true}));
@@ -386,10 +392,11 @@ test('the line adds ~/.local/bin to a shell profile only when no profile names i
  ok(m.gtmworks(['status']));
 });
 
-test('the line run from a pipe copies the command from its address, and run again repairs the same release', t => {
+test('the line run from a pipe takes the command from the image it installs, and run again repairs the same release', t => {
  const m=machine(t);
  ok(m.piped(['--version','v1.2.3']));
- assert.match(m.curl(),new RegExp(`^https://raw\\.githubusercontent\\.com/${repo}/main/scripts/get\\.sh$`,'m'));
+ assert.match(m.docker(),new RegExp(`^run --rm ${ref('v1.2.3').replace(/[.]/g,'\\.')} cat /app/release-source/scripts/get\\.sh$`,'m'));
+ assert.doesNotMatch(m.curl(),/raw\.githubusercontent/);
  assert.equal(m.file('gtmworks.sh'),getText);
  const secrets=m.file('.env.install');
  m.clear();
@@ -432,6 +439,63 @@ test('gtmworks update backs up first, then prints the backup path and the exact 
  ok(same);
  assert.match(same.stdout,/already runs/);
  assert.deepEqual(m.installer(),[]);
+});
+
+// #437: the command an install keeps is the get.sh of the build it runs, so a command added later reaches it on update.
+const olderCommand=getText.replace(/^ +elif \[ "\$operation" = sign-in \][^\n]*\n/m,'');
+test('gtmworks update replaces an older gtmworks command with the one the new release carries', t => {
+ assert.notEqual(olderCommand,getText,'the older copy knows no sign-in');
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ writeFileSync(join(m.dir,'gtmworks.sh'),olderCommand);
+ assert.match(m.gtmworks(['sign-in','claude']).stderr,/^Unexpected argument: claude$/m);
+ ok(m.gtmworks(['update']));
+ assert.equal(m.file('gtmworks.sh'),getText);
+ const signIn=m.gtmworks(['sign-in','claude']);
+ assert.equal(signIn.status,2);
+ assert.match(signIn.stderr,/^gtmworks sign-in claude needs --company <id-or-name>\.$/m);
+ // Already on the latest release: the command is still made to match it.
+ writeFileSync(join(m.dir,'gtmworks.sh'),olderCommand);
+ ok(m.gtmworks(['update']));
+ assert.equal(m.file('gtmworks.sh'),getText);
+});
+
+test('a release image without its get.sh: the command comes from the release tag, or main for a main build', t => {
+ const m=machine(t);
+ writeFileSync(join(m.env.FIXTURE,'raw/v1.2.3'),getText+'# v1.2.3\n');
+ ok(m.line(['--version','v1.2.3'],{extra:{IMAGE_WITHOUT_GET:'1'}}));
+ assert.match(m.curl(),new RegExp(`^https://raw\\.githubusercontent\\.com/${repo}/v1\\.2\\.3/scripts/get\\.sh$`,'m'));
+ assert.equal(m.file('gtmworks.sh'),getText+'# v1.2.3\n');
+ m.clear();
+ ok(m.gtmworks(['update','--channel','main'],{extra:{IMAGE_WITHOUT_GET:'1'}}));
+ assert.match(m.curl(),new RegExp(`^https://raw\\.githubusercontent\\.com/${repo}/main/scripts/get\\.sh$`,'m'));
+ assert.equal(m.file('gtmworks.sh'),getText);
+});
+
+test('a fetched command that is not the gtmworks installer is refused before anything changes, and the old copy stays', t => {
+ const m=machine(t);
+ ok(m.line(['--version','v1.2.3']));
+ writeFileSync(join(m.env.FIXTURE,'get',hex('c')),'<html>Not Found</html>\n');
+ const kept=m.file('gtmworks.sh');
+ m.clear();
+ const refused=m.gtmworks(['update']);
+ assert.equal(refused.status,1);
+ assert.match(refused.stderr,/^The gtmworks command that gtmworks v1\.10\.0 carries is not the gtmworks installer\. Nothing was changed\.$/m);
+ assert.equal(m.file('gtmworks.sh'),kept);
+ assert.deepEqual(m.installer(),[]);
+ assert.equal(m.file('.gtmworks-version'),'v1.2.3\n');
+ assert.deepEqual(readdirSync(m.dir).filter(name=>/^gtmworks\.sh\.|\.gtmworks-download/.test(name)),[]);
+});
+
+test('gtmworks restore --version leaves the command of the release it went back to', t => {
+ const m=machine(t);
+ ok(m.line());
+ const archive=join(m.root,'old.tgz');
+ writeFileSync(archive,'archive');
+ const older=getText+'# v1.2.3\n';
+ writeFileSync(join(m.env.FIXTURE,'get',hex('a')),older);
+ ok(m.gtmworks(['restore',archive,'--version','v1.2.3','--yes']));
+ assert.equal(m.file('gtmworks.sh'),older);
 });
 
 test('gtmworks update --no-backup with no new migration goes back with an update, and takes no backup', t => {
@@ -1026,6 +1090,9 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
   /env -i HOME="\$HOME" [^\n]*\\\n\s+sh -lc 'command -v gtmworks && gtmworks status'/,
   /All \[0-9\]\+ services are healthy/,
   /gtmworks update \|\| fail 'gtmworks update'/,
+  /sed -i '\/\^ \*elif \\\[ "\$operation" = sign-in \\\]\/d' gtmworks\.sh/,
+  /grep -Fx 'Unexpected argument: claude' "\$RUNNER_TEMP\/older-command\.log"/,
+  /grep -Fx 'gtmworks sign-in claude needs --company <id-or-name>\.' "\$RUNNER_TEMP\/updated-command\.log"/,
   /\^Backup: /,
   /To go back to v0\.0\.0: gtmworks restore '\$archive' --version v0\.0\.0/,
   /gtmworks v0\.0\.1 is running: \$next/,
@@ -1052,6 +1119,8 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
  const versionRun=run.indexOf('line --version v0.0.0 --dir "$fresh"');
  assert.ok(versionRun>run.lastIndexOf('compose down -v'));
  assert.ok(run.lastIndexOf(`'[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]'`,versionRun)>run.indexOf('eval "$back --yes"'));
+ // #437: the older command is swapped in before the update, and sign-in is run after it.
+ assert.ok(run.indexOf('older-command.log')<run.indexOf("gtmworks update || fail")&&run.indexOf("gtmworks update || fail")<run.indexOf('updated-command.log'));
  // The failing update runs after the successful one, and the refusal reads back the running image and migrations.
  assert.ok(run.indexOf('--version v0.0.2')>run.indexOf("gtmworks update || fail"));
  assert.match(run,/\[\[ \$\(web_image\) == "\$image" && \$\(cat \.install-release\) == "\$next"/);

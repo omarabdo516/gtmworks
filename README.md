@@ -277,8 +277,11 @@ back only while install.sh itself runs, by its lock on `.install.lock`, so run
 updates of one install as one user. An install
 on the `main` channel updates to the newest main build; the update keeps the two
 files of the build it ran (`.gtmworks-main/`), so its go-back command names that
-exact build, `--version main@sha256:<digest>`. `gtmworks update` does not replace
-the `gtmworks` command itself; run the line again for a newer one.
+exact build, `--version main@sha256:<digest>`. The `gtmworks` command itself is
+the `get.sh` of the build the folder runs, which each image carries: an install,
+an update or a `restore --version` leaves the command of the release or channel it
+installed, checked to be the gtmworks installer before anything changes. A command
+from before this (2026-11-20) cannot update itself: run the line again once.
 
 ## Backup
 
@@ -356,7 +359,7 @@ take the latest stable release to be the highest published `vX.Y.Z`, the one
 `stable` names, read from every page of the GitHub Releases list, and download
 its two files from that release. CI points both at local test releases instead with the test-only
 `GTMWORKS_RELEASES` (a base URL holding `releases.json` and `<tag>/<file>`) and
-`GTMWORKS_GET` (where the piped script copies itself from); `scripts/get.sh`
+`GTMWORKS_GET` (the address of main's `get.sh`, read for a build whose image carries none); `scripts/get.sh`
 describes them.
 
 The first push creates the package `ghcr.io/omarabdo516/gtmworks` **private**, and
