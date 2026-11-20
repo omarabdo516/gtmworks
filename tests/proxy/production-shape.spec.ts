@@ -85,6 +85,8 @@ test('a server action whose request fails shows an error and reports it', async 
 test('a rejection nobody handled is shown on the page', async ({ page }) => {
   await page.goto('/sign-in');
   await expect(alerts(page)).toHaveCount(0);
+  // The notice listens once React has hydrated the page; a rejection forced before that has no listener yet.
+  await page.waitForFunction(() => { const button = document.querySelector('button'); return !!button && Object.getOwnPropertyNames(button).some(name => name.startsWith('__reactProps$')); });
   await page.evaluate(() => { void Promise.reject(new Error('forced failure')); });
   await expect(alerts(page)).toContainText('Something went wrong');
 });

@@ -6,6 +6,8 @@ cd "$(dirname "$0")"
 lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
 install_chromium() {
+  # The visual lane's browser and its system packages, as it has always installed them (#257); the browser suite's
+  # shards get theirs from the workflow's cache, and install no system package (#404).
   npx playwright install --with-deps chromium
 }
 start_lanes() {
@@ -120,15 +122,15 @@ case "${1:-check}" in
   npm run test:db
   ;;
  integration)
-  # Any further arguments go to the browser suite; CI passes --shard=<i>/3 (#335), and the proxy suite runs in shard 1 only.
+  # Any further arguments go to the browser suite; CI passes --shard=<i>/6 (#335, #404), and the proxy suite runs in
+  # shard 1 only.
   shift
   proxy=true
   [[ " $* " == *' --shard='* && " $* " != *' --shard=1/'* ]] && proxy=false
+  # CI restores the dependencies and the browser from the fast job's caches before this, and installs Chromium alone on
+  # a miss: the runner image has its system packages and fonts, so nothing here reaches a package mirror (#404). A local
+  # run uses the checkout's own node_modules and browser.
   load_images
-  if [[ "${CI:-}" == "true" ]]; then
-    npm ci
-    install_chromium
-  fi
   images_loaded
   start_lanes
   wait_lanes
@@ -184,11 +186,16 @@ case "${1:-check}" in
   lane_test --update-snapshots=changed
   ;;
  install)
-  # The CI `install` job (scripts/ci-install-check.sh, #378) on an isolated Docker machine of its own, in a throwaway
-  # checkout of HEAD: the job writes into the checkout it runs in, as it does on a CI runner. Commit first: uncommitted
-  # changes are not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there
-  # reaches its containers empty.
-  # The job updates an install from HEAD's source, which an update downloads from GitHub: HEAD must be pushed to some branch.
+  # One area of the install proof (scripts/ci-install-check.sh, #406) on an isolated Docker machine of its own, in a
+  # throwaway checkout of HEAD: `./ci.sh install proxy` runs the proxy area alone; without an area the whole proof and
+  # the profile-size measurement (#408) run.
+  # The proof writes into the checkout it runs in, as it does on a CI runner, so commit first: uncommitted changes are
+  # not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there reaches
+  # its containers empty.
+  # The proof is Docker only, so without a daemon say what is missing in one line, before a machine is started.
+  shift
+  docker info > /dev/null 2>&1 || { echo 'the install proof needs Docker: docker info cannot reach a daemon' >&2; exit 1; }
+  # The update area updates an install from HEAD's source, which an update downloads from GitHub: HEAD must be pushed to some branch.
   git fetch -q origin "$(git rev-parse HEAD)" 2> /dev/null \
     || { echo "Push HEAD to a branch on GitHub first: the install job downloads it ($(git rev-parse --short HEAD))." >&2; exit 2; }
   work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-lane; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
@@ -218,7 +225,7 @@ case "${1:-check}" in
   # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
   umask 0000
   export INSTALL_LANE_FOREIGN_OWNER=1
-  for part in install release one-line; do bash scripts/ci-install-check.sh "$part"; done
+  bash scripts/ci-install-check.sh "$@"
   ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install [first-install | companies | agents | backup | proxy | update | one-line | measure]' >&2; exit 2;;
 esac

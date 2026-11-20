@@ -1005,12 +1005,14 @@ test('gtmworks status reports every service and fails when one is not healthy', 
 
 test('CI runs the one line twice, gtmworks status from a new shell, an update, a refusal, a failed update and going back', () => {
  const steps=installJob().steps;
- const at=pattern=>steps.findIndex(step=>pattern.test(step.name||''));
- const index=at(/one-line install/);
- assert.ok(index>at(/release install and update/)&&index<steps.length-1,'after the release step, before the Docker machine is removed');
- const step=steps[index];
- assert.equal(step.env.DOCKER_HOST,'tcp://127.0.0.1:2375');
+ const step=steps.find(step=>step.env?.INSTALL_REF);
+ assert.ok(step,'the job runs the install proof');
+ // The one line runs in the proof's last area, after the release install's own update: the whole proof is one step (#402).
  const run=step.run;
+ assert.ok(run.indexOf("fail 'the previous release install'")<run.indexOf('# one-line: the one line (#51)'),'after the release install');
+ assert.equal(step.env.DOCKER_HOST,'tcp://127.0.0.1:2375');
+ assert.ok(steps.indexOf(step)<steps.length-1,'before the step that removes the Docker machine');
+ assert.match(steps.at(-1).run,/docker rm -fv install-docker/,'the last step removes the machine');
  for(const pattern of [
   /line\(\) \{ curl -fsSL "\$GTMWORKS_GET" \| sh -s -- "\$@"; \}/,
   /GTMWORKS_RELEASES="file:\/\/\$releases"/,

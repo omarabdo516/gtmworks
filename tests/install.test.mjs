@@ -18,13 +18,21 @@ test('CI prints the captured update log on every failed-update assertion', t => 
  const step=install.steps.find(step=>step.env?.INSTALL_REF);
  assert.equal(install.permissions.contents,'read');
  assert.equal(step.env.GH_TOKEN,'${{ github.token }}');
- const script=`${step.run.split('\n')[0]}
+ // The proof's fail() and fail_update() are its lib's; the fixture stands the installer and psql in, and runs the
+ // failed-update block itself.
+ const lines=step.run.split('\n');
+ const definitions=lines.filter(line=>/^fail\(\) \{|^fail_update\(\) \{/.test(line));
+ const start=lines.findIndex(line=>line.startsWith('if sh scripts/install.sh update'));
+ const end=lines.findIndex(line=>line.startsWith('trap - EXIT'));
+ assert.ok(start>=0&&start<end,'the proof has the failed-update block');
+ const script=`${definitions.join('\n')}
+fail_prefix='install check failed: '
 sh() { cat "$UPDATE_FIXTURE"; return "$UPDATE_STATUS"; }
 compose() { echo "$WEB_CONTAINER"; }
 db() { echo "$ROLLED_BACK"; }
 docker() { printf '%s' "$HEALTH_STATUS"; return "$HEALTH_EXIT"; }
 old_web=original
-${step.run.slice(step.run.indexOf('fail_update()'))}`;
+${lines.slice(start,end).join('\n')}`;
  const fixture=join(directory,'update.fixture');
  const env={...process.env,UPDATE_FIXTURE:fixture,UPDATE_STATUS:'3',WEB_CONTAINER:'original',ROLLED_BACK:'t',HEALTH_STATUS:'200',HEALTH_EXIT:'0'};
  for(const [failure,reason] of [
@@ -286,7 +294,7 @@ test('a restore --version asks the target release the same archive check a resto
 });
 
 test('the install job updates a real previous-release install with one Company, and refuses one with two', () => {
- const step=installJob().steps.find(step=>/release install and update/.test(step.name||''));
+ const step=installJob().steps.find(step=>step.env?.INSTALL_REF);
  const run=step.run;
  const lines=run.split('\n');
  const at=text=>lines.findIndex(line=>line.includes(text));
@@ -324,7 +332,7 @@ test('the install job updates a real previous-release install with one Company, 
  ]) assert.ok(run.includes(text),text);
  // After it: the adopted Engine (its key, its volume, its own network and container), the memory and the sign-in.
  const adopted=[
-  "[[ $(engine_key) == \"$key\" ]] || fail 'the update adopted the Engine key'",
+  "[[ $(first_engine_key) == \"$key\" ]] || fail 'the update adopted the Engine key'",
   "if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi",
   "== gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'",
   "== gtmworks-engine-first ]] || fail \"the Engine joins its own network only\"",
@@ -452,11 +460,36 @@ test('the install job backs up and restores every Company Engine, refuses an inc
  ]) assert.ok(run.includes(text),text);
 });
 
+// #409: backup and restore is an area of its own, so it runs alone on a fresh Docker machine and makes the install, the
+// Companies and the archives it needs: it resets the machine, installs, completes first run for the first Company, backs
+// it up, and adds a second Company for the every-Engine archive. The archive in the previous release's shape is that
+// release's own, in the update area (#378, C3).
+test('the backup area makes the install, the Companies and the archives it needs itself', () => {
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
+ const lines=run.split('\n');
+ const start=lines.findIndex(line=>line.startsWith('backup() {'));
+ const next=lines.findIndex((line,index)=>index>start&&line.startsWith('# proxy:'));
+ assert.ok(start>=0&&next>start,run);
+ const area=lines.slice(start,next).join('\n');
+ const at=text=>{ const index=area.indexOf(text); assert.notEqual(index,-1,`${text}: ${area}`); return index; };
+ // It starts from a fresh machine and a fresh install, and completes first run as first-install does.
+ assert.ok(at('reset_install\ninstall_source backup-install.log')<at('install_source backup-install.log || fail'));
+ assert.ok(at('install_source backup-install.log || fail')<at('complete_setup ||'));
+ // The source install's own archive is made after first run and before the second Company has an Engine of its own.
+ assert.ok(at('complete_setup ||')<at("sh scripts/install.sh backup || fail 'backup'"));
+ assert.ok(at("sh scripts/install.sh backup || fail 'backup'")<at('second_company ||'));
+ // The source install's own archive is restored into a fresh install, then the every-Engine one is made and restored.
+ assert.ok(at('second_company ||')<at("sh scripts/install.sh backup || fail 'backup of every Engine'"));
+ assert.ok(at("fail 'backup'")<at('first_archive=$(find backups'));
+ assert.ok(at('sh scripts/install.sh restore "$first_archive"')<at("fail 'backup of every Engine'"));
+ assert.ok(at("fail 'backup of every Engine'")<at('sh scripts/install.sh restore "$every_engine"'));
+});
+
 // #386: a release that pins another Engine image recreates every Company's Engine, and a Run on each answers.
 test('the install job updates two Companies to a release pinning another Engine image and proves a Run on each', () => {
- const run=installJob().steps.find(step=>/release install and update/.test(step.name||'')).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const lines=run.split('\n');
- const add=lines.findIndex(line=>line.includes("sh install.sh company add --name 'Second Company' --owner proxy-owner@example.com || fail 'company add before the update'"));
+ const add=lines.findIndex(line=>line.includes("second_company install.sh || fail 'company add before the update'"));
  const update=lines.findIndex(line=>line.includes("sh install.sh update || fail 'update every Company Engine'"));
  assert.ok(add>=0,run);
  assert.ok(update>add,'the update runs on an install made with two Companies');
@@ -514,7 +547,7 @@ test('the install job writes an Agent rule and the Company knowledge before the 
  const lines=run.split('\n');
  const at=pattern=>lines.findIndex(line=>pattern.test(line));
  const seed=at(/^lifecycle seed/),backup=at(/^sh scripts\/install\.sh backup \|\| fail 'backup'$/);
- const restore=at(/sh scripts\/install\.sh restore "\$backup" \|\|/),verify=at(/^lifecycle verify/);
+ const restore=at(/sh scripts\/install\.sh restore "\$first_archive" \|\|/),verify=at(/^lifecycle verify/);
  for(const [index,name] of [[seed,'seed'],[backup,'backup'],[restore,'restore'],[verify,'verify']]) assert.ok(index>=0,`the job runs ${name}`);
  assert.ok(seed<backup&&backup<restore&&restore<verify,lines.join('\n'));
  const script=readFileSync('scripts/check-install.mjs','utf8');
@@ -1043,6 +1076,42 @@ esac
  assert.equal(failed.status,7);
  assert.doesNotMatch(failed.stdout,/is ready/);
  assert.equal(existsSync(join(directory,'.install-lock')),false);
+});
+
+// #411: a source install that skips `compose build web` because CI loaded the run's one image says so in one line, so a
+// person reading the log knows which image the install runs; a source install anywhere else still builds its own.
+test('a source install that skips building the app image says so in one line', t => {
+ const fixture=()=>{
+  const directory=mkdtempSync(join(tmpdir(),'gtmworks-prebuilt-'));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
+  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+  for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
+  writeFileSync(join(directory,'supabase/migrations/001_first.sql'),'select 1;');
+  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
+  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
+  const commands=join(directory,'commands');
+  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
+printf '%s\\n' "$*" >> "$COMMANDS"
+case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
+  *validate*) exit 0;;
+  *engine-key*) printf '%s\\n' "$ENGINE_KEY";;
+  *'exec -T db psql'*) cat > /dev/null;;
+esac
+`,{mode:0o755});
+  return {run:extra=>spawnSync('sh',['scripts/install.sh'],{cwd:directory,env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,ENGINE_KEY:'a1'.repeat(32),...extra},encoding:'utf8'}),commands};
+ };
+ const prebuilt=fixture();
+ const skipped=prebuilt.run({GTMWORKS_IMAGE_PREBUILT:'true'});
+ assert.equal(skipped.status,0,skipped.stderr);
+ assert.match(skipped.stdout,/^Using the prebuilt web image \(GTMWORKS_IMAGE_PREBUILT=true\); not building it\.$/m);
+ assert.doesNotMatch(readFileSync(prebuilt.commands,'utf8'),/build web/,'the prebuilt run builds no image');
+ const source=fixture();
+ const built=source.run({});
+ assert.equal(built.status,0,built.stderr);
+ assert.doesNotMatch(built.stdout,/prebuilt/,'a source install says nothing about a prebuilt image');
+ assert.match(readFileSync(source.commands,'utf8'),/build web/,'a source install builds its own image');
 });
 
 test('self-hosted startup refuses the unchanged example without printing secrets', () => {

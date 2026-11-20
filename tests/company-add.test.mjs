@@ -77,7 +77,8 @@ test('company add has one add path and the installer has one Engine name and one
  assert.doesNotMatch(install,/engine_container/);
  assert.match(install,/first_engine_up\(\)/);
  assert.doesNotMatch(install,/^engine_up\(\)/m);
- // Every loop over the install's Engines reads the one lister, and every network the one reader.
+ // Every loop over the install's Engines reads the one lister (the restore's key loop reads the keys' own folder list
+ // out of the archive instead, before any .engines/ exists, #378 X2), and every network the one reader.
  assert.equal((install.match(/for folder in \.engines\/\*\//g)||[]).length,1);
  assert.equal((install.match(/for name in \$\(engine_names\)/g)||[]).length,5);
  // A restore reads each Engine's key from the archive's checked folders, never from files it extracted.

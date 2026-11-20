@@ -6,13 +6,16 @@ import { resolve } from 'node:path';
 // The required `check` (#76, like Hermes `all-checks-pass`): a suite the first job did not ask for counts as passed only
 // when it was skipped; a suite it asked for, or one whose need is unknown, must succeed; a failed or cancelled stage is
 // always red. The compared screens are not a stage: they run on main only and never judge a pull request (#257).
-// The fast job's steps (scripts/ci-fast.mjs, #258) are listed one by one, and each must succeed; its component
-// tests may be skipped only when the first job did not ask for them.
+// The app image is a stage of its own (#403): it follows the browser suite's and the install proof's own answers and the
+// required check waits for it. The install proof is one stage (#406): its job runs one matrix entry per area — the first
+// install with Companies, Agents and backup; the proxy; the update; and the one-line install — so its one result is red
+// when any area failed or was cancelled. The fast job's steps (scripts/ci-fast.mjs, #258) are listed one by one, and
+// each must succeed; its component tests may be skipped only when the first job did not ask for them.
 const script = resolve('scripts/ci-verdict.mjs');
-const stages = ['DATABASE', 'INTEGRATION', 'INSTALL'];
+const stages = ['IMAGE', 'DATABASE', 'INTEGRATION', 'INSTALL'];
 const fastSteps = 'discovery=success docs=success i18n=success openapi=success lint=success typecheck=success knip=success node=success components=success';
 const green = {
-  CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true', DRAFT: 'false', LIVE_DRAFT: 'false',
+  CHANGES_RESULT: 'success', FAST_RESULT: 'success', FAST_STEPS: fastSteps, COMPONENTS_RUN: 'true',
   ...Object.fromEntries(stages.flatMap(stage => [[`${stage}_RUN`, 'true'], [`${stage}_RESULT`, 'success']])),
 };
 const run = overrides => {
@@ -46,57 +49,47 @@ for (const stage of stages) {
   });
 }
 
-// A draft pull request runs only the fast job (#333): its heavy suites are skipped as not needed, whatever its files.
-// The draft is read twice: from the event that started the run and live from the pull request when check runs, so a
-// re-run of an old draft run after the pull request was marked ready cannot pass with its heavy suites skipped.
-test('a draft passes with every heavy suite skipped, even ones its files need', () => {
-  const skipped = Object.fromEntries(stages.map(stage => [`${stage}_RESULT`, 'skipped']));
-  assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', ...skipped }), 0);
-  for (const draft of ['false', '', undefined]) assert.equal(verdict({ DRAFT: draft, LIVE_DRAFT: 'true', ...skipped }), 1, String(draft));
+// #405 (replacing the draft rule of #333): a draft pull request runs what a ready one runs. A heavy suite its files need
+// may not pass by being skipped, whatever the pull request's draft state, and the verdict reads no draft state at all; a
+// suite nobody asked for still passes skipped.
+const skippedHeavy = Object.fromEntries(stages.map(stage => [`${stage}_RESULT`, 'skipped']));
+const notAsked = Object.fromEntries(stages.map(stage => [`${stage}_RUN`, 'false']));
+
+test("a draft's skipped heavy suite is red when its files need it", () => {
+  assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', ...skippedHeavy }), 1);
+  assert.equal(verdict(skippedHeavy), 1);
 });
 
-test('a re-run of a draft run is red once the pull request is ready, or when its live state is unknown', () => {
-  const skipped = Object.fromEntries(stages.map(stage => [`${stage}_RESULT`, 'skipped']));
-  for (const live of ['false', '', undefined]) assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: live, ...skipped }), 1, String(live));
+test('a skipped heavy suite nobody asked for still passes on a draft', () => {
+  assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', ...skippedHeavy, ...notAsked }), 0);
 });
 
-test('check reads the live draft state from the pull request, and an unreadable state counts as ready', async () => {
+test('check reads no draft state: no live step, no pull request permission and no draft flag for the verdict', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { check } = load(readFileSync('.github/workflows/ci.yml', 'utf8')).jobs;
-  assert.equal(check.permissions['pull-requests'], 'read');
-  const live = check.steps.find(step => step.id === 'live');
-  assert.equal(live.env.GH_TOKEN, '${{ github.token }}');
-  assert.equal(live.env.PR_NUMBER, '${{ github.event.pull_request.number }}');
-  assert.doesNotMatch(live.run, /\$\{\{/, 'no expression in the script itself');
-  assert.match(live.run, /\|\| draft=false/);
-  assert.equal(check.steps.at(-1).env.LIVE_DRAFT, '${{ steps.live.outputs.draft }}');
+  assert.equal(check.permissions['pull-requests'], undefined);
+  assert.equal(check.steps.some(step => step.id === 'live'), false);
+  assert.equal(check.steps.at(-1).env.DRAFT, undefined);
+  assert.equal(check.steps.at(-1).env.LIVE_DRAFT, undefined);
 });
 
-test('a draft is red when any stage that ran failed or was cancelled', () => {
-  for (const result of ['failure', 'cancelled']) {
-    for (const stage of stages) assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', [`${stage}_RESULT`]: result }), 1, `${stage}=${result}`);
-    for (const key of ['CHANGES_RESULT', 'FAST_RESULT']) assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', [key]: result }), 1, `${key}=${result}`);
-    assert.equal(verdict({ DRAFT: 'true', LIVE_DRAFT: 'true', FAST_STEPS: fastSteps.replace('lint=success', `lint=${result}`) }), 1, `lint=${result}`);
-  }
-});
-
-// The browser suite runs in 3 shards (#335) with fail-fast off: GitHub's one result for the matrix is a failure or
+// The browser suite runs in 6 shards (#335, #404) with fail-fast off: GitHub's one result for the matrix is a failure or
 // cancelled when any shard is, so it alone judges them.
 test('integration is red when one shard failed or was cancelled, green when all passed', () => {
   assert.equal(verdict({ INTEGRATION_RESULT: 'success' }), 0);
   for (const result of ['failure', 'cancelled']) assert.equal(verdict({ INTEGRATION_RESULT: result }), 1, result);
 });
 
-test('the integration job runs as 3 shards, each uploading its own artifacts, and check reads the matrix result (#335)', async () => {
+test('the integration job runs as 6 shards, each uploading its own artifacts, and check reads the matrix result (#335, #404)', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
   const { integration, check } = jobs;
-  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3] } });
+  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6] } });
   const steps = integration.steps;
   const suite = steps.findIndex(step => step.name === 'integration');
-  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/3');
+  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/6');
   // Matrix legs share one outputs namespace, so per-shard outputs could overwrite each other: none are written.
   assert.equal(integration.outputs, undefined);
   const env = check.steps.at(-1).env;
@@ -109,6 +102,67 @@ test('the integration job runs as 3 shards, each uploading its own artifacts, an
   assert.match(ci, /\[\[ " \$\* " == \*' --shard='\* && " \$\* " != \*' --shard=1\/'\* \]\] && proxy=false/);
   assert.match(ci, /if \[\[ \$proxy == true \]\]; then npm run test:e2e:proxy; fi/);
   assert.match(ci, /npm run test:e2e -- "\$@"\n/);
+});
+
+// #410: a job that runs past its `timeout-minutes` ends as a failure or as cancelled, the two ways GitHub ends it, and
+// either turns the required check red for the install proof and the browser suite alike.
+test('a job that ran past its limit turns check red', () => {
+  for (const stage of ['INSTALL', 'INTEGRATION']) {
+    for (const result of ['failure', 'cancelled']) assert.equal(verdict({ [`${stage}_RESULT`]: result }), 1, `${stage}=${result}`);
+  }
+});
+
+// The install proof runs as a matrix (#406) with fail-fast off: GitHub's one result for the matrix is a failure or
+// cancelled when any area is, so it alone judges them, and a skipped install passes only when it was not asked for.
+test('the install proof is red when one area failed or was cancelled, green when all passed', () => {
+  assert.equal(verdict({ INSTALL_RESULT: 'success' }), 0);
+  for (const result of ['failure', 'cancelled']) assert.equal(verdict({ INSTALL_RESULT: result }), 1, result);
+  assert.equal(verdict({ INSTALL_RUN: 'false', INSTALL_RESULT: 'skipped' }), 0);
+  for (const run of [undefined, '', 'true']) assert.equal(verdict({ INSTALL_RUN: run, INSTALL_RESULT: 'skipped' }), 1, String(run));
+});
+
+test('the install job runs as one matrix of seven areas on a fresh Docker machine each, and check reads its one result (#406)', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  const { install, check } = jobs;
+  assert.equal(install.name, 'install-${{ matrix.area }}');
+  assert.deepEqual(install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'update', 'one-line'] } });
+  assert.deepEqual(install.needs, ['changes', 'image']);
+  assert.ok(check.needs.includes('install'), 'the required check waits for the proof');
+  const env = check.steps.at(-1).env;
+  assert.equal(env.INSTALL_RUN, '${{ needs.changes.outputs.install }}');
+  assert.equal(env.INSTALL_RESULT, '${{ needs.install.result }}');
+  // Matrix legs share one outputs namespace, so per-area outputs could overwrite each other: none are written.
+  assert.equal(install.outputs, undefined);
+});
+
+test('the image build is judged by the browser suite\'s own answer: failed or cancelled is red, skipped passes only when nothing needed it (#403)', () => {
+  assert.equal(verdict({}), 0);
+  for (const result of ['failure', 'cancelled']) assert.equal(verdict({ IMAGE_RESULT: result }), 1, result);
+  assert.equal(verdict({ IMAGE_RUN: 'false', IMAGE_RESULT: 'skipped' }), 0);
+  for (const run of [undefined, '', 'true']) assert.equal(verdict({ IMAGE_RUN: run, IMAGE_RESULT: 'skipped' }), 1, String(run));
+});
+
+// #411: a manual run with both inputs off asks for no browser or install suite, and still starts the image job because the
+// measurement loads that build (#408). `check` must read the image as asked for there, or a successful build would be
+// marked skipped and turn the required check red.
+test('a manual run with both suites off asks check for the image the measurement loads', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  const expression = jobs.check.steps.at(-1).env.IMAGE_RUN;
+  const evaluate = (source, context) => new Function('github', 'needs',
+    `return (${source.replace(/^\$\{\{|\}\}$/g, '').trim().replace(/\b(github|needs)((?:\.\w+)+)/g, path => path.replaceAll('.', '?.'))});`,
+  )(context.github, context.needs);
+  const asked = evaluate(expression, {
+    github: { event_name: 'workflow_dispatch' },
+    needs: { changes: { result: 'success', outputs: { integration: 'false', install: 'false' } } },
+  });
+  assert.equal(asked, true, 'the image is asked for on a manual run');
+  assert.equal(verdict({ IMAGE_RUN: String(asked), IMAGE_RESULT: 'success' }), 0);
+  // A skipped image that was asked for is red: a manual run whose build was skipped must not pass.
+  assert.equal(verdict({ IMAGE_RUN: String(asked), IMAGE_RESULT: 'skipped' }), 1);
 });
 
 test('check passes with no compared screens at all: a pull request never runs them (#257)', () => {
@@ -164,18 +218,35 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   assert.match(classify.run, /node scripts\/ci-areas\.mjs \$main < "\$RUNNER_TEMP\/changed-files"/);
   // The fast job's component step reads this output; without it the step would always run and never be skippable.
   assert.equal(jobs.changes.outputs.components, '${{ steps.classify.outputs.components }}');
-  for (const [job, output] of [['database', 'database'], ['integration', 'integration'], ['install', 'install']]) {
+  // The image build follows the browser suite's own answer (#403), and now the install proof's too (#406).
+  for (const [job, output] of [['database', 'database']]) {
     assert.equal(jobs.changes.outputs[output], `\${{ steps.classify.outputs.${output} }}`, output);
     assert.deepEqual(jobs[job].needs, ['changes'], job);
-    assert.equal(jobs[job].if, `\${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
+    assert.equal(jobs[job].if, `\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${output} != 'false') }}`, job);
   }
+  assert.equal(jobs.changes.outputs.install, '${{ steps.classify.outputs.install }}');
+  // A manual run builds the image even with nothing asked: the measurement runs on every manual run (#408).
+  assert.equal(jobs.image.if, "${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}");
+  // The install proof is one job under today's install condition and a successful image build (#406).
+  assert.deepEqual(jobs.install.needs, ['changes', 'image']);
+  assert.equal(jobs.install.if, "${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}");
+  // The browser suite takes the image the image job built, and does not start when that build failed (#403).
+  assert.deepEqual(jobs.integration.needs, ['changes', 'image']);
+  assert.equal(jobs.integration.if, '${{ !cancelled() && needs.image.result == \'success\' && (needs.changes.result != \'success\' || needs.changes.outputs.integration != \'false\') }}');
   // The images job only warms a cache: it cannot fail a run, and check, database and integration do not wait for it (#259).
   assert.equal(jobs['supabase-images']['continue-on-error'], true);
   assert.deepEqual(jobs['supabase-images'].needs, ['changes']);
   const step = jobs.check.steps.at(-1);
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
-  assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'database', 'integration', 'install']);
+  assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'install']);
+  // The image build is judged by what the browser suite or the install proof asked for, by the job's own result, and by
+  // the manual run the measurement always makes (#403, #411).
+  assert.equal(step.env.IMAGE_RUN, "${{ needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}");
+  assert.equal(step.env.IMAGE_RESULT, '${{ needs.image.result }}');
+  // The install proof is judged by its own answer and its job's result, red when any area was (#406).
+  assert.equal(step.env.INSTALL_RUN, '${{ needs.changes.outputs.install }}');
+  assert.equal(step.env.INSTALL_RESULT, '${{ needs.install.result }}');
   for (const key of Object.keys(green)) assert.ok(step.env[key], key);
   assert.deepEqual(Object.keys(step.env).filter(key => /VISUAL|LANE/.test(key)), []);
   // The fast job runs on every change; only its component step follows the first job's answer, and an unknown answer
@@ -188,6 +259,16 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   const fast = jobs.fast.steps.find(entry => entry.id === 'fast');
   assert.equal(fast.run, './ci.sh fast');
   assert.equal(jobs.fast.env.COMPONENTS, "${{ needs.changes.result == 'success' && needs.changes.outputs.components || 'true' }}");
+});
+
+// #408: the profile-size measurement is not a stage: it runs on main and on a manual run only, and no pull request
+// waits for it.
+test('check waits for no measurement: the profile-size measurement is no stage of the verdict (#408)', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  assert.equal(jobs.check.needs.includes('install-measure'), false, 'check needs no measurement job');
+  assert.deepEqual(Object.keys(jobs.check.steps.at(-1).env).filter(key => /MEASURE/.test(key)), [], 'the verdict reads no measurement');
 });
 
 test('the fast job restores its dependencies by lock-file hash and the browser by version, never the bundler cache (#218, #258)', async () => {

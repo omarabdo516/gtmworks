@@ -103,7 +103,8 @@ for (const path of [
   // The first-run and screen specs import its reset helpers; every browser lane is built from the migrations, the
   // stack configuration and the local default privileges (scripts/local-db.sh).
   'scripts/first-run-db.mjs', 'scripts/local-default-privileges.sql', 'supabase/migrations/20260101000000_x.sql', 'supabase/config.toml',
-  // The integration job builds the image and the proxy suite runs inside it (scripts/proxy-stack.sh).
+  // The image job builds the app image and the browser suite loads that build; the proxy suite runs inside it
+  // (scripts/proxy-stack.sh, #403).
   'Dockerfile', '.dockerignore',
   // Every lane's stack starts from the cached images (#259).
   'scripts/supabase-images.sh',
@@ -116,6 +117,7 @@ for (const path of [
 for (const path of [
   'Dockerfile', '.dockerignore', 'docker-compose.install.yml', '.env.install.example', 'scripts/install.sh', 'scripts/get.sh',
   'scripts/install-db.sql', 'scripts/check-install-proxy.mjs', 'scripts/check-hermes-keys.py', 'scripts/release-assets.mjs',
+  'scripts/ci-install-check.sh', 'scripts/ci-install-lib.sh', '.github/actions/install-machine/action.yml',
   'scripts/check-rls.sql', 'scripts/verify-db.mjs', 'scripts/forged-identity.mjs', 'supabase/migrations/20260101000000_x.sql',
   'playwright.install.config.ts', 'tests/install/rate-limit.install.ts', '.github/workflows/release.yml',
 ]) {

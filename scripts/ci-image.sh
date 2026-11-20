@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# CI builds the image first with a layer cache (CI_IMAGE_PREBUILT=true); a local run builds it here.
+# CI builds the image in its own job and the browser suite loads it (CI_IMAGE_PREBUILT=true, #403); a local run builds
+# it here.
 [[ "${CI_IMAGE_PREBUILT:-}" == "true" ]] || docker build -t gtmworks:ci .
 status=$(npx supabase status -o env)
 api_url=$(printf '%s\n' "$status" | sed -n 's/^API_URL="\(.*\)"$/\1/p')

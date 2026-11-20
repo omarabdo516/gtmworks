@@ -335,16 +335,16 @@ test('a release update replaces the mounted install files in place, so the runni
 
 test('CI updates a release install on a real database, applying a new migration through the running bind mount', () => {
  const install=installJob();
- const source=install.steps.findIndex(step=>step.env?.INSTALL_REF);
- const index=install.steps.findIndex(step=>/release install and update/.test(step.name||''));
- assert.ok(source>=0&&index>source,'runs after the source install checks, which it leaves unchanged');
- const step=install.steps[index];
+ const step=install.steps.find(step=>step.env?.INSTALL_REF);
+ assert.ok(step,'the job runs the install proof');
+ // The proof keeps the source install's checks before the release install's, which it leaves unchanged (#402).
+ assert.ok(step.run.indexOf("fail 'first install'")<step.run.indexOf("fail 'the previous release install'"));
  assert.equal(step.env.DOCKER_HOST,'tcp://127.0.0.1:2375');
  const run=step.run;
  for(const pattern of [
   /compose down -v \|\| fail/,
   /registry:2\.8\.3/,
-  /docker tag gtmworks-local:237 localhost:5000\/gtmworks:0\.0\.0-ci/,
+  /docker tag "\$\(web_image_tag\)" localhost:5000\/gtmworks:0\.0\.0-ci/,
   // The previous release is the last one before the Engines, a fixed commit rather than this pull request's base or
   // origin/main (#378, C1), built and installed from its own two release files; the next release carries one migration
   // more, which the update must read through the running db's /migrations.
@@ -366,20 +366,21 @@ test('CI updates a release install on a real database, applying a new migration 
  assert.ok(run.indexOf("update || fail 'release update'")>run.indexOf("|| fail 'the previous release install'"));
 });
 
-test('the install job keeps one Docker daemon for both install steps and removes it only after the last', () => {
- // The release step reuses the source install's daemon and its built image; an EXIT trap in a step fires when that
- // step ends, so a step that removes the daemon must be the job's last and run even after a failure.
+test('the install proof runs on one Docker machine per area and a GitHub-hosted runner does not wait for its removal', () => {
+ // Each install job has its own fresh machine (#406); an EXIT trap in a step fires when that step ends, so a step that
+ // removes the machine must be the job's last. A GitHub-hosted runner throws its machine away with the job, so the step
+ // is left for a runner that is reused.
  const steps=installJob().steps;
  const at=test=>steps.findIndex(test);
  const start=at(step=>/run -d --privileged --name install-docker/.test(step.run||''));
- const source=at(step=>step.env?.INSTALL_REF);
- const release=at(step=>/release install and update/.test(step.name||''));
+ const proof=at(step=>step.env?.INSTALL_REF);
  const removes=steps.flatMap((step,index)=>/rm -fv install-docker/.test(step.run||'')?[index]:[]);
- assert.ok(start>=0&&start<source&&source<release,'the daemon starts in its own step before the source install');
+ assert.ok(start>=0&&start<proof,'the daemon starts in its own step before the proof');
  assert.equal(steps[start].env?.DOCKER_HOST,undefined,'the start step talks to the runner Docker');
  assert.match(steps[start].run,/docker --host tcp:\/\/127\.0\.0\.1:2375 info/,'the start step waits for the daemon');
+ assert.equal(steps[proof].env?.DOCKER_HOST,'tcp://127.0.0.1:2375','the proof runs on that daemon');
  assert.deepEqual(removes,[steps.length-1],'only the last step removes the daemon');
- assert.equal(steps.at(-1).if,'${{ always() }}');
+ assert.equal(steps.at(-1).if,"${{ always() && runner.environment != 'github-hosted' }}");
  for(const step of steps.slice(0,-1)) assert.doesNotMatch(step.run||'',/trap .*install-docker/,step.name);
 });
 

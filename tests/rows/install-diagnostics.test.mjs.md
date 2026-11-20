@@ -1,1 +1,1 @@
-| `install-diagnostics.test.mjs` | An install failure prints only fixed fields, never a secret. | 1.4 s | — | keep |
+| `install-diagnostics.test.mjs` | An install failure prints only fixed fields, never a secret, from the EXIT trap each area sets with `area_setup` (#411), before the job's last step removes the Docker machine. | 1.4 s | — | keep |
