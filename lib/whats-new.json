@@ -1,5 +1,11 @@
 [
  {
+  "issue": 430,
+  "date": "2026-11-20",
+  "en": { "title": "Dictate in Egyptian Arabic", "body": "An Owner picks who turns speech into text in Settings, with Deepgram Nova-3 first for Egyptian Arabic, and every Agent listens with it." },
+  "ar": { "title": "اتكلم بالمصري والكلام يتكتب", "body": "صاحب الشركة بيختار مين يحوّل الكلام لنص من الإعدادات، وأولهم Deepgram Nova-3 للعامية المصرية، وكل الوكلاء بيسمعوا بيه." }
+ },
+ {
   "issue": 425,
   "date": "2026-11-20",
   "en": { "title": "Change your main Agent's settings", "body": "The main Agent's model, skills and the rest of its settings change in Settings, like every other Agent's." },
