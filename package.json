@@ -44,6 +44,7 @@
     "js-yaml": "^5.5.0",
     "knip": "^6.45.1",
     "playwright": "^1.64.1",
+    "sharp": "^0.35.5",
     "supabase": "*",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",

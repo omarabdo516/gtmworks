@@ -104,9 +104,9 @@ cmp .env.install.before .env.install || fail '.env.install unchanged after repea
 db -c 'select name from gtmworks_install.schema_migrations order by name' > after || fail 'read migrations after repeat install'
 diff -u before after || fail 'migrations unchanged after repeat install'
 [[ $(db -c "select name from public.companies where slug='install-probe'") == 'Keep me' ]] || fail 'company preserved after repeat install'
-for path in /api/health /sign-in /favicon.ico /manifest.webmanifest /apple-icon.png /icons/icon-192.png; do
-  # The install machine is DinD; its published loopback port lives in that network namespace. The last four are the
-  # gtmworks mark and its manifest, which a browser asks for with no session (#453).
+for path in /api/health /sign-in /favicon.ico /manifest.webmanifest /apple-icon.png /icons/icon-192.png /icons/icon-512.png /icons/icon-maskable-512.png; do
+  # The install machine is DinD; its published loopback port lives in that network namespace. The rest are the
+  # gtmworks mark, its manifest and the icons the manifest names, which a browser asks for with no session (#453).
   status=$(docker run --rm --network host curlimages/curl:8.12.1 \
     -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request on install host port 3000"
   [[ $status == 200 ]] || fail "$path returned HTTP $status (expected 200)"

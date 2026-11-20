@@ -22,7 +22,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // The mark and the web app manifest are asked for without a session (#453): a browser fetches the manifest and its
-  // icons with no cookies, so sending them to sign-in would leave the tab and an installed app without the gtmworks mark.
-  matcher: ['/((?!api/health|api/config|api/client-errors|_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // The manifest, like the mark, is fetched with no cookies, so it skips the session refresh (#453).
+  matcher: ['/((?!api/health|api/config|api/client-errors|_next/static|_next/image|favicon.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 };

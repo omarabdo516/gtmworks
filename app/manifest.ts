@@ -13,6 +13,9 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
       { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      // Android and Chrome crop an installed icon to their own shape, so this one keeps the mark inside the central
+      // 80% safe zone on a full-bleed background.
+      { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   };
 }
