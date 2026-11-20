@@ -1,5 +1,11 @@
 [
  {
+  "issue": 358,
+  "date": "2026-11-20",
+  "en": { "title": "A job command hands the work over", "body": "Typing /campaign, /report, /review or /article in Lead’s chat hands the job to the Agent made for that role, in the same chat, and the reply you read comes from that Agent." },
+  "ar": { "title": "أمر الشغل بيتسلّم للوكيل بتاعه", "body": "لما تكتب /campaign أو /report أو /review أو /article في شات Lead، الشغل بيتسلّم للوكيل اللي اتعمل للدور ده في نفس الشات، والرد اللي بتقراه بييجي منه هو." }
+ },
+ {
   "issue": 457,
   "date": "2026-11-20",
   "en": { "title": "A model error says why", "body": "When the model key has no credit, the provider refuses it, or the Agent’s model is not available, the chat says so and points to the Agent’s model settings instead of working on a reply forever." },
