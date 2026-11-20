@@ -13,7 +13,7 @@ select json_build_object(
  'level_logged',pg_get_constraintdef((select oid from pg_constraint where conrelid='public.company_audit'::regclass and conname='company_audit_action_check')) like '%agent_level_changed%'
   and position('agent_level_changed' in pg_get_functiondef('public.log_company_change()'::regprocedure))>0,
  'worker_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.company_profile_work()','public.record_company_profile(uuid,text,integer,integer)','public.attach_company_profile(uuid)',
+  from unnest(array['public.company_profile_work()','public.record_company_profile(uuid,text,integer,integer,boolean)','public.attach_company_profile(uuid)',
    'public.move_company_profile(uuid)','public.engine_tools_due()','public.forget_company_profile(text)']) f),
  'person_reads',(select bool_and(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute') and not has_function_privilege('service_role',f,'execute'))
   from unnest(array['public.company_engine_target(uuid)']) f),

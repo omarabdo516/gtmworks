@@ -102,7 +102,7 @@ test('the Owner changes the main Agent\'s model from its own page; the Engine ho
  }).toPass({timeout:30000});
  await expect.poll(()=>JSON.parse(query(`select coalesce(model_choice,'-') as choice from public.company_profiles where company_id='${company}'`))[0].choice).toBe('openrouter/openai/gpt-5.5');
  // A new Company default reaches the shared space and leaves Lead on its own choice.
- await openModels(page,'omar@example.com');
+ await page.goto('/c/rs-learning/settings?section=models');
  await hydrated(page);
  await page.getByRole('radiogroup',{name:/default/i}).getByRole('radio',{name:/^anthropic\/claude-opus-4\.6/}).click();
  await expect(page.locator(`#mdl-agent-${lead}-model`)).toContainText('Its own choice');

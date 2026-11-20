@@ -133,6 +133,8 @@ language plpgsql security definer set search_path='' as $$
 begin
  if engine_profile is distinct from public.company_engine_profile(c) or level is null or level not between 1 and 3 or policy is distinct from public.engine_tool_policy() then
   raise exception 'companyProfileInvalid' using errcode='22023'; end if;
+ -- The row is locked first, so an Owner's switch cannot land between this check and the record below.
+ perform 1 from public.company_profiles p where p.company_id=c for update;
  if subagents_written is not null and exists(select 1 from public.company_profiles p where p.company_id=c and p.subagents is distinct from subagents_written) then
   raise exception 'companyProfileChanged' using errcode='40001'; end if;
  insert into public.company_profiles(company_id,profile,tools_level,tools_policy,tools_pending) values (c,engine_profile,level,policy,false)
