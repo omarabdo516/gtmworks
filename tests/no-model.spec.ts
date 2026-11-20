@@ -72,6 +72,7 @@ test('a Member sees the same notice and line, telling them to ask the Owner, wit
 // Agent's model in Subscription and models.
 const refusedFix='Check the agent’s model in Subscription and models';
 test('a reply the Engine fails for no credit, a refused key or sign-in, or a missing model records why, and says so',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/chat');
  for(const [failure,outcome,line] of [
   [creditExhaustedError,'no_credit','Lead could not reply: the company’s model key has no credit left.'],
   [apiKeyRefusedError,'key_refused','Lead could not reply: the model provider refused the company’s key or sign-in.'],
@@ -79,7 +80,7 @@ test('a reply the Engine fails for no credit, a refused key or sign-in, or a mis
   [modelMissingError,'model_missing','Lead could not reply: its model is not available from the provider.'],
  ] as const) {
   fake.settings.failure=failure;
-  await signIn(page,'omar@example.com','/c/rs-learning/chat');
+  await page.goto('/c/rs-learning/chat');
   const conversation=await sendFromEmptyChat(page,`Plan the ${outcome} week`);
   const failed=page.locator(`[data-outcome="${outcome.replace('_','-')}"]`);
   await expect(failed).toContainText(line);
