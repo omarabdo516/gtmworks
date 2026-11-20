@@ -114,7 +114,7 @@ export function SpeechToText({company,owner,data}:{company:string,owner:boolean,
  const missing=data?.provider&&data.missing?.length?data.missing.map(item=>item.name||t('settingsModelsAnAgent')):[];
  return <section className="dp-sec" aria-labelledby="md-h-stt" id="md-stt"><h4 className="dp-label" id="md-h-stt"><span>{t('settingsSpeech')}</span></h4>
   {data?.missing?<div className="panel-card md-keys">{speechRows.map(([id,label,note])=>{ const on=data.provider===id; return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
-   <div className="panel-row"><span className="panel-row__text"><span className="panel-row__t"><bdi>{label}</bdi></span>
+   <div className="panel-row"><ProviderLogo provider={id} name={label} label={label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{label}</bdi></span>
     <span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):note?t(note):''}</span></span>
     {owner&&on&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',label)} onClick={()=>act(id,'remove')}>{t('settingsModelsKeyRemove')}</button>}
     {owner&&<button type="button" className="link-btn" aria-expanded={open===id} aria-controls={`mdl-stt-${id}-form`} onClick={()=>{ setOpen(open===id?'':id); setValue(''); setError(''); }}>{t(on?'settingsModelsKeyReplace':'settingsSpeechUse')}</button>}
