@@ -1,4 +1,4 @@
-| `chat-steps.spec.ts` | A reply's steps read from its Agent's Hermes session when the chat opens (#346): the fake session's tool calls on screen, done and skipped, with the turn's length, within one second of opening. | 5 s | hermes-session-steps.test.mjs (the driver), conversations.test.mjs (which reply a turn is) | new |
+| `chat-steps.spec.ts` | A reply's steps read from its Agent's Hermes session when the chat opens (#346): the fake session's tool calls on screen, done and skipped, with the turn's length, within one second of opening. Runs in the `chat-open` job with a machine to itself, on a pull request too (#421). | 5 s | hermes-session-steps.test.mjs (the driver), conversations.test.mjs (which reply a turn is) | new (#346), moved to its own job (#421) |
 
 ## Cases
 

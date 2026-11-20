@@ -91,9 +91,9 @@ test('the change touches database, app and install files', () => {
   for (const suite of heavy) assert.equal(outputs[suite], 'true', suite);
 });
 
-test('a draft that changes database, app and install files starts the image, database, integration and install jobs', () => {
+test('a draft that changes database, app and install files starts the image, database, integration, chat-open and install jobs', () => {
   assert.deepEqual(started({ event: 'pull_request', draft: true, files: heavyFiles }),
-    ['changes', 'check', 'database', 'fast', 'image', 'install', 'integration', 'supabase-images']);
+    ['changes', 'chat-open', 'check', 'database', 'fast', 'image', 'install', 'integration', 'supabase-images']);
 });
 
 test('a draft that changes only screens starts only changes, fast and check', () => {
@@ -120,7 +120,7 @@ test('a draft and a ready pull request start the same jobs for the same files', 
 
 test('a push to main runs every suite for a code change, and none of the heavy ones for documents only', () => {
   const code = started({ event: 'push', files: ['scripts/ci-fast.mjs'] });
-  for (const job of ['changes', 'fast', 'check', 'visual', 'image', 'database', 'integration', ...installJobs]) assert.ok(code.includes(job), job);
+  for (const job of ['changes', 'fast', 'check', 'visual', 'image', 'database', 'integration', 'chat-open', ...installJobs]) assert.ok(code.includes(job), job);
   assert.deepEqual(started({ event: 'push', files: documentFiles }), ['changes', 'check', 'fast']);
 });
 
