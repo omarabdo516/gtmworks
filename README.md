@@ -138,8 +138,10 @@ was proven with four Agents across two
 Companies, and twenty more Agent profiles for capacity: each of the 20 took 0.66 to
 1.04 seconds to be ready, the Engine held 775 MiB before and 825 MiB after making
 them, and one profile takes 5136 KiB of disk with the Engine's bundled Skills and
-1727 KiB without. Settings, Company says in one line what every Agent can use and
-that anything published or spent still waits for a person's Approval.
+1727 KiB without. Those twenty-profile figures come from the `install-measure` job's log, which runs on a push to
+`main` and on a manual run only, never on a pull request (#408), and prints them in its line `capacity: …`. Settings,
+Company says in one line what every Agent can use and that anything published or spent still waits for a person's
+Approval.
 Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory with the other agents of the same Company only: every profile lives in that Company's own Engine, and no other Company's Engine, Agents or people can read it.
 
 The Owner connects a subscription in Settings, Subscription and models: ChatGPT

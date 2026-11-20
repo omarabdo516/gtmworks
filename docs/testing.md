@@ -8,7 +8,7 @@ already proves its promise, when it checks only implementation detail or wording
 step every other test walks through. The first-run setup link (#50), the release install and update (decision 0015),
 contrast, and the English/Arabic direction checks are never removed.
 
-## How CI runs them
+## What runs when: how CI runs them
 
 As Hermes and T3 Code run their CI (#76): a first job decides what runs, the fast layers run on every pull request, and
 the whole-app browser and install suites run only when their own area changed, on `main`, or when asked for by hand.
@@ -25,10 +25,10 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   A change to the CI definition itself (`ci.yml`, `ci.sh`, the area, verdict, runner and fast-runner scripts) or to `package.json`
   and its lock runs every suite; an empty, malformed or unreadable change list runs every suite; a push to `main` runs
   every suite unless every changed file is a document.
-- A draft pull request runs only `changes`, `fast` and `check` (#333): the database, browser and install suites are
-  skipped as not needed, whatever its files, and `check` counts them passed only when they were skipped. Marking it
-  ready (`ready_for_review`) starts the suites its files need, and every later push to the ready pull request runs them
-  again. `tests/ci-draft.test.mjs` evaluates the real workflow and area script for each of these events.
+- A draft pull request runs what a ready pull request runs (#405, replacing the draft rule of #333): the database,
+  browser and install suites start when their own files change, on a draft as on a ready one, and `check` is red when
+  one of them failed or was skipped while its files needed it. Marking a draft ready starts nothing by itself.
+  `tests/ci-draft.test.mjs` evaluates the real workflow and area script for each of these events.
 - `fast` runs on every change, as one job (#258): the `node --test` files, lint, types, the unused-code check (`knip`,
   `knip.json`, as T3 Code runs it, #81), the catalogue and OpenAPI checks, and the screens as components in headless
   Chromium (Vitest browser mode, `vitest.config.mts`, `tests/components/`, in one run, no shards). `./ci.sh fast`
@@ -62,11 +62,23 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   archive when it is there and otherwise pull for themselves, without waiting; `visual`, on main only, waits for it. A
   warm cache makes no registry call, the job never fails a run, and each job log ends with how many images the registry
   served.
+- `image` builds the app image once per run, when the browser suite or the install proof is asked for, and on every
+  manual run, where the profile-size measurement runs (#403, #406, #408),
+  with its layers kept between runs (`cache-from: type=gha`, `cache-to: type=gha,mode=max`), so a change that leaves the
+  dependencies alone restores them. It passes `NEXT_SKIP_CHECKS=true`, so `next build` repeats no lint and no type check
+  `fast` already ran (`next.config.mjs`); a release image and a local build keep both. It uploads the image as the
+  `gtmworks-image` artifact, kept for a day and stored uncompressed. `integration`, the install proof and the
+  measurement job wait for it and load that image from the artifact: no shard and no install area builds an image of its
+  own, and `check` is red when the build failed or was cancelled.
 - `integration` is the whole-app browser suite: the production-shaped proxy suite, then the functional journeys and
-  first run. It runs as 3 shards at the same time (a matrix passing Playwright's `--shard=<i>/3` to `./ci.sh
-  integration`, #335), each on a GitHub-hosted runner with stacks of its own; the proxy suite runs in shard 1 only, and
-  each shard uploads its screenshots, report and server logs under its own number. `check` is green only when all three
-  shards passed: with fail-fast off, the matrix's one result is red when any shard is (`scripts/ci-verdict.mjs`). All of it runs when the journeys' own area changes: a browser spec or
+  first run, on the image the `image` job built, loaded from its artifact (a shard builds nothing, #403). Its dependencies and its browser come from the caches the `fast` job keeps, restored by the same keys (the
+  lock file's hash for `node_modules`; Playwright's version and the runner image for the browser), and a miss installs
+  Chromium alone: the runner image has its system packages and fonts, so no shard downloads a browser, a package or a
+  font during a run (#404). It runs as 6 shards at the same time (a matrix
+  passing Playwright's `--shard=<i>/6` to `./ci.sh integration`, #335), each on a GitHub-hosted runner with stacks of
+  its own; the proxy suite runs in shard 1 only, and each shard uploads its screenshots, report and server logs under
+  its own number. `check` is green only when all six shards passed: with fail-fast off, the matrix's one result is red
+  when any shard is (`scripts/ci-verdict.mjs`). All of it runs when the journeys' own area changes: a browser spec or
   its helpers, the fake engines, the Playwright configs, the stacks it runs on (migrations, stack configuration, local
   default privileges, the first-run reset helpers, the image the proxy suite runs in), the seed, `public/`, and the code
   the journeys drive that no component test covers. That code is the server code under `app/` (its `.ts` route handlers
@@ -98,21 +110,46 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   compares it with its design in `design/` in T3's preview, motions included, at the widths and in the languages the
   design shows, and attaches the evidence (side-by-side images, and a recording for each motion) to the pull request
   that delivers it. No CI job compares a screen with `design/`, and no animation frame is sampled in CI.
-- `install` is the Docker install, update, backup, restore, release and one-line install. It runs when the image, its
-  build inputs, the install and release files, the migrations it applies or its own checks change, and when `lib/`
-  outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install drives that code against
-  the real bundled Hermes. Its profile proof (#126) runs on the pinned Engine: two Companies with a main and a second
+- `install` is the Docker install, update, backup, restore, release and one-line install. The proof is one job of one
+  matrix entry per area of the repo's proof, each on a fresh isolated Docker machine of its own and named for its area
+  (#406): `install-first-install` (the first install and its repeat), `install-companies` (Companies and their Engines,
+  #407), `install-agents` (Agents on their Engines, #408), `install-backup` (backup and restore, #409),
+  `install-proxy` (the public address behind a proxy), `install-update` (the update between releases) and
+  `install-one-line` (the one-line install). Each entry is one command of the repo, `bash scripts/ci-install-check.sh
+  <area>`; here `./ci.sh install first-install`, `./ci.sh install companies`, `./ci.sh install agents`,
+  `./ci.sh install backup`, `./ci.sh install proxy`, `./ci.sh install update` and `./ci.sh install one-line` each run one
+  area, and `./ci.sh install` runs the whole proof (`docs/agents/checks.md`) — and holds no check of its own, so a red
+  entry's name is the area that failed and fail-fast is off: one red area leaves the others running to their end. A new area is one more
+  matrix entry and one more case of the script. Every area is independent: each makes the install, its first run, the
+  Companies, the archives, its local registry and its release files itself, so no area needs another to have run (#406,
+  #407, #408, #409); the profile-size measurement is the `install-measure` job below. Every entry loads the one image
+  the `image` job built, tagged as the source install's own compose file names (read from `docker-compose.install.yml`,
+  #411), and the installer skips its build for it and says so in one line (`GTMWORKS_IMAGE_PREBUILT`, tests only); the
+  update area still builds the previous release, the last one before the Engines at a fixed commit, which is a different
+  image (#378, C1), so only it checks the history out in full. A job on a GitHub-hosted runner does not wait for its Docker machine's removal. It
+  runs when the image, its build inputs, the install and release files, the migrations it applies or its own checks
+  change, and when `lib/` outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install
+  drives that code against the real bundled Hermes.
+  Its profile proof (#126) runs on the pinned Engine: two Companies with a main and a second
   Agent each, every Agent on its own profile and every Company on its one shared space, the tools off and a Run on a
   shared space refused, memory and a shared Skill reaching only the first Company's Agents, a key set for one Company
-  only, and the database refusing a row of one Company that names the other's profile. It then makes twenty more Agent
-  profiles in one Company and prints each one's seconds to be ready, the Engine container's memory around them and the
-  disk one profile takes with and without its bundled Skills; the first Agent runs again afterwards. Every line is a
-  name, a state or a count (`lib/install-proof.mjs`), and the secrets scan that follows covers every profile.
+  only, and the database refusing a row of one Company that names the other's profile. Every line is a name, a state or
+  a count (`lib/install-proof.mjs`), and the secrets scan that follows covers every Engine.
+- `install-measure` is the profile-size measurement (#126, #400): twenty more Agent profiles in one Company, ten with
+  the Engine's bundled Skills and ten without; it prints each one's seconds to be ready, the Engine container's memory
+  around them, the disk one profile takes with and without its Skills, and one line of numbers. It is no check a pull
+  request needs, so it runs on a push to `main` and on a manual run only, never on a pull request, like the visual lane
+  (#408, Omar, 2026-11-19); `check` does not wait for it. It makes the install and the two Companies its prepare step
+  reads on a fresh isolated Docker machine of its own, and loads the run's one image. The numbers the README states come
+  from its log, line `capacity: …`.
 - A manual run (`gh workflow run ci.yml --ref <branch>`) runs the fast job and the database; the browser suite and the install
-  run only with `-f e2e=true` and `-f install=true`, both off by default (like Hermes `e2e` and `e2e_upgrade`).
+  run only with `-f e2e=true` and `-f install=true`, both off by default (like Hermes `e2e` and `e2e_upgrade`). The
+  profile-size measurement and the image it loads run on every manual run.
 - `check` is the one required check (like Hermes `all-checks-pass`): a suite `changes` did not ask for passes only when
   it was skipped; one it asked for must succeed; a failed or cancelled stage is red; it lists each step of the fast job
-  and every step must succeed (`scripts/ci-verdict.mjs`).
+  and every step must succeed (`scripts/ci-verdict.mjs`). The install proof is one stage (#406): its matrix is red when
+  any area failed or was cancelled, and it passes skipped only when the install proof was not asked for. The
+  profile-size measurement is no stage: `check` never waits for it (#408).
 - Every test runs offline (#266). `tests/offline.mjs` holds one table of what is local: `localhost`, the special-use
   names `.localhost`, `.test`, `.example` and `.invalid` (RFC 6761, never delegated), loopback and unspecified
   addresses, and Unix sockets; everything else is outside, `example.com` and private LAN addresses included. `npm test`
@@ -133,7 +170,7 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   not guarded. The visual lane (#257, which aborts outside requests with guards of its own) and
   the install suite, which drives a real install on purpose, are not guarded, nor yet the containers' network.
   `provider-hosts.test.mjs` fails `static` when a tracked file under `tests/` names a real model provider host
-  (`scripts/provider-hosts.mjs`): tests talk to the fake engine, the fake Hermes or the install job's fake provider.
+  (`scripts/provider-hosts.mjs`): tests talk to the fake engine, the fake Hermes or the install proof's fake provider.
 - The nightly `Time zones` workflow (`time-zones.yml`, #266) runs the node tests (`npm test`) and `./ci.sh components`
   under `TZ=Africa/Cairo` and `TZ=America/Sao_Paulo`. The day boundary is checked with fixed instants in the runner's
   zone, so it holds whatever the hour; the run is set for 02:35 UTC, 23:35 in Sao Paulo while Cairo and UTC are on the
@@ -142,11 +179,29 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   `tests/clock.mjs` in the runner's own zone (`sidebar.test.mjs`), so the same check meets a different midnight in each
   zone. A change to the workflow or its test runs it on its own pull request.
 
+Every job of the full check has a time limit near its budget: one and a half times the minutes measured on run 44636876755,
+the first run with every other ticket of spec #401, kept between 3 and 12 minutes; `visual` and `install-measure` are no
+part of it and keep the limits they had. A job that runs past its limit ends as cancelled or failed, and `check` is red
+either way. `tests/ci-budgets.test.mjs` reads the limits from `.github/workflows/ci.yml` and fails when one rises without
+the table changing.
+
+| Job | Measured | Limit |
+|---|---|---|
+| `changes` | 0.2 min | 3 min |
+| `fast` | 2.7 min | 5 min |
+| `supabase-images` | 0.1 min | 3 min |
+| `image` | 3.7 min | 6 min |
+| `database` | 2.1 min | 4 min |
+| `integration` | 10.6 min, its slowest shard | 12 min |
+| `install` | 9.5 min, its slowest area (backup) | 12 min |
+| `check` | 0.1 min | 3 min |
+
 A pull request that changes only screens runs the fast job with its component tests; the compared screens run on `main`
 and on a manual run only (#257), where a failed comparison uploads its expected, actual and difference images in
 `lane-screenshots` and the `visual-regression` issue links them. A change to the journeys'
-area runs the whole browser suite, and `lib/` outside the catalogues and `worker/` also run the install. Screens alone
-get their journeys and install proof on `main`, where every push runs every suite unless every file is a document.
+area builds the app image once and runs the whole browser suite on it, and `lib/` outside the catalogues and `worker/`
+also run the install. Screens alone get their journeys and install proof on `main`, where every push runs every suite
+unless every file is a document.
 
 The tests that guard money, sign-in, permissions and Company isolation run as follows:
 
@@ -175,7 +230,8 @@ the parts are timed from run 43642299138.
 | proxy suite (tests/proxy/, 7 tests) | whole-app browser | sign-in, settings and invitations behind an https proxy | 0.7 min inside `integration`, every non-document PR | inside `integration`: the journeys' area, `main`, or `e2e` input; not for screens alone (#213) | gated |
 | browser suite (playwright test, 225 tests on 4 lanes: screens, functional, measured, first run) | whole-app browser | journeys, the 72 approved screens, navigation budgets, first run | 13.3 min of `integration`'s 22.2 min (stack start 4 min, image 2.7 min), every non-document PR | inside `integration`: the journeys' area, `main`, or `e2e` input; screens alone run only the screens (`visual`, #213) | gated; screens alone run the comparisons only (#213) |
 | image health (scripts/ci-image.sh) | whole-app | the built image serves health and runs its worker | inside `integration` | inside `integration`, not for screens alone (#213) | gated with it |
-| install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files and `lib/` outside the catalogues, `worker/`, `next.config.mjs`, `server.js` (the code it drives against the real Hermes); every `main` push; or `install` input | gated as before on a PR; `app/` and `components/` alone still skip it |
+| install | install end-to-end | install, repeat, backup, restore, release update, one-line install, rollback, Agents and their profiles | 15.2 min, PRs touching install files, `lib/`, `worker/` or the app build, every `main` push | its own files and `lib/` outside the catalogues, `worker/`, `next.config.mjs`, `server.js` (the code it drives against the real Hermes); every `main` push; or `install` input | gated as before on a PR; `app/` and `components/` alone still skip it |
+| install-measure | install measurement | the disk and memory twenty Agent profiles take, printed for the README | inside `install`, 85 s of every install run | its own job on a push to `main` and on a manual run only, never a pull request, no stage of `check` (#408) | moved off the pull request's path (Omar, 2026-11-19) |
 | compare-failures, flaky-tests | our own CI tooling | names failures inherited from main; files an issue per flaky test | 0.1 to 0.2 min after `integration` | none | removed (#81): Playwright's HTML report (uploaded by `integration`) and GitHub reporter show each failure and mark each flaky test |
 | check | summary | the one required check | 0.1 min | 0.1 min | keep; judges six stages (the lane, #257) |
 | design-compare.yml | design tool | a screen against the design reference | its own paths, or by hand | unchanged | keep |
@@ -195,6 +251,7 @@ the parts are timed from run 43642299138.
 | `playwright-journal.test.mjs`, the journal reporter and `docs/ci-test-journal.md` (#81) | They kept our own record of a Playwright run killed before its report, including the tests it never started. #81 removes that record. | Nothing lists the tests a killed run never started; Playwright's list reporter prints in the job log each test that ended. A killed run still fails `check` (`ci-verdict.test.mjs`). |
 | `app.spec.ts` "screenshots for unit routes" | It checked nothing beyond signing in, which every test does; it wrote unchecked screenshots. | `visual-lane.spec.ts` compares the members and agents settings screens exactly, in Arabic (#257). |
 | `touch-diagnostics.test.mjs` and `touch-diagnostics.mjs` (#218) | They recorded and printed what the page saw during `app.spec.ts`'s touch drag on CI, which keeps no trace of a functional test. The drag now runs as a component test on the test's own clock. | `components/board-touch.test.tsx` (the swipe and the held drag). Nothing replaces the recorder. |
+| `ci-verdict.test.mjs` "a draft is red when any stage that ran failed or was cancelled" (#405) | Its only distinct input was the draft flag; the verdict reads no draft state now, so it repeated the per-stage failure checks. | `ci-verdict.test.mjs` "DATABASE: a failed or cancelled run is red, even where it could have been skipped" (and the same for INTEGRATION and INSTALL), "classification and the fast job must succeed", and "a fast step that failed is red even when the job reports success". |
 
 ## Flaky tests (#83)
 

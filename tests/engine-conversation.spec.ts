@@ -65,6 +65,10 @@ const endRows=(conversation:string)=>JSON.parse(query(`select outcome from publi
 // has no Card, and its rows stay its person's.
 const untie=(conversation:string)=>query(`update public.work_cards set conversation_id=null where conversation_id='${conversation}'`);
 
+// Six minutes of tests in one file held one worker of one shard (#404, #410): each test makes its own rows and runs on
+// its lane's own stack, so they spread over the shard's workers and the shards.
+test.describe.configure({mode:'parallel'});
+
 test('integration: a message on the fake engine gets its slow reply stored once, with its end',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); fake.settings.pendingReads=1; fake.settings.usage={input:3200,output:41};

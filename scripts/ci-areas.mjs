@@ -49,13 +49,15 @@ const suites = {
     true: [
       /^lib\/(?!messages\/)/, /^worker\//, /^next\.config\.mjs$/, /^server\.js$/,
       /^Dockerfile$/, /^\.dockerignore$/, /^docker-compose[^/]*\.ya?ml$/, /^\.env[^/]*\.example$/,
-      /^scripts\/(install|check-install|get\.sh$|release-assets\.mjs$|check-hermes-keys\.py$|check-rls\.sql$|verify-db\.mjs$|forged-identity\.mjs$|local-default-privileges\.sql$|ci-install-check\.sh$|engine-template\.yml$|company-[a-z]+\.mjs$|install-engine\.mjs$)/,
+      /^scripts\/(install|check-install|get\.sh$|release-assets\.mjs$|check-hermes-keys\.py$|check-rls\.sql$|verify-db\.mjs$|forged-identity\.mjs$|local-default-privileges\.sql$|ci-install-(check|lib)\.sh$|engine-template\.yml$|company-[a-z]+\.mjs$|install-engine\.mjs$)/,
       // The work sandbox image every Company's sandbox runs (#392, ADR 0020): its one build file and the files it adds,
       // the module that reads its pin, and the check the install job runs against the built image.
       /^sandbox\//, /^lib\/work-sandbox-image\.mjs$/, /^scripts\/check-work-sandbox\.mjs$/,
       // The install job's profile proof (#126) and its unit test: a change to what it proves runs it.
       /^scripts\/check-install-profiles\.mjs$/, /^tests\/check-install-profiles\.test\.mjs$/,
       /^supabase\//, /^playwright\.install\.config\.ts$/, /^tests\/install\//, /^\.github\/workflows\/release[^/]*\.ya?ml$/,
+      // The isolated Docker machine and the image every install area starts from (#406, #411).
+      /^\.github\/actions\/install-machine\//,
     ],
   },
 };

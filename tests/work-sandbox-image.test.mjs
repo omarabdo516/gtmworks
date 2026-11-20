@@ -43,11 +43,10 @@ test('a build file with no base image, or with two, is refused', () => {
 test('the install job checks the work sandbox image the install got and requires its ok line', () => {
   const install = installJob();
   const run = install.steps.map(step => step.run || '').join('\n');
-  assert.match(run, /cat \.work-sandbox-image/);
-  assert.match(run, /node scripts\/check-work-sandbox\.mjs --image "\$sandbox_image"/);
+  assert.match(run, /node scripts\/check-work-sandbox\.mjs --image "\$\(cat \.work-sandbox-image\)"/);
   assert.match(run, /grep -qx 'work sandbox: ok'/);
   // The check runs in the install proof's own script, after the install that fetched the image.
-  assert.ok(run.indexOf('check-work-sandbox.mjs') > run.indexOf('sh scripts/install.sh'));
+  assert.ok(run.indexOf('check-work-sandbox.mjs') > run.indexOf("install_source first-install.log || fail 'first install'"));
 });
 
 test('the README states the image size on disk and that every Company\'s sandbox runs it', () => {

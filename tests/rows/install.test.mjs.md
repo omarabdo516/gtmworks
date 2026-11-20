@@ -1,1 +1,1 @@
-| `install.test.mjs` | A failed update keeps the serving containers and prints its log. | 4.5 s | install job | keep (decision 0015) |
+| `install.test.mjs` | A failed update keeps the serving containers and prints its log; a source install that skips `compose build web` because CI loaded the run's image says so in one line, and a source install anywhere else still builds its own (#411). (#378, #411) | 4.5 s | install job | keep (decision 0015) |

@@ -1,14 +1,18 @@
 # As Hermes and T3 Code run CI (#76): the first job (`changes`, scripts/ci-areas.mjs) decides which suites a change
 # needs. The fast job (lint, types, catalogues, unit tests and the screen component tests, #258) runs on every change;
 # its component tests run when the app, its components or its library change. The database tests, the whole-app browser
-# suite (`integration`) and the Docker install run on a pull request only when their own files change, and never on a
-# draft: marking it ready (ready_for_review) starts them, and every later push runs them again (#333). The visual
-# lane's key screens and the measured navigation budgets (`visual`) run on a push to main and on a
-# manual run only, never on a pull request, and `check` does not wait for them (Omar, 2026-11-17, #257): a failure on main
-# opens or updates one issue labelled visual-regression. A push to main runs every suite unless every file is a document; a manual
-# run starts the browser and install suites only through inputs that default to off. Required `check`
-# (scripts/ci-verdict.mjs) counts a suite nobody asked for, or a draft's heavy suite, as passed when it was skipped, and is red on any failed or
-# cancelled stage.
+# suite (`integration`) and the Docker install run on a pull request only when their own files change, and a draft runs
+# what a ready pull request runs (Omar, 2026-11-19, #405): the suites start on a draft as on a ready one, and marking a
+# draft ready starts nothing by itself. The app image is built once per run by its own job, and the browser suite and the
+# install proof load that build instead of building their own (#403, #406). The install proof is one job, one matrix
+# entry per area, each on a fresh isolated Docker machine of its own (#406). The profile-size measurement
+# (`install-measure`) is no check a pull request needs: it runs on a push to main and on a manual run only, like the
+# visual lane (#408). The visual lane's key screens and the measured navigation budgets (`visual`) run on a push to main
+# and on a manual run only, never on a pull request, and `check` does not wait for them
+# (Omar, 2026-11-17, #257): a failure on main opens or updates one issue labelled visual-regression. A push to main runs
+# every suite unless every file is a document; a manual run starts the browser and install suites only through inputs that
+# default to off. Required `check` (scripts/ci-verdict.mjs) counts a suite nobody asked for as passed when it was
+# skipped, and is red on any failed or cancelled stage.
 # Every job runs on a GitHub-hosted ubuntu-latest runner (decision 0038, #334); the measured navigation budgets need a
 # machine no other job shares. The stack's ports lie in Linux's range for outgoing connections, so a job reserves them
 # before it starts the stack (#225).
@@ -18,8 +22,8 @@ name: CI
 
 on:
   pull_request:
-    # ready_for_review: marking a draft ready starts the heavy suites it skipped (#333).
-    types: [opened, synchronize, reopened, ready_for_review]
+    # A draft runs what a ready pull request runs (#405): marking one ready starts nothing, so no ready_for_review type.
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
   workflow_dispatch:
@@ -40,7 +44,8 @@ concurrency:
 jobs:
   changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 0.2 min measured on run 44636876755: 3 min is 1.5 times it, floored at 3 (#410).
+    timeout-minutes: 3
     permissions:
       contents: read
       actions: read
@@ -101,6 +106,7 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    # 2.7 min measured on run 44636876755: 5 min is 1.5 times it, rounded up (#410).
     timeout-minutes: 5
     permissions:
       contents: read
@@ -181,11 +187,14 @@ jobs:
   # that choose images (scripts/supabase-images.sh, #259). With the key cached it only looks the key up; after a key
   # change it pulls the images on an empty project and saves them. `database` and `integration` do not wait for it
   # (their own time comes first): each restores the archive when there is one and otherwise pulls for itself, from its
-  # own runner. `visual`, on main only, waits for it. It never fails a run.
+  # own runner. `visual`, on main only, waits for it. It never fails a run, and it is no part of the full check: its own
+  # limit is longer so a cache-key change finishes and saves (#411).
   supabase-images:
     needs: [changes]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
+    # 0.1 min measured on run 44636876755, but a cache-key change pulls every Supabase image: 15 minutes lets it finish
+    # and save, and the job never fails a run (#411).
     timeout-minutes: 15
     continue-on-error: true
     permissions:
@@ -227,9 +236,10 @@ jobs:
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
     needs: [changes]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 2.1 min measured on run 44636876755: 4 min is 1.5 times it, rounded up (#410).
+    timeout-minutes: 4
     permissions:
       contents: read
     steps:
@@ -357,20 +367,81 @@ jobs:
             gh issue create -R "$GITHUB_REPOSITORY" --label visual-regression --title "$title" --body "$body"
           fi
 
-  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 3
-  # shards at the same time (Playwright's --shard, #335), each on a runner and stacks of its own. The proxy suite runs in
-  # shard 1 only (ci.sh).
-  integration:
+  # The app image, built once per run with its own layer cache (#403). The browser suite's shards, the install proof and
+  # the measurement load this archive instead of each building the image again, so one run pays for one build; a change
+  # that leaves the dependencies alone restores them from the cache. Next's build repeats no lint and no type check the
+  # fast job already ran (NEXT_SKIP_CHECKS, next.config.mjs). It follows the answers of the suites that load it — the
+  # browser suite and the install proof, and the measurement on a manual run, which runs even with nothing asked (#408) —
+  # so no job ever waits for an image it did not ask for (#406).
+  image:
     needs: [changes]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    # 3.7 min measured on run 44636876755 for the app image alone (#410); with the work sandbox image (#392) 8 min is an
+    # estimate until a full run measures it, and 12 min is 1.5 times that.
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: gtmworks:ci
+          build-args: NEXT_SKIP_CHECKS=true
+          # An archive instead of `load`: the shards are other runners, and only a file can travel as an artifact.
+          outputs: type=docker,dest=${{ runner.temp }}/gtmworks-image.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: upload the image
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtmworks-image
+          path: ${{ runner.temp }}/gtmworks-image.tar
+          # It is one build's image, read by this run's shards and by nothing later.
+          retention-days: 1
+          # Docker's archive is compressed already.
+          compression-level: 0
+      # The work sandbox image every Company's sandbox runs (#392, ADR 0020), built in the same job with its own layer cache:
+      # every install area and the measurement load it, so no area builds it again. The browser suite does not use it.
+      - name: build the work sandbox image
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: sandbox
+          push: false
+          tags: gtmworks-work-sandbox:local
+          outputs: type=docker,dest=${{ runner.temp }}/gtmworks-sandbox-image.tar
+          cache-from: type=gha,scope=sandbox
+          cache-to: type=gha,mode=max,scope=sandbox
+      - name: upload the work sandbox image
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtmworks-sandbox-image
+          path: ${{ runner.temp }}/gtmworks-sandbox-image.tar
+          retention-days: 1
+          compression-level: 0
+
+  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 6
+  # shards at the same time (Playwright's --shard, #335; six since #404), each on a runner and stacks of its own. The
+  # proxy suite runs in shard 1 only (ci.sh). The browser comes from the cache the fast job keeps: a shard never
+  # downloads a browser or a system package during a run. The image is the one the image job built (#403): a shard
+  # loads it, and no shard builds it.
+  integration:
+    needs: [changes, image]
+    if: ${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
     strategy:
       # Every shard runs to the end, so one red shard still shows the others' failures.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
-    # main's browser suite already took 24 of 25 minutes on one runner (run 43398274074); a shard takes about a third.
-    timeout-minutes: 40
+        shard: [1, 2, 3, 4, 5, 6]
+    # 10.6 min measured for the slowest shard on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
+    timeout-minutes: 12
     permissions:
       contents: read
     steps:
@@ -381,9 +452,53 @@ jobs:
           sudo sysctl -w net.ipv4.ip_local_reserved_ports="$(node scripts/ci-runner.mjs reserved-ports)"
           sysctl net.ipv4.ip_local_reserved_ports
       - uses: actions/setup-node@v4
+        id: node
         with:
           node-version: 22
-          cache: npm
+      # The dependencies and the browser the fast job already saved (#404): one cache entry each, keyed alike, so a shard
+      # starts with both and reaches neither a registry nor a package mirror during a run.
+      - name: restore dependencies
+        id: modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            !node_modules/.vite
+            !node_modules/.cache
+          key: node-modules-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - name: install dependencies
+        if: ${{ steps.modules.outputs.cache-hit != 'true' }}
+        run: npm ci
+      - name: save dependencies
+        if: ${{ steps.modules.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            !node_modules/.vite
+            !node_modules/.cache
+          key: node-modules-${{ runner.os }}-node-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+      - name: browser version
+        id: browser-version
+        # A new runner image downloads the browser again for itself.
+        run: echo "version=$(node -p "require('playwright-core/package.json').version")-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      - name: restore the browser
+        id: browser
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
+      - name: install the browser
+        if: ${{ steps.browser.outputs.cache-hit != 'true' }}
+        # The browser alone, as a hit restores it: the image's own system packages and fonts serve every run alike, so
+        # no shard reaches a package mirror.
+        run: npx playwright install chromium
+      - name: save the browser
+        if: ${{ steps.browser.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ steps.browser-version.outputs.version }}
       # The stack's images from the cache the supabase-images job keeps (#259).
       - name: Supabase images cache key
         id: images
@@ -393,23 +508,21 @@ jobs:
         with:
           path: ${{ runner.temp }}/supabase-images
           key: ${{ steps.images.outputs.key }}
-      - uses: docker/setup-buildx-action@v3
-      - name: build image (layer cache)
-        uses: docker/build-push-action@v6
+      # The image the image job built, loaded under the tag scripts/ci-image.sh runs (#403).
+      - name: download the image
+        uses: actions/download-artifact@v4
         with:
-          context: .
-          load: true
-          push: false
-          tags: gtmworks:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: gtmworks-image
+          path: ${{ runner.temp }}
+      - name: load the image
+        run: docker load --input "$RUNNER_TEMP/gtmworks-image.tar"
       - name: integration
         env:
           CI_IMAGE_PREBUILT: "true"
           # One browser test lane per worker, each on a whole stack of its own (tests/lane.mjs, #69).
           GTMWORKS_TEST_LANES: "4"
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
-        run: ./ci.sh integration --shard=${{ matrix.shard }}/3
+        run: ./ci.sh integration --shard=${{ matrix.shard }}/6
       # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
       - name: upload journey screenshots
         if: always()
@@ -439,98 +552,108 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # The install proof is one job, one matrix entry per area, each on a fresh isolated Docker machine of its own (#406):
+  # the first install and its repeat; Companies and their Engines; Agents on their Engines; backup and restore; the
+  # public address behind a proxy; the update between releases; and the one-line install. A fault in one area cannot
+  # hide or cause another's: fail-fast is off, so one red area leaves the others running to their end, and the job's name
+  # is the area that failed. An area adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing
+  # else (#407–#409).
+  # Every entry loads the one app image the `image` job built (#403), under the tag a source install's compose file names,
+  # and the installer skips its build because the image is already there (GTMWORKS_IMAGE_PREBUILT, tests only). The
+  # isolated machine and that image are one composite action (.github/actions/install-machine, #411) the measurement also
+  # uses, and the tag is read from docker-compose.install.yml there. The job holds no check of its own: its whole area is
+  # one command of the repo, so the same command proves it on a machine with Docker. Its failure sentences are the area's,
+  # in scripts/ci-install-check.sh.
   install:
-    needs: [changes]
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
+    name: install-${{ matrix.area }}
+    needs: [changes, image]
+    if: ${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
-    # The release install and update below add a fresh stack, a real install of the last release before the Engines and
-    # an update of it to this release, and the one-line install adds another, an update, a failed update and a return to
-    # an older release from a backup.
-    timeout-minutes: 90
+    strategy:
+      # Every area runs to its end, so one red area still shows the others' faults (#406).
+      fail-fast: false
+      matrix:
+        area: [first-install, companies, agents, backup, proxy, update, one-line]
+    # 9.5 min measured for its slowest area, backup, on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
+    timeout-minutes: 12
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-        # The release step builds and installs the last release before the Engines, a fixed commit (#378, C1).
         with:
-          fetch-depth: 0
-      # One isolated Docker machine for both install steps below: the release step reuses the source install's image.
-      # The last step removes it, also after a failure.
-      - name: start the isolated Docker machine
-        run: |
-          docker run -d --privileged --name install-docker \
-            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
-          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
-          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
-      # Only the browser check of the sign-in rate limit uses these, inside the Playwright image; the install itself is
-      # Docker only. No install scripts: the image already has the browsers.
+          # Only the update area builds and installs the last release before the Engines, a fixed commit (#378, C1).
+          fetch-depth: ${{ matrix.area == 'update' && '0' || '1' }}
+      # The isolated Docker machine and the image the run built once, as one action the measurement also uses (#403,
+      # #411): the area of scripts/ci-install-check.sh the matrix names runs on it, and the last step removes it, also
+      # after a failure, on a runner that is reused.
+      - uses: ./.github/actions/install-machine
+      # Only the browser check of the sign-in rate limit, in the proxy area, uses these, inside the Playwright image; the
+      # install itself is Docker only. No install scripts: the image already has the browsers.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - name: test packages for the install browser check
+        if: ${{ matrix.area == 'proxy' }}
         run: npm ci --ignore-scripts
-      - name: isolated Docker-only install, repeat and verify
+      - name: the install proof
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
           INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/ci-install-check.sh install
-      # A release install of the last release before the Engines (a fixed commit, #378), then its update to this release
-      # on a real database (#49, #378 S1, S2). A previous-release install has no Engine record and its one Company names
-      # no Engine; the update must adopt the Engine it already runs, keeping the Agent's memory and the Company's sign-in,
-      # an install with two Companies on its schema must be refused before it changes anything, and the backup that
-      # release's installer made must restore onto this release. The images come by digest from a local registry; the next
-      # release adds a migration, which psql must read through the running database's /migrations bind mount after the
-      # update replaced the install files in place.
-      - name: release install and update from the two release files
-        env:
-          DOCKER_HOST: tcp://127.0.0.1:2375
-        run: bash scripts/ci-install-check.sh release
-
-      # releases.json lists the tags and <tag>/ holds each release's two files. GTMWORKS_RELEASES and GTMWORKS_GET are
-      # read only by tests (scripts/get.sh). HOME is inside the checkout, the one folder the Docker machine mounts.
-      - name: one-line install, gtmworks status and gtmworks update between test releases
-        env:
-          DOCKER_HOST: tcp://127.0.0.1:2375
-        run: bash scripts/ci-install-check.sh one-line
+          GTMWORKS_IMAGE_PREBUILT: "true"
+        run: bash scripts/ci-install-check.sh ${{ matrix.area }}
       - name: remove the isolated Docker machine
-        if: ${{ always() }}
+        if: ${{ always() && runner.environment != 'github-hosted' }}
+        run: docker rm -fv install-docker || true
+
+  # The profile-size measurement (#126, #400) is no check a pull request needs: twenty Agent profiles took 85 seconds,
+  # and their numbers are for the README. It runs on a push to main and on a manual run only, easy to find beside the
+  # install proof (#408, Omar, 2026-11-19), on a fresh isolated Docker machine of its own and with the run's one image.
+  # `check` does not wait for it.
+  install-measure:
+    needs: [changes, image]
+    if: ${{ !cancelled() && needs.image.result == 'success' && ((github.event_name == 'push' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false')) || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    # The measurement installs the stack and makes twenty more Agent profiles.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # The isolated Docker machine and the image the run built once, as one action the install matrix also uses (#411).
+      - uses: ./.github/actions/install-machine
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: the profile-size measurement
+        env:
+          DOCKER_HOST: tcp://127.0.0.1:2375
+          INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+          GTMWORKS_IMAGE_PREBUILT: "true"
+        run: bash scripts/ci-install-check.sh measure
+      - name: remove the isolated Docker machine
+        if: ${{ always() && runner.environment != 'github-hosted' }}
         run: docker rm -fv install-docker || true
 
   check:
-    needs: [changes, fast, database, integration, install]
+    needs: [changes, fast, image, database, integration, install]
     if: ${{ always() }}
     runs-on: ubuntu-latest
+    # 0.1 min measured on run 44636876755: 3 min is 1.5 times it, floored at 3 (#410).
+    timeout-minutes: 3
     permissions:
       contents: read
-      # The pull request's live draft state, read below.
-      pull-requests: read
     steps:
       - uses: actions/checkout@v4
-      # The event's draft flag is the one the run started with: a re-run after the pull request was marked ready still
-      # says draft. check accepts a draft's skipped suites only when the pull request is a draft now too; a state it
-      # cannot read counts as ready.
-      - name: the pull request's live draft state
-        id: live
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          draft=false
-          if [[ $PR_NUMBER =~ ^[0-9]+$ ]]; then
-            draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .draft) || draft=false
-          fi
-          echo "draft=$draft" | tee -a "$GITHUB_OUTPUT"
       - name: all required stages green
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           FAST_RESULT: ${{ needs.fast.result }}
           FAST_STEPS: ${{ needs.fast.outputs.steps }}
-          DRAFT: ${{ github.event.pull_request.draft }}
-          LIVE_DRAFT: ${{ steps.live.outputs.draft }}
           COMPONENTS_RUN: ${{ needs.changes.outputs.components }}
+          IMAGE_RUN: ${{ needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
+          IMAGE_RESULT: ${{ needs.image.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}
           INTEGRATION_RUN: ${{ needs.changes.outputs.integration }}

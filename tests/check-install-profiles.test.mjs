@@ -6,10 +6,11 @@ import { generateInstallEnv } from '../lib/install-env.mjs';
 import { proof, proofName, writeProof, writeName } from '../lib/install-proof.mjs';
 import { installJob } from './install-job.mjs';
 
-// The install job's proof (#126) runs on the pinned Engine, against a real install: four Agents in two Companies, the
-// shared space of each, a key set for one Company, and the capacity of twenty more Agent profiles. It prints names,
-// states and counts only, and a unit test here holds that no value of the install's own environment can be printed
-// (#2, ADR 0014, ADR 0016). The figures the README states come from that job's log.
+// The agents area's proof (#126) runs on the pinned Engine, against a real install: four Agents in two Companies, the
+// shared space of each, and a key set for one Company. The capacity of twenty more Agent profiles is the measurement
+// area's, which no pull request runs (#408). The proof prints names, states and counts only, and a unit test here holds
+// that no value of the install's own environment can be printed (#2, ADR 0014, ADR 0016). The figures the README states
+// come from the measurement job's log.
 const script=readFileSync('scripts/check-install-profiles.mjs','utf8');
 
 test('the install proof prints no value from .env.install, only the fields it names', () => {
@@ -46,19 +47,23 @@ test('the README states the figures the install job measured, and the number of 
  assert.doesNotMatch(readme,/\bTBD\b/,'every figure is the measured value');
 });
 
-test('the install job fills the capacity step and proves the database refuses another Company\'s profile', () => {
+// The agents area proves the database refuses another Company's profile. The capacity step left it for the measurement
+// area, which no pull request runs (#408): the measurement makes its own install and the two Companies its prepare step
+// reads, then measures twenty more profiles on the first Company's Engine.
+test('the agents area proves the database refuses another Company\'s profile, and the measurement fills the capacity step', () => {
  const job=installJob().steps.map(step=>step.run||'').join('\n');
- assert.ok(job.includes('capacity'),'the capacity step runs');
- assert.match(job,/docker stats --no-stream/);
- assert.match(job,/du -sk/);
- assert.match(job,/--volumes-from/);
  assert.match(job,/insert into public\.hermes_agents/);
  assert.match(job,/hermesProfileNotShared/);
+ assert.ok(job.includes('capacity with-skills'),'the capacity step runs');
+ const measure=job.slice(job.indexOf('measure() {'),job.indexOf('case "${1:-all}"'));
+ assert.match(measure,/docker stats --no-stream/);
+ assert.match(measure,/du -sk/);
+ assert.match(measure,/--volumes-from/);
  const prepared=job.indexOf('- prepare < scripts/check-install-profiles.mjs');
- const capacity=job.indexOf('capacity');
- const scan=job.indexOf('check-hermes-keys.py');
- assert.ok(prepared>=0&&capacity>prepared,'capacity runs after the four Agents are proven');
- assert.ok(scan>capacity,'the secrets scan covers every profile, the capacity ones included');
+ const capacity=job.indexOf('capacity with-skills');
+ assert.ok(prepared>=0&&capacity>prepared,'capacity runs after its own prepare made the pair it reads');
+ // The secrets scan covers the twenty profiles too: it runs in measure after both capacity steps.
+ assert.ok(measure.indexOf('check-hermes-keys.py')>measure.indexOf('capacity no-skills'),'the keys scan runs after the capacity profiles');
 });
 
 test('the script\'s printers write the proof\'s line and the bare name, and nothing else', t => {

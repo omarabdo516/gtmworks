@@ -9,6 +9,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 FROM dependencies AS build
+# The CI image build passes NEXT_SKIP_CHECKS=true: the fast job already linted and type-checked this change, so `next
+# build` does neither (#403). Its default keeps both in a release image or a local build.
+ARG NEXT_SKIP_CHECKS=false
 COPY . .
 RUN npm run build
 

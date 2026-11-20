@@ -54,8 +54,13 @@ work_sandbox_image() {
     docker pull "$sandbox_image" || return 1
     printf '%s\n' "$sandbox_image" > .install-lock/work-sandbox-image
   else
-    echo "Building the work sandbox image: $work_sandbox_tag"
-    docker build --tag "$work_sandbox_tag" sandbox || return 1
+    # Tests only (#401): CI's install areas load the run's one sandbox image under this tag, as they load the app image.
+    if [ "${GTMWORKS_IMAGE_PREBUILT:-}" = true ] && docker image inspect "$work_sandbox_tag" > /dev/null 2>&1; then
+      echo "Using the prebuilt work sandbox image (GTMWORKS_IMAGE_PREBUILT=true): $work_sandbox_tag"
+    else
+      echo "Building the work sandbox image: $work_sandbox_tag"
+      docker build --tag "$work_sandbox_tag" sandbox || return 1
+    fi
     printf '%s\n' "$work_sandbox_tag" > .install-lock/work-sandbox-image
   fi
 }
@@ -794,7 +799,15 @@ compose run --rm --no-deps gateway nginx -t
 if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
 apply_migrations
 if [ -z "$release_image" ]; then
-  compose build web
+  # Tests only (#406): CI's install jobs load the one image the `image` job built, under this compose file's own tag,
+  # and set this so no job builds the app image again. GTMWORKS_IMAGE_PREBUILT is read here and in work_sandbox_image
+  # only; a source install anywhere else builds its images, as it always has.
+  if [ "${GTMWORKS_IMAGE_PREBUILT:-}" != true ]; then
+    compose build web
+  else
+    # One line names the image this install runs, so the log says why no build ran (#411).
+    echo 'Using the prebuilt web image (GTMWORKS_IMAGE_PREBUILT=true); not building it.'
+  fi
   # Compose does not recreate a container when only a file it mounts changed. The gateway is recreated when it is not
   # running, when its compose definition differs from the one it runs (its config-hash label), or when its mounted files
   # differ from those it last started with (.install-gateway): a new config (the X-Real-IP the auth rate limit counts by,
