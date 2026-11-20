@@ -16,5 +16,7 @@ select json_build_object(
   and has_function_privilege('service_role','public.open_conversation_runs(uuid,uuid,bigint)','execute')
   and not has_function_privilege('authenticated','public.open_conversation_runs(uuid,uuid,bigint)','execute'),
  'begin_handover_knows_it',position('answers_person' in pg_get_functiondef('public.begin_handover(bigint)'::regprocedure))>0,
- 'close_target_knows_it',position('answers_person' in pg_get_functiondef('public.close_handover_target(bigint,text,text,text)'::regprocedure))>0
+ 'close_target_knows_it',position('answers_person' in pg_get_functiondef('public.close_handover_target(bigint,text,text,text)'::regprocedure))>0,
+ 'agent_move_skips_the_command',position('answers_person' in pg_get_functiondef('public.agent_move_blocked(uuid)'::regprocedure))>0,
+ 'company_move_skips_the_command',position('answers_person' in pg_get_functiondef('public.move_company_profile(uuid)'::regprocedure))>0
 );
