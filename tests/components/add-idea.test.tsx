@@ -1,8 +1,9 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import type { ComponentProps } from 'react';
+import { StrictMode, type ComponentProps } from 'react';
 import { userEvent } from 'vitest/browser';
+import { render } from 'vitest-browser-react';
 import type {} from '@vitest/browser-playwright';
-import { card, ideasSent, sent, showWork, workProps } from './work-page';
+import { card, ideasSent, sent, showWork, workProps, workView } from './work-page';
 
 const { toast, replace } = vi.hoisted(() => ({ toast: vi.fn(), replace: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace, prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/work/board' }));
@@ -224,6 +225,16 @@ test('an answer that comes after its form closed leaves the form now open alone,
  expect(document.querySelector('#idea-title')).not.toBeNull();
  await expect.element(screen.getByLabelText('Idea')).toHaveValue('idea B');
  expect(replace).not.toHaveBeenCalled();
+});
+
+test('under React Strict Mode an idea the server took still closes the form and moves the board to its Card', async () => {
+ const props = withAgents();
+ const screen = await render(<StrictMode>{workView(props, 'en')}</StrictMode>);
+ await screen.getByRole('button', { name: 'Add an idea' }).click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await expect.poll(() => document.querySelector('#idea-title')).toBeNull();
+ expect(replace).toHaveBeenCalledWith('/c/rs-learning/work/board?show=9&idea=1', { scroll: false });
 });
 
 test('Add pressed twice while the first is on its way sends one idea', async () => {

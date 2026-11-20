@@ -21,7 +21,8 @@ export default function AddIdea({company,slug,stage,agents,preferred,addIdea,onC
  // A form that has closed has no say over the one open in its place: the parent unmounts it when the person cancels, so
  // its late answer is ignored rather than closing the new form and sending the board to a Card it never asked for.
  const mounted=useRef(true);
- useEffect(()=>()=>{ mounted.current=false; },[]);
+ // Strict Mode runs an effect as mount, cleanup, mount again, so the mount sets it back.
+ useEffect(()=>{ mounted.current=true; return ()=>{ mounted.current=false; }; },[]);
  // Opening moves the focus into the Idea field, as the reference does.
  useEffect(()=>{ input.current?.focus({preventScroll:true}); },[]);
  const close=()=>onClose();
