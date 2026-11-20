@@ -1,0 +1,648 @@
+# file-sync.sh output, 2026-11-20 (the 305 bundled-Skill lines under /home/pn/.hermes/skills/ in step 1 are left out)
+managed config (variant 1):
+  terminal:
+    backend: ssh
+    ssh_host: sandbox
+    ssh_user: pn
+    ssh_port: 2222
+    ssh_key: /opt/data/ssh/id_ed25519
+    lifetime_seconds: 20
+
+=== variant 1: the install's managed config
+setup probe-a: skills.external_dirs=/opt/data/profiles/probe-space/skills -> 200 {"ok":true}
+setup probe-b: skills.external_dirs=/opt/data/profiles/probe-space/skills -> 200 {"ok":true}
+setup: engine files written
+--- 1 A's first command: every file under the sandbox's ~/.hermes
+exit=0 error=None
+/home/pn/.hermes/attachments/gw393-a-attachment.txt
+/home/pn/.hermes/cache/delegation/gw393-a-delegation.txt
+/home/pn/.hermes/cache/documents/gw393-a-doc.txt
+/home/pn/.hermes/external_skills/0/shared-one/SKILL.md
+
+pn
+8696d12bb77d
+--- 1 A reads its own document in the sandbox
+exit=0 error=None
+GW393 A's document (uploaded by a person)GW393 A's attachment
+--- 1 B's command reads A's document and attachment
+exit=0 error=None
+GW393 A's document (uploaded by a person)
+GW393 A's attachment
+GW393 A's delegation cache
+--- 2 the shared Skill in the sandbox (A's command)
+exit=0 error=None
+---
+name: shared-one
+description: the Company's
+---
+GW393 SHARED original
+--- 2/3 A edits the shared Skill, its own Skill, and adds files the Engine never had
+exit=0 error=None
+edited
+--- 2/3 the Engine's copies right after the edit (before any teardown)
+/opt/data/profiles/probe-space/skills/shared-one/SKILL.md: --- | name: shared-one | description: the Company's | --- | GW393 SHARED original
+/opt/data/profiles/probe-space/skills/planted/SKILL.md: FileNotFoundError
+/opt/data/profiles/probe-a/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original
+/opt/data/profiles/probe-a/skills/a-own/new.md: FileNotFoundError
+/opt/data/profiles/probe-a/cache/documents/gw393-a-doc.txt: GW393 A's document (uploaded by a person)
+/opt/data/profiles/probe-a/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-a-doc.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/new.md: FileNotFoundError
+/opt/data/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+--- the sandbox's own view of ~/.hermes (owner, mode)
+pn 644 /home/pn/.hermes/attachments/gw393-a-attachment.txt
+pn 644 /home/pn/.hermes/cache/delegation/gw393-a-delegation.txt
+pn 644 /home/pn/.hermes/cache/documents/gw393-a-doc.txt
+pn 644 /home/pn/.hermes/cache/documents/gw393-sandbox-made.txt
+pn 644 /home/pn/.hermes/external_skills/0/planted/SKILL.md
+pn 644 /home/pn/.hermes/external_skills/0/shared-one/SKILL.md
+pn 644 /home/pn/.hermes/skills/.bundled_manifest
+pn 644 /home/pn/.hermes/skills/a-own/SKILL.md
+pn 644 /home/pn/.hermes/skills/a-own/new.md
+pn 644 /home/pn/.hermes/skills/apple/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/apple/apple-notes/SKILL.md
+pn 644 /home/pn/.hermes/skills/apple/apple-reminders/SKILL.md
+pn 644 /home/pn/.hermes/skills/apple/findmy/SKILL.md
+pn 644 /home/pn/.hermes/skills/apple/imessage/SKILL.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/claude-code/SKILL.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/codex/SKILL.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/computer-use/SKILL.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/SKILL.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/background-systems.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/cli-reference.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/configuration.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/contributor-guide.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/delegate-task-concurrency-diagnosis.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/desktop-plugins.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/native-mcp.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/petdex.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/portal-auth-for-third-party-apps.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/project-context-files.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/projects-and-folders.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/providers-and-models.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/security-privacy.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/slash-commands.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/themes.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/troubleshooting.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/tui-widgets.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/webhooks.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/references/windows-quirks.md
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/templates/clock.mjs
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/templates/plugin.js
+pn 644 /home/pn/.hermes/skills/autonomous-ai-agents/hermes-agent/templates/skin.yaml
+pn 644 /home/pn/.hermes/skills/creative/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/creative/architecture-diagram/SKILL.md
+pn 644 /home/pn/.hermes/skills/creative/architecture-diagram/templates/template.html
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/README.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/SKILL.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/references/architecture.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/references/composition.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/references/effects.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/references/inputs.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/references/optimization.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/references/scenes.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/references/shaders.md
+pn 644 /home/pn/.hermes/skills/creative/ascii-video/references/troubleshooting.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/PORT_NOTES.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/SKILL.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/analysis-framework.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/base-prompt.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/bento-grid.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/binary-comparison.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/bridge.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/circular-flow.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/comic-strip.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/comparison-matrix.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/dashboard.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/dense-modules.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/funnel.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/hierarchical-layers.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/hub-spoke.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/iceberg.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/isometric-map.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/jigsaw.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/linear-progression.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/periodic-table.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/story-mountain.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/structural-breakdown.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/tree-branching.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/venn-diagram.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/layouts/winding-roadmap.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/structured-content-template.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/aged-academia.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/bold-graphic.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/chalkboard.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/claymation.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/corporate-memphis.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/craft-handmade.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/cyberpunk-neon.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/hand-drawn-edu.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/ikea-manual.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/kawaii.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/knolling.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/lego-brick.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/morandi-journal.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/origami.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/pixel-art.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/pop-laboratory.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/retro-pop-grid.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/storybook-watercolor.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/subway-map.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/technical-schematic.md
+pn 644 /home/pn/.hermes/skills/creative/baoyu-infographic/references/styles/ui-wireframe.md
+pn 644 /home/pn/.hermes/skills/creative/claude-design/SKILL.md
+pn 644 /home/pn/.hermes/skills/creative/humanizer/LICENSE
+pn 644 /home/pn/.hermes/skills/creative/humanizer/SKILL.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/README.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/SKILL.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/animation-design-thinking.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/animations.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/camera-and-3d.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/decorations.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/equations.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/graphs-and-data.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/mobjects.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/paper-explainer.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/production-quality.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/rendering.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/scene-planning.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/troubleshooting.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/updaters-and-trackers.md
+pn 644 /home/pn/.hermes/skills/creative/manim-video/references/visual-design.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/README.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/SKILL.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/animation.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/color-systems.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/core-api.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/export-pipeline.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/interaction.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/shapes-and-geometry.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/troubleshooting.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/typography.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/visual-effects.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/references/webgl-and-3d.md
+pn 644 /home/pn/.hermes/skills/creative/p5js/templates/viewer.html
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/SKILL.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/airbnb.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/airtable.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/apple.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/bmw.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/cal.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/claude.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/clay.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/clickhouse.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/cohere.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/coinbase.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/composio.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/cursor.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/elevenlabs.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/expo.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/figma.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/framer.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/hashicorp.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/ibm.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/intercom.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/kraken.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/linear.app.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/lovable.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/minimax.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/mintlify.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/miro.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/mistral.ai.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/mongodb.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/notion.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/nvidia.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/ollama.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/opencode.ai.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/pinterest.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/posthog.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/raycast.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/replicate.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/resend.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/revolut.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/runwayml.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/sanity.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/sentry.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/spacex.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/spotify.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/stripe.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/supabase.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/superhuman.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/together.ai.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/uber.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/vercel.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/voltagent.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/warp.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/webflow.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/wise.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/x.ai.md
+pn 644 /home/pn/.hermes/skills/creative/popular-web-designs/templates/zapier.md
+pn 644 /home/pn/.hermes/skills/creative/songwriting-and-ai-music/SKILL.md
+pn 644 /home/pn/.hermes/skills/devops/sdlc-review/SKILL.md
+pn 644 /home/pn/.hermes/skills/email/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/email/email-inbox-triage/SKILL.md
+pn 644 /home/pn/.hermes/skills/email/himalaya/SKILL.md
+pn 644 /home/pn/.hermes/skills/email/himalaya/references/configuration.md
+pn 644 /home/pn/.hermes/skills/email/himalaya/references/message-composition.md
+pn 644 /home/pn/.hermes/skills/media/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/media/youtube-content/SKILL.md
+pn 644 /home/pn/.hermes/skills/media/youtube-content/references/output-formats.md
+pn 644 /home/pn/.hermes/skills/media/youtube-content/scripts/fetch_transcript.py
+pn 644 /home/pn/.hermes/skills/note-taking/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/note-taking/obsidian/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/productivity/document-to-action-items/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/google-workspace/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/google-workspace/references/daily-brief.md
+pn 644 /home/pn/.hermes/skills/productivity/google-workspace/references/gmail-search-syntax.md
+pn 644 /home/pn/.hermes/skills/productivity/google-workspace/scripts/_hermes_home.py
+pn 644 /home/pn/.hermes/skills/productivity/google-workspace/scripts/google_api.py
+pn 644 /home/pn/.hermes/skills/productivity/google-workspace/scripts/setup.py
+pn 644 /home/pn/.hermes/skills/productivity/maps/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/maps/scripts/maps_client.py
+pn 644 /home/pn/.hermes/skills/productivity/meeting-action-items/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/LICENSE
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/references/excel.md
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/references/powerpoint.md
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/references/restructuring.md
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/references/revisions-and-comments.md
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/references/word.md
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/csv_to_xlsx.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/docx_comments.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/docx_common.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/docx_create.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/docx_edit.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/docx_read.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/docx_revisions.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/docx_template.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/docx_validate.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/pptx_create.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/pptx_edit.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/pptx_from_template.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/pptx_read.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/pptx_render.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/xlsx_create.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/xlsx_edit.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/xlsx_read.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/xlsx_recalc.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/xlsx_restructure.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/scripts/xlsx_to_csv.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/tests/test_docx_skill.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/tests/test_powerpoint_skill.py
+pn 644 /home/pn/.hermes/skills/productivity/microsoft-office/tests/test_xlsx_skill.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/LICENSE
+pn 644 /home/pn/.hermes/skills/productivity/pdf/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/pdf/references/forms.md
+pn 644 /home/pn/.hermes/skills/productivity/pdf/references/nano-pdf-editing.md
+pn 644 /home/pn/.hermes/skills/productivity/pdf/references/ocr-extraction.md
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/_raster.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/extract_marker.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/extract_pymupdf.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_create.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_fill_form.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_form_layout.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_make_form.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_merge.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_meta.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_page_image.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_read.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_secure.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_split.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_stamp.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/scripts/pdf_watermark.py
+pn 644 /home/pn/.hermes/skills/productivity/pdf/tests/test_pdf_skill.py
+pn 644 /home/pn/.hermes/skills/productivity/product-price-monitor/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/teams-meeting-pipeline/SKILL.md
+pn 644 /home/pn/.hermes/skills/productivity/weekly-review-planning/SKILL.md
+pn 644 /home/pn/.hermes/skills/research/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/research/arxiv/SKILL.md
+pn 644 /home/pn/.hermes/skills/research/arxiv/scripts/search_arxiv.py
+pn 644 /home/pn/.hermes/skills/research/competitor-news-monitor/SKILL.md
+pn 644 /home/pn/.hermes/skills/research/grounded-citations/SKILL.md
+pn 644 /home/pn/.hermes/skills/research/grounded-citations/references/citation-formats.md
+pn 644 /home/pn/.hermes/skills/research/grounded-citations/references/grounding-rationale.md
+pn 644 /home/pn/.hermes/skills/research/grounded-citations/scripts/_hermes_home.py
+pn 644 /home/pn/.hermes/skills/research/grounded-citations/scripts/sources.py
+pn 644 /home/pn/.hermes/skills/social-media/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/social-media/xurl/SKILL.md
+pn 644 /home/pn/.hermes/skills/software-development/codebase-inspection/SKILL.md
+pn 644 /home/pn/.hermes/skills/software-development/dogfood/SKILL.md
+pn 644 /home/pn/.hermes/skills/software-development/dogfood/references/issue-taxonomy.md
+pn 644 /home/pn/.hermes/skills/software-development/dogfood/templates/dogfood-report-template.md
+pn 644 /home/pn/.hermes/skills/software-development/github/SKILL.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/auth.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/ci-troubleshooting.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/code-review.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/conventional-commits.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/github-api-cheatsheet.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/issue-to-pr.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/issues.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/pr-workflow.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/repo-management.md
+pn 644 /home/pn/.hermes/skills/software-development/github/references/review-output-template.md
+pn 644 /home/pn/.hermes/skills/software-development/github/scripts/git-credential-token.py
+pn 644 /home/pn/.hermes/skills/software-development/github/templates/bug-report.md
+pn 644 /home/pn/.hermes/skills/software-development/github/templates/feature-request.md
+pn 644 /home/pn/.hermes/skills/software-development/github/templates/pr-body-bugfix.md
+pn 644 /home/pn/.hermes/skills/software-development/github/templates/pr-body-feature.md
+pn 644 /home/pn/.hermes/skills/software-development/requesting-code-review/SKILL.md
+pn 644 /home/pn/.hermes/skills/software-development/simplify-code/SKILL.md
+pn 644 /home/pn/.hermes/skills/software-development/spike/SKILL.md
+pn 644 /home/pn/.hermes/skills/software-development/systematic-debugging/SKILL.md
+pn 644 /home/pn/.hermes/skills/software-development/test-driven-development/SKILL.md
+pn 644 /home/pn/.hermes/skills/web/DESCRIPTION.md
+pn 644 /home/pn/.hermes/skills/web/blocked-page-recovery/SKILL.md
+pn 644 /home/pn/.hermes/skills/web/blocked-page-recovery/scripts/recover_page.py
+pn 755 /home/pn/.hermes/skills/creative/manim-video/scripts/setup.sh
+pn 755 /home/pn/.hermes/skills/creative/p5js/scripts/export-frames.js
+pn 755 /home/pn/.hermes/skills/creative/p5js/scripts/render.sh
+pn 755 /home/pn/.hermes/skills/creative/p5js/scripts/serve.sh
+pn 755 /home/pn/.hermes/skills/creative/p5js/scripts/setup.sh
+pn 755 /home/pn/.hermes/skills/productivity/google-workspace/scripts/gws_bridge.py
+pn 755 /home/pn/.hermes/skills/software-development/github/scripts/gh-env.sh
+--- waiting for the idle reaper (lifetime 20 s, sweep every 60 s)
+--- the Engine's new log lines after 80s:
+  2026-11-20 18:48:19,914 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:48:19,986 INFO tools.environments.file_sync: sync_back: applied 2 changed file(s)
+  2026-11-20 18:48:19,994 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:48:19,994 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_98c80fe93a074c3dbc1c3bd976ff9c94
+  2026-11-20 18:48:20,130 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:48:20,136 INFO tools.environments.file_sync: sync_back: applied 2 changed file(s)
+  2026-11-20 18:48:20,142 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_151b71c26e7a4bdc851595a3d71ff8c4
+  2026-11-20 18:48:20,143 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:48:20,288 INFO tools.environments.file_sync: sync_back: applied 2 changed file(s)
+  2026-11-20 18:48:20,296 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:48:20,296 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-b:session:agent:probe-b:api_server:dm:run_2ba4ed94abda465cb5f89fa0b2167cb8
+  2026-11-20 18:48:20,432 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:48:20,437 INFO tools.environments.file_sync: sync_back: applied 2 changed file(s)
+  2026-11-20 18:48:20,444 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:48:20,444 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_c52eb44ece2948939e080ec09b76b359
+  2026-11-20 18:48:20,583 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:48:20,588 INFO tools.environments.file_sync: sync_back: applied 2 changed file(s)
+  2026-11-20 18:48:20,595 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_549bd902746941788343d45edf8da53f
+--- after the reaper's teardown: the Engine's copies
+/opt/data/profiles/probe-space/skills/shared-one/SKILL.md: --- | name: shared-one | description: the Company's | --- | GW393 SHARED original
+/opt/data/profiles/probe-space/skills/planted/SKILL.md: FileNotFoundError
+/opt/data/profiles/probe-a/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original
+/opt/data/profiles/probe-a/skills/a-own/new.md: FileNotFoundError
+/opt/data/profiles/probe-a/cache/documents/gw393-a-doc.txt: GW393 A's document (uploaded by a person)
+/opt/data/profiles/probe-a/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-a-doc.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original | GW393 A-OWN EDITED IN SANDBOX
+/opt/data/skills/a-own/new.md: GW393 new file next to A-OWN
+/opt/data/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+--- 5 a Run after the teardown still works (A)
+exit=0 error=None
+run-ok
+8696d12bb77d
+
+=== variant 2: plus terminal.sync_back_max_bytes: 0
+--- 4/5 A's fresh session: the shared Skill as uploaded
+exit=0 error=None
+---
+name: shared-one
+description: the Company's
+---
+GW393 SHARED original
+--- 4/5 A edits the shared Skill and its own Skill again
+exit=0 error=None
+edited
+--- waiting for the idle reaper (lifetime 20 s, sweep every 60 s)
+--- the Engine's new log lines after 80s:
+  2026-11-20 18:49:55,144 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:49:55,160 WARNING tools.environments.file_sync: sync_back: remote tar is 2969600 bytes (cap 0, override with terminal.sync_back_max_bytes) — skipping extraction
+  2026-11-20 18:49:55,164 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:49:55,164 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_7331e9c2edbe47af98db2dc7a2975d31
+  2026-11-20 18:49:55,252 WARNING tools.environments.file_sync: sync_back: remote tar is 2969600 bytes (cap 0, override with terminal.sync_back_max_bytes) — skipping extraction
+  2026-11-20 18:49:55,257 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_b71a91ffe6f940149dfbca539ada6848
+--- after the reaper's teardown: the Engine's copies
+/opt/data/profiles/probe-space/skills/shared-one/SKILL.md: --- | name: shared-one | description: the Company's | --- | GW393 SHARED original
+/opt/data/profiles/probe-space/skills/planted/SKILL.md: FileNotFoundError
+/opt/data/profiles/probe-a/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original
+/opt/data/profiles/probe-a/skills/a-own/new.md: FileNotFoundError
+/opt/data/profiles/probe-a/cache/documents/gw393-a-doc.txt: GW393 A's document (uploaded by a person)
+/opt/data/profiles/probe-a/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-a-doc.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original | GW393 A-OWN EDITED IN SANDBOX
+/opt/data/skills/a-own/new.md: GW393 new file next to A-OWN
+/opt/data/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+
+=== variant 3: the shared folder mounted read-only (cap removed)
+--- the Engine's write to the shared folder: touch: cannot touch '/opt/data/profiles/probe-space/skills/x': Read-only file system
+--- 4/5 A's fresh session: the shared Skill as uploaded
+exit=0 error=None
+---
+name: shared-one
+description: the Company's
+---
+GW393 SHARED original
+--- 4/5 A edits the shared Skill and its own Skill again
+exit=0 error=None
+edited
+--- waiting for the idle reaper (lifetime 20 s, sweep every 60 s)
+--- the Engine's new log lines after 80s:
+  2026-11-20 18:51:26,312 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:51:26,365 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:51:26,370 INFO tools.environments.file_sync: sync_back: applied 1 changed file(s)
+  2026-11-20 18:51:26,377 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:51:26,377 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_ff5addb0e2a94afea70b0ffdc500d7c8
+  2026-11-20 18:51:26,500 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:51:26,506 INFO tools.environments.file_sync: sync_back: applied 1 changed file(s)
+  2026-11-20 18:51:26,513 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_ea36dee5b09c41628ceb052e98528365
+--- after the reaper's teardown: the Engine's copies
+/opt/data/profiles/probe-space/skills/shared-one/SKILL.md: --- | name: shared-one | description: the Company's | --- | GW393 SHARED original
+/opt/data/profiles/probe-space/skills/planted/SKILL.md: FileNotFoundError
+/opt/data/profiles/probe-a/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original
+/opt/data/profiles/probe-a/skills/a-own/new.md: FileNotFoundError
+/opt/data/profiles/probe-a/cache/documents/gw393-a-doc.txt: GW393 A's document (uploaded by a person)
+/opt/data/profiles/probe-a/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-a-doc.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original | GW393 A-OWN EDITED AGAIN
+/opt/data/skills/a-own/new.md: GW393 new file next to A-OWN
+/opt/data/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+--- 5 a Run after the teardown still works (A)
+exit=0 error=None
+run-ok
+8696d12bb77d
+
+=== variant 4: the Engine stopped (docker stop) before the reaper runs
+--- 4/5 A's fresh session: the shared Skill as uploaded
+exit=0 error=None
+---
+name: shared-one
+description: the Company's
+---
+GW393 SHARED original
+--- 4/5 A edits the shared Skill and its own Skill again
+exit=0 error=None
+edited
+--- the stop's log lines:
+  2026-11-20 18:51:26,506 INFO tools.environments.file_sync: sync_back: applied 1 changed file(s)
+  2026-11-20 18:51:26,513 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_ea36dee5b09c41628ceb052e98528365
+  2026-11-20 18:52:00,135 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:52:00,201 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:52:00,207 INFO tools.environments.file_sync: sync_back: applied 1 changed file(s)
+  2026-11-20 18:52:00,214 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:52:00,346 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:52:00,351 INFO tools.environments.file_sync: sync_back: applied 1 changed file(s)
+--- after the reaper's teardown: the Engine's copies
+/opt/data/profiles/probe-space/skills/shared-one/SKILL.md: --- | name: shared-one | description: the Company's | --- | GW393 SHARED original
+/opt/data/profiles/probe-space/skills/planted/SKILL.md: FileNotFoundError
+/opt/data/profiles/probe-a/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original
+/opt/data/profiles/probe-a/skills/a-own/new.md: FileNotFoundError
+/opt/data/profiles/probe-a/cache/documents/gw393-a-doc.txt: GW393 A's document (uploaded by a person)
+/opt/data/profiles/probe-a/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-a-doc.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original | GW393 A-OWN EDITED AGAIN
+/opt/data/skills/a-own/new.md: GW393 new file next to A-OWN
+/opt/data/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+
+=== variant 5: the launch profile also reads the shared folder (reaper)
+launch profile: skills.external_dirs=/opt/data/profiles/probe-space/skills -> 200 {"ok":true}
+--- the launch profile's config, terminal section:
+  terminal:
+    cwd: "."  # For local backend: "." = current directory. Ignored for remote backends unless a backend documents otherwise.
+--- 4/5 A's fresh session: the shared Skill as uploaded
+exit=0 error=None
+---
+name: shared-one
+description: the Company's
+---
+GW393 SHARED original
+--- 4/5 A edits the shared Skill and its own Skill again
+exit=0 error=None
+edited
+--- waiting for the idle reaper (lifetime 20 s, sweep every 60 s)
+--- the Engine's new log lines after 80s:
+  2026-11-20 18:53:20,542 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:53:20,717 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:53:20,723 INFO tools.environments.file_sync: sync_back: applied 2 changed file(s)
+  2026-11-20 18:53:20,730 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:53:20,730 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_ee233cd2d296453fa04bcda5c8c4d774
+  2026-11-20 18:53:20,888 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/external_skills/0/shared-one/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:53:20,891 WARNING tools.environments.file_sync: sync_back: conflict on /home/pn/.hermes/skills/a-own/SKILL.md — host modified since push, remote also changed. Applying remote version (last-write-wins).
+  2026-11-20 18:53:20,896 INFO tools.environments.file_sync: sync_back: applied 2 changed file(s)
+  2026-11-20 18:53:20,906 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_397b7db2c3644d7d916df1c90cdbcb32
+--- after the reaper's teardown: the Engine's copies
+/opt/data/profiles/probe-space/skills/shared-one/SKILL.md: --- | name: shared-one | description: the Company's | --- | GW393 SHARED original | GW393 SHARED EDITED AGAIN
+/opt/data/profiles/probe-space/skills/planted/SKILL.md: FileNotFoundError
+/opt/data/profiles/probe-a/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original
+/opt/data/profiles/probe-a/skills/a-own/new.md: FileNotFoundError
+/opt/data/profiles/probe-a/cache/documents/gw393-a-doc.txt: GW393 A's document (uploaded by a person)
+/opt/data/profiles/probe-a/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-a-doc.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original | GW393 A-OWN EDITED AGAIN
+/opt/data/skills/a-own/new.md: GW393 new file next to A-OWN
+/opt/data/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+
+=== variant 6: as 5, the shared folder mounted read-only
+--- the reaper's lifetime as the restarted Engine resolves it: 20
+--- 4/5 A's fresh session: the shared Skill as uploaded
+exit=0 error=None
+---
+name: shared-one
+description: the Company's
+---
+GW393 SHARED original
+GW393 SHARED EDITED AGAIN
+--- 4/5 A edits the shared Skill and its own Skill again
+exit=0 error=None
+edited
+--- waiting for the idle reaper (lifetime 20 s, sweep every 60 s)
+--- the Engine's new log lines after 390s:
+  2026-11-20 18:59:52,813 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:59:52,996 WARNING tools.environments.file_sync: sync_back: attempt 1 failed ([Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'), retrying in 2s
+  2026-11-20 18:59:55,051 WARNING tools.environments.file_sync: sync_back: attempt 2 failed ([Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'), retrying in 4s
+  2026-11-20 18:59:59,106 WARNING tools.environments.file_sync: sync_back: all 3 attempts failed: [Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'
+  2026-11-20 18:59:59,111 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 18:59:59,111 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_caa4316e4916452784992b98c5e0d9fb
+  2026-11-20 18:59:59,237 WARNING tools.environments.file_sync: sync_back: attempt 1 failed ([Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'), retrying in 2s
+  2026-11-20 19:00:01,292 WARNING tools.environments.file_sync: sync_back: attempt 2 failed ([Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'), retrying in 4s
+  2026-11-20 19:00:05,345 WARNING tools.environments.file_sync: sync_back: all 3 attempts failed: [Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'
+  2026-11-20 19:00:05,349 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_7f9a4226b57b4144aaeb154f510a8f07
+--- after the reaper's teardown: the Engine's copies
+/opt/data/profiles/probe-space/skills/shared-one/SKILL.md: --- | name: shared-one | description: the Company's | --- | GW393 SHARED original | GW393 SHARED EDITED AGAIN
+/opt/data/profiles/probe-space/skills/planted/SKILL.md: FileNotFoundError
+/opt/data/profiles/probe-a/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original
+/opt/data/profiles/probe-a/skills/a-own/new.md: FileNotFoundError
+/opt/data/profiles/probe-a/cache/documents/gw393-a-doc.txt: GW393 A's document (uploaded by a person)
+/opt/data/profiles/probe-a/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-a-doc.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original | GW393 A-OWN EDITED AGAIN
+/opt/data/skills/a-own/new.md: GW393 new file next to A-OWN
+/opt/data/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+--- 5 a Run after the teardown still works (A)
+exit=0 error=None
+run-ok
+8696d12bb77d
+--- the Engine's warnings:
+  2026-11-20 18:59:59,106 WARNING tools.environments.file_sync: sync_back: all 3 attempts failed: [Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'
+  2026-11-20 18:59:59,237 WARNING tools.environments.file_sync: sync_back: attempt 1 failed ([Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'), retrying in 2s
+  2026-11-20 19:00:01,292 WARNING tools.environments.file_sync: sync_back: attempt 2 failed ([Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'), retrying in 4s
+  2026-11-20 19:00:05,345 WARNING tools.environments.file_sync: sync_back: all 3 attempts failed: [Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'
+
+=== variant 7: as 5, plus terminal.sync_back_max_bytes: 0
+--- 4/5 A's fresh session: the shared Skill as uploaded
+exit=0 error=None
+---
+name: shared-one
+description: the Company's
+---
+GW393 SHARED original
+GW393 SHARED EDITED AGAIN
+--- 4/5 A edits the shared Skill and its own Skill again
+exit=0 error=None
+edited
+--- waiting for the idle reaper (lifetime 20 s, sweep every 60 s)
+--- the Engine's new log lines after 380s:
+  2026-11-20 19:06:37,578 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 19:06:37,718 WARNING tools.environments.file_sync: sync_back: remote tar is 2969600 bytes (cap 0, override with terminal.sync_back_max_bytes) — skipping extraction
+  2026-11-20 19:06:37,733 INFO tools.environments.ssh: SSH: syncing files from sandbox...
+  2026-11-20 19:06:37,733 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_27f17b4277fa45dfafb39d89d8ccb620
+  2026-11-20 19:06:37,819 WARNING tools.environments.file_sync: sync_back: remote tar is 2969600 bytes (cap 0, override with terminal.sync_back_max_bytes) — skipping extraction
+  2026-11-20 19:06:37,835 INFO tools.terminal_tool: Cleaned up inactive environment for task: profile:probe-a:session:agent:probe-a:api_server:dm:run_7600da5e559f47f6940b46e42010935e
+--- after the reaper's teardown: the Engine's copies
+/opt/data/profiles/probe-space/skills/shared-one/SKILL.md: --- | name: shared-one | description: the Company's | --- | GW393 SHARED original | GW393 SHARED EDITED AGAIN
+/opt/data/profiles/probe-space/skills/planted/SKILL.md: FileNotFoundError
+/opt/data/profiles/probe-a/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original
+/opt/data/profiles/probe-a/skills/a-own/new.md: FileNotFoundError
+/opt/data/profiles/probe-a/cache/documents/gw393-a-doc.txt: GW393 A's document (uploaded by a person)
+/opt/data/profiles/probe-a/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-a-doc.txt: FileNotFoundError
+/opt/data/profiles/probe-b/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+/opt/data/profiles/probe-b/skills/a-own/SKILL.md: FileNotFoundError
+/opt/data/skills/a-own/SKILL.md: --- | name: a-own | description: A's own | --- | GW393 A-OWN original | GW393 A-OWN EDITED AGAIN
+/opt/data/skills/a-own/new.md: GW393 new file next to A-OWN
+/opt/data/cache/documents/gw393-sandbox-made.txt: FileNotFoundError
+
+=== variant 3b: an unreadable file in A's cache (root-owned, mode 000)
+--- 5a A's command with an unreadable file in its cache
+exit=1 error=None
+ran
+gw393-a-doc.txt
+cat: /home/pn/.hermes/cache/documents/gw393-late.txt: No such file or directory
+--- the Engine's warnings:
+  2026-11-20 18:59:59,237 WARNING tools.environments.file_sync: sync_back: attempt 1 failed ([Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'), retrying in 2s
+  2026-11-20 19:00:01,292 WARNING tools.environments.file_sync: sync_back: attempt 2 failed ([Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'), retrying in 4s
+  2026-11-20 19:00:05,345 WARNING tools.environments.file_sync: sync_back: all 3 attempts failed: [Errno 30] Read-only file system: '/opt/data/profiles/probe-space/skills/shared-one/SKILL.md'
+  2026-11-20 19:06:37,718 WARNING tools.environments.file_sync: sync_back: remote tar is 2969600 bytes (cap 0, override with terminal.sync_back_max_bytes) — skipping extraction
+  2026-11-20 19:06:37,819 WARNING tools.environments.file_sync: sync_back: remote tar is 2969600 bytes (cap 0, override with terminal.sync_back_max_bytes) — skipping extraction
+
+probe finished; everything it made is removed
