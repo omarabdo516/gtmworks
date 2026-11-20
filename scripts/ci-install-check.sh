@@ -804,8 +804,17 @@ export PATH="$HOME/.local/bin:$PATH"
 # v0.0.1 is published: gtmworks update moves to it, backing up first.
 cp "$workspace/release-next/docker-compose.install.yml" "$workspace/release-next/install.sh" "$releases/v0.0.1/" || fail 'test release v0.0.1'
 echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]' > "$releases/releases.json"
+# #437: the install keeps an older gtmworks command, one from before #437 (main's, bbd2941a) without sign-in: it never
+# replaced itself, so the update leaves the one v0.0.1 carries through v0.0.1's install.sh.
+older_command=bbd2941a5c8064f496dc29a83c7e8fe251e96e5f
+git -C "$workspace" cat-file -e "$older_command^{commit}" 2> /dev/null || git -C "$workspace" fetch -q --no-tags --depth 1 origin "$older_command" || fail 'the older gtmworks command commit'
+git -C "$workspace" show "$older_command:scripts/get.sh" | sed '/^ *elif \[ "$operation" = sign-in \]/d' > gtmworks.sh.older && mv gtmworks.sh.older gtmworks.sh || fail 'swap in an older gtmworks command'
+if gtmworks sign-in claude > "$RUNNER_TEMP/older-command.log" 2>&1; then fail 'the older command must refuse sign-in'; fi
+grep -Fx 'Unexpected argument: claude' "$RUNNER_TEMP/older-command.log" || fail 'the older command knows no sign-in'
 old_image=$(web_image)
 { gtmworks update || fail 'gtmworks update'; } 2>&1 | tee "$RUNNER_TEMP/update.log"
+if gtmworks sign-in claude > "$RUNNER_TEMP/updated-command.log" 2>&1; then fail 'sign-in without --company must stop at its usage'; fi
+grep -Fx 'gtmworks sign-in claude needs --company <id-or-name>.' "$RUNNER_TEMP/updated-command.log" || fail 'after the update, the gtmworks command runs sign-in'
 archive=$(sed -n 's/^Backup: //p' "$RUNNER_TEMP/update.log" | tail -n 1)
 [[ $archive == "$dir"/backups/*.tgz && -f $archive ]] || fail 'the update prints the backup archive path'
 grep -E 'Digest: sha256:[a-f0-9]{64}' "$RUNNER_TEMP/update.log" || fail 'the update pulls the new image by digest'

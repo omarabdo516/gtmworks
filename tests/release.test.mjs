@@ -142,6 +142,7 @@ case "$*" in
   # Runs the installer's own extraction script, with the image's /app/install and the mounted /install mapped here.
   eval "script=\\\${$#}"
   umask 022; sh -ec "$(printf '%s' "$script" | sed -e "s#/app/install/#$IMAGE_ROOT/#g" -e 's#/install/#./#g')";;
+ *' cat /app/release-source/scripts/get.sh') cat "$IMAGE_GET";;
  *install-env.mjs\\ engine-key*) printf 'a1%.0s' $(seq 1 32);;
  *install-env.mjs\\ generate*) printf 'GENERATED=1\\n';;
  *'count(*) from public.companies'*) echo 1;;
@@ -156,7 +157,7 @@ function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app)}={}) {
  const bin=mkdtempSync(join(tmpdir(),'gtmworks-release-bin-'));
  t.after(()=>rmSync(bin,{recursive:true,force:true}));
  writeFileSync(join(bin,'docker'),dockerShim,{mode:0o755});
- const env={...process.env,PATH:`${bin}:${process.env.PATH}`,COMMANDS:join(bin,'commands'),MIGRATION_SQL:join(bin,'migration.sql'),IMAGE_ROOT:imageFolder(t)};
+ const env={...process.env,PATH:`${bin}:${process.env.PATH}`,COMMANDS:join(bin,'commands'),MIGRATION_SQL:join(bin,'migration.sql'),IMAGE_ROOT:imageFolder(t),IMAGE_GET:join(process.cwd(),'scripts/get.sh')};
  const runWith=(extra,...args)=>spawnSync('sh',['install.sh',...args],{cwd:directory,env:{...env,...extra},encoding:'utf8'});
  return {directory,imageRoot:env.IMAGE_ROOT,run:(...args)=>runWith({},...args),runWith,clear:()=>rmSync(env.COMMANDS,{force:true}),
   commands:()=>existsSync(env.COMMANDS)?readFileSync(env.COMMANDS,'utf8'):'',sql:()=>readFileSync(env.MIGRATION_SQL,'utf8'),
@@ -331,6 +332,31 @@ test('a release update replaces the mounted install files in place, so the runni
  assert.deepEqual(inodes(),before);
  assert.equal(readdirSync(seen('supabase/migrations')).includes('99999999999999_next.sql'),false);
  assert.ok(readdirSync(seen('supabase/migrations')).length>0);
+});
+
+// #437: a gtmworks command from before #437 never replaces itself, but its update runs the new release's install.sh, which
+// leaves the get.sh its image carries. The running command is the old file: the new one is moved over it, never written in.
+test('a release install or update leaves the gtmworks command its image carries, and refuses one that is not the installer', t => {
+ const release=releaseDirectory(t);
+ assert.equal(release.run().status,0);
+ assert.equal(existsSync(join(release.directory,'gtmworks.sh')),false,'a folder without the command (install.sh run by hand) gets none');
+ const command=join(release.directory,'gtmworks.sh');
+ writeFileSync(command,'#!/bin/sh\n# an older gtmworks command\n');
+ const held=openSync(command,'r');
+ t.after(()=>closeSync(held));
+ const updated=release.run('update');
+ assert.equal(updated.status,0,updated.stderr);
+ assert.equal(readFileSync(command,'utf8'),readFileSync('scripts/get.sh','utf8'));
+ assert.equal(statSync(command).mode & 0o111,0o111);
+ assert.equal(readFileSync(`/proc/self/fd/${held}`,'utf8'),'#!/bin/sh\n# an older gtmworks command\n','the running copy is not written into');
+ const bad=join(release.directory,'not-get.sh');
+ writeFileSync(bad,'<html>Not Found</html>\n');
+ writeFileSync(command,'#!/bin/sh\n# an older gtmworks command\n');
+ const refused=release.runWith({IMAGE_GET:bad},'update');
+ assert.equal(refused.status,0,refused.stderr);
+ assert.match(refused.stderr,/^The gtmworks command in .* is not the gtmworks installer: gtmworks\.sh is kept\.$/m);
+ assert.equal(readFileSync(command,'utf8'),'#!/bin/sh\n# an older gtmworks command\n');
+ assert.equal(existsSync(join(release.directory,'gtmworks.sh.tmp')),false);
 });
 
 test('CI updates a release install on a real database, applying a new migration through the running bind mount', () => {
