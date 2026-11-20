@@ -6,10 +6,22 @@
   "ar": { "title": "أي أداة بتتكلم MCP", "body": "قايمة التطبيقات بقى فيها كل تطبيق المحرك بيجي بيه وأدوات التسويق الجاهزة من gtmworks، وصاحب الشركة يقدر يضيف أي سيرفر MCP بعنوانه، من غير دخول أو بتوكن أو بتسجيل دخول. وكل تطبيق بيدي الوكيل كل أدواته." }
  },
  {
+  "issue": 460,
+  "date": "2026-11-20",
+  "en": { "title": "Home shows your real Agents", "body": "Home lists the same Agents as the sidebar, Lead first, each with the Card it is working on now." },
+  "ar": { "title": "الرئيسية بتعرض وكلاءك الحقيقيين", "body": "الرئيسية بقت بتعرض نفس الوكلاء اللي في القايمة الجانبية، الوكيل الرئيسي الأول، وكل واحد معاه البطاقة اللي شغال عليها دلوقتي." }
+ },
+ {
   "issue": 457,
   "date": "2026-11-20",
   "en": { "title": "A model error says why", "body": "When the model key has no credit, the provider refuses it, or the Agent’s model is not available, the chat says so and points to the Agent’s model settings instead of working on a reply forever." },
   "ar": { "title": "خطأ الموديل بيقول سببه", "body": "لما مفتاح الموديل يخلص رصيده، أو المزوّد يرفضه، أو موديل الوكيل مش متاح، الشات بيقول كده وبيوصّلك لإعدادات موديل الوكيل بدل ما يفضل شغّال على رد مش جاي." }
+ },
+ {
+  "issue": 368,
+  "date": "2026-11-20",
+  "en": { "title": "A message whose image is gone says so", "body": "A message sent with an image that is no longer stored is marked as not sent, and the next queued message in that conversation starts." },
+  "ar": { "title": "رسالة صورتها ضاعت بتقولك", "body": "لو رسالة اتبعتت بصورة والصورة دي مش متخزنة تاني، الرسالة بتتحسب إنها ما اتبعتتش، والرسالة اللي بعدها في نفس المحادثة بتكمّل على طول." }
  },
  {
   "issue": 453,
