@@ -237,29 +237,30 @@ the second container, which is what `tools/bot_desktop/placement.py` resolves fo
 The stream itself reaches a viewer through the Engine's management listener (`/api/display/ws`), which the next spec
 builds on.
 
-# 9. File sync: what the sandbox receives, and what it sends back
+# 9. File sync: what the sandbox received, and the switch that turns it off
 
 The `ssh` backend keeps a copy of the Engine's `~/.hermes` per sandbox at `/home/pn/.hermes`
 (`tools/environments/ssh.py`, `file_sync.py`). Measured on 2026-11-20 by `work-sandbox-ssh/file-sync.sh`, whose full
 output is `work-sandbox-ssh/file-sync-output.txt`:
 
-- **Into the sandbox, always on.** On connect the backend uploads the profile's Skills (the bundled ones and its own), the
-  Company's shared Skills folder as `external_skills/<i>`, and the profile's caches (documents, attachments, delegation
-  and the rest in the same code list). No setting turns it off: `sync_files` is not reachable from a config, and no
-  profile or environment variable gates it. Every profile of a Company uploads into the same `~/.hermes`, so an Agent's
-  own Skills and its uploaded documents are readable by every other Agent of that Company. That is inside one Company's
-  sandbox and never across Companies; accepted as it stands (Hermes, 2026-11-20).
-- **Back to the Engine, off.** On cleanup the backend runs `sync_back()`. It maps remote paths by the *launch* home
-  (`/opt/data`), so without a cap an Agent's edit to a Skill copy becomes an edit of the Engine's own `/opt/data/skills`,
-  and a planted file lands beside it. `terminal.sync_back_max_bytes: 0` in the managed configuration makes the extraction
-  skip and write nothing (proven live, runs keep working), and every caller goes through that check. No profile and no
-  Settings write can raise it, because it sits in the managed scope. It is in `scripts/engine-managed.yml`, and the
-  launch profile names no `skills.external_dirs`, so the Company's shared folder is in no sync-back path map either.
-- A profile whose cache holds a file the Engine cannot read breaks that profile's whole upload cycle (a staging failure
-  rolls the transaction back), and every later cycle fails the same way. Noted; it is a failure path, not a setting.
-
-The cap's cost is that the sandbox's `~/.hermes` is still downloaded at every teardown and then thrown away (about 3 MB
-in the probe). Nothing of the upload reaches another Company: each Company has its own sandbox and its own Engine.
+- **Into the sandbox.** On connect the backend uploads the profile's Skills (the bundled ones and its own), the Company's
+  shared Skills folder as `external_skills/<i>`, the profile's caches (documents, attachments, delegation and the rest in
+  the same code list), and the profile's credential files (`iter_sync_files`, `get_credential_file_mounts`). No setting
+  turns it off: `sync_files` is not reachable from a configuration, and no profile or environment variable gates it. Every
+  profile of a Company uploads into the same `~/.hermes`, so one Agent's Skills and credentials would be readable by
+  every other Agent of that Company.
+- **Back to the Engine.** On cleanup the backend runs `sync_back()`. It maps remote paths by the *launch* home
+  (`/opt/data`), so an Agent's edit to a Skill copy became an edit of the Engine's own `/opt/data/skills`, and a planted
+  file landed beside it. The probe found `terminal.sync_back_max_bytes: 0` makes the extraction skip; that is a **size cap
+  on the tar, not an off switch** — the upload still ran and the tar was still downloaded and thrown away.
+- **The switch.** `SSHEnvironment(sync_files=False)` removes the `FileSyncManager` itself: nothing is copied in and
+  nothing back. The pinned release never passes it (`tools/terminal_tool_backends.py`, `_build_ssh_env`), so gtmworks adds
+  the upstream `terminal.ssh_sync_files` key at the Engine's start with a cont-init hook,
+  `scripts/engine-ssh-sync-files.sh`, and sets it false in the managed configuration (`scripts/engine-managed.yml`). The
+  hook fails the start if the pinned text moved (`S6_BEHAVIOUR_IF_STAGE2_FAILS: 2`: s6-overlay's default would start
+  the Engine anyway, unpatched), so a pin bump cannot silently drop it; a restarted Engine keeps its patched copy, and
+  the image stays the pinned official one. With it off an Agent sees only the Company's work folder, and a Run still works (the install job proves
+  both, and that no credential file of the Engine's profiles is in the sandbox).
 
 # 10. Tools that fail the proof with no safe setting
 

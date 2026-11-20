@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -57,6 +57,9 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.equal(engine.environment.HERMES_DASHBOARD_PUBLIC_URL,'http://${ENGINE_NAME:?Run scripts/install.sh}:9119');
  // The file tools write only under the work folder, which is the sandbox's (#390).
  assert.equal(engine.environment.HERMES_WRITE_SAFE_ROOT,'/work');
+ // A start hook that fails stops the Engine (s6-overlay's own switch): the file-sync patch and the listener address
+ // either hold or the Engine does not serve, never an Engine that started without them.
+ assert.equal(engine.environment.S6_BEHAVIOUR_IF_STAGE2_FAILS,2);
  assert.ok(engine.volumes.includes('data:/opt/data'));
  // The Company's work folder, read-only: the Library reads an Agent's folder in it through this Engine's file routes,
  // and nothing on the Engine may write what its Agents made (#395).
@@ -80,11 +83,15 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.match(refused.stderr,/The Engine has no key/);
  // The install's managed scope pins the sandbox backend, so no profile and no Settings write moves it.
  const managed=load(readFileSync('scripts/engine-managed.yml','utf8'));
- assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',sync_back_max_bytes:0}});
- // Nothing comes back from the sandbox (#393): sync_back_max_bytes: 0 in the managed scope makes every teardown skip its
- // write-back, and the Engine's launch home (/opt/data) names no shared Skills folder, which is where a write-back maps
- // a path. A Company's shared folder is named on each Company's and Agent's profile (lib/hermes.mjs), never there.
- assert.equal(managed.terminal.sync_back_max_bytes,0,'the sandbox writes nothing back to the Engine');
+ assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false}});
+ // Nothing is copied between the Engine and the sandbox (#393): ssh_sync_files is false in the managed scope, and the
+ // cont-init hook that adds that key to the pinned Engine runs before anything starts and fails the start if the pinned
+ // text moved. The Engine's launch home (/opt/data) names no shared Skills folder, so nothing of a profile's Skills is
+ // reachable from there either.
+ assert.equal(managed.terminal.ssh_sync_files,false,'the ssh backend copies nothing in and nothing back');
+ assert.ok(engine.volumes.includes('./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro'),'the file-sync switch patch runs at start');
+ // The install job runs the hook against the pinned image and proves the ssh sandbox is built with sync off.
+ assert.ok(statSync('scripts/engine-ssh-sync-files.sh').mode&0o111,'the hook is executable as s6 runs it');
  const launch=readFileSync('scripts/ci-install-lib.sh','utf8');
  assert.match(launch,/cat > \/opt\/data\/config\.yaml/,'the install names the launch profile it writes');
  assert.doesNotMatch(launch,/external_dirs/,'the launch profile names no shared Skills folder');

@@ -33,6 +33,27 @@ install_source first-install.log || fail 'first install'
 [[ -f .work-sandbox-image ]] || fail 'the install names the work sandbox image it got'
 node scripts/check-work-sandbox.mjs --image "$(cat .work-sandbox-image)" | tee work-sandbox.log || fail 'the work sandbox image'
 grep -qx 'work sandbox: ok' work-sandbox.log || fail 'the work sandbox image prints "work sandbox: ok"'
+# The pinned Engine's file-sync switch (#393): its cont-init hook patches the Engine's own copy to take
+# terminal.ssh_sync_files, and fails when the pinned text is not there. In a throwaway container of the pinned image with
+# the managed configuration, the hook runs twice (as a restarted Engine runs it) and the ssh environment a profile's
+# terminal builds gets sync_files off, even when the profile's own config asks for it on.
+engine_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
+docker run --rm -v "$PWD/scripts/engine-ssh-sync-files.sh:/hook:ro" -v "$PWD/scripts/engine-managed.yml:/etc/hermes/config.yaml:ro" \
+  --entrypoint /bin/sh "$engine_image" -ec '/hook; /hook; cd /opt/hermes; exec python - <<"PY"
+import pathlib, tempfile
+from unittest.mock import MagicMock
+home = pathlib.Path(tempfile.mkdtemp())
+(home / "config.yaml").write_text("terminal: {ssh_sync_files: true}\n")
+from tools.terminal_scope import build_profile_terminal_scope, set_terminal_scope
+set_terminal_scope(build_profile_terminal_scope(home))
+from tools import terminal_tool_backends
+from tools.terminal_tool import _get_env_config
+from tools.terminal_tool_lifecycle import _create_configured_env
+terminal_tool_backends._SSHEnvironment = built = MagicMock()
+config = _get_env_config()
+_create_configured_env(config, config["env_type"], image="", cwd="/work", timeout=30, task_id="sync-check", host_cwd=None)
+assert config["env_type"] == "ssh" and built.call_args.kwargs["sync_files"] is False, built.call_args
+PY' || fail 'the pinned Engine builds its ssh sandbox with file sync off'
 [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
 # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
 # other line, and a repeat install while setup is still open prints the same link. The code travels after `#`
@@ -473,30 +494,50 @@ engine_healthy "$engine_id" 180 || fail 'the Engine is healthy with its sandbox 
 engine_node "$engine_key" - sandbox-key "$key_marker" runs < scripts/check-install-profiles.mjs | tee sandbox-key-runs.log \
   || fail "an Agent's command runs again once the sandbox host key is back"
 [[ $(docker exec "$sandbox" cat "/work/$key_marker-key.txt") == "$key_marker" ]] || fail "the Agent's command wrote in the work folder after the host key returned"
-# The upload into the sandbox is on with no switch, and nothing comes back (#393): the Engine copies an Agent's Skills
-# and caches into /home/pn/.hermes, and every session teardown used to copy what an Agent changed there back onto the
-# Engine's own disk. An Agent edits its own copy of a Skill, the Company's shared Skill copy, and plants a new file; after
-# the Engine's session teardown neither edit nor the planted file is in any Skills folder on the Engine (the Engine's own,
-# the profiles' and the Company's shared one).
+# No file sync between the Engine and the sandbox (#393): the ssh backend runs with sync_files off, so nothing of the
+# Engine is copied into /home/pn/.hermes (a profile's Skills, the Company's shared Skills, its caches, its memories, its
+# settings, or a credential file the sync would carry), and nothing an Agent writes there comes back. An Agent counts the
+# files it finds there and writes the paths a sync would map; the job restarts the Engine to tear the session down and
+# finds none of it on the Engine or in the sandbox, and the Run itself shows an Agent still works.
 engine_change() {
-  docker exec "$engine_id" sh -c 'for folder in /opt/data/skills /opt/data/profiles/*/skills; do [ -d "$folder" ] || continue; grep -rl -- "EDIT-$1" "$folder" 2> /dev/null; find "$folder" -name "planted-$1.md" 2> /dev/null; done; true' sh "$1"
+  docker exec "$engine_id" sh -c 'for folder in /opt/data/skills /opt/data/memories /opt/data/profiles/*/skills /opt/data/profiles/*/memories; do
+    [ -d "$folder" ] || continue
+    grep -rl -- "EDIT-$1" "$folder" 2> /dev/null
+  done
+  for file in /opt/data/config.yaml /opt/data/profiles/*/config.yaml; do
+    [ -f "$file" ] || continue
+    grep -l -- "EDIT-$1" "$file" 2> /dev/null
+  done; true' sh "$1"
 }
+# A credential file the sync would copy into the sandbox: the profile's config names it, and it sits in the profile's
+# home as a credential file of that profile does.
+credential_marker="credential-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+docker exec "$engine_id" sh -ec 'install -d -m 700 -o hermes -g hermes "/opt/data/profiles/$1/sandbox-check-credentials"
+  printf "CHECK-%s\n" "$2" > "/opt/data/profiles/$1/sandbox-check-credentials/credential.json"
+  chown hermes:hermes "/opt/data/profiles/$1/sandbox-check-credentials" "/opt/data/profiles/$1/sandbox-check-credentials/credential.json"' sh "$first" "$credential_marker" \
+  || fail 'write a credential file in the first profile'
 sync_marker="sandbox-sync-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 engine_node "$engine_key" - sandbox-sync "$sync_marker" < scripts/check-install-profiles.mjs | tee sandbox-sync.log \
-  || fail 'an Agent edits and plants a Skill in its sandbox home'
+  || fail 'an Agent works in its sandbox with the file sync off'
+grep -q '"count":0' sandbox-sync.log || fail 'the Engine copied its files into the sandbox'
+# The settings file a sync would map, planted as the sandbox's user: an Agent's own redirect into ~/.hermes/config.yaml
+# is a command the Engine holds for a person's approval, so the Run would wait for one and never reply.
+docker exec "$sandbox" sh -ec 'printf "# EDIT-%s\n" "$1" > /home/pn/.hermes/config.yaml' sh "$sync_marker" \
+  || fail "plant the settings file in the sandbox's Engine home"
+# No copy of the profile's credential file anywhere an Agent can write in its sandbox, under any name.
+leaked=$(docker exec --user 0 "$sandbox" sh -c 'grep -rl -- "CHECK-$1" /home /work /tmp 2> /dev/null; find / -xdev -name credential.json -path "*sandbox-check-credentials*" 2> /dev/null; true' sh "$credential_marker")
+[[ -z $leaked ]] || fail "a credential file of the Engine profile is in the sandbox: $leaked"
 before_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills before the sandbox session ended"
 [[ -z $before_sync ]] || fail "an Agent's edit reached the Engine before its session ended: $before_sync"
-# The teardown's own log line says the cap did its work, so a stop that never reached it cannot pass for one that did.
-sync_back_skips() {
-  docker exec "$engine_id" sh -c "find /opt/data -name '*.log' -path '*logs*' | xargs grep -h 'skipping extraction' 2> /dev/null | wc -l" || echo 0
-}
-skips_before=$(sync_back_skips)
+# The Engine's own process tears the session down at a restart: a stop that never happened cannot pass for one that did.
+started_before=$(docker inspect -f '{{.State.StartedAt}}' "$engine_id")
 docker restart -t 60 "$engine_id" > /dev/null || fail 'restart the Engine to tear the sandbox session down'
 engine_healthy "$engine_id" 180 || fail 'the Engine is healthy after the sandbox session teardown'
-skips_after=$(sync_back_skips)
-[[ ${skips_after:-0} -gt ${skips_before:-0} ]] || fail 'the Engine did not run the sandbox session teardown'
+[[ $(docker inspect -f '{{.State.StartedAt}}' "$engine_id") != "$started_before" ]] || fail 'the Engine did not restart before its next command'
 after_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills after the sandbox session teardown"
 [[ -z $after_sync ]] || fail "what an Agent changed in the sandbox came back to the Engine: $after_sync"
+[[ $(docker exec "$engine_id" cat "/opt/data/profiles/$first/sandbox-check-credentials/credential.json") == "CHECK-$credential_marker" ]] \
+  || fail 'a credential file of the Engine profile changed with the sandbox session'
 # The Library of an Agent (#395, ADR 0018): a file an Agent writes with its file tool in its own folder in the Company's
 # work folder is in its Library, previews as text and downloads with the same bytes, read as the app reads it (the
 # database names the Agent's profile, the Engine's file routes read the work folder it sees read-only). The Engine cannot

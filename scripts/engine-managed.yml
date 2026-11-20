@@ -11,7 +11,9 @@ terminal:
   ssh_user: pn
   ssh_port: 2222
   ssh_key: /opt/data/ssh/id_ed25519
-  # No write-back from the sandbox to the Engine (#393): the upload into the sandbox is on with no switch, and an Agent
-  # could otherwise plant a Skill in the Engine's own home. 0 makes every teardown's sync-back skip its extraction and
-  # write nothing (probe: docs/engine-probes/work-sandbox-ssh.md, "File sync"); Runs keep working.
-  sync_back_max_bytes: 0
+  # No file sync at all between the Engine and the sandbox (#393): the pinned Engine copies a profile's Skills and caches
+  # into the sandbox and, at a session's teardown, copies what the Agent changed there back onto the Engine's own disk.
+  # The switch is `SSHEnvironment(sync_files=False)`, which the pinned release has no config key for; the cont-init hook
+  # scripts/engine-ssh-sync-files.sh adds `terminal.ssh_sync_files` and passes it there (default true, so an install that
+  # sets nothing behaves as the release does). With it false nothing is copied in and nothing back; Agents see /work only.
+  ssh_sync_files: false

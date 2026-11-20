@@ -28,6 +28,9 @@ services:
       # listener still binds the install network's address alone and the name answers there.
       HERMES_DASHBOARD_PUBLIC_URL: http://${ENGINE_NAME:?Run scripts/install.sh}:9119
       HERMES_WRITE_SAFE_ROOT: /work
+      # A cont-init hook that fails stops the container (s6-overlay's default carries on): an Engine never serves without
+      # the file-sync patch or its listener address (#393).
+      S6_BEHAVIOUR_IF_STAGE2_FAILS: 2
     volumes:
       - data:/opt/data
       # The Company's work folder, read-only: an Agent's Library is its own folder in it, read through this Engine's file
@@ -37,6 +40,9 @@ services:
       # The backend the Engine's terminal, file and code tools use, pinned so no profile and no Settings write can move
       # them back onto the Engine's own disk (ADR 0018).
       - ./engine-managed.yml:/etc/hermes/config.yaml:ro
+      # The ssh backend's file sync, off (#393): a hook before s6 starts any service patches the Engine's own copy to take
+      # the terminal.ssh_sync_files key the managed configuration sets, and fails the start if the pinned text moved.
+      - ./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro
       # The one way the listeners learn the address the install network gave this Engine: a hook that runs before s6
       # starts any service writes it into the container's environment, so the gateway and the dashboard bind there and
       # never to the wildcard address the sandbox's network could reach (#390).
