@@ -1310,5 +1310,15 @@
   "settingsSpeechMissing": "Not on this provider yet; give the key again to reach:",
   "settingsSpeechUnread": "Couldn’t read the speech-to-text provider right now.",
   "settingsVoiceArabicEgypt": "Arabic (Egypt)",
-  "settingsSpeechNotReached": "The change did not reach {0}. Try again."
+  "settingsSpeechNotReached": "The change did not reach {0}. Try again.",
+  "updateReady": "Update ready",
+  "updateReadyOut": "gtmworks {0} came out {1}.",
+  "updateReadyFixes": "Fixes and improvements.",
+  "updateReadyMore": "And {0} more improvements and fixes.",
+  "updateReadyRun": "On the server, run:",
+  "updateReadyHide": "Hide until the next version",
+  "whatsNew": "What’s new",
+  "whatsNewSub": "gtmworks was updated. Here is what arrived.",
+  "whatsNewDone": "Got it",
+  "updateReadyMoreOne": "And one more improvement or fix."
 }

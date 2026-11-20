@@ -453,6 +453,9 @@ test('a vX.Y.Z tag only requests a release; the publishing workflow runs from ma
  assert.equal(workflow.jobs['install-test'].if,"${{ needs.provenance.outputs.release != '' }}");
  const build=workflow.jobs.image.steps.find(step=>step.uses?.startsWith('docker/build-push-action@'));
  assert.equal(build.with.tags,'${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}');
+ // The image carries the version it is published as, which Update ready compares with the newest (#442).
+ assert.equal(build.with['build-args'],'GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}');
+ assert.match(readFileSync('Dockerfile','utf8'),/ARG GTMWORKS_VERSION=\n.*GTMWORKS_VERSION=\$GTMWORKS_VERSION/);
  assert.equal(build.with.platforms,'linux/amd64,linux/arm64');
  assert.equal(build.with.push,true);
  assert.match(runs('image'),/docker manifest inspect "\$IMAGE:\$TAG"/);

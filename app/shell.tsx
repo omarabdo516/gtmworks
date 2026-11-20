@@ -25,6 +25,7 @@ import { SidebarSearchProvider, SearchToggle, SearchBox } from './sidebar-search
 import { Frame } from './frame';
 import { markOpen } from '@/lib/chat-open-timing';
 import { AppsSheetProvider, AppsButton } from './apps-sheet';
+import UpdateReady from './update-ready';
 import type { ReactNode } from 'react';
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from '@/components/paperclip/ui/breadcrumb';
 import { Fragment, cache } from 'react';
@@ -54,7 +55,8 @@ type Company = {id:string,slug:string,name:string};
 // The frame every screen sits in (design-reference: #sidebar). From the top: the Company, search and a new chat with
 // Lead; the four entries; the Agents with Lead first; the channels this person is in with their unread counts (#23,
 // #24; none in a Company worked alone), this person's recent chats and cards; Connect apps, which opens the apps as a
-// sheet over the page (#201), the account and theme.
+// sheet over the page (#201), the account and theme. An Owner also sees Update ready above Connect apps when a newer
+// gtmworks exists (#442).
 // `agentId` and `conversationId` mark the open Conversation in the sidebar, `channelId` the open channel; `personId` is
 // the signed-in person, for whom an Agent Lead made at their request is marked new until they open it (#13).
 // `approvalCount` may still be on its way (app/approvals-count.tsx).
@@ -106,7 +108,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </section>
   </>}</nav>
   {/* The apps are read by the browser (app/company-apps-read.ts): the page is drawn with no Engine read and the count lands after. */}
-  <div className="sb-foot sidebar-bottom">{company?<><AppsButton/>{account}</>:account}</div>
+  <div className="sb-foot sidebar-bottom">{company?<><UpdateReady company={company.id} person={personId} owner={owner}/><AppsButton/>{account}</>:account}</div>
  </SidebarSearchProvider>;
  // Paperclip BreadcrumbBar: a trail of two or more crumbs replaces the single page title. Rendered on the server so it adds no route JavaScript.
  const breadcrumb=crumbs&&crumbs.length>1?<div className="heading m-0 min-w-0 flex-1 overflow-hidden"><Breadcrumb aria-label={t('breadcrumb')} className="min-w-0 overflow-hidden"><BreadcrumbList className="flex-nowrap">{crumbs.map((crumb,index)=>{const last=index===crumbs.length-1;return <Fragment key={index}>{index>0&&<BreadcrumbSeparator/>}<BreadcrumbItem className={last?'min-w-0':'shrink-0'}>{last||!crumb.href?<BreadcrumbPage className="truncate"><bdi>{crumb.label}</bdi></BreadcrumbPage>:<Link className="hover:text-foreground transition-colors" href={crumb.href}><bdi>{crumb.label}</bdi></Link>}</BreadcrumbItem></Fragment>;})}</BreadcrumbList></Breadcrumb></div>:undefined;
