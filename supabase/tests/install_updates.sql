@@ -12,7 +12,7 @@ select is(public.request_install_update(),'requested','asking again while it wai
 select throws_ok($$update public.install_updates set auto=true$$,'42501',null,'an Owner cannot turn automatic updates on');
 select throws_ok($$select version from public.install_updates$$,'42501',null,'nor read the row itself');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is(public.install_update(),null,'a Manager reads nothing');
+select ok(public.install_update() is null,'a Manager reads nothing');
 select throws_ok($$select public.request_install_update()$$,'42501','updateNotAllowed','a Manager cannot ask');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.request_install_update()$$,'42501','updateNotAllowed','a Viewer cannot ask');

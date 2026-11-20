@@ -888,6 +888,105 @@ cd "$fresh"
 probe 'after the --version run'
 }
 
+# updater: Update now and automatic updates (#443, ADR 0020) on a real install of the test releases: the line puts the
+# updater in cron, the first run's Owner asks for an update, and one run of the updater installs the newest release and
+# records it; with the button off a request is refused and one already recorded is ignored; a release whose app never
+# comes up healthy, after its migration ran, is rolled back from the update's own backup and the failure is shown; and
+# with automatic updates on the updater installs the newest release without a click. The machine's own systemd and cron
+# are never touched: the schedulers on the PATH here keep their table in a file.
+updater() {
+cd "$root"
+area_setup
+fail_prefix='updater install check failed: '
+set -o pipefail
+workspace=$PWD
+reset_install
+if [[ ${GTMWORKS_IMAGE_PREBUILT:-} != true ]] && ! docker image inspect "$(web_image_tag)" > /dev/null 2>&1; then
+  install_source source-install.log || fail 'source install for the test releases'
+  reset_install
+fi
+start_registry
+publish_releases
+releases="$workspace/test-releases"
+mkdir -p "$releases/v0.0.0" "$releases/v0.0.1"
+cp release-first/docker-compose.install.yml release-first/install.sh "$releases/v0.0.0/" || fail 'test release v0.0.0'
+cp release-next/docker-compose.install.yml release-next/install.sh "$releases/v0.0.1/" || fail 'test release v0.0.1'
+echo '[{"tag_name":"v0.0.0"}]' > "$releases/releases.json"
+export GTMWORKS_RELEASES="file://$releases" GTMWORKS_GET="file://$workspace/scripts/get.sh"
+export HOME="$workspace/updater-home" CRONTAB_FILE="$workspace/updater-crontab"
+mkdir -p "$HOME" "$workspace/updater-bin"
+printf '%s\n' '#!/bin/sh' 'exit 1' > "$workspace/updater-bin/systemctl"
+printf '%s\n' '#!/bin/sh' 'case "$1" in -l) cat "$CRONTAB_FILE" 2> /dev/null;; -) cat > "$CRONTAB_FILE";; *) exit 2;; esac' > "$workspace/updater-bin/crontab"
+chmod 755 "$workspace/updater-bin/systemctl" "$workspace/updater-bin/crontab"
+export PATH="$workspace/updater-bin:$HOME/.local/bin:$PATH"
+dir="$HOME/gtmworks"
+first=$(sed -n 's/^release_image=//p' release-first/install.sh)
+next=$(sed -n 's/^release_image=//p' release-next/install.sh)
+{ curl -fsSL "$GTMWORKS_GET" | sh -s -- --version v0.0.0 || fail 'the one line installs v0.0.0'; } 2>&1 | tee updater-install.log
+grep -F "'$HOME/.local/bin/gtmworks' updater > /dev/null 2>&1 # gtmworks updater" "$CRONTAB_FILE" || fail 'the line puts the updater in cron'
+cd "$dir"
+complete_setup || fail 'first run makes the Owner who asks for the update'
+owner() {
+  docker run --rm -i --network host --env-file <(grep -E '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.install) \
+    node:22.14.0-alpine3.21 node --input-type=module - "$1" < "$workspace/scripts/check-install-update-request.mjs"
+}
+state() { db -c "select state||' '||coalesce(version,'') from public.install_updates"; }
+gtmworks status | tee "$RUNNER_TEMP/updater-status.log" || fail 'gtmworks status before the update'
+grep -Fx 'Update now button: on. Automatic updates: off.' "$RUNNER_TEMP/updater-status.log" || fail 'status shows the button on and automatic updates off'
+grep -Fx 'Updater: cron, every minute' "$RUNNER_TEMP/updater-status.log" || fail 'status names the updater'
+# v0.0.1 is out: the Owner clicks Update now, and one run of the updater installs it, as the timer would.
+echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"}]' > "$releases/releases.json"
+[[ $(owner request) == requested ]] || fail "the Owner's request is recorded"
+gtmworks updater || { cat .gtmworks-updater.log; fail 'the updater runs the update'; }
+[[ $(cat .install-release) == "$next" && $(cat .gtmworks-version) == v0.0.1 ]] || fail 'the updater installed the newest release of the channel'
+[[ $(state) == 'updated v0.0.1' ]] || fail 'the updater records the version it installed'
+[[ $(owner read) == 'updated v0.0.1 button-on' ]] || fail 'the Owner reads Updated to v0.0.1'
+probe 'after the updater'
+gtmworks status || fail 'healthy after the updater'
+# The button off: the Owner is refused, and a request recorded before is ignored by the updater.
+gtmworks update-button off || fail 'gtmworks update-button off'
+[[ $(owner refused) == refused ]] || fail 'with the button off the request is refused'
+db -c "update public.install_updates set state='requested'" > /dev/null || fail 'a request recorded before the button went off'
+gtmworks updater || fail 'the updater with the button off'
+[[ $(state) == 'idle v0.0.1' && $(cat .install-release) == "$next" ]] || fail 'the updater ignores a request while the button is off'
+gtmworks update-button on || fail 'gtmworks update-button on'
+# A release whose app never comes up, after its migration ran: the updater puts v0.0.1 back from the update's backup.
+docker build -q -t localhost:5000/gtmworks:0.0.2-ci - > /dev/null <<'DOCKERFILE' || fail 'build the broken release image'
+FROM localhost:5000/gtmworks:0.0.1-ci
+RUN echo 'create table gtmworks_install.broken_release_probe(id integer);' > /app/install/supabase/migrations/99999999999999_broken_release_probe.sql \
+ && echo 'process.exit(1);' > /app/server.js
+DOCKERFILE
+broken=$(publish 0.0.2-ci) || fail 'push the broken release image'
+(cd "$workspace" && node scripts/release-assets.mjs "$broken" "$releases/v0.0.2") || fail 'the broken release files'
+echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"},{"tag_name":"v0.0.2"}]' > "$releases/releases.json"
+[[ $(owner request) == requested ]] || fail "the Owner's request for the broken release"
+if gtmworks updater; then cat .gtmworks-updater.log; fail 'the update to the broken release must fail'; fi
+cat .gtmworks-updater.log
+grep -F 'broken_release_probe' .gtmworks-updater.log || fail 'the broken release applied its migration before it failed'
+[[ $(cat .install-release) == "$next" && $(cat .gtmworks-version) == v0.0.1 ]] || fail 'the updater put v0.0.1 back'
+[[ $(db -c "select to_regclass('gtmworks_install.broken_release_probe') is null") == t ]] || fail 'the data from before the broken update is back'
+[[ $(state) == 'failed v0.0.1' ]] || fail 'the failure is recorded with the version still running'
+[[ $(owner read) == 'failed v0.0.1 button-on' ]] || fail 'the Owner reads that the update failed and v0.0.1 runs'
+probe 'after the broken update was put back'
+# Automatic updates on: the next good release is installed without a click. The hour since the last check has passed.
+docker build -q -t localhost:5000/gtmworks:0.0.3-ci - > /dev/null <<'DOCKERFILE' || fail 'build the next good release image'
+FROM localhost:5000/gtmworks:0.0.1-ci
+RUN echo 'create table gtmworks_install.auto_update_probe(id integer);' > /app/install/supabase/migrations/99999999999999_auto_update_probe.sql
+DOCKERFILE
+later=$(publish 0.0.3-ci) || fail 'push the next good release image'
+(cd "$workspace" && node scripts/release-assets.mjs "$later" "$releases/v0.0.3") || fail 'the next good release files'
+echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"},{"tag_name":"v0.0.2"},{"tag_name":"v0.0.3"}]' > "$releases/releases.json"
+gtmworks auto-update on || fail 'gtmworks auto-update on'
+db -c "update public.install_updates set auto_checked_at=now() - interval '2 hours'" > /dev/null || fail 'the hour since the last check'
+gtmworks updater || { cat .gtmworks-updater.log; fail 'the automatic update'; }
+[[ $(cat .install-release) == "$later" && $(cat .gtmworks-version) == v0.0.3 ]] || fail 'automatic updates install the newest release without a click'
+[[ $(state) == 'updated v0.0.3' ]] || fail 'the automatic update is recorded'
+probe 'after the automatic update'
+# Checked a moment ago: the next run does nothing.
+gtmworks updater || fail 'the updater right after a check'
+[[ $(cat .install-release) == "$later" ]] || fail 'the updater waits an hour between checks'
+}
+
 # measure: how much disk and memory twenty Agent profiles take (#126, #400, #408): ten more profiles in the first
 # Company with the Engine's bundled Skills and ten without. It is no check a pull request needs, and its numbers are for
 # the README: it runs on a push to main and on a manual run only (Omar, 2026-11-19). The area makes the install and the
@@ -927,7 +1026,7 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (update); (one_line); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
@@ -935,6 +1034,7 @@ case "${1:-all}" in
  proxy) proxy;;
  update) update;;
  one-line) one_line;;
+ updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | update | one-line | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | update | one-line | updater | measure]' >&2; exit 2;;
 esac
