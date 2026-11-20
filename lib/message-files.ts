@@ -25,13 +25,21 @@ export async function imagesOf(files:File[]):Promise<ChosenImage[]> {
 }
 
 // The image parts of a stored message, read from its file rows in the order they were chosen: base64 in the file's own
-// type. Read when the Run starts, so a retry of the same start sends the same body.
+// type. Read when the Run starts, so a retry of the same start sends the same body. A stored object that is gone never
+// reads again, so a waiting turn fails for its sender instead of being claimed on every pass (#368); any other storage
+// failure is thrown as it is and tried again.
+type StorageFailure={statusCode?:string|number,status?:number,code?:string,message?:string};
+const gone=(error:StorageFailure)=>error.statusCode==='404'||error.statusCode===404||error.status===404||error.code==='NoSuchKey'||/not found/i.test(error.message??'');
+export class MessageFileGone extends Error {
+ constructor(message:string) { super(message); this.name='MessageFileGone'; }
+}
 /** @param {SupabaseClient} service @param {{content_type:string,path:string}[]} rows @param {string} missing */
 export async function filesAsImages(service:SupabaseClient,rows:{content_type:string,path:string}[],missing:string):Promise<ChosenImage[]|undefined> {
  const images:ChosenImage[]=[];
  for(const row of rows) {
   const file=await service.storage.from(bucket).download(row.path);
-  if(file.error||!file.data) throw file.error||new Error(missing);
+  if(file.error) throw gone(file.error as StorageFailure)?new MessageFileGone(missing):file.error;
+  if(!file.data) throw new MessageFileGone(missing);
   images.push({content_type:row.content_type,base64:Buffer.from(await file.data.arrayBuffer()).toString('base64')});
  }
  return images.length?images:undefined;
