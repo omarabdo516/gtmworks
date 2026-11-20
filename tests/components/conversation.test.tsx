@@ -160,6 +160,27 @@ for (const [language, line] of [['en', 'The agent could not finish this reply. S
  await expect.element(failed.getByRole('alert').filter({ hasText: line })).toBeVisible();
 });
 
+// #422: a reply that failed because the Company has no model at all says so instead of offering a retry: the Owner
+// gets the way to Settings, Subscription and models; a Member is told to ask the Owner.
+const words = {
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Subscription and models', ask: 'Ask the company’s Owner to connect one in Settings.', retry: 'Send the message again to retry.' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من الاشتراك والموديلات', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.', retry: 'ابعت الرسالة تاني' },
+} as const;
+for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a reply that failed for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'}`, async () => {
+ const said = words[language];
+ const screen = await render(view(talk([asking], { failed: true, noModel: { owner } }), language));
+ const line = screen.getByRole('alert').filter({ hasText: said.line });
+ await expect.element(line).toBeVisible();
+ await expect.element(line.filter({ hasText: said.retry })).not.toBeInTheDocument();
+ if (owner) {
+  await expect.element(line.getByRole('link', { name: said.connect })).toHaveAttribute('href', '/c/rs-learning/settings?section=models');
+  await expect.element(line.filter({ hasText: said.ask })).not.toBeInTheDocument();
+ } else {
+  await expect.element(line.filter({ hasText: said.ask })).toBeVisible();
+  await expect.element(line.getByRole('link')).not.toBeInTheDocument();
+ }
+});
+
 // #317: a job Lead handed another Agent is a quiet row under Lead's reply, drawn from gtmworks's own record: both
 // faces, the arrow pointing the way the interface reads, the other Agent's name and the job.
 for (const [language, line, arrow] of [['en', 'Handed to', 'M5 12h14'], ['ar', 'سلّم الشغل لـ', 'M19 12H5']] as const) test(`in ${language} a job Lead handed another Agent reads under Lead's reply with both faces and the job`, async () => {

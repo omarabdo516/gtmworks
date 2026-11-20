@@ -111,7 +111,7 @@ export function ChatPlaceholder() {
 
 // The messages as the reference draws them (design-reference: msgHTML): the Agent's turns on the start side, the
 // person's on the end side, with every card and line the Conversation has; then whether the Agent is working, and for
-// whom, or that the reply failed. While the Agent works, a message sent meanwhile waits as its sender's next turn
+// whom, or that the reply failed, and why when the Company has no model to reply with (#422). While the Agent works, a message sent meanwhile waits as its sender's next turn
 // (marked as the reference marks a queued message).
 // A question the Agent waits on (#138) is answered from its card: a pick goes to the waiting Run, and the record is asked
 // for again at once. While it waits, the Agent is not shown working. The main Agent's question draws as the reference's
@@ -190,7 +190,10 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
-  {failed&&<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>}
+  {failed&&(record.noModel
+   // The Company has no model at all (#422): sending again cannot work, so the line says where one is connected.
+   ?<p className="note convo-status" role="alert" data-outcome="no-model">{t('noModelLine')} {record.noModel.owner?<Link className="note__link" href={overlayHref(slug,'models')}>{t('noModelConnect')}</Link>:t('noModelAskOwner')}</p>
+   :<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>)}
  </>;
 }
 
