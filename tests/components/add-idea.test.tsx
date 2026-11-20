@@ -208,6 +208,24 @@ test('another Agent after an answer that never came is sent again under a new re
  expect(second.agent).toBe('h-ads');
 });
 
+test('an answer that comes after its form closed leaves the form now open alone, with its idea and no move to the board (#452)', async () => {
+ let answer!: (result: { card: number }) => void;
+ const props = withAgents({ addIdea: vi.fn(() => new Promise<{ card: number }>(resolve => { answer = resolve; })) });
+ const screen = await showWork(props);
+ const add = screen.getByRole('button', { name: 'Add an idea' });
+ await add.click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'A post about the new cohort');
+ await screen.getByRole('button', { name: 'Add', exact: true }).click();
+ await screen.getByRole('button', { name: 'Cancel' }).click();
+ await add.click();
+ await userEvent.fill(screen.getByLabelText('Idea'), 'idea B');
+ answer({ card: 9 });
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(document.querySelector('#idea-title')).not.toBeNull();
+ await expect.element(screen.getByLabelText('Idea')).toHaveValue('idea B');
+ expect(replace).not.toHaveBeenCalled();
+});
+
 test('Add pressed twice while the first is on its way sends one idea', async () => {
  let answer!: (result: { card: number }) => void;
  const props = withAgents({ addIdea: vi.fn(() => new Promise<{ card: number }>(resolve => { answer = resolve; })) });

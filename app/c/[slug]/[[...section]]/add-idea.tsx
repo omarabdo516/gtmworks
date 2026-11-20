@@ -18,6 +18,10 @@ export default function AddIdea({company,slug,stage,agents,preferred,addIdea,onC
  const [failed,setFailed]=useState(false);
  const [pending,setPending]=useState(false);
  const input=useRef<HTMLInputElement>(null);
+ // A form that has closed has no say over the one open in its place: the parent unmounts it when the person cancels, so
+ // its late answer is ignored rather than closing the new form and sending the board to a Card it never asked for.
+ const mounted=useRef(true);
+ useEffect(()=>()=>{ mounted.current=false; },[]);
  // Opening moves the focus into the Idea field, as the reference does.
  useEffect(()=>{ input.current?.focus({preventScroll:true}); },[]);
  const close=()=>onClose();
@@ -32,8 +36,9 @@ export default function AddIdea({company,slug,stage,agents,preferred,addIdea,onC
   form.set('title',idea); form.set('agent',agent);
   // A form that could not be sent says so under the Idea it kept, and Add works again; one that was added closes back onto
   // the column's "+" and the board comes back on its Card (#188).
-  const failure=()=>{ setPending(false); setFailed(true); };
+  const failure=()=>{ if(!mounted.current) return; setPending(false); setFailed(true); };
   void addIdea(form).then(result=>{
+   if(!mounted.current) return;
    if(!('card' in result)) return failure();
    close(); router.replace(`/c/${slug}/work/board?show=${result.card}&idea=1`,{scroll:false});
   },failure);
