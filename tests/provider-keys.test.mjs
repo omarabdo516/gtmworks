@@ -136,7 +136,7 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   if(name==='record_unfinished_provider_key') { if(owner) args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return owner?{data:null,error:null}:{data:null,error:{code:'42501'}}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,one_company:false,profiles:[]}],error:null};
+  if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space').map(row=>noKeeper&&row.kind==='company'?{...row,agent:null,name:null}:row),error:null};
   if(name==='record_provider_key_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}}; }};
@@ -149,8 +149,8 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {read:(target,keys)=>readProviderKeys(at(target),keys),set:(target,key)=>setProviderKey(at(target),key),remove:(target,key)=>removeProviderKey(at(target),key)}; };
-const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company:first,provider:'openrouter',driver:pointedAt(fake),...request});
-const read=(person,fake,company=first)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake)});
+const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{company:first,provider:'openrouter',driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'},...request});
+const read=(person,fake,company=first)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'}});
 const profileOf=path=>new URL(path,'http://engine').searchParams.get('profile')??/^\/api\/profiles\/([^/]+)\/model$/.exec(new URL(path,'http://engine').pathname)?.[1]??null;
 
 test('a set reaches the Company\'s space and its Agent profiles only, key before model, and names each Agent and whether it was written', async () => {
@@ -281,14 +281,14 @@ test('two changes of one Company\'s key run one after the other, and another Com
   const owner=sessions(fake,{owner:true});
   const steps=[]; let open; const gate=new Promise(resolve=>{ open=resolve; });
   const held=name=>({set:async()=>{ steps.push(`${name} starts`); if(name==='A') await gate; steps.push(`${name} ends`); return {state:'written',model:null,profiles:{}}; }});
-  const changeAs=(name,company)=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,driver:held(name)});
+  const changeAs=(name,company)=>changeCompanyKey(owner.db,owner.service,{company,provider:'openrouter',intent:'set',value:known,driver:held(name),hermes:{address:fake.address,key:'test-only-key'}});
   const a=changeAs('A',first); const b=changeAs('B',first); const other=changeAs('C',second);
   assert.equal((await other).status,200);
   assert.deepEqual(steps,['A starts','C starts','C ends'],'the second change of the first Company waits; the other Company does not');
   open();
   assert.deepEqual([(await a).status,(await b).status],[200,200]);
   assert.deepEqual(steps.slice(3),['A ends','B starts','B ends']);
-  const failing=changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known,driver:{set:async()=>{ throw new Error('down'); }}});
+  const failing=changeCompanyKey(owner.db,owner.service,{company:first,provider:'openrouter',intent:'set',value:known,driver:{set:async()=>{ throw new Error('down'); }},hermes:{address:fake.address,key:'test-only-key'}});
   await assert.rejects(failing);
   assert.equal((await changeAs('D',first)).status,200,'a change that threw does not hold the next');
  } finally { await fake.close(); }
@@ -328,18 +328,18 @@ test('a key change reads in the Company log by its provider, in both languages',
  assert.match(i18n('ar').t('logActProviderKeySet'),/مفتاح/);
 });
 
-test('the README says a Company on an install with several Companies uses its own key, which lives in the agent engine only', () => {
- const sentence='A company\'s API key lives in the agent engine only: gtmworks passes it to that company\'s profiles in the bundled Hermes, never to the root profile or another company\'s, and never keeps, logs or shows it.';
+test('the README says a Company\'s API key lives in its own Engine only, never in another Company\'s', () => {
+ const sentence='Company\'s API key lives in its own Engine only: gtmworks passes it to that Company\'s Engine, never to another Company\'s, and never keeps, logs or shows it.';
  const readme=readFileSync('README.md','utf8').replace(/\s+/g,' ');
- assert.ok(readme.includes('On an install with several companies, a subscription signed in on the root profile is shared by every company on the install, and a company that wants its own uses its own API key (#124).'));
+ assert.ok(readme.includes('One account serves one Company, so each Company signs in with its own account or sets its own API key.'));
  assert.ok(readme.includes(sentence),sentence);
 });
 
 test('the install job sets a key on the pinned Engine for a Company\'s space and both Agent profiles only, then removes it', () => {
  const script=readFileSync('scripts/check-install-profiles.mjs','utf8');
  assert.match(script,/const keyed=\{space:spaceOf\(first\),profiles:\[first\.profile,first\.secondProfile\]\}/);
- assert.match(script,/setProviderKey\(\{\.\.\.engine,profile:first\.profile,key\},\{\.\.\.keyed,provider,value:/);
+ assert.match(script,/setProviderKey\(\{\.\.\.firstEngine,profile:first\.profile\},\{\.\.\.keyed,provider,value:/);
  assert.match(script,/assert\.deepEqual\(keyedStates,\[true,true,true,false,false,false,false\]/);
- assert.match(script,/removeProviderKey\(\{\.\.\.engine,profile:first\.profile,key\},\{\.\.\.keyed,provider\}\)/);
+ assert.match(script,/removeProviderKey\(\{\.\.\.firstEngine,profile:first\.profile\},\{\.\.\.keyed,provider\}\)/);
  assert.match(script,/assert\.deepEqual\(await providerKeys\(\),\[false,false,false,false,false,false,false\]/);
 });

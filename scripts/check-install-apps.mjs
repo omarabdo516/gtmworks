@@ -8,10 +8,10 @@ const {readApps,prepareApp,finishAppSignIn,disconnectApp}=await import(`${proces
 const {apps,appByKey}=await import(`${process.cwd()}/lib/app-catalogue.mjs`);
 const {appUrl}=await import(`${process.cwd()}/lib/app-origin.mjs`);
 
-const key=process.env.HERMES_API_KEY;
+const key=process.env.ENGINE_KEY;
 assert.ok(key,'the install key is in the web container');
 const [{profile}]=JSON.parse(readFileSync('/tmp/check-install-profiles.json','utf8'));
-const target={address:'http://hermes:8642',managementAddress:'http://hermes:9119',profile,key};
+const target={address:process.env.HERMES_ADDRESS||'http://gtmworks-engine-first:8642',managementAddress:process.env.HERMES_MANAGEMENT_ADDRESS||'http://gtmworks-engine-first:9119',profile,key};
 const stateOf=async name=>(await readApps(target)).apps?.find(app=>app.key===name)?.state;
 
 const listed=await readApps(target);
@@ -19,7 +19,7 @@ assert.equal(listed.state,'found');
 assert.deepEqual(listed.apps.map(app=>app.key),apps.map(app=>app.key),'every app of the registry is in the pinned catalogue');
 const back=appUrl('/api/apps/callback/klaviyo').href;
 assert.equal(await prepareApp(target,'klaviyo',back),null,'klaviyo installed with its list');
-const config=await (await fetch(`http://hermes:9119/api/config?profile=${profile}`,{headers:{Authorization:`Bearer ${key}`}})).json();
+const config=await (await fetch(`${target.managementAddress}/api/config?profile=${profile}`,{headers:{Authorization:`Bearer ${key}`}})).json();
 assert.deepEqual(config.mcp_servers?.klaviyo?.tools,{include:[...appByKey('klaviyo').readTools],prompts:false,resources:false},'only the read tools are written');
 assert.equal(config.mcp_servers?.klaviyo?.oauth?.redirect_uri,back,'the sign-in comes back through gtmworks');
 assert.equal(await stateOf('klaviyo'),'attention','on, but not signed in');

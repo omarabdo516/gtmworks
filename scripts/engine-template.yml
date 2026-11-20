@@ -1,0 +1,37 @@
+# One Company's Engine (ADR 0018): the pinned official Hermes image, unmodified, with its own data volume, its own key
+# and its own network. scripts/install.sh writes .engines/first/.env and runs this file as its own Compose project, and
+# `gtmworks company add` (#382) writes another engine folder and runs the same file, so every Engine is made the same
+# way. The image is the one place the Engine release is pinned; tests/bundled-hermes.test.mjs and the driver check it.
+services:
+  engine:
+    # The one place the Engine release is pinned, by tag and digest; every Engine of an install runs it, and nothing
+    # overrides it.
+    image: nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002
+    restart: unless-stopped
+    container_name: ${ENGINE_NAME:?Run scripts/install.sh}
+    # The key is required: an Engine with no key must refuse to start rather than serve an API with none.
+    command: [sh, -ec, 'test -n "$${API_SERVER_KEY}" || { echo "The Engine has no key: run scripts/install.sh" >&2; exit 1; }; exec hermes gateway run']
+    # No ports and no env file: the Run API and the management listener are on this Engine's own network only, and only
+    # this Engine's own key reaches it. No gtmworks secret is passed to an Engine.
+    environment:
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: 8642
+      API_SERVER_KEY: ${ENGINE_KEY:?Run scripts/install.sh}
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_SESSION_TOKEN: ${ENGINE_KEY:?Run scripts/install.sh}
+    volumes:
+      - data:/opt/data
+    networks:
+      - engine
+    healthcheck:
+      test: [CMD, /opt/hermes/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/health', timeout=5)"]
+      interval: 5s
+      timeout: 10s
+      start_period: 120s
+      retries: 60
+volumes:
+  data:
+    name: ${ENGINE_VOLUME:?Run scripts/install.sh}
+networks:
+  engine:
+    name: ${ENGINE_NETWORK:?Run scripts/install.sh}

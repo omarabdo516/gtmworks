@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { generateSetupCode, setupCodeMatches } from '../lib/setup-code.mjs';
 import { setupCodeFromHash, setupLink } from '../lib/setup-link.mjs';
 import { generateInstallEnv, validateInstallEnv, missingInstallEnv, readyLine } from '../lib/install-env.mjs';
+import { installJob } from './install-job.mjs';
 
 // First-run setup works only through the one-time link the installer prints (issue #50): whoever runs the installer on
 // the server sets the install up, not whoever reaches /first-run first.
@@ -65,7 +66,9 @@ test('the page reads the code from the link fragment only', () => {
 
 test('the first-run form sends the code only as a field of its POST body, read from the fragment', () => {
  const form=readFileSync('app/first-run/form.tsx','utf8');
- assert.match(form,/<form action="\/first-run\/submit" method="post"/);
+ assert.match(form,/<form action=\{endpoint\} method="post"/);
+ // First run posts to its own route; a first-Owner link (#383) shares this form and posts to its own.
+ assert.match(form,/const endpoint=owner\?'\/first-owner\/submit':'\/first-run\/submit'/);
  assert.match(form,/<input type="hidden" name="code" value=\{code\}\/>/);
  assert.match(form,/setupCodeFromHash\(window\.location\.hash\)/);
  // The server page no longer looks for a code: it cannot see the fragment, and a query string would reach the logs.
@@ -79,14 +82,14 @@ test('the first-run form sends the code only as a field of its POST body, read f
 test('the first-run form shows only after the server confirms the code, asked in the body of a submit request', () => {
  const form=readFileSync('app/first-run/form.tsx','utf8');
  // The check goes to the submit route as a POST body, like the submission itself: no other request carries the code.
- assert.match(form,/fetch\('\/first-run\/submit',\{method:'POST',body\}\)/);
+ assert.match(form,/fetch\(endpoint,\{method:'POST',body\}\)/);
  assert.match(form,/body\.set\('code',code\)/);
  assert.match(form,/body\.set\('check','1'\)/);
  assert.doesNotMatch(form,/console\.|fetch\(`/);
  // Nothing renders the form until the answer for this exact code is "open"; a missing or refused code gets the message.
  const gate=form.indexOf("if(!code || checked?.state!=='open') return <p role=\"alert\"");
  assert.ok(gate>0,'the form waits for the server to accept the code');
- assert.ok(gate<form.indexOf('<form action="/first-run/submit"'));
+ assert.ok(gate<form.indexOf('<form action={endpoint}'));
  // The route answers the check only after the code matched, and before it reads the details or creates anything.
  const route=readFileSync('app/first-run/submit/route.ts','utf8');
  const answer=route.indexOf("if(form.get('check')==='1') return new NextResponse(null,{status:204});");
@@ -101,11 +104,13 @@ const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 all="$*"
 case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
  *install-env.mjs*)
   file=; previous=
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done
   if [ -z "$file" ]; then exec node "$INSTALL_ENV" \${all##*install-env.mjs }; fi
   exec env -i PATH="$PATH" sh -c 'set -a; case "$1" in /*) . "$1";; *) . "./$1";; esac; set +a; shift; exec node "$@"' sh "$file" "$INSTALL_ENV" \${all##*install-env.mjs };;
+ *'count(*) from public.companies'*) echo 1;;
  *'exec -T db psql'*) cat > /dev/null;;
  *'exec -T web node'*) echo "$SETUP_STATE";;
  *' config --hash gateway') echo "gateway $(cat "$STATE/compose-hash" 2> /dev/null || echo one)";;
@@ -163,7 +168,7 @@ test('install and update restart no service once the worker runs', t => {
   const result=install.run('open',...args);
   assert.equal(result.status,0,`${args.join(' ')||'install'}: ${result.stderr}`);
   const commands=install.commands();
-  const started=commands.findIndex(command=>/compose .* up -d (--no-deps )?--wait --wait-timeout 300( (auth )?hermes web worker)?$/.test(command));
+  const started=commands.findIndex(command=>/compose .*-f docker-compose\.install\.yml up -d (--no-deps )?--wait --wait-timeout 300( (auth )?(hermes )?web worker)?$/.test(command));
   assert.ok(started>=0,commands.join('\n'));
   assert.deepEqual(commands.slice(started+1).filter(command=>/ (up|restart|stop|down)\b|--force-recreate/.test(command)),[],`${args.join(' ')||'install'}:\n${commands.join('\n')}`);
  }
@@ -228,7 +233,7 @@ test('the installer asks the app whether setup is open, through the service role
 
 test('the install job checks the setup link before and after setup, and that no container logs the code', async () => {
  const {load}=await import('js-yaml');
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
  const localCheck=run.indexOf('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
  // The first install ends with the link, its code in no other line; a repeat before setup prints the same link.
@@ -253,7 +258,7 @@ test('the install job checks the setup link before and after setup, and that no 
 // and completes setup with the code, never holds the code; it did log those requests, so the search is not of nothing.
 test('the install job reads the gateway access log after setup and finds the setup requests but not the code', async () => {
  const {load}=await import('js-yaml');
- const run=load(readFileSync('.github/workflows/ci.yml','utf8')).jobs.install.steps.find(step=>step.env?.INSTALL_REF).run;
+ const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const at=text=>{ const index=run.indexOf(text); assert.notEqual(index,-1,text); return index; };
  const localCheck=at('-e APP_ORIGIN=http://localhost:3000 -e MAIL_URL');
  const read=at("gateway_logs=$(compose logs gateway 2>&1) || fail 'read gateway logs'");

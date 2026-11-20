@@ -7,9 +7,9 @@ import Form, { ForgotForm } from './form';
 import FirstRunForm from '@/app/first-run/form';
 import SetPasswordForm from '@/app/set-password-form';
 
-type Mode='sign-in'|'first-run'|'forgot'|'reset';
-const copy={'sign-in':['signIn','welcomeBackToYourWorkspace'],'first-run':['setUpGtmworks','firstRunDescription'],forgot:['forgotPassword','resetPasswordDescription'],reset:['setNewPassword','setNewPasswordDescription']} as const;
-export default function SignInScreen({next,wordmark,mode='sign-in',invalid,invalidLink=false,initialLanguage}:{next:string,wordmark:ReactNode,mode?:Mode,invalid?:'setupInvalid'|'passwordTooShort'|'passwordsDoNotMatch',invalidLink?:boolean,initialLanguage?:Language}) {
+type Mode='sign-in'|'first-run'|'first-owner'|'forgot'|'reset';
+const copy={'sign-in':['signIn','welcomeBackToYourWorkspace'],'first-run':['setUpGtmworks','firstRunDescription'],'first-owner':['setUpGtmworks','firstOwnerDescription'],forgot:['forgotPassword','resetPasswordDescription'],reset:['setNewPassword','setNewPasswordDescription']} as const;
+export default function SignInScreen({next,wordmark,mode='sign-in',invalid,invalidLink=false,initialLanguage}:{next:string,wordmark:ReactNode,mode?:Mode,invalid?:'setupInvalid'|'passwordTooShort'|'passwordsDoNotMatch'|'firstOwnerEmailTaken',invalidLink?:boolean,initialLanguage?:Language}) {
  const initial=useI18n().language;
  const [language,setLanguage]=useState<Language>(initialLanguage??initial);
  const {t}=i18n(language);
@@ -21,6 +21,6 @@ export default function SignInScreen({next,wordmark,mode='sign-in',invalid,inval
  const [title,description]=copy[mode];
  return <LanguageProvider language={language}>
   <div className="absolute top-4 end-4 z-10"><label className="text-xs text-muted-foreground">{t('interfaceLanguage')} <select className={mode==='first-run'?'max-md:min-h-11':undefined} value={language} onChange={event=>setLanguage(event.target.value as Language)}><option value="en">{t('english')}</option><option value="ar">{t('arabic')}</option></select></label></div>
-  <Auth wordmark={wordmark} title={t(title)} description={t(description)}>{mode==='first-run'?<FirstRunForm invalid={invalid}/>:mode==='forgot'?<ForgotForm invalidLink={invalidLink}/>:mode==='reset'?<SetPasswordForm done={next}/>:<Form next={next}/>}</Auth>
+  <Auth wordmark={wordmark} title={t(title)} description={t(description)}>{mode==='first-run'?<FirstRunForm invalid={invalid}/>:mode==='first-owner'?<FirstRunForm owner invalid={invalid}/>:mode==='forgot'?<ForgotForm invalidLink={invalidLink}/>:mode==='reset'?<SetPasswordForm done={next}/>:<Form next={next}/>}</Auth>
  </LanguageProvider>;
 }

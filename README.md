@@ -32,8 +32,9 @@ Nothing is built on the server and no source is downloaded. Options go after
 It also puts a `gtmworks` command in `~/.local/bin`, and adds that folder to the
 PATH in your shell profile only when no profile names it yet (`~/.profile`, and
 `~/.zshenv` when your login shell is zsh, which reads no other); open a new shell
-to use it. `gtmworks status` reports each service's health; `gtmworks backup`,
-`gtmworks restore` and `gtmworks update` are described below.
+to use it. `gtmworks status` reports each service's health and every
+Company's Engine; `gtmworks backup`, `gtmworks restore` and `gtmworks update` are
+described below.
 
 Before it changes anything, the line checks for Docker and Docker Compose v2.20+
 and stops with a plain message naming what to install. Running the line again (or
@@ -77,50 +78,82 @@ No SMTP account is needed for it.
 
 The install starts the web app, worker, Postgres,
 GoTrue, PostgREST, file Storage, an Nginx gateway, the local mail inbox and the
-Hermes agent engine, which is reachable only inside the install.
-Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory, so an agent can repeat facts from one company to people in another until it moves.
+first Company's Engine. gtmworks makes that Engine from a fixed template shipped
+with the release: the official Hermes image, pinned by tag and digest and kept
+unmodified, with its own data volume, its own generated key and its own network.
+The app and the worker join the Engine's network; the Engine joins nothing else,
+so it cannot reach the database, the sign-in service, REST, Storage or another
+Engine. No container of the install mounts the server's Docker socket.
 
-**Company isolation (ADR 0014).** Nothing needs setting up on a fresh server: the
-worker gives every company its own profile in the bundled Hermes
-(`co-<company id>`), with its own memory, skills and sessions, and attaches the
-company's agents to it. A company's agents get marketing tools only:
-terminal, file, code-execution, browser and desktop tools are turned off in that
-profile at every Agent level, so a member cannot ask an agent to read another
-company's files. An install was proven with four Agents across two companies, and
-twenty more Agent profiles for capacity: each of the 20 took 0.66 to 1.04 seconds to be
-ready, the engine held 775 MiB before and 825 MiB after making them, and one profile
-takes 5136 KiB of disk with the engine's bundled Skills and 1727 KiB without.
-The Owner chooses the Agent level in Settings, Company (read and
-draft, act on approval, or scheduled work); new companies start at read and draft.
+**One Engine per Company (ADR 0018).** Every Company runs on its own Engine, so one
+Company's Agents, memory, Skills, Conversations and model sign-in stay in its own
+container and are not reachable from another Company's Engine. The installer makes
+the first Company's Engine; a later Company gets its own Engine from the same
+template when the install owner adds it on the server:
+
+```sh
+gtmworks company add --name "Second Company" --owner person@example.com
+gtmworks company add --name "Third Company"     # prints a first-Owner link instead
+gtmworks company list
+```
+
+`--owner` names a Person who already has an account on this install; an email that
+belongs to no Person is refused before anything is made. With no `--owner`, the
+Company's name waits behind a first-Owner link that the command prints once: whoever
+opens it types their name, email and password, becomes that Company's Owner and lands
+in it signed in. Its secret sits after `#` in the address, so only its hash is kept,
+it works once, and opening the page without sending the form leaves it open. A lost
+link is replaced with `gtmworks company link "Third Company"`, which ends the earlier
+one. Until the link is used the Company exists nowhere, and `gtmworks company list`
+shows it waiting for its Owner. `company add` makes the Engine, waits until it is
+healthy, registers it and then makes the Company with that Person as its Owner, or
+holds the name behind the link; the worker then gives the Company its main Agent on
+its own Engine. If the Engine does not become healthy the command says so in one line,
+removes what it made (its container, volume, network and folder, and its record), and
+leaves no Company, so running it again is safe. `gtmworks company list` shows every
+Company with the state of its Engine, and `gtmworks status` reports every Engine.
+Each Engine adds roughly the memory one Engine takes, and the install job prints the memory one idle Engine uses on every run. The measured figures below are 775 MiB before its Agents' profiles and 825 MiB with twenty of them, so size the server for that much per Company.
+
+**Agent profiles and isolation (ADR 0014).** Inside its Engine a Company keeps the
+shape gtmworks has: the worker gives the Company its own profile (`co-<company
+id>`), with its own memory, skills and sessions, and attaches the Company's agents
+to it; each other agent gets its own `ag-` profile once it moves there, and a
+Company's shared space is `cs-<company id>`. A Company's agents get marketing tools
+only: terminal, file, code-execution, browser and desktop tools are turned off in
+that Company's Engine at every Agent level, so a member cannot ask an agent to read
+another Company's data. An install was proven with four Agents across two
+Companies, and twenty more Agent profiles for capacity: each of the 20 took 0.66 to
+1.04 seconds to be ready, the Engine held 775 MiB before and 825 MiB after making
+them, and one profile takes 5136 KiB of disk with the Engine's bundled Skills and
+1727 KiB without. The Owner chooses the Agent level in Settings, Company (read and
+draft, act on approval, or scheduled work); new Companies start at read and draft.
+Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory with the other agents of the same Company only: every profile lives in that Company's own Engine, and no other Company's Engine, Agents or people can read it.
+
 The Owner connects a subscription in Settings, Subscription and models: ChatGPT
-signs in from that page; Claude signs in only from the install's command line,
-with the command shown there, run from this folder.
-On an install with one company, the subscription is signed in once on the bundled
-Hermes's root profile from Settings, Subscription and models, and every agent of
-the company uses it. Claude's command for it is
-`docker compose --env-file .env.install -f docker-compose.install.yml exec -u hermes hermes hermes auth add anthropic --type oauth --no-browser`.
-On an install with several companies, a subscription signed in on the root
-profile is shared by every company on the install, and a company that wants its
-own uses its own API key (#124). So on such an install, do not sign in to a
-subscription on Hermes's own `default` (root) profile: each company signs in on its
-own profile from Settings, and its Claude command adds `-p <profile>` after
-`hermes hermes hermes`. A company's API key lives in the agent engine only:
-gtmworks passes it to that company's profiles in the bundled Hermes, never to the
-root profile or another company's, and never keeps, logs or shows it. An install updated
-from before ADR 0014 keeps its companies running on the shared `default` profile
-until a company's own profile holds a sign-in; the worker then moves it there.
-Memory already written on `default` stays there and is not split between companies,
-and earlier conversations do not carry their Hermes context to the new profile.
-A backup includes the agent engine's data: every Agent's profile, its rules and
-memory, its skills, the Company knowledge, and its conversations' history. A backup
-made before this was included holds none of it; restoring one says so in a line, and
-the worker makes each company's profile again, empty, so the company signs in again.
+signs in from that page. A Company's subscription is signed in once on its own
+Engine's root profile, and every Agent of that Company uses it. Another
+Company's Engine and its Agents never see it. One account serves one Company, so
+each Company signs in with its own account or sets its own API key. Claude signs in
+only from the install's command line, with the command shown there, run from this
+folder:
+`gtmworks sign-in claude --company "<Company id or name>"`.
+A Company's API key lives in its own Engine only: gtmworks passes it to that Company's Engine, never to another Company's, and never keeps, logs or shows it.
+An install updated from before ADR 0014 keeps a Company's agents on the shared
+`default` profile until its own profile holds a sign-in; the worker then moves it
+there. Memory already written on `default` stays there, and earlier conversations
+do not carry their Engine context to the new profile.
+A backup includes every Company's Engine: each Company's Agents' profiles, rules
+and memory, its skills, the Company knowledge, and its conversations' history. A
+backup made before this was included holds none of it; restoring one says so in a
+line, and the worker makes the profiles again, empty, so the Companies sign in
+again.
 Realtime, Studio, analytics and edge functions are not installed. Service settings
 follow the [official Supabase self-hosted stack](https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml).
 
 Secrets are generated on this machine in **`.env.install`**, with owner-only
 permissions (600), ignored by Git and excluded from image builds. Never commit,
-delete or regenerate this file for an existing database. `.env.install.example`
+delete or regenerate this file for an existing database; each Engine's key is kept
+apart, in that Engine's own `.engines/<name>/.env` (600). `.env.install.example`
 documents the keys but deliberately cannot start the app. Public HTTP is rejected;
 HTTP is allowed only for this install's loopback origin. For a public deployment,
 put HTTPS in front and set `APP_ORIGIN` and `SUPABASE_PUBLIC_URL` to that origin.
@@ -141,8 +174,9 @@ are never applied. Migration history lives in `gtmworks_install.schema_migration
 
 Persistent data lives in Docker named volumes `gtmworks-install_database`
 (Postgres), `gtmworks-install_database-config` (database encryption configuration),
-`gtmworks-install_files` (Storage files) and `gtmworks-install_hermes` (agent
-engine data), under Docker's data root (normally
+`gtmworks-install_files` (Storage files) and `gtmworks-install_hermes` (the first
+Company's Engine data); each later Company's Engine keeps its own
+`gtmworks-engine-<name>` volume, under Docker's data root (normally
 `/var/lib/docker/volumes`). The local email inbox is temporary. Never use `down -v`
 on live data.
 
@@ -158,6 +192,25 @@ source set `GH_TOKEN` to a GitHub token with Contents read access. The `backup` 
 `restore` below run as `sh scripts/install.sh backup` and `sh scripts/install.sh
 restore <archive>` there.
 
+## Companies
+
+```sh
+gtmworks company add --name "Second Company" --owner person@example.com
+gtmworks company add --name "Third Company"     # prints a first-Owner link instead
+gtmworks company link "Third Company"          # a fresh link for a Company still waiting
+gtmworks company list
+```
+
+`company add` makes the Company's own Engine from the same template, waits until it is
+healthy, and makes the Company with that existing Person as its Owner; with no
+`--owner` it prints a first-Owner link instead and makes the Company when that link is
+sent. `company link` prints a fresh link for a Company still waiting and ends the
+earlier one. A failed Engine leaves nothing behind and the same command can be run
+again. `company list` shows every Company with the state of its Engine, including one
+still waiting for its Owner. `gtmworks status` reports every Engine beside the
+services. See **One Engine per Company** under Install for what each Engine holds and
+how much memory it adds.
+
 ## Update
 
 ```sh
@@ -169,7 +222,10 @@ gtmworks update --channel stable             # a main install back to the latest
 Update backs up first and prints the archive's path (`--no-backup` skips it),
 downloads the new release's two files, pulls its images by digest, applies its
 migrations from inside the new image and recreates the containers whose image
-changed. It keeps the existing volumes and `.env.install`, downloads no source,
+changed — every Company's Engine included: an Engine whose image the release
+changed is recreated from the new release's Engine template with its own data
+volume, its key and its network, so no Company is left on an old Engine. It keeps
+the existing volumes and `.env.install`, downloads no source,
 and every file in the install folder stays owned by you. Its last line is the
 exact command that goes back to the release you ran before:
 `gtmworks update --version <previous>` when the update applied no migration, or,
@@ -180,8 +236,20 @@ migration `<previous>` does not carry, or whose `.env.install` that release's ow
 check refuses; then it names what it replaces and asks you
 to type `yes` (`--yes` answers for a script). It then backs up the current data,
 makes the install anew with that release, restores the archive and applies that
-release's migrations the archive predates (the agent engine's data, now in the
+release's migrations the archive predates (every Engine's data, now in the
 archive, goes back with it).
+
+An install made before each Company had its own Engine has every Company on the
+one Engine, and this release has no way to give each of them one. With one
+Company the update keeps that Company's Engine — its data volume and its key,
+with its Agents, their memory, Skills, history, sessions and sign-in — now under
+the Engine's own Compose project on a network of its own, with the key moved from
+`.env.install` to `.engines/first/.env`, the only place an Engine key is kept.
+With more than one Company the update stops before it changes anything: each
+Company now needs its own Engine, there is no path for such an install in this
+release, no migration is applied, no container is changed, and the release you
+run keeps serving. Running the install command again on an updated install keeps
+the Engine it adopted.
 
 It refuses a release older than the data: when the database has applied a
 migration the chosen release does not carry, a later release migrated it, and
@@ -216,10 +284,12 @@ the `gtmworks` command itself; run the line again for a newer one.
 gtmworks backup                              # dated archive in backups/
 ```
 
-Backup briefly stops the stack — the bundled Hermes included — for a consistent copy of
-the database and its configuration, the Storage files, the agent engine's data volume
-and `.env.install`, then starts it again. The engine's data holds every Agent's profile,
-rules, memory, skills and history, so a restore brings them back as they were. An
+Backup briefly stops the stack — every Company's Engine included — for a consistent
+copy of the database and its configuration (which holds each Company's Engine record),
+the Storage files, each Company's Engine data volume, each Engine's key file
+(`.engines/`) and `.env.install`, then starts every Engine and the stack again. Each
+Engine's data holds that Company's Agents, their profiles, rules, memory, skills and
+history, so a restore brings every Company back as it was. An
 optional directory after `backup` changes the destination.
 **A backup holds every company's data and the encryption key. Keep it private.**
 Archives have owner-only permissions (600); copy them to private storage on another
@@ -234,10 +304,16 @@ gtmworks restore backups/gtmworks-<date>-<number>.tgz
 Restore only accepts an empty install: install the same release as the backup
 first, then restore the trusted archive (or, on a running install, use
 `gtmworks restore <archive> --version vX.Y.Z` as Update describes). It replaces that
-empty install's volumes and `.env.install`, including its keys and origin settings,
-and restarts the stack. This is a full-install backup, not a company export, and it
-includes the agent engine's data, so every Agent comes back with its knowledge, rules,
-skills and memory. An archive made before that data was included still restores: the
+empty install's volumes, each Engine's key (`.engines/`) and `.env.install`, including its keys and origin settings,
+and restarts the stack, every Company's Engine included: each Company comes back on
+its own Engine, in that Engine's own container with its own network, volume and key,
+so its Engine record still finds it. This is a full-install backup, not a company
+export, and it includes every Company's Engine data, so every Agent comes back with
+its knowledge, rules, skills and memory. Before it changes anything, restore refuses
+an archive it cannot fully restore, such as one naming an Engine without that
+Engine's data or its key. An archive made before each Company had its own Engine
+still restores: it holds one Engine and comes back as one Company on its own Engine.
+An archive made before that data was included still restores: the
 command says in one line that the Agents' Hermes data was not in it, and the worker
 makes each company's profile again, empty. Do not use it to change the pinned Postgres version.
 A relative archive path the current folder does not hold is read from the install

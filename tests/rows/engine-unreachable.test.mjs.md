@@ -1,0 +1,1 @@
+| `engine-unreachable.test.mjs` | A Company whose Engine is not made or does not answer reads as one plain state in Settings, and a message to it is refused with the one plain conversation error without starting or recording a Run; the next send works once the Engine answers again (#387). | 0.2 s | company-sign-in.spec.ts; engine-unreachable.spec.ts (the browser journey) | keep |

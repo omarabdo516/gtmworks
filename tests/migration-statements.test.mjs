@@ -58,3 +58,10 @@ test('a name ends where Postgres says: any character past ASCII belongs to it, a
  }
  assert.deepEqual(topLevelStatements("select caféE'x\\'; select 1"), ["select caféE'x\\'", 'select 1'], 'an E that ends a longer name opens no escape string');
 });
+
+// The runners record a migration by the version before its first underscore, so two files with one version make the
+// second one fail to record and stop every lane that applies them.
+test('every migration has a version of its own', () => {
+ const versions=migrations.map(name=>name.split('_')[0]);
+ assert.deepEqual(versions.filter((version,at)=>versions.indexOf(version)!==at),[]);
+});

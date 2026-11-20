@@ -1,4 +1,4 @@
-| `one-hermes.spec.ts` | A conversation, a Card note and a channel message that call Lead each start their Run on the Company's own profile of the bundled Hermes (#342). | — | bundled-hermes.test.mjs (the target) | keep, new |
+| `one-hermes.spec.ts` | A conversation, a Card note and a channel message that call Lead each start their Run on the Company's own profile of the bundled Hermes (#342). | — | company-engine.test.mjs (the target) | keep, new |
 
 ## Cases
 

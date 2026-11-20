@@ -23,7 +23,7 @@ const agents = [{ agent: lead, name: 'Lead', profile, own: true }, { agent: writ
 function database({ role = 'contributor', rows = agents, target = true } = {}) {
  const db = {
   rpc: async (name) => {
-   if (name === 'company_engine_target') return { data: target ? [{ profile, one_company: false, profiles: [] }] : null, error: null };
+   if (name === 'company_engine_target') return { data: target ? [{ profile, profiles: [] }] : null, error: null };
    if (name === 'company_app_agents') return { data: rows, error: null };
    return { data: null, error: { message: `unexpected ${name}` } };
   },

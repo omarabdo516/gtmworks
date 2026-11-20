@@ -24,7 +24,7 @@ begin
 end $$;
 grant execute on function public.readable_company_rows(uuid) to authenticated;
 select is((select count(*)::int from jsonb_object_keys(public.readable_company_rows())),
- (select count(*)::int+3 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relname not in ('agents','companies','people','setup_claim')),
+ (select count(*)::int+3 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relname not in ('agents','companies','company_engines','company_owner_links','people','setup_claim')),
  'every Company table is checked');
 
 set local role authenticated;
@@ -33,7 +33,7 @@ select set_config('request.jwt.claims','{"sub":"a7000000-0000-0000-0000-00000000
 select is((select string_agg(key||'='||value,',') from jsonb_each_text(public.readable_company_rows()) where value<>'0'),null,'a two-step verified person who is not a Member reads zero rows of every Company table');
 select throws_ok($$select public.manage_hermes_agent('10000000-0000-0000-0000-000000000001','default',a=>'00000000-0000-0000-0000-000000000000')$$,'42501','hermesNotAllowed','a non-Member cannot manage a Company''s agents');
 select ok(not public.conversation_can_write('10000000-0000-0000-0000-000000000001'),'a non-Member cannot talk to a Company''s agents');
-select ok(not public.bundled_engine_shared('10000000-0000-0000-0000-000000000001'),'a non-Member is not told about the shared Engine');
+select is((select count(*)::int from public.company_engine_target('10000000-0000-0000-0000-000000000001')),0,'a non-Member is not told where the Company''s sign-in is');
 select throws_ok($$insert into public.hermes_agents(company_id,name,speciality,profile) values ('10000000-0000-0000-0000-000000000001','Mine','Writing','writer')$$,'42501',null,'a non-Member cannot add an Agent');
 
 -- The same check sees rows when there are rows to see: the Owner of all three companies reads them.

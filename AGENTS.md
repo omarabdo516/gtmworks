@@ -19,6 +19,7 @@ Deleting code or files inside your pull request or your own worktree is normal w
 ## Tests
 
 `./ci.sh check` runs everything CI runs; `./ci.sh fast` is the quick loop (static checks, node tests, component tests).
+`./ci.sh install` runs the CI install job (`scripts/ci-install-check.sh`) on an isolated Docker machine here; it runs `HEAD`, so commit first.
 
 ## Read when
 

@@ -2,7 +2,8 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(17);
 -- A company Omar is not a member of: nothing lets him write there, even with two-step verification.
-insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','conversation-outside','Test');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000004','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000099','conversation-outside','Test','e3821000-0000-4000-8000-000000000004');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e1000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Mona','Writing',true,'writer');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

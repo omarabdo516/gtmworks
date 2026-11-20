@@ -21,7 +21,7 @@ function archivedPaths() {
 }
 
 test('the Backup section holds exactly what scripts/install.sh archives', () => {
-  // #349 adds the Agents' Hermes data (opt/data) to the archive. Until it lands this is red for opt/data alone.
+  // #349 added the Agents' Hermes data to the archive; #386 holds every Company's Engine data, one folder per Engine.
   assert.deepEqual(archivedPaths(), backupIncludes.flatMap(item => item.paths).sort());
 });
 
@@ -52,4 +52,15 @@ test('no backup or restore route exists: both stay on the host (#33)', () => {
     return statSync(path).isDirectory() ? walk(path) : [path];
   });
   assert.deepEqual(walk('app/api').filter(file => /backup|restore/i.test(file)), []);
+});
+
+// #386: every Company's Engine is in the backup, the restore brings them all back, and the update moves them all.
+test('the README says every Company Engine is in the backup, the restore and the update', () => {
+  const readme = readFileSync('README.md', 'utf8');
+  const section = name => readme.split(new RegExp(`^## ${name}$`, 'm'))[1].split(/^## /m)[0];
+  for (const name of ['Update', 'Backup', 'Restore']) {
+    assert.match(section(name), /every Company's Engine included/, name);
+  }
+  assert.match(section('Backup'), /each Company's Engine data volume/, 'the backup names every Engine volume');
+  assert.match(section('Restore'), /refuses\s+an archive it cannot fully restore/, 'restore refuses an incomplete archive');
 });

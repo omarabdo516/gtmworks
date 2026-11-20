@@ -8,7 +8,8 @@
 # into the install folder and runs that install.sh, which pulls the images by digest, applies the migrations from the
 # image and starts gtmworks; nothing is built and no source is downloaded. It keeps a copy of itself in the folder as
 # gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
-#   gtmworks status | update | backup | restore <archive> | install
+#   gtmworks status | update | backup | restore <archive> | install | sign-in claude
+#   gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
 # stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
@@ -47,36 +48,45 @@ Usage:
   gtmworks update [--version vX.Y.Z | --version main@sha256:<digest> | --channel main] [--no-backup]
   gtmworks backup [directory]
   gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes]]
+  gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
+  gtmworks company add --name <Company> [--owner <email>]
+  gtmworks company link <Company>  (a fresh first-Owner link for a Company still waiting)
+  gtmworks company list     (each Company and the state of its Engine)
 USAGE
   exit "${1:-2}"
 }
 wrong() { printf '%s\n' "$*" >&2; usage; }
 
-command_mode=no operation= archive= version= channel= dir= backup=yes yes=no
+command_mode=no operation= archive= version= channel= dir= backup=yes yes=no provider= company= company_command=no
 destination=
 while [ $# -gt 0 ]; do
   case "$1" in
     --command) command_mode=yes;;
-    --version|--channel|--dir) [ $# -ge 2 ] || wrong "$1 needs a value."
-      case "$1" in --version) version=$2;; --channel) channel=$2;; --dir) dir=$2;; esac; shift;;
+    --version|--channel|--dir|--company) [ $# -ge 2 ] || wrong "$1 needs a value."
+      case "$1" in --version) version=$2;; --channel) channel=$2;; --dir) dir=$2;; --company) company=$2;; esac; shift;;
     --version=*) version=${1#*=};;
     --channel=*) channel=${1#*=};;
     --dir=*) dir=${1#*=};;
+    --company=*) company=${1#*=};;
     --no-backup) backup=no;;
     --yes) yes=yes;;
     -h|--help|help) usage 0;;
     -*) wrong "Unknown option: $1";;
-    *) if [ -z "$operation" ]; then operation=$1
+    *) if [ -z "$operation" ]; then
+         operation=$1
+         [ "$operation" != company ] || company_command=yes
+       elif [ "$company_command" = yes ]; then break
        elif [ "$operation" = restore ] && [ -z "$archive" ]; then archive=$1
        elif [ "$operation" = backup ] && [ -z "$destination" ]; then destination=$1
+       elif [ "$operation" = sign-in ] && [ -z "$provider" ]; then provider=$1
        else wrong "Unexpected argument: $1"; fi;;
   esac
   shift
 done
 # The line installs; the gtmworks command does what it is told and nothing when told nothing.
 if [ -z "$operation" ]; then [ "$command_mode" = no ] || usage; operation=install; fi
-case "$operation" in install|update|backup|restore|status) ;; *) wrong "Unknown command: $operation";; esac
+case "$operation" in install|update|backup|restore|status|company|sign-in) ;; *) wrong "Unknown command: $operation";; esac
 if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+|main@sha256:[a-f0-9]{64}'; then
   wrong "--version takes a release version such as v1.2.3, not $version."
 fi
@@ -87,6 +97,12 @@ case "$channel" in ''|stable|main) ;; *) wrong "--channel is stable or main, not
 [ -z "$version" ] || [ "$channel" != main ] || wrong '--version names a stable release; it cannot be combined with --channel main.'
 [ "$backup" = yes ] || [ "$operation" = update ] || wrong '--no-backup belongs to gtmworks update.'
 [ "$yes" = no ] || [ "$operation" = restore ] || wrong '--yes belongs to gtmworks restore.'
+if [ "$operation" = sign-in ]; then
+  [ "$provider" = claude ] || wrong "gtmworks sign-in signs in claude. Run: gtmworks sign-in claude --company <id-or-name>"
+  [ -n "$company" ] || wrong 'gtmworks sign-in claude needs --company <id-or-name>.'
+else
+  [ -z "$company" ] || wrong "--company belongs to gtmworks sign-in."
+fi
 [ -z "$channel" ] || [ "$operation" = install ] || [ "$operation" = update ] || wrong "--channel belongs to the install and to gtmworks update."
 case "$operation" in install|update|restore) ;; *) [ -z "$version" ] || wrong "--version does not apply to gtmworks $operation.";; esac
 [ "$operation" != restore ] || [ -n "$archive" ] || wrong 'gtmworks restore needs the backup archive to restore.'
@@ -216,7 +232,8 @@ check_project_owner() {
 }
 
 stage=
-cleanup() { status=$?; trap - EXIT; [ -z "$stage" ] || rm -rf "$stage"; exit "$status"; }
+restore_marker=
+cleanup() { status=$?; trap - EXIT; [ -z "$stage" ] || rm -rf "$stage"; [ -z "$restore_marker" ] || rm -f "$restore_marker"; exit "$status"; }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 new_stage() { stage=$(mktemp -d "$dir/.gtmworks-download.XXXXXX"); }
@@ -513,13 +530,51 @@ update_to() {
 # required: an archive the installer made before #349 restores, and install.sh says what it lacks.
 check_archive() {
   entries=$(docker run --rm -i alpine:3.21 tar -tzf - < "$archive") || fail "$archive cannot be read as a gtmworks backup archive. Nothing was changed."
+  # The target release's own installer makes the same check a restore makes, before anything changes (#378, T4): the
+  # archive's entries, the Engines it holds and their keys are one check, not two that can drift. A release made before
+  # this check keeps the copy below for archives it can restore.
+  if grep -q 'check-restore' "$stage/install.sh"; then
+    checked=$( ( cd "$stage" && sh ./install.sh check-restore "$archive" ) 2>&1 ) \
+      || fail "$checked Nothing was changed."
+    return 0
+  fi
   bad=$(printf '%s\n' "$entries" | while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..|..) printf 'an unsafe path: %s\n' "$entry"; break;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
+    case "$entry" in .env.install|engines.list|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
   done)
   [ -z "$bad" ] || fail "$archive is not a gtmworks backup: it holds $bad. Nothing was changed."
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
     printf '%s\n' "$entries" | grep -Fqx -- "$entry" || fail "$archive is not a complete gtmworks backup: it has no $entry. Nothing was changed."
+  done
+  # Every Company's Engine is in the archive as one data folder per Engine under engines/, named as its folder under
+  # .engines/ (its key), or, in an archive made before that (#386), as the first Engine's data at opt/data. An archive
+  # naming an Engine without its data, data without its key, or both layouts at once cannot be fully restored.
+  data_engines=$(printf '%s\n' "$entries" | sed -n 's#^engines/\([^/][^/]*\)/.*#\1#p' | sort -u)
+  key_engines=$(printf '%s\n' "$entries" | sed -n 's#^\.engines/\([^/][^/]*\)/\.env$#\1#p' | sort -u)
+  if printf '%s\n' "$entries" | grep -Eq '^engines/'; then
+    printf '%s\n' "$entries" | grep -Eq '^opt/data(/|$)' \
+      && fail "$archive is not a gtmworks backup: it holds one Engine's data at opt/data and every Engine's data under engines/. Nothing was changed."
+    [ "$data_engines" = "$key_engines" ] \
+      || fail "$archive is not a complete gtmworks backup: it does not hold every Company Engine. Nothing was changed."
+    if [ -n "$data_engines" ]; then
+      printf '%s\n' "$data_engines" | grep -qx first \
+        || fail "$archive is not a complete gtmworks backup: it does not hold the first Engine. Nothing was changed."
+    fi
+  else
+    other=$(printf '%s\n' "$key_engines" | grep -vx first | grep . || true)
+    [ -z "$other" ] \
+      || fail "$archive is not a complete gtmworks backup: it names an Engine without its data ($(printf '%s' "$other" | tr '\n' ' ')). Nothing was changed."
+  fi
+  # An Engine folder in the archive is named like an Engine and holds only its ENGINE_KEY (64 hex characters) (#378, X2).
+  # install.sh writes each Engine's own file from that key with this release's standard names; a name or a line that
+  # could point the install network or the database's volume at something else is refused before anything changes.
+  for name in $key_engines; do
+    printf '%s\n' "$name" | grep -Eq '^[a-z0-9-]+$' \
+      || fail "$archive is not a gtmworks backup: it names an Engine folder that is not usable ($name). Nothing was changed."
+    key=$(docker run --rm -i alpine:3.21 tar -xzOf - ".engines/$name/.env" < "$archive" 2> /dev/null | sed -n 's/^ENGINE_KEY=//p') \
+      || fail "$archive is not a gtmworks backup: the Engine $name cannot be read. Nothing was changed."
+    printf '%s\n' "$key" | grep -Eq '^[a-f0-9]{64}$' \
+      || fail "$archive is not a gtmworks backup: the Engine $name has no usable key. Nothing was changed."
   done
 }
 # The archive's settings, checked as install.sh restore checks them (completed, then validated) but with the tool of the
@@ -573,6 +628,13 @@ op_restore() {
   # Going back to a release: the archive is checked, and the current data backed up, before this install is made anew
   # with that release's files, the archive restored into it, and that release's migrations applied. The agent engine's
   # volume is kept.
+  #
+  # The whole go-back holds .install-restore (#378, C5): `company add` takes install.sh's lock and refuses while the
+  # marker is held, so a Company made between the safety backup below and the replacement is never lost without being in
+  # that backup. A plain restore is one installer run under install.sh's own lock and needs no marker.
+  restore_marker=$dir/.install-restore
+  exec 8>>"$restore_marker"
+  flock -n 8 || fail "Another gtmworks restore is running in $dir: wait for it to finish, then run this again. Nothing was changed."
   need_curl
   new_stage
   download_release "$version" "$stage"
@@ -581,6 +643,14 @@ op_restore() {
   # install.sh first.
   if printf '%s\n' "$entries" | grep -Eq '^opt/data(/|$)' && ! grep -Fq 'opt/data/*' "$stage/install.sh"; then
     fail "gtmworks $version cannot restore $archive: it holds the Agents' data, which releases before it cannot restore. Restore it with a newer release. Nothing was changed."
+  fi
+  # So does a release from before #385, whose restore knows no .engines/ (the Engines' keys).
+  if printf '%s\n' "$entries" | grep -Eq '^\.engines(/|$)' && ! grep -Fq '.engines/*' "$stage/install.sh"; then
+    fail "gtmworks $version cannot restore $archive: it holds the Engines' keys, which releases before it cannot restore. Restore it with a newer release. Nothing was changed."
+  fi
+  # And one from before #386, whose restore knows no engines/ (each Company's Engine data).
+  if printf '%s\n' "$entries" | grep -Eq '^engines/' && ! grep -Fq 'engines|engines/*' "$stage/install.sh"; then
+    fail "gtmworks $version cannot restore $archive: it holds each Company's Engine data, which releases before it cannot restore. Restore it with a newer release. Nothing was changed."
   fi
   check_archive_settings
   archived=$(archive_migrations)
@@ -606,6 +676,12 @@ op_restore() {
 
 op_backup() { check_prerequisites; in_install; check_project_owner; run_installer backup "${destination:-$dir/backups}"; }
 
+# The Company commands are the installer's own (#382): get.sh keeps the gtmworks command's options, then hands the rest of
+# the line to install.sh, which owns the Engine helpers and the Company scripts. install.sh's own lock serializes it with
+# an install or update on this machine. The ownership check of `gtmworks backup` comes first, as it is a check only: one
+# machine runs one install, so a command from another folder stops before it changes anything (#378, C5).
+op_company() { check_prerequisites; in_install; check_project_owner; run_installer company "$@"; }
+
 op_status() {
   check_prerequisites
   in_install
@@ -626,13 +702,30 @@ op_status() {
     printf '%-8s %s\n' "$service" "$shown"
   done
   if [ -z "$unhealthy" ]; then
-    compose exec -T web node --input-type=module -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','http://hermes:8642/health']) { const response=await fetch(url); console.log(url+' '+response.status); if(response.status!==200) process.exitCode=1; }" < /dev/null \
+    compose exec -T web node --input-type=module -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in']) { const response=await fetch(url); console.log(url+' '+response.status); if(response.status!==200) process.exitCode=1; }" < /dev/null \
       || unhealthy=' the app'
+    # Every Engine of the install, each Company's own: a stopped or unhealthy one is named, and status fails (#382).
+    run_installer engines || unhealthy="$unhealthy an Engine"
   fi
   [ -z "$unhealthy" ] || fail "Not healthy:$unhealthy. Repair with: gtmworks install"
   say "All $total services are healthy."
 }
 
-"op_$operation"
+# #384, ADR 0018: Claude's sign-in is the Engine's own, run in the Company's Engine on its root profile, which lends it
+# to every Agent of the Company. install.sh owns the Engine lookup and the container it runs in, as it does for `company`
+# (#378, T4); stdin stays open because the sign-in asks for a pasted code. The ownership check comes first, as for every
+# command that names a folder (#378, C5).
+op_signin() {
+  check_prerequisites
+  in_install
+  check_project_owner
+  sh ./install.sh sign-in "$provider" --company "$company"
+}
+
+case "$operation" in
+  sign-in) op_signin;;
+  company) "op_company" "$@";;
+  *) "op_$operation";;
+esac
 }
 main "$@"

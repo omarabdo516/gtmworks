@@ -183,5 +183,42 @@ case "${1:-check}" in
   start_lane
   lane_test --update-snapshots=changed
   ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update' >&2; exit 2;;
+ install)
+  # The CI `install` job (scripts/ci-install-check.sh, #378) on an isolated Docker machine of its own, in a throwaway
+  # checkout of HEAD: the job writes into the checkout it runs in, as it does on a CI runner. Commit first: uncommitted
+  # changes are not run. The work folder sits under the git directory: the Docker machine hides /tmp, so a checkout there
+  # reaches its containers empty.
+  # The job updates an install from HEAD's source, which an update downloads from GitHub: HEAD must be pushed to some branch.
+  git fetch -q origin "$(git rev-parse HEAD)" 2> /dev/null \
+    || { echo "Push HEAD to a branch on GitHub first: the install job downloads it ($(git rev-parse --short HEAD))." >&2; exit 2; }
+  work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-lane; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
+  git worktree add -q --detach "$work/src" HEAD
+  trap 'docker rm -fv "$dind" > /dev/null 2>&1 || true; git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true; rm -rf "$work" 2> /dev/null || true' EXIT
+  # One install lane at a time on this machine: a machine an interrupted run left behind is removed first.
+  docker rm -fv "$dind" > /dev/null 2>&1 || true
+  docker run -d --privileged --name "$dind" -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$port:2375" -v "$work/src:$work/src" docker:28.5.1-dind > /dev/null
+  host_docker=${DOCKER_HOST:-}
+  export DOCKER_HOST=tcp://127.0.0.1:$port RUNNER_TEMP=$work/tmp INSTALL_REF
+  INSTALL_REF=$(git rev-parse HEAD)
+  mkdir -p "$RUNNER_TEMP"
+  for attempt in $(seq 1 60); do docker info > /dev/null 2>&1 && break; sleep 1; done
+  docker info > /dev/null
+  # Pulls inside this machine stall here (the nested network behind rootless Docker), so every image the job runs comes
+  # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
+  images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local'
+    awk '/^FROM/ && $2 ~ /[:@]/ {print $2}' Dockerfile
+    grep -o -h -E '(alpine:[0-9.]+|node:[0-9a-z.-]+|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
+  for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
+  DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null
+  # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it
+  # (CI installs them there with npm ci).
+  cp -al "$(readlink -f "$here/node_modules")" "$work/src/node_modules"
+  cd "$work/src"
+  # Under rootless Docker this machine's root is the invoking user and its `--user $(id -u)` is another one, unlike a CI
+  # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
+  umask 0000
+  export INSTALL_LANE_FOREIGN_OWNER=1
+  for part in install release one-line; do bash scripts/ci-install-check.sh "$part"; done
+  ;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install' >&2; exit 2;;
 esac

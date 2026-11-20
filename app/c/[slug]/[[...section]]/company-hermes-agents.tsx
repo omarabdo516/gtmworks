@@ -14,7 +14,7 @@ function AgentPicker({name,label,choices}:{name:string,label:string,choices:{id:
   </DropdownMenuRadioGroup></DropdownMenuContent>
  </DropdownMenu></>;
 }
-// The Company's Agents on the bundled Hermes (#342: no Agent is attached by hand): an Owner picks the main one or removes one.
+// The Company's Agents on its own Engine (#342: no Agent is attached by hand): an Owner picks the main one or removes one.
 export default function CompanyHermesAgents({company,owner,initial}:{company:string,owner:boolean,initial:Agent[]}) {
  const {t}=useI18n(); const [agents,setAgents]=useState(initial); const [error,setError]=useState(''); const [pending,setPending]=useState(false);
  async function submit(event:FormEvent<HTMLFormElement>) {

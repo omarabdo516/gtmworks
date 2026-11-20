@@ -1,7 +1,8 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(23);
-insert into public.companies(id,slug,name) values ('10000000-0000-0000-0000-000000000099','isolated-test','Test');
+insert into public.company_engines(id,address,key_encrypted) values ('e3821000-0000-4000-8000-000000000006','http://engine:8642','cipher');
+insert into public.companies(id,slug,name,engine_id) values ('10000000-0000-0000-0000-000000000099','isolated-test','Test','e3821000-0000-4000-8000-000000000006');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select count(*)::int from public.member_audit where company_id='10000000-0000-0000-0000-000000000001' and actor_name='عمر' and person_name='مراجع' and action='UPDATE'),1,'seed contains a named audit example');
