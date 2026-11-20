@@ -570,6 +570,19 @@ test('a profile applied under an older policy is applied again at the same level
  } finally { await fake.close(); }
 });
 
+test('the main Agent\'s sub-agents switch on its Company profile writes the delegation variant there, and names it on the read-back', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  await provideProfile(install(fake),{name,soul:'',config:levelConfig(1),forbidden:alwaysOff});
+  // #425: the Owner turned sub-agents on for the main Agent, so set_agent_subagents marked its `co-` profile pending.
+  const db=workerDatabase([row(two,{attach:false,tools_level:1,tools_policy:toolPolicy,tools_pending:true,subagents:true})]);
+  assert.equal((await keepCompanyProfiles(db,{hermes:install(fake)})).configured,1);
+  assert.ok((await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets.includes('delegation'));
+  assert.deepEqual(db.calls.at(-1),{name:'record_company_profile',args:{c:two,engine_profile:name,level:1,policy:toolPolicy,subagents_written:true}});
+ } finally { await fake.close(); }
+});
+
 test('raised, written, not recorded, then lowered: the profile stays pending until the read-back of the lower level is recorded', async () => {
  const fake=await fakeHermes();
  try {

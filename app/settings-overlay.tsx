@@ -199,8 +199,8 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
  const voiceEditable=canManage&&voice?.state==='found'&&voice.own;
  // The thinking level is the Owner's alone (#179), on the Agent's own profile — the Company's `co-` profile is the main
  // Agent's own while it is the profile's keeper — and only once the Engine was read, so an unread level is never drawn
- // as Medium. It is `own`, not #29's `choosable`: the main Agent never chooses a model (its model is the Company's
- // default) yet the level in its own profile is its own.
+ // as Medium. It is `own`: the keeper's model is choosable too (#425), and an Agent another one shares a profile with has
+ // neither.
  const effortEditable=owner&&agentModel?.models?.agents[0]?.own===true&&agentModel.models.agents[0].effort!==null;
  const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">

@@ -9,7 +9,7 @@ import { signIn } from './sign-in';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const hex=company.replaceAll('-','');
-const space=`cs-${hex}`; const co=`co-${hex}`; const writer='e9100000-0000-0000-0000-000000000002'; const writerProfile=`ag-${writer.replaceAll('-','')}`;
+const space=`cs-${hex}`; const co=`co-${hex}`; const lead='e9100000-0000-0000-0000-000000000001'; const writer='e9100000-0000-0000-0000-000000000002'; const writerProfile=`ag-${writer.replaceAll('-','')}`;
 const key='sk-ant-playwright-never-drawn-0123456789abcdef';
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 
@@ -90,11 +90,32 @@ test('the Owner chooses the Company default and one Agent\'s own model, each rea
  expect(rows.map(row=>row.setting)).toContain('model');
 });
 
+test('the Owner changes the main Agent\'s model from its own page; the Engine holds it on `co-` and a new default leaves it', async({page})=>{
+ language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ // #425: Lead keeps the Company's `co-` profile, and that profile is its own (ADR 0016).
+ await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${lead}`);
+ const models=page.getByRole('radiogroup',{name:/Lead/});
+ await expect(models).toBeVisible();
+ await expect(async()=>{
+  await models.getByRole('radio',{name:/^openai\/gpt-5\.5/}).click();
+  await expect.poll(()=>fake.settings.profiles.get(co)?.model,{timeout:3000}).toBe('openai/gpt-5.5');
+ }).toPass({timeout:30000});
+ await expect.poll(()=>JSON.parse(query(`select coalesce(model_choice,'-') as choice from public.company_profiles where company_id='${company}'`))[0].choice).toBe('openrouter/openai/gpt-5.5');
+ // A new Company default reaches the shared space and leaves Lead on its own choice.
+ await openModels(page,'omar@example.com');
+ await hydrated(page);
+ await page.getByRole('radiogroup',{name:/default/i}).getByRole('radio',{name:/^anthropic\/claude-opus-4\.6/}).click();
+ await expect(page.locator(`#mdl-agent-${lead}-model`)).toContainText('Its own choice');
+ await expect.poll(()=>fake.settings.profiles.get(space)?.model).toBe('anthropic/claude-opus-4.6');
+ expect(fake.settings.profiles.get(co)?.model).toBe('openai/gpt-5.5');
+});
+
 test('the Owner turns sub-agents on for one Agent; the profile waits for the toolset and a member reads the switch', async({page,browser})=>{
  language(`update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000004')`);
  await openModels(page,'omar@example.com');
  await hydrated(page);
- const toggle=page.getByRole('switch',{name:'Sub-agents'});
+ // The main Agent has its own switch now (#425): the Writer's is the one this test turns on.
+ const toggle=page.locator(`#mdl-sub-${writer}`);
  await expect(toggle).toHaveAttribute('aria-checked','false');
  await toggle.click();
  await expect(toggle).toHaveAttribute('aria-checked','true');
