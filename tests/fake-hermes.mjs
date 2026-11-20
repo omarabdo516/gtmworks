@@ -230,7 +230,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{output:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
    // The run's own routes (api_server_runs.py): stop, the answer to the question it waits for, which takes exactly
    // request_id, execution_generation and answer, and the choice for the request it waits on (_handle_run_approval).
