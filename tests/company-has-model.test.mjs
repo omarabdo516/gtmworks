@@ -27,4 +27,6 @@ test('an Engine that cannot be read, or none, claims nothing',async()=>{
  assert.equal(await has({keys:unreachable,signIns:signIns()}),null);
  assert.equal(await has({keys:keys(),signIns:unreachable}),null);
  assert.equal(await companyHasModel(db,{company:'c',hermes:null,driver:{keys:keys(),signIns:signIns()}}),null);
+ // The root holds no sign-in and the Company's own profile cannot be read: an older sign-in may be there.
+ assert.equal(await has({keys:keys(),signIns:async connection=>connection.profile==='default'?signIns()():unreachable()}),null);
 });
