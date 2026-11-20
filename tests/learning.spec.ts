@@ -60,6 +60,9 @@ const learning=(email:string,page:import('@playwright/test').Page)=>signIn(page,
 const group=(page:import('@playwright/test').Page,name:string)=>page.getByRole('dialog',{name:'Settings'}).getByRole('radiogroup',{name});
 const ruleRow=(page:import('@playwright/test').Page,text:string)=>page.locator('.ln-row').filter({hasText:text});
 // The server writes both write approvals to a profile, memory first: wait for each exact value the test reads.
+// The Engine holds a saved mode before the page does: the radio is marked only once the whole Settings page is read again,
+// which asks the Company's Engine for every section and can take longer than the default 5 s on a loaded runner (#420).
+const reread={timeout:15000};
 const wrote=async(name:string,value:boolean)=>{
  await expect.poll(()=>fake.settings.profiles.get(name)!.config.memory?.write_approval).toBe(value);
  await expect.poll(()=>fake.settings.profiles.get(name)!.config.skills?.write_approval).toBe(value);
@@ -82,7 +85,7 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  // The Owner gives the whole Company "Asks first": both write approvals, on every Agent profile and the shared space.
  await group(page,'For the whole company').getByRole('radio',{name:/^Asks first/}).click();
  for(const name of [profile,writerProfile,space]) await wrote(name,true);
- await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','true');
+ await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','true',reread);
  for(const name of [profile,writerProfile,space]) {
   const kept=fake.settings.profiles.get(name)!.config;
   expect(kept.memory?.write_approval).toBe(true);
@@ -92,7 +95,7 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  const writerModes=group(page,'Writer');
  await writerModes.getByRole('radio',{name:'Learns on its own',exact:true}).click();
  await wrote(writerProfile,false);
- await expect(writerModes.getByRole('radio',{name:'Learns on its own',exact:true})).toHaveAttribute('aria-checked','true');
+ await expect(writerModes.getByRole('radio',{name:'Learns on its own',exact:true})).toHaveAttribute('aria-checked','true',reread);
  expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(false);
  expect(fake.settings.profiles.get(writerProfile)!.config.skills?.write_approval).toBe(false);
  expect(fake.settings.profiles.get(profile)!.config.memory?.write_approval).toBe(true);
@@ -104,10 +107,10 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  // mixed once the page has re-read the profiles, and only then do the Engine's profiles hold the Company's turn.
  await writerModes.getByRole('radio',{name:'Asks first',exact:true}).click();
  await wrote(writerProfile,true);
- await expect(writerModes.getByRole('radio',{name:'Asks first',exact:true})).toHaveAttribute('aria-checked','true');
+ await expect(writerModes.getByRole('radio',{name:'Asks first',exact:true})).toHaveAttribute('aria-checked','true',reread);
  await group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/}).click();
  await wrote(profile,false); await wrote(space,false); await wrote(writerProfile,true);
- await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','false');
+ await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','false',reread);
  await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Learns on its own');
  await expect(overlay.locator('.ln-ag').filter({hasText:'Writer'})).toContainText('Asks first');
  expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(true);
@@ -117,7 +120,7 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  const following=group(page,'Writer');
  await following.getByRole('radio',{name:'Follow the company'}).click();
  await wrote(writerProfile,false);
- await expect(following.getByRole('radio',{name:'Follow the company'})).toHaveAttribute('aria-checked','true');
+ await expect(following.getByRole('radio',{name:'Follow the company'})).toHaveAttribute('aria-checked','true',reread);
  expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(false);
  expect(fake.settings.profiles.get(writerProfile)!.config.skills?.write_approval).toBe(false);
  await expect.poll(()=>choice(writer)).toBe(null);
