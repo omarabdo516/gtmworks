@@ -277,12 +277,17 @@ test('the Owner turns sub-agents on for one Agent, logged, and its settings are 
   const on=await changeCompanySetting(db,{company,agent:writer,setting:'subagents',value:true});
   assert.deepEqual(on,{state:'written',setting:'subagents',agent:writer,subagents:true});
   assert.deepEqual(calls.filter(call=>call.name==='set_agent_subagents').map(call=>call.args),[{agent:writer,enabled:true}]);
-  assert.deepEqual(logged().map(row=>[row.agent,row.setting,row.old_value,row.new_value]).slice(0,1),[[writer,'subagents',false,true]]);
+  assert.deepEqual(logged().map(row=>[row.agent,row.setting,row.old_value,row.new_value]),[[writer,'subagents',false,true]]);
   // The main Agent on the Company profile has its own switch too (#425); an Agent sharing a profile it does not keep has
   // none; only a boolean is a value.
   assert.deepEqual(await changeCompanySetting(db,{company,agent:lead,setting:'subagents',value:true}),{state:'written',setting:'subagents',agent:lead,subagents:true});
   const sharing=rows(); sharing[1]={...sharing[1],own:false,choosable:false};
   assert.equal((await changeCompanySetting(database({rowsFor:sharing}).db,{company,agent:writer,setting:'subagents',value:true})).state,'shared');
+  // While the worker still moves another Agent off the main Agent's profile, the profile is shared: refused, as every
+  // other per-Agent write is, until the move finishes.
+  const moving=[...rows(),{agent:'3a000000-0000-0000-0000-000000000041',name:'Mover',profile:companyProfileName,own:false,choosable:false,model_choice:null,subagents:false}];
+  assert.equal((await changeCompanySetting(database({rowsFor:moving}).db,{company,agent:lead,setting:'subagents',value:true})).state,'shared');
+  assert.equal((await changeCompanySetting(database({rowsFor:moving}).db,{company,agent:lead,setting:'model',value:'openrouter/openai/gpt-5.5',hermes:install(fake),driver:driver(fake)})).state,'shared');
   assert.equal((await changeCompanySetting(db,{company,agent:writer,setting:'subagents',value:'yes'})).state,'invalid');
   assert.equal((await changeCompanySetting(database({owner:false}).db,{company,agent:writer,setting:'subagents',value:true})).state,'notAllowed');
   // A delegation setting is refused while sub-agents are off, and written through #125's route when they are on.

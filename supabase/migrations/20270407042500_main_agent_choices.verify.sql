@@ -7,10 +7,11 @@ select json_build_object(
  'choices_shaped',(select count(*)=2 from pg_constraint where conrelid='public.company_profiles'::regclass
   and conname in ('company_profiles_model_choice_shape','company_profiles_learning_mode_choice_shape')),
  'keeper_choosable',position('else public.is_profile_keeper(c,a.id) end' in pg_get_functiondef('public.company_agent_models(uuid)'::regprocedure))>0,
- -- Every existing main Agent that keeps its Company's profile is choosable, with no agent_profiles row of its own.
+ -- Every existing main Agent that keeps its Company's profile is choosable, by the rule company_agent_models reads.
  'existing_keepers_choosable',not exists(select 1 from public.company_profiles p
   join public.hermes_agents a on a.id=public.company_profile_keeper(p.company_id) and a.profile=p.profile
-  where not public.is_profile_keeper(p.company_id,a.id)),
+  left join public.agent_profiles g on g.agent_id=a.id and g.company_id=p.company_id
+  where not coalesce(case when g.agent_id is not null then g.profile=a.profile else public.is_profile_keeper(p.company_id,a.id) end,false)),
  'writers_reach_keeper',position('is_profile_keeper' in pg_get_functiondef('public.set_agent_model(uuid,text)'::regprocedure))>0
   and position('is_profile_keeper' in pg_get_functiondef('public.set_agent_subagents(uuid,boolean)'::regprocedure))>0
   and position('is_profile_keeper' in pg_get_functiondef('public.set_agent_learning_mode(uuid,text)'::regprocedure))>0,
