@@ -128,7 +128,10 @@ case "$*" in
  *install-env.mjs*)
   file=; previous=; all="$*"
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done
-  exec env -i PATH="$PATH" sh -c 'set -a; case "$1" in /*) . "$1";; *) . "./$1";; esac; set +a; shift; exec node "$@"' sh "$file" "$INSTALL_ENV" \${all##*install-env.mjs };;
+  if [ -n "$file" ]; then
+   exec env -i PATH="$PATH" sh -c 'set -a; case "$1" in /*) . "$1";; *) . "./$1";; esac; set +a; shift; exec node "$@"' sh "$file" "$INSTALL_ENV" \${all##*install-env.mjs }
+  fi
+  exec node "$INSTALL_ENV" \${all##*install-env.mjs };;
  *'exec -T db psql'*)
   case "$*" in *'count(*) from public.companies'*) echo 1;; *) cat > /dev/null;; esac;;
 esac
@@ -328,4 +331,14 @@ test('the Engine management listener is on for web and worker with the Engine ke
  assert.match(install,/worker node -e .*engine_management\/api\/profiles/);
  assert.match(install,/http:\/\/127\.0\.0\.1:3000\/api\/profiles/);
  assert.match(install,/http:\/\/127\.0\.0\.1:9119\/api\/profiles/);
+});
+
+// The Docker stand-in runs lib/install-env.mjs for real with the --env-file it was given (#378, C16): an install that
+// names no file (the Engine key this installer generates) runs it with nothing sourced, never with `. "./"`, which a
+// stricter shell reads as the install folder.
+test('the Docker stand-in sources an env file only when --env-file named one', () => {
+ const own=readFileSync(new URL(import.meta.url),'utf8');
+ const branch=own.slice(own.indexOf('*install-env.mjs*)'),own.indexOf('*\'exec -T db psql\'*)'));
+ assert.match(branch,/if \[ -n "\$file" \]; then\n   exec env -i/,'the env file is sourced only when one was named');
+ assert.match(branch,/\n  exec node "\$INSTALL_ENV"/,'without one, the script runs with no source at all');
 });

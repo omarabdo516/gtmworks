@@ -12,7 +12,8 @@ const rows=<T>(sql:string):T[]=>{ const out=JSON.parse(query(sql)); return (Arra
 const company='10000000-0000-0000-0000-000000000001';
 const profile=`co-${company.replaceAll('-','')}`;
 const omar='20000000-0000-0000-0000-000000000001';
-const messages=()=>rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where company_id='${company}'`)[0].n;
+// The person's messages: the Agent's reply to the send that goes may or may not be in yet, and is not what is counted.
+const messages=()=>rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where company_id='${company}' and author='person'`)[0].n;
 
 test('an Engine that is not running says so once in Settings, refuses a message without losing it or recording a Run, and takes the next one when it answers',async({page})=>{
  const fake=await laneHermes();

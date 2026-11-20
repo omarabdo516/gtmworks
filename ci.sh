@@ -205,8 +205,8 @@ case "${1:-check}" in
   docker rm -fv "$dind" > /dev/null 2>&1 || true
   docker run -d --privileged --name "$dind" -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$port:2375" -v "$work/src:$work/src" docker:28.5.1-dind > /dev/null
   host_docker=${DOCKER_HOST:-}
-  export DOCKER_HOST=tcp://127.0.0.1:$port RUNNER_TEMP=$work/tmp INSTALL_REF BASE_SHA
-  INSTALL_REF=$(git rev-parse HEAD); BASE_SHA=${BASE_SHA:-$(git merge-base origin/main HEAD)}
+  export DOCKER_HOST=tcp://127.0.0.1:$port RUNNER_TEMP=$work/tmp INSTALL_REF
+  INSTALL_REF=$(git rev-parse HEAD)
   mkdir -p "$RUNNER_TEMP"
   for attempt in $(seq 1 60); do docker info > /dev/null 2>&1 && break; sleep 1; done
   docker info > /dev/null

@@ -560,7 +560,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Only the update area builds and installs the previous release from this pull request's base (#378, S2).
+          # Only the update area builds and installs the last release before the Engines, a fixed commit (#378, C1).
           fetch-depth: ${{ matrix.area == 'update' && '0' || '1' }}
       # The isolated Docker machine and the image the run built once, as one action the measurement also uses (#403,
       # #411): the area of scripts/ci-install-check.sh the matrix names runs on it, and the last step removes it, also
@@ -579,7 +579,6 @@ jobs:
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
           INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
           GTMWORKS_IMAGE_PREBUILT: "true"
         run: bash scripts/ci-install-check.sh ${{ matrix.area }}
@@ -610,7 +609,6 @@ jobs:
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
           INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GTMWORKS_IMAGE_PREBUILT: "true"
         run: bash scripts/ci-install-check.sh measure
       - name: remove the isolated Docker machine

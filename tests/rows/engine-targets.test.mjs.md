@@ -1,0 +1,1 @@
+| `engine-targets.test.mjs` | The every-Engine check runs a Company with a main Agent and an Engine, leaves a probe Company with no Agent alone, and fails on a Company with a main Agent and no readable Engine (#378, C2). | 0.1 s | none | new |

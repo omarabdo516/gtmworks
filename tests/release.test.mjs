@@ -174,7 +174,9 @@ test('a release install pulls the image by digest, takes its install files from 
  assert.equal(result.status,0,result.stderr);
  const commands=release.commands().split('\n');
  const index=pattern=>commands.findIndex(line=>pattern.test(line));
- assert.equal(commands[0],`pull ${app}`);
+ // The one look before it is read-only: whether a previous release's Engine container runs here (#378).
+ assert.equal(commands[0],'ps -aq --filter label=com.docker.compose.project=gtmworks-install --filter label=com.docker.compose.service=hermes');
+ assert.equal(commands[1],`pull ${app}`);
  assert.match(result.stdout,/Digest: sha256:a{64}/);
  const extract=index(/cp -R \/app\/install\/\. \/install\//);
  assert.ok(extract>0);
@@ -343,10 +345,11 @@ test('CI updates a release install on a real database, applying a new migration 
   /compose down -v \|\| fail/,
   /registry:2\.8\.3/,
   /docker tag "\$\(web_image_tag\)" localhost:5000\/gtmworks:0\.0\.0-ci/,
-  // The previous release is origin/main's own code at the pull request's base (#378, S2), built and installed from
-  // its own two release files; the next release carries one migration more, which the update must read through the
-  // running db's /migrations.
-  /git worktree add "\$RUNNER_TEMP\/previous-release" "\$base"/,
+  // The previous release is the last one before the Engines, a fixed commit rather than this pull request's base or
+  // origin/main (#378, C1), built and installed from its own two release files; the next release carries one migration
+  // more, which the update must read through the running db's /migrations.
+  /previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6/,
+  /git worktree add "\$RUNNER_TEMP\/previous-release" "\$previous_release"/,
   /docker build -q -t localhost:5000\/gtmworks:0\.0\.0-main "\$RUNNER_TEMP\/previous-release"/,
   /node scripts\/release-assets\.mjs "\$previous" "\$root\/release-previous"/,
   /FROM localhost:5000\/gtmworks:0\.0\.0-ci\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, readFileSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 
 // `gtmworks company add` (#382, ADR 0018): the installer makes one Engine from the template with its own folder, volume,
 // key and network, waits until it is healthy, joins the app and the worker to its network, then makes the Company through
@@ -14,13 +15,17 @@ printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
  *'company-add.mjs check'*) printf '%s\\n' "\${SLUG:-second-company-0000abcd}"; exit "\${CHECK_EXIT:-0}";;
- *'company-add.mjs add'*) exit "\${ADD_EXIT:-0}";;
- *'company-add.mjs drop'*) exit 0;;
+ *'company-add.mjs add'*)
+  if [ "\${KILL_ON_ADD:-}" = 1 ]; then kill -TERM "$PPID"; exit 1; fi
+  exit "\${ADD_EXIT:-0}";;
+ *'company-add.mjs drop'*) printf '%s\\n' "\${DROP_OUTPUT:-removed}"; exit "\${DROP_EXIT:-0}";;
  *'company-list.mjs'*) printf 'Company "Second Company": Engine http://gtmworks-engine-second-company-0000abcd:8642 (healthy)\\n';;
  *' ps -q web'*) echo web-id;;
  *' ps -q worker'*) echo worker-id;;
  *'network inspect '*) exit 1;;
- *' up -d --wait '*) exit "\${ENGINE_EXIT:-0}";;
+ *' up -d --wait '*)
+  if [ "\${KILL_ON_UP:-}" = 1 ]; then kill -TERM "$PPID"; exit 1; fi
+  exit "\${ENGINE_EXIT:-0}";;
 esac
 exit 0
 `;
@@ -75,7 +80,7 @@ test('company add has one add path and the installer has one Engine name and one
  // Every loop over the install's Engines reads the one lister (the restore's key loop reads the keys' own folder list
  // out of the archive instead, before any .engines/ exists, #378 X2), and every network the one reader.
  assert.equal((install.match(/for folder in \.engines\/\*\//g)||[]).length,1);
- assert.equal((install.match(/for name in \$\(engine_names\)/g)||[]).length,4);
+ assert.equal((install.match(/for name in \$\(engine_names\)/g)||[]).length,5);
  // A restore reads each Engine's key from the archive's checked folders, never from files it extracted.
  assert.equal((install.match(/for name in \$engine_key_folders; do/g)||[]).length,2);
  assert.match(install,/join_engine_network "\$\(engine_network_of "\$name"\)"/);
@@ -139,4 +144,179 @@ test('company link asks the web container for a fresh first-Owner link for a Com
  assert.equal(result.status,0,result.stderr);
  assert.deepEqual(installDir.lines(),['compose --env-file .env.install -f docker-compose.install.yml exec -T web node scripts/company-add.mjs link --name Held Company']);
  assert.equal(installDir.lines().some(line=>line.includes(' up -d ')),false,'a fresh link makes no Engine');
+});
+
+// A failed add must not describe as "nothing was left behind" a Company that was made (#378, C11): the script's drop
+// answer says whether a Company holds the Engine record, and an Engine a Company holds is never destroyed.
+test('a failed add says what the install holds: a made Company keeps its Engine, and only a waiting record is taken back', t => {
+ // The Engine's record is held by a Company: the Company was made, and its Engine stays.
+ const held=install(t,{env:{ADD_EXIT:'1',DROP_OUTPUT:'held'}});
+ const made=held.run('company','add','--name','Second Company','--owner','person@example.com');
+ assert.notEqual(made.status,0);
+ const madeOutput=made.stdout+made.stderr;
+ assert.match(madeOutput,/Company "Second Company" was made on its own Engine \(gtmworks-engine-second-company-0000abcd\): its Engine stays\./);
+ assert.doesNotMatch(madeOutput,/Nothing was left behind/);
+ assert.ok(existsSync(held.envFile('second-company-0000abcd')),'the Engine a Company was made on stays');
+ assert.doesNotMatch(held.lines().join('\n'),/ down -v| volume rm| network rm/);
+ // A waiting record only: nothing of the command stays, and the line says so.
+ const waiting=install(t,{env:{ADD_EXIT:'1'}});
+ const removed=waiting.run('company','add','--name','Second Company','--owner','person@example.com');
+ assert.notEqual(removed.status,0);
+ assert.match(removed.stdout,/Company "Second Company" was not made\. Nothing was left behind; run the same command again\./);
+ assert.doesNotMatch(removed.stdout,/was made on its own Engine/);
+ assert.equal(existsSync(waiting.envFile('second-company-0000abcd')),false);
+ // The answer could not be read at all: the Engine stays too, and the line says what is known.
+ const unknown=install(t,{env:{ADD_EXIT:'1',DROP_EXIT:'1'}});
+ const unread=unknown.run('company','add','--name','Second Company','--owner','person@example.com');
+ assert.notEqual(unread.status,0);
+ assert.match(unread.stdout,/could not be read back after a failure, so its Engine \(gtmworks-engine-second-company-0000abcd\) stays\./);
+ assert.doesNotMatch(unread.stdout,/Nothing was left behind/);
+ assert.ok(existsSync(unknown.envFile('second-company-0000abcd')));
+});
+
+// `company-add.mjs drop` answers `held` for an Engine record a Company names, and `removed` after it removed one that
+// waits (#378, C11): the installer reads that answer, so it must be true of the database.
+test('company-add.mjs drop reports whether a Company holds the Engine record', async t => {
+ const requests=[];
+ let held=false;
+ const server=createServer((request,response)=>{
+  requests.push(`${request.method} ${request.url}`);
+  response.setHeader('Content-Type','application/json');
+  // As the database does: companies.engine_id is a foreign key, so a record a Company names refuses its delete.
+  if(request.method==='DELETE') {
+   if(held) { response.writeHead(409); return response.end(JSON.stringify({code:'23503',message:'still referenced from table companies'})); }
+   response.writeHead(204); return response.end();
+  }
+  if(String(request.url).startsWith('/rest/v1/company_engines')) return response.end(JSON.stringify([{id:'e1'}]));
+  if(String(request.url).startsWith('/rest/v1/companies')) return response.end(JSON.stringify(held?[{id:'c1'}]:[]));
+  return response.end('[]');
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>{ server.closeAllConnections(); server.close(resolve); }));
+ const url=`http://127.0.0.1:${server.address().port}`;
+ // The server runs in this process, so the script is run without blocking the event loop it needs to answer.
+ const drop=()=>new Promise(resolve=>{
+  const child=spawn(process.execPath,['scripts/company-add.mjs','drop','--address','http://gtmworks-engine-second-company:8642'],
+   {env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:url,SUPABASE_SERVICE_ROLE_KEY:'service-role',WEBHOOK_ENCRYPTION_KEY:'k'}});
+  let stdout='',stderr='';
+  child.stdout.on('data',chunk=>{ stdout+=chunk; });
+  child.stderr.on('data',chunk=>{ stderr+=chunk; });
+  child.on('exit',status=>resolve({status,stdout,stderr}));
+ });
+ const waiting=await drop();
+ assert.equal(waiting.status,0,waiting.stderr);
+ assert.equal(waiting.stdout,'removed\n');
+ assert.ok(requests.some(request=>request.startsWith('DELETE /rest/v1/company_engines')),requests.join('\n'));
+ // A Company names the record, even one committed just before: its delete is refused by the foreign key, and the
+ // answer says the record is held (#378, C10/C11).
+ held=true;
+ requests.length=0;
+ const named=await drop();
+ assert.equal(named.status,0,named.stderr);
+ assert.equal(named.stdout,'held\n');
+ assert.ok(requests.some(request=>request.startsWith('DELETE /rest/v1/company_engines')),requests.join('\n'));
+});
+
+// A versioned restore replaces the install over several installer runs and holds install.sh's own restore marker while
+// it does (#378, C5): a Company made in the middle would be lost without being in its safety backup, so `company add`
+// refuses until the restore has finished.
+test('company add refuses while a restore runs, before it makes anything', async t => {
+ const installDir=install(t);
+ const holder=spawn('sh',['-c','exec 8>>.install-restore; flock -n 8 || exit 1; echo held; exec sleep 60'],{cwd:installDir.directory});
+ t.after(()=>{ holder.kill('SIGKILL'); holder.stdout.destroy(); holder.unref(); });
+ await new Promise(resolve=>holder.stdout.once('data',resolve));
+ const refused=installDir.run('company','add','--name','Second Company','--owner','person@example.com');
+ assert.equal(refused.status,1,refused.stderr);
+ assert.match(refused.stderr,/^A restore is running: wait for it to finish, then run this again\.$/m);
+ assert.equal(existsSync(join(installDir.directory,'.engines/second-company-0000abcd')),false,'the refused add made no Engine folder');
+ assert.deepEqual(installDir.lines(),[],'the refused add asked Docker for nothing');
+});
+
+// An interrupt during the Engine's start takes back everything the command made (#378, C10): the rollback is registered
+// before the Engine's folder exists, so a TERM leaves no container, volume, network, folder or waiting record behind.
+test('an interrupt while the Engine starts removes the container, volume, network, folder and waiting record', t => {
+ const installDir=install(t,{env:{KILL_ON_UP:'1'}});
+ const interrupted=installDir.run('company','add','--name','Second Company','--owner','person@example.com');
+ assert.notEqual(interrupted.status,0,interrupted.stdout);
+ const commands=installDir.lines().join('\n');
+ assert.match(commands,/company-add\.mjs drop --address http:\/\/gtmworks-engine-second-company-0000abcd:8642/);
+ assert.match(commands,/down -v --remove-orphans/);
+ assert.match(commands,/rm -f gtmworks-engine-second-company-0000abcd/);
+ assert.match(commands,/volume rm gtmworks-engine-second-company-0000abcd/);
+ assert.match(commands,/network rm gtmworks-engine-second-company-0000abcd/);
+ assert.equal(existsSync(join(installDir.directory,'.engines/second-company-0000abcd')),false,'the interrupted add left no Engine folder');
+ // It made no Company and printed no closing line.
+ assert.doesNotMatch(interrupted.stdout,/is made on its own Engine/);
+ assert.equal(commands.includes('company-add.mjs add'),false,'the interrupted add made no Company');
+});
+
+// An interrupt that comes after the Company was made never takes its Engine back (#378, C10/C11 follow-up): the rollback
+// asks whether a Company holds the record, keeps the Engine when one does or when it cannot tell, and says so.
+test('an interrupt after the Company is made keeps its Engine and says so', t => {
+ for(const answer of ['held','']) {
+  const installDir=install(t,{env:{KILL_ON_UP:'1',DROP_OUTPUT:answer,...(answer?{}:{DROP_EXIT:'1'})}});
+  const interrupted=installDir.run('company','add','--name','Second Company','--owner','person@example.com');
+  assert.notEqual(interrupted.status,0,interrupted.stdout);
+  const commands=installDir.lines().join('\n');
+  assert.match(commands,/company-add\.mjs drop --address/);
+  assert.doesNotMatch(commands,/down -v --remove-orphans|volume rm |network rm /,answer||'unknown');
+  assert.match(interrupted.stderr,/The Engine gtmworks-engine-second-company-0000abcd stays: a Company may already be made on it\./);
+ }
+});
+
+// A first-Owner link written between a restore's safety backup and its replacement would stop working, or bring back an
+// older one from the archive (#378, C5 follow-up): `company link` refuses while a restore holds its marker, as add does.
+test('company link refuses while a restore runs, before it writes anything', async t => {
+ const installDir=install(t);
+ const holder=spawn('sh',['-c','exec 8>>.install-restore; flock -n 8 || exit 1; echo held; exec sleep 60'],{cwd:installDir.directory});
+ t.after(()=>{ holder.kill('SIGKILL'); holder.stdout.destroy(); holder.unref(); });
+ await new Promise(resolve=>holder.stdout.once('data',resolve));
+ const refused=installDir.run('company','link','Second Company');
+ assert.equal(refused.status,1,refused.stderr);
+ assert.match(refused.stderr,/^A restore is running: wait for it to finish, then run this again\.$/m);
+ assert.deepEqual(installDir.lines(),[],'the refused link asked Docker for nothing');
+});
+
+// A lost answer from the call that makes the Company may hide a Company that was made, so the script never says nothing
+// was made: it says the outcome could not be confirmed, and the installer reads the record and says what is there.
+test('company-add.mjs says an add it cannot confirm is unconfirmed, never that nothing was made', async t => {
+ const server=createServer((request,response)=>{
+  response.setHeader('Content-Type','application/json');
+  const url=String(request.url);
+  if(url.startsWith('/auth/v1/admin/users')) return response.end(JSON.stringify({users:[{id:'u1',email:'person@example.com'}]}));
+  if(url.startsWith('/rest/v1/people')) return response.end(JSON.stringify({id:'u1'}));
+  if(url.startsWith('/rest/v1/rpc/create_company_with_owner')) { response.writeHead(502); return response.end(JSON.stringify({message:'upstream lost'})); }
+  if(request.method==='POST'&&url.startsWith('/rest/v1/company_engines')) { response.writeHead(201); return response.end(JSON.stringify({id:'e1',address:'http://gtmworks-engine-second-company:8642'})); }
+  if(url.startsWith('/rest/v1/companies')) return response.end('[]');
+  if(request.method==='DELETE') { response.writeHead(204); return response.end(); }
+  return response.end('[]');
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>{ server.closeAllConnections(); server.close(resolve); }));
+ const url=`http://127.0.0.1:${server.address().port}`;
+ const result=await new Promise(resolve=>{
+  const child=spawn(process.execPath,['scripts/company-add.mjs','add','--name','Second Company','--owner','person@example.com','--address','http://gtmworks-engine-second-company:8642','--slug','second-company'],
+   {env:{...process.env,NEXT_PUBLIC_SUPABASE_URL:url,SUPABASE_SERVICE_ROLE_KEY:'service-role',WEBHOOK_ENCRYPTION_KEY:Buffer.alloc(32,7).toString('base64'),ENGINE_KEY:'a1'.repeat(32)}});
+  let stdout='',stderr='';
+  child.stdout.on('data',chunk=>{ stdout+=chunk; });
+  child.stderr.on('data',chunk=>{ stderr+=chunk; });
+  child.on('exit',status=>resolve({status,stdout,stderr}));
+ });
+ assert.notEqual(result.status,0,result.stdout);
+ assert.match(result.stderr,/The Company "Second Company" could not be confirmed:/);
+ assert.doesNotMatch(result.stderr+result.stdout,/was not made|Nothing was left behind/);
+});
+
+// An interrupt while the web container makes the Company can come before or after that Company commits, and the
+// interrupted command cannot tell (#378, C10/C11): from the moment the add starts, its Engine is never taken back, and
+// the line says to read `company list`.
+test('an interrupt while the Company is being made keeps its Engine and says to read company list', t => {
+ const installDir=install(t,{env:{KILL_ON_ADD:'1'}});
+ const interrupted=installDir.run('company','add','--name','Second Company','--owner','person@example.com');
+ assert.notEqual(interrupted.status,0,interrupted.stdout);
+ const commands=installDir.lines().join('\n');
+ assert.match(commands,/company-add\.mjs add/);
+ assert.doesNotMatch(commands,/company-add\.mjs drop|down -v --remove-orphans|volume rm |network rm /);
+ assert.match(interrupted.stderr,/The Engine gtmworks-engine-second-company-0000abcd stays: its Company may be made\. Run gtmworks company list to see its state\./);
+ assert.ok(existsSync(join(installDir.directory,'.engines/second-company-0000abcd/.env')),'the Engine folder stays');
 });

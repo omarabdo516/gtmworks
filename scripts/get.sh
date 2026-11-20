@@ -232,7 +232,8 @@ check_project_owner() {
 }
 
 stage=
-cleanup() { status=$?; trap - EXIT; [ -z "$stage" ] || rm -rf "$stage"; exit "$status"; }
+restore_marker=
+cleanup() { status=$?; trap - EXIT; [ -z "$stage" ] || rm -rf "$stage"; [ -z "$restore_marker" ] || rm -f "$restore_marker"; exit "$status"; }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 new_stage() { stage=$(mktemp -d "$dir/.gtmworks-download.XXXXXX"); }
@@ -539,7 +540,7 @@ check_archive() {
   fi
   bad=$(printf '%s\n' "$entries" | while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..|..) printf 'an unsafe path: %s\n' "$entry"; break;; esac
-    case "$entry" in .env.install|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
+    case "$entry" in .env.install|engines.list|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) printf 'an entry no backup holds: %s\n' "$entry"; break;; esac
   done)
   [ -z "$bad" ] || fail "$archive is not a gtmworks backup: it holds $bad. Nothing was changed."
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
@@ -627,6 +628,13 @@ op_restore() {
   # Going back to a release: the archive is checked, and the current data backed up, before this install is made anew
   # with that release's files, the archive restored into it, and that release's migrations applied. The agent engine's
   # volume is kept.
+  #
+  # The whole go-back holds .install-restore (#378, C5): `company add` takes install.sh's lock and refuses while the
+  # marker is held, so a Company made between the safety backup below and the replacement is never lost without being in
+  # that backup. A plain restore is one installer run under install.sh's own lock and needs no marker.
+  restore_marker=$dir/.install-restore
+  exec 8>>"$restore_marker"
+  flock -n 8 || fail "Another gtmworks restore is running in $dir: wait for it to finish, then run this again. Nothing was changed."
   need_curl
   new_stage
   download_release "$version" "$stage"
@@ -670,8 +678,9 @@ op_backup() { check_prerequisites; in_install; check_project_owner; run_installe
 
 # The Company commands are the installer's own (#382): get.sh keeps the gtmworks command's options, then hands the rest of
 # the line to install.sh, which owns the Engine helpers and the Company scripts. install.sh's own lock serializes it with
-# an install or update on this machine.
-op_company() { check_prerequisites; in_install; run_installer company "$@"; }
+# an install or update on this machine. The ownership check of `gtmworks backup` comes first, as it is a check only: one
+# machine runs one install, so a command from another folder stops before it changes anything (#378, C5).
+op_company() { check_prerequisites; in_install; check_project_owner; run_installer company "$@"; }
 
 op_status() {
   check_prerequisites
@@ -704,10 +713,12 @@ op_status() {
 
 # #384, ADR 0018: Claude's sign-in is the Engine's own, run in the Company's Engine on its root profile, which lends it
 # to every Agent of the Company. install.sh owns the Engine lookup and the container it runs in, as it does for `company`
-# (#378, T4); stdin stays open because the sign-in asks for a pasted code.
+# (#378, T4); stdin stays open because the sign-in asks for a pasted code. The ownership check comes first, as for every
+# command that names a folder (#378, C5).
 op_signin() {
   check_prerequisites
   in_install
+  check_project_owner
   sh ./install.sh sign-in "$provider" --company "$company"
 }
 

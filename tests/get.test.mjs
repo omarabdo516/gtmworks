@@ -49,7 +49,8 @@ release_image=@REF@
 # restore accepts .engines/* (each Engine's key, #385)
 # restore accepts engines|engines/* (each Company's Engine data, #386)
 op=\${1:-install}
-${lockBlock}printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
+${lockBlock}[ ! -f .install-restore ] || printf 'held\\n' >> "$RESTORE_LOG"
+printf '%s %s\\n' "\${release_image##*:}" "$*" >> "$INSTALLER_LOG"
 case "$op" in
  backup) mkdir -p "$2"; : > "$2/gtmworks-test.tgz"; echo 'Stopping...'; echo "Backup: $2/gtmworks-test.tgz"; exit 0;;
  restore) exit 0;;
@@ -157,7 +158,7 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
  if(docker) writeFileSync(join(bin,'docker'),fakeDocker,{mode:0o755});
  writeFileSync(join(bin,'curl'),fakeCurl,{mode:0o755});
  writeFileSync(join(bin,'mv'),fakeMv,{mode:0o755});
- const logs={DOCKER_LOG:join(root,'docker.log'),CURL_LOG:join(root,'curl.log'),INSTALLER_LOG:join(root,'installer.log'),DB_FILE:join(root,'database')};
+ const logs={DOCKER_LOG:join(root,'docker.log'),CURL_LOG:join(root,'curl.log'),INSTALLER_LOG:join(root,'installer.log'),RESTORE_LOG:join(root,'restore.log'),DB_FILE:join(root,'database')};
  const env={HOME:home,PATH:`${bin}:${tools}`,REAL_MV:join(tools,'mv'),FIXTURE:fixture,GET_SOURCE:getScript,MAIN_HEX:mainHex,...logs};
  const spawn=(args,{extra={},input,cwd=work}={})=>spawnSync('/bin/sh',args,{cwd,env:{...env,...extra},encoding:'utf8',input});
  const read=path=>existsSync(path)?readFileSync(path,'utf8'):'';
@@ -169,7 +170,8 @@ function machine(t,{list=['v1.2.3','nightly','v1.10.0','v2.0.0-rc1','v1.3.0','v1
   spawnIn:(args,options)=>spawn(args.slice(1),options),
   docker:()=>read(logs.DOCKER_LOG),curl:()=>read(logs.CURL_LOG),installer:()=>read(logs.INSTALLER_LOG).split('\n').filter(Boolean),
   file:name=>read(join(dir,name)),
-  clear:()=>{ for(const path of [logs.DOCKER_LOG,logs.CURL_LOG,logs.INSTALLER_LOG]) rmSync(path,{force:true}); }};
+  clear:()=>{ for(const path of [logs.DOCKER_LOG,logs.CURL_LOG,logs.INSTALLER_LOG,logs.RESTORE_LOG]) rmSync(path,{force:true}); },
+  restoreLog:()=>read(logs.RESTORE_LOG)};
 }
 const ok=(result,label='')=>assert.equal(result.status,0,`${label}\n${result.stdout}\n${result.stderr}`);
 
@@ -788,7 +790,9 @@ test('a second install folder is refused while another folder runs gtmworks on t
  ok(m.line());
  m.clear();
  ok(m.line([],{extra:{PROJECT_DIRS:m.dir}}));
- for(const args of [['update'],['backup'],['restore','x.tgz','--version','v1.2.3','--yes']]) {
+ // The Company commands and the sign-in are refused too, as `gtmworks backup` is (#378, C5): each names a folder, and
+ // one machine runs one install.
+ for(const args of [['update'],['backup'],['restore','x.tgz','--version','v1.2.3','--yes'],['company','add','--name','Acme','--owner','a@example.com'],['company','list'],['sign-in','claude','--company','Acme']]) {
   writeFileSync(join(m.work,'x.tgz'),'archive');
   m.clear();
   const taken=m.gtmworks(args,{extra:{PROJECT_DIRS:`${m.dir}\n${other}`}});
@@ -859,9 +863,15 @@ test('gtmworks restore --version goes back: backs up the current data, makes the
  m.clear();
  ok(m.gtmworks(['restore',archive]));
  assert.deepEqual(m.installer(),[`${hex('c')} restore ${archive}`]);
+ // A plain restore is one installer run under install.sh's own lock and holds no restore marker.
+ assert.equal(m.restoreLog(),'');
  m.clear();
  const back=m.gtmworks(['restore',archive,'--version','v1.2.3','--yes']);
  ok(back);
+ // The go-back holds install.sh's restore marker for every one of its installer runs, and removes it at the end
+ // (#378, C5): a `company add` in the middle refuses rather than be lost with the replaced data.
+ assert.deepEqual(m.restoreLog().trimEnd().split('\n'),['held','held','held','held'],m.restoreLog());
+ assert.equal(existsSync(join(m.dir,'.install-restore')),false,'the restore marker is removed when the go-back ends');
  // After the restore, v1.2.3's update applies its migrations the archive predates.
  assert.deepEqual(m.installer(),[`${hex('c')} backup ${join(m.dir,'backups')}`,`${hex('a')} `,`${hex('a')} restore ${archive}`,`${hex('a')} update`]);
  const docker=m.docker().split('\n');

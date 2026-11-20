@@ -9,7 +9,8 @@ import { appUrl } from '../lib/app-origin.mjs';
 // before the installer makes anything; add registers the Engine record and then either makes the Company with the named
 // existing Person as its Owner (one SQL function, so the Company is never left without one) or holds the Company's name
 // behind a printed first-Owner link, which is used once and makes the Company with its sender as Owner; link prints a
-// fresh link for a Company still waiting, ending the earlier one; drop removes a waiting record left by a failed add. It
+// fresh link for a Company still waiting, ending the earlier one; drop removes a waiting record left by a failed add, and
+// says whether a Company holds it (so the installer never destroys an Engine that Company was made on). It
 // prints the slug the installer names the Engine folder after, and only a link's address, never a key or a secret's hash.
 const service=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL||'http://gateway:8080',process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const [mode]=process.argv.slice(2);
@@ -78,7 +79,8 @@ try {
    } catch(error) {
     // Nothing half made: the one function made no Company, so the waiting record (and any link on it) is all to remove.
     if(made) { try { await removeEngine(service,{id:made.id}); } catch {} }
-    sayError(`The Company "${name}" was not made: ${error.message}. Nothing was left behind; run the same command again.`);
+    // A record a Company names is kept by removeEngine, so the outcome is not known here: the installer reads it and says.
+    sayError(`The Company "${name}" could not be confirmed: ${error.message}.`);
    }
   }
  } else if(mode==='link') {
@@ -93,9 +95,17 @@ try {
    }
   }
  } else if(mode==='drop') {
-  // A failed add leaves no record waiting for a Company that will never come; a record a Company names is kept.
+  // A failed add leaves no record waiting for a Company that will never come; a record a Company names is kept, and the
+  // answer says so (#378, C11): the installer never destroys an Engine a Company was made on.
   if(!address) { sayError('An Engine address is needed to remove its waiting record.'); }
-  else for(const record of await press(service.from('company_engines').select('id').eq('address',address))) await removeEngine(service,{id:record.id});
+  else {
+   let held=false;
+   // The delete is the one answer (lib/engine-record.mjs): a Company committed at any moment before it keeps its record.
+   for(const record of await press(service.from('company_engines').select('id').eq('address',address))) {
+    if(await removeEngine(service,{id:record.id})==='held') held=true;
+   }
+   process.stdout.write(held?'held\n':'removed\n');
+  }
  } else sayError('Usage: company-add.mjs check|add|drop --name <name> [--owner <email>] [--address <url>] | company-add.mjs link --name <name>');
 } catch(error) {
  sayError(`${error.message} Nothing was left behind.`);
