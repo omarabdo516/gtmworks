@@ -24,3 +24,6 @@ backups/
 .vitest/
 .ci-tmp/
 ci-ledger/
+
+# The error log release.yml writes into its working directory; tests/release.test.mjs runs that step from the repo
+registry-error
