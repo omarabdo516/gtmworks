@@ -179,7 +179,11 @@ test('company-add.mjs drop reports whether a Company holds the Engine record', a
  const server=createServer((request,response)=>{
   requests.push(`${request.method} ${request.url}`);
   response.setHeader('Content-Type','application/json');
-  if(request.method==='DELETE') { response.writeHead(204); return response.end(); }
+  // As the database does: companies.engine_id is a foreign key, so a record a Company names refuses its delete.
+  if(request.method==='DELETE') {
+   if(held) { response.writeHead(409); return response.end(JSON.stringify({code:'23503',message:'still referenced from table companies'})); }
+   response.writeHead(204); return response.end();
+  }
   if(String(request.url).startsWith('/rest/v1/company_engines')) return response.end(JSON.stringify([{id:'e1'}]));
   if(String(request.url).startsWith('/rest/v1/companies')) return response.end(JSON.stringify(held?[{id:'c1'}]:[]));
   return response.end('[]');
@@ -200,14 +204,14 @@ test('company-add.mjs drop reports whether a Company holds the Engine record', a
  assert.equal(waiting.status,0,waiting.stderr);
  assert.equal(waiting.stdout,'removed\n');
  assert.ok(requests.some(request=>request.startsWith('DELETE /rest/v1/company_engines')),requests.join('\n'));
- // A Company names the record: nothing is removed, and the answer says so.
+ // A Company names the record, even one committed just before: its delete is refused by the foreign key, and the
+ // answer says the record is held (#378, C10/C11).
  held=true;
  requests.length=0;
  const named=await drop();
  assert.equal(named.status,0,named.stderr);
  assert.equal(named.stdout,'held\n');
- assert.equal(requests.some(request=>request.startsWith('DELETE')),false,requests.join('\n'));
- assert.ok(requests.some(request=>request.startsWith('GET /rest/v1/companies')),requests.join('\n'));
+ assert.ok(requests.some(request=>request.startsWith('DELETE /rest/v1/company_engines')),requests.join('\n'));
 });
 
 // A versioned restore replaces the install over several installer runs and holds install.sh's own restore marker while

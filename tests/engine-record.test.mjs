@@ -36,7 +36,8 @@ const store=(rows=[],companies=[])=>{
   ...query(name),
   insert:written=>({select:()=>({single:async()=>{ const row={...written,id:`engine-${++next}`}; rows.push(row); return {data:row,error:null}; }})}),
   update:change=>({eq:async(column,value)=>{ const row=list(name).find(found=>found[column]===value); if(row) Object.assign(row,change); return {error:null}; }}),
-  delete:()=>({eq:async(column,value)=>{ const at=rows.findIndex(row=>row[column]===value); if(at>=0) rows.splice(at,1); return {error:null}; }}),
+  // As the database does: companies.engine_id is a foreign key, so a record a Company names refuses the delete.
+  delete:()=>({eq:async(column,value)=>{ const at=rows.findIndex(row=>row[column]===value); if(at<0) return {error:null}; if(companies.some(found=>found.engine_id===rows[at].id)) return {error:{code:'23503'}}; rows.splice(at,1); return {error:null}; }}),
  });
  return {rows,companies,from:table};
 };
@@ -72,11 +73,11 @@ test('a Company names the one record it is made on, and a failed add removes onl
   assert.equal(await engineRecord(db,company),null);
   await attachEngine(db,{id:waiting.id,company});
   assert.deepEqual(await engineRecord(db,company),{address:'http://hermes:8642',key});
-  // A record a Company names is not removed by a failed add's cleanup; a waiting one is.
-  await removeEngine(db,{id:waiting.id});
+  // A record a Company names is not removed by a failed add's cleanup, and the answer says so; a waiting one is.
+  assert.equal(await removeEngine(db,{id:waiting.id}),'held');
   assert.deepEqual(await engineRecord(db,company),{address:'http://hermes:8642',key});
   const lost=await registerEngine(db,{address:'http://gtmworks-engine-lost:8642',key:'k'.repeat(64)});
-  await removeEngine(db,{id:lost.id});
+  assert.equal(await removeEngine(db,{id:lost.id}),'removed');
   assert.equal(db.rows.some(row=>row.id===lost.id),false,'a waiting record a failed add made is removed');
  } finally {
   if(saved===undefined) delete process.env.WEBHOOK_ENCRYPTION_KEY; else process.env.WEBHOOK_ENCRYPTION_KEY=saved;
@@ -134,6 +135,27 @@ test('an install made before the Engine records adopts its one Company\'s Engine
   const severalRows=[];
   await assert.rejects(()=>settleInstallEngine(database([{id:company,engine_id:null},{id:other,engine_id:null}],severalRows),{address:'http://gtmworks-engine-first:8642',key}),/more than one Company/);
   assert.deepEqual(severalRows,[]);
+ } finally {
+  if(saved===undefined) delete process.env.WEBHOOK_ENCRYPTION_KEY; else process.env.WEBHOOK_ENCRYPTION_KEY=saved;
+ }
+});
+
+// The delete decides, not an earlier read (#378, C10/C11): a Company committed between a check and the delete still keeps
+// its record, and the answer is `held`, so the installer keeps its Engine.
+test('a Company made between the check and the delete keeps its record, and removal answers held', async () => {
+ const saved=process.env.WEBHOOK_ENCRYPTION_KEY;
+ process.env.WEBHOOK_ENCRYPTION_KEY=encryptionKey;
+ try {
+  const companies=[];
+  const db=store([],companies);
+  const waiting=await registerEngine(db,{address:'http://gtmworks-engine-race:8642',key});
+  // Nothing names the record when it is read...
+  const {data:named}=await db.from('companies').select('id').eq('engine_id',waiting.id).limit(1);
+  assert.deepEqual(named,[]);
+  // ...then the Company commits before the delete runs.
+  companies.push({id:company,engine_id:waiting.id});
+  assert.equal(await removeEngine(db,{id:waiting.id}),'held');
+  assert.ok(db.rows.some(row=>row.id===waiting.id),'the record the Company names stays');
  } finally {
   if(saved===undefined) delete process.env.WEBHOOK_ENCRYPTION_KEY; else process.env.WEBHOOK_ENCRYPTION_KEY=saved;
  }

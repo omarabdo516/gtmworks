@@ -100,10 +100,9 @@ try {
   if(!address) { sayError('An Engine address is needed to remove its waiting record.'); }
   else {
    let held=false;
+   // The delete is the one answer (lib/engine-record.mjs): a Company committed at any moment before it keeps its record.
    for(const record of await press(service.from('company_engines').select('id').eq('address',address))) {
-    const named=await press(service.from('companies').select('id').eq('engine_id',record.id).limit(1));
-    if(named.length) { held=true; continue; }
-    await removeEngine(service,{id:record.id});
+    if(await removeEngine(service,{id:record.id})==='held') held=true;
    }
    process.stdout.write(held?'held\n':'removed\n');
   }

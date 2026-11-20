@@ -874,7 +874,7 @@ appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
 if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.exit(0); }
 if(args[0]==='compose') {
  if(args.includes('ps')) console.log(args.at(-1)+'-id');
- if(args.includes('psql')) console.log('t');
+ if(args.includes('psql')) console.log(args.some(arg=>arg.includes('select e.address'))?'http://gtmworks-engine-first:8642':'t');
 } else if(args.includes('alpine:3.21')) {
  const command=args.slice(args.indexOf('alpine:3.21')+1);
  // The first Engine's data goes into the volume its own folder names, mounted at opt/data as before #386.
@@ -936,7 +936,7 @@ if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.
   if(args.includes('stop')) writeFileSync(cwd+'/stopped','yes');
   if(args.includes('up')) { writeFileSync(cwd+'/stopped','no'); if(args.includes('--force-recreate')) writeFileSync(cwd+'/env-at-up',readFileSync(cwd+'/.env.install')); }
   if(args.includes('ps')) console.log(args.at(-1)+'-stopped');
-  if(args.includes('psql')) console.log('t');
+  if(args.includes('psql')) console.log(args.some(arg=>arg.includes('select e.address'))?'http://gtmworks-engine-first:8642':'t');
  } else if(args.includes('alpine:3.21')) {
   const command=args.slice(args.indexOf('alpine:3.21')+1);
   if(args.includes('--volumes-from')) assert.ok(args.includes('gtmworks-install_hermes:/opt/data'),'the Engine volume is restored too');
@@ -1373,7 +1373,7 @@ test('a backup stops before an Engine that did not stop and writes no archive', 
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
- *'ps -aq --filter name=^gtmworks-engine-'*) echo engine-id;;
+ *'ps -aq --filter name=^gtmworks-engine-'*) [ -z "\${PS_FAILS:-}" ] || exit 1; echo engine-id;;
  *'inspect -f {{.State.Running}}'*) [ -z "\${INSPECT_FAILS:-}" ] || exit 1; echo true;;
  *' ps -q web'*) echo web-id;;
  *' ps -q worker'*) echo worker-id;;
@@ -1385,12 +1385,15 @@ esac
  const commands=join(directory,'commands');
  const backup=extra=>spawnSync('sh',['scripts/install.sh','backup'],{cwd:directory,
   env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,...extra},encoding:'utf8'});
- // An Engine whose state Docker cannot report is not known to be stopped: the backup stops the same way (#378, C9).
- const unknown=backup({INSPECT_FAILS:'1'});
- assert.notEqual(unknown.status,0,unknown.stdout);
- assert.match(unknown.stderr,/This Engine did not stop: gtmworks-engine-first\./);
- assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');
- writeFileSync(commands,'');
+ // An Engine whose state Docker cannot report, or that Docker cannot even list, is not known to be stopped: the backup
+ // stops the same way (#378, C9).
+ for(const failure of [{INSPECT_FAILS:'1'},{PS_FAILS:'1'}]) {
+  const unknown=backup(failure);
+  assert.notEqual(unknown.status,0,unknown.stdout);
+  assert.match(unknown.stderr,/This Engine did not stop: gtmworks-engine-first\./,Object.keys(failure)[0]);
+  assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');
+  writeFileSync(commands,'');
+ }
  const result=backup({});
  assert.notEqual(result.status,0,result.stdout);
  assert.match(result.stderr,/This Engine did not stop: gtmworks-engine-first\. Nothing was archived, and what was stopped starts again\./);
@@ -1492,6 +1495,7 @@ case "$*" in
  *'tar -xOzf'*'.env.install'*) printf '%s\\n' "$ARCHIVE_ENV";;
  *'tar -xOzf'*'engines.list'*) printf '%s\\n' first;;
  *'tar -xOzf'*'.engines/'*) printf 'ENGINE_KEY=%s\\n' "${'a1'.repeat(32)}";;
+ *'select e.address from public.company_engines'*) printf '%s\\n' \${RESTORED_ENGINES:-http://gtmworks-engine-first:8642};;
  *'exec -T db psql'*) cat > /dev/null; echo t;;
   *'.State.Health.Status'*) echo healthy;;
  *' ps -q web'*) echo web-id;;
@@ -1519,4 +1523,11 @@ exit 0
  assert.match(sql,/select 1/);
  const migrationRun=run[migrations];
  assert.match(migrationRun,/exec -T db psql .*--single-transaction/);
+ // The restored database decides which Engines came back (#378, C4): one it names that the archive did not hold (lost
+ // with its list and key) fails the restore with a plain line.
+ const missing=spawnSync('sh',['scripts/install.sh','restore','backup.tgz'],{cwd:directory,
+  env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,ARCHIVE_ENV:secrets,
+   RESTORED_ENGINES:'http://gtmworks-engine-first:8642 http://gtmworks-engine-second-company:8642'},encoding:'utf8'});
+ assert.notEqual(missing.status,0,missing.stdout);
+ assert.match(missing.stderr,/The restored database names an Engine the backup did not hold \(http:\/\/gtmworks-engine-second-company:8642\): this archive is not complete\./);
 });

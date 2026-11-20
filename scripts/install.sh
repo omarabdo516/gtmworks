@@ -227,7 +227,8 @@ engines_stopped() {
   for name in $(engine_names); do
     container=$(engine_project "$name")
     # A container Docker does not list is stopped; one it lists but cannot report on is not known to be stopped.
-    [ -n "$(docker ps -aq --filter "name=^${container}$" 2> /dev/null)" ] || continue
+    listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null) || { running="$running $container"; continue; }
+    [ -n "$listed" ] || continue
     state=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null) || state=unknown
     [ "$state" = false ] || running="$running $container"
   done
@@ -676,6 +677,18 @@ elif [ "$operation" = restore ]; then
   # The database now has this release's schema and every Company names one Engine, or names none (an archive made by an
   # earlier release): the record is settled in one transaction, as an update does (#378).
   ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web node scripts/install-engine.mjs || return 1
+  # The archive's database decides which Engines its Companies need: an archive that lost an Engine together with its
+  # list and key passes the checks above, so every Engine the restored Companies name must have come back (#378, C4).
+  restored_engines=$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c \
+    'select e.address from public.company_engines e join public.companies c on c.engine_id=e.id;') \
+    || { echo "Could not read the restored Companies' Engines." >&2; return 1; }
+  for address in $restored_engines; do
+    name=$(printf '%s\n' "$address" | sed -n 's#^http://gtmworks-engine-\([a-z0-9-]*\):8642$#\1#p')
+    if [ -z "$name" ] || [ ! -f "$(engine_folder "$name")/.env" ]; then
+      echo "The restored database names an Engine the backup did not hold ($address): this archive is not complete." >&2
+      return 1
+    fi
+  done
   if [ "$hermes_data" = no ]; then
     echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
   fi
