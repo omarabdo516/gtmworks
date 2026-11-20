@@ -1,7 +1,7 @@
 import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
-import { noProviderError as noProvider } from './fake-hermes.mjs';
+import { noProviderError as noProvider, creditExhaustedError, apiKeyRefusedError, signInRefusedError, modelMissingError } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
 
 // #422, on the app: a Company with no model at all (no provider key in its shared space, no subscription signed in)
@@ -66,6 +66,28 @@ test('a Member sees the same notice and line, telling them to ask the Owner, wit
  const failed=page.locator('[data-outcome=no-model]');
  await expect(failed).toContainText(`${line} ${askOwner}`);
  await expect(failed.getByRole('link')).toHaveCount(0);
+});
+
+// #457: a model error a retry cannot fix is closed with its own outcome and says so, and the Owner gets the way to the
+// Agent's model in Subscription and models.
+const refusedFix='Check the agent’s model in Subscription and models';
+test('a reply the Engine fails for no credit, a refused key or sign-in, or a missing model records why, and says so',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/chat');
+ for(const [failure,outcome,line] of [
+  [creditExhaustedError,'no_credit','Lead could not reply: the company’s model key has no credit left.'],
+  [apiKeyRefusedError,'key_refused','Lead could not reply: the model provider refused the company’s key or sign-in.'],
+  [signInRefusedError,'key_refused','Lead could not reply: the model provider refused the company’s key or sign-in.'],
+  [modelMissingError,'model_missing','Lead could not reply: its model is not available from the provider.'],
+ ] as const) {
+  fake.settings.failure=failure;
+  await page.goto('/c/rs-learning/chat');
+  const conversation=await sendFromEmptyChat(page,`Plan the ${outcome} week`);
+  const failed=page.locator(`[data-outcome="${outcome.replace('_','-')}"]`);
+  await expect(failed).toContainText(line);
+  await expect(failed.getByRole('link',{name:refusedFix})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
+  await expect(page.getByText('Send the message again to retry.')).toHaveCount(0);
+  expect(JSON.parse(query(`select outcome from public.conversation_run_ends where conversation_id='${conversation}'`))).toEqual([{outcome}]);
+ }
 });
 
 test('once the Company holds a key, the empty chat shows no notice',async({page})=>{

@@ -1,5 +1,11 @@
 [
  {
+  "issue": 457,
+  "date": "2026-11-20",
+  "en": { "title": "A model error says why", "body": "When the model key has no credit, the provider refuses it, or the Agent’s model is not available, the chat says so and points to the Agent’s model settings instead of working on a reply forever." },
+  "ar": { "title": "خطأ الموديل بيقول سببه", "body": "لما مفتاح الموديل يخلص رصيده، أو المزوّد يرفضه، أو موديل الوكيل مش متاح، الشات بيقول كده وبيوصّلك لإعدادات موديل الوكيل بدل ما يفضل شغّال على رد مش جاي." }
+ },
+ {
   "issue": 368,
   "date": "2026-11-20",
   "en": { "title": "A message whose image is gone says so", "body": "A message sent with an image that is no longer stored is marked as not sent, and the next queued message in that conversation starts." },
