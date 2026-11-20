@@ -103,3 +103,15 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Lobe Icons
+
+Source: https://github.com/lobehub/lobe-icons (npm `@lobehub/icons-static-svg` 1.104.0). The AI providers' logos in
+`public/logos/lobe/` are copied unchanged; the MIT licence is `public/logos/lobe/LICENSE`. The logos remain their owners'
+trademarks.
+
+## Simple Icons
+
+Source: https://github.com/simple-icons/simple-icons (npm `simple-icons` 16.38.0). The apps' logos in `public/logos/simple/`
+are copied with each brand's colour from the set's data set as their fill; CC0 1.0, `public/logos/simple/LICENSE.md`. The
+logos remain their owners' trademarks.

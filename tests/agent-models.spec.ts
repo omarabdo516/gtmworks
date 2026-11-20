@@ -122,3 +122,27 @@ test('the Owner turns sub-agents on for one Agent; the profile waits for the too
  await expect(see.locator('#mdl-agent-'+writer+'-model')).toContainText('Its own choice');
  await contributor.close();
 });
+
+// #424: each provider key row and both subscriptions show their logo, drawn from this install only, in the light and the
+// dark theme; the two screenshots are attached to the run for the pull request.
+test('every provider and subscription shows its logo from the install, in both themes', async({page},testInfo)=>{
+ language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ const origin=new URL(testInfo.project.use.baseURL!).origin;
+ const outside:string[]=[];
+ page.on('request',request=>{ if(request.resourceType()==='image'&&new URL(request.url()).origin!==origin) outside.push(request.url()); });
+ for(const theme of ['light','dark'] as const) {
+  await page.emulateMedia({colorScheme:theme});
+  await openModels(page,'omar@example.com');
+  const rows=page.locator('#md-keys .md-key');
+  await expect(rows.first()).toBeVisible();
+  for(const row of await rows.all()) {
+   const name=await row.locator('.panel-row__t').textContent();
+   await expect(row.getByRole('img',{name:name!,exact:true})).toBeVisible();
+  }
+  for(const name of ['ChatGPT','Claude']) await expect(page.locator('#md-subscriptions').getByRole('img',{name,exact:true}).locator('.tool-logo')).toBeVisible();
+  await expect.poll(()=>page.locator('#md-keys img.tool-logo').evaluateAll(images=>images.length>0&&images.every(image=>(image as HTMLImageElement).complete&&(image as HTMLImageElement).naturalWidth>0))).toBe(true);
+  await page.locator('#md-subscriptions').scrollIntoViewIfNeeded();
+  await testInfo.attach(`models-${theme}`,{body:await page.locator('.sov').screenshot(),contentType:'image/png'});
+ }
+ expect(outside).toEqual([]);
+});
