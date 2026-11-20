@@ -234,6 +234,19 @@ gtmworks update --version v1.2.3             # or to that release
 gtmworks update --channel stable             # a main install back to the latest stable release
 ```
 
+Owners can also update from the app: **Update now** asks the install's updater, a
+small timer the install puts on the server (a systemd user timer, or cron), which
+runs `gtmworks update` within a minute and shows "Updated to <version>", or that
+the update failed and which version still runs (ADR 0020). The app never reaches
+Docker and never names the version: the updater always takes the newest of the
+install's channel.
+
+```sh
+gtmworks update-button off                   # hide Update now; the updater ignores requests (on by default)
+gtmworks auto-update on                      # install each newer version by itself, once an hour at most (off by default)
+gtmworks status                              # shows both switches and how the updater runs
+```
+
 Update backs up first and prints the archive's path (`--no-backup` skips it),
 downloads the new release's two files, pulls its images by digest, applies its
 migrations from inside the new image and recreates the containers whose image
@@ -361,7 +374,7 @@ nor re-tags its image `X.Y.Z`; it only runs the promotion of `stable` and
 takes the migrations and install files from it; nothing is built on the server.
 `stable` and `latest` move only after a release's install passes on its exact image,
 and always to the highest published release, so an older or hotfix tag never moves
-them back; `main` follows the head of main once its CI passed. A release install
+them back; `main` follows the newest commit of main whose CI passed, never an older one. A release install
 updates when both files are replaced with the next release's and `sh install.sh
 update` runs; it applies the new migrations, then recreates every service whose
 image changed. Back up before replacing them: backup and restore refuse to run with

@@ -25,6 +25,8 @@ export const seedSnapshotOf = (n = lane) => resolve(`supabase/.temp/lanes/${n}/s
 export const appOrigin = originOf();
 /** The bundled Hermes a lane's app and worker are given (scripts/web.sh, #342): a spec starts its fake Hermes there. */
 export const hermesHostOf = (n = lane) => `127.0.0.${110 + n}`;
+/** Where a lane's app reads the newest gtmworks (scripts/web.sh, #442): a spec starts its fake release source there. */
+export const updateHostOf = (n = lane) => `127.0.0.${120 + n}`;
 
 // Lane 0's ports by role, as supabase/config.toml sets them. The path is from the repository root: Playwright compiles
 // this file to CommonJS, where import.meta does not exist.

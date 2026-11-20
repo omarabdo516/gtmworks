@@ -1,0 +1,44 @@
+[
+ {
+  "issue": 442,
+  "date": "2026-11-20",
+  "en": { "title": "Update ready", "body": "When a newer gtmworks is out, Owners see it at the foot of the sidebar with what it brings and the one command that installs it." },
+  "ar": { "title": "في تحديث جاهز", "body": "لما تنزل نسخة أحدث من gtmworks، أصحاب الشركة بيشوفوها تحت في القايمة الجانبية، باللي جاية بيه والأمر الوحيد اللي بيثبّتها." }
+ },
+ {
+  "issue": 438,
+  "date": "2026-11-20",
+  "en": { "title": "Your Claude subscription shows connected", "body": "A Claude subscription you signed in reads Connected, and an API key is shown as a key paid per use, never as a subscription." },
+  "ar": { "title": "اشتراك Claude بيبان متوصل", "body": "اشتراك Claude اللي سجّلت بيه بيبان متوصل، ومفتاح الـ API بيبان مفتاح بتدفع على قد استخدامك، مش اشتراك." }
+ },
+ {
+  "issue": 434,
+  "date": "2026-11-20",
+  "en": { "title": "Lead runs your team", "body": "The main Agent manages the team, hands work to the right Agent, and opens a new Company's first conversation itself." },
+  "ar": { "title": "الوكيل الرئيسي بيدير الفريق", "body": "الوكيل الرئيسي بيدير الفريق، وبيدّي كل شغلانة للوكيل المناسب، وبيبدأ هو أول محادثة في الشركة الجديدة." }
+ },
+ {
+  "issue": 430,
+  "date": "2026-11-20",
+  "en": { "title": "Dictate in Egyptian Arabic", "body": "An Owner picks who turns speech into text in Settings, with Deepgram Nova-3 first for Egyptian Arabic, and every Agent listens with it." },
+  "ar": { "title": "اتكلم بالمصري والكلام يتكتب", "body": "صاحب الشركة بيختار مين يحوّل الكلام لنص من الإعدادات، وأولهم Deepgram Nova-3 للعامية المصرية، وكل الوكلاء بيسمعوا بيه." }
+ },
+ {
+  "issue": 425,
+  "date": "2026-11-20",
+  "en": { "title": "Change your main Agent's settings", "body": "The main Agent's model, skills and the rest of its settings change in Settings, like every other Agent's." },
+  "ar": { "title": "غيّر إعدادات الوكيل الرئيسي", "body": "موديل الوكيل الرئيسي ومهاراته وباقي إعداداته بتتغير من الإعدادات، زي أي وكيل تاني." }
+ },
+ {
+  "issue": 424,
+  "date": "2026-11-20",
+  "en": { "title": "Logos in Settings", "body": "Model providers, subscriptions and apps show their own logos, so you find the one you want at a glance." },
+  "ar": { "title": "اللوجوهات في الإعدادات", "body": "مزوّدين الموديلات والاشتراكات والتطبيقات بقى ليهم لوجوهاتهم، فتلاقي اللي عايزه من أول نظرة." }
+ },
+ {
+  "issue": 422,
+  "date": "2026-11-20",
+  "en": { "title": "No model connected, said plainly", "body": "When a Company has no model connected, the conversation says so and links straight to Settings." },
+  "ar": { "title": "مفيش موديل متوصل؟ هنقولك", "body": "لما الشركة مايكونش ليها موديل متوصل، المحادثة بتقول كده وبتوديك على الإعدادات على طول." }
+ }
+]

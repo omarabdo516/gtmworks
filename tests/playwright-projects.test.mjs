@@ -109,17 +109,24 @@ describe('the Playwright projects', { concurrency: 3 }, () => {
   assert.ok(ends(results, 'functional') <= starts(results, 'first-run'), output);
  });
 
- test('the chat open time runs alone after every functional test, also where the budgets run elsewhere (#346)', async t => {
+ test('the chat open time runs alone after every functional test, and is left to its own job where the shards run (#346, #421)', async t => {
   const dir = sandbox(t, { functional: true });
   writeFileSync(join(dir, 'tests/chat-steps.spec.ts'), `import { test } from '@playwright/test';
 test('chat opens', async () => { await new Promise(r => setTimeout(r, 30)); });
 `);
-  const { status, results, output } = await run(dir, ['playwright', 'test'], { GTMWORKS_HOSTED_ELSEWHERE: 'true' });
-  assert.equal(status, 0, output);
-  assert.equal(count(results, 'alone'), 1, output);
-  assert.equal(count(results, 'functional'), 2, output);
-  assert.ok(ends(results, 'functional') <= starts(results, 'alone'), output);
-  assert.ok(ends(results, 'alone') <= starts(results, 'first-run'), output);
+  const local = await run(dir, ['playwright', 'test']);
+  assert.equal(local.status, 0, local.output);
+  assert.equal(count(local.results, 'alone'), 1, local.output);
+  assert.equal(count(local.results, 'functional'), 2, local.output);
+  assert.ok(ends(local.results, 'functional') <= starts(local.results, 'alone'), local.output);
+  assert.ok(ends(local.results, 'alone') <= starts(local.results, 'first-run'), local.output);
+  // On CI the shards run with GTMWORKS_HOSTED_ELSEWHERE: the chat test runs in the `chat-open` job alone (#421), so
+  // no shard lists it, and the other groups keep their order.
+  const shard = await run(dir, ['playwright', 'test'], { GTMWORKS_HOSTED_ELSEWHERE: 'true' });
+  assert.equal(shard.status, 0, shard.output);
+  assert.equal(count(shard.results, 'alone'), 0, shard.output);
+  assert.equal(count(shard.results, 'functional'), 2, shard.output);
+  assert.ok(ends(shard.results, 'functional') <= starts(shard.results, 'first-run'), shard.output);
  });
 
  test('the navigation time budgets run alone after every functional test and before first run, and hide no failure', async t => {
@@ -135,8 +142,9 @@ test('chat opens', async () => { await new Promise(r => setTimeout(r, 30)); });
 });
 
 // The real config and specs, listed and never run: --list starts no web server.
-const list = (args, ci) => {
+const list = (args, ci, { hostedElsewhere = true } = {}) => {
  const env = { ...process.env, NODE_TEST_CONTEXT: undefined, GTMWORKS_HOSTED_ELSEWHERE: 'true' };
+ if (!hostedElsewhere) delete env.GTMWORKS_HOSTED_ELSEWHERE;
  if (ci) env.CI = 'true'; else delete env.CI;
  const child = spawnSync(process.execPath, [resolve('node_modules/@playwright/test/cli.js'), 'test', '--list', '--reporter=json', ...args], { encoding: 'utf8', env, maxBuffer: 64 * 1024 * 1024 });
  assert.equal(child.status, 0, child.stderr);
@@ -152,11 +160,18 @@ test('the real config retries a failed browser test once on CI and never locally
  }
 });
 
-// CI runs the browser suite as --shard=<i>/6 (#335, #404): together the six shards list every test exactly once.
-test('the six shards together run every browser test exactly once (#335, #319, #404)', () => {
- const whole = listed(list([], true)).sort();
- assert.ok(whole.length > 0);
+// CI runs the browser suite as --shard=<i>/6 (#335, #404), and the chat's open time in a job of its own with a machine
+// to itself (#421): the six shards leave the `alone` project empty, so the shards and that job together list every test
+// that runs on a pull request exactly once, and the budgets keep their own job on main.
+test('the six shards and the chat-open job together run every browser test exactly once (#335, #319, #404, #421)', () => {
  const shards = [1, 2, 3, 4, 5, 6].map(shard => listed(list([`--shard=${shard}/6`], true)));
  for (const shard of shards) assert.ok(shard.length > 0, 'every shard has tests');
- assert.deepEqual(shards.flat().sort(), whole);
+ const elsewhere = listed(list([], true)).sort();
+ assert.deepEqual(shards.flat().sort(), elsewhere);
+ const chatOpen = listed(list(['--project=alone', '--no-deps'], true, { hostedElsewhere: false })).sort();
+ assert.ok(chatOpen.length > 0, 'the chat-open job has the chat test');
+ // Every test that runs on a pull request: the shards' own list plus the alone project, but not the navigation budgets,
+ // which keep their machine on main (`visual`).
+ const everywhere = listed(list([], true, { hostedElsewhere: false })).filter(entry => !entry.startsWith('measured ')).sort();
+ assert.deepEqual([...elsewhere, ...chatOpen].sort(), everywhere);
 });

@@ -1,0 +1,18 @@
+/* Update ready and What's new (#442): the sidebar item sits with Connect apps at the foot, and its dialog is the shell's
+   modal (app/shell.css .gw.modal) at a reading width, as tall as its lines. */
+.gw .sb-update { flex: 1 0 100%; }
+.gw .sb-update__dot { flex: none; width: 8px; height: 8px; border-radius: var(--gw-r-full); background: var(--gw-accent); }
+.gw.modal.modal--upd { display: flex; flex-direction: column; width: min(480px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 48px); }
+.gw .upd-body { display: grid; gap: 12px; padding: 0 24px 20px; overflow-y: auto; min-height: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
+.gw .upd-lines { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.gw .upd-lines b { color: var(--gw-text-1); font-weight: 600; }
+.gw .upd-more { color: var(--gw-text-3); }
+.gw .upd-run, .gw .upd-hint { margin: 0; }
+.gw .upd-hint { font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .upd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gw .upd-cmd { flex: 1 1 auto; min-width: 0; padding: 4px 12px; border-radius: var(--gw-r-sm); background: var(--gw-bg-active); color: var(--gw-text-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--gw-fs-xs); overflow-wrap: anywhere; user-select: all; }
+.gw.modal--upd .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .upd-foot { justify-content: flex-end; }
+/* Update now inside the notice (#443): it sits under the command, on the body's own spacing. */
+.gw .upd-body .install-update { padding: 0; }

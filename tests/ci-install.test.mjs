@@ -23,15 +23,15 @@ const cases = [...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, comma
 
 test('the proof is one job with one matrix entry per area, every entry left to its end', () => {
   assert.equal(job.name, 'install-${{ matrix.area }}', 'the name says which area failed');
-  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'engines-update', 'one-line'] } });
+  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'engines-update', 'one-line', 'updater'] } });
   assert.equal(job.permissions.contents, 'read');
   // Its time limit is tests/ci-budgets.test.mjs's, one table for every job of the full check (#410).
 });
 
-const eight = ['first_install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'engines_update', 'one_line'];
-// The proof's nine areas in the order it has always run them, then the measurement: all of them in subshells when no
+const areaFns = ['first_install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'engines_update', 'one_line', 'updater'];
+// The proof's ten areas (#389's rollback and engines-update, #443's updater the last) in the order it has always run them, then the measurement: all of them in subshells when no
 // area is named, one area when one is (#406, #411).
-const allAreas = [...eight, 'measure'];
+const allAreas = [...areaFns, 'measure'];
 
 test('the dispatch names every area once, in the matrix, the measurement and all\'s own subshells', () => {
   // The measurement is the one case outside the matrix: it is the `install-measure` job's (#408).
@@ -54,6 +54,7 @@ test('the dispatch names every area once, in the matrix, the measurement and all
   assert.equal(dispatches.update, 'update');
   assert.equal(dispatches['engines-update'], 'engines_update');
   assert.equal(dispatches['one-line'], 'one_line');
+  assert.equal(dispatches.updater, 'updater');
   assert.equal(dispatches.measure, 'measure');
   // `./ci.sh install proxy` passes the area through to the same command.
   assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /bash scripts\/ci-install-check\.sh "\$@"/);
@@ -210,7 +211,7 @@ test('every ./ci.sh install area the checks document names is a case of the disp
   const doc = readFileSync('docs/agents/checks.md', 'utf8');
   const dispatches = new Set([...script.matchAll(/^ ([\w-]+)\)/gm)].map(([, name]) => name));
   const areas = new Set([...doc.matchAll(/\.\/ci\.sh install ([a-z][a-z-]*)/g)].map(([, area]) => area));
-  assert.deepEqual([...areas].sort(), ['agents', 'backup', 'companies', 'engines-update', 'first-install', 'measure', 'one-line', 'proxy', 'rollback', 'update']);
+  assert.deepEqual([...areas].sort(), ['agents', 'backup', 'companies', 'engines-update', 'first-install', 'measure', 'one-line', 'proxy', 'rollback', 'update', 'updater']);
   for (const area of areas) assert.ok(dispatches.has(area), `./ci.sh install ${area}`);
 });
 
@@ -221,5 +222,5 @@ test('backup and restore is an area of its own and the first-install job no long
   assert.doesNotMatch(first, /backup/, 'the first-install area runs no backup check');
   assert.match(script, /^ backup\) backup;;$/m, 'the proof has a backup area of its own');
   // The area is one command of the repo, and its sentence names it on a failure.
-  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| backup \| proxy \| rollback \| update \| engines-update \| one-line \| measure\]/);
+  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| backup \| proxy \| rollback \| update \| engines-update \| one-line \| updater \| measure\]/);
 });

@@ -5,7 +5,7 @@ import { everyAgentGets, sandboxTools, noAgentGets, toolConfig, fixedToolsets, t
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, prepareApp, removeProviderKey } from '../lib/hermes.mjs';
-import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
+import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools, keepLeadSouls, leadSoul, baselineSoul } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
@@ -139,6 +139,33 @@ test('two companies get two different profiles, each with the sandbox tools and 
   assert.deepEqual(fake.settings.requests.filter(request=>request.path.endsWith('/health')).map(request=>request.path),profiles.map(name=>`/p/${name}/health`));
   // Nothing is left to do: asking again makes nothing.
   assert.equal(await keepCompanyProfiles(db,{hermes:install(fake)}).then(result=>result.provided),0);
+  // #434: a new Company's main Agent starts as the manager of its team.
+  for(const name of profiles) assert.equal(fake.settings.profiles.get(name).soul,leadSoul);
+ } finally { await fake.close(); }
+});
+
+// #434: Lead's identity is the manager's. A main Agent whose profile still holds the old default text gets the new one,
+// its team's rules section kept; one whose Owner edited the text, or that already has the new one, is left as it is. Each
+// profile read is recorded, so it is read once; one the Engine cannot read is asked again on a later pass.
+test('the old default soul of a main Agent becomes the manager identity, an edited one is untouched, each profile is checked once', async () => {
+ const fake=await fakeHermes();
+ try {
+  const [old,edited,current,lost]=['10000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000007'].map(companyProfile);
+  const rules='<!-- gtmworks:rules -->\n## Rules the team gave you\n- Never use emojis\n<!-- /gtmworks:rules -->\n';
+  const profile=soul=>({soul,provider:'auto',model:'',key:'test-only-key',config:{},credentials:{}});
+  fake.settings.profiles.set(old,profile(`${baselineSoul}\n${rules}`));
+  fake.settings.profiles.set(edited,profile('You write for a bakery in Cairo.'));
+  fake.settings.profiles.set(current,profile(leadSoul));
+  const calls=[]; const work=[old,edited,current,lost].map(name=>({company_id:name,profile:name}));
+  const db={rpc:async(name,args)=>{ calls.push([name,args]); return name==='lead_soul_work'?{data:work,error:null}:name==='record_lead_soul'?{data:true,error:null}:{data:null,error:{message:`unexpected ${name}`}}; }};
+  assert.deepEqual(await keepLeadSouls(db,{hermes:install(fake)}),{upgraded:1,checked:3});
+  assert.equal(fake.settings.profiles.get(old).soul,`${leadSoul}\n${rules}`);
+  assert.equal(fake.settings.profiles.get(edited).soul,'You write for a bakery in Cairo.');
+  assert.equal(fake.settings.profiles.get(current).soul,leadSoul);
+  assert.deepEqual(calls.filter(([name])=>name==='record_lead_soul').map(([,args])=>args),[old,edited,current].map(name=>({c:name,engine_profile:name})));
+  assert.notEqual(leadSoul,baselineSoul);
+  assert.match(leadSoul,/manage/); assert.match(leadSoul,/hand_to_agent/);
+  assert.deepEqual(await keepLeadSouls(db,{hermes:null}),{upgraded:0,checked:0});
  } finally { await fake.close(); }
 });
 

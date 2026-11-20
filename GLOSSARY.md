@@ -95,6 +95,10 @@ _Avoid_: admin, super admin
 The person who runs the install from its server: installs and updates it, makes Companies, and sets how people reach it. An install owner enters a Company only as one of its Members.
 _Avoid_: admin, super admin, agency, instance admin
 
+**Updater / المحدّث**:
+The small timer the install puts on its server, run as the install owner, that carries out Update now and automatic updates by running `gtmworks update` itself. The app only asks it; it chooses the version (ADR 0020).
+_Avoid_: auto-updater service, update daemon
+
 **Invite link / لينك دعوة**:
 A link an Owner makes to bring one new Person into a Company, with the Role they will hold and the Agents they will see. It works once, ends after 7 days, and can be cancelled before it is used. It never gives the Owner role: an Owner makes an existing Member an Owner.
 _Avoid_: invitation email, magic link
