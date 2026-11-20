@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -77,11 +77,19 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.match(refused.stderr,/The Engine has no key/);
  // The install's managed scope pins the sandbox backend, so no profile and no Settings write moves it.
  const managed=load(readFileSync('scripts/engine-managed.yml','utf8'));
- assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',sync_back_max_bytes:0}});
- // Nothing comes back from the sandbox (#393): sync_back_max_bytes: 0 in the managed scope makes every teardown skip its
- // write-back, and the Engine's launch home (/opt/data) names no shared Skills folder, which is where a write-back maps
- // a path. A Company's shared folder is named on each Company's and Agent's profile (lib/hermes.mjs), never there.
- assert.equal(managed.terminal.sync_back_max_bytes,0,'the sandbox writes nothing back to the Engine');
+ assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false}});
+ // Nothing is copied between the Engine and the sandbox (#393): ssh_sync_files is false in the managed scope, and the
+ // cont-init hook that adds that key to the pinned Engine runs before anything starts and fails the start if the pinned
+ // text moved. The Engine's launch home (/opt/data) names no shared Skills folder, so nothing of a profile's Skills is
+ // reachable from there either.
+ assert.equal(managed.terminal.ssh_sync_files,false,'the ssh backend copies nothing in and nothing back');
+ assert.ok(engine.volumes.includes('./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro'),'the file-sync switch patch runs at start');
+ const hook=readFileSync('scripts/engine-ssh-sync-files.sh','utf8');
+ assert.ok(statSync('scripts/engine-ssh-sync-files.sh').mode&0o111,'the hook is executable as s6 runs it');
+ for(const expected of ['_SSH_KEYS = (("host", "ssh_host", ""), ("user", "ssh_user", ""), ("port", "ssh_port", 22),',
+  'sync_files=ssh_config.get("sync_files", True)','"ssh_sync_files": _tenv_bool("TERMINAL_SSH_SYNC_FILES", "true"),']) {
+  assert.ok(hook.includes(expected),'the hook replaces the pinned text it names');
+ }
  const launch=readFileSync('scripts/ci-install-lib.sh','utf8');
  assert.match(launch,/cat > \/opt\/data\/config\.yaml/,'the install names the launch profile it writes');
  assert.doesNotMatch(launch,/external_dirs/,'the launch profile names no shared Skills folder');

@@ -20,7 +20,7 @@ function engineSecretLeaks(template) {
  }
  // The Engine mounts its data volume and two files gtmworks ships for it (the managed terminal pin and the helper that
  // resolves the install-network address); anything else could carry a secret in.
- const allowed=['data:/opt/data','./engine-managed.yml:/etc/hermes/config.yaml:ro','./engine-listener-address.py:/etc/hermes/listener-address.py:ro','./engine-listener-address.sh:/etc/cont-init.d/05-engine-listener-address:ro'];
+ const allowed=['data:/opt/data','./engine-managed.yml:/etc/hermes/config.yaml:ro','./engine-listener-address.py:/etc/hermes/listener-address.py:ro','./engine-listener-address.sh:/etc/cont-init.d/05-engine-listener-address:ro','./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro'];
  for(const volume of engine.volumes||[]) if(!allowed.includes(String(volume))) leaks.push(`volume ${volume}`);
  return leaks;
 }

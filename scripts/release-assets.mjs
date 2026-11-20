@@ -55,9 +55,10 @@ export function releaseEngineTemplate(text) {
  return text;
 }
 
-// The Engine template mounts two files of its own, so a release that ships the template without them would leave every
-// Engine unable to start: both are beside it wherever it is copied (Dockerfile, /app/install/scripts and /app/release-source).
-const engineBeside = ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-listener-address.sh'];
+// The Engine template mounts three files of its own, so a release that ships the template without them would leave
+// every Engine unable to start: all are beside it wherever it is copied (Dockerfile, /app/install/scripts and
+// /app/release-source).
+const engineBeside = ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-listener-address.sh', 'scripts/engine-ssh-sync-files.sh'];
 
 export function writeReleaseAssets(app, directory, sandbox) {
  const compose = releaseCompose(readFileSync('docker-compose.install.yml', 'utf8'), app);

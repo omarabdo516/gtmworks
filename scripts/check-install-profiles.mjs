@@ -23,9 +23,10 @@
 //   sandbox-key <marker> <refused|runs>: one Agent's command, when the install job has replaced the sandbox's host key
 //     (refused) or put it back (runs): the Engine's ssh client trusts a host it has not seen but refuses a changed key, and
 //     the install pre-seeds known_hosts with the sandbox's, so a swapped sandbox is refused.
-//   sandbox-sync <marker>: one Agent edits the copy of a Skill under /home/pn/.hermes in its sandbox and plants a new one
-//     there; the install job restarts the Engine (its session teardown runs sync-back) and checks the Engine's own Skills
-//     and the Company's shared Skills are unchanged, and the planted file is on no Engine.
+//   sandbox-sync <marker>: one Agent counts the files under /home/pn/.hermes in its sandbox (none, with file sync off) and
+//     writes the paths a sync would map (its own Skills, the Company's shared folder, its memories, its settings); the
+//     profile names a credential file the job puts in the profile's home too. The job checks that none of it, the
+//     credential file included, reaches the Engine or the sandbox, and that the Run still works.
 // The companies and their Owner's sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -514,16 +515,29 @@ try {
  writeProof({step:'sandbox-key',marker,want,ran});
 } finally { model.close(); model.closeAllConnections(); }
 } else if(step==='sandbox-sync') {
-// The upload into the sandbox is on with no switch, and the write-back must be off (#393): the Engine's ssh backend
-// copies an Agent's Skills and caches into /home/pn/.hermes, and on every session teardown it used to copy what the
-// Agent changed there back onto the Engine's own disk. Here an Agent edits the copy of a Skill and plants a new one; the
-// install job restarts the Engine (its teardown runs sync-back) and checks that the Engine's own Skills and the
-// Company's shared Skills are unchanged and the planted file is on no Engine.
+// Nothing is copied between the Engine and the sandbox (#393): the ssh backend runs with file sync off, so the sandbox's
+// /home/pn/.hermes holds no file when an Agent's command starts, and nothing an Agent writes there comes back. The Agent
+// counts the files it finds and writes the paths a sync would map (its own Skills, the shared Skills folder, its memories,
+// its settings); the install job checks the Engine's own Skills, shared folder, memory and settings after the teardown and
+// asserts none of it arrived, and that a Run still works.
 assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
 const first=JSON.parse(readFileSync(state,'utf8'))[0];
 const firstEngine=await engineFor(first.company);
 await pointAtFakeModel(firstEngine,first.profile);
-const command=`folder=$(find /home/pn/.hermes/skills -mindepth 1 -maxdepth 1 -type d | head -n 1); test -n "$folder"; printf '\\nEDIT-${marker}\\n' >> "$folder/SKILL.md"; printf '${marker}' > "$folder/planted-${marker}.md"; shared=$(find /home/pn/.hermes/external_skills -name SKILL.md -type f | head -n 1); [ -z "$shared" ] || printf '\\nEDIT-${marker}\\n' >> "$shared"; printf '%s\\n' "$folder"`;
+// The profile names a credential file the sync would carry (the job writes it in the profile's home): with file sync off
+// it must not reach the sandbox.
+const named=await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',
+ body:JSON.stringify({config:{terminal:{credential_files:['sandbox-check-credentials/credential.json']}}})});
+assert.equal(named.status,200,`${first.profile} names the credential file the sync would carry (HTTP ${named.status})`);
+const command=[
+ `uploaded=$(find /home/pn/.hermes -type f 2> /dev/null | wc -l | tr -d ' ')`,
+ `mkdir -p /home/pn/.hermes/skills/agent-made /home/pn/.hermes/external_skills/0/shared-made /home/pn/.hermes/memories`,
+ `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/skills/agent-made/SKILL.md`,
+ `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/external_skills/0/shared-made/SKILL.md`,
+ `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/memories/MEMORY.md`,
+ `printf '# EDIT-${marker}\\n' > /home/pn/.hermes/config.yaml`,
+ `printf 'uploaded=%s\\n' "$uploaded"`,
+].join('\n');
 const plan=messages=>{
  const text=messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
  const done=messages.filter(message=>message.role==='tool').length;
@@ -538,7 +552,7 @@ try {
  const {data:{user}}=await person.auth.getUser();
  assert.ok(user,'the first-run Owner signs in');
  const conversation=randomUUID();
- const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-SYNC ${marker}: change a Skill copy.`};
+ const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-SYNC ${marker}: write the paths a sync would copy.`};
  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until('reply on the sandbox sync check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
@@ -546,8 +560,8 @@ try {
  assert.ok(results.length>=1,JSON.stringify(results));
  const terminal=(()=>{ try { return JSON.parse(String(results[0])); } catch { return null; } })();
  assert.equal(terminal?.exit_code,0,String(results[0]));
- const folder=String(terminal?.output??'').trim().split('\n').at(-1);
- assert.match(folder,/^\/home\/pn\/\.hermes\/skills\/[^/]+$/,'the Agent edited a Skill copy in its sandbox home');
- writeProof({step:'sandbox-sync',marker,folder,edited:true});
+ const output=String(terminal?.output??'');
+ assert.match(output,/uploaded=0/,'the sandbox holds no file the Engine copied in');
+ writeProof({step:'sandbox-sync',marker,uploaded:0,ran:true});
 } finally { model.close(); model.closeAllConnections(); }
 } else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker>');

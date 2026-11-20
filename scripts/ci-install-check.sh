@@ -33,6 +33,12 @@ install_source first-install.log || fail 'first install'
 [[ -f .work-sandbox-image ]] || fail 'the install names the work sandbox image it got'
 node scripts/check-work-sandbox.mjs --image "$(cat .work-sandbox-image)" | tee work-sandbox.log || fail 'the work sandbox image'
 grep -qx 'work sandbox: ok' work-sandbox.log || fail 'the work sandbox image prints "work sandbox: ok"'
+# The pinned Engine's file-sync switch (#393): its cont-init hook patches the Engine's own copy to take
+# terminal.ssh_sync_files, and fails the start loudly when the pinned text is not there. Run the same hook in a throwaway
+# container of the pinned image, so a pin bump that moves the text is caught here as well as at the Engine's start.
+engine_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
+docker run --rm -v "$PWD/scripts/engine-ssh-sync-files.sh:/hook:ro" --entrypoint /bin/sh "$engine_image" /hook \
+  || fail 'the pinned Engine holds the text the file-sync switch replaces'
 [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
 # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
 # other line, and a repeat install while setup is still open prints the same link. The code travels after `#`
@@ -473,30 +479,46 @@ engine_healthy "$engine_id" 180 || fail 'the Engine is healthy with its sandbox 
 engine_node "$engine_key" - sandbox-key "$key_marker" runs < scripts/check-install-profiles.mjs | tee sandbox-key-runs.log \
   || fail "an Agent's command runs again once the sandbox host key is back"
 [[ $(docker exec "$sandbox" cat "/work/$key_marker-key.txt") == "$key_marker" ]] || fail "the Agent's command wrote in the work folder after the host key returned"
-# The upload into the sandbox is on with no switch, and nothing comes back (#393): the Engine copies an Agent's Skills
-# and caches into /home/pn/.hermes, and every session teardown used to copy what an Agent changed there back onto the
-# Engine's own disk. An Agent edits its own copy of a Skill, the Company's shared Skill copy, and plants a new file; after
-# the Engine's session teardown neither edit nor the planted file is in any Skills folder on the Engine (the Engine's own,
-# the profiles' and the Company's shared one).
+# No file sync between the Engine and the sandbox (#393): the ssh backend runs with sync_files off, so nothing of the
+# Engine is copied into /home/pn/.hermes (a profile's Skills, the Company's shared Skills, its caches, its memories, its
+# settings, or a credential file the sync would carry), and nothing an Agent writes there comes back. An Agent counts the
+# files it finds there and writes the paths a sync would map; the job restarts the Engine to tear the session down and
+# finds none of it on the Engine or in the sandbox, and the Run itself shows an Agent still works.
 engine_change() {
-  docker exec "$engine_id" sh -c 'for folder in /opt/data/skills /opt/data/profiles/*/skills; do [ -d "$folder" ] || continue; grep -rl -- "EDIT-$1" "$folder" 2> /dev/null; find "$folder" -name "planted-$1.md" 2> /dev/null; done; true' sh "$1"
+  docker exec "$engine_id" sh -c 'for folder in /opt/data/skills /opt/data/memories /opt/data/profiles/*/skills /opt/data/profiles/*/memories; do
+    [ -d "$folder" ] || continue
+    grep -rl -- "EDIT-$1" "$folder" 2> /dev/null
+  done
+  for file in /opt/data/config.yaml /opt/data/profiles/*/config.yaml; do
+    [ -f "$file" ] || continue
+    grep -l -- "EDIT-$1" "$file" 2> /dev/null
+  done; true' sh "$1"
 }
+# A credential file the sync would copy into the sandbox: the profile's config names it, and it sits in the profile's
+# home as a credential file of that profile does.
+credential_marker="credential-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+docker exec "$engine_id" sh -ec 'install -d -m 700 -o hermes -g hermes "/opt/data/profiles/$1/sandbox-check-credentials"
+  printf "CHECK-%s\n" "$2" > "/opt/data/profiles/$1/sandbox-check-credentials/credential.json"
+  chown hermes:hermes "/opt/data/profiles/$1/sandbox-check-credentials" "/opt/data/profiles/$1/sandbox-check-credentials/credential.json"' sh "$first" "$credential_marker" \
+  || fail 'write a credential file in the first profile'
 sync_marker="sandbox-sync-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 engine_node "$engine_key" - sandbox-sync "$sync_marker" < scripts/check-install-profiles.mjs | tee sandbox-sync.log \
-  || fail 'an Agent edits and plants a Skill in its sandbox home'
+  || fail 'an Agent works in its sandbox with the file sync off'
+grep -q '"uploaded":0' sandbox-sync.log || fail 'the Engine copied its files into the sandbox'
+if docker exec "$sandbox" test -e /home/pn/.hermes/sandbox-check-credentials/credential.json; then
+  fail 'a credential file of the Engine profile is in the sandbox'
+fi
 before_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills before the sandbox session ended"
 [[ -z $before_sync ]] || fail "an Agent's edit reached the Engine before its session ended: $before_sync"
-# The teardown's own log line says the cap did its work, so a stop that never reached it cannot pass for one that did.
-sync_back_skips() {
-  docker exec "$engine_id" sh -c "find /opt/data -name '*.log' -path '*logs*' | xargs grep -h 'skipping extraction' 2> /dev/null | wc -l" || echo 0
-}
-skips_before=$(sync_back_skips)
+# The Engine's own process tears the session down at a restart: a stop that never happened cannot pass for one that did.
+started_before=$(docker inspect -f '{{.State.StartedAt}}' "$engine_id")
 docker restart -t 60 "$engine_id" > /dev/null || fail 'restart the Engine to tear the sandbox session down'
 engine_healthy "$engine_id" 180 || fail 'the Engine is healthy after the sandbox session teardown'
-skips_after=$(sync_back_skips)
-[[ ${skips_after:-0} -gt ${skips_before:-0} ]] || fail 'the Engine did not run the sandbox session teardown'
+[[ $(docker inspect -f '{{.State.StartedAt}}' "$engine_id") != "$started_before" ]] || fail 'the Engine did not restart before its next command'
 after_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills after the sandbox session teardown"
 [[ -z $after_sync ]] || fail "what an Agent changed in the sandbox came back to the Engine: $after_sync"
+[[ $(docker exec "$engine_id" cat "/opt/data/profiles/$first/sandbox-check-credentials/credential.json") == "CHECK-$credential_marker" ]] \
+  || fail 'a credential file of the Engine profile changed with the sandbox session'
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.
