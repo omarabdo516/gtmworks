@@ -233,11 +233,17 @@ test('a Company-wide write sends every profile\'s write before the first one ans
   profileOn(fake,space);
   const {db}=database();
   const base=driver(fake);
-  let open=0, most=0;
-  const slow={...base,write:async(target,config)=>{ open++; most=Math.max(most,open); await new Promise(done=>setTimeout(done,50)); try { return await base.write(target,config); } finally { open--; } }};
-  const changed=await changeCompanySetting(db,{company,setting:'memory.memory_char_limit',value:2400,hermes:{address:fake.address,key:fake.settings.key},driver:slow});
-  assert.equal(changed.state,'written',JSON.stringify(changed));
   const profiles=new Set(rowsByCompany[company].map(row=>row.profile)).size+1;
-  assert.equal(most,profiles,'every Agent profile and the shared space are written at the same time');
+  // Every write waits at one gate that opens when all of them have arrived; writes sent one after another would leave
+  // only the first there, so the gate also opens after two seconds and the count says how many had arrived.
+  let entered=0, arrived=0, open;
+  const gate=new Promise(done=>{ open=()=>{ arrived=arrived||entered; done(); }; });
+  const timer=setTimeout(()=>open(),2000);
+  const gated={...base,write:async(target,config)=>{ if(++entered===profiles) open(); await gate; return base.write(target,config); }};
+  try {
+   const changed=await changeCompanySetting(db,{company,setting:'memory.memory_char_limit',value:2400,hermes:{address:fake.address,key:fake.settings.key},driver:gated});
+   assert.equal(changed.state,'written',JSON.stringify(changed));
+  } finally { clearTimeout(timer); open(); }
+  assert.equal(arrived,profiles,'every Agent profile and the shared space are written at the same time');
  } finally { await fake.close(); }
 });
