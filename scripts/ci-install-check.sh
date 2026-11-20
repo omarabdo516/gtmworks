@@ -982,7 +982,7 @@ RUN echo 'create table gtmworks_install.broken_release_probe(id integer);' > /ap
  && echo 'process.exit(1);' > /app/server.js
 DOCKERFILE
 broken=$(publish 0.0.2-ci) || fail 'push the broken release image'
-(cd "$workspace" && node scripts/release-assets.mjs "$broken" "$releases/v0.0.2") || fail 'the broken release files'
+(cd "$workspace" && node scripts/release-assets.mjs "$broken" "$releases/v0.0.2" "$sandbox") || fail 'the broken release files'
 echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"},{"tag_name":"v0.0.2"}]' > "$releases/releases.json"
 [[ $(owner request) == requested ]] || fail "the Owner's request for the broken release"
 if gtmworks updater; then cat .gtmworks-updater.log; fail 'the update to the broken release must fail'; fi
@@ -999,7 +999,7 @@ FROM localhost:5000/gtmworks:0.0.1-ci
 RUN echo 'create table gtmworks_install.auto_update_probe(id integer);' > /app/install/supabase/migrations/99999999999999_auto_update_probe.sql
 DOCKERFILE
 later=$(publish 0.0.3-ci) || fail 'push the next good release image'
-(cd "$workspace" && node scripts/release-assets.mjs "$later" "$releases/v0.0.3") || fail 'the next good release files'
+(cd "$workspace" && node scripts/release-assets.mjs "$later" "$releases/v0.0.3" "$sandbox") || fail 'the next good release files'
 echo '[{"tag_name":"v0.0.0"},{"tag_name":"v0.0.1"},{"tag_name":"v0.0.2"},{"tag_name":"v0.0.3"}]' > "$releases/releases.json"
 gtmworks auto-update on || fail 'gtmworks auto-update on'
 db -c "update public.install_updates set auto_checked_at=now() - interval '2 hours'" > /dev/null || fail 'the hour since the last check'
