@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { agentLevels, levelToolsets, alwaysOff, riskyToolsets, levelConfig, childToolsets, forbiddenOf, riskyOf, companyProfile, toolPolicy } from '../lib/agent-levels.mjs';
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
-import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn } from '../lib/hermes.mjs';
+import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, removeProviderKey } from '../lib/hermes.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
@@ -421,8 +421,12 @@ test('a Claude subscription in the root profile\'s credential pool is the Compan
   const both=await read();
   assert.deepEqual(states(both),{'openai-codex':'notConnected',anthropic:'connected'});
   assert.doesNotMatch(JSON.stringify(both),new RegExp(`${token.slice(-4)}|${key.slice(-4)}|hermes_pkce|env_var`),'no credential, preview or source leaves the read');
-  // Removing the key leaves the subscription.
-  for(const name of [companyProfile(two),agentProfile]) fake.settings.profiles.get(name).env={};
+  // Removing the key, as Settings removes it, leaves the subscription.
+  const space=`cs-${companyProfile(two).slice(3)}`;
+  fake.settings.profiles.set(space,{soul:'',provider:'auto',model:'',key:'test-only-key',config:{},credentials:{},env:{ANTHROPIC_API_KEY:key}});
+  assert.equal((await removeProviderKey(install(fake),{space,profiles:[companyProfile(two),agentProfile],provider:'anthropic'})).state,'removed');
+  for(const name of [space,companyProfile(two),agentProfile]) assert.equal(fake.settings.profiles.get(name).env.ANTHROPIC_API_KEY,undefined,name);
+  assert.ok(fake.settings.defaultPool.anthropic);
   assert.equal((await read()).signIns.anthropic.state,'connected');
   // Disconnect removes the subscription and leaves the key: a profile whose Claude is its key has nothing to remove.
   for(const name of [companyProfile(two),agentProfile]) fake.settings.profiles.get(name).env={ANTHROPIC_API_KEY:key};

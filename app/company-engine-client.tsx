@@ -59,7 +59,8 @@ const stateText:Record<SubscriptionState,string>={connected:'signInConnected',ma
 const quoted=(value:string)=>`"${value.replace(/[\\"$`]/g,char=>`\\${char}`)}"`;
 // `keyed` are the providers the Company has a key for. Claude's subscription and an Anthropic key share one pool in the
 // Engine, which always puts the signed-in subscription first and a key from the settings after it (v0.23.0
-// agent/credential_pool.py _normalize_pool_priorities), so with both the row says which is used first (#438).
+// agent/credential_pool.py _normalize_pool_priorities) and, with no pool strategy set (gtmworks owns that setting and
+// sets none, lib/engine-settings.mjs), takes them in that order (fill_first), so with both the row says which is first (#438).
 export function CompanySubscriptions({company,companyName,owner,available,signIns,noEngine=false,keyed=[]}:{company:string,companyName:string,owner:boolean,available:boolean,signIns:CompanySignIns['signIns'],noEngine?:boolean,keyed?:string[]}) {
  const {t}=useI18n(); const router=useRouter();
  const [started,setStarted]=useState<Started|null>(null);
