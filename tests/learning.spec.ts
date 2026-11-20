@@ -83,6 +83,11 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  await expect(group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/})).toHaveAttribute('aria-checked','true');
  await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Learns on its own');
  // The Owner gives the whole Company "Asks first": both write approvals, on every Agent profile and the shared space.
+ // A radio does nothing until React hydrated it: wait for its handlers, as for the rules below.
+ await page.waitForFunction(()=>{
+  const radio=document.getElementById('ln-co-ask');
+  return !!radio&&Object.getOwnPropertyNames(radio).some(name=>name.startsWith('__reactProps$'));
+ });
  await group(page,'For the whole company').getByRole('radio',{name:/^Asks first/}).click();
  for(const name of [profile,writerProfile,space]) await wrote(name,true);
  await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','true',reread);
