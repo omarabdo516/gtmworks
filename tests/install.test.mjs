@@ -373,12 +373,12 @@ test('the install job backs up and restores every Company Engine, refuses an inc
  assert.ok(early<secondCompany,'the one-Engine archive is made before the second Company is added');
  for(const text of [
   "sh scripts/install.sh backup || fail 'backup before the Engines are proven'",
-  'first_folder=$(ls -d "$before_dir"/engines/*/ 2> /dev/null | head -n 1)',
-  'mkdir -p "$before_dir/opt"',
-  'mv "${first_folder%/}" "$before_dir/opt/data"',
-  "printf 'HERMES_API_KEY=%s\\n' \"$before_engines_key\" >> \"$before_dir/.env.install\"",
-  'rm -rf "$before_dir/engines" "$before_dir/.engines"',
-  'tar -czf "$RUNNER_TEMP/before-engines.tgz" .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage',
+  // Reshaped in a root container, so the database files keep their owners and modes as a real backup's do.
+  'tar -xzpf "/install/$1" --numeric-owner',
+  'mkdir -p opt && mv "${first%/}" opt/data && rm -rf engines .engines',
+  'printf "HERMES_API_KEY=%s\\n" "$KEY" >> .env.install',
+  'tar -czf /install/before-engines.tgz --numeric-owner .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage',
+  'mv before-engines.tgz "$RUNNER_TEMP/before-engines.tgz"',
   "fail \"the $service starts with no Engine key in its environment\"",
  ]) assert.ok(run.includes(text),text);
  // The two-Company proof starts from the profiles the job has just proven on two Engines, writes a code word into each

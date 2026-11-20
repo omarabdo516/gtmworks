@@ -309,22 +309,22 @@ complete_setup || fail 'first run before the backup'
 sh scripts/install.sh backup || fail 'backup before the Engines are proven'
 before_engines=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
 [[ -f $before_engines ]] || fail 'the one-Engine backup archive'
-before_dir="$RUNNER_TEMP/before-engines"
-rm -rf "$before_dir" && mkdir -p "$before_dir"
-tar -xzf "$before_engines" -C "$before_dir" || fail 'read the one-Engine backup'
 before_engines_key=$(first_engine_key)
 [[ $before_engines_key =~ ^[a-f0-9]{64}$ ]] || fail 'the first Engine key before the Engines are proven'
-# The archive names the Engine folder it holds; the one-Engine layout puts that data at opt/data. The move's
-# destination folder has to exist for mv, and a listing says what the archive held when it does not.
-first_folder=$(ls -d "$before_dir"/engines/*/ 2> /dev/null | head -n 1)
-if [[ -z $first_folder ]]; then tar -tzf "$before_engines" | sed -n '1,40p'; fail 'the one-Engine archive holds the Engine data'; fi
-mkdir -p "$before_dir/opt"
-mv "${first_folder%/}" "$before_dir/opt/data" || fail 'put the first Engine at opt/data'
-rm -rf "$before_dir/engines" "$before_dir/.engines"
-if [ -n "$(tail -c 1 "$before_dir/.env.install")" ]; then echo >> "$before_dir/.env.install"; fi
-printf 'HERMES_API_KEY=%s\n' "$before_engines_key" >> "$before_dir/.env.install"
-( cd "$before_dir" && tar -czf "$RUNNER_TEMP/before-engines.tgz" .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage ) \
-  || fail 'make the one-Engine archive'
+# Reshaped in a root container, as a backup is made, so the database files keep their owners and modes: the archive names
+# the Engine folder it holds, and the one-Engine layout puts that data at opt/data. The Docker machine mounts only this
+# checkout, so the archive is written here and then moved beside the others.
+rm -f before-engines.tgz
+docker run --rm -v "$PWD:/install" -e KEY="$before_engines_key" alpine:3.21 sh -ec '
+  mkdir /work && cd /work && tar -xzpf "/install/$1" --numeric-owner
+  first=$(ls -d engines/*/ 2> /dev/null | head -n 1)
+  if [ -z "$first" ]; then tar -tzf "/install/$1" | sed -n "1,40p"; echo "no Engine data in the archive" >&2; exit 3; fi
+  mkdir -p opt && mv "${first%/}" opt/data && rm -rf engines .engines
+  if [ -n "$(tail -c 1 .env.install)" ]; then echo >> .env.install; fi
+  printf "HERMES_API_KEY=%s\n" "$KEY" >> .env.install
+  tar -czf /install/before-engines.tgz --numeric-owner .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage
+' sh "$before_engines" || fail 'make the one-Engine archive'
+mv before-engines.tgz "$RUNNER_TEMP/before-engines.tgz" || fail 'keep the one-Engine archive'
 cp .env.install .env.install.before
 # The migration history the fresh install must bring back with the archive.
 db -c 'select name from gtmworks_install.schema_migrations order by name' > before || fail 'read the migrations before the backup'
@@ -595,7 +595,16 @@ for path in /api/health /sign-in; do
   status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request after the refusal"
   [[ $status == 200 ]] || fail "$path returned HTTP $status after the refused update (expected 200)"
 done
-db -c "delete from public.companies where id='00000000-0000-4000-8000-000000000239';" || fail 'remove the probe Company'
+# The probe Company goes with every row the previous release made for it (its board stages and the like), in one
+# transaction and with foreign keys held off, so no row is left naming a Company that is gone.
+db -c "begin; set local session_replication_role=replica;
+  do \$\$ declare t record; begin
+   for t in select c.table_name from information_schema.columns c join information_schema.tables b
+     on b.table_schema=c.table_schema and b.table_name=c.table_name and b.table_type='BASE TABLE'
+     where c.table_schema='public' and c.column_name='company_id' and c.table_name<>'companies' loop
+    execute format('delete from public.%I where company_id=%L',t.table_name,'00000000-0000-4000-8000-000000000239');
+   end loop; end \$\$;
+  delete from public.companies where id='00000000-0000-4000-8000-000000000239'; commit;" || fail 'remove the probe Company'
 [[ $(db -c 'select count(*) from public.companies') == 1 ]] || fail 'the previous release install has its one Company again'
 # The update to this release: it applies the migrations (including the Engine records), adopts the Engine the
 # previous release ran, and leaves the Company answering from its record.

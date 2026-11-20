@@ -195,6 +195,9 @@ case "${1:-check}" in
   # The proof is Docker only, so without a daemon say what is missing in one line, before a machine is started.
   shift
   docker info > /dev/null 2>&1 || { echo 'the install proof needs Docker: docker info cannot reach a daemon' >&2; exit 1; }
+  # The update area updates an install from HEAD's source, which an update downloads from GitHub: HEAD must be pushed to some branch.
+  git fetch -q origin "$(git rev-parse HEAD)" 2> /dev/null \
+    || { echo "Push HEAD to a branch on GitHub first: the install job downloads it ($(git rev-parse --short HEAD))." >&2; exit 2; }
   work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-lane; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
   git worktree add -q --detach "$work/src" HEAD
   trap 'docker rm -fv "$dind" > /dev/null 2>&1 || true; git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true; rm -rf "$work" 2> /dev/null || true' EXIT
@@ -214,7 +217,9 @@ case "${1:-check}" in
     grep -o -h -E '(alpine:[0-9.]+|node:[0-9a-z.-]+|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
   for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
   DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null
-  ln -s "$here/node_modules" "$work/src/node_modules"
+  # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it
+  # (CI installs them there with npm ci).
+  cp -al "$(readlink -f "$here/node_modules")" "$work/src/node_modules"
   cd "$work/src"
   # Under rootless Docker this machine's root is the invoking user and its `--user $(id -u)` is another one, unlike a CI
   # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
