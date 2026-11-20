@@ -235,7 +235,7 @@ done
 # The sandbox takes its own Engine's key and no password (#393): the private half is only among that Engine's files, in
 # its data volume, and the sandbox holds no private key at all.
 second_volume=$(engine_value "$second_folder" VOLUME)
-public_of() { docker run --rm --entrypoint sh -v "$1:/data:ro" "$sandbox_image" -ec 'ssh-keygen -y -f /data/ssh/id_ed25519'; }
+public_of() { docker run --rm --user 0 --entrypoint sh -v "$1:/data:ro" "$sandbox_image" -ec 'ssh-keygen -y -f /data/ssh/id_ed25519'; }
 first_public=$(public_of "$(engine_value .engines/first VOLUME)") || fail "the first Engine's sandbox key"
 second_public=$(public_of "$second_volume") || fail "the second Engine's sandbox key"
 [[ -n $first_public && -n $second_public && $first_public != "$second_public" ]] || fail 'each Engine has a key pair of its own'
