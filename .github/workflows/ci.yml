@@ -377,9 +377,8 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
-    # 3.7 min measured on run 44636876755 for the app image alone (#410); with the work sandbox image (#392) 8 min is an
-    # estimate until a full run measures it, and 12 min is 1.5 times that.
-    timeout-minutes: 12
+    # 3.4 min measured on run 44726291691 with the work sandbox image (#392): 6 min is 1.5 times it, rounded up (#410).
+    timeout-minutes: 6
     permissions:
       contents: read
     steps:
@@ -574,7 +573,7 @@ jobs:
       fail-fast: false
       matrix:
         area: [first-install, companies, agents, backup, proxy, rollback, update, engines-update, one-line]
-    # 9.5 min measured for its slowest area, backup, on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
+    # 10.7 min measured for its slowest area, update, on run 44726291691 (#389): 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:
       contents: read
