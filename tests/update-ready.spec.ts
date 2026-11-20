@@ -12,7 +12,7 @@ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','qu
 const arrived={issue:999999,date:'2026-11-21',en:{title:'Faster boards',body:'The board opens at once, however many cards it holds.'},ar:{title:'بوردات أسرع',body:'البورد بيفتح على طول، مهما كان فيه كروت.'}};
 const fakeSource=()=>new Promise<Server>(resolve=>{
  const server=createServer((request,response)=>{
-  const body=request.url==='/releases?per_page=100'?[{tag_name:'v9.9.9',published_at:new Date(Date.now()-2*86400000).toISOString()}]
+  const body=request.url==='/releases?per_page=100&page=1'?[{tag_name:'v9.9.9',published_at:new Date(Date.now()-2*86400000).toISOString()}]
    :request.url==='/v9.9.9/lib/whats-new.json'?[arrived,...whatsNew]:null;
   response.writeHead(body?200:404,{'content-type':'application/json'}).end(JSON.stringify(body));
  });

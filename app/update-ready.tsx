@@ -20,11 +20,11 @@ const seenList=(person:string)=>{ try { const list=JSON.parse(read(seenKey(perso
 // A release is named by its tag; a main build by what it brings, so each newer merge with an entry is a newer version.
 const keyOf=(update:Update)=>update.version==='main'?`main:${update.entries.map(item=>item.issue).join(',')}`:update.version;
 
-function Lines({entries}:{entries:Entry[]}) {
+function Lines({entries,limit=shownLines}:{entries:Entry[],limit?:number}) {
  const {t,language}=useI18n();
- const rest=entries.length-shownLines;
+ const rest=entries.length-limit;
  return <ul className="upd-lines">
-  {entries.slice(0,shownLines).map(item=><li key={item.issue}><b>{item[language].title}</b> {item[language].body}</li>)}
+  {entries.slice(0,limit).map(item=><li key={item.issue}><b>{item[language].title}</b> {item[language].body}</li>)}
   {!entries.length&&<li>{t('updateReadyFixes')}</li>}
   {rest>0&&<li className="upd-more">{rest===1?t('updateReadyMoreOne'):t('updateReadyMore',rest)}</li>}
  </ul>;
@@ -84,7 +84,8 @@ export default function UpdateReady({company,person,owner}:{company:string,perso
      <div className="modal__titles"><DialogTitle className="modal__title">{t('whatsNew')}</DialogTitle>
       <DialogDescription className="modal__sub">{t('whatsNewSub')}</DialogDescription></div>
     </header>
-    <div className="upd-body"><Lines entries={arrived}/></div>
+    {/* Every entry that arrived: it is recorded as seen, so none is left to a later visit. */}
+    <div className="upd-body"><Lines entries={arrived} limit={arrived.length}/></div>
     <footer className="modal__foot upd-foot"><button type="button" className="btn btn--primary" onClick={()=>setArrived([])}>{t('whatsNewDone')}</button></footer>
    </DialogContent>
   </Dialog>}

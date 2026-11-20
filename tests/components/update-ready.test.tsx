@@ -127,3 +127,13 @@ test('What\'s new seen by one Owner is still shown to another Owner in the same 
  const screen = await shown(true);
  await expect.element(screen.getByRole('dialog', { name: 'What’s new' })).toBeVisible();
 });
+
+test('What\'s new lists every entry that arrived, none left counted', async () => {
+ localStorage.setItem(seenKey(person), JSON.stringify([]));
+ answering({ joined: '2026-01-01T00:00:00Z', update: null });
+ const screen = await shown(true);
+ const dialog = screen.getByRole('dialog', { name: 'What’s new' });
+ await expect.element(dialog).toBeVisible();
+ expect(dialog.element().querySelectorAll('.upd-lines li')).toHaveLength(whatsNew.length);
+ expect(dialog.element().textContent).not.toMatch(/more improvement/);
+});

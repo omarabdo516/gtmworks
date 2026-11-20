@@ -1,5 +1,23 @@
 [
  {
+  "issue": 442,
+  "date": "2026-11-20",
+  "en": { "title": "Update ready", "body": "When a newer gtmworks is out, Owners see it at the foot of the sidebar with what it brings and the one command that installs it." },
+  "ar": { "title": "في تحديث جاهز", "body": "لما تنزل نسخة أحدث من gtmworks، أصحاب الشركة بيشوفوها تحت في القايمة الجانبية، باللي جاية بيه والأمر الوحيد اللي بيثبّتها." }
+ },
+ {
+  "issue": 438,
+  "date": "2026-11-20",
+  "en": { "title": "Your Claude subscription shows connected", "body": "A Claude subscription you signed in reads Connected, and an API key is shown as a key paid per use, never as a subscription." },
+  "ar": { "title": "اشتراك Claude بيبان متوصل", "body": "اشتراك Claude اللي سجّلت بيه بيبان متوصل، ومفتاح الـ API بيبان مفتاح بتدفع على قد استخدامك، مش اشتراك." }
+ },
+ {
+  "issue": 434,
+  "date": "2026-11-20",
+  "en": { "title": "Lead runs your team", "body": "The main Agent manages the team, hands work to the right Agent, and opens a new Company's first conversation itself." },
+  "ar": { "title": "الوكيل الرئيسي بيدير الفريق", "body": "الوكيل الرئيسي بيدير الفريق، وبيدّي كل شغلانة للوكيل المناسب، وبيبدأ هو أول محادثة في الشركة الجديدة." }
+ },
+ {
   "issue": 430,
   "date": "2026-11-20",
   "en": { "title": "Dictate in Egyptian Arabic", "body": "An Owner picks who turns speech into text in Settings, with Deepgram Nova-3 first for Egyptian Arabic, and every Agent listens with it." },
