@@ -377,8 +377,10 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
-    # 3.4 min measured on run 44726291691 with the work sandbox image (#392): 6 min is 1.5 times it, rounded up (#410).
-    timeout-minutes: 6
+    # 3.4 min measured on run 44726291691 with a warm work-sandbox layer cache (#392), and 6.5 min on run 44735657345
+    # when that cache was cold and the whole sandbox image was exported to it (#393): 10 min is 1.5 times the slower one,
+    # rounded up (#410).
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
