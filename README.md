@@ -348,7 +348,7 @@ nor re-tags its image `X.Y.Z`; it only runs the promotion of `stable` and
 takes the migrations and install files from it; nothing is built on the server.
 `stable` and `latest` move only after a release's install passes on its exact image,
 and always to the highest published release, so an older or hotfix tag never moves
-them back; `main` follows the head of main once its CI passed. A release install
+them back; `main` follows the newest commit of main whose CI passed, never an older one. A release install
 updates when both files are replaced with the next release's and `sh install.sh
 update` runs; it applies the new migrations, then recreates every service whose
 image changed. Back up before replacing them: backup and restore refuse to run with
