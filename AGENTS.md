@@ -5,7 +5,7 @@ English-first UI with a complete Egyptian Arabic translation worded as in the ap
 
 ## How work is done
 
-Work arrives as a spec issue with its tickets as sub-issues; one thread runs `/implement-spec` on branch `spec/<slug>`. The spec's one pull request closes the spec and every ticket it built, one `Closes #<n>` per line; a ticket left unbuilt is named in the body and stays open. The spec and its tickets are the scope: open an issue for anything else you find. CodeRabbit and the `code-review` skill review the pull request; every review thread is fixed or answered.
+Work arrives as a spec issue with its tickets as sub-issues; one thread runs `/implement-spec` on branch `spec/<slug>`. The spec's one pull request closes the spec and every ticket it built, one `Closes #<n>` per line; a ticket left unbuilt is named in the body and stays open. The spec and its tickets are the scope: open an issue for anything else you find. A change a person can see adds its entry to `lib/whats-new.json` in the same pull request: its issue, the merge date, and a bold title with one sentence in English and Egyptian Arabic, newest first; it is what an Owner reads in Update ready and What's new (#442). CodeRabbit and the `code-review` skill review the pull request; every review thread is fixed or answered.
 
 Architecture (Omar, 2026-11-19): a design choice is judged by whether it is the right shape for the product, not the quickest fix. A wrong old shape inside the spec's scope is replaced, never patched over; outside the scope, open an issue.
 

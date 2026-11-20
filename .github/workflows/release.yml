@@ -166,6 +166,8 @@ jobs:
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           # The commit the image is built from, which the next main release reads back (#448).
           annotations: index:org.opencontainers.image.revision=${{ needs.provenance.outputs.sha }}
+          # The image knows its own version (X.Y.Z or main) and so its channel, for Update ready (#442).
+          build-args: GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}
           cache-from: type=gha,scope=release
           cache-to: type=gha,mode=max,scope=release
       - name: both platform digests pushed

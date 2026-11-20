@@ -44,3 +44,16 @@ test('a person with no place in the Company is told nothing, and a missing Owner
  assert.match(text,/"Ask the Owner for it\?"/);
  assert.match(text,/«أطلبه من المالك؟»/);
 });
+
+// #434: in the Conversation Lead opened, its Run is given the opening it wrote, and once the Owner has answered it Lead
+// proposes the first two or three Agents, each with its name and job, with the Owner's "Make it?" for each in turn.
+test('the Run of the Conversation Lead opened carries its opening and the first Agents to propose; any other carries neither',()=>{
+ const opening='Hi Omar, I manage the team.\n\n1. What does RS Learning sell?';
+ const text=leadInstructions({role:'owner',owner:'Omar',agents:[],opening});
+ assert.ok(text.includes(`You opened this conversation, before they wrote anything, with this message:\n\n${opening}\n\n`));
+ assert.match(text,/propose the first two or three agents to make for this company[^.]*, each with its name and its job/);
+ assert.match(text,/"Make it\?" with the choices "Make it" and "Not now"/);
+ for(const brief of [{role:'owner',owner:'Omar',agents:[],opening:null},{role:'owner',owner:'Omar',agents:[]}]) assert.doesNotMatch(leadInstructions(brief),/You opened this conversation/);
+ // Only the Owner the opening was written for is asked to make Agents from it.
+ assert.doesNotMatch(leadInstructions({role:'manager',owner:'Omar',agents:[],opening}),/You opened this conversation/);
+});
