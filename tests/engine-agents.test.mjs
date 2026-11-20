@@ -202,11 +202,11 @@ test('providing an Agent its own profile makes it with its soul, the key and the
   const profile=fake.settings.profiles.get(own);
   assert.equal(profile.soul,'Run the Meta ads.');
   assert.equal(profile.key,'test-only-key');
-  assert.deepEqual(profile.config,toolConfig());
+  assert.deepEqual(profile.config,toolConfig({profile:own}));
   assert.deepEqual(fake.settings.managementRequests.map(({method,path,body})=>({method,path,body})),[
    {method:'POST',path:'/api/profiles',body:{name:own,soul:'Run the Meta ads.'}},
    {method:'PUT',path:`/api/env?profile=${own}`,body:{key:'API_SERVER_KEY',value:'test-only-key'}},
-   {method:'PUT',path:`/api/config?profile=${own}`,body:{config:toolConfig()}},
+   {method:'PUT',path:`/api/config?profile=${own}`,body:{config:toolConfig({profile:own})}},
    {method:'GET',path:`/api/model/options?profile=${own}`,body:null},
   ]);
   assert.deepEqual(fake.settings.requests.map(request=>request.path),[`/p/${own}/v1/toolsets`]);

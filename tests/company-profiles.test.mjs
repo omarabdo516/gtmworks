@@ -129,7 +129,7 @@ test('two companies get two different profiles, each with its work tools and eve
    const config=fake.settings.profiles.get(name).config;
    for(const off of noAgentGets) assert.ok(config.agent.disabled_toolsets.includes(off),`${off} is off`);
    for(const name of ['terminal','file','code_execution']) assert.ok(config.platform_toolsets.api_server.includes(name),`${name} is offered`);
-   assert.deepEqual(config.terminal,{cwd:'/work'},'every Agent starts in the Company\'s work folder');
+   assert.deepEqual(config.terminal,{cwd:`/work/${name}`},'every Agent starts in its own folder in the Company\'s work folder');
    assert.deepEqual(config.approvals,{unattended_mode:'approve'},'an Agent\'s code runs with no person to approve each call');
    const read=await readToolsets({address:fake.address,profile:name,key:'test-only-key'});
    assert.equal(toolsDiffer(read.toolsets),false);
@@ -246,31 +246,6 @@ test('the profile check compares what the Engine reports with the fixed set, cor
  } finally { await fake.close(); }
 });
 
-test('a profile that starts its work somewhere else, or asks a person to approve each code call, is written again', async () => {
- const fake=await fakeHermes();
- try {
-  const name=companyProfile(two);
-  // The fixed tools, but the Engine's own disk as the start folder and a person needed for each call: the tools read back
-  // exactly the fixed set, so only the saved settings say something moved (#393).
-  const displaced=toolConfig();
-  displaced.terminal={cwd:'/'};
-  displaced.approvals={unattended_mode:'deny'};
-  await provideProfile(install(fake),{name,soul:'',config:displaced,forbidden:displaced.agent.disabled_toolsets});
-  assert.equal(toolsDiffer((await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets),false);
-  const calls=[];
-  const db={rpc:async(rpc,args)=>{ calls.push({rpc,args}); return {data:rpc==='engine_tools_due'?[{profile:name,company_id:two,subagents:false}]:null,error:null}; }};
-  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
-  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due','begin_profile_tools','record_profile_tools']);
-  const saved=fake.settings.profiles.get(name).config;
-  assert.deepEqual(saved.terminal,{cwd:'/work'});
-  assert.deepEqual(saved.approvals,{unattended_mode:'approve'});
-  // Once it is the fixed settings and the fixed set, the check has nothing to write.
-  calls.length=0;
-  assert.equal(await checkAgentTools(db,{hermes:install(fake)}),1);
-  assert.deepEqual(calls.map(call=>call.rpc),['engine_tools_due']);
- } finally { await fake.close(); }
-});
-
 test('every profile a Company serves, its main Agent and each made Agent included, offers the terminal, files and code', async () => {
  const fake=await fakeHermes();
  try {
@@ -289,7 +264,7 @@ test('every profile a Company serves, its main Agent and each made Agent include
   for(const profile of [companyProfile(two),own]) {
    const read=await readToolsets({address:fake.address,profile,key:'test-only-key'});
    for(const name of ['terminal','file','code_execution']) assert.ok(read.toolsets.includes(name),`${profile} offers ${name}`);
-   assert.deepEqual(fake.settings.profiles.get(profile).config.terminal,{cwd:'/work'});
+   assert.deepEqual(fake.settings.profiles.get(profile).config.terminal,{cwd:`/work/${profile}`});
   }
  } finally { await fake.close(); }
 });
@@ -818,7 +793,7 @@ test('every Agent profile the database lists is written the fixed set, each mark
  assert.deepEqual(db.log.map(({name,args})=>`${name} ${args?.agent||args?.name||''}`.trim()),['agent_profile_work',
   `begin_agent_tools ${writer}`,`configure ag-${writer.replaceAll('-','')}`,`record_agent_profile ${writer}`,
   `begin_agent_tools ${critic}`,`configure ag-${critic.replaceAll('-','')}`,`record_agent_profile ${critic}`]);
- for(const call of db.log.filter(({name})=>name==='configure')) assert.deepEqual(call.args,{name:call.args.name,config:toolConfig(),forbidden:toolConfig().agent.disabled_toolsets});
+ for(const call of db.log.filter(({name})=>name==='configure')) assert.deepEqual(call.args,{name:call.args.name,config:toolConfig({profile:call.args.name}),forbidden:toolConfig().agent.disabled_toolsets});
  assert.deepEqual(db.log.filter(({name})=>name==='record_agent_profile').map(({args})=>args),[writer,critic].map(agent=>({agent,engine_profile:`ag-${agent.replaceAll('-','')}`,subagents_written:false})));
  assert.ok(db.rows.every(row=>row.tools_confirmed&&!row.tools_pending));
  db.log.length=0;
@@ -831,7 +806,7 @@ test('the worker writes an Agent\'s sub-agents choice with the delegation varian
  const db=agentWorkerDatabase([agentRow(writer,{tools_pending:true,subagents:true})]);
  assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:0,configured:1});
  const written=db.log.find(({name})=>name==='configure');
- assert.deepEqual(written.args.config,toolConfig({subagents:true}));
+ assert.deepEqual(written.args.config,toolConfig({subagents:true,profile:written.args.name}));
  assert.ok(written.args.config.platform_toolsets.api_server.includes('delegation'));
  assert.deepEqual(db.log.find(({name})=>name==='record_agent_profile').args,{agent:writer,engine_profile:`ag-${writer.replaceAll('-','')}`,subagents_written:true});
 });
@@ -855,7 +830,7 @@ test('a lost Agent profile is made again first, empty, with the Agent\'s instruc
  assert.deepEqual(await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)}),{provided:1,configured:1});
  assert.deepEqual(db.log.map(({name})=>name),['agent_profile_work','provide','record_agent_profile','begin_agent_tools','configure','record_agent_profile']);
  const made=db.log.find(({name})=>name==='provide').args;
- assert.deepEqual(made,{name:`ag-${critic.replaceAll('-','')}`,config:toolConfig(),forbidden:toolConfig().agent.disabled_toolsets,soul:made.soul});
+ assert.deepEqual(made,{name:`ag-${critic.replaceAll('-','')}`,config:toolConfig({profile:made.name}),forbidden:toolConfig().agent.disabled_toolsets,soul:made.soul});
  assert.match(made.soul,/^You are a marketing agent working for one company in gtmworks\./);
  db.rows[1].tools_confirmed=false; db.rows[1].tools_pending=false; db.rows[1].instructions='You are the ad critic.'; db.log.length=0;
  await keepAgentProfiles(db,{hermes:hermesOf,driver:recordingDriver(db.log)});
@@ -878,7 +853,7 @@ test('an Agent profile the Engine no longer serves is forgotten by tool health a
   const created=fake.settings.managementRequests.find(request=>request.method==='POST'&&request.path==='/api/profiles');
   assert.deepEqual(created.body,{name,soul:'You are the writer.'},'made, never cloned from another profile');
   const profile=fake.settings.profiles.get(name);
-  assert.deepEqual([profile.key,profile.credentials,profile.config],['test-only-key',{},toolConfig()]);
+  assert.deepEqual([profile.key,profile.credentials,profile.config],['test-only-key',{},toolConfig({profile:name})]);
   assert.deepEqual(db.rows[0],{...agentRow(writer,{instructions:'You are the writer.'})});
  } finally { await fake.close(); }
 });

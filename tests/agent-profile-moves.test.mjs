@@ -98,7 +98,7 @@ test('on the Engine server a move asks about the Agent\'s own profile only: noth
   assert.deepEqual(fake.settings.managementRequests.find(request=>request.method==='POST').body,{name:own(writer),soul:`You are ${writer}.`},'made, never cloned');
   assert.ok(requests.includes(`GET /api/model/options?profile=${own(writer)}`),'the Engine is asked whether the Agent\'s own profile can answer');
   assert.deepEqual(fake.settings.profiles.get(kept),before,'the keeper\'s profile is as it was');
-  assert.deepEqual(fake.settings.profiles.get(own(writer)).config,toolConfig());
+  assert.deepEqual(fake.settings.profiles.get(own(writer)).config,toolConfig({profile:own(writer)}));
  } finally { await fake.close(); }
 });
 

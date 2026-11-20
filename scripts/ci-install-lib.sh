@@ -53,6 +53,15 @@ engine_healthy() {
   done
   return 1
 }
+# Every TCP port one Engine listens on, read from inside its own container: /proc/net/tcp and tcp6 list a listening socket
+# as state 0A, with its port in hex after the last colon of the address (#393). The work-network check probes every one of
+# them on the Engine's work-network address, so a listener that moves to the wildcard address is caught on any port.
+engine_listen_ports() {
+  docker exec "$1" sh -ec 'cat /proc/net/tcp /proc/net/tcp6 2> /dev/null || cat /proc/net/tcp 2> /dev/null || true' | while read -r _ address _ state _; do
+    [ "${state:-}" = 0A ] || continue
+    printf '%d\n' "$((16#${address##*:}))"
+  done | sort -un | paste -sd, -
+}
 # The second Company on an Engine of its own, made by the command a person runs (#382): the caller names its failure and
 # where the output goes; an area running a release's own installer names that script instead.
 second_company() { sh "${1:-scripts/install.sh}" company add --name 'Second Company' --owner proxy-owner@example.com; }

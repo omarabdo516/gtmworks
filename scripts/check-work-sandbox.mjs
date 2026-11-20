@@ -15,6 +15,8 @@ import { workSandboxBase } from '../lib/work-sandbox-image.mjs';
 //   - the base image is the pinned one (the built image's layers start with the base's);
 //   - no private key, no authorized key and no token is in the image's files or its environment;
 //   - the only service that listens is the sshd the Engine's `ssh` backend needs, and it takes a key and no password;
+//   - a login the way the Engine opens one starts in the profile's own folder in the work folder, made before the
+//     Engine's command needs it (#393);
 //   - the image's size on disk is printed, for the README's Install section.
 // The install job calls this after it builds the image. Nothing of the image's is left behind, unless --keep is given.
 //   node scripts/check-work-sandbox.mjs --image <name:tag>
@@ -195,6 +197,16 @@ echo "secrets=$found"
   const password = inside(`ssh -p ${sshPort} -o PreferredAuthentications=password -o PubkeyAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${user}@127.0.0.1 true`, { allowFailure: true });
   if (password.status === 0 || !/Permission denied/.test(`${password.stderr}${password.stdout}`)) throw new Failed('sshd accepted something other than the key');
   say('ports', `${sshPort} (the Engine's sshd), key login works, password refused`);
+
+  // Criterion: an Agent's start folder is there before the Engine's first command needs it (#393). The Engine's ssh
+  // backend opens every command with `builtin cd -- <folder> || exit 126`, and a folder it does not have exits 126, so
+  // the login shell makes the profile's own folder in the work folder (sandbox/work-shell).
+  inside('cat > /tmp/check/start.sh', { input: `#!/bin/sh\nssh -i /tmp/check/id -p ${sshPort} -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR ${user}@127.0.0.1 "bash -c 'builtin cd -- /work/ag-check-profile || exit 126; pwd'"\n` });
+  const start = inside('sh /tmp/check/start.sh', { allowFailure: true });
+  if (start.status !== 0 || start.stdout.trim() !== '/work/ag-check-profile') {
+    throw new Failed(`an Agent's first command does not start in its own folder: ${(start.stderr || start.stdout).trim()}`);
+  }
+  say('start folder', '/work/ag-check-profile, made before the Engine\'s first command');
 
   // Criterion: the size on disk, printed for the README.
   const bytes = Number(docker(['image', 'inspect', '--format', '{{.Size}}', image]).stdout.trim());

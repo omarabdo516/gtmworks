@@ -30,11 +30,15 @@ for(const pair of (process.env.INSTALL_SERVICE_IPS||'').split(',').filter(Boolea
 console.log('The work network reaches none of the install services, by name or by address');
 
 // The Engine of this network is reachable over ssh (that is the point of the network), and its own listeners are not:
-// they bind the address the install network gave it, so its work-network address refuses both.
+// they bind the address the install network gave it, so its work-network address refuses every port it listens on. The
+// ports are read from inside the Engine by the install job (scripts/ci-install-lib.sh engine_listen_ports), so a listener
+// on a port the job does not name by hand is checked too.
 const engineAddress=process.env.ENGINE_WORK_IP||'';
 assert.ok(engineAddress,'the Engine work-network address');
-for(const port of [8642,9119]) assert.equal(await reachable(engineAddress,port),false,`the Engine answers on its work-network address at ${port}`);
-console.log('The Engine answers on its install-network address only, never on the work network');
+const enginePorts=(process.env.ENGINE_WORK_PORTS||'8642,9119').split(',').filter(Boolean).map(Number);
+assert.ok(enginePorts.length>0&&enginePorts.every(port=>Number.isInteger(port)&&port>0),'the ports the Engine listens on');
+for(const port of enginePorts) assert.equal(await reachable(engineAddress,port),false,`the Engine answers on its work-network address at ${port}`);
+console.log(`The Engine answers on its install-network address only, never on the work network (${enginePorts.join(', ')})`);
 
 // A network is one Company's: another Engine, named as a service would name a host, resolves nowhere here.
 for(const other of (process.env.OTHER_ENGINES||'').split(',').filter(Boolean)) {

@@ -15,23 +15,31 @@ test('every Agent gets the terminal, files and code in the work sandbox beside t
  assert.deepEqual([...everyAgentGets],['web','vision','image_gen','skills','todo','memory','session_search','clarify','cronjob',
   'terminal','file','code_execution']);
  for(const name of [...everyAgentGets,...noAgentGets]) assert.ok(pinnedToolsets.includes(name),name);
- const config=toolConfig();
+ const config=toolConfig({profile:'ag-a0000000000000000000000000000001'});
  assert.deepEqual(config.platform_toolsets.api_server,[...everyAgentGets]);
  for(const name of ['terminal','file','code_execution']) assert.ok(!config.agent.disabled_toolsets.includes(name),`${name} is offered`);
  assert.deepEqual(fixedToolsets(),[...everyAgentGets]);
- // Every Agent's commands start in the Company's one work folder, and its code runs with no person to approve each call.
+ // Every Agent's commands start in its own folder in the Company's work folder, and its code runs with no person to
+ // approve each call.
  assert.equal(workFolder,'/work');
- assert.deepEqual(config.terminal,{cwd:'/work'});
+ assert.deepEqual(config.terminal,{cwd:'/work/ag-a0000000000000000000000000000001'});
  assert.deepEqual(config.approvals,{unattended_mode:'approve'});
 });
 
-test('a profile is the fixed work folder and approval mode, or it is written again', () => {
- assert.equal(profileSettingsDiffer(toolConfig()),false);
- assert.equal(profileSettingsDiffer({terminal:{cwd:'/work'},approvals:{unattended_mode:'approve'}}),false);
- assert.equal(profileSettingsDiffer({terminal:{cwd:'/work/ag-other'},approvals:{unattended_mode:'approve'}}),true,'another start folder');
- assert.equal(profileSettingsDiffer({terminal:{cwd:'.'},approvals:{unattended_mode:'approve'}}),true,'the Engine\'s own disk');
- assert.equal(profileSettingsDiffer({terminal:{cwd:'/work'}}),true,'a profile that would ask a person to approve each call');
- assert.equal(profileSettingsDiffer({approvals:{unattended_mode:'deny'},terminal:{cwd:'/work'}}),true);
+test('a profile starts in its own folder in the work folder and needs no approval for code, or it is written again', () => {
+ const own='ag-a0000000000000000000000000000001';
+ const other='co-10000000000000000000000000000002';
+ // Two profiles, two start folders: each Agent's commands start in the folder named for its own profile (#393).
+ assert.deepEqual(toolConfig({profile:own}).terminal,{cwd:`/work/${own}`});
+ assert.deepEqual(toolConfig({profile:other}).terminal,{cwd:`/work/${other}`});
+ assert.notEqual(toolConfig({profile:own}).terminal.cwd,toolConfig({profile:other}).terminal.cwd);
+ assert.equal(profileSettingsDiffer(toolConfig({profile:own}),own),false);
+ assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${own}`},approvals:{unattended_mode:'approve'}},own),false);
+ assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${other}`},approvals:{unattended_mode:'approve'}},own),true,'another profile\'s folder');
+ assert.equal(profileSettingsDiffer({terminal:{cwd:'/work'},approvals:{unattended_mode:'approve'}},own),true,'the work folder itself');
+ assert.equal(profileSettingsDiffer({terminal:{cwd:'.'},approvals:{unattended_mode:'approve'}},own),true,'the Engine\'s own disk');
+ assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${own}`}},own),true,'a profile that would ask a person to approve each call');
+ assert.equal(profileSettingsDiffer({approvals:{unattended_mode:'deny'},terminal:{cwd:`/work/${own}`}},own),true);
 });
 
 test('no Agent gets a switch for browser, computer_use, speech, video, project, desktop, catalog, onboarding, kanban or connections', () => {
@@ -58,7 +66,8 @@ test('sub-agents stay the Owner\'s switch per Agent, and a child never gains wha
  assert.ok(!child.toolsets.includes('delegation')&&!child.toolsets.includes('kanban'));
  assert.ok(child.disabled.includes('delegation'));
  for(const name of noAgentGets) assert.ok(child.disabled.includes(name),`a child keeps ${name} off`);
- // A child works in the same sandbox as its parent: the sandbox's tools are its own, not a switch delegation turns on.
+ // A child works in the same pinned sandbox as its parent: delegation keeps the terminal, files and code, and gives the
+ // child no reach its parent did not have (the same ssh backend, address and key, which the managed scope pins).
  for(const name of ['terminal','file','code_execution']) assert.ok(child.toolsets.includes(name),`a child keeps ${name}`);
  assert.ok(childToolsets(off).disabled.includes('delegation'));
 });
@@ -91,10 +100,12 @@ test('a Company\'s own App is beside the fixed set, and a toolset the Engine add
 
 test('the sandbox tools are one place only: no caller can ask for a fixed set without them', () => {
  // #392 held terminal, files and code back until a sandbox existed; #393 gives every Company one, so the module offers
- // them always. A `sandbox: false` option would be a way to run an Agent's code on the Engine's own disk again.
- const config=toolConfig();
- assert.equal(Object.hasOwn(config,'sandbox'),false);
- assert.equal(toolConfig({sandbox:false}).platform_toolsets.api_server.includes('terminal'),true);
+ // them always, in every profile's config.
+ for(const profile of ['co-10000000000000000000000000000002','ag-a0000000000000000000000000000001']) {
+  const config=toolConfig({profile});
+  assert.equal(Object.hasOwn(config,'sandbox'),false);
+  for(const name of ['terminal','file','code_execution']) assert.ok(config.platform_toolsets.api_server.includes(name),`${profile} offers ${name}`);
+ }
  for(const name of ['terminal','file','code_execution']) assert.ok(toolsDiffer([...everyAgentGets,...noAgentGets].filter(toolset=>toolset!==name)),`${name} missing`);
 });
 

@@ -147,7 +147,7 @@ test('the work sandbox image, its build files and its check run the install suit
 // The Company's sandbox template and the Engine's managed pin (#393): a change to either changes what an install starts,
 // so it runs the install suite.
 test('the work sandbox template and the Engine\'s managed pin run the install suite', () => {
-  for (const path of ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-template.yml']) {
+  for (const path of ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-listener-address.sh', 'scripts/engine-template.yml']) {
     assert.equal(areas('README.md', path).install, 'true', path);
   }
 });

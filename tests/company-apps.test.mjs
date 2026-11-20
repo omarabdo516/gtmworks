@@ -65,7 +65,7 @@ test('only an Owner connects, follows or disconnects an app; a Member reads the 
  const fake=await fakeHermes();
  try {
   const install={address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'};
-  await provideProfile(install,{name:companyProfile(company),soul:'',config:toolConfig(),forbidden:toolConfig().agent.disabled_toolsets});
+  await provideProfile(install,{name:companyProfile(company),soul:'',config:toolConfig({profile:companyProfile(company)}),forbidden:toolConfig().agent.disabled_toolsets});
   const driver=driverAt(fake);
   const hermes={address:fake.address,key:'test-only-key'};
   const signIns=[];

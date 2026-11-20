@@ -40,7 +40,14 @@ RUN set -eux; \
 
 COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/work-sandbox-entrypoint
-RUN chmod 0755 /usr/local/bin/work-sandbox-entrypoint
+COPY work-shell /usr/local/bin/work-shell
+RUN chmod 0755 /usr/local/bin/work-sandbox-entrypoint /usr/local/bin/work-shell
+# sshd starts every session through the user's login shell, which is where an Agent's own start folder is made before the
+# Engine's command runs (work-shell, #393).
+RUN set -eux; \
+    if command -v usermod > /dev/null 2>&1; then usermod --shell /usr/local/bin/work-shell pn; \
+    else sed -i 's#^\(pn:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:\).*$#\1/usr/local/bin/work-shell#' /etc/passwd; fi; \
+    test "$(getent passwd pn | cut -d: -f7)" = /usr/local/bin/work-shell
 
 # No host key and no authorized key are in the image: the entrypoint makes a host key when the container starts and takes
 # the public key that arrives at run time, in SSH_AUTHORIZED_KEY or in the file SSH_AUTHORIZED_KEYS_FILE names.

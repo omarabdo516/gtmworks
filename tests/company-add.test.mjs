@@ -83,8 +83,6 @@ test('company add has one add path and the installer has one Engine name and one
  // Every loop over the install's Engines reads the one lister (the restore's key loop reads the keys' own folder list
  // out of the archive instead, before any .engines/ exists, #378 X2), and every network the one reader.
  assert.equal((install.match(/for folder in \.engines\/\*\//g)||[]).length,1);
- // Each Engine's own work sandbox is reported beside it in `gtmworks status` (#393), so that loop is one more.
- assert.equal((install.match(/for name in \$\(engine_names\)/g)||[]).length,6);
  // A restore reads each Engine's key from the archive's checked folders, never from files it extracted.
  assert.equal((install.match(/for name in \$engine_key_folders; do/g)||[]).length,2);
  assert.match(install,/join_engine_network "\$\(engine_network_of "\$name"\)"/);

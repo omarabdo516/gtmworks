@@ -92,6 +92,8 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
  assert.equal(result.status,3,result.stderr);
  assert.match(result.stderr,/division by zero/);
  assert.doesNotMatch(readFileSync(commands,'utf8'),/\bstop\b|\bup\b|\bbuild\b/);
+ // A run that failed records no work sandbox image (#393): the file appears only when the install is whole.
+ assert.equal(existsSync(join(directory,'.work-sandbox-image')),false);
  assert.match(readFileSync(commands,'utf8'),/ON_ERROR_STOP=1 --single-transaction/);
  // The stub reports only the SQL error; the installer must generate its own migration label.
  assert.match(readFileSync(env.MIGRATION_SQL,'utf8'),/\\else\n\\echo Applying migration: 999_failure.sql\n\\ir \/migrations\/999_failure.sql/);

@@ -39,15 +39,12 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.equal(engine.restart,'unless-stopped');
  assert.equal(engine.container_name,'${ENGINE_NAME:?Run scripts/install.sh}');
  // The listeners bind to the install network's own address, resolved when the Engine starts: a wildcard bind answers on
- // the sandbox's network too (docs/engine-probes/work-sandbox-ssh.md, section 6). A hook before s6 starts any service
- // writes it into the container's environment; the healthcheck asks the same helper.
+ // the sandbox's network too (docs/engine-probes/work-sandbox-ssh.md, section 6). The hook that writes it is mounted here,
+ // and the install job proves the behaviour: it reads every port the Engine listens on and asks each from the work
+ // network, after a restart and after a restore (#393).
  assert.equal(engine.environment.API_SERVER_HOST,undefined);
  assert.equal(engine.environment.HERMES_DASHBOARD_HOST,undefined);
  assert.ok(engine.volumes.includes('./engine-listener-address.sh:/etc/cont-init.d/05-engine-listener-address:ro'));
- const hook=readFileSync('scripts/engine-listener-address.sh','utf8');
- for(const name of ['API_SERVER_HOST','HERMES_DASHBOARD_HOST']) assert.ok(hook.includes(name),name);
- assert.match(hook,/\/run\/s6\/container_environment/);
- assert.match(readFileSync('scripts/engine-listener-address.py','utf8'),/\/proc\/net\/route/,'the address is the install network\'s');
  assert.deepEqual(engine.networks,{engine:null,work:null});
  assert.equal(engine.environment.API_SERVER_PORT,8642);
  // The Engine's own key is required and is the only key in it: an Engine with none refuses to start rather than serve.

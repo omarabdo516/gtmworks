@@ -45,15 +45,15 @@ trap 'exit 1' HUP INT TERM
 node_image=node:22.14.0-alpine3.21
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
 # The image every Company's work sandbox runs (#392, ADR 0020): a release names it by tag and digest and the install
-# pulls it; a source checkout builds it from its one build file. Its reference is kept in .work-sandbox-image, the one
-# place whatever makes a Company's sandbox reads it, so every sandbox of an install runs the same image. It is written
-# before any Engine starts: the Engine's Compose project starts its sandbox too.
+# pulls it; a source checkout builds it from its one build file. Its reference is written under .install-lock while the
+# run is in flight and only moved to .work-sandbox-image when the run succeeds (#393), so a run that failed records no
+# image it did not finish with. Every sandbox of an install reads that one file.
 work_sandbox_tag=gtmworks-work-sandbox:local
 work_sandbox_image() {
   if [ -n "$sandbox_image" ]; then
     echo "Pulling the work sandbox image: $sandbox_image"
     docker pull "$sandbox_image" || return 1
-    printf '%s\n' "$sandbox_image" > .work-sandbox-image.tmp
+    printf '%s\n' "$sandbox_image" > .install-lock/work-sandbox-image
   else
     # Tests only (#401): CI's install areas load the run's one sandbox image under this tag, as they load the app image.
     if [ "${GTMWORKS_IMAGE_PREBUILT:-}" = true ] && docker image inspect "$work_sandbox_tag" > /dev/null 2>&1; then
@@ -62,10 +62,12 @@ work_sandbox_image() {
       echo "Building the work sandbox image: $work_sandbox_tag"
       docker build --tag "$work_sandbox_tag" sandbox || return 1
     fi
-    printf '%s\n' "$work_sandbox_tag" > .work-sandbox-image.tmp
+    printf '%s\n' "$work_sandbox_tag" > .install-lock/work-sandbox-image
   fi
-  mv .work-sandbox-image.tmp .work-sandbox-image || return 1
 }
+# The image a sandbox may start from now: the one this run made, or the one an earlier successful run recorded. It never
+# builds or pulls anything: the exit handler starts Engines after a run that failed, and must not start a build there.
+work_sandbox_ref() { cat .install-lock/work-sandbox-image 2> /dev/null || cat .work-sandbox-image 2> /dev/null; }
 # A Company's Engine (ADR 0018) is made from the template shipped with the release, as its own Compose project: the pinned
 # official Hermes image, its own data volume, its own key and its own network. The app and the worker join that network;
 # the Engine joins nothing else. The installer makes the first Company's Engine; `gtmworks company add` (#382, #383) makes
@@ -95,20 +97,23 @@ sandbox_shm=${SANDBOX_SHM:-1gb}
 # The private key an Engine dials its sandbox with, and the sandbox's own host key, both made in the one sandbox image
 # (it has ssh-keygen; the Engine has none) and written into the Engine's data volume and the host-key volume. The Engine's
 # known_hosts is written to the host key's public half at the address its ssh client uses, so a recreated sandbox keeps
-# the host key its Engine trusts: Hermes dials with accept-new, which verifies a host it already knows and refuses a
-# changed one. The public key is printed for the Compose environment and never written to a file of the install.
+# the host key its Engine trusts. The deviation from a pinned known_hosts: Hermes's ssh client is hard-coded
+# StrictHostKeyChecking=accept-new (tools/environments/ssh.py), so gtmworks cannot demand a known host; it pre-seeds the
+# Engine's file instead, and accept-new still refuses a host whose key changed. The public key is printed for the Compose
+# environment and never written to a file of the install.
 sandbox_keys() {
   slug=$1
   folder=$(engine_folder "$slug")
   volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$folder/.env")
   test -n "$volume" || { echo "The Engine $slug names no data volume: run sh scripts/install.sh." >&2; return 1; }
   # An Engine the exit handler starts after a run that failed before the image was recorded (a failed update, a backup)
-  # still needs a sandbox image: record it the way an install does, from its release's pin or this checkout's build file.
-  test -f .work-sandbox-image || work_sandbox_image || return 1
+  # starts only from an image an earlier run recorded: this never builds or pulls one from the exit handler (#393).
+  image=$(work_sandbox_ref)
+  test -n "$image" || { echo "The work sandbox image is not recorded: run sh scripts/install.sh." >&2; return 1; }
   docker volume create "$volume" > /dev/null || return 1
   docker volume create "$(host_key_volume "$slug")" > /dev/null || return 1
   keys=$(docker run --rm --user 0 --entrypoint sh -v "$volume:/data" -v "$(host_key_volume "$slug"):/keys" \
-    "$(cat .work-sandbox-image)" -ec '
+    "$image" -ec '
       set -e
       install -d -m 700 -o 10000 -g 10000 /data/ssh
       if [ ! -s /data/ssh/id_ed25519 ]; then
@@ -154,7 +159,7 @@ engine_names() {
 engine() {
   slug=$1
   shift
-  SANDBOX_IMAGE=${SANDBOX_IMAGE:-$(cat .work-sandbox-image 2> /dev/null || printf '%s' "$work_sandbox_tag")} \
+  SANDBOX_IMAGE=${SANDBOX_IMAGE:-$(work_sandbox_ref || printf '%s' "$work_sandbox_tag")} \
   SANDBOX_NAME=$(sandbox_container "$slug") \
   SANDBOX_AUTHORIZED_KEY=${sandbox_key:-} \
   SANDBOX_HOST_KEY_VOLUME=$(host_key_volume "$slug") \
@@ -809,6 +814,8 @@ elif [ "$operation" = restore ]; then
   if [ "$hermes_data" = no ]; then
     echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
   fi
+  # The image the restored install's sandboxes start from is recorded only now that the restore is whole (#393).
+  mv .install-lock/work-sandbox-image .work-sandbox-image || { echo 'The restored install could not record its work sandbox image.' >&2; return 1; }
   return
 elif [ "$operation" = check-restore ]; then
   # get.sh runs this with the target release's own installer before it changes anything (#378, T4): the same check a
@@ -984,6 +991,9 @@ if [ -n "$release_image" ] && [ -f gtmworks.sh ]; then
   fi
 fi
 if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
+# The work sandbox image this run made is recorded only now, with the install whole (#393, as before #393): a run that
+# failed leaves the image an earlier run recorded, and the exit handler starts no build.
+mv .install-lock/work-sandbox-image .work-sandbox-image
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
 echo 'Mail: http://localhost:8025'
