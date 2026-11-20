@@ -181,6 +181,29 @@ for (const language of ['en', 'ar'] as const) for (const owner of [true, false])
  }
 });
 
+// #457: a model error a retry cannot fix names its cause, with no retry: the Owner gets the way to the Agent's model in
+// Subscription and models, a Member is told to ask the Owner, in English and Arabic.
+const refusedWords = {
+ en: { credit: 'Mona could not reply: the company’s model key has no credit left.', key: 'Mona could not reply: the model provider refused the company’s key or sign-in.', model: 'Mona could not reply: its model is not available from the provider.', fix: 'Check the agent’s model in Subscription and models', ask: 'Ask the company’s Owner to check it in Settings.', retry: 'Send the message again to retry.' },
+ ar: { credit: 'Mona مقدرش يرد: مفتاح الموديل بتاع الشركة مفيهوش رصيد.', key: 'Mona مقدرش يرد: مزوّد الموديل رفض مفتاح الشركة أو تسجيل الدخول.', model: 'Mona مقدرش يرد: الموديل بتاعه مش متاح عند المزوّد.', fix: 'اتأكد من موديل الوكيل من الاشتراك والموديلات', ask: 'اطلب من مالك الشركة يتأكد منه من الإعدادات.', retry: 'ابعت الرسالة تاني' },
+} as const;
+const refusedOutcome = { credit: 'no-credit', key: 'key-refused', model: 'model-missing' } as const;
+for (const language of ['en', 'ar'] as const) for (const reason of ['credit', 'key', 'model'] as const) for (const owner of [true, false]) test(`in ${language} a reply that failed for ${reason === 'credit' ? 'no credit' : reason === 'key' ? 'a refused key' : 'a missing model'} tells ${owner ? 'the Owner where to check it' : 'a Member to ask the Owner'}`, async () => {
+ const said = refusedWords[language];
+ const screen = await render(view(talk([asking], { failed: true, modelRefused: { reason, owner } }), language));
+ const line = screen.getByRole('alert').filter({ hasText: said[reason] });
+ await expect.element(line).toBeVisible();
+ await expect.element(line).toHaveAttribute('data-outcome', refusedOutcome[reason]);
+ await expect.element(line.filter({ hasText: said.retry })).not.toBeInTheDocument();
+ if (owner) {
+  await expect.element(line.getByRole('link', { name: said.fix })).toHaveAttribute('href', '/c/rs-learning/settings?section=models');
+  await expect.element(line.filter({ hasText: said.ask })).not.toBeInTheDocument();
+ } else {
+  await expect.element(line.filter({ hasText: said.ask })).toBeVisible();
+  await expect.element(line.getByRole('link')).not.toBeInTheDocument();
+ }
+});
+
 // #317: a job Lead handed another Agent is a quiet row under Lead's reply, drawn from gtmworks's own record: both
 // faces, the arrow pointing the way the interface reads, the other Agent's name and the job.
 for (const [language, line, arrow] of [['en', 'Handed to', 'M5 12h14'], ['ar', 'سلّم الشغل لـ', 'M19 12H5']] as const) test(`in ${language} a job Lead handed another Agent reads under Lead's reply with both faces and the job`, async () => {
