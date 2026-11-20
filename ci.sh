@@ -153,10 +153,8 @@ case "${1:-check}" in
   # The chat's open time (project `alone`, #346) with a machine to itself, on the pull request too (#421): one lane's
   # stack, one build of the app and the one test, whose budget is one second (decision 0042).
   lanes=1
+  # CI restores the dependencies and the browser from the fast job's caches before this, as the shards do (#404).
   load_images
-  if [[ "${CI:-}" == "true" ]]; then
-    npm ci
-  fi
   images_loaded
   start_lanes
   wait_lanes
