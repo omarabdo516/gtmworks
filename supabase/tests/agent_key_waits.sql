@@ -21,9 +21,9 @@ select is(public.company_holds_provider_key('10000000-0000-0000-0000-00000000000
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('e2990000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e2990000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001'),
  ('e2990000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002','e2990000-0000-0000-0000-000000000002','Lead two','General',true,'co-10000000000000000000000000000002');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true),
- ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true),
+ ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',true,true);
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('e2991000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','e2990000-0000-0000-0000-000000000011','Lead'),
  ('e2991000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','e2990000-0000-0000-0000-000000000011','Lead');
@@ -39,7 +39,7 @@ insert into made(name,agent) values ('waiting',public.lead_agent_id('e2991000-00
 update made set profile=public.agent_engine_profile(agent);
 grant select on made to authenticated,service_role;
 -- Each Agent's own profile, owner record and wait, read as the database's owner.
-create temporary view placed as select m.name,a.profile,p.tools_level,p.tools_policy,exists(select 1 from public.agent_key_waits w where w.agent_id=m.agent) as waits
+create temporary view placed as select m.name,a.profile,p.tools_confirmed,p.tools_pending,exists(select 1 from public.agent_key_waits w where w.agent_id=m.agent) as waits
  from made m join public.hermes_agents a on a.id=m.agent left join public.agent_profiles p on p.agent_id=m.agent;
 
 set local role authenticated;
@@ -57,19 +57,19 @@ select is(public.company_holds_provider_key('10000000-0000-0000-0000-00000000000
 
 set local role service_role;
 select is(public.lead_create_agent(conversation=>'e2991000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
-  instructions=>'You write for {company}.',own_level=>1,own_policy=>public.engine_tool_policy(),own_answers=>false),jsonb_build_object('state','created','agent',(select agent from made where name='waiting')),
+  instructions=>'You write for {company}.',own_profile=>true,own_answers=>false),jsonb_build_object('state','created','agent',(select agent from made where name='waiting')),
  'an Agent whose own profile has no model yet is made');
 reset role;
 update made set connection=(select connection_id from public.hermes_agents where id=made.agent) where name='waiting';
-select results_eq($$select profile,tools_level,waits from placed where name='waiting'$$,$$select profile,1::smallint,true from made where name='waiting'$$,
+select results_eq($$select profile,tools_confirmed,waits from placed where name='waiting'$$,$$select profile,false,true from made where name='waiting'$$,
  'it is attached to its own profile with its tools, never Lead''s, and waits for the key');
 set local role service_role;
 select is(public.lead_create_agent('e2991000-0000-0000-0000-000000000001','run-1','call-2','Designer','Designs the ads.','{}'),jsonb_build_object('state','created','agent',(select agent from made where name='bare')),
  'with a key held, a call that names no own profile still makes the Agent');
 reset role;
-select results_eq($$select profile,tools_level,tools_policy,waits from placed where name='bare'$$,$$select profile,null::smallint,null::integer,true from made where name='bare'$$,
+select results_eq($$select profile,tools_confirmed,tools_pending,waits from placed where name='bare'$$,$$select profile,false,true,true from made where name='bare'$$,
  'on its own profile with no tools yet, waiting, never on Lead''s');
-select ok(exists(select 1 from public.agent_profile_work() w where w.agent_id=(select agent from made where name='bare') and w.tools_level is null),'so the worker makes that profile, as it makes a lost one');
+select ok(exists(select 1 from public.agent_profile_work() w where w.agent_id=(select agent from made where name='bare') and not w.tools_confirmed),'so the worker makes that profile, as it makes a lost one');
 set local role service_role;
 select is(public.lead_request_agent('e2991000-0000-0000-0000-000000000002','run-2','call-0','Social','Writes the social posts.','{}')->>'state','requested','the Manager asks for an Agent');
 reset role;
@@ -77,14 +77,14 @@ select set_config('test.asked',(select id::text from public.lead_agent_requests 
 set local role authenticated;
 select is(public.answer_agent_request('10000000-0000-0000-0000-000000000001',current_setting('test.asked')::bigint,true),'made','the Owner''s «Make it» makes it while the key is held');
 reset role;
-select results_eq($$select profile,tools_level,waits from placed where name='asked'$$,$$select profile,null::smallint,true from made where name='asked'$$,
+select results_eq($$select profile,tools_confirmed,waits from placed where name='asked'$$,$$select profile,false,true from made where name='asked'$$,
  'on its own profile with no tools yet, waiting, never on Lead''s');
-select is(public.agent_profile_refusal((select profile from made where name='waiting'),'10000000-0000-0000-0000-000000000001',(select agent from made where name='waiting')),'agentLevelPending',
+select is(public.agent_profile_refusal((select profile from made where name='waiting'),'10000000-0000-0000-0000-000000000001',(select agent from made where name='waiting')),'agentToolsPending',
  'every Run entry holds a waiting Agent');
 
 set local role authenticated;
 select throws_ok($$select public.reserve_conversation_run('e2992000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',(select agent from made where name='waiting'),'e2993000-0000-0000-0000-000000000001','Hello')$$,
- '55000','agentLevelPending','no Run is reserved for it');
+ '55000','agentToolsPending','no Run is reserved for it');
 select results_eq($$select kind,title,body,asked_by,card_id,conversation_id from public.waiting_list('10000000-0000-0000-0000-000000000001') where kind='agent_key' order by title$$,
  $$values ('agent_key'::text,'Designer'::text,''::text,''::text,null::bigint,null::uuid),('agent_key','Social','','',null,null),('agent_key','Writer','','',null,null)$$,'the Owner sees each waiting, by its name');
 select is((select count(*)::int from public.waiting_list('10000000-0000-0000-0000-000000000002') where kind='agent_key'),0,'and nothing waits in the other Company');
@@ -103,6 +103,9 @@ select is(public.finish_provider_key_change('10000000-0000-0000-0000-00000000000
  array[(select profile from made where name='bare'),(select profile from made where name='asked')],'the set gave one waiting profile key and model, and the others still waiting are named');
 reset role;
 select is((select count(*)::int from public.agent_key_waits),2,'its wait ended, theirs did not');
+set local role service_role;
+select public.record_agent_profile((select agent from made where name='waiting'),(select profile from made where name='waiting'),false);
+reset role;
 select is(public.agent_profile_refusal((select profile from made where name='waiting'),'10000000-0000-0000-0000-000000000001',(select agent from made where name='waiting')),null,'then nothing holds its Runs');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
@@ -133,12 +136,12 @@ select is((select count(*)::int from public.agent_key_waits where company_id='10
  'and no Agent waits for one: each runs on its own profile without it, never on Lead''s');
 set local role service_role;
 select is(public.lead_create_agent(conversation=>'e2991000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-1',agent_name=>'SEO',job=>'Writes for search.',apps=>'{}',
-  own_level=>1,own_policy=>public.engine_tool_policy(),own_answers=>false)->>'agent',(select agent::text from made where name='lead'),'with no key held, a profile with no model makes the Agent');
+  own_profile=>true,own_answers=>false)->>'agent',(select agent::text from made where name='lead'),'with no key held, a profile with no model makes the Agent');
 select is(public.lead_create_agent('e2991000-0000-0000-0000-000000000001','run-1','call-3','Ads','Runs the ads.','{}')->>'agent',(select agent::text from made where name='plain'),
  'and so does a call that names no own profile');
 reset role;
-select results_eq($$select name,profile,tools_level,waits from placed where name in ('lead','plain') order by name$$,
- $$values ('lead'::text,'co-10000000000000000000000000000001'::text,null::smallint,false),('plain','co-10000000000000000000000000000001',null,false)$$,
+select results_eq($$select name,profile,tools_confirmed,waits from placed where name in ('lead','plain') order by name$$,
+ $$values ('lead'::text,'co-10000000000000000000000000000001'::text,null::boolean,false),('plain','co-10000000000000000000000000000001',null,false)$$,
  'both on Lead''s profile as before, with no profile of their own and no wait');
 
 set local role authenticated;
@@ -184,7 +187,7 @@ select is((select count(*)::int from public.agent_key_waits where company_id='10
 -- A wait that outlived the Company's hold: its Agent's tools are recorded, as the worker would, so only the wait could
 -- hold its Runs.
 insert into public.agent_key_waits(agent_id,company_id) select agent,'10000000-0000-0000-0000-000000000001' from made where name='bare';
-update public.agent_profiles p set tools_level=co.agent_level,tools_policy=public.engine_tool_policy(),tools_pending=false,skills_shared=true
+update public.agent_profiles p set tools_confirmed=true,tools_pending=false,skills_shared=true
  from public.companies co,public.agent_key_waits w where co.id=p.company_id and w.agent_id=p.agent_id and w.company_id='10000000-0000-0000-0000-000000000001';
 select is(public.agent_profile_refusal((select p.profile from public.agent_key_waits w join public.agent_profiles p on p.agent_id=w.agent_id where w.company_id='10000000-0000-0000-0000-000000000001'),'10000000-0000-0000-0000-000000000001',
   (select w.agent_id from public.agent_key_waits w where w.company_id='10000000-0000-0000-0000-000000000001')),null,'so the wait left behind holds no Run');

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
-import { levelConfig } from '../lib/agent-levels.mjs';
+import { toolConfig } from '../lib/agent-toolsets.mjs';
 
 // One Agent is one Engine profile, made through the Engine's management listener (ADR 0011) with the install key.
 const connection=(fake,key='test-only-key')=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key});
@@ -194,23 +194,23 @@ const own='ag-a0000000000000000000000000000001';
 // A root profile signed in to a model provider, whose model block a new profile copies, as in the install.
 const signedIn=fake=>{ fake.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'}; fake.settings.defaultCredentials['openai-codex']='root-codex-token'; };
 
-test('providing an Agent its own profile makes it with its soul, the key and the level\'s tools, read back, and asks whether it can answer',async()=>{
+test('providing an Agent its own profile makes it with its soul, the key and the fixed tools, read back, and asks whether it can answer',async()=>{
  const fake=await fakeHermes(); signedIn(fake);
  try {
   const engine=engineFor(connection(fake));
-  assert.deepEqual(await engine.provideAgent({name:own,instructions:'Run the Meta ads.',level:3}),{state:'provided'});
+  assert.deepEqual(await engine.provideAgent({name:own,instructions:"Run the Meta ads."}),{state:'provided'});
   const profile=fake.settings.profiles.get(own);
   assert.equal(profile.soul,'Run the Meta ads.');
   assert.equal(profile.key,'test-only-key');
-  assert.deepEqual(profile.config,levelConfig(3));
+  assert.deepEqual(profile.config,toolConfig());
   assert.deepEqual(fake.settings.managementRequests.map(({method,path,body})=>({method,path,body})),[
    {method:'POST',path:'/api/profiles',body:{name:own,soul:'Run the Meta ads.'}},
    {method:'PUT',path:`/api/env?profile=${own}`,body:{key:'API_SERVER_KEY',value:'test-only-key'}},
-   {method:'PUT',path:`/api/config?profile=${own}`,body:{config:levelConfig(3)}},
+   {method:'PUT',path:`/api/config?profile=${own}`,body:{config:toolConfig()}},
    {method:'GET',path:`/api/model/options?profile=${own}`,body:null},
   ]);
   assert.deepEqual(fake.settings.requests.map(request=>request.path),[`/p/${own}/v1/toolsets`]);
-  assert.deepEqual(await engine.provideAgent({name:own,instructions:'Run the Meta ads.',level:3}),{state:'provided'});
+  assert.deepEqual(await engine.provideAgent({name:own,instructions:"Run the Meta ads."}),{state:'provided'});
   assert.deepEqual([...fake.settings.profiles.keys()],[own]);
  } finally { await fake.close(); }
 });
@@ -219,7 +219,7 @@ test('a profile that cannot answer, still offers a toolset that must stay off, o
  const fake=await fakeHermes();
  try {
   const engine=engineFor(connection(fake));
-  const provide=(level=1)=>engine.provideAgent({name:own,instructions:'Write.',level});
+  const provide=()=>engine.provideAgent({name:own,instructions:'Write.'});
   assert.deepEqual(await provide(),{state:'noModel'},'no model');
   fake.settings.seedModel={provider:'openai-codex',model:'gpt-5.5'}; await engine.removeAgent(own);
   assert.deepEqual(await provide(),{state:'noModel'},'a model whose provider has no sign-in');
@@ -231,18 +231,17 @@ test('a profile that cannot answer, still offers a toolset that must stay off, o
   assert.deepEqual(await provide(),{state:'failed'});
   fake.settings.failStep='';
   assert.deepEqual(await provide(),{state:'provided'});
-  assert.deepEqual(await engineFor(connection(fake,'wrong-key')).provideAgent({name:own,instructions:'Write.',level:1}),{state:'refused'});
+  assert.deepEqual(await engineFor(connection(fake,'wrong-key')).provideAgent({name:own,instructions:'Write.'}),{state:'refused'});
   fake.settings.managementStatus=503;
   assert.deepEqual(await provide(),{state:'unreachable'});
   fake.settings.managementStatus=200;
   // Only an Agent's reserved name is provided: finishing another name would rewrite that profile's key and tools.
   const asked=fake.settings.managementRequests.length;
   for(const name of ['co-10000000000000000000000000000001','seo-agent','default','ag-A0000000000000000000000000000001','ag-a000'])
-   assert.deepEqual(await engine.provideAgent({name,instructions:'Write.',level:1}),{state:'failed'},name);
-  for(const level of [0,4,'1',null]) assert.deepEqual(await engine.provideAgent({name:own,instructions:'Write.',level:/** @type {any} */(level)}),{state:'failed'});
+   assert.deepEqual(await engine.provideAgent({name,instructions:'Write.'}),{state:'failed'},name);
   assert.equal(fake.settings.managementRequests.length,asked);
  } finally { await fake.close(); }
- assert.deepEqual(await engineFor(connection(fake)).provideAgent({name:own,instructions:'Write.',level:1}),{state:'unreachable'});
+ assert.deepEqual(await engineFor(connection(fake)).provideAgent({name:own,instructions:'Write.'}),{state:'unreachable'});
 });
 
 test('providing and removing log nothing and return nothing that holds the key',async()=>{
@@ -254,15 +253,15 @@ test('providing and removing log nothing and return nothing that holds the key',
  const results=[];
  try {
   const engine=engineFor(connection(fake,key));
-  results.push(await engine.provideAgent({name:own,instructions:'Write.',level:1}),await engine.removeAgent(own));
+  results.push(await engine.provideAgent({name:own,instructions:'Write.'}),await engine.removeAgent(own));
   fake.settings.key=key;
-  results.push(await engine.provideAgent({name:own,instructions:'Write.',level:1}));
+  results.push(await engine.provideAgent({name:own,instructions:'Write.'}));
   fake.settings.managementStatus=500;
-  results.push(await engine.provideAgent({name:own,instructions:'Write.',level:1}),await engine.removeAgent(own));
+  results.push(await engine.provideAgent({name:own,instructions:'Write.'}),await engine.removeAgent(own));
   fake.settings.managementStatus=200;
   results.push(await engine.removeAgent(own));
   await fake.close();
-  results.push(await engine.provideAgent({name:own,instructions:'Write.',level:1}),await engine.removeAgent(own));
+  results.push(await engine.provideAgent({name:own,instructions:'Write.'}),await engine.removeAgent(own));
  } finally {
   for(const method of ['log','info','warn','error','debug','trace']) console[method]=real[method];
   for(const stream of ['stdout','stderr']) process[stream].write=real[stream];

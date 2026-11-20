@@ -39,9 +39,9 @@ test.beforeAll(async({browser},testInfo)=>{
   const [connection,second]=[randomUUID(),randomUUID()];
   query(`do $$ begin
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profile}');
-      insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
-    on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
-   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) select '${writer}',id,agent_level,public.engine_tool_policy() from public.companies where id='${company}';
+      insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
+   insert into public.agent_profiles(agent_id,company_id,tools_confirmed) select '${writer}',id,true from public.companies where id='${company}';
       insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,apps,profile) values ('${writer}','${company}','${second}','Writer','Content',false,'{Mixpanel}','${own}');
       insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${writer}'),('${company}','20000000-0000-0000-0000-000000000004','${writer}');
   end $$;`);

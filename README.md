@@ -118,15 +118,18 @@ Each Engine adds roughly the memory one Engine takes, and the install job prints
 shape gtmworks has: the worker gives the Company its own profile (`co-<company
 id>`), with its own memory, skills and sessions, and attaches the Company's agents
 to it; each other agent gets its own `ag-` profile once it moves there, and a
-Company's shared space is `cs-<company id>`. A Company's agents get marketing tools
-only: terminal, file, code-execution, browser and desktop tools are turned off in
-that Company's Engine at every Agent level, so a member cannot ask an agent to read
-another Company's data. An install was proven with four Agents across two
+Company's shared space is `cs-<company id>`. Every Agent gets one fixed set of
+tools (ADR 0018): web, vision, image generation, skills, a task list, memory,
+session search, the question tool and scheduled work. The work sandbox's terminal,
+files and code, and the Agent's tools as a whole, are set out in Settings, Company.
+`browser`, `computer_use` and the desktop and project tools stay off for every
+Agent, so a member cannot ask an agent to read another Company's data. An install
+was proven with four Agents across two
 Companies, and twenty more Agent profiles for capacity: each of the 20 took 0.66 to
 1.04 seconds to be ready, the Engine held 775 MiB before and 825 MiB after making
 them, and one profile takes 5136 KiB of disk with the Engine's bundled Skills and
-1727 KiB without. The Owner chooses the Agent level in Settings, Company (read and
-draft, act on approval, or scheduled work); new Companies start at read and draft.
+1727 KiB without. Settings, Company says in one line what every Agent can use and
+that anything published or spent still waits for a person's Approval.
 Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory with the other agents of the same Company only: every profile lives in that Company's own Engine, and no other Company's Engine, Agents or people can read it.
 
 The Owner connects a subscription in Settings, Subscription and models: ChatGPT

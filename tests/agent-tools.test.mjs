@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import { engineReady, runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
-import { toolPolicy } from '../lib/agent-levels.mjs';
 
 const profile='co-10000000000000000000000000000001';
 // `plan` is what the database names for a create_agent call (lead_agent_profile): the Agent a call already made, or
@@ -64,7 +63,7 @@ test('create_agent starts from a ready-made role: its name, job and apps unless 
  assert.deepEqual(rpcs.at(-1)?.[1],{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Penny',job:roleTemplates.writer.job,apps:['WordPress'],template:'writer',instructions:instructionsOf('writer')});
 });
 
-const own={profile:'ag-a0000000000000000000000000000001',soul:'You write for RS Learning.',level:3};
+const own={profile:'ag-a0000000000000000000000000000001',soul:'You write for RS Learning.'};
 const writerCall={conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:roleTemplates.writer.name,job:roleTemplates.writer.job,apps:roleAppNames('writer'),template:'writer',instructions:instructionsOf('writer')};
 /** @param {ReturnType<typeof harness>['engine']} engine */
 const leadReady=engine=>engine.createAgent({name:profile,instructions:''});
@@ -73,9 +72,9 @@ test('create_agent makes the Agent its own profile, and the database attaches it
  const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},own);
  await leadReady(engine); fake.settings.agentProfile='provided';
  assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'created',agent:'agent-1'});
- assert.deepEqual(fake.provided,[{name:own.profile,instructions:own.soul,level:3}]);
+ assert.deepEqual(fake.provided,[{name:own.profile,instructions:own.soul}]);
  assert.deepEqual(rpcs,[['lead_agent_profile',{conversation:'conversation-1',run:'run-1',call:'call-0',instructions:instructionsOf('writer')}],
-  ['lead_create_agent',{...writerCall,own_level:3,own_policy:toolPolicy}]]);
+  ['lead_create_agent',{...writerCall,own_profile:true}]]);
  assert.deepEqual(fake.removed,[]);
 });
 
@@ -93,7 +92,7 @@ test('a profile made with no model to answer with asks the database to make the 
  const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},own);
  await leadReady(engine); fake.settings.agentProfile='noModel';
  assert.deepEqual(await call('create_agent',{template:'writer'}),{state:'created',agent:'agent-1'});
- assert.deepEqual(rpcs.at(-1),['lead_create_agent',{...writerCall,own_level:3,own_policy:toolPolicy,own_answers:false}]);
+ assert.deepEqual(rpcs.at(-1),['lead_create_agent',{...writerCall,own_profile:true,own_answers:false}]);
  assert.deepEqual(fake.removed,[]);
 });
 

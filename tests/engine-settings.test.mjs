@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/hermes.mjs';
 import { engineSettings, engineOwnsSetting, settingsSchemaProblems, readSettings, writeSetting, readAgentSettings, changeCompanySetting } from '../lib/engine-settings.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // The one list of Engine settings gtmworks reads and writes (#125, ADR 0016), pinned to the Engine release in the install
