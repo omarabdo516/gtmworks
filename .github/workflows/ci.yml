@@ -554,7 +554,7 @@ jobs:
 
   # The install proof is one job, one matrix entry per area, each on a fresh isolated Docker machine of its own (#406):
   # the first install and its repeat; Companies and their Engines; Agents on their Engines; backup and restore; the
-  # public address behind a proxy; the update between releases; and the one-line install. A fault in one area cannot
+  # public address behind a proxy; the update between releases (`./ci.sh install update`); a release that pins another Engine image (`./ci.sh install engines-update`); and the one-line install. A fault in one area cannot
   # hide or cause another's: fail-fast is off, so one red area leaves the others running to their end, and the job's name
   # is the area that failed. An area adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing
   # else (#407–#409).
@@ -573,7 +573,7 @@ jobs:
       # Every area runs to its end, so one red area still shows the others' faults (#406).
       fail-fast: false
       matrix:
-        area: [first-install, companies, agents, backup, proxy, rollback, update, one-line]
+        area: [first-install, companies, agents, backup, proxy, rollback, update, engines-update, one-line]
     # 9.5 min measured for its slowest area, backup, on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:

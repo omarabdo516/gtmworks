@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # The install proof, one command of the repo (#402): each CI install job runs this file for its area on an isolated
 # Docker machine and holds no check of its own, and `./ci.sh install [area]` starts such a machine here and runs it.
-# Without an area the eight areas (spec #401's seven and `rollback`, #389) run one after another, then the profile-size measurement; with one, only
+# Without an area the nine areas (spec #401's seven, `rollback` and `engines-update`, #389) run one after another, then the profile-size measurement; with one, only
 # that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat), `companies` (Companies
 # and their Engines), `agents` (Agents on their Engines), `backup` (backup and restore), `proxy` (the public address
-# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `one-line` (the one-line install) and `measure` (the
+# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `engines-update` (a release that pins another Engine image), `one-line` (the one-line install) and `measure` (the
 # profile-size measurement, on a push to main and a manual run only, never on a pull request, #408). Every area makes
 # the install, its first run, the Companies, the archives, the local registry and the release files it needs itself
 # (#406–#409), so no area needs another to have run. The helpers the areas share are in scripts/ci-install-lib.sh,
@@ -682,12 +682,21 @@ engine_node "$key" - < "$root/scripts/check-install-conversation.mjs" \
   || fail 'the Company the previous release archive restored answers on its own Engine'
 ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
   || fail 'the Company the previous release archive restored answers on its own Engine and its Agent remembers'
-# An install this release made, with two Companies after `company add`, updates to a release that pins another
-# Engine image: every Company's Engine is recreated from the new template with its own volume, key and network,
-# and a Run on each answers afterwards (#386, ADR 0018).
-compose down -v || fail 'remove the previous release install'
-remove_engine
+}
+
+# engines-update: an install this release made, with two Companies after `company add`, updates to a release that pins
+# another Engine image: every Company's Engine is recreated from the new template with its own volume, key and network,
+# and a Run on each answers afterwards (#386, ADR 0018). Its own area since the work sandbox image (#389) took the update
+# area past its 12 minutes; it starts from this release's own files, not from the update area's install.
+engines_update() {
 cd "$root"
+reset_install
+trap - EXIT
+set +o pipefail
+fail_prefix='release install check failed: '
+start_registry
+publish_releases
+hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml)
 # The update wrote these files as the install's user from a container; a root container removes them on any Docker.
 docker run --rm -v "$PWD:/work" alpine:3.21 rm -rf /work/release-install || fail 'remove the first release install folder'
 mkdir release-install
@@ -923,12 +932,12 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$engine_id" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine holds none of gtmworks's keys and passwords after the capacity profiles"
 }
 
-# The area named by the one argument, or all eight in the order the proof has always run them, then the measurement
+# The area named by the one argument, or all nine in the order the proof has always run them, then the measurement
 # (#406, #408). A CI job names one area; `./ci.sh install` without one still runs the whole proof. Each area of `all` runs
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (one_line); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (engines_update); (one_line); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
@@ -936,6 +945,7 @@ case "${1:-all}" in
  proxy) proxy;;
  rollback) rollback;;
  update) update;;
+ engines-update) engines_update;;
  one-line) one_line;;
  measure) measure;;
  *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | update | one-line | measure]' >&2; exit 2;;
