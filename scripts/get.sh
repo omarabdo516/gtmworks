@@ -774,7 +774,9 @@ updates() {
     checked) sql="update public.install_updates set auto_checked_at=now();";;
     idle) sql="update public.install_updates set state='idle', changed_at=now() where state in ('requested','updating');";;
     updated|failed) sql="update public.install_updates set state='$1', version=nullif(:'version',''), changed_at=now(), auto_checked_at=now();";;
+    *) echo "gtmworks knows no updater step $1." >&2; return 2;;
   esac
+  # step names the statement in psql's own log (and to the tests' stand-in for the database); no statement reads it.
   printf '%s\n' "$sql" | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v "step=$1" -v "version=${2:-}"
 }
 # The version running, as the updater reports it: a release's tag, or a main build by its digest.
