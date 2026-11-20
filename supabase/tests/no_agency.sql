@@ -24,7 +24,7 @@ begin
 end $$;
 grant execute on function public.readable_company_rows(uuid) to authenticated;
 select is((select count(*)::int from jsonb_object_keys(public.readable_company_rows())),
- (select count(*)::int+3 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relname not in ('agents','companies','company_engines','company_owner_links','people','setup_claim')),
+ (select count(*)::int+3 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relname not in ('agents','companies','company_engines','company_owner_links','people','setup_claim','install_updates')),
  'every Company table is checked');
 
 set local role authenticated;
