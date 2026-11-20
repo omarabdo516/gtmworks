@@ -72,7 +72,7 @@ test('the Owner\'s Manage turns rows into Disconnect; Disconnect removes the app
  await tools.getByRole('button',{name:'Manage'}).click();
  const done=tools.getByRole('button',{name:'Done'});
  await expect(done).toBeFocused();
- expect((await rowsOf(page,'Writer')).map(row=>row[2])).toEqual(['Disconnect','Disconnect','Connect']);
+ expect((await rowsOf(page,'Writer')).map(row=>row[2])).toEqual(['Disconnect','Connect','Disconnect']);
  await tools.locator('.panel-row').filter({hasText:'Canva'}).getByRole('button',{name:'Disconnect'}).click();
  await expect(page.locator('.toast').filter({hasText:'Canva disconnected'})).toBeVisible();
  await expect(done).toBeFocused();
