@@ -282,7 +282,8 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
      <span className="set-err" id="app-pick-err" hidden={!pickError}>{say('pickOne')}</span></section>}
    {waiting&&<p className="set-hint" role="status">{named(say('waiting'),item.name)}</p>}
    {error&&<p className="set-err" role="alert">{say(error)}</p>}
-   {owner&&on&&(asking?<div className="app-off" role="group" aria-labelledby="app-off-t"><p id="app-off-t">{named(say(custom?'removeAsk':having.length>1?'disconnectAskMany':'disconnectAsk'),item.name,names(having.map(agent=>agent.id)))}</p>
+   {/* A server the Owner added keeps Remove while it is off for every Agent: it is still in their profiles. */}
+   {owner&&(on||custom)&&(asking?<div className="app-off" role="group" aria-labelledby="app-off-t"><p id="app-off-t">{named(say(custom?'removeAsk':having.length>1?'disconnectAskMany':'disconnectAsk'),item.name,names(having.map(agent=>agent.id)))}</p>
      <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--secondary btn--sm" id="app-off-cancel" disabled={pending} onClick={()=>setAsking(false)}>{say('cancel')}</button>
       <button type="button" className="btn btn--primary btn--sm" id="app-off-go" disabled={pending} onClick={disconnect}>{say(custom?'remove':'disconnect')}</button></div></div>
     :<div><button type="button" className="link-btn" id="app-off" onClick={()=>setAsking(true)}>{say(custom?'remove':'disconnect')} <bdi>{item.name}</bdi></button></div>)}

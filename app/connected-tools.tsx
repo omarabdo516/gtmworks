@@ -11,7 +11,7 @@ import { AppTile } from '@/components/app-tile';
 import { useI18n } from '@/lib/i18n-client';
 import { toast } from '@/app/toast';
 import { signInToApp } from '@/app/app-sign-in';
-import { appsChanged } from '@/app/company-apps-read';
+import { appsChanged, useHeldApps } from '@/app/company-apps-read';
 import { useAppsSheet } from '@/app/apps-sheet-open';
 import type { AgentTool } from '@/lib/company-apps.mjs';
 
@@ -26,7 +26,10 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
  const following=useRef(new Set<AbortController>());
  useEffect(()=>{ const open=following.current; return ()=>open.forEach(controller=>controller.abort()); },[]);
  // Until the read lands the section is its heading alone; a failed read is the apps' "can't be read" line.
- const [read,setRead]=useState<AgentToolItem[]|null>();
+ const [read,setRead]=useState<AgentToolItem[]|null>(); const [reads,setReads]=useState(0);
+ // The apps sheet's store changes after a connect there (#458: a tool that needs a token is connected on its page), so
+ // the Agent's tools are read again, and a row left Not connected by that handoff shows what the read says.
+ const held=useHeldApps(company,language);
  useEffect(()=>{
   if(given!==undefined) return;
   let live=true;
@@ -34,7 +37,10 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
    .then(response=>response.ok?response.json():null).then(body=>Array.isArray(body?.tools)?body.tools as AgentToolItem[]:null).catch(()=>null)
    .then(tools=>{ if(live) setRead(tools); });
   return ()=>{ live=false; };
- },[given,company,agent]);
+ },[given,company,agent,reads]);
+ // Read again only after a handoff to the sheet, once the sheet's store changes; a change made here keeps its own row.
+ const handedOff=useRef(false);
+ useEffect(()=>{ if(handedOff.current&&held!==undefined) { handedOff.current=false; setReads(count=>count+1); } },[held]);
  const tools=given!==undefined?given:read;
  const stateOf=(tool:AgentToolItem):State=>states[tool.key]??tool.state;
  const set=(key:string,state:State)=>setStates(now=>({...now,[key]:state}));
@@ -46,7 +52,7 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
   const result=await signInToApp({company,agent,app:tool.key,signal:controller.signal,openApp:key=>openSheet?.(null,key,agent)});
   following.current.delete(controller);
   if(controller.signal.aborted) return;
-  if('state' in result) { if(result.state==='manual') { set(tool.key,'missing'); return; } set(tool.key,'connected'); toast(t('connectConnected',tool.name)); void appsChanged(company,language); }
+  if('state' in result) { if(result.state==='manual') { handedOff.current=true; setStates(now=>{ const rest={...now}; delete rest[tool.key]; return rest; }); return; } set(tool.key,'connected'); toast(t('connectConnected',tool.name)); void appsChanged(company,language); }
   else { set(tool.key,'missing'); setError(result.error); }
  };
  const disconnect=async(tool:AgentToolItem)=>{

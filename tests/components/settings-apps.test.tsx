@@ -304,6 +304,14 @@ test('a made server has the per-Agent switches and turns on for another Agent', 
   await expect.element(again.getByRole('button', { name: 'Reconnect for Writer' })).toBeVisible();
 });
 
+// #458: a server the Owner added and switched off for every Agent is still in their profiles, so Remove stays.
+test('a made server off for every Agent still offers Remove', async () => {
+  const off: AppItem = { key: 'my-crm', name: 'my-crm', mark: 'MY', category: 'more', source: 'custom', auth: 'none', state: 'off',
+    use: text['use.custom'], can: text['can.custom'], words: 'my-crm', agents: [agent(lead, 'Lead', true, 'off')] };
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={off} text={text} failed={false}/>);
+  await expect.element(screen.getByRole('button', { name: `${text.remove} my-crm` })).toBeVisible();
+});
+
 // #458: an OAuth add keeps its Agent first until that Agent's sign-in is connected. A failed sign-in leaves it first so
 // the next Add retries it, and the form finishes only when every picked Agent connected.
 test('the own-tool OAuth queue retries a failed Agent first and finishes after every picked Agent', async () => {
