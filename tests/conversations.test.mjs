@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handTurn, latestEnded, offeredChoices, queuedWaiting, questionParts, replyCardOf, shown, stepsOfReplies, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
+import { handTurn, latestEnd, offeredChoices, queuedWaiting, questionParts, replyCardOf, shown, stepsOfReplies, waiting, withDecisions, withTeamWork } from '../lib/conversations.ts';
 
 // A Contributor's Conversation in a team (#25): the line under the Agent's reply says who their rule was sent to as a
 // suggestion, and the Owner's or a Manager's decision on it shows where it happened among the messages.
@@ -229,12 +229,12 @@ test('a message whose run Hermes no longer knew is marked lost and waits no more
  const lost=[{run_id:'r1',outcome:/** @type {const} */('lost')}];
  assert.deepEqual(shown(first,lost).map(message=>message.lost),[true]);
  assert.deepEqual(waiting(first,lost),[]);
- assert.equal(latestEnded(first,lost),true);
+ assert.equal(latestEnd(first,lost),'lost');
  assert.deepEqual(shown(first,[{...lost[0],outcome:'stopped'}]).map(message=>message.lost),[false],'a stopped run is not lost');
  const again=[...first,{id:2,author:/** @type {const} */('person'),author_name:'Omar',body:'Second try',run_id:'r2',created_at:at(2)}];
  assert.deepEqual(shown(again,lost).map(message=>message.lost),[true,false]);
  assert.deepEqual(waiting(again,lost).map(message=>message.id),[2]);
- assert.equal(latestEnded(again,lost),false);
+ assert.equal(latestEnd(again,lost),null);
 });
 
 // #346: a reply's steps are read from the Agent's Hermes session, never kept: each reply takes the last turn the session

@@ -164,7 +164,6 @@ export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'|
 export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[])=>messages.filter(message=>message.author==='person'&&!messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)&&!ends.some(run=>run.run_id===message.run_id));
 // How the latest message's run ended without a reply (stopped, lost, failed or no_model), or null when it did not.
 export const latestEnd=(messages:StoredMessage[],ends:RunEnd[])=>{ const latest=messages.filter(message=>message.author==='person').at(-1); return (latest&&ends.find(run=>run.run_id===latest.run_id&&run.outcome!=='completed')?.outcome)||null; };
-export const latestEnded=(messages:StoredMessage[],ends:RunEnd[])=>latestEnd(messages,ends)!==null;
 // A chat is named by its first message: its first line, or, for a message that carries images alone, its first file
 // (design-reference: send's title). A chat with no message yet keeps the Agent's name.
 export const titleOf=(messages:ConversationMessage[],agentName:string)=>messages[0]?.body.split('\n')[0]||messages[0]?.files?.[0]?.name||agentName;

@@ -111,8 +111,8 @@ export function ChatPlaceholder() {
 
 // The messages as the reference draws them (design-reference: msgHTML): the Agent's turns on the start side, the
 // person's on the end side, with every card and line the Conversation has; then whether the Agent is working, and for
-// whom, or that the reply failed, and why when the Company has no model to reply with (#422). While the Agent works, a message sent meanwhile waits as its sender's next turn
-// (marked as the reference marks a queued message).
+// whom, or that the reply failed, and why when the Company has no model to reply with (#422). While the Agent works, a
+// message sent meanwhile waits as its sender's next turn (marked as the reference marks a queued message).
 // A question the Agent waits on (#138) is answered from its card: a pick goes to the waiting Run, and the record is asked
 // for again at once. While it waits, the Agent is not shown working. The main Agent's question draws as the reference's
 // chip card, any other Agent's as the lettered card (#143).

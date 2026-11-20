@@ -1,6 +1,7 @@
 import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
+import { noProviderError as noProvider } from './fake-hermes.mjs';
 import { signIn } from './sign-in';
 
 // #422, on the app: a Company with no model at all (no provider key in its shared space, no subscription signed in)
@@ -11,9 +12,6 @@ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','qu
 const company='10000000-0000-0000-0000-000000000001';
 const hex=company.replaceAll('-','');
 const space=`cs-${hex}`; const co=`co-${hex}`;
-// The pinned release's failure line for a Run on an Engine with no provider (api_server_runs.py, around AuthError
-// no_provider_configured in hermes_cli/auth.py).
-const noProvider='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
 const line='This company has no AI subscription or model key connected yet, so its agents can’t reply.';
 const connect='Connect one in Subscription and models';
 const askOwner='Ask the company’s Owner to connect one in Settings.';

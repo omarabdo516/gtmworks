@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeHermes } from './fake-hermes.mjs';
+import { fakeHermes, noProviderError } from './fake-hermes.mjs';
 import { startRun, readRun, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 
@@ -111,9 +111,6 @@ test('a run Hermes no longer knows is read as lost, not as unreachable',async()=
  finally { globalThis.fetch=real; }
 });
 
-// #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
-// failure's user_text around AuthError no_provider_configured).
-const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
 test('a run that failed because the Engine has no model provider says so; any other failure does not',async()=>{
  const fake=await fakeHermes(); fake.settings.ending='failed'; fake.settings.failure=noProviderError;
  try {

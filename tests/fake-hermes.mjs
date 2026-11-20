@@ -1,5 +1,8 @@
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
+// #422: the pinned release's line for a Run on an Engine with no model provider (api_server_runs.py, the provider-auth
+// failure's user_text around AuthError no_provider_configured in hermes_cli/auth.py).
+export const noProviderError='⚠️ Provider authentication failed: Hermes is not connected to any AI provider yet. Run `hermes model` to pick one, type `/login` in chat, or add a key with `hermes auth add <provider>`. (Advanced: put an API key such as OPENROUTER_API_KEY in /opt/data/.env.)';
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
 // fixes the gateway's (tests/lane.mjs laneHermes: the address the app under test is given).
