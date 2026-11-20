@@ -99,11 +99,14 @@ begin
  if r.attempted_at is not null and r.attempted_at > now()-interval '30 seconds' then return; end if;
  -- A target works in one session per chat (or channel): a second job to the same Agent waits while the first may still
  -- be running — an open Run, or a start whose answer was lost (target_attempts above zero, as #354 reads one). Every
- -- handover of that place and Agent is counted, not only a command's, since they share the session. The row itself is
- -- left out, so a lost start still retries.
+ -- handover of that place and Agent is counted, not only a command's, since they share the session: a Conversation's by
+ -- its id, a channel's by its channel (the target's session there is the channel's, whatever message made the handover).
+ -- The row itself is left out, so a lost start still retries.
  if exists(select 1 from public.agent_handovers o
   where o.id<>h and o.to_agent=r.to_agent
-   and o.conversation_id is not distinct from r.conversation_id and o.channel_message_id is not distinct from r.channel_message_id
+   and (case when r.conversation_id is not null then o.conversation_id=r.conversation_id
+     else exists(select 1 from public.channel_messages mine join public.channel_messages theirs on theirs.channel_id=mine.channel_id
+      where mine.id=r.channel_message_id and theirs.id=o.channel_message_id) end)
    and (o.state='target' or o.state='waiting' and o.target_attempts>0)) then return; end if;
  select * into target from public.hermes_agents where id=r.to_agent;
  if r.conversation_id is not null then
