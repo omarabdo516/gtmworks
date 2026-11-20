@@ -141,6 +141,8 @@ jobs:
           push: true
           tags: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          # The image knows its own version (X.Y.Z or main) and so its channel, for Update ready (#442).
+          build-args: GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}
           cache-from: type=gha,scope=release
           cache-to: type=gha,mode=max,scope=release
       - name: both platform digests pushed

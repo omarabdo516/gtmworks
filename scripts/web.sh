@@ -31,6 +31,9 @@ if [[ "${1:-dev}" == "build" ]]; then exec npm run build; fi
 # The bundled Hermes is the only Hermes (#342): a lane's app and worker are given its address and key, where a browser
 # spec starts its fake Hermes (tests/lane.mjs hermesHostOf). The worker keeps no profiles here, as a hosted one keeps none.
 export BUNDLED_HERMES_URL=${BUNDLED_HERMES_URL:-http://127.0.0.$((110 + lane)):8642} HERMES_API_KEY=${HERMES_API_KEY:-test-only-key}
+# Update ready (#442): a lane's app is an old release that reads the newest one from its own address
+# (tests/lane.mjs updateHostOf), where nothing answers unless a spec starts its fake there, so nothing shows.
+export GTMWORKS_VERSION=${GTMWORKS_VERSION:-0.0.1} GTMWORKS_UPDATE_SOURCE=${GTMWORKS_UPDATE_SOURCE:-http://127.0.0.$((120 + lane)):8643}
 GTMWORKS_SELF_HOSTED= node worker/index.mjs &
 worker_pid=$!
 trap 'kill "$worker_pid" 2>/dev/null || true' EXIT INT TERM

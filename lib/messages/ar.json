@@ -1310,5 +1310,14 @@
   "settingsSpeechMissing": "لسه مش على المزوّد ده؛ حط المفتاح تاني عشان يوصل لـ:",
   "settingsSpeechUnread": "مقدرناش نقرا مزوّد تحويل الكلام لنص دلوقتي.",
   "settingsVoiceArabicEgypt": "عربي (مصري)",
-  "settingsSpeechNotReached": "التغيير موصلش لـ {0}. جرّب تاني."
+  "settingsSpeechNotReached": "التغيير موصلش لـ {0}. جرّب تاني.",
+  "updateReady": "في تحديث جاهز",
+  "updateReadyOut": "gtmworks {0} نزل {1}.",
+  "updateReadyFixes": "إصلاحات وتحسينات.",
+  "updateReadyMore": "وكمان {0} تحسينات وإصلاحات تانية.",
+  "updateReadyRun": "على السيرفر، شغّل:",
+  "updateReadyHide": "اخفيه لحد النسخة الجاية",
+  "whatsNew": "الجديد",
+  "whatsNewSub": "gtmworks اتحدّث. ده اللي وصل.",
+  "whatsNewDone": "تمام"
 }

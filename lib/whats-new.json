@@ -1,0 +1,20 @@
+[
+ {
+  "issue": 425,
+  "date": "2026-11-20",
+  "en": { "title": "Change your main Agent's settings", "body": "The main Agent's model, skills and the rest of its settings change in Settings, like every other Agent's." },
+  "ar": { "title": "غيّر إعدادات الوكيل الرئيسي", "body": "موديل الوكيل الرئيسي ومهاراته وباقي إعداداته بتتغير من الإعدادات، زي أي وكيل تاني." }
+ },
+ {
+  "issue": 424,
+  "date": "2026-11-20",
+  "en": { "title": "Logos in Settings", "body": "Model providers, subscriptions and apps show their own logos, so you find the one you want at a glance." },
+  "ar": { "title": "اللوجوهات في الإعدادات", "body": "مزوّدين الموديلات والاشتراكات والتطبيقات بقى ليهم لوجوهاتهم، فتلاقي اللي عايزه من أول نظرة." }
+ },
+ {
+  "issue": 422,
+  "date": "2026-11-20",
+  "en": { "title": "No model connected, said plainly", "body": "When a Company has no model connected, the conversation says so and links straight to Settings." },
+  "ar": { "title": "مفيش موديل متوصل؟ هنقولك", "body": "لما الشركة مايكونش ليها موديل متوصل، المحادثة بتقول كده وبتوديك على الإعدادات على طول." }
+ }
+]
