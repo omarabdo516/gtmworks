@@ -431,6 +431,15 @@ test('a Claude subscription in the root profile\'s credential pool is the Compan
   assert.equal(fake.settings.profiles.get(companyProfile(two)).env.ANTHROPIC_API_KEY,key);
   assert.deepEqual(states(await read()),{'openai-codex':'notConnected',anthropic:'notConnected'});
   assert.deepEqual(owner.logged.map(change=>[change.provider,change.connected]),[['anthropic',false]]);
+  // A token the Engine seeded from outside its own store is no sign-in the Company can remove, so it is not one.
+  fake.settings.defaultPool.anthropic=[{id:'d4e5f6',label:'claude_code',auth_type:'oauth',source:'claude_code',priority:0,access_token:token}];
+  assert.equal((await read()).signIns.anthropic.state,'notConnected');
+  // A root whose Claude reads as a key refuses the Disconnect: that is a failure, never a removal (the sign-in may stay).
+  fake.settings.defaultPool.anthropic=[{id:'a1b2c3',label:'anthropic-oauth-1',auth_type:'oauth',source:'manual:hermes_pkce',priority:0,access_token:token}];
+  fake.settings.defaultEnv.ANTHROPIC_API_KEY=key;
+  assert.deepEqual(await ask(owner,driver,{provider:'anthropic',intent:'disconnect'}),{status:502,body:{error:'signInFailed'}});
+  assert.ok(fake.settings.defaultPool.anthropic);
+  delete fake.settings.defaultEnv.ANTHROPIC_API_KEY;
   // A pool the Engine cannot read is not taken as no subscription.
   fake.settings.poolFail=true;
   assert.equal((await read()).signIns,null);
