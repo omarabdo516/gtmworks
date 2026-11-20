@@ -2,9 +2,10 @@
 // restored into an empty install and after an update moved every Engine to another image (#386, ADR 0018). It proves
 // every Company came back on its own Engine: a Run on each Company's main Agent gets a reply, and the code word the job
 // wrote in that Company's own Engine before the backup is in that Company's own requests and in no other Company's.
-// Every Company that has a main Agent and an Engine is checked; a Company made straight in the database (the job's
-// persistence probes) has no Agent and is left alone. It prints Company names, states and profiles only, never a key or
-// any other value of the install's environment (lib/install-proof.mjs).
+// Every Company that has a main Agent is checked; a Company made straight in the database (the job's persistence probes)
+// has no Agent and is left alone, and one with a main Agent and no readable Engine fails the check (lib/engine-targets.mjs).
+// It prints Company names, states and profiles only, never a key or any other value of the install's environment
+// (lib/install-proof.mjs).
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -12,6 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 const { sendMessage }=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
 const { engineOf }=await import(`${process.cwd()}/lib/company-engine.mjs`);
 const { companyProfile }=await import(`${process.cwd()}/lib/agent-levels.mjs`);
+const { engineTarget }=await import(`${process.cwd()}/lib/engine-targets.mjs`);
 const { writeProof }=await import(`${process.cwd()}/lib/install-proof.mjs`);
 
 const origin='http://gateway:8080';
@@ -24,15 +26,15 @@ const until=async(what,read,seconds)=>{
 };
 
 // Each Company's Engine, from the record the app and the worker answer from: its address and its own key. The code word
-// is the one the install job wrote in the Company's own Engine before the backup; the job derives it the same way.
+// is the one the install job wrote in the Company's own Engine before the backup; the job derives it the same way. A
+// Company with no main Agent yet is left alone; one with a main Agent and no readable Engine fails the check (#378, C2).
 const targets=[];
 for(const company of await checked(service.from('companies').select('id,name').order('name'))) {
  // The main Agent runs on its Company's own profile; the server role reads hermes_agents by these columns only.
  const [agent]=await checked(service.from('hermes_agents').select('id,profile').eq('company_id',company.id).eq('profile',companyProfile(company.id)));
  const engine=await engineOf(company.id,service);
- if(!agent?.profile||!engine) continue;
- targets.push({company:company.id,name:company.name,agent:agent.id,profile:agent.profile,engine,
-  code:`backup-${company.id.replaceAll('-','')}`,management:engine.address.replace(/:\d+$/,'')+':9119'});
+ const target=engineTarget({company,agent,engine});
+ if(target) targets.push(target);
 }
 assert.ok(targets.length>=2,`two Companies or more, each with its main Agent and its own Engine: ${targets.map(target=>target.name).join(', ')}`);
 const distinct=pick=>new Set(targets.map(pick)).size===targets.length;

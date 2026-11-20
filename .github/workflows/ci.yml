@@ -443,15 +443,15 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
-    # The release install and update below add a fresh stack, a real install of origin/main's code and an update of it to
-    # this release, and the one-line install adds another, an update, a failed update and a return to an older release
-    # from a backup.
+    # The release install and update below add a fresh stack, a real install of the last release before the Engines and
+    # an update of it to this release, and the one-line install adds another, an update, a failed update and a return to
+    # an older release from a backup.
     timeout-minutes: 90
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-        # The release step builds and installs the previous release from this pull request's base (#378, S2).
+        # The release step builds and installs the last release before the Engines, a fixed commit (#378, C1).
         with:
           fetch-depth: 0
       # One isolated Docker machine for both install steps below: the release step reuses the source install's image.
@@ -477,16 +477,16 @@ jobs:
           INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/ci-install-check.sh install
-      # A release install of the release before this one, from origin/main's own code, then its update to this release on
-      # a real database (#49, #378 S1, S2). A previous-release install has no Engine record and its one Company names no
-      # Engine; the update must adopt the Engine it already runs, keeping the Agent's memory and the Company's sign-in,
-      # and an install with two Companies on main's schema must be refused before it changes anything. The images come by
-      # digest from a local registry; the next release adds a migration, which psql must read through the running
-      # database's /migrations bind mount after the update replaced the install files in place.
+      # A release install of the last release before the Engines (a fixed commit, #378), then its update to this release
+      # on a real database (#49, #378 S1, S2). A previous-release install has no Engine record and its one Company names
+      # no Engine; the update must adopt the Engine it already runs, keeping the Agent's memory and the Company's sign-in,
+      # an install with two Companies on its schema must be refused before it changes anything, and the backup that
+      # release's installer made must restore onto this release. The images come by digest from a local registry; the next
+      # release adds a migration, which psql must read through the running database's /migrations bind mount after the
+      # update replaced the install files in place.
       - name: release install and update from the two release files
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash scripts/ci-install-check.sh release
 
       # releases.json lists the tags and <tag>/ holds each release's two files. GTMWORKS_RELEASES and GTMWORKS_GET are

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The install job's three steps, one part each (.github/workflows/ci.yml, job `install`). CI runs each part as its own
 # step against the isolated Docker machine; `./ci.sh install` starts such a machine here and runs the three in order.
-# DOCKER_HOST names that machine; RUNNER_TEMP is a scratch folder; INSTALL_REF, BASE_SHA and GH_TOKEN come from CI or
-# ci.sh. Each part runs as GitHub runs a step's script: bash with -e.
+# DOCKER_HOST names that machine; RUNNER_TEMP is a scratch folder; INSTALL_REF and GH_TOKEN come from CI or ci.sh. Each
+# part runs as GitHub runs a step's script: bash with -e.
 set -e
 part=${1:?usage: scripts/ci-install-check.sh install|release|one-line}
 case "$part" in
@@ -104,28 +104,8 @@ docker run --rm --network gtmworks-engine-first -e INSTALL_SERVICE_IPS="$(instal
 if docker ps -aq | xargs -r docker inspect -f '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' | grep -q 'docker.sock'; then
   fail 'no container of the install mounts the Docker socket'
 fi
-# An archive in the shape the release before this one made (#385, #386): one Engine, its data at opt/data, its key in
-# .env.install and no .engines/. It is made now, while this install has one Company, from a consistent copy of the
-# stopped stack, and restored at the end of this job.
-sh scripts/install.sh backup || fail 'backup before the Engines are proven'
-before_engines=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
-[[ -f $before_engines ]] || fail 'the one-Engine backup archive'
-before_engines_key=$(sed -n 's/^ENGINE_KEY=//p' .engines/first/.env)
-[[ $before_engines_key =~ ^[a-f0-9]{64}$ ]] || fail 'the first Engine key before the Engines are proven'
-# Reshaped in a root container, as a backup is made, so the database files keep their owners and modes: the archive names
-# the Engine folder it holds, and the one-Engine layout puts that data at opt/data. The Docker machine mounts only this
-# checkout, so the archive is written here and then moved beside the others.
-rm -f before-engines.tgz
-docker run --rm -v "$PWD:/install" -e KEY="$before_engines_key" alpine:3.21 sh -ec '
-  mkdir /work && cd /work && tar -xzpf "/install/$1" --numeric-owner
-  first=$(ls -d engines/*/ 2> /dev/null | head -n 1)
-  if [ -z "$first" ]; then tar -tzf "/install/$1" | sed -n "1,40p"; echo "no Engine data in the archive" >&2; exit 3; fi
-  mkdir -p opt && mv "${first%/}" opt/data && rm -rf engines .engines
-  if [ -n "$(tail -c 1 .env.install)" ]; then echo >> .env.install; fi
-  printf "HERMES_API_KEY=%s\n" "$KEY" >> .env.install
-  tar -czf /install/before-engines.tgz --numeric-owner .env.install opt/data var/lib/postgresql/data etc/postgresql-custom var/lib/storage
-' sh "$before_engines" || fail 'make the one-Engine archive'
-mv before-engines.tgz "$RUNNER_TEMP/before-engines.tgz" || fail 'keep the one-Engine archive'
+# An archive in the shape the release before this one made (#385, #386) is made by that release's own installer in the
+# release step, not repacked here from this install's database (#378, C3).
 cp .env.install .env.install.before
 # A Company names its Engine record (#382): the probe makes its own waiting record and the Company on it.
 db -c "with e as (insert into public.company_engines (id,address,key_encrypted) values ('00000000-0000-4000-8000-000000000236','$engine_address','install-probe') returning id) insert into public.companies (id,slug,name,engine_id) select '00000000-0000-4000-8000-000000000237','install-probe','Keep me',id from e;" || fail 'insert persistence probe'
@@ -375,6 +355,7 @@ every_engine=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n
 [[ -f $every_engine ]] || fail 'the every-Engine backup archive'
 # Listed once into a file: under pipefail, grep -q leaving a long listing early makes tar's SIGPIPE fail the check.
 tar -tzf "$every_engine" > "$RUNNER_TEMP/every-engine.list" || fail 'list the every-Engine backup'
+grep -qx 'engines.list' "$RUNNER_TEMP/every-engine.list" || fail 'the every-Engine backup names the Engines its Companies use'
 for folder in .engines/*/; do
   name=${folder#.engines/}; name=${name%/}
   grep -q "^engines/$name/" "$RUNNER_TEMP/every-engine.list" || fail "the backup holds the Engine $name data"
@@ -405,13 +386,14 @@ done
 # A Run on each Company answers on its own Engine, and the code word its own Engine kept reaches its own Run only.
 compose exec -T web node --input-type=module - < scripts/check-install-engines.mjs || fail 'every Company answers on its own Engine after the restore'
 # An archive naming an Engine without its data cannot be fully restored: it is refused before anything stops or changes.
+# The archive keeps its engines.list, so the check that catches it is the manifest one (#378, C4).
 incomplete="$RUNNER_TEMP/incomplete-engines"
 rm -rf "$incomplete" && mkdir -p "$incomplete"
 tar -xzf "$every_engine" -C "$incomplete" || fail 'read the every-Engine archive'
 second_folder=$(ls -d .engines/* | grep -v '/first$' | head -n 1)
 second_name=${second_folder#.engines/}
 rm -rf "$incomplete/engines/$second_name" || fail 'leave an Engine out of the archive'
-( cd "$incomplete" && tar -czf "$RUNNER_TEMP/incomplete-engines.tgz" .env.install .engines engines var/lib/postgresql/data etc/postgresql-custom var/lib/storage ) \
+( cd "$incomplete" && tar -czf "$RUNNER_TEMP/incomplete-engines.tgz" .env.install .engines engines engines.list var/lib/postgresql/data etc/postgresql-custom var/lib/storage ) \
   || fail 'make the incomplete archive'
 web=$(compose ps -q web)
 engine=$(docker ps -q --filter 'name=^gtmworks-engine-first$')
@@ -426,25 +408,6 @@ grep -Fq 'The backup does not hold an Engine for every Company.' incomplete-engi
 [[ $(docker ps -q --filter 'name=^gtmworks-engine-first$') == "$engine" ]] || fail 'the refused restore stopped no Engine'
 [[ $(sha256sum < .env.install) == "$env_before" ]] || fail 'the refused restore changed no setting'
 db -c 'select name from gtmworks_install.schema_migrations order by name' | diff -u before-incomplete - || fail 'the refused restore changed no data'
-# An archive made before each Company had its own Engine restores as one Company on the first Engine (#386).
-remove_install || fail 'remove the install before the one-Engine archive'
-rm -f .env.install
-sh scripts/install.sh || fail 'fresh install before the one-Engine archive'
-sh scripts/install.sh restore "$RUNNER_TEMP/before-engines.tgz" || fail 'restore an archive made before the Engines'
-[[ $(ls -d .engines/* | wc -l) == 1 ]] || fail 'the one-Engine archive restores one Engine'
-[[ $(db -c 'select count(*) from public.companies') == 1 ]] || fail 'the one-Engine archive restores its one Company'
-[[ $(sed -n 's/^ENGINE_KEY=//p' .engines/first/.env) == "$before_engines_key" ]] || fail 'the one-Engine archive keeps the key it held in .env.install'
-if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the restored install keeps no Engine key in .env.install'; fi
-# The key left the app's and the worker's environment before they were recreated (#378, X3): a pre-#385
-# archive's key is never in their environment for even one start.
-for service in web worker; do
-  if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(compose ps -q "$service")" | grep -q '^HERMES_API_KEY='; then
-    fail "the $service starts with no Engine key in its environment"
-  fi
-done
-[[ -n $(docker ps -q --filter 'name=^gtmworks-engine-first$') ]] || fail 'the restored install runs its one Engine'
-ENGINE_KEY="$before_engines_key" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS=http://gtmworks-engine-first:8642 -e HERMES_MANAGEMENT_ADDRESS=http://gtmworks-engine-first:9119 web \
-  node --input-type=module - < scripts/check-install-conversation.mjs || fail 'the one Company answers on its own Engine after the restore'
 # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
 # First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
 # invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40).
@@ -526,16 +489,13 @@ remove_engine
 docker run -d --name install-registry -p 127.0.0.1:5000:5000 registry:2.8.3 > /dev/null || fail 'local registry'
 for attempt in $(seq 1 30); do docker run --rm --network host curlimages/curl:8.12.1 -sf http://127.0.0.1:5000/v2/ > /dev/null && break; sleep 1; done
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
-# The previous release is origin/main's code at this pull request's base (#378, S2), built as an image of its
-# own and installed from its own two release files: its own schema (no Engine record, no companies.engine_id),
-# its own one `hermes` service, and its own key in .env.install.
-base=$BASE_SHA
-if [[ ! $base =~ ^[a-f0-9]{40}$ ]]; then
-  git fetch --no-tags origin main || fail 'the main branch of the previous release'
-  base=$(git rev-parse origin/main) || fail 'the main commit of the previous release'
-fi
-git cat-file -e "$base^{commit}" 2> /dev/null || git fetch --no-tags origin "$base" || fail 'the previous release commit'
-git worktree add "$RUNNER_TEMP/previous-release" "$base" || fail 'the previous release checkout'
+# The previous release is the last one before each Company got its own Engine (spec #378): its own schema (no Engine
+# record, no companies.engine_id), its own one `hermes` service, and its own key in .env.install. It is a fixed commit,
+# not this pull request's base or origin/main: after this release merges, main has the Engines, and the update proof would
+# build this release's own shape twice and prove nothing (#378, C1).
+previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6
+git cat-file -e "$previous_release^{commit}" 2> /dev/null || git fetch --no-tags origin "$previous_release" || fail 'the previous release commit'
+git worktree add "$RUNNER_TEMP/previous-release" "$previous_release" || fail 'the previous release checkout'
 docker build -q -t localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release" > /dev/null || fail 'build the previous release image'
 previous=$(publish 0.0.0-main) || fail 'push the previous release image'
 ( cd "$RUNNER_TEMP/previous-release" && node scripts/release-assets.mjs "$previous" "$root/release-previous" ) || fail 'previous release files'
@@ -583,6 +543,17 @@ docker exec -i gtmworks-install-hermes-1 sh -ec \
 docker exec -i gtmworks-install-hermes-1 sh -ec \
   'umask 077; printf "%s\n" "{\"accessToken\":\"install-check-token\",\"refreshToken\":\"install-check-refresh\",\"expiresAt\":4102444800000}" > /opt/data/.anthropic_oauth.json; chown hermes:hermes /opt/data/.anthropic_oauth.json' \
   || fail 'sign the Company in on the Engine before the update'
+# The backup the previous release's own installer makes of its one-Company install, kept before the update (#378, C3): it
+# holds that release's own shape (one Engine at opt/data, its key in .env.install, no .engines/), so restoring it is a
+# real archive made before the Engines, not one repacked from this release's database.
+mkdir -p "$RUNNER_TEMP/previous-release-backup"
+sh install.sh backup "$RUNNER_TEMP/previous-release-backup" > "$RUNNER_TEMP/previous-release-backup.log" 2>&1 \
+  || { cat "$RUNNER_TEMP/previous-release-backup.log"; fail 'the previous release backup'; }
+previous_backup=$(sed -n 's/^Backup: //p' "$RUNNER_TEMP/previous-release-backup.log" | tail -n 1)
+[[ -f $previous_backup ]] || fail 'the previous release backup archive'
+tar -tzf "$previous_backup" > "$RUNNER_TEMP/previous-release.list" || fail 'list the previous release backup'
+grep -Eq '^opt/data(/|$)' "$RUNNER_TEMP/previous-release.list" || fail 'the previous release backup holds the Agents data at opt/data'
+if grep -Eq '^\.?engines' "$RUNNER_TEMP/previous-release.list"; then fail 'the previous release backup holds no Engine folders'; fi
 # Two Companies on the previous release's schema (#378, S2): the update is refused before it migrates, replaces
 # or restarts anything, and the release it runs keeps serving.
 db -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000239','release-probe','Release probe');" \
@@ -673,6 +644,23 @@ sh install.sh || fail 'the install command again'
 cmp .env.install .env.install.before || fail 'the install command again leaves .env.install as it was'
 [[ $(engine_key) == "$key" ]] || fail 'the install command again keeps the adopted Engine key'
 [[ $(engine_id) == "$engine" ]] || fail 'the install command again leaves the adopted Engine running'
+# The archive the previous release's own installer made, restored onto a fresh install of this release (#378, C3): the one
+# Company it holds reaches its own Engine, and its Agent remembers what it was told and its sign-in still serves, all of it
+# from data written before the Engines existed.
+compose down -v || fail 'remove the updated install before the previous release archive'
+remove_engine
+rm -f .env.install
+sh install.sh || fail 'fresh install before the previous release archive'
+sh install.sh restore "$previous_backup" || fail 'restore the archive the previous release made'
+[[ $(ls -d .engines/*/ | wc -l) == 1 ]] || fail 'the previous release archive restores its one Engine'
+[[ $(db -c 'select count(*) from public.companies') == 1 ]] || fail 'the previous release archive restores its one Company'
+[[ $(engine_key) == "$key" ]] || fail 'the previous release archive keeps the key it held in .env.install'
+if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the restored install keeps no Engine key in .env.install'; fi
+company=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the Company the archive restored'
+[[ $(db -c "select count(*) from public.company_engines e join public.companies c on c.engine_id=e.id where c.id='$company'") == 1 ]] \
+  || fail 'the Company the previous release archive restored names its own Engine'
+ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
+  || fail 'the Company the previous release archive restored answers on its own Engine and its Agent remembers'
 # An install this release made, with two Companies after `company add`, updates to a release that pins another
 # Engine image: every Company's Engine is recreated from the new template with its own volume, key and network,
 # and a Run on each answers afterwards (#386, ADR 0018).
