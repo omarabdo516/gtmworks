@@ -1,0 +1,1 @@
+| `app-icons.test.mjs` | The sign-in gate lets the favicon, the web app manifest, the Apple touch icon and the app icons through without a session and still holds the app; the manifest names gtmworks and points at both icons in `public/` (#453). |

@@ -1,9 +1,16 @@
 [
  {
+<<<<<<< HEAD
   "issue": 452,
   "date": "2026-11-20",
   "en": { "title": "Adding an idea closes its form", "body": "An idea you add closes the form and shows its new Card, and pressing Add twice or trying again still makes one Card." },
   "ar": { "title": "إضافة فكرة بتقفل الفورم", "body": "الفكرة اللي بتضيفها بتقفل الفورم وبتوريك البطاقة الجديدة بتاعتها، ولو دوست إضافة مرتين أو جربت تاني بتتعمل بطاقة واحدة بس." }
+=======
+  "issue": 453,
+  "date": "2026-11-20",
+  "en": { "title": "The gtmworks icon", "body": "A browser tab and an installed app show the gtmworks mark, and the Month filter with no month chosen reads All months instead of the browser's raw placeholder." },
+  "ar": { "title": "أيقونة gtmworks", "body": "تاب المتصفح والتطبيق اللي بتثبّته بقى بيبيّنوا علامة gtmworks، وفلاتر الشهر وهي فاضية بقت مكتوب فيها كل الشهور بدل حتة المتصفح الفاضية." }
+>>>>>>> 19bd7044 (The gtmworks mark and an All months filter (#453))
  },
  {
   "issue": 442,
