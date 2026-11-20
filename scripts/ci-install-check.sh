@@ -909,6 +909,8 @@ memory_after=$(engine_memory) || fail 'the Engine memory after the capacity prof
 per_with=$(( (disk_with-disk_before)/10 )) || fail 'the disk one profile with Skills takes'
 per_without=$(( (disk_without-disk_with)/10 )) || fail 'the disk one profile without Skills takes'
 echo "capacity: engine memory $memory_before before and $memory_after after 20 agent profiles; $per_with KiB per profile with the bundled Skills, $per_without KiB without"
+# The twenty profiles are scanned as the Agents area scans its own: the Engine holds none of gtmworks's keys (#2, #408).
+{ grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$engine_id" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine holds none of gtmworks's keys and passwords after the capacity profiles"
 }
 
 # The area named by the one argument, or all seven in the order the proof has always run them, then the measurement

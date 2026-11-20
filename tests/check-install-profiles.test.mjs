@@ -62,6 +62,8 @@ test('the agents area proves the database refuses another Company\'s profile, an
  const prepared=job.indexOf('- prepare < scripts/check-install-profiles.mjs');
  const capacity=job.indexOf('capacity with-skills');
  assert.ok(prepared>=0&&capacity>prepared,'capacity runs after its own prepare made the pair it reads');
+ // The secrets scan covers the twenty profiles too: it runs in measure after both capacity steps.
+ assert.ok(measure.indexOf('check-hermes-keys.py')>measure.indexOf('capacity no-skills'),'the keys scan runs after the capacity profiles');
 });
 
 test('the script\'s printers write the proof\'s line and the bare name, and nothing else', t => {

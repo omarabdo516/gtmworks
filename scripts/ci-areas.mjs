@@ -53,6 +53,8 @@ const suites = {
       // The install job's profile proof (#126) and its unit test: a change to what it proves runs it.
       /^scripts\/check-install-profiles\.mjs$/, /^tests\/check-install-profiles\.test\.mjs$/,
       /^supabase\//, /^playwright\.install\.config\.ts$/, /^tests\/install\//, /^\.github\/workflows\/release[^/]*\.ya?ml$/,
+      // The isolated Docker machine and the image every install area starts from (#406, #411).
+      /^\.github\/actions\/install-machine\//,
     ],
   },
 };
