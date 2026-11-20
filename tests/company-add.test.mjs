@@ -15,7 +15,9 @@ printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
  *'company-add.mjs check'*) printf '%s\\n' "\${SLUG:-second-company-0000abcd}"; exit "\${CHECK_EXIT:-0}";;
- *'company-add.mjs add'*) exit "\${ADD_EXIT:-0}";;
+ *'company-add.mjs add'*)
+  if [ "\${KILL_ON_ADD:-}" = 1 ]; then kill -TERM "$PPID"; exit 1; fi
+  exit "\${ADD_EXIT:-0}";;
  *'company-add.mjs drop'*) printf '%s\\n' "\${DROP_OUTPUT:-removed}"; exit "\${DROP_EXIT:-0}";;
  *'company-list.mjs'*) printf 'Company "Second Company": Engine http://gtmworks-engine-second-company-0000abcd:8642 (healthy)\\n';;
  *' ps -q web'*) echo web-id;;
@@ -302,4 +304,18 @@ test('company-add.mjs says an add it cannot confirm is unconfirmed, never that n
  assert.notEqual(result.status,0,result.stdout);
  assert.match(result.stderr,/The Company "Second Company" could not be confirmed:/);
  assert.doesNotMatch(result.stderr+result.stdout,/was not made|Nothing was left behind/);
+});
+
+// An interrupt while the web container makes the Company can come before or after that Company commits, and the
+// interrupted command cannot tell (#378, C10/C11): from the moment the add starts, its Engine is never taken back, and
+// the line says to read `company list`.
+test('an interrupt while the Company is being made keeps its Engine and says to read company list', t => {
+ const installDir=install(t,{env:{KILL_ON_ADD:'1'}});
+ const interrupted=installDir.run('company','add','--name','Second Company','--owner','person@example.com');
+ assert.notEqual(interrupted.status,0,interrupted.stdout);
+ const commands=installDir.lines().join('\n');
+ assert.match(commands,/company-add\.mjs add/);
+ assert.doesNotMatch(commands,/company-add\.mjs drop|down -v --remove-orphans|volume rm |network rm /);
+ assert.match(interrupted.stderr,/The Engine gtmworks-engine-second-company-0000abcd stays: its Company may be made\. Run gtmworks company list to see its state\./);
+ assert.ok(existsSync(join(installDir.directory,'.engines/second-company-0000abcd/.env')),'the Engine folder stays');
 });

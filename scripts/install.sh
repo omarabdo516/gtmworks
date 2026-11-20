@@ -325,11 +325,18 @@ company_add() {
   # Anything that ends this command before the Company's ownership is committed takes back what the command made (#378,
   # C10): the Engine's container, volume, network and folder, and any record waiting for a Company. The Engine's folder is
   # the first thing made, so the rollback is in place before it. The interrupt trap is set back once the Company is made.
-  add_slug=$slug add_address=$address add_volume=$volume add_network=$network
+  add_slug=$slug add_address=$address add_volume=$volume add_network=$network add_started=no
   # An Engine a Company already names is never taken back: a signal after the Company was made, or a record that cannot
   # be read, keeps it and says so; only a record no Company holds goes with its Engine.
   rollback_add() {
     [ -n "$add_slug" ] || return 0
+    # Once the add has started in the web container it can still register the Engine and make the Company after this
+    # command is interrupted, so from then on an interrupt keeps the Engine and leaves the answer to `company list`.
+    if [ "$add_started" = yes ]; then
+      echo "The Engine $(engine_project "$add_slug") stays: its Company may be made. Run gtmworks company list to see its state." >&2
+      add_slug=
+      return 0
+    fi
     held=$(compose exec -T web node scripts/company-add.mjs drop --address "$add_address" 2> /dev/null) || held=unknown
     if [ "$held" = removed ]; then
       engine_destroy "$add_slug" "$add_volume" "$add_network" || true
@@ -352,6 +359,7 @@ company_add() {
   # One add for both paths: the Owner is the only difference, and a failure removes what this command made (#378, C11): a
   # record a Company names means the Company was made, so its Engine stays and this says what the install holds.
   set -- --name "$company_name" --address "$address" --slug "$slug"
+  add_started=yes
   [ "$has_owner" = no ] || set -- "$@" --owner "$owner_email"
   if ! ENGINE_ADDRESS="$address" ENGINE_KEY="$key" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web \
     node scripts/company-add.mjs add "$@"; then

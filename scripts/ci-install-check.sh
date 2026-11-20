@@ -408,6 +408,17 @@ grep -Fq 'The backup does not hold an Engine for every Company.' incomplete-engi
 [[ $(docker ps -q --filter 'name=^gtmworks-engine-first$') == "$engine" ]] || fail 'the refused restore stopped no Engine'
 [[ $(sha256sum < .env.install) == "$env_before" ]] || fail 'the refused restore changed no setting'
 db -c 'select name from gtmworks_install.schema_migrations order by name' | diff -u before-incomplete - || fail 'the refused restore changed no data'
+# A real archive with a hard link member, listed by BusyBox in alpine:3.21 as the restore lists it, is refused as an
+# unsafe path before anything stops (#378, C15): GNU tar stores the second name of one file as a hard link.
+ln "$incomplete/.env.install" "$incomplete/var/lib/storage/hard-link" || fail 'make a hard link in the archive tree'
+( cd "$incomplete" && tar -czf "$RUNNER_TEMP/hard-link.tgz" .env.install .engines engines engines.list var/lib/postgresql/data etc/postgresql-custom var/lib/storage ) \
+  || fail 'make the hard-link archive'
+if sh scripts/install.sh restore "$RUNNER_TEMP/hard-link.tgz" > hard-link.log 2>&1; then
+  cat hard-link.log >&2; fail 'an archive with a hard link member must be refused'
+fi
+grep -Fq 'Unsafe backup path.' hard-link.log || { cat hard-link.log >&2; fail 'the hard link is refused as an unsafe path'; }
+[[ $(compose ps -q web) == "$web" ]] || fail 'the refused hard-link restore replaced the web container'
+[[ $(docker ps -q --filter 'name=^gtmworks-engine-first$') == "$engine" ]] || fail 'the refused hard-link restore stopped no Engine'
 # A remote server (README): a fresh install whose APP_ORIGIN is the https origin of a proxy in front of the gateway.
 # First run and the emailed sign-in link must stay on that origin and reach the Company home, and so must the
 # invitation link and a sign-in link requested with a forged X-Forwarded-Host (issue #40).
