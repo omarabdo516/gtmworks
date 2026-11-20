@@ -734,6 +734,13 @@ done
 compose exec -T web node --input-type=module - < "$root/scripts/check-install-engines.mjs" || fail 'a Run on each Company answers after the update'
 ;;
 one-line)
+# Every file of an install belongs to the user who ran it. Only a Docker whose `--user $(id -u)` is that same user can show
+# it: ./ci.sh install, whose Docker machine sits inside rootless Docker, sets INSTALL_LANE_FOREIGN_OWNER and the check is
+# left to CI.
+owned_by_others() {
+  if [[ -n ${INSTALL_LANE_FOREIGN_OWNER:-} ]]; then echo "file owners not checked here (INSTALL_LANE_FOREIGN_OWNER)" >&2; return 0; fi
+  find "$1" ! -user "$(id -u)"
+}
 fail() { echo "one-line install check failed: $1" >&2; exit 1; }
 set -o pipefail
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
@@ -832,7 +839,7 @@ grep -Fx "To go back to v0.0.0: gtmworks restore '$archive' --version v0.0.0" "$
 [[ $(db -c "select to_regclass('gtmworks_install.release_update_probe') is not null") == t ]] || fail 'the v0.0.1 migration applied'
 probe 'after gtmworks update'
 echo "find $dir ! -user $(id -u):"
-owners=$(find "$dir" ! -user "$(id -u)")
+owners=$(owned_by_others "$dir")
 [[ -z $owners ]] || { echo "$owners"; fail 'every file in the install folder belongs to the user who ran the update'; }
 # An older release than the data: refused, nothing changed.
 migrations > "$RUNNER_TEMP/updated-migrations"
@@ -857,7 +864,7 @@ grep -Fq 'Applying migration: 99999999999999_failure.sql' "$RUNNER_TEMP/failed-u
 [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail 'the failed migration rolled back'
 [[ $(cat .install-release) == "$next" && $(cat .gtmworks-version) == v0.0.1 ]] || fail 'the previous release files are back'
 probe 'after the failed update'
-owners=$(find "$dir" ! -user "$(id -u)")
+owners=$(owned_by_others "$dir")
 [[ -z $owners ]] || { echo "$owners"; fail 'every file still belongs to the user after the failed update'; }
 # The printed command goes back to v0.0.0 with the data from before the update; with no terminal to ask on, it
 # replaces the current data only with --yes.
@@ -873,7 +880,7 @@ migrations | diff -u "$RUNNER_TEMP/one-line-migrations" - || fail 'the migration
 [[ $(sha256sum < .env.install) == "$checksum" ]] || fail 'the keys from before the update'
 probe 'after going back'
 gtmworks status || fail 'healthy after going back'
-owners=$(find "$dir" ! -user "$(id -u)")
+owners=$(owned_by_others "$dir")
 [[ -z $owners ]] || { echo "$owners"; fail 'every file belongs to the user after going back'; }
 # One machine runs one install: the line refuses a second folder while this one runs, before changing anything.
 fresh="$workspace/one-line-fresh"

@@ -217,6 +217,7 @@ case "${1:-check}" in
   # Under rootless Docker this machine's root is the invoking user and its `--user $(id -u)` is another one, unlike a CI
   # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
   umask 0000
+  export INSTALL_LANE_FOREIGN_OWNER=1
   for part in install release one-line; do bash scripts/ci-install-check.sh "$part"; done
   ;;
  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install' >&2; exit 2;;
