@@ -14,3 +14,5 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--gw-fs-xs); overflow-wrap: anywhere; user-select: all; }
 .gw.modal--upd .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
 .gw .upd-foot { justify-content: flex-end; }
+/* Update now inside the notice (#443): it sits under the command, on the body's own spacing. */
+.gw .upd-body .install-update { padding: 0; }

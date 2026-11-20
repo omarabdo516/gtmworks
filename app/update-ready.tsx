@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { ShellIcon } from '@/components/shell-icon';
 import { whatsNew, unseenEntries } from '@/lib/updates.mjs';
 import { CopyCommand } from './settings-backup-copy';
+import InstallUpdate from './install-update';
 
 type Entry=(typeof whatsNew)[number];
 type Update={version:string,date:string,entries:Entry[]};
@@ -71,8 +72,10 @@ export default function UpdateReady({company,person,owner}:{company:string,perso
     <div className="upd-body">
      <Lines entries={update.entries}/>
      <p className="upd-run">{t('updateReadyRun')}</p>
-     {/* The action row: the command and its copy button; an "Update now" button may join them (#443). */}
+     {/* The action row: the command and its copy button, and Update now while the install owner leaves it on (#443): it
+         asks the updater on the server, which closes this and leaves the sidebar's line saying Updating. */}
      <div className="upd-actions"><code className="upd-cmd" dir="ltr" translate="no">{updateCommand}</code><CopyCommand command={updateCommand}/></div>
+     <InstallUpdate offer onAsked={()=>setOpen(false)}/>
      <p className="upd-hint">{t('signInTerminalWho')}</p>
     </div>
     <footer className="modal__foot upd-foot"><button type="button" className="btn btn--secondary" onClick={hide}>{t('updateReadyHide')}</button></footer>

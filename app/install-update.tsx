@@ -8,6 +8,8 @@ import { useI18n } from '@/lib/i18n-client';
 // says how it ended. Anyone else reads nothing and sees nothing; a failed read shows nothing.
 export type InstallUpdateState = { button: boolean, state: 'idle'|'requested'|'updating'|'updated'|'failed', version: string|null, changedAt: string };
 const seenKey='gtmworks-update-seen';
+// Said by the instance that recorded a request, so the sidebar's own line reads the state again and shows Updating.
+const asked='gtmworks:update-asked';
 const poll=5000;
 // A release by its tag; a main build by the start of its digest.
 const versionName=(version:string|null)=>version?.startsWith('main@sha256:')?`main · ${version.slice(12,19)}`:version||'';
@@ -21,7 +23,7 @@ async function readState():Promise<InstallUpdateState|null|undefined> {
  } catch { return undefined; }
 }
 
-export default function InstallUpdate({offer=false,initial}:{offer?:boolean,initial?:InstallUpdateState|null}) {
+export default function InstallUpdate({offer=false,initial,onAsked}:{offer?:boolean,initial?:InstallUpdateState|null,onAsked?:()=>void}) {
  const {t}=useI18n();
  const [update,setUpdate]=useState<InstallUpdateState|null|undefined>(initial);
  // Drawn in the browser only (the state is read there), so the result an Owner closed is known from the first render.
@@ -37,6 +39,11 @@ export default function InstallUpdate({offer=false,initial}:{offer?:boolean,init
   void readState().then(state=>{ if(live&&state!==undefined) setUpdate(state); });
   return ()=>{ live=false; };
  },[initial]);
+ useEffect(()=>{
+  const again=()=>void readState().then(state=>{ if(state!==undefined) setUpdate(state); });
+  window.addEventListener(asked,again);
+  return ()=>window.removeEventListener(asked,again);
+ },[]);
  const updating=running(update?.state);
  useEffect(()=>{
   if(!updating) return;
@@ -50,7 +57,7 @@ export default function InstallUpdate({offer=false,initial}:{offer?:boolean,init
   try {
    const response=await fetch('/api/install-update',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
    const body=await response.json().catch(()=>({})) as {state?:InstallUpdateState['state'],error?:string};
-   if(response.ok&&body.state) { setAsking(false); setUpdate({...update,state:body.state,changedAt:new Date().toISOString()}); }
+   if(response.ok&&body.state) { setAsking(false); setUpdate({...update,state:body.state,changedAt:new Date().toISOString()}); window.dispatchEvent(new Event(asked)); onAsked?.(); }
    else setProblem(body.error==='updateButtonOff'||body.error==='updateFailedRecently'?body.error:'updateRequestFailed');
   } catch { setProblem('updateRequestFailed'); }
   setPending(false);
