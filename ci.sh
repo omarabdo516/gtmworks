@@ -89,6 +89,7 @@ case "${1:-check}" in
   bash ci.sh database
   bash ci.sh visual
   bash ci.sh integration
+  bash ci.sh chat-open
   ;;
  fast | static | components)
   # The fast layer's steps at the same time, each with its own result (scripts/ci-fast.mjs, #258): `static` leaves out
@@ -147,6 +148,20 @@ case "${1:-check}" in
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
   # The measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e -- "$@"
+  ;;
+ chat-open)
+  # The chat's open time (project `alone`, #346) with a machine to itself, on the pull request too (#421): one lane's
+  # stack, one build of the app and the one test, whose budget is one second (decision 0042).
+  lanes=1
+  load_images
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+  fi
+  images_loaded
+  start_lanes
+  wait_lanes
+  LANE=0 bash scripts/web.sh build
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=1 npx playwright test --project=alone --no-deps
   ;;
  images)
   # Every Supabase image the jobs use, pulled once and archived for the Actions cache (the supabase-images job, #259).
@@ -227,5 +242,5 @@ case "${1:-check}" in
   export INSTALL_LANE_FOREIGN_OWNER=1
   bash scripts/ci-install-check.sh "$@"
   ;;
- *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | visual | visual-update | install [first-install | companies | agents | backup | proxy | update | one-line | measure]' >&2; exit 2;;
+ *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | update | one-line | measure]' >&2; exit 2;;
 esac
