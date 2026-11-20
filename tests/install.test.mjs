@@ -368,7 +368,7 @@ test('the install job backs up and restores every Company Engine, refuses an inc
  assert.ok(early>=0,run);
  // The area makes the second Company it backs up, after the one-Company archive was made (#409).
  const start=lines.findIndex(line=>line.startsWith('backup() {'));
- const secondCompany=lines.findIndex((line,index)=>index>start&&line.includes("company add --name 'Second Company' --owner proxy-owner@example.com"));
+ const secondCompany=lines.findIndex((line,index)=>index>start&&line.trim()==="second_company || fail 'the second Company for the every-Engine backup'");
  assert.ok(start>=0&&secondCompany>start,run);
  assert.ok(early<secondCompany,'the one-Engine archive is made before the second Company is added');
  for(const text of [
@@ -442,13 +442,13 @@ test('the backup area makes the install, the Companies and the archives it needs
  const area=lines.slice(start,next).join('\n');
  const at=text=>{ const index=area.indexOf(text); assert.notEqual(index,-1,`${text}: ${area}`); return index; };
  // It starts from a fresh machine and a fresh install, and completes first run as first-install does.
- assert.ok(at('reset_install ||')<at('install_source backup-install.log || fail'));
+ assert.ok(at('reset_install\ninstall_source backup-install.log')<at('install_source backup-install.log || fail'));
  assert.ok(at('install_source backup-install.log || fail')<at('complete_setup ||'));
  // The one-Company archive is made before the second Company has an Engine of its own.
  assert.ok(at('complete_setup ||')<at("sh scripts/install.sh backup || fail 'backup before the Engines are proven'"));
- assert.ok(at('$RUNNER_TEMP/before-engines.tgz')<at("company add --name 'Second Company'"));
+ assert.ok(at('$RUNNER_TEMP/before-engines.tgz')<at('second_company ||'));
  // The source install's own archive is restored into a fresh install, then the every-Engine one is made and restored.
- assert.ok(at("company add --name 'Second Company'")<at("sh scripts/install.sh backup || fail 'backup of every Engine'"));
+ assert.ok(at('second_company ||')<at("sh scripts/install.sh backup || fail 'backup of every Engine'"));
  assert.ok(at("fail 'backup'")<at('first_archive=$(find backups'));
  assert.ok(at('sh scripts/install.sh restore "$first_archive"')<at("fail 'backup of every Engine'"));
  assert.ok(at("fail 'backup of every Engine'")<at('sh scripts/install.sh restore "$every_engine"'));
@@ -458,7 +458,7 @@ test('the backup area makes the install, the Companies and the archives it needs
 test('the install job updates two Companies to a release pinning another Engine image and proves a Run on each', () => {
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  const lines=run.split('\n');
- const add=lines.findIndex(line=>line.includes("sh install.sh company add --name 'Second Company' --owner proxy-owner@example.com || fail 'company add before the update'"));
+ const add=lines.findIndex(line=>line.includes("second_company install.sh || fail 'company add before the update'"));
  const update=lines.findIndex(line=>line.includes("sh install.sh update || fail 'update every Company Engine'"));
  assert.ok(add>=0,run);
  assert.ok(update>add,'the update runs on an install made with two Companies');
@@ -1003,6 +1003,42 @@ esac
  assert.equal(failed.status,7);
  assert.doesNotMatch(failed.stdout,/is ready/);
  assert.equal(existsSync(join(directory,'.install-lock')),false);
+});
+
+// #411: a source install that skips `compose build web` because CI loaded the run's one image says so in one line, so a
+// person reading the log knows which image the install runs; a source install anywhere else still builds its own.
+test('a source install that skips building the app image says so in one line', t => {
+ const fixture=()=>{
+  const directory=mkdtempSync(join(tmpdir(),'gtmworks-prebuilt-'));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
+  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+  for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
+  writeFileSync(join(directory,'supabase/migrations/001_first.sql'),'select 1;');
+  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
+  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
+  const commands=join(directory,'commands');
+  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
+printf '%s\\n' "$*" >> "$COMMANDS"
+case "$*" in
+  *'.State.Health.Status'*) echo healthy;;
+  *validate*) exit 0;;
+  *engine-key*) printf '%s\\n' "$ENGINE_KEY";;
+  *'exec -T db psql'*) cat > /dev/null;;
+esac
+`,{mode:0o755});
+  return {run:extra=>spawnSync('sh',['scripts/install.sh'],{cwd:directory,env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,ENGINE_KEY:'a1'.repeat(32),...extra},encoding:'utf8'}),commands};
+ };
+ const prebuilt=fixture();
+ const skipped=prebuilt.run({GTMWORKS_IMAGE_PREBUILT:'true'});
+ assert.equal(skipped.status,0,skipped.stderr);
+ assert.match(skipped.stdout,/^Using the prebuilt web image \(GTMWORKS_IMAGE_PREBUILT=true\); not building it\.$/m);
+ assert.doesNotMatch(readFileSync(prebuilt.commands,'utf8'),/build web/,'the prebuilt run builds no image');
+ const source=fixture();
+ const built=source.run({});
+ assert.equal(built.status,0,built.stderr);
+ assert.doesNotMatch(built.stdout,/prebuilt/,'a source install says nothing about a prebuilt image');
+ assert.match(readFileSync(source.commands,'utf8'),/build web/,'a source install builds its own image');
 });
 
 test('self-hosted startup refuses the unchanged example without printing secrets', () => {

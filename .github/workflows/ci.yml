@@ -187,13 +187,15 @@ jobs:
   # that choose images (scripts/supabase-images.sh, #259). With the key cached it only looks the key up; after a key
   # change it pulls the images on an empty project and saves them. `database` and `integration` do not wait for it
   # (their own time comes first): each restores the archive when there is one and otherwise pulls for itself, from its
-  # own runner. `visual`, on main only, waits for it. It never fails a run.
+  # own runner. `visual`, on main only, waits for it. It never fails a run, and it is no part of the full check: its own
+  # limit is longer so a cache-key change finishes and saves (#411).
   supabase-images:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.database != 'false' || needs.changes.outputs.integration != 'false') }}
     runs-on: ubuntu-latest
-    # 0.1 min measured on run 44636876755: 3 min is 1.5 times it, floored at 3 (#410).
-    timeout-minutes: 3
+    # 0.1 min measured on run 44636876755, but a cache-key change pulls every Supabase image: 15 minutes lets it finish
+    # and save, and the job never fails a run (#411).
+    timeout-minutes: 15
     continue-on-error: true
     permissions:
       contents: read
@@ -536,9 +538,11 @@ jobs:
   # is the area that failed. An area adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing
   # else (#407–#409).
   # Every entry loads the one app image the `image` job built (#403), under the tag a source install's compose file names,
-  # and the installer skips its build because the image is already there (GTMWORKS_IMAGE_PREBUILT, tests only). The job
-  # holds no check of its own: its whole area is one command of the repo, so the same command proves it on a machine with
-  # Docker. Its failure sentences are the area's, in scripts/ci-install-check.sh.
+  # and the installer skips its build because the image is already there (GTMWORKS_IMAGE_PREBUILT, tests only). The
+  # isolated machine and that image are one composite action (.github/actions/install-machine, #411) the measurement also
+  # uses, and the tag is read from docker-compose.install.yml there. The job holds no check of its own: its whole area is
+  # one command of the repo, so the same command proves it on a machine with Docker. Its failure sentences are the area's,
+  # in scripts/ci-install-check.sh.
   install:
     name: install-${{ matrix.area }}
     needs: [changes, image]
@@ -558,15 +562,10 @@ jobs:
         with:
           # Only the update area builds and installs the previous release from this pull request's base (#378, S2).
           fetch-depth: ${{ matrix.area == 'update' && '0' || '1' }}
-      # One isolated Docker machine for this area alone: the area of scripts/ci-install-check.sh the matrix names runs on
-      # it, and the last step removes it, also after a failure, on a runner that is reused.
-      - name: start the isolated Docker machine
-        run: |
-          docker run -d --privileged --name install-docker \
-            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
-          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
-          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
+      # The isolated Docker machine and the image the run built once, as one action the measurement also uses (#403,
+      # #411): the area of scripts/ci-install-check.sh the matrix names runs on it, and the last step removes it, also
+      # after a failure, on a runner that is reused.
+      - uses: ./.github/actions/install-machine
       # Only the browser check of the sign-in rate limit, in the proxy area, uses these, inside the Playwright image; the
       # install itself is Docker only. No install scripts: the image already has the browsers.
       - uses: actions/setup-node@v4
@@ -576,16 +575,6 @@ jobs:
       - name: test packages for the install browser check
         if: ${{ matrix.area == 'proxy' }}
         run: npm ci --ignore-scripts
-      # The image the run built once (#403), loaded under the tag the source install's compose file names.
-      - name: download the image
-        uses: actions/download-artifact@v4
-        with:
-          name: gtmworks-image
-          path: ${{ runner.temp }}
-      - name: load the image
-        run: |
-          docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar"
-          docker --host tcp://127.0.0.1:2375 tag gtmworks:ci gtmworks-local:237
       - name: the install proof
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
@@ -612,31 +601,16 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: start the isolated Docker machine
-        run: |
-          docker run -d --privileged --name install-docker \
-            -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-            -v "$PWD:$PWD" docker:28.5.1-dind
-          for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
-          docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
+      # The isolated Docker machine and the image the run built once, as one action the install matrix also uses (#411).
+      - uses: ./.github/actions/install-machine
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: download the image
-        uses: actions/download-artifact@v4
-        with:
-          name: gtmworks-image
-          path: ${{ runner.temp }}
-      - name: load the image
-        run: |
-          docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar"
-          docker --host tcp://127.0.0.1:2375 tag gtmworks:ci gtmworks-local:237
       - name: the profile-size measurement
         env:
           DOCKER_HOST: tcp://127.0.0.1:2375
           INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
           GTMWORKS_IMAGE_PREBUILT: "true"
         run: bash scripts/ci-install-check.sh measure
       - name: remove the isolated Docker machine
@@ -659,7 +633,7 @@ jobs:
           FAST_RESULT: ${{ needs.fast.result }}
           FAST_STEPS: ${{ needs.fast.outputs.steps }}
           COMPONENTS_RUN: ${{ needs.changes.outputs.components }}
-          IMAGE_RUN: ${{ needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' }}
+          IMAGE_RUN: ${{ needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
           IMAGE_RESULT: ${{ needs.image.result }}
           DATABASE_RUN: ${{ needs.changes.outputs.database }}
           DATABASE_RESULT: ${{ needs.database.result }}

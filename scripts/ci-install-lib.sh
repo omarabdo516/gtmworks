@@ -8,6 +8,14 @@
 fail() { echo "${fail_prefix}$1" >&2; exit 1; }
 # The failed update prints the update's own log before its sentence.
 fail_update() { cat update.log >&2; fail "$1"; }
+# An area starts from the proof's own sentence and the summary trap (#402, #411), so no area relies on what an earlier
+# one set: the trap prints a fixed-field summary of the web and gateway logs (never log text) while the install still
+# exists, and keeps the status. The job's last step removes the Docker machine; the update area turns the summary off,
+# as the release and one-line steps never printed it.
+area_setup() {
+  fail_prefix='install check failed: '
+  trap 'status=$?; if [ "$status" -ne 0 ]; then bash scripts/install-diagnostics.sh || true; fi; exit "$status"' EXIT
+}
 # The install's own Compose project and its database (docker-compose.install.yml).
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
 db() { compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -At "$@"; }
@@ -20,24 +28,49 @@ install_service_ips() {
     printf '%s=%s,' "$service" "$address"
   done | sed 's/,$//'
 }
+# One value of an Engine's own file (.engines/<name>/.env): its container name, volume, network or key (#385). The
+# folder is the Engine's own, with or without its trailing slash.
+engine_value() { sed -n "s/^ENGINE_$2=//p" "$1/.env"; }
 # The first Engine (ADR 0018): its addresses on the install network, the container that runs it, and the key in its own
 # file, which is never in the install's environment (#385).
 engine_address=http://gtmworks-engine-first:8642
 engine_management=http://gtmworks-engine-first:9119
 first_engine_id() { docker ps -q --filter 'name=^gtmworks-engine-first$'; }
-first_engine_key() { sed -n 's/^ENGINE_KEY=//p' .engines/first/.env 2> /dev/null || true; }
+first_engine_key() { engine_value .engines/first KEY 2> /dev/null || true; }
+# A node check inside the installed web container against the first Engine's own addresses (ADR 0011), with that
+# Engine's key in its environment by name: the addresses and the key the install keeps, written once for every area
+# (#378, #408). The check is one of scripts/check-install-*.mjs, its input on stdin or in its argument.
+engine_node() {
+  ENGINE_KEY="$1" compose exec -T -e ENGINE_KEY -e HERMES_ADDRESS="$engine_address" \
+    -e HERMES_MANAGEMENT_ADDRESS="$engine_management" web node --input-type=module "${@:2}"
+}
+# Wait, up to the given seconds, for the named Engine container to be healthy; the caller names the step it waited for
+# (#382). Fails when it never is.
+engine_healthy() {
+  for attempt in $(seq 1 "$2"); do
+    [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$1") == healthy ]] && return 0
+    sleep 1
+  done
+  return 1
+}
+# The second Company on an Engine of its own, made by the command a person runs (#382): the caller names its failure and
+# where the output goes; an area running a release's own installer names that script instead.
+second_company() { sh "${1:-scripts/install.sh}" company add --name 'Second Company' --owner proxy-owner@example.com; }
+# The app image a source install runs, from its compose file's `web` service: CI loads the run's one build under this
+# tag and the release areas tag their test releases from it, so a tag change is made in that file alone (#411).
+web_image_tag() { sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1; }
 # The data a backup must bring back (#349), written and read through the engine contract inside the installed web
 # container: a rule in an Agent's SOUL.md and each Company's knowledge live only in the Engine's volume, not in the
 # database, so the backup area writes them before its archive and reads them back after the restore.
-lifecycle() { ENGINE_KEY=$(first_engine_key) compose exec -T -e ENGINE_KEY web node --input-type=module - "$1" < scripts/check-install.mjs; }
+lifecycle() { engine_node "$(first_engine_key)" - "$1" < scripts/check-install.mjs; }
 # Each Engine is its own Compose project (ADR 0018), so removing the install removes every one of them: the first
 # Engine, every Company's Engine under .engines/, and the one container a release before #385 ran an Engine in.
 remove_engine() {
   for folder in .engines/*/; do
     [ -f "$folder/.env" ] || continue
-    name=$(sed -n 's/^ENGINE_NAME=//p' "$folder/.env")
-    volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$folder/.env")
-    network=$(sed -n 's/^ENGINE_NETWORK=//p' "$folder/.env")
+    name=$(engine_value "$folder" NAME)
+    volume=$(engine_value "$folder" VOLUME)
+    network=$(engine_value "$folder" NETWORK)
     docker rm -f "$name" > /dev/null 2>&1 || true
     docker volume rm "$volume" > /dev/null 2>&1 || true
     docker network rm "$network" > /dev/null 2>&1 || true
@@ -79,11 +112,7 @@ model:
   context_length: 128000
 YAML
   docker restart "$1" > /dev/null || fail 'restart the Engine'
-  for attempt in $(seq 1 60); do
-    [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$1") == healthy ]] && break
-    [[ $attempt == 60 ]] && fail 'the Engine is healthy after configuration'
-    sleep 1
-  done
+  engine_healthy "$1" 60 || fail 'the Engine is healthy after configuration'
 }
 publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
 # The local registry a release area serves its test releases from: each area that needs one starts its own (#406).
@@ -95,7 +124,7 @@ start_registry() {
 # This release and the next as registry images and release files, from the app image this checkout built (or CI loaded
 # and tagged): the update and the one-line areas each make what they need from the same steps (#406).
 publish_releases() {
-  docker tag gtmworks-local:237 localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'
+  docker tag "$(web_image_tag)" localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'
   first=$(publish 0.0.0-ci) || fail 'push this release image'
   node scripts/release-assets.mjs "$first" release-first || fail 'this release files'
   docker build -q -t localhost:5000/gtmworks:0.0.1-ci - > /dev/null <<'DOCKERFILE' || fail 'build the next release image'

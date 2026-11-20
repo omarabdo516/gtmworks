@@ -1,0 +1,32 @@
+# The machine and the image every install area starts from (#406, #411), written once so the `install` matrix and the
+# `install-measure` job cannot drift apart: one isolated Docker machine for the area alone, and the one app image the
+# run's `image` job built, loaded into that machine under the tag the source install's compose file names.
+name: Install machine
+description: Start the isolated Docker machine an install area runs on and load the run's image into it.
+runs:
+  using: composite
+  steps:
+    # One isolated Docker machine for this area alone: the area of scripts/ci-install-check.sh the job names runs on it,
+    # and the job's last step removes it, also after a failure, on a runner that is reused.
+    - name: start the isolated Docker machine
+      shell: bash
+      run: |
+        docker run -d --privileged --name install-docker \
+          -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
+          -v "$PWD:$PWD" docker:28.5.1-dind
+        for attempt in $(seq 1 60); do docker --host tcp://127.0.0.1:2375 info >/dev/null 2>&1 && break; sleep 1; done
+        docker --host tcp://127.0.0.1:2375 info >/dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
+    # The image the run built once (#403), loaded under the tag the source install's compose file names.
+    - name: download the image
+      uses: actions/download-artifact@v4
+      with:
+        name: gtmworks-image
+        path: ${{ runner.temp }}
+    # The tag is read from the compose file's `web` service (#411), so a tag change there is the one place to make it:
+    # a hard-coded tag would leave the install building its own image silently.
+    - name: load the image
+      shell: bash
+      run: |
+        web_image=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1)
+        docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar"
+        docker --host tcp://127.0.0.1:2375 tag gtmworks:ci "$web_image"

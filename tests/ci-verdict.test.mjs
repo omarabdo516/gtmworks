@@ -144,6 +144,27 @@ test('the image build is judged by the browser suite\'s own answer: failed or ca
   for (const run of [undefined, '', 'true']) assert.equal(verdict({ IMAGE_RUN: run, IMAGE_RESULT: 'skipped' }), 1, String(run));
 });
 
+// #411: a manual run with both inputs off asks for no browser or install suite, and still starts the image job because the
+// measurement loads that build (#408). `check` must read the image as asked for there, or a successful build would be
+// marked skipped and turn the required check red.
+test('a manual run with both suites off asks check for the image the measurement loads', async () => {
+  const { load } = await import('js-yaml');
+  const { readFileSync } = await import('node:fs');
+  const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
+  const expression = jobs.check.steps.at(-1).env.IMAGE_RUN;
+  const evaluate = (source, context) => new Function('github', 'needs',
+    `return (${source.replace(/^\$\{\{|\}\}$/g, '').trim().replace(/\b(github|needs)((?:\.\w+)+)/g, path => path.replaceAll('.', '?.'))});`,
+  )(context.github, context.needs);
+  const asked = evaluate(expression, {
+    github: { event_name: 'workflow_dispatch' },
+    needs: { changes: { result: 'success', outputs: { integration: 'false', install: 'false' } } },
+  });
+  assert.equal(asked, true, 'the image is asked for on a manual run');
+  assert.equal(verdict({ IMAGE_RUN: String(asked), IMAGE_RESULT: 'success' }), 0);
+  // A skipped image that was asked for is red: a manual run whose build was skipped must not pass.
+  assert.equal(verdict({ IMAGE_RUN: String(asked), IMAGE_RESULT: 'skipped' }), 1);
+});
+
 test('check passes with no compared screens at all: a pull request never runs them (#257)', () => {
   assert.equal(verdict({ VISUAL_RUN: undefined, VISUAL_RESULT: undefined, LANE_RUN: undefined, LANE_RESULT: undefined }), 0);
   assert.equal(verdict({ VISUAL_RESULT: 'failure', LANE_RESULT: 'failure' }), 0);
@@ -219,8 +240,9 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   assert.equal(step.run, 'node scripts/ci-verdict.mjs');
   assert.equal(jobs.check.if, '${{ always() }}');
   assert.deepEqual(jobs.check.needs, ['changes', 'fast', 'image', 'database', 'integration', 'install']);
-  // The image build is judged by what the browser suite or the install proof asked for, and by the job's own result (#403).
-  assert.equal(step.env.IMAGE_RUN, "${{ needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' }}");
+  // The image build is judged by what the browser suite or the install proof asked for, by the job's own result, and by
+  // the manual run the measurement always makes (#403, #411).
+  assert.equal(step.env.IMAGE_RUN, "${{ needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}");
   assert.equal(step.env.IMAGE_RESULT, '${{ needs.image.result }}');
   // The install proof is judged by its own answer and its job's result, red when any area was (#406).
   assert.equal(step.env.INSTALL_RUN, '${{ needs.changes.outputs.install }}');

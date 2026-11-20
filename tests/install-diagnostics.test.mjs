@@ -105,9 +105,14 @@ test('the summary prints nothing when it cannot read what it checks against', t 
 test('a failed install check prints the web and gateway summaries before teardown and keeps its exit status', t => {
  const {commands,run,directory}=sandbox(t);
  const step=installJob().steps.find(step=>step.env?.INSTALL_REF);
- const lines=step.run.split('\n'), trap=lines.findIndex(line=>line.startsWith('trap '));
- assert.ok(trap>0,'the install step sets an EXIT trap');
- const until=code=>`${lines.slice(0,trap+1).join('\n')}\nexit ${code}\n`;
+ const lines=step.run.split('\n');
+ // Every area starts with the lib's area_setup, which sets the EXIT trap (#411).
+ const setup=lines.findIndex(line=>line.startsWith('area_setup() {'));
+ assert.ok(setup>=0,'the proof has its area setup');
+ const end=lines.findIndex((line,index)=>index>setup&&line==='}');
+ const trap=lines.findIndex((line,index)=>index>setup&&index<end&&/^\s*trap /.test(line));
+ assert.ok(trap>setup&&trap<end,'the proof sets an EXIT trap');
+ const until=code=>`${lines.slice(0,end+1).join('\n')}\narea_setup\nexit ${code}\n`;
 
  const failed=run(until(7));
  assert.equal(failed.status,7,failed.stderr);

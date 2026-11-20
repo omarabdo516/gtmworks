@@ -342,7 +342,7 @@ test('CI updates a release install on a real database, applying a new migration 
  for(const pattern of [
   /compose down -v \|\| fail/,
   /registry:2\.8\.3/,
-  /docker tag gtmworks-local:237 localhost:5000\/gtmworks:0\.0\.0-ci/,
+  /docker tag "\$\(web_image_tag\)" localhost:5000\/gtmworks:0\.0\.0-ci/,
   // The previous release is origin/main's own code at the pull request's base (#378, S2), built and installed from
   // its own two release files; the next release carries one migration more, which the update must read through the
   // running db's /migrations.

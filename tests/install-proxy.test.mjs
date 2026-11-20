@@ -144,10 +144,11 @@ test('the install job runs first run and sign-in through an HTTPS proxy whose or
  assert.match(run,/-e NODE_EXTRA_CA_CERTS=\/ca\.crt -e APP_ORIGIN="\$public" -e MAIL_URL=http:\/\/127\.0\.0\.1:8025/);
  assert.ok(at('node --input-type=module - < scripts/check-install-proxy.mjs') < at('check-install-rate-limit.mjs fresh'),'before the rate-limit checks');
  // The local install on http://localhost:3000 is checked first, as before.
- assert.ok(at("install_source first-install.log || fail 'first install'") < at("reset_install || fail 'remove restored install'"));
+ const proxyReset='reset_install\ndocker run --rm -v "$root/lib:/code:ro" node:22.14.0-alpine3.21 node /code/install-env.mjs generate > .env.install';
+ assert.ok(at("install_source first-install.log || fail 'first install'") < at(proxyReset));
  // The proxy area makes its own fresh install (#406): no earlier area's install is needed, and the public origin is in
  // the settings file before the first install runs.
- assert.ok(at("reset_install || fail 'remove restored install'") < at("s#^APP_ORIGIN=.*#APP_ORIGIN=$public#"));
+ assert.ok(at(proxyReset) < at("s#^APP_ORIGIN=.*#APP_ORIGIN=$public#"));
  // The same links check runs on that local install first, while first run is still open, straight to the gateway.
  const checks=[...run.matchAll(/docker run [^\n]*(?:\\\n[^\n]*)*node --input-type=module - < scripts\/check-install-proxy\.mjs/g)];
  assert.equal(checks.length,2,'the links check runs on the local and on the proxied install');

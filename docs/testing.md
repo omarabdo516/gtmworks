@@ -123,9 +123,10 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   matrix entry and one more case of the script. Every area is independent: each makes the install, its first run, the
   Companies, the archives, its local registry and its release files itself, so no area needs another to have run (#406,
   #407, #408, #409); the profile-size measurement is the `install-measure` job below. Every entry loads the one image
-  the `image` job built, tagged as the source install's own (`gtmworks-local:237`), and the installer skips its build
-  for it (`GTMWORKS_IMAGE_PREBUILT`, tests only); the update area still builds the previous release from the pull
-  request's base, which is a different image (#378), so only it checks the history out in full. A job on a GitHub-hosted runner does not wait for its Docker machine's removal. It
+  the `image` job built, tagged as the source install's own compose file names (read from `docker-compose.install.yml`,
+  #411), and the installer skips its build for it and says so in one line (`GTMWORKS_IMAGE_PREBUILT`, tests only); the
+  update area still builds the previous release from the pull request's base, which is a different image (#378), so only
+  it checks the history out in full. A job on a GitHub-hosted runner does not wait for its Docker machine's removal. It
   runs when the image, its build inputs, the install and release files, the migrations it applies or its own checks
   change, and when `lib/` outside the catalogues, `worker/`, `next.config.mjs` or `server.js` change: only the install
   drives that code against the real bundled Hermes.

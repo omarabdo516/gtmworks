@@ -45,6 +45,25 @@ function started({ event, draft, files }) {
   return [...run].sort();
 }
 
+// #411: `check` treats an image job that was skipped as passed only when nothing asked for it (scripts/ci-verdict.mjs),
+// so the answer it reads must be the image job's own condition for every event. A manual run with both inputs off asks
+// for no browser or install suite, and still starts the image job: the measurement loads that build (#408).
+test('the image answer check reads agrees with the image job for every event, a manual run with both suites off too', () => {
+  const env = ci.jobs.check.steps.at(-1).env;
+  const cases = [
+    { event: 'pull_request', outputs: areas(heavyFiles, false) },
+    { event: 'pull_request', outputs: areas(documentFiles, false) },
+    { event: 'push', outputs: areas(heavyFiles, true) },
+    { event: 'workflow_dispatch', outputs: { integration: 'false', install: 'false' } },
+  ];
+  for (const { event, outputs } of cases) {
+    const context = { github: { event_name: event }, needs: { changes: { result: 'success', outputs } } };
+    assert.equal(evaluate(env.IMAGE_RUN, context), evaluate(String(ci.jobs.image.if), context), `${event}: ${JSON.stringify(outputs)}`);
+  }
+  const manual = { github: { event_name: 'workflow_dispatch' }, needs: { changes: { result: 'success', outputs: { integration: 'false', install: 'false' } } } };
+  assert.equal(evaluate(env.IMAGE_RUN, manual), true, 'a manual run asks for the image the measurement loads');
+});
+
 // next.config.mjs reads NEXT_SKIP_CHECKS when it loads, as Next does inside the image build (#403): each case loads it
 // in a process of its own, with the variable set as the build sets it.
 const configFor = value => JSON.parse(spawnSync(process.execPath, [

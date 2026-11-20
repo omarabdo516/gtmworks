@@ -605,6 +605,9 @@ if [ -z "$release_image" ]; then
   # install anywhere else builds its image here, as it always has.
   if [ "${GTMWORKS_IMAGE_PREBUILT:-}" != true ]; then
     compose build web
+  else
+    # One line names the image this install runs, so the log says why no build ran (#411).
+    echo 'Using the prebuilt web image (GTMWORKS_IMAGE_PREBUILT=true); not building it.'
   fi
   # Compose does not recreate a container when only a file it mounts changed. The gateway is recreated when it is not
   # running, when its compose definition differs from the one it runs (its config-hash label), or when its mounted files
