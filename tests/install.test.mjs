@@ -1440,3 +1440,53 @@ esac
  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
  assert.equal(existsSync(join(directory,'.install-lock')),false);
 });
+
+// An archive may hold an earlier release's database (a go-back, or one made before the Engines): a restore applies this
+// release's migrations to it while only the database is up, before web and the worker are recreated, then settles each
+// Company's Engine record (#378, C3). It is the same block an update applies to a previous release's database.
+test('a restore applies the migrations before it recreates web and the worker, then settles the Engine records', t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-restore-migrations-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ writeFileSync(join(directory,'supabase/migrations/001_first.sql'),'select 1;');
+ writeFileSync(join(directory,'.env.install'),'fresh keys',{mode:0o600});
+ writeFileSync(join(directory,'backup.tgz'),'archive');
+ // An archive of this release's own shape: one Company, one Engine with its key and data.
+ const secrets=`KEYS=kept\nHERMES_API_KEY=${'k'.repeat(64)}\n`;
+ writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
+printf '%s\\n' "$*" >> "$COMMANDS"
+case "$*" in
+  *'tar -tzf'*) printf '%s\\n' var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install engines/first/ engines/first/data .engines/first/.env engines.list;;
+ *'tar -tvzf'*) printf 'drwxr-xr-x root/root 0 var/lib/storage/\\n';;
+ *'tar -xOzf'*'.env.install'*) printf '%s\\n' "$ARCHIVE_ENV";;
+ *'tar -xOzf'*'engines.list'*) printf '%s\\n' first;;
+ *'tar -xOzf'*'.engines/'*) printf 'ENGINE_KEY=%s\\n' "${'a1'.repeat(32)}";;
+ *'exec -T db psql'*) cat > /dev/null; echo t;;
+  *'.State.Health.Status'*) echo healthy;;
+ *' ps -q web'*) echo web-id;;
+ *' ps -q worker'*) echo worker-id;;
+ *'network inspect '*) exit 1;;
+ *alpine:3.21*) exit 0;;
+esac
+exit 0
+`,{mode:0o755});
+ const commands=join(directory,'commands');
+ const result=spawnSync('sh',['scripts/install.sh','restore','backup.tgz'],{cwd:directory,
+  env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,ARCHIVE_ENV:secrets},encoding:'utf8'});
+ assert.equal(result.status,0,result.stderr);
+ const run=readFileSync(commands,'utf8').split('\n').filter(Boolean);
+ const at=pattern=>run.findIndex(line=>pattern.test(line));
+ const databaseUp=at(/^compose --env-file \.env\.install -f docker-compose\.install\.yml up -d --wait --wait-timeout 300 db$/);
+ const migrations=at(/--single-transaction$/);
+ const recreate=at(/^compose --env-file \.env\.install -f docker-compose\.install\.yml up -d --force-recreate/);
+ const settled=at(/exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web node scripts\/install-engine\.mjs$/);
+ for(const [index,name] of [[databaseUp,'the database is started alone'],[migrations,'the migrations run'],[recreate,'everything is recreated'],[settled,'the Engine records are settled']]) assert.ok(index>=0,`${name}: ${run.join('\n')}`);
+ assert.ok(databaseUp<migrations&&migrations<recreate,'the migrations run on the restored database, before web and the worker are recreated');
+ assert.ok(settled>recreate,'the Engine records are settled once the app is up');
+ // The migration block is the one an update runs: every file once, recorded, in one transaction.
+ const sql=readFileSync(join(directory,'supabase/migrations/001_first.sql'),'utf8');
+ assert.match(sql,/select 1/);
+ const migrationRun=run[migrations];
+ assert.match(migrationRun,/exec -T db psql .*--single-transaction/);
+});

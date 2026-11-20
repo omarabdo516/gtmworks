@@ -431,6 +431,27 @@ volumes() {
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
     --tmpfs /engines "$@"
 }
+# The migrations this release carries, applied in one transaction and recorded in gtmworks_install.schema_migrations: an
+# install and an update run it before the app starts, and a restore runs it on the database it just put back, so an
+# archive from an earlier release never serves on a schema this release cannot read (#378, C3). It is the same block an
+# update applies to a previous release's database, so that path already proves it.
+apply_migrations() {
+  {
+    printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
+      'revoke all on schema gtmworks_install from public, anon, authenticated, service_role;' \
+      'create table if not exists gtmworks_install.schema_migrations(name text primary key);' \
+      'select not exists(select 1 from gtmworks_install.schema_migrations) as bootstrap \gset' \
+      '\if :bootstrap' '\ir /bootstrap-grants.sql' '\endif'
+    for file in supabase/migrations/*.sql; do
+      case "$file" in *.verify.sql) continue;; esac
+      migration=${file##*/}
+      printf '%s\n' "select exists(select 1 from gtmworks_install.schema_migrations where name='$migration') as applied \gset" \
+        '\if :applied' '\else' "\echo Applying migration: $migration" "\ir /migrations/$migration" \
+        "insert into gtmworks_install.schema_migrations values ('$migration');" '\endif'
+    done
+    printf "notify pgrst, 'reload schema';\n"
+  } | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
+}
 # The one check of a backup archive, made before anything stops or changes: only the backup's own entries, none outside
 # it, each of them present, and every Company's Engine with its data and a usable key (#378, T4). It sets engines_layout,
 # hermes_data and engine_keys for the restore that follows. get.sh runs it as `check-restore`, so a restore --version asks
@@ -622,18 +643,20 @@ elif [ "$operation" = restore ]; then
     ' sh "$hermes_data"
   fi
   mv .env.install.tmp .env.install
+  # The archive's database may be an earlier release's (a go-back, or an archive made before the Engines): this
+  # release's migrations are applied while only the database is up, before web and the worker read it, exactly as an
+  # update applies them to a previous release's database (#378, C3).
+  compose up -d --wait --wait-timeout 300 db
+  apply_migrations || return 1
   # The Engine's key is adopted before web and the worker are recreated (#378, X3): an archive made before #385 holds its
   # key in .env.install, which the containers read their environment from, so the key moves into the Engine's own file
   # first and the containers never start with it in their environment.
   adopt_engine_key || return 1
   compose up -d --force-recreate --wait --wait-timeout 300
   engines_up
-  # An archive made by this release already holds each Company's Engine record; one whose Companies name no Engine (an
-  # archive taken while a previous release's database was carried over, or before an update registered the record)
-  # adopts the Engine this install already runs, in one transaction, as an update does (#378).
-  if [ "$(compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -c "select to_regclass('public.company_engines') is not null;")" = t ]; then
-    ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web node scripts/install-engine.mjs || return 1
-  fi
+  # The database now has this release's schema and every Company names one Engine, or names none (an archive made by an
+  # earlier release): the record is settled in one transaction, as an update does (#378).
+  ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e ENGINE_ADDRESS -e ENGINE_KEY web node scripts/install-engine.mjs || return 1
   if [ "$hermes_data" = no ]; then
     echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
   fi
@@ -704,21 +727,7 @@ docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" nod
 echo 'Checking gateway configuration...'
 compose run --rm --no-deps gateway nginx -t
 if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
-{
-  printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
-    'revoke all on schema gtmworks_install from public, anon, authenticated, service_role;' \
-    'create table if not exists gtmworks_install.schema_migrations(name text primary key);' \
-    'select not exists(select 1 from gtmworks_install.schema_migrations) as bootstrap \gset' \
-    '\if :bootstrap' '\ir /bootstrap-grants.sql' '\endif'
-  for file in supabase/migrations/*.sql; do
-    case "$file" in *.verify.sql) continue;; esac
-    name=${file##*/}
-    printf '%s\n' "select exists(select 1 from gtmworks_install.schema_migrations where name='$name') as applied \gset" \
-      '\if :applied' '\else' "\echo Applying migration: $name" "\ir /migrations/$name" \
-      "insert into gtmworks_install.schema_migrations values ('$name');" '\endif'
-  done
-  printf "notify pgrst, 'reload schema';\n"
-} | compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 --single-transaction
+apply_migrations
 if [ -z "$release_image" ]; then
   compose build web
   # Compose does not recreate a container when only a file it mounts changed. The gateway is recreated when it is not
