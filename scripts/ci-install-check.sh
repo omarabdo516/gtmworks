@@ -194,7 +194,9 @@ second_company=$(db -c "select id from public.companies where name='Second Compa
 # app and the worker join its network.
 [[ $(docker inspect -f '{{.Config.Image}}' "$second_container") == *'nousresearch/hermes-agent:v0.23.0@sha256:'* ]] || fail 'the second Engine runs the pinned Hermes image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$second_container") != *HostPort* ]] || fail 'the second Engine publishes no host port'
-[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container" | grep . | sort) == $(printf '%s\n' "$second_network" "gtmworks-work-second-company" | sort) ]] || fail 'the second Engine joins its own network and its work network only'
+second_sandbox=$(printf '%s' "$second_container" | sed 's/^gtmworks-engine-/gtmworks-sandbox-/')
+second_work_network=$(printf '%s' "$second_container" | sed 's/^gtmworks-engine-/gtmworks-work-/')
+[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container" | grep . | sort) == $(printf '%s\n' "$second_network" "$second_work_network" | sort) ]] || fail 'the second Engine joins its own network and its work network only'
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx "$second_network" \
     || fail "the $service joins the second Engine's network"
@@ -261,19 +263,19 @@ sh scripts/install.sh engines | tee engines.log || fail 'every Engine is reporte
 grep -F "Engine $second_address: healthy (Company \"Second Company\")" engines.log || fail 'the Engine report names the second Engine'
 # `gtmworks status` reports each Company's work sandbox beside its Engine, and fails when one is not running (#393).
 grep -F 'Sandbox gtmworks-sandbox-first: running (Company "Proxy Company")' engines.log || fail 'the report names the first sandbox and its Company'
-grep -F 'Sandbox gtmworks-sandbox-second-company: running (Company "Second Company")' engines.log || fail 'the report names the second sandbox and its Company'
-docker stop gtmworks-sandbox-second-company > /dev/null || fail 'stop the second sandbox'
+grep -F "Sandbox $second_sandbox: running (Company \"Second Company\")" engines.log || fail 'the report names the second sandbox and its Company'
+docker stop "$second_sandbox" > /dev/null || fail 'stop the second sandbox'
 if sh scripts/install.sh engines > engines-sandbox-stopped.log 2>&1; then
   cat engines-sandbox-stopped.log
   fail 'a stopped sandbox must fail the report'
 fi
-grep -F 'Sandbox gtmworks-sandbox-second-company: stopped (Company "Second Company")' engines-sandbox-stopped.log || fail 'the report says the sandbox is stopped'
-docker start gtmworks-sandbox-second-company > /dev/null || fail 'start the second sandbox'
+grep -F "Sandbox $second_sandbox: stopped (Company \"Second Company\")" engines-sandbox-stopped.log || fail 'the report says the sandbox is stopped'
+docker start "$second_sandbox" > /dev/null || fail 'start the second sandbox'
 for attempt in $(seq 1 60); do
-  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gtmworks-sandbox-second-company) == healthy ]] && break
+  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$second_sandbox") == healthy ]] && break
   sleep 1
 done
-[[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gtmworks-sandbox-second-company) == healthy ]] || fail 'the second sandbox is healthy again'
+[[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$second_sandbox") == healthy ]] || fail 'the second sandbox is healthy again'
 # A Company with no Owner yet is held behind a first-Owner link (#383, ADR 0019): the command prints the link,
 # only its hash is stored, the Company exists nowhere, `company list` shows it waiting for its Owner, and a
 # fresh link ends the earlier one. Sending the fresh link's form then makes the Company with its sender as
