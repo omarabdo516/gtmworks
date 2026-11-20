@@ -12,6 +12,6 @@ export function readAgentTools(db:SupabaseClient,request:{company:string,agent:s
 export const uuid:RegExp;
 export const callbackOf:(key:string)=>string;
 export const badToken:(token:unknown)=>boolean;
-export function latestSignIn(db:SupabaseClient,filter:{app:string,person?:string,company?:string,agent?:string,open?:boolean}):Promise<any>;
+export function latestSignIn(db:SupabaseClient,filter:{app:string,person?:string,company?:string,agent?:string,open?:boolean}):Promise<{company_id:string,agent_id:string|null,flow_id:string,finished_at:string|null,companies:{slug:string}|null}|null>;
 export function changeCompanyApp(db:SupabaseClient,request:{company:string,agent?:unknown,person:string,app:unknown,action:unknown,fields?:unknown,token?:unknown,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{status:number,body:Record<string,unknown>}>;
 export function finishCompanyAppSignIn(db:SupabaseClient,request:{person:string,app:string,answer:Record<string,string>,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{slug:string|null,outcome:'connected'|'waiting'|'failed'}>;

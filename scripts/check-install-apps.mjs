@@ -108,7 +108,7 @@ const kinds=[
  {key:'check-oauth',kind:'oauth',url:`${publicUrl}/oauth/mcp`},
 ];
 for(const given of kinds) {
- assert.equal(await prepareServer(target,{key:given.key,url:given.url,auth:given.kind,token:given.token}),null,`${given.key} added`);
+ assert.equal(await prepareServer(target,{key:given.key,url:given.url,auth:given.kind,token:given.token,redirectUri:given.kind==='oauth'?back(given.key):undefined}),null,`${given.key} added`);
  if(given.kind==='oauth') {
   const started=await startAppSignIn(target,given.key,back(given.key),{url:given.url,auth:'oauth'});
   assert.equal(started.state,'started',`${given.key} starts a sign-in`);
