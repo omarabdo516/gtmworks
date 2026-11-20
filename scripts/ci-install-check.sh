@@ -679,7 +679,8 @@ cmp .env.install .env.install.before || fail 'the install command again leaves .
 compose down -v || fail 'remove the previous release install'
 remove_engine
 cd "$root"
-rm -rf release-install
+# The update wrote these files as the install's user from a container; a root container removes them on any Docker.
+docker run --rm -v "$PWD:/work" alpine:3.21 rm -rf /work/release-install || fail 'remove the first release install folder'
 mkdir release-install
 cp release-first/docker-compose.install.yml release-first/install.sh release-install/ || fail 'the first release files again'
 cd release-install
