@@ -6,7 +6,8 @@ import Link, { pageBeingOpened } from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
 import { moreSections, themeChoices } from '@/lib/sidebar.mjs';
 import { rememberOpener } from './settings-opener';
-import { AppsCount, useAppsSheet } from './apps-sheet';
+import { AppsCount } from './apps-sheet';
+import { useAppsCompany, useAppsSheet } from './apps-sheet-open';
 import TeamDialog, { type TeamActions } from './team-dialog';
 
 const themeIcons={light:'sun',dark:'moon',device:'monitor'} as const;
@@ -46,7 +47,7 @@ type Save=(state:string,form:FormData)=>Promise<string>;
 export default function AccountMenuView({slug,company,personId,personName,role,owner=false,canManage=false,alone=false,theme,companyName,settingsHref,team,saveLanguage,saveTheme}:AccountMenuProps&{saveLanguage:Save,saveTheme:Save}) {
  const {t,language}=useI18n();
  const pathname=usePathname();
- const openApps=useAppsSheet();
+ const openApps=useAppsSheet(); const appsCompany=useAppsCompany();
  const state=useSyncExternalStore(subscribeMenu,()=>menuState,()=>closedMenu);
  const [teamOpen,setTeamOpen]=useState(false);
  const open=state.open&&state.company===slug&&state.paths.includes(pathname);
@@ -110,7 +111,7 @@ export default function AccountMenuView({slug,company,personId,personName,role,o
     <ShellIcon name={themeIcons[choice]}/><span className="menu__t">{t(choice)}</span>{choice===theme&&<ShellIcon name="check" className="menu__check"/>}
    </button>)}</div>
    {slug&&<><div className="menu__sep" role="separator"/>
-    <button type="button" className="menu__item" role="menuitem" onClick={()=>{ closeMenu(); openApps?.(button.current); }}><ShellIcon name="plug"/><span className="menu__t">{t('shellConnectApps')}<AppsCount className="menu__d"/></span></button>
+    <button type="button" className="menu__item" role="menuitem" onClick={()=>{ closeMenu(); openApps?.(button.current); }}><ShellIcon name="plug"/><span className="menu__t">{t('shellConnectApps')}{appsCompany&&<AppsCount company={appsCompany} className="menu__d"/>}</span></button>
     <div className="menu__sep" role="separator"/>
     <div className="menu__label" id="me-more-lbl">{t('shellMoreSections')}</div>
     <div role="group" aria-labelledby="me-more-lbl">{moreSections.map(([path,label,icon])=><Link key={path} className="menu__item" role="menuitem" href={`/c/${slug}/${path}`} onClick={()=>closeMenu()}><ShellIcon name={icon}/><span className="menu__t">{t(label)}</span></Link>)}</div>

@@ -95,3 +95,26 @@ test('a sign-in still waiting at fifteen minutes settles then: the last wait and
  await expect(outcome).resolves.toEqual({ error: 'connectFailed' });
  expect(opened.close).toHaveBeenCalled();
 });
+
+test('a no-sign-in app answers with its state alone: connected at the press, with no window and nothing cancelled', async () => {
+ const opened = vendor();
+ const fetch = vi.fn(() => answer({ status: 'connected' }));
+ vi.stubGlobal('fetch', fetch);
+ const outcome = signInToApp({ ...given, app: 'context7' });
+ await expect(outcome).resolves.toEqual({ state: 'connected' });
+ expect(actions(fetch.mock.calls)).toEqual(['connect']);
+ expect(opened.close).toHaveBeenCalled();
+ expect(opened.location.href).toBe('');
+});
+
+test('an app that needs a token or a declared field opens the apps sheet and connects nothing', async () => {
+ const opened = vendor();
+ const openApp = vi.fn();
+ const fetch = vi.fn(() => answer({ needs: 'details' }));
+ vi.stubGlobal('fetch', fetch);
+ const outcome = signInToApp({ ...given, app: 'asana', openApp });
+ await expect(outcome).resolves.toEqual({ state: 'manual' });
+ expect(openApp).toHaveBeenCalledWith('asana');
+ expect(actions(fetch.mock.calls)).toEqual(['connect']);
+ expect(opened.close).toHaveBeenCalled();
+});

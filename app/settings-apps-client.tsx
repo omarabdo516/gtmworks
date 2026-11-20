@@ -335,8 +335,11 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
    setFollowing(null);
    if(answer.ok&&status==='connected') {
     toast(say('ownAdded',name.trim()||key));
-    if(queue.length) { setToken(''); return; }
-    refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
+    // The Agent stays first until its sign-in is connected; only then does the queue move on, and the form finishes
+    // only when every picked Agent has connected.
+    const rest=queue.slice(1);
+    if(rest.length) { setQueue(rest); setToken(''); return; }
+    setQueue([]); refreshApps(); if(addressPage) router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
    } else setError('connectAttention');
   };
   timer=setTimeout(poll,pollEvery);
@@ -371,7 +374,7 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
      const url=typeof answer.body.url==='string'?answer.body.url:null;
      if(!url) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
      const key=String(answer.body.key||''); popup!.opener=null; popup!.location.href=url; vendor.current=popup; setToken('');
-     setQueue(targets.slice(targets.indexOf(agent)+1)); setFollowing({key,agent}); setBusy(false); return;
+     setQueue(targets); setFollowing({key,agent}); setBusy(false); return;
     }
    }
    setQueue([]); setToken(''); setBusy(false);

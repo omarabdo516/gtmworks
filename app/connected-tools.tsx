@@ -12,13 +12,14 @@ import { useI18n } from '@/lib/i18n-client';
 import { toast } from '@/app/toast';
 import { signInToApp } from '@/app/app-sign-in';
 import { appsChanged } from '@/app/company-apps-read';
+import { useAppsSheet } from '@/app/apps-sheet-open';
 import type { AgentTool } from '@/lib/company-apps.mjs';
 
 export type AgentToolItem=AgentTool&{use:string};
 type State=AgentToolItem['state']|'connecting';
 
 export function ConnectedTools({company,agent,name,owner,tools:given}:{company:string,agent:string,name:string,owner:boolean,tools?:AgentToolItem[]|null}) {
- const {t,language}=useI18n();
+ const {t,language}=useI18n(); const openSheet=useAppsSheet();
  const [managing,setManaging]=useState(false); const [states,setStates]=useState<Record<string,State>>({}); const [error,setError]=useState('');
  const manage=useRef<HTMLButtonElement>(null);
  // A sign-in still followed when the panel goes is cancelled and its window closed.
@@ -42,10 +43,10 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
   if(stateOf(tool)!=='missing') return;
   setError(''); set(tool.key,'connecting');
   const controller=new AbortController(); following.current.add(controller);
-  const result=await signInToApp({company,agent,app:tool.key,signal:controller.signal});
+  const result=await signInToApp({company,agent,app:tool.key,signal:controller.signal,openApp:key=>openSheet?.(null,key)});
   following.current.delete(controller);
   if(controller.signal.aborted) return;
-  if('state' in result) { set(tool.key,'connected'); toast(t('connectConnected',tool.name)); void appsChanged(company,language); }
+  if('state' in result) { if(result.state==='manual') { set(tool.key,'missing'); return; } set(tool.key,'connected'); toast(t('connectConnected',tool.name)); void appsChanged(company,language); }
   else { set(tool.key,'missing'); setError(result.error); }
  };
  const disconnect=async(tool:AgentToolItem)=>{

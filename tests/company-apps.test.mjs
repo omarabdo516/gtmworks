@@ -416,7 +416,7 @@ test('a made server is turned on for another Agent from the address its own prof
 
   assert.equal((await add({name:'Token CRM',url:'https://token-crm.example/mcp',kind:'header',token:'token-one'})).status,200);
   const tokenWriter=extra=>changeCompanyApp(omar.db,{company,person:owner,agent:writer,app:'token-crm',action:'connect',hermes,...extra});
-  assert.deepEqual(await tokenWriter({}),{status:400,body:{error:'appsTokenInvalid'}},'gtmworks has no copy of the token');
+  assert.deepEqual(await tokenWriter({}),{status:200,body:{needs:'details'}},'the token is typed in the app page');
   assert.deepEqual(await tokenWriter({token:'token-two'}),{status:200,body:{status:'connected'}});
   assert.equal(fake.settings.serverTokens.get(`${agentProfile(writer)}:token-crm`),'token-two');
  } finally { await fake.close(); }
@@ -433,5 +433,60 @@ test('Remove takes a switched-off copy off its Agent too', async () => {
   const driver={read:target=>readApps({...target,managementAddress:fake.managementAddress}),disconnect:(target,key)=>disconnectApp({...target,managementAddress:fake.managementAddress},key)};
   assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,app:'my-crm',action:'disconnect',hermes,driver}),{status:200,body:{status:'off'}});
   assert.equal(serversOf(fake,agentProfile(writer))['my-crm'],undefined,'the switched-off copy is gone');
+ } finally { await fake.close(); }
+});
+
+test('an app with a declared field asks the browser for the app page instead of connecting without it', async () => {
+ const fake=await fakeHermes();
+ try {
+  makeProfile(fake,companyProfile(company));
+  fake.settings.catalog.push('asana');
+  fake.settings.catalogEnv.asana=[{name:'ASANA_CLIENT_ID',prompt:'Client ID',required:true}];
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'asana',action:'connect',hermes}),{status:200,body:{needs:'details'}});
+  assert.equal(serversOf(fake,companyProfile(company)).asana,undefined,'nothing was installed without its field');
+ } finally { await fake.close(); }
+});
+
+test('Test probes under a temporary key, leaving an existing server of that name byte-for-byte unchanged', async () => {
+ const fake=await fakeHermes();
+ try {
+  makeProfile(fake,companyProfile(company));
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My CRM',url:'https://one.example/mcp',kind:'none',hermes});
+  const before=JSON.stringify(serversOf(fake,companyProfile(company)));
+  const probe=url=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name:'My CRM',url,kind:'none',hermes});
+  assert.equal((await probe('https://two.example/mcp')).body.state,'connected');
+  assert.equal(JSON.stringify(serversOf(fake,companyProfile(company))),before,'the real server is untouched');
+  assert.equal(serversOf(fake,companyProfile(company))['my-crm-test'],undefined,'the probe key is removed');
+  fake.settings.appsUnreachable.add('my-crm-test');
+  assert.equal((await probe('https://two.example/mcp')).body.state,'attention');
+  assert.equal(JSON.stringify(serversOf(fake,companyProfile(company))),before,'a failed probe leaves it untouched too');
+ } finally { await fake.close(); }
+});
+
+test('a Test whose temporary server cannot be removed answers a failure, not its tools', async () => {
+ const fake=await fakeHermes();
+ try {
+  makeProfile(fake,companyProfile(company));
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  const driver={disconnect:async()=>({state:'failed'})};
+  assert.deepEqual(await changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'test',name:'My CRM',url:'https://crm.example/mcp',kind:'none',hermes,driver}),{status:502,body:{error:'appsFailed'}});
+ } finally { await fake.close(); }
+});
+
+test('connecting a made server uses its target Agent\'s own address, and refuses when the other profiles disagree', async () => {
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),agentProfile(writer),agentProfile(analyst)]) makeProfile(fake,name);
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow,analystRow]});
+  for(const [agent,url] of [[lead,'https://one.example/mcp'],[writer,'https://two.example/mcp']]) assert.equal((await changeCompanyServer(omar.db,{company,person:owner,agent,action:'add',name:'My CRM',url,kind:'none',hermes})).status,200);
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:writer,app:'my-crm',action:'connect',hermes}),{status:200,body:{status:'connected'}});
+  assert.equal(serversOf(fake,agentProfile(writer))['my-crm'].url,'https://two.example/mcp','its own address, not the other profile\'s');
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:analyst,app:'my-crm',action:'connect',hermes}),{status:400,body:{error:'appsServerInvalid'}},'the other profiles disagree');
  } finally { await fake.close(); }
 });

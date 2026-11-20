@@ -8,6 +8,7 @@ import { Frame } from '@/app/frame';
 import type { AppItem } from '@/app/settings-apps-client';
 import { ToastHost } from '@/app/toast';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { useAppsSheet } from '@/app/apps-sheet-open';
 import en from '@/lib/messages/apps.en.json';
 import { apps } from '@/lib/app-catalogue.mjs';
 import '@/app/tokens.css';
@@ -260,4 +261,18 @@ test('the next page shows the count read a moment ago, with no read of its own',
  const next = await render(shell(true, 'c-kept'));
  await expect.element(next.getByRole('button', { name: 'Connect apps 2 connected' })).toBeVisible();
  expect(seen.reads, 'a read under a minute old is kept').toBe(1);
+});
+
+// #458: a card that needs a token or a declared field opens the sheet at that app's page.
+function Opener() {
+  const open = useAppsSheet();
+  return <button type="button" onClick={() => open?.(null, 'klaviyo')}>Open Klaviyo</button>;
+}
+test('the sheet can open at one app\'s page from outside it', async () => {
+  engine(items);
+  const screen = await render(<div className="gw"><LanguageProvider language="en">
+    <AppsSheetProvider company="c-direct" owner rtl={false}><Opener/></AppsSheetProvider>
+  </LanguageProvider></div>);
+  await screen.getByRole('button', { name: 'Open Klaviyo' }).click();
+  await expect.element(screen.getByRole('heading', { name: 'Klaviyo' })).toBeVisible();
 });

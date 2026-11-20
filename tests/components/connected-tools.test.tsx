@@ -92,3 +92,15 @@ test('a read of the tools that fails shows the apps\' line', async () => {
   expect(screen.container.querySelectorAll('button, .panel-row')).toHaveLength(0);
  } finally { fetch.mockRestore(); }
 });
+
+// #458: an app that needs a token or a declared field is typed in the apps sheet, not connected from this row; the row
+// stays Connect and no toast says it connected.
+test('Connect on a row opens the app\'s page in the sheet when it needs a value typed there', async () => {
+ signInToApp.mockReset(); signInToApp.mockResolvedValue({ state: 'manual' }); toast.mockReset();
+ const screen = await drawn({ owner: true });
+ await screen.getByRole('button', { name: 'Connect' }).click();
+ await expect.poll(() => signInToApp.mock.calls.length).toBe(1);
+ expect(signInToApp.mock.calls[0][0]).toMatchObject({ company: 'co-1', agent: 'ag-1', app: 'mixpanel', openApp: expect.any(Function) });
+ await expect.element(screen.getByRole('button', { name: 'Connect' })).toBeVisible();
+ expect(toast).not.toHaveBeenCalled();
+});

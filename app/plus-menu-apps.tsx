@@ -2,7 +2,7 @@
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { useCompanyApps } from './company-apps-read';
-import { useAppsSheet } from './apps-sheet';
+import { useAppsSheet } from './apps-sheet-open';
 import { connectedCount } from './settings-apps-client';
 import type { ComposerPlace } from './conversation-composer';
 

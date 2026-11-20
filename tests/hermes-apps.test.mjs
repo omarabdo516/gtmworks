@@ -184,8 +184,11 @@ test('an own server may sign in over http, while a catalogue app still signs in 
  const {fake,target}=await companyEngine();
  try {
   fake.settings.appAuthScheme='http';
-  const started=await startAppSignIn(target,'my-oauth','http://127.0.0.1:3000/api/apps/callback/my-oauth',{url:'https://mcp.my-oauth.example/mcp',auth:'oauth'});
-  assert.equal(started.state,'started');
+  const https=await startAppSignIn(target,'my-oauth','http://127.0.0.1:3000/api/apps/callback/my-oauth',{url:'https://mcp.my-oauth.example/mcp',auth:'oauth'});
+  assert.equal(https.state,'failed','an https server needs an https sign-in page');
+  fake.settings.appFlows.clear();
+  const started=await startAppSignIn(target,'my-oauth','http://127.0.0.1:3000/api/apps/callback/my-oauth',{url:'http://mcp.my-oauth.example/mcp',auth:'oauth'});
+  assert.equal(started.state,'started','an http server on the Company network may sign in over http');
   assert.equal(new URL(started.url).protocol,'http:');
   const catalogue=await startAppSignIn(target,'klaviyo',back('klaviyo'));
   assert.equal(catalogue.state,'failed','a vendor page is https only');

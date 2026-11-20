@@ -286,3 +286,36 @@ test('a made server has the per-Agent switches and turns on for another Agent', 
   const again = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={attention} text={text} failed={false}/>);
   await expect.element(again.getByRole('button', { name: 'Reconnect for Writer' })).toBeVisible();
 });
+
+// #458: an OAuth add keeps its Agent first until that Agent's sign-in is connected. A failed sign-in leaves it first so
+// the next Add retries it, and the form finishes only when every picked Agent connected.
+test('the own-tool OAuth queue retries a failed Agent first and finishes after every picked Agent', async () => {
+  const polls: Record<string, number> = {};
+  const adds: string[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/company-servers') {
+      const body = JSON.parse(String(init?.body)); adds.push(body.agent);
+      return Promise.resolve(new Response(JSON.stringify({ key: 'my-oauth', url: `https://auth.example/${body.agent}` }), { status: 200 }));
+    }
+    if (url === '/api/company-apps') {
+      const body = JSON.parse(String(init?.body));
+      polls[body.agent] = (polls[body.agent] ?? 0) + 1;
+      const status = body.agent === lead && polls[body.agent] === 1 ? 'failed' : 'connected';
+      return Promise.resolve(new Response(JSON.stringify({ status }), { status: 200 }));
+    }
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  vi.stubGlobal('open', vi.fn(() => ({ opener: {}, location: { href: 'about:blank' }, close: vi.fn() })));
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await screen.getByRole('textbox', { name: /Name/ }).fill('My OAuth');
+  await screen.getByRole('textbox', { name: /Address/ }).fill('https://oauth.example/mcp');
+  await screen.getByRole('checkbox', { name: 'Writer' }).click();
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(text.connectAttention);
+  await expect.element(screen.getByRole('button', { name: 'Add for Lead' })).toBeVisible();
+  await screen.getByRole('button', { name: 'Add for Lead' }).click();
+  await expect.element(screen.getByRole('button', { name: 'Add for Writer' })).toBeVisible();
+  await screen.getByRole('button', { name: 'Add for Writer' }).click();
+  await expect.poll(() => replace.mock.calls.map(([href]) => href), { timeout: 8000 }).toEqual(['/c/rs-learning/settings?section=apps']);
+  expect(adds).toEqual([lead, lead, writer]);
+});
