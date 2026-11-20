@@ -1,5 +1,11 @@
 [
  {
+  "issue": 460,
+  "date": "2026-11-20",
+  "en": { "title": "Home shows your real Agents", "body": "Home lists the same Agents as the sidebar, Lead first, each with the Card it is working on now." },
+  "ar": { "title": "الرئيسية بتعرض وكلاءك الحقيقيين", "body": "الرئيسية بقت بتعرض نفس الوكلاء اللي في القايمة الجانبية، الوكيل الرئيسي الأول، وكل واحد معاه البطاقة اللي شغال عليها دلوقتي." }
+ },
+ {
   "issue": 453,
   "date": "2026-11-20",
   "en": { "title": "The gtmworks icon", "body": "A browser tab and an installed app show the gtmworks mark, and the Month filter with no month chosen reads All months instead of the browser's raw placeholder." },

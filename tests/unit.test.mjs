@@ -151,6 +151,23 @@ test('Home charts use fourteen UTC days, actual stages and first acceptance with
  assert.equal(homeCharts([],stages,[],now).acceptance,null,'no denominator is unavailable');
 });
 
+test('an Agent works on its newest Card in progress, never one whose chat waits on a person', async()=>{
+ const {currentAgentCard}=await import('../lib/home-data.mjs');
+ const stages=[{id:1,name:'كتابة',board_column:'progress'},{id:2,name:'معتمد',board_column:'planned'},{id:3,name:'مراجعة',board_column:'waiting'}];
+ const cards=[
+  {id:1,stage_id:1,agent_id:'a',created_at:'2030-01-02T00:00:00Z'},
+  {id:2,stage_id:1,agent_id:'a',created_at:'2030-01-03T00:00:00Z'},
+  {id:3,stage_id:1,agent_id:'a',created_at:'2030-01-04T00:00:00Z',wait:{person:'p',kind:'question',title:'Which tone?'}},
+  {id:4,stage_id:2,agent_id:'a',created_at:'2030-01-05T00:00:00Z'},
+  {id:5,stage_id:1,agent_id:'b',created_at:'2030-01-06T00:00:00Z'},
+ ];
+ assert.equal(currentAgentCard(cards,stages,'a')?.id,2,'the newest Card in progress, not one waiting or in another column');
+ assert.equal(currentAgentCard(cards,stages,'b')?.id,5);
+ assert.equal(currentAgentCard(cards,stages,'c'),null,'no Card is not a Card');
+ assert.equal(currentAgentCard(null,stages,'a'),null,'an unread Card list is unavailable');
+ assert.equal(currentAgentCard(cards,null,'a'),null,'an unread stage list is unavailable');
+});
+
 test('catalogues reject missing keys, empty messages and mismatched interpolation', async()=>{
  const {catalogueProblems}=await import('../scripts/check-i18n.mjs');
  assert.deepEqual(catalogueProblems({hello:'Hello {0}'},{hello:'مرحبًا {0}'}),[]);
