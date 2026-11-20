@@ -56,6 +56,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // config defaults and schema are what its config routes serve (#125); configWriteFail is a profile whose next config
   // write answers 500, as a profile home that cannot be written does.
   defaultConfig:/** @type {any} */({}),defaultCredentials:/** @type {Record<string,string>} */({}),
+  // The root profile's credential pool (auth.json credential_pool), where `hermes auth add anthropic --type oauth` (the
+  // install's `gtmworks sign-in claude`) puts a Claude subscription with no ~/.anthropic_oauth.json, so the Engine's own
+  // sign-in status does not see it (#438).
+  defaultPool:/** @type {Record<string,{id:string,label:string,auth_type:'oauth'|'api_key',source:string,priority:number,access_token:string}[]>} */({}),
   configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
   configWriteFail:/** @type {Set<string>} */(new Set()),
   // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal
@@ -102,7 +106,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   modelNeedsKey:false,
   // Models a Run may not run on (#158): a Run naming one is answered 400 before it is made, as the pinned release answers a
   // provider or model it cannot resolve (api_server_runs.py 803-809).
-  refusedModels:/** @type {Set<string>} */(new Set()),defaultEnv:/** @type {Record<string,string>} */({}),modelOptionsFail:false,envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
+  refusedModels:/** @type {Set<string>} */(new Set()),defaultEnv:/** @type {Record<string,string>} */({}),modelOptionsFail:false,poolFail:false,envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
   // A run's events (#141): `emit` adds one (tool.started, tool.completed, message.delta and the like) to its stream,
   // `forget` drops its oldest ones as the 1,000-event backlog does, `sweep` drops its whole stream as Hermes does five
   // minutes after the start when nobody reads it. A run reports `runSeconds` from its start to its end. `stallEvents`
@@ -642,6 +646,18 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(found.profile!==scoped) return send(response,400,{detail:'OAuth session profile mismatch'});
     found.status='cancelled'; settings.signInSessions.delete(cancel[1]); return send(response,200,{ok:true,session_id:cancel[1]});
    }
+   // The credential pool (hermes_cli/web_routers/ops.py 351-377): a profile with no entries of its own for a provider
+   // reads the root's (read_credential_pool), and load_pool seeds the profile's ANTHROPIC_API_KEY after the manual rows
+   // (agent/credential_pool.py _normalize_pool_priorities). Each entry carries a token preview gtmworks must never pass on.
+   if(url.pathname==='/api/credentials/pool'&&request.method==='GET') {
+    if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
+    if(settings.poolFail) return send(response,500,{detail:'Internal Server Error'});
+    const pool={...settings.defaultPool};
+    const env=(scoped==='default'?settings.defaultEnv:settings.profiles.get(scoped)?.env)||{};
+    if(env.ANTHROPIC_API_KEY) pool.anthropic=[...pool.anthropic||[],{id:'envkey',label:'ANTHROPIC_API_KEY',auth_type:'api_key',source:'env:ANTHROPIC_API_KEY',priority:(pool.anthropic||[]).length,access_token:env.ANTHROPIC_API_KEY}];
+    return send(response,200,{providers:Object.entries(pool).filter(([,entries])=>entries.length).map(([provider,entries])=>({provider,
+     entries:entries.map((entry,at)=>({index:at+1,id:entry.id,label:entry.label,auth_type:entry.auth_type,source:entry.source,priority:entry.priority,last_status:null,request_count:0,token_preview:`...${entry.access_token.slice(-4)}`,has_refresh:entry.auth_type==='oauth'}))}))});
+   }
    const oauth=url.pathname.match(/^\/api\/providers\/oauth(?:\/([^/]+))?(?:\/(start|poll)(?:\/([^/]+))?)?$/);
    if(oauth) {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
@@ -649,9 +665,14 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     // As in the pinned release (hermes_cli/auth.py read_credential_pool, _load_provider_state), a profile with no
     // credential of its own for a provider reads the default (root) profile's, and its status says logged in.
     const credentialFor=id=>home.credentials[id]||(scoped!=='default'?settings.defaultCredentials[id]:undefined);
+    // Claude's status reads the sign-in file, then the profile's ANTHROPIC_API_KEY, which it reports as logged in with
+    // source env_var; it never reads the credential pool (hermes_cli/web_server_oauth.py 43-73, _anthropic_oauth_status).
+    const envKey=((scoped==='default'?settings.defaultEnv:settings.profiles.get(scoped)?.env)||{}).ANTHROPIC_API_KEY;
+    const anthropicStatus=()=>credentialFor('anthropic')?{logged_in:true,source:'hermes_pkce',token_preview:credentialFor('anthropic').slice(-6)}
+     :envKey?{logged_in:true,source:'env_var',source_label:'ANTHROPIC_API_KEY',token_preview:envKey.slice(-6)}:{logged_in:false,source:null,token_preview:null};
     if(!provider&&request.method==='GET') return send(response,200,{providers:[
      {id:'openai-codex',name:'ChatGPT or Codex Subscription',flow:'device_code',status:{logged_in:Boolean(credentialFor('openai-codex')),token_preview:credentialFor('openai-codex')?.slice(-6)||null}},
-     {id:'anthropic',name:'Anthropic Account',flow:'external',cli_command:'hermes auth add anthropic',status:{logged_in:Boolean(credentialFor('anthropic')),token_preview:credentialFor('anthropic')?.slice(-6)||null}}]});
+     {id:'anthropic',name:'Anthropic Account',flow:'external',cli_command:'hermes auth add anthropic',status:anthropicStatus()}]});
     if(!['openai-codex','anthropic'].includes(provider)) return send(response,400,{detail:`Unknown provider ${provider}`});
     if(step==='start'&&request.method==='POST') {
      if(provider==='anthropic') return send(response,400,{detail:'anthropic uses an external CLI; run `hermes auth add anthropic` manually'});
@@ -667,6 +688,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     }
     // clear_provider_auth clears the scoped profile's own store only, and nothing there is a 409 (oauth.py 774-815).
     if(!step&&request.method==='DELETE') {
+     // A Claude status read from a key is refused before anything is cleared (oauth.py 659-672, 775-785); otherwise the
+     // sign-in file and the provider's whole pool section in the scoped store go (clear_provider_auth).
+     if(provider==='anthropic'&&anthropicStatus().source==='env_var') return send(response,400,{detail:'Anthropic Account cannot be disconnected automatically. Remove the API key from Settings → Keys instead.'});
+     if(scoped==='default'&&settings.defaultPool[provider]?.length) { delete settings.defaultPool[provider]; delete home.credentials[provider]; return send(response,200,{ok:true,provider}); }
      if(!home.credentials[provider]) return send(response,409,{detail:`No stored credentials were removed for ${provider==='anthropic'?'Anthropic Account':'ChatGPT or Codex Subscription'}.`});
      delete home.credentials[provider]; return send(response,200,{ok:true,provider});
     }

@@ -88,7 +88,7 @@ export function ProviderKeys({company,owner,data}:{company:string,owner:boolean,
   {error&&<p className="set-err" role="alert">{t(reasonKey(error,'key'))}</p>}
   {!owner&&<p className="set-hint">{t('settingsModelsKeyOwnerOnly')}</p>}
   {owner&&notes.length>0&&<ul className="set-hint md-waiting">{notes.map(([label,name],at)=><li key={`${label}-${at}`}>{t(label)} <bdi>{name}</bdi></li>)}</ul>}
-  <p className="set-hint">{t('settingsModelsProviderKeysHint')}</p>
+  <p className="set-hint">{t('settingsModelsKeyWhat')} {t('settingsModelsProviderKeysHint')}</p>
  </section>;
 }
 
