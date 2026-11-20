@@ -88,9 +88,10 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const runner=(working as {person:string,name:string}[]|null)?.[0];
  const {data:manages}=runner&&runner.person!==person?await db.rpc('can_manage_company',{target:company}):{data:false};
  const board=card&&{card:card.card,column:card.column};
- // A reply that failed for want of any model provider (#422) says so: the Owner connects one, a Member asks the Owner.
+ // A reply that failed for a cause a retry cannot fix (#422, #457) says so: the Owner fixes it, a Member asks the Owner.
  const ended=latestEnd(messages,ends);
- const {data:ownsIt}=ended==='no_model'?await db.rpc('is_company_owner',{c:company}):{data:false};
+ const reason: 'credit'|'key'|'model'|null=ended==='no_credit'?'credit':ended==='key_refused'?'key':ended==='model_missing'?'model':null;
+ const {data:ownsIt}=ended==='no_model'||reason?await db.rpc('is_company_owner',{c:company}):{data:false};
  // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
  // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
  // of a Run no message of the person started.
@@ -112,6 +113,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(connect?{connect}:{}),
   failed:ended!==null,
   ...(ended==='no_model'?{noModel:{owner:ownsIt===true}}:{}),
+  ...(reason?{modelRefused:{reason,owner:ownsIt===true}}:{}),
   working:runner?.name??null,
   canStop:!!runner&&(runner.person===person||manages===true),
   ...(board?{board}:{}),

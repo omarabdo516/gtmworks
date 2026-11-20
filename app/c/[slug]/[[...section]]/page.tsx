@@ -85,6 +85,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const boardCards=()=>db.rpc('board_cards',{c:company.id}).select(`${boardCardColumns},crew`) as unknown as ReturnType<typeof read>;
  // A Card's own Agent and the board's chips (#144, #190): the Company's Agents the reader sees, in the sidebar's order.
  // Home's Agent tiles read their in-progress Cards on their own, newest first, so the capped Card list never hides one (#460).
+ // shortcut: one read for every Agent, so past the Data API's 1,000 rows one Agent's Cards could crowd out another's; read per Agent if a Company ever holds that many in progress.
  const [workData,{data:agentRows},homeAgentCards]=await Promise.all([
   (isWork||section==='home'||section==='approvals')?Promise.all(['work_stages','work_labels','work_cards','work_checklist','work_activity','work_creatives','work_versions','work_card_labels','work_assignees','work_attachments'].map(t=>t==='work_cards'?onBoard?boardCards():cards():read(t))):[],
   onBoard?db.from('hermes_agents').select('id,connection_id,name,speciality,is_default').eq('company_id',company.id).order('name'):{data:[]},
