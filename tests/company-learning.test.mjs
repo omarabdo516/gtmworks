@@ -125,6 +125,43 @@ test('the Company\'s mode reaches every Agent profile and the shared space, and 
  } finally { await fake.close(); }
 });
 
+test('a Company-wide mode leaves the main Agent\'s own choice on its `co-` profile, though an Agent being moved still shares it', async () => {
+ const fake=await fakeHermes();
+ try {
+  setup(fake);
+  for(const row of rows) profileOn(fake,row.profile);
+  profileOn(fake,space);
+  // #425: Lead chose "ask first" for itself; Helper still runs on Lead's profile while the worker moves it.
+  profileOn(fake,companyProfile(company),{memory:{write_approval:true},skills:{write_approval:true}});
+  const {db}=database({modes:new Map([[lead,'ask']])});
+  const changed=await changeLearningMode(db,{company,mode:'auto',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  assert.equal(changed.state,'written',JSON.stringify(changed));
+  assert.deepEqual(changed.agents.map(agent=>agent.agent),[writer],'only the Agents whose profile follows the Company are written');
+  const config=fake.settings.profiles.get(companyProfile(company)).config;
+  assert.deepEqual([at(config,'memory.write_approval'),at(config,'skills.write_approval')],[true,true],'the main Agent keeps its own ask first');
+  assert.ok(!requestsOf(fake,'PUT').some(request=>request.path.includes(companyProfile(company))),'its profile is never written');
+ } finally { await fake.close(); }
+});
+
+test('the main Agent chooses its own mode on its `co-` profile and the database keeps it, as any Agent does', async () => {
+ const fake=await fakeHermes();
+ try {
+  setup(fake);
+  const alone=rows.filter(row=>row.agent!==helper);
+  for(const row of alone) profileOn(fake,row.profile);
+  profileOn(fake,space);
+  const modes=new Map();
+  const {db}=database({agents:alone,modes});
+  // #425: before, the Engine took the write and the database then refused the main Agent as shared.
+  const changed=await changeLearningMode(db,{company,agent:lead,mode:'ask',hermes:{address:fake.address,key:fake.settings.key},driver:settingsDriver(fake)});
+  assert.equal(changed.state,'written',JSON.stringify(changed));
+  const config=fake.settings.profiles.get(companyProfile(company)).config;
+  assert.deepEqual([at(config,'memory.write_approval'),at(config,'skills.write_approval')],[true,true]);
+  assert.equal(modes.get(lead),'ask');
+  assert.ok(requestsOf(fake,'PUT').every(request=>request.path.includes(companyProfile(company))),'only its own profile is written');
+ } finally { await fake.close(); }
+});
+
 test('the mode changes for the Owner only, before the Engine is asked, and a mode this version does not know writes nothing', async () => {
  const fake=await fakeHermes();
  try {

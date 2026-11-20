@@ -21,7 +21,7 @@ select json_build_object(
   and position('agentToolsPending' in pg_get_functiondef('public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)'::regprocedure))>0
   and position('agentToolsPending' in pg_get_functiondef('public.claim_conversation_turn(uuid)'::regprocedure))>0,
  'health_reads_the_sub_agents_choice',position('subagents' in pg_get_function_result('public.engine_tools_due()'::regprocedure))>0,
- 'the_worker_records_the_read_back',position('tools_confirmed' in pg_get_functiondef('public.record_company_profile(uuid,text)'::regprocedure))>0
+ 'the_worker_records_the_read_back',position('tools_confirmed' in pg_get_functiondef('public.record_company_profile(uuid,text,boolean)'::regprocedure))>0
   and position('tools_confirmed' in pg_get_functiondef('public.record_agent_profile(uuid,text,boolean)'::regprocedure))>0
   and position('subagents_written' in pg_get_functiondef('public.record_agent_profile(uuid,text,boolean)'::regprocedure))>0
   and position('tools_pending' in pg_get_functiondef('public.begin_profile_tools(text)'::regprocedure))>0,
@@ -34,7 +34,7 @@ select json_build_object(
   and exists(select 1 from information_schema.columns where table_schema='public' and table_name='company_audit' and column_name='old_level')
   and exists(select 1 from information_schema.columns where table_schema='public' and table_name='company_audit' and column_name='new_level'),
  'worker_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.company_profile_work()','public.agent_profile_work()','public.record_company_profile(uuid,text)',
+  from unnest(array['public.company_profile_work()','public.agent_profile_work()','public.record_company_profile(uuid,text,boolean)',
    'public.record_agent_profile(uuid,text,boolean)','public.begin_profile_tools(text)','public.record_profile_tools(text,boolean)',
    'public.attach_company_profile(uuid)','public.move_company_profile(uuid)','public.engine_tools_due()',
    'public.forget_company_profile(text)','public.agent_move_work()','public.move_agent_profile(uuid)',

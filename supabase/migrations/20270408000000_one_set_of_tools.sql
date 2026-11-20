@@ -22,6 +22,8 @@ drop function if exists public.claim_conversation_turn(uuid);
 drop function if exists public.company_profile_work();
 drop function if exists public.agent_profile_work();
 drop function if exists public.record_company_profile(uuid,text,integer,integer);
+-- 20270407042500 (#425) gave it the main Agent's sub-agents switch.
+drop function if exists public.record_company_profile(uuid,text,integer,integer,boolean);
 drop function if exists public.record_agent_profile(uuid,text,integer,integer,boolean);
 drop function if exists public.move_agent_profile(uuid);
 drop function if exists public.agent_move_work();
@@ -153,13 +155,14 @@ end $function$;
 revoke all on function public.claim_conversation_turn(uuid) from public,anon,authenticated;
 grant execute on function public.claim_conversation_turn(uuid) to service_role;
 
--- 20270213's Company work, unchanged but for the confirmation: a recorded profile is work while it is unconfirmed or
--- marked as changing, and a profile whose Engine lost it is made again.
+-- 20270407042500's Company work (#425: it carries the main Agent's sub-agents switch), unchanged but for the
+-- confirmation: a recorded profile is work while it is unconfirmed or marked as changing, and a profile whose Engine lost
+-- it is made again.
 create function public.company_profile_work()
- returns table(company_id uuid, profile text, tools_confirmed boolean, tools_pending boolean, attach boolean, move boolean)
+ returns table(company_id uuid, profile text, tools_confirmed boolean, tools_pending boolean, attach boolean, move boolean, subagents boolean)
  language sql stable security definer set search_path='' as $function$
- select w.id,public.company_engine_profile(w.id),w.tools_confirmed,coalesce(w.tools_pending,false),w.attach,w.move from (
-  select c.id,coalesce(p.tools_confirmed,false) as tools_confirmed,p.tools_pending,p.company_id is not null as recorded,
+ select w.id,public.company_engine_profile(w.id),w.tools_confirmed,coalesce(w.tools_pending,false),w.attach,w.move,coalesce(w.subagents,false) from (
+  select c.id,coalesce(p.tools_confirmed,false) as tools_confirmed,p.tools_pending,p.subagents,p.company_id is not null as recorded,
    p.company_id is null and exists(select 1 from public.hermes_agents a where a.company_id=c.id and a.profile=public.company_engine_profile(c.id)) as lost,
    not exists(select 1 from public.hermes_agents a where a.company_id=c.id) as attach,
    exists(select 1 from public.hermes_agents a where a.company_id=c.id and a.profile<>public.company_engine_profile(c.id) and a.profile !~ '^ag-[0-9a-f]{32}$') as move
@@ -187,16 +190,24 @@ $$;
 revoke all on function public.agent_profile_work() from public,anon,authenticated;
 grant execute on function public.agent_profile_work() to service_role;
 
--- The worker records the read-back of the fixed set; no level and no policy is named anywhere.
-create function public.record_company_profile(c uuid, engine_profile text) returns void
+-- The worker records the read-back of the fixed set; no level and no policy is named anywhere. The read-back names the
+-- sub-agents switch the worker wrote (20270407042500, #425): a change the Owner made while it wrote is never recorded as
+-- applied, and the profile stays pending.
+create function public.record_company_profile(c uuid, engine_profile text, subagents_written boolean default null) returns void
 language plpgsql security definer set search_path='' as $$
 begin
  if engine_profile is distinct from public.company_engine_profile(c) then raise exception 'companyProfileInvalid' using errcode='22023'; end if;
+ -- The row is locked first, so an Owner's switch cannot land between this check and the record below.
+ perform 1 from public.company_profiles p where p.company_id=c for update;
+ if subagents_written is not null and exists(select 1 from public.company_profiles p where p.company_id=c and p.subagents is distinct from subagents_written) then
+  raise exception 'companyProfileChanged' using errcode='40001'; end if;
  insert into public.company_profiles(company_id,profile,tools_confirmed) values (c,engine_profile,true)
-  on conflict (company_id) do update set tools_confirmed=true,tools_pending=false;
+  -- A worker that names no switch writes no delegation: its read-back never clears a switch that is on.
+  on conflict (company_id) do update set tools_confirmed=true,
+   tools_pending=record_company_profile.subagents_written is null and public.company_profiles.subagents;
 end $$;
-revoke all on function public.record_company_profile(uuid,text) from public,anon,authenticated;
-grant execute on function public.record_company_profile(uuid,text) to service_role;
+revoke all on function public.record_company_profile(uuid,text,boolean) from public,anon,authenticated;
+grant execute on function public.record_company_profile(uuid,text,boolean) to service_role;
 
 -- Only lead_create_agent writes an owner record; the worker records the read-back of the fixed set on one that exists,
 -- refusing a sub-agents choice the Owner changed while it wrote.

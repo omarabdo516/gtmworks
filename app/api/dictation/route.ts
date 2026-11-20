@@ -48,7 +48,7 @@ async function respond(request:NextRequest) {
   if(raw.length>maxBody) return reply({error:'dictationTooLarge'},413);
   const body=writing?JSON.parse(raw):Object.fromEntries(request.nextUrl.searchParams);
   if(typeof body.company!=='string'||!uuid.test(body.company)) return reply({error:'dictationNotFound'},404);
-  const {data:company}=await db.from('companies').select('id').eq('id',body.company).maybeSingle();
+  const {data:company}=await db.from('companies').select('id,slug').eq('id',body.company).maybeSingle();
   if(!company) return reply({error:'dictationNotFound'},404);
   const agent=await spokenFor(db,body.company,body);
   if(!agent) return reply({error:'dictationNotFound'},404);
@@ -64,7 +64,11 @@ async function respond(request:NextRequest) {
   if(typeof body.mimeType!=='string'||!body.mimeType.startsWith('audio/')) return reply({error:'dictationInvalid'},400);
   const heard=await engine.transcribe({dataUrl:body.dataUrl,mimeType:body.mimeType});
   if(heard.state==='transcribed') return reply({text:heard.text});
-  if(heard.state==='unavailable') return reply({state:'unavailable'});
+  // No provider (#430): the line under the box tells an Owner where to set one, and anyone else that the Owner must.
+  if(heard.state==='unavailable') {
+   const {data:owner,error}=await db.rpc('is_company_owner',{c:body.company});
+   return reply({state:'unavailable',owner:!error&&owner===true,slug:company.slug});
+  }
   return reply({state:'failed'},502);
  } catch { return reply({error:'dictationFailed'},400); }
 }

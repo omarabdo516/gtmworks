@@ -229,3 +229,13 @@ test('a blocked sign-in window starts no sign-in, stays on the page and says how
   expect(sent, 'no sign-in was started').toEqual([]);
   await expect.element(screen.getByRole('button', { name: 'Connect', exact: true })).not.toHaveAttribute('aria-disabled', 'true');
 });
+
+// #424: every connectable app shows its logo from Simple Icons, a file of this install, or its letters where Simple Icons
+// has none.
+test('every app card shows its logo or its letters', async () => {
+  await render(<AppsList place={settings} owner items={items} text={text}/>);
+  const tile = (key: string) => document.getElementById(`app-t-${key}`)?.closest('.app-card')?.querySelector('.tool-tile');
+  expect(apps.map(app => [app.key, tile(app.key)?.querySelector('img.tool-logo')?.getAttribute('src') ?? tile(app.key)?.textContent])).toEqual([
+    ['klaviyo', 'K'], ['canva', 'Ca'], ['notion', '/logos/simple/notion.svg'], ['airtable', '/logos/simple/airtable.svg'],
+    ['gamma', 'G'], ['amplitude', 'Am'], ['mixpanel', '/logos/simple/mixpanel.svg']]);
+});

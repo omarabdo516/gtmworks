@@ -3,8 +3,8 @@ import type { VoiceList } from './hermes.mjs';
 export const voiceLanguages:readonly string[];
 export const voiceSpeeds:readonly number[];
 export function voiceSample(language:string,name:unknown):string;
-export type AgentVoice={state:'found',own:boolean,language:string,speed:number,provider:string,voice:string|null,voiceName:string|null,list:VoiceList|null}
- |{state:'refused'|'unreachable'|'failed',own:boolean,language:string,speed:number,provider:string,voice:null,voiceName:null,list:null};
+export type AgentVoice={state:'found',own:boolean,language:string,speed:number,provider:string,voice:string|null,voiceName:string|null,list:VoiceList|null,speech:string|null,languages:string[]}
+ |{state:'refused'|'unreachable'|'failed',own:boolean,language:string,speed:number,provider:string,voice:null,voiceName:null,list:null,speech:null,languages:string[]};
 export type VoiceValues={language:string,speed:number,voice:string|null};
 export type VoiceRefusal='invalid'|'notOwn'|'notAllowed'|'noEngine'|'noVoices'|'refused'|'unreachable'|'failed'|'mismatch';
 export function readAgentVoice(db:SupabaseClient,request:{company:string,agent:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<AgentVoice|null>;

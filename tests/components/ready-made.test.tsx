@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import ReadyMade from '@/app/ready-made';
@@ -8,6 +9,8 @@ import type { Language } from '@/lib/i18n.mjs';
 
 const replace = vi.fn<(href: string) => void>();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace, push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
+// The composer's settings link is the app's Link, which needs Next's router; a plain link stands in.
+vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 let answer: (response: Response) => void = () => {};
 const sent = vi.fn<(body: { conversation: string, message: string }) => void>();

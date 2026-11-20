@@ -6,7 +6,7 @@ import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversatio
 import { LanguageProvider } from '@/lib/i18n-client';
 import { MessageBox } from '@/app/conversation-composer';
 import type { ConversationRecord } from '@/lib/conversation-record';
-import { latestEnded, shown, type AgentRequestView } from '@/lib/conversations';
+import { latestEnd, shown, type AgentRequestView } from '@/lib/conversations';
 import '@/app/shell.css';
 // The loaded chat once its record is read, as the page streams it.
 const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
@@ -148,7 +148,7 @@ const asking = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'P
 const draft = { run_id: 'run-1', at, card: { kind: 'reply' as const, card: { id: 5, kind: 'draft' as const, title: 'Campaign plan', line: 'Draft · Meta Ads', rows: [{ label: 'Goal', value: 'WhatsApp leads' }] } } };
 const onlyCard = (outcome: 'completed' | 'failed') => {
  const usage = [{ run_id: 'run-1', outcome }];
- return talk(shown([asking], usage, [draft], 'Mona'), { failed: latestEnded([asking], usage) });
+ return talk(shown([asking], usage, [draft], 'Mona'), { failed: latestEnd([asking], usage) !== null });
 };
 for (const [language, line] of [['en', 'The agent could not finish this reply. Send the message again to retry.'], ['ar', 'الوكيل مقدرش يكمّل الرد ده. ابعت الرسالة تاني عشان تجرّب من الأول.']] as const) test(`in ${language} a reply that is only a card shows the card and no failure line, and a failed one shows the line`, async () => {
  const done = await render(view(onlyCard('completed'), language));
@@ -158,6 +158,27 @@ for (const [language, line] of [['en', 'The agent could not finish this reply. S
  const failed = await render(view(onlyCard('failed'), language));
  await expect.element(failed.getByRole('group', { name: 'Campaign plan' })).toBeVisible();
  await expect.element(failed.getByRole('alert').filter({ hasText: line })).toBeVisible();
+});
+
+// #422: a reply that failed because the Company has no model at all says so instead of offering a retry: the Owner
+// gets the way to Settings, Subscription and models; a Member is told to ask the Owner.
+const words = {
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Subscription and models', ask: 'Ask the company’s Owner to connect one in Settings.', retry: 'Send the message again to retry.' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من الاشتراك والموديلات', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.', retry: 'ابعت الرسالة تاني' },
+} as const;
+for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a reply that failed for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'}`, async () => {
+ const said = words[language];
+ const screen = await render(view(talk([asking], { failed: true, noModel: { owner } }), language));
+ const line = screen.getByRole('alert').filter({ hasText: said.line });
+ await expect.element(line).toBeVisible();
+ await expect.element(line.filter({ hasText: said.retry })).not.toBeInTheDocument();
+ if (owner) {
+  await expect.element(line.getByRole('link', { name: said.connect })).toHaveAttribute('href', '/c/rs-learning/settings?section=models');
+  await expect.element(line.filter({ hasText: said.ask })).not.toBeInTheDocument();
+ } else {
+  await expect.element(line.filter({ hasText: said.ask })).toBeVisible();
+  await expect.element(line.getByRole('link')).not.toBeInTheDocument();
+ }
 });
 
 // #317: a job Lead handed another Agent is a quiet row under Lead's reply, drawn from gtmworks's own record: both

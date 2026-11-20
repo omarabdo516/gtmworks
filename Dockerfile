@@ -21,6 +21,8 @@ ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
+# The providers' and apps' logos with their licences (#424): a standalone build does not carry public/.
+COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/worker ./worker
 COPY --from=build --chown=node:node /app/lib ./lib
 # The installer registers the install's Engine record through this script (#380); a release image needs it too.
@@ -34,9 +36,10 @@ COPY --from=build --chown=node:node /app/lib ./install/lib
 COPY --from=build --chown=node:node /app/scripts/install-db.sql /app/scripts/local-default-privileges.sql /app/scripts/install-key.sh /app/scripts/install-nginx.conf /app/scripts/install-gateway-real-ip.sh /app/scripts/engine-template.yml ./install/scripts/
 COPY --from=build --chown=node:node /app/supabase/migrations ./install/supabase/migrations
 # The main channel (scripts/get.sh --channel main) has no GitHub Release: its compose file and install script are written
-# from these source files by release-assets.mjs, run inside the main image for the digest the install just pulled.
+# from these source files by release-assets.mjs, run inside the main image for the digest the install just pulled. Every
+# image also carries its own get.sh, the gtmworks command an install or update of it leaves behind (#437).
 COPY --from=build --chown=node:node /app/docker-compose.install.yml ./release-source/
-COPY --from=build --chown=node:node /app/scripts/install.sh /app/scripts/release-assets.mjs /app/scripts/engine-template.yml ./release-source/scripts/
+COPY --from=build --chown=node:node /app/scripts/install.sh /app/scripts/get.sh /app/scripts/release-assets.mjs /app/scripts/engine-template.yml ./release-source/scripts/
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

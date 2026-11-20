@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { everyAgentGets, sandboxTools, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, childToolsets, forbiddenOf, companyProfile } from '../lib/agent-toolsets.mjs';
-import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, prepareApp } from '../lib/hermes.mjs';
+import { createHash } from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, prepareApp, removeProviderKey } from '../lib/hermes.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
@@ -339,7 +341,7 @@ test('the sign-in driver passes on states, a code and an https link, never a cre
   assert.deepEqual(await cancelSignIn(root,cancelled.session),{state:'cancelled'});
   assert.deepEqual(fake.settings.managementRequests.map(request=>`${request.method} ${request.path}`),[
    'POST /api/providers/oauth/openai-codex/start',`GET /api/providers/oauth/openai-codex/poll/${atRoot.session}?profile=${name}`,
-   `GET /api/providers/oauth/openai-codex/poll/${atRoot.session}`,'GET /api/providers/oauth','DELETE /api/providers/oauth/openai-codex','DELETE /api/providers/oauth/openai-codex',
+   `GET /api/providers/oauth/openai-codex/poll/${atRoot.session}`,'GET /api/providers/oauth','GET /api/credentials/pool','DELETE /api/providers/oauth/openai-codex','DELETE /api/providers/oauth/openai-codex',
    'POST /api/providers/oauth/openai-codex/start',`DELETE /api/providers/oauth/sessions/${cancelled.session}`]);
  } finally { await fake.close(); }
 });
@@ -427,6 +429,53 @@ test('the Owner signs the Company in once on the root profile of its own Engine,
   const cancelled=await ask(owner,driver,{intent:'start'});
   assert.deepEqual(await ask(owner,driver,{intent:'cancel',session:cancelled.body.session}),{status:200,body:{status:'cancelled'}});
   assert.equal(fake.settings.signInSessions.has(cancelled.body.session),false);
+ } finally { await fake.close(); }
+});
+
+test('a Claude subscription in the root profile\'s credential pool is the Company\'s; an API key is never a sign-in, and each outlives the other\'s removal (#438)', async () => {
+ const fake=await fakeHermes({managementPort:0});
+ try {
+  const driver=pointedAt(fake);
+  const config=toolConfig();
+  for(const name of [companyProfile(two),agentProfile]) await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets});
+  const owner=sessions(fake,{owner:true,agents:[agentProfile]});
+  const read=()=>readCompanySignIns(owner.db,{company:two,driver,hermes:{address:fake.address,key:'test-only-key'}});
+  // The API key the Owner gave first: the Engine reports Claude logged in on the Agents' profiles, from env_var.
+  const key='sk-ant-api03-known-key-0123456789';
+  for(const name of [companyProfile(two),agentProfile]) fake.settings.profiles.get(name).env={ANTHROPIC_API_KEY:key};
+  assert.deepEqual(states(await read()),{'openai-codex':'notConnected',anthropic:'notConnected'},'a key is not a subscription');
+  // `gtmworks sign-in claude`: an OAuth row in the root's pool, which the Engine's own Claude status does not see.
+  const token='sk-ant-oat01-known-subscription-0123456789';
+  fake.settings.defaultPool.anthropic=[{id:'a1b2c3',label:'anthropic-oauth-1',auth_type:'oauth',source:'manual:hermes_pkce',priority:0,access_token:token}];
+  const both=await read();
+  assert.deepEqual(states(both),{'openai-codex':'notConnected',anthropic:'connected'});
+  assert.doesNotMatch(JSON.stringify(both),new RegExp(`${token.slice(-4)}|${key.slice(-4)}|hermes_pkce|env_var`),'no credential, preview or source leaves the read');
+  // Removing the key, as Settings removes it, leaves the subscription.
+  const space=`cs-${companyProfile(two).slice(3)}`;
+  fake.settings.profiles.set(space,{soul:'',provider:'auto',model:'',key:'test-only-key',config:{},credentials:{},env:{ANTHROPIC_API_KEY:key}});
+  assert.equal((await removeProviderKey(install(fake),{space,profiles:[companyProfile(two),agentProfile],provider:'anthropic'})).state,'removed');
+  for(const name of [space,companyProfile(two),agentProfile]) assert.equal(fake.settings.profiles.get(name).env.ANTHROPIC_API_KEY,undefined,name);
+  assert.ok(fake.settings.defaultPool.anthropic);
+  assert.equal((await read()).signIns.anthropic.state,'connected');
+  // Disconnect removes the subscription and leaves the key: a profile whose Claude is its key has nothing to remove.
+  for(const name of [companyProfile(two),agentProfile]) fake.settings.profiles.get(name).env={ANTHROPIC_API_KEY:key};
+  assert.deepEqual(await ask(owner,driver,{provider:'anthropic',intent:'disconnect'}),{status:200,body:{status:'disconnected'}});
+  assert.equal(fake.settings.defaultPool.anthropic,undefined);
+  assert.equal(fake.settings.profiles.get(companyProfile(two)).env.ANTHROPIC_API_KEY,key);
+  assert.deepEqual(states(await read()),{'openai-codex':'notConnected',anthropic:'notConnected'});
+  assert.deepEqual(owner.logged.map(change=>[change.provider,change.connected]),[['anthropic',false]]);
+  // A token the Engine seeded from outside its own store is no sign-in the Company can remove, so it is not one.
+  fake.settings.defaultPool.anthropic=[{id:'d4e5f6',label:'claude_code',auth_type:'oauth',source:'claude_code',priority:0,access_token:token}];
+  assert.equal((await read()).signIns.anthropic.state,'notConnected');
+  // A root whose Claude reads as a key refuses the Disconnect: that is a failure, never a removal (the sign-in may stay).
+  fake.settings.defaultPool.anthropic=[{id:'a1b2c3',label:'anthropic-oauth-1',auth_type:'oauth',source:'manual:hermes_pkce',priority:0,access_token:token}];
+  fake.settings.defaultEnv.ANTHROPIC_API_KEY=key;
+  assert.deepEqual(await ask(owner,driver,{provider:'anthropic',intent:'disconnect'}),{status:502,body:{error:'signInFailed'}});
+  assert.ok(fake.settings.defaultPool.anthropic);
+  delete fake.settings.defaultEnv.ANTHROPIC_API_KEY;
+  // A pool the Engine cannot read is not taken as no subscription.
+  fake.settings.poolFail=true;
+  assert.equal((await read()).signIns,null);
  } finally { await fake.close(); }
 });
 
@@ -583,6 +632,20 @@ test('a profile the Engine reports with other tools is marked as changing, writt
   assert.deepEqual(db.calls.map(call=>call.name),['company_profile_work','begin_company_tools','record_company_profile']);
   const read=await readToolsets({address:fake.address,profile:name,key:'test-only-key'});
   assert.equal(toolsDiffer(read.toolsets),false,'the connectors no Agent gets are gone');
+ } finally { await fake.close(); }
+});
+
+test('the main Agent\'s sub-agents switch on its Company profile writes the delegation variant there, and names it on the read-back', async () => {
+ const fake=await fakeHermes();
+ try {
+  const name=companyProfile(two);
+  const config=toolConfig();
+  await provideProfile(install(fake),{name,soul:'',config,forbidden:config.agent.disabled_toolsets});
+  // #425: the Owner turned sub-agents on for the main Agent, so set_agent_subagents marked its `co-` profile pending.
+  const db=workerDatabase([row(two,{attach:false,tools_confirmed:true,tools_pending:true,subagents:true})]);
+  assert.equal((await keepCompanyProfiles(db,{hermes:install(fake)})).configured,1);
+  assert.ok((await readToolsets({address:fake.address,profile:name,key:'test-only-key'})).toolsets.includes('delegation'));
+  assert.deepEqual(db.calls.at(-1),{name:'record_company_profile',args:{c:two,engine_profile:name,subagents_written:true}});
  } finally { await fake.close(); }
 });
 

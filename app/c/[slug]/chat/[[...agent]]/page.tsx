@@ -9,6 +9,7 @@ import { madeColumns, madeOf } from '@/lib/agent-made';
 import { readyRoles, roleSentence, roleStart } from '@/lib/ready-roles';
 import { emptyChatFacts, type EmptyChatFacts } from '@/lib/empty-chat.mjs';
 import { agentDetails } from '@/app/agent-details-server';
+import { companyHasModel } from '@/lib/provider-keys.mjs';
 import AgentChat from './agent-chat';
 import type { EmptyChat } from '@/app/agent-empty-chat';
 
@@ -47,6 +48,9 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const asks=!owner&&(newAgent||(fresh&&!!writer));
  const factsRead=agent?emptyChatFacts(db,{company:company.id,agent:agent.id,me:user.id,main,fresh,alone,owner,asks}):Promise.resolve(null);
  const detailsRead=agent?agentDetails(db,{company:company.id,agent:agent.id,name:agent.name,slug,me:user.id,role:membership?.role||'',tab}):Promise.resolve(null);
+ // A Company with no model at all says so above the composer before anyone writes (#422); only a writer has a composer,
+ // and only a read that tells "none" for certain draws the line.
+ const modelRead=agent&&writer?companyHasModel(db,{company:company.id}).catch(()=>null):Promise.resolve(null);
  const facts=await factsRead;
  const askOf=asks?facts?.owners??[]:null;
  const emptyOf=(own:EmptyChatFacts,row:AgentRow):EmptyChat=>own.state==='known'?{state:'known',example:roleSentence(language,row.template)}
@@ -67,7 +71,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone),owner,owners:facts?.owners??[]}:null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={agent?.id}>
-  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)} agents={pickers??[]} first={first==='alone'||first==='team'?first:undefined} invites={Number.parseInt(invites||'0',10)||0}/></main>
+  <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)} agents={pickers??[]} first={first==='alone'||first==='team'?first:undefined} invites={Number.parseInt(invites||'0',10)||0} noModel={await modelRead===false?{owner}:null}/></main>
  </Shell>;
 }
 

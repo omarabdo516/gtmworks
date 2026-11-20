@@ -21,6 +21,7 @@ import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
 import { readCompanyModels } from '@/lib/engine-settings.mjs';
 import { readCompanyKeys } from '@/lib/provider-keys.mjs';
+import { readCompanySpeech } from '@/lib/company-speech.mjs';
 import { readAgentAbout, type AgentAbout } from '@/lib/agent-about.mjs';
 import { readAgentSkills } from '@/lib/company-skills.mjs';
 import { readCompanyLearning } from '@/lib/company-learning.mjs';
@@ -29,7 +30,7 @@ import { LearningSection } from './settings-learning';
 import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, DefaultEffort, ProviderKeys, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
+import { CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -77,6 +78,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
  const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;
  const keys=section==='models'?await (async()=>{ try { return await readCompanyKeys(db,service(),{company:company.id}); } catch { return null; } })():null;
+ const speech=section==='models'?await readCompanySpeech(db,{company:company.id}).catch(()=>({provider:null,missing:null})):null;
  // The token use of the period, read from each Company's Agents' profiles in the bundled Engine (#347, #32): the
  // Owner and the Managers see every Company they manage, the same read the database checks.
  const usageRows=section==='usage'?await managedUsage(userId,query.period==='30'?30:7):[];
@@ -121,8 +123,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
-  :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} companyName={company.name} owner={owner} subscriptions={subscriptions}/>}
-    keys={<ProviderKeys company={company.id} owner={owner} data={keys}/>}
+  :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} companyName={company.name} owner={owner} subscriptions={subscriptions} keyed={keys?.keys?.filter(key=>key.set).map(key=>key.provider)??[]}/>}
+    keys={<><ProviderKeys company={company.id} owner={owner} data={keys}/><SpeechToText company={company.id} owner={owner} data={speech}/></>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}
     defaultEffort={<DefaultEffort/>}/>;
@@ -201,8 +203,8 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
  const voiceEditable=canManage&&voice?.state==='found'&&voice.own;
  // The thinking level is the Owner's alone (#179), on the Agent's own profile — the Company's `co-` profile is the main
  // Agent's own while it is the profile's keeper — and only once the Engine was read, so an unread level is never drawn
- // as Medium. It is `own`, not #29's `choosable`: the main Agent never chooses a model (its model is the Company's
- // default) yet the level in its own profile is its own.
+ // as Medium. It is `own`: the keeper's model is choosable too (#425), and an Agent another one shares a profile with has
+ // neither.
  const effortEditable=owner&&agentModel?.models?.agents[0]?.own===true&&agentModel.models.agents[0].effort!==null;
  const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
@@ -336,6 +338,6 @@ function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent,def
 // The Company's connected AI subscriptions. A Company signs its subscription in once on the root profile of its own
 // Engine (#384, ADR 0018): the state is read on the server from that Engine, and the Owner's buttons call
 // /api/company-sign-in, which checks the Owner again.
-function ModelsSubscriptions({company,companyName,owner,subscriptions}:{company:string,companyName:string,owner:boolean,subscriptions:Awaited<ReturnType<typeof readCompanySignIns>>|null}) {
- return <CompanySubscriptions company={company} companyName={companyName} owner={owner} available={subscriptions?.profiles!=null} signIns={subscriptions?.signIns??null} noEngine={subscriptions?.noEngine===true}/>;
+function ModelsSubscriptions({company,companyName,owner,subscriptions,keyed}:{company:string,companyName:string,owner:boolean,subscriptions:Awaited<ReturnType<typeof readCompanySignIns>>|null,keyed:string[]}) {
+ return <CompanySubscriptions company={company} companyName={companyName} owner={owner} available={subscriptions?.profiles!=null} signIns={subscriptions?.signIns??null} noEngine={subscriptions?.noEngine===true} keyed={keyed}/>;
 }
