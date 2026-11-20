@@ -497,6 +497,25 @@ skips_after=$(sync_back_skips)
 [[ ${skips_after:-0} -gt ${skips_before:-0} ]] || fail 'the Engine did not run the sandbox session teardown'
 after_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills after the sandbox session teardown"
 [[ -z $after_sync ]] || fail "what an Agent changed in the sandbox came back to the Engine: $after_sync"
+# The Library of an Agent (#395, ADR 0018): a file an Agent writes with its file tool in its own folder in the Company's
+# work folder is in its Library, previews as text and downloads with the same bytes, read as the app reads it (the
+# database names the Agent's profile, the Engine's file routes read the work folder it sees read-only). The Engine cannot
+# write that folder: the host's own Docker says the mount is read-only, and a write from inside the Engine changes
+# nothing in the sandbox's work folder.
+library_marker="library-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - library "$library_marker" < scripts/check-install-profiles.mjs | tee library-proof.log \
+  || fail "an Agent's file appears in its Library, previews as text and downloads with the same bytes"
+grep -q '"step":"library"' library-proof.log || fail 'the Library check printed its proof'
+[[ $(docker exec "$sandbox" cat "/work/$first/library-$library_marker.md") == "$library_marker-written-by-the-file-tool" ]] \
+  || fail "the file an Agent wrote is in its own folder in the Company's work folder"
+work_volume=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$sandbox") || fail "read the sandbox's work volume"
+[[ -n $work_volume ]] || fail 'the sandbox mounts the Company work folder'
+[[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data/work"}}{{.Name}} {{.RW}}{{end}}{{end}}' "$engine_id") == "$work_volume false" ]] \
+  || fail 'the Engine sees the Company work folder read-only'
+if docker exec "$engine_id" sh -ec "printf 'written by the Engine' > '/opt/data/work/$first/engine-write.txt'"; then
+  fail 'the Engine cannot write the Company work folder'
+fi
+docker exec "$sandbox" test ! -e "/work/$first/engine-write.txt" || fail 'a write attempted from the Engine reached the work folder'
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.

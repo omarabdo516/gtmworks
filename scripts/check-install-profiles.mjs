@@ -20,6 +20,9 @@
 //     starts in a folder of its own inside the Company's work folder, and neither a profile write nor a settings write
 //     moves where a command runs. The job reads the host's Docker for where each marker landed, which a tool's own answer
 //     cannot fake.
+//   library <marker>: one Agent writes a file with its file tool in its own folder inside the Company's work folder; its
+//     Library, read as the app reads it (the database names the Agent's profile, the Engine's file routes read the work
+//     folder it sees read-only), lists that file, previews it as text and downloads the same bytes (#395).
 //   sandbox-key <marker> <refused|runs>: one Agent's command, when the install job has replaced the sandbox's host key
 //     (refused) or put it back (runs): the Engine's ssh client trusts a host it has not seen but refuses a changed key, and
 //     the install pre-seeds known_hosts with the sandbox's, so a swapped sandbox is refused.
@@ -474,6 +477,58 @@ try {
  assert.equal(restored.state,'configured');
  writeProof({step:'sandbox',marker,sandbox_host:host,user:userName,profile:first.profile,cwd,pwd:secondPwd,file:written?.resolved_path,code:code?.status});
 } finally { model.close(); model.closeAllConnections(); }
+} else if(step==='library') {
+// The Library of an Agent (#395, ADR 0018): the file an Agent's own `write_file` makes in its folder inside the
+// Company's work folder is the file its Library lists, previews and downloads — read as the app reads it, with the
+// database naming the Agent's profile and the Engine's file routes reading the work folder the Engine sees read-only.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const first=JSON.parse(readFileSync(state,'utf8'))[0];
+const firstEngine=await engineFor(first.company);
+await pointAtFakeModel(firstEngine,first.profile);
+const name=`library-${marker}.md`;
+const content=`${marker}-written-by-the-file-tool`;
+// A relative path, so the file lands in the folder the Agent starts in: its own folder inside the Company's work folder.
+const plan=messages=>{
+ const text=messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+ const done=messages.filter(message=>message.role==='tool').length;
+ return text.includes(`LIBRARY ${marker}`)&&done<1
+  ? {id:'call_library',type:'function',function:{name:'write_file',arguments:JSON.stringify({path:name,content})}}
+  : null;
+};
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const conversation=randomUUID();
+ const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`LIBRARY ${marker}: write the file, then answer.`};
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until('reply on the Library check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ assert.ok(answer.body.includes(reply),answer.body);
+ assert.ok(results.length>=1,JSON.stringify(results));
+ const written=(()=>{ try { return JSON.parse(String(results[0])); } catch { return null; } })();
+ assert.equal(written?.verified,true,String(results[0]));
+ assert.equal(written?.resolved_path,`/work/${first.profile}/${name}`,'the file tool wrote in the Agent\'s own folder');
+ // The Library, read as the app reads it: the database answers which profile serves this Agent, and the Engine's own
+ // file routes read that profile's folder in the work folder it sees read-only.
+ const {agentLibrary,agentFileDownload,agentFilePreview}=await import(`${process.cwd()}/lib/agent-files.mjs`);
+ const library=await agentLibrary(person,{company:first.company,agent:first.agent,hermes:firstEngine});
+ assert.equal(library.state,'found');
+ const entry=library.entries.find(row=>row.name===name);
+ assert.ok(entry,`the file the Agent wrote is in its Library (${JSON.stringify(library.entries)})`);
+ assert.equal(entry.isFolder,false);
+ assert.equal(entry.size,Buffer.byteLength(content));
+ const preview=await agentFilePreview(person,{company:first.company,agent:first.agent,name,hermes:firstEngine});
+ assert.equal(preview.state,'found');
+ assert.equal(preview.preview.text,content,'the file previews as the text the Agent wrote');
+ const download=await agentFileDownload(person,{company:first.company,agent:first.agent,name,hermes:firstEngine});
+ assert.equal(download.state,'found');
+ assert.equal(Buffer.from(download.body).toString('utf8'),content,'the download carries the same bytes');
+ assert.equal(download.size,Buffer.byteLength(content));
+ writeProof({step:'library',marker,profile:first.profile,name,bytes:download.size,preview:preview.preview.kind});
+} finally { model.close(); model.closeAllConnections(); }
 } else if(step==='sandbox-key') {
 // The Engine's pinned ssh client is hard-coded `StrictHostKeyChecking=accept-new`, which trusts a host it has not seen
 // but refuses one whose key changed (tools/environments/ssh.py). The install pre-seeds the Engine's known_hosts with its
@@ -550,4 +605,4 @@ try {
  assert.match(folder,/^\/home\/pn\/\.hermes\/skills\/[^/]+$/,'the Agent edited a Skill copy in its sandbox home');
  writeProof({step:'sandbox-sync',marker,folder,edited:true});
 } finally { model.close(); model.closeAllConnections(); }
-} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker>');
+} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | library <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker>');

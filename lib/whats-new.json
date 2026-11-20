@@ -1,5 +1,11 @@
 [
  {
+  "issue": 395,
+  "date": "2026-11-20",
+  "en": { "title": "The Library shows your Agents' work files", "body": "An Agent's Library shows the files it made in the Company's work folder, and each file previews and downloads; every Agent of the Company can read and change them." },
+  "ar": { "title": "المكتبة بتوري ملفات شغل الوكلاء", "body": "مكتبة الوكيل بتوري الملفات اللي عملها في فولدر شغل الشركة، وكل ملف بيتشاف بيتنزّل؛ وكل وكلاء الشركة يقدروا يقراوا الملفات دي ويغيّروها." }
+ },
+ {
   "issue": 389,
   "date": "2026-11-20",
   "en": { "title": "Agents work in a work sandbox", "body": "Every Company's Agents get a terminal, files and code execution that run in the Company's own work sandbox, not on the Engine's machine." },

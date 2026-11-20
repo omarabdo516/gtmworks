@@ -4,19 +4,22 @@ import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { chooseLanguageInSettings } from './choose-language';
 import { fileSize } from '../lib/agent-details.mjs';
 
-// #194, #353: the Library of an Agent is its own Engine profile — the work folder and the images it generated — read
-// through the Engine and never copied into gtmworks. The Owner and Managers open it — the generated images folder
+// #194, #353, #395: the Library of an Agent is its own folder in the Company's work folder — read through the Engine and
+// never copied into gtmworks — and the images it generated. The Owner and Managers open it — the generated images folder
 // leading the list, each folder with how many files it holds and when the newest was saved, a folder inside it, a file's
-// download and the reference's toast — and a Contributor and a Viewer have none and are refused by the server. No page
-// and no answer names the Engine or a path on its disk.
+// download and the reference's toast — and a Contributor and a Viewer have none and are refused by the server. One line
+// says every Agent of the Company can read and change these files, in both languages. No page and no answer names the
+// Engine or a path on its disk.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
 const companyProfile=`co-${company.replaceAll('-','')}`;
 const agent=randomUUID();
 const profile=`ag-${agent.replaceAll('-','')}`;
-const work=`/opt/data/profiles/${profile}/workspace`;
+// The Agent's own folder in the Company's work folder, as the Engine sees that folder read-only (#395).
+const work=`/opt/data/work/${profile}`;
 // The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
 const images=`/opt/data/profiles/${profile}/cache/generated/images`;
 const at=Date.parse('2026-11-18T09:37:00Z')/1000;
@@ -79,7 +82,9 @@ test('the Owner opens the Agent\'s Library above its files, its generated images
  const briefRow=library.locator('li.lib-file').filter({hasText:'brief.md'});
  await expect(briefRow.locator('.panel-row__d')).toContainText(fileSize(Buffer.byteLength(brief)));
  await expect(briefRow.locator('time')).toHaveAttribute('datetime',new Date(at*1000).toISOString());
- await expect(library.locator('.lib-hint')).toHaveText('Files in Librarian’s work folder, and the images it generated, show here. You can view and download them, and ask for edits in the chat.');
+ await expect(library.locator('.lib-hint').first()).toHaveText('Files in Librarian’s work folder, and the images it generated, show here. You can view and download them, and ask for edits in the chat.');
+ // Every Agent of the Company shares the one work folder, and the Library says so.
+ await expect(library.locator('.lib-hint').nth(1)).toHaveText('Every Agent in the Company can read and change these files.');
 
  // A folder opens in place with its own count of files, the focus on the way back to the Library (the reference's
  // lib-open focuses #lib-root), and the way back puts the focus on that folder's row; a folder inside a folder opens
@@ -142,6 +147,23 @@ test('the Owner opens the Agent\'s Library above its files, its generated images
  expect(generatedBody).not.toContain('/opt/');
  expect(generatedBody).not.toMatch(/hermes/i);
  await expect(panel.locator('.dp-library')).not.toContainText(/hermes|\/opt\//i);
+});
+
+test('the Library says every Agent of the Company can read and change its work folder, in both languages',async({page})=>{
+ const {panel}=await openFiles(page,'omar@example.com');
+ // The line sits beside the Library's own hint, in the hint style, and names the one work folder its Agents share.
+ const shared={en:'Every Agent in the Company can read and change these files.',ar:'كل وكلاء الشركة يقدروا يقراوا الملفات دي ويغيّروها.'};
+ await expect(panel.locator('.dp-library .lib-hint')).toHaveCount(2);
+ for(const language of ['en','ar'] as const) {
+  await chooseLanguageInSettings(page,language);
+  await page.goto(`/c/rs-learning/chat/${agent}`);
+  const details=page.getByRole('complementary',{name:language==='en'?'Details: Librarian':'تفاصيل Librarian',exact:true});
+  await expect(details).toBeVisible();
+  await details.getByRole('tab',{name:language==='en'?'Files':'ملفات',exact:true}).click();
+  const library=details.getByRole('tabpanel').locator('.dp-library');
+  await expect(library.locator('.lib-hint').nth(1)).toHaveText(language==='en'?shared.en:shared.ar);
+ }
+ await chooseLanguageInSettings(page,'en');
 });
 
 test('a Contributor and a Viewer have no Library, and the server refuses them',async({page})=>{

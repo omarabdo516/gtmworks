@@ -8,9 +8,10 @@ import { downloadAgentFile, libraryRoot, listAgentFiles, readAgentFile, workSegm
 import { agentFileDownload, agentLibrary } from '../lib/agent-files.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
-// The Library of an Agent (#194): one folder of the Agent's work folder in its own Engine profile, read through the
-// dashboard's file routes and never copied into gtmworks. A Contributor or a Viewer is refused on the server, a hidden
-// Agent and another Company's Agent are not found, and no answer carries an Engine address or a path on its disk.
+// The Library of an Agent (#194, #395): the Agent's own folder in the Company's work folder, read through the Engine's
+// file routes and never copied into gtmworks. The Engine sees that folder read-only under its own data root
+// (scripts/engine-template.yml), which is where its file routes serve from. A Contributor or a Viewer is refused on the
+// server, a hidden Agent and another Company's Agent are not found, and no answer carries an Engine address or a path.
 const company='10000000-0000-0000-0000-000000000001';
 const otherCompany='10000000-0000-0000-0000-000000000002';
 const agent='3a000000-0000-0000-0000-000000000021';
@@ -19,7 +20,11 @@ const person='9a000000-0000-0000-0000-000000000001';
 const profile=`ag-${agent.replaceAll('-','')}`;
 const otherProfile=`ag-${otherAgent.replaceAll('-','')}`;
 const home=`/opt/data/profiles/${profile}`;
-const work=`${home}/workspace`;
+// The Agent's folder in the Company's work folder, as the Engine sees it read-only: the Library's `work` root.
+const work=`/opt/data/work/${profile}`;
+// The per-profile folder of the Engine's own disk the Library showed until #395: nothing could write to it, so it is no
+// part of the Library any more.
+const oldWork=`${home}/workspace`;
 // The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
 const images=`${home}/cache/generated/images`;
 const mtime=1763500000;
@@ -36,8 +41,8 @@ function load(file,imports,globals={}) {
  return exports;
 }
 
-// A fake Engine with one Agent's profile and the work folder the Engine makes in every profile (hermes_cli/profiles.py
-// line 40, _PROFILE_DIRS).
+// A fake Engine with one Agent's profile and the Company's work folder mounted read-only under its data root, holding
+// the Agent's own folder (scripts/engine-template.yml, #393, #395).
 async function engine() {
  const fake=await fakeHermes();
  for(const name of [profile,otherProfile]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
@@ -58,7 +63,7 @@ function database({role='owner',agents=[{agent,name:'Lead',connection:'c',profil
  return {db,asked};
 }
 
-test('an Agent\'s library is the folders and files in its profile\'s work folder, read from the Engine with no path in the answer', async () => {
+test('an Agent\'s library is the folders and files in its own folder in the Company\'s work folder, read from the Engine with no path in the answer', async () => {
  const {fake,at}=await engine();
  try {
   fake.settings.files.set(work,[{name:'reports',isFolder:true},{name:'brief.md',size:2048,mtime},{name:'shot.png',size:4096,mtime}]);
@@ -71,8 +76,13 @@ test('an Agent\'s library is the folders and files in its profile\'s work folder
   // The folder's own path and the profile's home never leave the contract.
   assert.ok(!JSON.stringify(read).includes('/opt/'),'no Engine path in the answer');
   assert.ok(!JSON.stringify(read).includes(fake.address),'no Engine address in the answer');
-  // It is the profile's own work folder the Engine is asked about.
+  // It is the Agent's folder in the work folder, as the Engine sees it read-only, that the Engine is asked about.
   assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(work)}`));
+  // The per-profile folder on the Engine's own disk is no longer shown, and is never asked about (#395).
+  fake.settings.files.set(oldWork,[{name:'stale.md',size:9,mtime}]);
+  assert.ok(!fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(oldWork)}`));
+  assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['reports','brief.md','shot.png']);
+  fake.settings.files.delete(oldWork);
 
   // A folder inside it is asked about by its relative name.
   fake.settings.files.set(`${work}/reports`,[{name:'q3.csv',size:12,mtime}]);
@@ -86,6 +96,25 @@ test('an Agent\'s library is the folders and files in its profile\'s work folder
   assert.deepEqual(await listAgentFiles({...at,key:'another-key'}),{state:'refused',entries:null});
   assert.deepEqual(await listAgentFiles({...at,profile:'ag-nothing'}),{state:'missing',entries:null});
  } finally { await fake.close(); }
+});
+
+test('a brand-new Agent whose folder in the work folder is not made yet has an empty Library, not a missing one', async () => {
+ const {fake,at}=await engine();
+ try {
+  // The sandbox's login shell makes an Agent's folder with its first command (sandbox/work-shell, #393): before that the
+  // Engine answers 404 for it, and the Library reads that as the empty folder it is.
+  fake.settings.files.delete(work);
+  assert.deepEqual(await listAgentFiles(at),{state:'found',entries:[]});
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(work)}`),'the Engine was asked, and answered 404');
+  // A folder inside it is not made for it: only the Agent's own folder itself is empty rather than missing.
+  assert.deepEqual(await listAgentFiles(at,'gone'),{state:'missing',entries:null});
+  assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'missing'});
+ } finally { await fake.close(); }
+});
+
+test('the Engine sees the Company\'s work folder read-only where the Library reads it', async () => {
+ const template=readFileSync('scripts/engine-template.yml','utf8');
+ assert.match(template,/^      - work:\/opt\/data\/work:ro$/m,'the work volume is mounted read-only at the path the Library reads');
 });
 
 test('a name that could leave the work folder is refused in gtmworks before the Engine is asked', async () => {

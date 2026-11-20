@@ -1,12 +1,13 @@
 'use client';
-// The Library of an Agent (#194, #353; design-reference: libraryHTML, libThumb, libDownload, fname, filesWord, the
-// .lib-* rules): the folders and files saved in the Agent's own Engine profile — its work folder, and the images it
-// generated — read from GET /api/agent-files after the panel is drawn so no page waits on the Engine. The Owner and
-// Managers have it; a Contributor or a Viewer is drawn no Library at all and is refused by that route. A folder opens in
-// place with its own count and the newest file's day, a file downloads from the address beside it, and the preview dialog
-// is #195. The root leads with the Agent's generated images as a folder of its own, and it is one row whatever the work
-// folder holds. Nothing here names the Engine, and no path on its disk reaches this page: each row is a name, a size, a
-// time and a folder or a file.
+// The Library of an Agent (#194, #353, #395; design-reference: libraryHTML, libThumb, libDownload, fname, filesWord, the
+// .lib-* rules): the folders and files in the Agent's own folder inside the Company's work folder — where every Agent
+// works — and the images it generated, read from GET /api/agent-files after the panel is drawn so no page waits on the
+// Engine. The Owner and Managers have it; a Contributor or a Viewer is drawn no Library at all and is refused by that
+// route. One hint line says every Agent of the Company can read and change these files, because they all share one work
+// folder. A folder opens in place with its own count and the newest file's day, a file downloads from the address beside
+// it, and the preview dialog is #195. The root leads with the Agent's generated images as a folder of its own, and it is
+// one row whatever the work folder holds. Nothing here names the Engine, and no path on its disk reaches this page: each
+// row is a name, a size, a time and a folder or a file.
 import { useEffect, useRef, useState } from 'react';
 import { ShellIcon } from '@/components/shell-icon';
 import { FileName } from '@/components/file-name';
@@ -129,6 +130,7 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
   <h3 className="dp-label" id="dp-lib-h"><span>{t('agentLibraryOf',name)} <span className="muted num">{count}</span></span></h3>
   {drawn??blank}
   <p className="lib-hint">{t('agentLibraryHint',name)}</p>
+  <p className="lib-hint">{t('agentLibraryShared')}</p>
  </section>{dialog}</>;
 
  const current=root==='images'?imagesLabel:place.path[place.path.length-1];

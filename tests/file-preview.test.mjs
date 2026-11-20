@@ -21,7 +21,8 @@ const person='9a000000-0000-0000-0000-000000000001';
 const profile=`ag-${agent.replaceAll('-','')}`;
 const otherProfile=`ag-${otherAgent.replaceAll('-','')}`;
 const home=`/opt/data/profiles/${profile}`;
-const work=`${home}/workspace`;
+// The Agent's own folder in the Company's work folder, as the Engine sees it read-only (#395).
+const work=`/opt/data/work/${profile}`;
 // The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
 const images=`${home}/cache/generated/images`;
 const mtime=1763500000;

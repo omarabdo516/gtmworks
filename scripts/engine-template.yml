@@ -30,6 +30,10 @@ services:
       HERMES_WRITE_SAFE_ROOT: /work
     volumes:
       - data:/opt/data
+      # The Company's work folder, read-only: an Agent's Library is its own folder in it, read through this Engine's file
+      # routes, and nothing on the Engine may write what its Agents made (#395). It is mounted under the Engine's data
+      # root because that is the one place its file routes serve from.
+      - work:/opt/data/work:ro
       # The backend the Engine's terminal, file and code tools use, pinned so no profile and no Settings write can move
       # them back onto the Engine's own disk (ADR 0018).
       - ./engine-managed.yml:/etc/hermes/config.yaml:ro

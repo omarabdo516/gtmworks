@@ -58,6 +58,9 @@ test('an Engine publishes no host port, joins its install network and its work n
  // The file tools write only under the work folder, which is the sandbox's (#390).
  assert.equal(engine.environment.HERMES_WRITE_SAFE_ROOT,'/work');
  assert.ok(engine.volumes.includes('data:/opt/data'));
+ // The Company's work folder, read-only: the Library reads an Agent's folder in it through this Engine's file routes,
+ // and nothing on the Engine may write what its Agents made (#395).
+ assert.ok(engine.volumes.includes('work:/opt/data/work:ro'));
  assert.ok(engine.volumes.includes('./engine-managed.yml:/etc/hermes/config.yaml:ro'));
  assert.ok(engine.volumes.includes('./engine-listener-address.py:/etc/hermes/listener-address.py:ro'));
  assert.equal(template.volumes.data.name,'${ENGINE_VOLUME:?Run scripts/install.sh}');
