@@ -22,6 +22,8 @@
 -- The Run a Handover was on when Stop ended it, until its Engine says that Run ended: on the asking Agent's profile when
 -- the follow-up was stopped, else on the asked Agent's.
 alter table public.agent_handovers add column stopping_run text;
+-- The profile that Run runs on, kept with it: the Agent's profile may move once its Handover is done.
+alter table public.agent_handovers add column stopping_profile text;
 create index agent_handovers_stopping on public.agent_handovers(id) where stopping_run is not null;
 
 -- A Run of a Conversation's or a channel message's own that Stop found still open: its hand_to_agent calls hand nothing
@@ -66,7 +68,7 @@ language sql security definer set search_path='' as $$
    target_outcome=case when o.was in ('waiting','target','handing','answering') then 'stopped' else h.target_outcome end,
    target_closed_at=case when o.was in ('waiting','target','handing','answering') then now() else h.target_closed_at end,
    follow_up_outcome=case when o.was in ('returning','follow_up') and o.parent_id is null and not o.answers_person then 'stopped' else h.follow_up_outcome end,
-   stopping_run=o.going
+   stopping_run=o.going, stopping_profile=case when o.going is not null then o.on_profile end
   from open o where h.id=o.id
   returning h.id, o.going, o.on_profile, o.answers_person, o.company_id, o.conversation_id, o.run_id
  ), told as (
@@ -135,7 +137,9 @@ create function public.stop_late_handover_run(h bigint, run text) returns boolea
 language plpgsql security definer set search_path='' as $$
 declare kept bigint;
 begin
- update public.agent_handovers x set stopping_run=coalesce(x.stopping_run,stop_late_handover_run.run)
+ update public.agent_handovers x set stopping_run=coalesce(x.stopping_run,stop_late_handover_run.run),
+  stopping_profile=coalesce(x.stopping_profile,(select a.profile from public.hermes_agents a
+   where a.id=case when x.follow_up_outcome='stopped' then x.from_agent else x.to_agent end))
   where x.id=h and x.state='done' and (x.target_outcome='stopped' or x.follow_up_outcome='stopped') and coalesce(btrim(stop_late_handover_run.run),'')<>''
   returning x.id into kept;
  return kept is not null;
@@ -144,11 +148,11 @@ revoke all on function public.stop_late_handover_run(bigint,text) from public,an
 grant execute on function public.stop_late_handover_run(bigint,text) to service_role;
 
 -- The worker's list of Runs Stop ended a Handover on that their Engine has not yet said ended, a page of 500 at a time,
--- each on its Agent's profile. A removed Agent's Run has no profile, and nothing more can be asked of it.
+-- each on the profile it ran on (kept with it), else its Agent's. A Run with no profile left has nothing more to ask.
 create function public.handover_runs_stopping(after bigint default 0)
 returns table(id bigint, run text, profile text, company uuid)
 language sql stable security definer set search_path='' as $$
- select x.id, x.stopping_run, a.profile, x.company_id from public.agent_handovers x
+ select x.id, x.stopping_run, coalesce(x.stopping_profile,a.profile), x.company_id from public.agent_handovers x
   left join public.hermes_agents a on a.id=case when x.follow_up_outcome='stopped' then x.from_agent else x.to_agent end
  where x.stopping_run is not null and x.id>coalesce(after,0)
  order by x.id limit 500;
@@ -161,7 +165,7 @@ create function public.handover_run_stopped(h bigint, run text) returns boolean
 language plpgsql security definer set search_path='' as $$
 declare cleared bigint;
 begin
- update public.agent_handovers x set stopping_run=null where x.id=h and x.stopping_run=handover_run_stopped.run returning x.id into cleared;
+ update public.agent_handovers x set stopping_run=null, stopping_profile=null where x.id=h and x.stopping_run=handover_run_stopped.run returning x.id into cleared;
  return cleared is not null;
 end $$;
 revoke all on function public.handover_run_stopped(bigint,text) from public,anon,authenticated;
@@ -178,7 +182,9 @@ begin
  if position(was in def)=0 then raise exception 'answer_handover changed: %',def; end if;
  execute replace(def,was,was||E'\n if r.stop_requested_at is not null then\n'
   || E'  perform public.end_handovers_stopped(array[h]);\n'
-  || E'  if run is not null then update public.agent_handovers x set stopping_run=coalesce(x.stopping_run,run) where x.id=h; end if;\n'
+  || E'  if run is not null then update public.agent_handovers x set stopping_run=coalesce(x.stopping_run,run),\n'
+  || E'   stopping_profile=coalesce(x.stopping_profile,(select a.profile from public.hermes_agents a\n'
+  || E'    where a.id=case when x.follow_up_outcome=''stopped'' then x.from_agent else x.to_agent end)) where x.id=h; end if;\n'
   || E'  return false;\n'
   || E' end if;');
 end $$;

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(52);
+select plan(54);
 -- #478 (spec #474): Stop ends the whole Handover chain. RS Learning has Lead, Writer, Ads and Critic, each on its own
 -- profile. The Owner (1) talks to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the
 -- Viewer (4) work with Writer, and the Manager (2) made the channel but is not in it.
@@ -76,6 +76,13 @@ select is(public.stop_late_handover_run(current_setting('test.p2pending')::bigin
 select is((select string_agg(id::text||':'||run||'@'||coalesce(profile,'-'),' | ' order by id) from public.handover_runs_stopping()),
  current_setting('test.q')||':run-critic@ag-a4780000000000000000000000000014',
  'the worker keeps stopping Critic''s Run, the one Stop ended its Handover on, until its Engine says it ended');
+-- The profile the Run ran on is kept with it, and is the one the worker asks, wherever its Agent moves since.
+select is((select stopping_profile from public.agent_handovers where id=current_setting('test.q')::bigint),'ag-a4780000000000000000000000000014',
+ 'Critic''s profile is kept with its Run');
+update public.agent_handovers set stopping_profile='ag-a4780000000000000000000000000099' where id=current_setting('test.q')::bigint;
+select is((select profile from public.handover_runs_stopping() where id=current_setting('test.q')::bigint),'ag-a4780000000000000000000000000099',
+ 'the worker asks the kept profile, not the Agent''s present one');
+update public.agent_handovers set stopping_profile='ag-a4780000000000000000000000000014' where id=current_setting('test.q')::bigint;
 select is(public.handover_run_stopped(current_setting('test.q')::bigint,'run-critic'),true,'its Engine says it ended');
 select is((select count(*)::int from public.handover_runs_stopping()),0,'and nothing is left to stop');
 delete from public.agent_handovers where call_id='call-open';
