@@ -40,9 +40,10 @@ function AgentRows({job,apps,tiles=false,children}:{job:string,apps:string[]|nul
  </dl>;
 }
 
-export function MadeCard({slug,agent}:{slug:string,agent:MadeAgent}) {
+// `fresh`: Lead made it while the Conversation was open, so it rises in (design-reference: agentCardHTML's card-in).
+export function MadeCard({slug,agent,fresh=false}:{slug:string,agent:MadeAgent,fresh?:boolean}) {
  const {t,language}=useI18n(); const zone=useZone(); const {c}=useCardText();
- return <div className="ac-card" role="group" aria-label={c('madeAgentLabel',agent.name)}>
+ return <div className={`ac-card${fresh?' card-in':''}`} role="group" aria-label={c('madeAgentLabel',agent.name)}>
   <div className="hcard__top"><span className="badge badge--made" data-utc={agent.fresh?undefined:zone}><ShellIcon name="check"/>{c('madeAgentMade')} · {agent.fresh?t('agentNew'):madeDay(agent.created_at,language,zone)}</span></div>
   <div className="card__head"><span aria-hidden="true"><CompanyAgentFace agent={agent} size={44}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
   <AgentRows job={agent.job} apps={agent.apps}/>
