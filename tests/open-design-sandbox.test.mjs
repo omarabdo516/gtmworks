@@ -150,11 +150,13 @@ async function engineAnswering(answer) {
   seen.push(`${request.method} ${request.url}`);
   response.setHeader('Content-Type','application/json');
   if(request.method==='POST'&&request.url.endsWith('/v1/runs')) { response.statusCode=202; return response.end(JSON.stringify({run_id:'run-9'})); }
-  const [status,body]=answer(request);
+  const answered=answer(request);
+  if(!answered) return; // held: never answered
+  const [status,body]=answered;
   response.statusCode=status; response.end(JSON.stringify(body));
  });
  await new Promise(resolve=>engine.listen(socket,resolve));
- return {route:{sockets:[socket],profile:`od-${agent}`,key:'k'.repeat(43)},seen,close:()=>engine.close()};
+ return {route:{sockets:[socket],profile:`od-${agent}`,key:'k'.repeat(43)},seen,close:()=>{ engine.closeAllConnections(); engine.close(); }};
 }
 
 test('an Engine that keeps answering errors gives the design up after the outage, and a refused key at once', async () => {
@@ -202,4 +204,18 @@ test('a start lock is never taken from a live holder, and one left by a holder t
  writeFileSync(lock,'999999999\n');
  assert.equal(await locked(lock,async()=>'c'),'c');
  assert.equal(existsSync(lock),false);
+});
+
+test('a cancel interrupts a read the Engine holds, and the stop goes out at once', async () => {
+ const held=await engineAnswering(request=>request.method==='GET'?null:[200,{ok:true}]);
+ try {
+  const abort=new AbortController();
+  const running=runOnEngine(held.route,{input:'x',cwd,signal:abort.signal,pace:20});
+  await new Promise(resolve=>setTimeout(resolve,200));
+  const asked=Date.now();
+  abort.abort();
+  await assert.rejects(running,/cancelled/);
+  assert.ok(Date.now()-asked<3000,'not after the read\'s own time limit');
+  assert.ok(held.seen.some(line=>line.endsWith('/run-9/stop')),held.seen.join('\n'));
+ } finally { held.close(); }
 });

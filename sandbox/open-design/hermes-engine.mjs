@@ -41,12 +41,12 @@ export function routeOf(agent,home=homedir()) {
 // One call to the design profile's Run API over a forwarded socket. A socket whose session ended refuses the connection;
 // it is removed and the next one is tried.
 const gone=new Set(['ECONNREFUSED','ENOENT']);
-/** @param {{sockets:string[],profile:string,key:string}} route @param {string} method @param {string} path @param {unknown} [body] @param {number} [timeout] */
-export async function call(route,method,path,body,timeout=30000) {
+/** @param {{sockets:string[],profile:string,key:string}} route @param {string} method @param {string} path @param {unknown} [body] @param {number} [timeout] @param {AbortSignal} [signal] */
+export async function call(route,method,path,body,timeout=30000,signal) {
  for(;;) {
   const [socket]=route.sockets;
   if(!socket) throw new Error("Open Design cannot reach the Company's Engine now: its connection to this Agent is closed.");
-  try { return await callOn(socket,route,method,path,body,timeout); }
+  try { return await callOn(socket,route,method,path,body,timeout,signal); }
   catch(failure) {
    if(!gone.has(/** @type {any} */(failure)?.code)) throw failure;
    rmSync(socket,{force:true});
@@ -54,11 +54,11 @@ export async function call(route,method,path,body,timeout=30000) {
   }
  }
 }
-/** @param {string} socket @param {{profile:string,key:string}} route @param {string} method @param {string} path @param {unknown} body @param {number} timeout */
-function callOn(socket,route,method,path,body,timeout) {
+/** @param {string} socket @param {{profile:string,key:string}} route @param {string} method @param {string} path @param {unknown} body @param {number} timeout @param {AbortSignal} [signal] */
+function callOn(socket,route,method,path,body,timeout,signal) {
  return new Promise((resolve,reject)=>{
   const text=body===undefined?null:JSON.stringify(body);
-  const sent=request({socketPath:socket,method,path:`/p/${encodeURIComponent(route.profile)}${path}`,timeout,
+  const sent=request({socketPath:socket,method,path:`/p/${encodeURIComponent(route.profile)}${path}`,timeout,...(signal?{signal}:{}),
    headers:{Authorization:`Bearer ${route.key}`,Host:'engine',...(text?{'Content-Type':'application/json','Content-Length':Buffer.byteLength(text)}:{})}},response=>{
    let data='';
    response.setEncoding('utf8');
@@ -107,7 +107,9 @@ export async function runOnEngine(route,{input,cwd,signal,outage=60000,pace=1000
   if(signal.aborted) return stop();
   const left=outage-(Date.now()-seen);
   if(left<=0) throw new Error("Open Design lost the Company's Engine while it drew the design.");
-  const read=await call(route,'GET',at,undefined,Math.max(1000,Math.min(left,30000))).catch(failure=>{ if(!route.sockets.length) throw failure; return null; });
+  // A cancel interrupts a read still waiting on the Engine, so the stop goes out at once.
+  const read=await call(route,'GET',at,undefined,Math.max(1000,Math.min(left,30000)),signal).catch(failure=>{ if(!signal.aborted&&!route.sockets.length) throw failure; return null; });
+  if(signal.aborted) return stop();
   if(read&&[401,403].includes(read.status)) throw new Error(refused);
   if(read?.status===404) throw new Error('The Engine no longer knows this design Run.');
   const record=read?.status===200&&typeof read.json?.status==='string'?read.json:null;
