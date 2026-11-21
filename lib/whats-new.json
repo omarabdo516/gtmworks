@@ -6,6 +6,12 @@
   "ar": { "title": "المحرك الواقف مبقاش بيفشّل المنشن في القناة أو الملاحظة", "body": "لما تنادي وكيل في قناة أو في ملاحظة على بطاقة ومحرك الشركة مش شغال، التشغيل بيستنى المحرك لحد عشر دقايق ويبدأ أول ما يرجع، بدل ما يفشل على طول." }
  },
  {
+  "issue": 178,
+  "date": "2026-11-21",
+  "en": { "title": "Settings show a waiting proposal", "body": "While an Agent’s proposed change waits for the Owner, its page in Settings says who proposed what with a link to the proposal, its row in the Agents list says Proposal waiting, and Agents carries the number waiting." },
+  "ar": { "title": "الإعدادات بتوريك الاقتراح اللي مستني", "body": "طول ما فيه تغيير اقترحه وكيل ومستني موافقة المالك، صفحته في الإعدادات بتقول مين اقترح إيه ومعاها لينك للاقتراح، وصفّه في قايمة الوكلاء بيقول «اقتراح مستنيك»، و«الوكلاء» عليها عدد الاقتراحات اللي مستنية." }
+ },
+ {
   "issue": 31,
   "date": "2026-11-21",
   "en": { "title": "Recurring tasks in Settings", "body": "Settings now lists every recurring task of every agent with when it runs next and how its last run went; the Owner and Managers can switch one off or on, run it now, change when it runs, add one or delete one, and each change is in the log." },
