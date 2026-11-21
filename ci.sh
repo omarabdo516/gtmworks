@@ -253,7 +253,13 @@ case "${1:-check}" in
   # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's.
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
   docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
-  images="$images $sandbox_tag"
+  # The app image the same way, as CI's install jobs load the image job's build under the compose file's tag and set
+  # GTMWORKS_IMAGE_PREBUILT (#411): built here through scripts/docker-build.sh, so a cloud session's CA reaches its npm
+  # steps (#562), and never inside the machine, whose nested network stalls.
+  web_tag=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' "$work/src/docker-compose.install.yml" | head -n 1)
+  bash scripts/docker-build.sh -q -t "$web_tag" "$work/src" > /dev/null
+  images="$images $sandbox_tag $web_tag"
+  export GTMWORKS_IMAGE_PREBUILT=true
   for image in $images; do docker image inspect "$image" > /dev/null 2>&1 || docker pull -q "$image" > /dev/null; done
   docker save $images | DOCKER_HOST=$machine docker load > /dev/null
   # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it

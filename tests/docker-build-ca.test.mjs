@@ -56,9 +56,22 @@ test('the app image is built through the helper wherever a script builds it from
  const scripts=['ci.sh','scripts/ci-image.sh','scripts/proxy-stack.sh','scripts/ci-install-lib.sh','scripts/ci-install-check.sh'];
  const builds=scripts.flatMap(path=>read(path).split('\n').filter(line=>/docker(-build\.sh| build)\b/.test(line)).map(line=>({path,line})));
  // The app image's builds: a context of the checkout itself or another commit's checkout.
- const app=builds.filter(({line})=>/ (\.|"\$source")( |$)/.test(line));
- assert.ok(app.length>=4,JSON.stringify(app));
+ // The checkout here, another commit's checkout (release_image) or the install lane's throwaway checkout of HEAD.
+ const checkoutContext=/ (\.|"\$source"|"\$work\/src")( |$)/;
+ const app=builds.filter(({line})=>checkoutContext.test(line));
+ assert.ok(app.length>=5,JSON.stringify(app));
  for(const {path,line} of app) assert.match(line,/bash scripts\/docker-build\.sh /,`${path}: ${line}`);
+});
+
+test('the local install lane builds the app image on this host and hands it to the proof as prebuilt, as CI does',()=>{
+ const lane=read('ci.sh').split('\n install)')[1].split('\n  ;;')[0];
+ const build=lane.indexOf('bash scripts/docker-build.sh -q -t "$web_tag" "$work/src"');
+ assert.ok(build>0,'the app image is built through the helper');
+ assert.ok(build<lane.indexOf('docker save $images'),'before the images are loaded into the machine');
+ assert.match(lane,/images="\$images \$sandbox_tag \$web_tag"/);
+ assert.match(lane,/export GTMWORKS_IMAGE_PREBUILT=true/);
+ // Under the tag the compose file's web service names, which the installer runs instead of building (#411).
+ assert.match(lane,/web_tag=\$\(sed -n '\/\^  web:\$\/,\/\^  \[a-z\]\/s\/\^    image: \/\/p' "\$work\/src\/docker-compose.install.yml"/);
 });
 
 test('CI builds the image as before: the workflows hand no secret to the image builds',()=>{
@@ -74,4 +87,11 @@ test('the cloud session doc says how the image and integration jobs run in a clo
  const doc=read('docs/agents/cloud-verify.md');
  assert.match(doc,/scripts\/docker-build\.sh/);
  assert.match(doc,/\.\/ci\.sh integration/);
+});
+
+test('the proxy suite reaches its own local proxy directly, never through the machine HTTPS_PROXY',()=>{
+ // A cloud session's proxy cannot reach the made-up host app.gtmworks.test and answers 502 (#562).
+ const curls=read('scripts/proxy-stack.sh').split('\n').filter(line=>/^\s*curl\b/.test(line));
+ assert.ok(curls.length>=2,curls.join('\n'));
+ for(const line of curls) assert.match(line,/ --noproxy '\*' /,line);
 });

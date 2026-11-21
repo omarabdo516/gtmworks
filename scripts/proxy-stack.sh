@@ -41,11 +41,13 @@ chmod 644 "$work/root.crt"
 # and resolves the public name to this machine.
 docker run -d --name gtmworks-proxy-app --network host --add-host "$host:127.0.0.1" -v "$work/root.crt:/ca/root.crt:ro" -e NODE_EXTRA_CA_CERTS=/ca/root.crt \
   -e NEXT_PUBLIC_SUPABASE_URL -e NEXT_PUBLIC_SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY -e WEBHOOK_ENCRYPTION_KEY -e APP_ORIGIN gtmworks:ci >/dev/null
+# Straight to the local proxy, never through the machine's own HTTPS_PROXY: a cloud session's (#562) cannot reach this
+# made-up host and answers 502.
 for attempt in $(seq 1 60); do
-  curl -fsS --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" >/dev/null 2>&1 && break
+  curl -fsS --noproxy '*' --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" >/dev/null 2>&1 && break
   sleep 1
 done
-curl -fsS --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" || { docker logs gtmworks-proxy-app; docker logs gtmworks-proxy-caddy; exit 1; }
+curl -fsS --noproxy '*' --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" || { docker logs gtmworks-proxy-app; docker logs gtmworks-proxy-caddy; exit 1; }
 echo
 echo "PROXY STACK READY"
 # Keep the server log in the test output: a rejected request leaves its reason here.

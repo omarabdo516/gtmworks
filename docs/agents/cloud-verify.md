@@ -75,7 +75,10 @@ Every app image build goes through `scripts/docker-build.sh` (#562): the session
 with its own CA, which the VM's Node trusts through `NODE_EXTRA_CA_CERTS` and a container does not, so the helper hands
 that file to the build as the BuildKit secret `build-ca`, and the Dockerfile's npm steps trust it only while they run.
 Nothing of it reaches the image, and where the variable names no file (CI, a release) it is the plain `docker build`. A
-build you type yourself does the same with `bash scripts/docker-build.sh -t gtmworks:ci .`. Docker needs no proxy setting
+build you type yourself does the same with `bash scripts/docker-build.sh -t gtmworks:ci .`. `./ci.sh install <area>`
+builds the app image on the VM the same way and loads it into its isolated machine, as CI's install jobs load the image
+job's build; the areas that update from a fixed older commit (`update`, `previous-archive`, `sandbox-update`,
+`staged-update`) build that commit's own Dockerfile, which takes the CA only once the commit is one made after #562. Docker needs no proxy setting
 here: the network reaches containers directly (plain HTTP, such as the sandbox image's `apt-get`, works as it is), and
 the session proxy at `127.0.0.1` would be the container's own loopback.
 
