@@ -1,7 +1,10 @@
 'use client';
 import './first-run-choice.css';
 import { useActionState, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
+import { useLeave } from '@/lib/motion';
+import { askComposerFocus } from '@/lib/composer-focus';
 import { inviteError } from '@/lib/invite.mjs';
 import { inviteRoles } from '@/lib/member-roles.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
@@ -20,8 +23,9 @@ const isolateEmails=(text:string):ReactNode[]=>text.split(/([\w.+-]+@[\w.-]+)/).
 
 // First run (#9, #186; design-reference: dialog#firstrun, frHTML): alone or with a team, then, for a team, who is on
 // it. It covers the whole window over the new workspace, which stays inert behind it, until the Owner answers; the
-// answer is kept on the Company only when the second step ends, and the workspace opens on the Owner's Conversation
-// with the main Agent. The action comes as a prop, so its component test needs no server.
+// answer is kept on the Company only when the second step ends; once it is saved the question leaves with the dialog's
+// exit and the workspace opens on the Owner's Conversation with the main Agent (#130; design-reference: closeDlg). A save
+// that fails keeps the question with its error. The action comes as a prop, so its component test needs no server.
 export default function FirstRunChoice({slug,company,companyName,personName,lead,brand,mark,finish}:{slug:string,company:string,companyName:string,personName:string,lead:{name:string,connection_id:string}|null,brand:ReactNode,mark:ReactNode,finish:FirstRunFinish}) {
  const {t,language}=useI18n();
  const [mode,setMode]=useState<Mode|null>(null);
@@ -33,6 +37,10 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  // Both it and the row's own check are kept by the row's id.
  const [dismissed,setDismissed]=useState<Record<number,boolean>>({});
  const [result,action,pending]=useActionState(finish,{});
+ const router=useRouter(); const leaving=useLeave(); const {close}=leaving;
+ const opened=result?.opened;
+ // Lead's Conversation takes the keyboard once it is drawn (design-reference: #ta-main focused after closeDlg).
+ useEffect(()=>{ if(opened) close(()=>{ askComposerFocus(opened); router.push(opened); }); },[opened,close,router]);
  const box=useRef<HTMLDivElement>(null);
  const focusTo=useRef<string|null>(null);
  const name=lead?.name||'Lead';
@@ -96,7 +104,7 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  // and its focus come back by.
  const data=JSON.stringify(rows.filter(row=>row.email.trim()).map(({id,email,role})=>({id,email:email.trim(),role})));
  const sent=JSON.stringify(result?.sent??[]);
- return <div className="gw fr-root"><div ref={box} className="fr" role="dialog" aria-modal="true" aria-labelledby="fr-title" tabIndex={-1} onKeyDown={event=>{ if(event.key==='Escape'&&step==='invite') { event.preventDefault(); back(); } }}>
+ return <div className="gw fr-root" hidden={leaving.gone}><div ref={box} className={`fr${leaving.closing?' is-closing':''}`} role="dialog" aria-modal="true" aria-labelledby="fr-title" tabIndex={-1} inert={!!opened||undefined} onKeyDown={event=>{ if(event.key==='Escape'&&step==='invite') { event.preventDefault(); back(); } }}>
   <header className="fr__bar"><span className="ws">{mark}<bdi className="ws__name">{brand}</bdi></span></header>
   <div className="fr__body"><form className="fr__col" action={action} noValidate onSubmit={submit}>
    {step==='mode'?<>

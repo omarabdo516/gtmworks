@@ -37,7 +37,7 @@ test('the Owner\'s foot keeps "Start from scratch", which returns to Lead\'s cha
  const screen = await gallery();
  await expect.element(screen.getByRole('button', { name: 'Start from scratch' })).toBeVisible();
  await screen.getByRole('button', { name: 'Start from scratch' }).click();
- expect(replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
+ await expect.poll(() => replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
  expect(sent).not.toHaveBeenCalled();
 });
 
@@ -46,7 +46,7 @@ test('the Owner\'s empty search keeps "Start from scratch" too', async () => {
  await screen.getByRole('searchbox', { name: 'Search ready-made agents' }).fill('zzz');
  await expect.element(screen.getByText('No ready-made agent matches “zzz”', { exact: true })).toBeVisible();
  await screen.getByRole('button', { name: 'Start from scratch' }).first().click();
- expect(replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
+ await expect.poll(() => replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
 });
 
 test('a Manager or a Contributor asks for a role: every card says "Ask for it", and the line names Lead and the Owner', async () => {
@@ -88,7 +88,7 @@ test('"Ask Lead" in the foot closes the gallery and returns to Lead\'s chat', as
  const screen = await gallery({ owner: false, owners: ['Omar'] });
  await expect.element(screen.getByRole('button', { name: 'Ask Lead', exact: true })).toBeVisible();
  await screen.getByRole('button', { name: 'Ask Lead', exact: true }).click();
- expect(replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
+ await expect.poll(() => replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
  expect(sent).not.toHaveBeenCalled();
 });
 
@@ -97,7 +97,7 @@ test('"Ask Lead" in the empty search closes the gallery too', async () => {
  await screen.getByRole('searchbox', { name: 'Search ready-made agents' }).fill('zzz');
  await expect.element(screen.getByText('No ready-made agent matches “zzz”', { exact: true })).toBeVisible();
  await screen.getByRole('button', { name: 'Ask Lead', exact: true }).first().click();
- expect(replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
+ await expect.poll(() => replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
 });
 
 test('in Arabic a Member asks for a role and the line names the Owner too', async () => {
@@ -116,4 +116,35 @@ test('a send still on its way when the gallery closes does not move the page tha
  answer(new Response('{}', { status: 200 }));
  await new Promise(resolve => setTimeout(resolve, 100));
  expect(replace.mock.calls.map(([href]) => href)).toEqual(['/c/rs-learning/chat?new=agent']);
+});
+
+// #130: the gallery leaves with the dialog's exit (design-reference: closeModal) and the page moves only once it has run.
+test('closing keeps the gallery and its scrim in the page while its leave runs, then the gallery is gone and the address moves once', async () => {
+ const screen = await gallery();
+ const dialog = screen.getByRole('dialog');
+ await expect.element(dialog).toBeVisible();
+ await screen.getByRole('button', { name: 'Close' }).click();
+ expect(dialog.element()).toHaveClass('is-closing');
+ // Nothing in it can be pressed while it leaves: an Add then would ask for a role nobody sees opened.
+ expect((dialog.element() as HTMLElement).inert).toBe(true);
+ expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
+ expect(replace).not.toHaveBeenCalled();
+ // A second way out during the leave adds nothing.
+ await userEvent.keyboard('{Escape}');
+ await expect.poll(() => replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
+ expect(document.querySelector('[role="dialog"]')).toBeNull();
+ expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
+ await new Promise(resolve => setTimeout(resolve, 250));
+ expect(replace).toHaveBeenCalledOnce();
+});
+
+test('after Add the gallery leaves first and the new Conversation opens after it', async () => {
+ const screen = await gallery();
+ await screen.getByRole('button', { name: 'Add SEO content writer' }).click();
+ await expect.poll(() => sent.mock.calls.length).toBe(1);
+ answer(new Response('{}', { status: 200 }));
+ await expect.poll(() => document.querySelector('[role="dialog"]')?.classList.contains('is-closing')).toBe(true);
+ expect(replace).not.toHaveBeenCalled();
+ await expect.poll(() => replace.mock.calls.length).toBe(1);
+ expect(replace.mock.calls[0][0]).toBe(`/c/rs-learning/conversations/${sent.mock.calls[0][0].conversation}`);
 });
