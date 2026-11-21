@@ -23,7 +23,10 @@ function databases({has_files=false,retry=false,files=[],refuse=null,download=nu
  const downloads=/** @type {string[]} */([]);
  // The Conversation's waiting turns, oldest first: the first until a turn is failed, then the next, then nothing.
  const turns=[{send_key:'q',message:'Look at these',has_files},{send_key:'q2',message:'And this too',has_files:false}];
- let claimed=0; let transient=download==='fails once'?1:0;
+ let claimed=0;
+ // The first turn's start was attempted before this claim (retry), so it is a retry and the database never fails it.
+ const retried=()=>claimed===0&&retry;
+ let transient=download==='fails once'?1:0;
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  const completion={state:'reserved',connection,profile:'writer',note:null};
  const rpc=async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
@@ -31,14 +34,14 @@ function databases({has_files=false,retry=false,files=[],refuse=null,download=nu
   if(name==='queued_conversations') return ok([{conversation}]);
   if(name==='reserve_conversation_turn') return ok(completion);
   if(name==='claim_conversation_turn') { const turn=turns[claimed];
-   return ok(turn?[{company:'co',agent:'a',person:'p',send_key:turn.send_key,message:turn.message,connection,profile:'writer',note:null,retry:claimed===0&&retry,has_files:turn.has_files}]:[]); }
+   return ok(turn?[{company:'co',agent:'a',person:'p',send_key:turn.send_key,message:turn.message,connection,profile:'writer',note:null,retry:retried(),has_files:turn.has_files}]:[]); }
   if(name==='conversation_handover_agents') return ok([]);
   if(['pin_run','pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return ok(null);
-  if(name==='begin_start') return ok(claimed===0&&retry?2:1);
+  if(name==='begin_start') return ok(retried()?2:1);
   // The three-argument form fails a turn nobody attempted yet (attempt 0): it leaves the queue, so the next claim gets
   // the next turn. A retried turn's attempt is above 0, or its start was attempted before this claim, and the database
   // leaves it alone: it may hold a Run.
-  if(name==='fail_conversation_turn') { if(args.attempt===0&&!(claimed===0&&retry)) claimed++; return ok(null); }
+  if(name==='fail_conversation_turn') { if(args.attempt===0&&!retried()) claimed++; return ok(null); }
   if(name==='send_conversation_message') return refuse?{data:null,error:{code:refuse}}:ok(true);
   if(name==='record_conversation_turn') { claimed++; return ok(true); }
   return {data:null,error:{message:`unexpected ${name}`}};
