@@ -9,12 +9,12 @@ import { readFileSync } from 'node:fs';
 const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict|runner|fast)\.mjs$/, /^package(-lock)?\.json$/];
 const suites = {
   // Screens as components in headless Chromium (vitest.config.mts, #81): the app's screens and components, the library
-  // they import (catalogues included), and the component tests and their config. The motion test (#127) also reads the
-  // reference and the motion table through the motion reader, at the motion table's widths and languages, with the
-  // stylesheets built through PostCSS. The offline guard (tests/offline.mjs, #266) is loaded by both test configs.
+  // they import (catalogues included), and the component tests and their config. The motion test (#127) draws the
+  // motion table's parts with the stylesheets built through PostCSS; it no longer reads the design reference (#271). The
+  // offline guard (tests/offline.mjs, #266) is loaded by both test configs.
   components: { true: [
     /^(app|components|lib)\//, /^tests\/components\//, /^vitest\.config\.mts$/,
-    /^tests\/(motion-table|motion-css|offline)\.mjs$/, /^design-reference\/index\.html$/, /^postcss\.config\.mjs$/,
+    /^tests\/(motion-table|offline)\.mjs$/, /^postcss\.config\.mjs$/,
   ] },
   // The database tests: migrations replayed and verified, RLS and grants (tests/db.sh, *.verify.sql, check-rls.sql).
   database: {
@@ -35,7 +35,8 @@ const suites = {
     true: [
       /^app\/.+\.ts$/, /^lib\/(?!messages\/)/, /^worker\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/,
       /^server\.js$/, /^tests\/(?!visual-lane)(.+\/)?[^/]+\.spec\.ts$/, /^tests\/(?!visual-lane)[^/]+\.ts$/,
-      /^tests\/(lane|fake-hermes|fake-engine|offline)\.mjs$/,
+      // tests/frame.spec.ts reads the motion table to tell a moving button from one that swaps at once (#271).
+      /^tests\/(lane|fake-hermes|fake-engine|offline|motion-table)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
       /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql|supabase-images\.sh)$/,
       /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
