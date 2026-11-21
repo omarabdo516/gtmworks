@@ -81,7 +81,7 @@ export const motionTable = [
   // The board as built (#131): a Card eases its colours and lift and gives under a press; a bar slides when its figure
   // changes and grows in when the board opens; the sidebar's count pops when more waits on the reader. The carried
   // Card's lean, fly-back and landing are set from the page, and the bar's growth on open also carries the bar's own
-  // transition, which a row of one reference rule cannot name: tests/board-motion.spec.ts reads them.
+  // transition, which a row drawn on its own cannot show: tests/board-motion.spec.ts reads them.
   { built: '.gw .board-view .kcard', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="kcard card"></div></div></div>', held: 0.985 },
   { built: '.gw .kcard .bar__fill', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><div class="kcard card"><span class="bar"><span class="bar__fill"></span></span></div></div></div>' },
   { built: '.gw .sb-count.is-pop', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-count is-pop" href="#"><span class="sb-count__n">2</span></a></div></aside></div>' },
