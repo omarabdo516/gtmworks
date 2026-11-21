@@ -36,6 +36,9 @@ test('a run of the job is read back from its own profile: its session and its re
   await triggerRoutine(at(fake,leadProfile),{id:routine.id});
   const newest=(await readRoutineRuns(at(fake,leadProfile),{id:routine.id})).runs[0];
   assert.deepEqual(await readRunReply(at(fake,leadProfile),newest.session),{state:'found',reply:null});
+  // `full` says the Engine answered as many runs as asked for, so older ones may lie beyond its list.
+  assert.equal((await readRoutineRuns(at(fake,leadProfile),{id:routine.id,limit:2})).full,true);
+  assert.equal((await readRoutineRuns(at(fake,leadProfile),{id:routine.id,limit:3})).full,false);
   // Another Agent's Routine id is never asked for through this profile.
   const other=(await createRoutine(at(fake,adsProfile),{name:'Ads',prompt:'Ads',schedule:'0 * * * *'})).routine;
   assert.equal((await readRoutineRuns(at(fake,leadProfile),{id:other.id})).state,'missing');
