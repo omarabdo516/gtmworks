@@ -724,7 +724,7 @@
   "settingsRole": "Role",
   "settingsMainAgent": "Main agent",
   "settingsIsMain": "{0} is the main agent",
-  "settingsIsMainD": "First in the list for every member. To change it, open another agent and press “Make it main”.",
+  "settingsIsMainD": "First in the list for every member, and it sends the good-morning message. To change it, open another agent and press “Make it main”.",
   "settingsMakeMain": "Make it main",
   "settingsMakeMainD": "It will show first for every member instead of {0}.",
   "settingsMainToast": "{0} is now the main agent. It shows first for everyone",

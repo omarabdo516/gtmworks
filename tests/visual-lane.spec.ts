@@ -45,6 +45,7 @@ const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
 const change = (n: number) => `69200000-0000-0000-0000-00000000000${n}`;
 const routine = (n: number) => `69300000-0000-0000-0000-00000000000${n}`;
+const morning = (n: number) => `69400000-0000-0000-0000-00000000000${n}`;
 const ownProfile = (agent: string) => `ag-${agent.replaceAll('-', '')}`;
 const companyProfile = `co-${rsLearning.replaceAll('-', '')}`;
 // A Routine as the fake Engine keeps it (#31): no zone of its own, so it reads in UTC, and its next and last runs are
@@ -71,6 +72,22 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
       fake.settings.cron.set(companyProfile, [routineJob('aa00000000a1', 'ملخص الصبح للفريق', '0 8 * * *', { last_run_at: day(-1, 8), last_status: 'ok' })]);
       fake.settings.cron.set(ownProfile(routine(2)), [routineJob('bb00000000b1', 'ابعتلي ملخص الإعلانات', '0 9 * * *', { last_run_at: day(-1, 9), last_status: 'ok' }),
         routineJob('bb00000000b2', 'وقّف أي إعلان تكلفة الليد فيه عدّت 45 ج', '0 16 * * 4', { enabled: false, state: 'paused', next_run_at: null })]);
+    },
+  },
+  // Good morning (#182): the main Agent's page with its daily message on at 9:00, Cairo time, at Agent level 3.
+  'good-morning': {
+    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+       ('${morning(1)}','${rsLearning}','${morning(2)}','Lead','General',true,'${companyProfile}');
+      insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${companyProfile}',3,public.engine_tool_policy() from public.companies where id='${rsLearning}'
+       on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+      insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${morning(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;
+      update public.companies set agent_level=3 where id='${rsLearning}';`,
+    unset: `update public.companies set agent_level=1 where id='${rsLearning}';
+      delete from public.company_profile_keepers where agent_id='${morning(1)}';
+      delete from public.hermes_agents where id='${morning(1)}';`,
+    engine: fake => {
+      fake.settings.profiles.set(companyProfile, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: levelConfig(3), credentials: {} });
+      fake.settings.cron.set(companyProfile, [routineJob('cc00000000c1', 'Good morning', '0 9 * * *', { timezone: 'Africa/Cairo' })]);
     },
   },
   // The general channel (#24): the Manager's note, Omar asking Lead, and Lead's answer.
