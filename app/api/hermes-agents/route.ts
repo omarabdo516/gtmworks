@@ -24,8 +24,11 @@ async function respond(request:NextRequest) {
    // The Agents before the change, with their Engine profiles: the main Agent's daily message (#182) moves to the new main
    // Agent once the database made it so, by Make it main or by removing the main Agent with a replacement. Read first, so a
    // removed Agent's profile is still known.
-   const listed=(await db.rpc('company_app_agents',{c:body.company})).data as {agent:string,main:boolean}[]|null;
-   const before=Array.isArray(listed)?listed.find(row=>row.main)?.agent:undefined;
+   const {data:listing,error:listingError}=await db.rpc('company_app_agents',{c:body.company});
+   // Without that list the message could be left on an Agent that is no longer the main one: nothing is changed.
+   if(listingError||!Array.isArray(listing)) return reply({error:'hermesAgentFailed'},503);
+   const listed=listing as {agent:string,main:boolean}[];
+   const before=listed.find(row=>row.main)?.agent;
    const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,a:body.agent,replacement:body.replacement??null});
    if(error) {
     const key=['hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';

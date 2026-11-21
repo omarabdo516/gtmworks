@@ -36,6 +36,8 @@ export const fixture = {
   agent: '61000000-0000-0000-0000-000000000002',
   // SEO & Content, made from the ready-made SEO content writer, with no Conversation yet (#170).
   newAgent: '61000000-0000-0000-0000-000000000003',
+  // Analyst, for which Lead proposed a faster model (#19), waiting on Omar's OK (#178).
+  analyst: '61000000-0000-0000-0000-000000000004',
   conversation: '62000000-0000-0000-0000-000000000001',
   // Omar's Conversation in which Lead made Ads (#13), as the reference's thread th-made-ads.
   madeConversation: '62000000-0000-0000-0000-000000000002',
@@ -97,6 +99,9 @@ export const screens = {
   // One Agent's page: Lead's settings inside the overlay. Built: the comparison fixture's main Agent, Lead (the seed
   // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).
   agent: { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}` },
+  // #178. Settings, Agents, Analyst: the note under its tabs while Lead's proposed model for it waits for the Owner
+  // (the reference's chg-analyst). Built: the comparison fixture's Analyst, with the same proposal (#19).
+  'agent-proposal': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-analyst' }, { waitFor: '.sov-pend' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.analyst}` },
   // #30. Settings, Apps: the reference draws its app catalogue there; built, the apps the Engine offers the Company.
   apps: { reference: { steps: [...settingsSection('apps'), { waitFor: '#sov-apps .app-card' }] }, builtPath: '/c/rs-learning/settings?section=apps' },
   account: { reference: { steps: settingsSection('account') }, builtPath: '/c/rs-learning/settings?section=account' },
@@ -105,9 +110,10 @@ export const screens = {
   // some (the visual lane's `routines` state and its fake Engine).
   routines: { reference: { steps: settingsSection('routines') }, builtPath: '/c/rs-learning/settings?section=routines' },
   // Good morning (#182): the main Agent's daily message, on its Settings page. Built: the switch and time are the Engine's,
-  // so they need an Engine that holds the main Agent's profile (`npm run cloud:up`'s fake Engine, or the comparison fixture).
+  // so they need an Engine that holds the main Agent's own profile (`npm run cloud:up`'s fake Engine with an Agent made
+  // there, passed with --built-path); the wait is for the switch, so a page that could only draw the read-only row fails.
   'good-morning': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#set-checkin' }, { scrollTo: '#set-checkin' }] },
-   builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}`, builtSteps: [{ waitFor: '#set-checkin' }, { scrollTo: '#set-checkin' }] },
+   builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}`, builtSteps: [{ waitFor: '#set-ck-on' }, { scrollTo: '#set-checkin' }] },
   // The morning message (#183): the reference's morning thread with Lead's greeting and the card under it. Built: the
   // fixture's morning Conversation (its foot reads the Engine's job, so `npm run cloud:up`'s fake Engine draws it off).
   morning: { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-morning"]' }, { waitFor: '.ckcard' }, { scrollTo: '.ckcard' }] },
