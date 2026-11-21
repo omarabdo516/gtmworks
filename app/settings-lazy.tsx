@@ -21,6 +21,7 @@ const LazyInstructionsRead=lazy(()=>import('./settings-agent-form').then(module=
 const LazySaveBar=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentSaveBar})));
 const LazyVoice=lazy(()=>import('./settings-agent-voice').then(module=>({default:module.AgentVoice})));
 const LazyEffort=lazy(()=>import('./settings-agent-effort').then(module=>({default:module.AgentEffort})));
+const LazyMorning=lazy(()=>import('./settings-agent-morning').then(module=>({default:module.AgentMorning})));
 const LazyKeys=lazy(()=>import('./settings-models').then(module=>({default:module.ProviderKeys})));
 const LazySpeech=lazy(()=>import('./settings-models').then(module=>({default:module.SpeechToText})));
 const LazyDefault=lazy(()=>import('./settings-models').then(module=>({default:module.DefaultModel})));
@@ -48,6 +49,8 @@ export function AgentSaveBar(props:{company:string,agent:string,name:string}) { 
 export function AgentVoice(props:{company:string,agent:string,personName:string,voice:import('@/lib/agent-voice.mjs').AgentVoice}) { return <Suspense fallback={null}><LazyVoice {...props}/></Suspense>; }
 /** @param {{agent:string,effort:string|null,editable:boolean}} props */
 export function AgentEffort(props:{agent:string,effort:string|null,editable:boolean}) { return <Suspense fallback={null}><LazyEffort {...props}/></Suspense>; }
+/** @param {{agent:string,editable:boolean,morning:import('./settings-agent-morning').MorningProps|null}} props */
+export function AgentMorning(props:{agent:string,editable:boolean,morning:import('./settings-agent-morning').MorningProps|null}) { return <Suspense fallback={null}><LazyMorning {...props}/></Suspense>; }
 export function ProviderKeys(props:ComponentProps<typeof Keys>) { return <Suspense fallback={null}><LazyKeys {...props}/></Suspense>; }
 export function SpeechToText(props:ComponentProps<typeof Speech>) { return <Suspense fallback={null}><LazySpeech {...props}/></Suspense>; }
 export function DefaultModel(props:ComponentProps<typeof Default>) { return <Suspense fallback={null}><LazyDefault {...props}/></Suspense>; }

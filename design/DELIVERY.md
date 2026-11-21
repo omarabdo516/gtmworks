@@ -74,6 +74,7 @@ The pull request is the one that added the screen to the tool, with its side-by-
 | `numbers-loading` | #253 |
 | `standing-activity` | #499 |
 | `standing-settings` | #499 |
+| `good-morning` | #506 |
 
 ## Motion
 

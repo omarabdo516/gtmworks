@@ -97,13 +97,15 @@ export function AgentInstructionsReadOnly({instructions,empty}:{instructions:str
 // The page's save bar: hidden until the draft differs. Cancel puts back what was saved and the focus on the first field;
 // Save sends every changed field in one request, then shows what the Engine kept. Every key of the draft is its own part
 // of `changes` (About, How it works, the thinking level and each Skill's switch), except the Voice section's keys, which
-// go as one `voice` object with the section's values. Every way out of the page asks the shared store first, which
+// go as one `voice` object with the section's values, and Good morning's (#182), which go as one `morning` object. Every way out of the page asks the shared store first, which
 // flashes this bar and focuses Save.
 export function AgentSaveBar({company,agent,name}:{company:string,agent:string,name:string}) {
  const {t}=useI18n();
  const language=useDraftValue(agent,'voice.language','');
  const speed=useDraftValue(agent,'voice.speed','1');
  const voice=useDraftValue(agent,'voice.voice','');
+ const morningOn=useDraftValue(agent,'morning.on','off');
+ const morningTime=useDraftValue(agent,'morning.time','');
  const dirty=useDraftDirty(agent);
  const flash=useBarFlash();
  const [saving,setSaving]=useState(false);
@@ -126,8 +128,13 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
   // newer read or Cancel is dropped, and the values it carried are the snapshot a later edit is compared with.
   const changed=changedValues(agent);
   const stamp=draftStamp(agent);
-  const changes:Record<string,unknown>=Object.fromEntries(Object.entries(changed).filter(([key])=>!key.startsWith('voice.')));
+  const changes:Record<string,unknown>=Object.fromEntries(Object.entries(changed).filter(([key])=>!key.startsWith('voice.')&&!key.startsWith('morning.')));
   if(Object.keys(changed).some(key=>key.startsWith('voice.'))) changes.voice={language,speed,...(voice?{voice}:{})};
+  // Good morning's switch and time go as one part, with the browser's zone for a message switched on the first time (#182).
+  if(Object.keys(changed).some(key=>key.startsWith('morning.'))) {
+   let zone:string|undefined; try { zone=Intl.DateTimeFormat().resolvedOptions().timeZone||undefined; } catch { zone=undefined; }
+   changes.morning={on:morningOn==='on',time:morningTime,...(zone?{zone}:{})};
+  }
   if(!Object.keys(changes).length) return;
   setSaving(true); setFailed(false);
   try {
@@ -150,6 +157,13 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
       patch['voice.voice']=keptVoice.voice;
       if(voice) sent['voice.voice']=voice;
      }
+    } else if(key==='morning') {
+     const keptMorning=kept.morning as {on?:unknown,time?:unknown}|null|undefined;
+     if(!keptMorning||typeof keptMorning.on!=='boolean'||typeof keptMorning.time!=='string') { setFailed(true); return; }
+     patch['morning.on']=keptMorning.on?'on':'off';
+     patch['morning.time']=keptMorning.time;
+     sent['morning.on']=morningOn;
+     sent['morning.time']=morningTime;
     } else {
      if(typeof kept[key]!=='string') { setFailed(true); return; }
      patch[key]=kept[key] as string;

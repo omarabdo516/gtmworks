@@ -7,5 +7,5 @@ export type RoutineAction = 'create' | 'change' | 'pause' | 'resume' | 'run' | '
 export type RoutineChangeState = { state: 'done', routine: Routine | null, logged: boolean }
  | { state: 'missing' | 'invalid' | 'notAllowed' | 'noEngine' | 'busy' | 'refused' | 'unreachable' | 'failed' };
 export function readCompanyRoutines(db: unknown, request: { company: string, hermes?: { address: string, key: string } | null, driver?: object }): Promise<CompanyRoutines>;
-export function changeAgentRoutine(db: unknown, request: { company: string, agent: unknown, action: unknown, routine?: unknown, name?: unknown, prompt?: unknown, schedule?: unknown, timezone?: unknown, hermes?: { address: string, key: string } | null, driver?: object }): Promise<RoutineChangeState>;
+export function changeAgentRoutine(db: unknown, request: { company: string, agent: unknown, action: unknown, routine?: unknown, name?: unknown, prompt?: unknown, schedule?: unknown, timezone?: unknown, hermes?: { address: string, key: string } | null, driver?: object, leaseWait?: number }): Promise<RoutineChangeState>;
 export function readAgentRoutines(db: unknown, request: { company: string, agent: unknown, hermes?: { address: string, key: string } | null, driver?: object }): Promise<OneAgentRoutines>;
