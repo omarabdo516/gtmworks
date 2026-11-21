@@ -62,9 +62,11 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
  // The Card flying back to its place: it stays dimmed there until the carried copy arrives (design-reference: dragEnd).
  const [returning,setReturning]=useState<number|null>(null);
  const flyBack=useRef<number|null>(null);
- // The bars grow in when the board opens; the class that does it is gone 900ms later (design-reference: boardEnter).
- const [entering,setEntering]=useState(true);
- useEffect(()=>{ const timer=window.setTimeout(()=>setEntering(false),900); return ()=>clearTimeout(timer); },[]);
+ // The bars grow in when the board opens; the class that does it is gone 900ms later (design-reference: boardEnter). It
+ // is drawn once and taken off the element itself, as the reference does: the board's class never changes in a render, so
+ // React never writes it again over the edge fade BoardPager sets on the same element (#572).
+ const columns=useRef<HTMLDivElement>(null);
+ useEffect(()=>{ const timer=window.setTimeout(()=>columns.current?.classList.remove('board--enter'),900); return ()=>clearTimeout(timer); },[]);
  // The pointer's own place, read on every move of the mouse or the finger rather than once per droppable, so the line
  // stands before the Card the carried one is really over (design-reference: dragMove's card under the pointer).
  const carrying=useRef<number|null>(null); const dropped=useRef<DropPlace>(nowhere); const shown=useRef<DropPlace>(nowhere);
@@ -164,7 +166,7 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   void onMove(id,at.column,at.before,was?{left:was.left,top:was.top}:true);
  }} accessibility={{screenReaderInstructions:{draggable:t('boardDragHint')},announcements:{onDragStart:({active})=>t('dragStarted',cards.find(card=>card.id===Number(active.id))?.title),onDragOver:({over})=>over?t('dragOver',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragEnd:({over})=>over?t('dragEnded',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragCancel:()=>t('dragCancelled')}}}>
   <DropMark.Provider value={{place,carrying:activeId!==null,returning}}>
-   <div className={`board board-cols${entering?' board--enter':''}`} id="board-cols" aria-label={label} aria-busy={busy}>{children}</div>
+   <div ref={columns} className="board board-cols board--enter" id="board-cols" aria-label={label} aria-busy={busy}>{children}</div>
    {/* The carried Card follows the pointer and never catches it, so the Card under the pointer is the one read (#174). */}
    <DragOverlay dropAnimation={dropAnimation} style={{pointerEvents:'none'}}>{activeId!==null?renderOverlay(activeId):null}</DragOverlay>
   </DropMark.Provider>

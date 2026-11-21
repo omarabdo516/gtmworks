@@ -8,19 +8,23 @@ type Step = { name: string, link: string, path: string, content: string, search?
 // A step that opens a new page counts `settled` from the end of the reference's own motion (#135): the page region's
 // fadeIn (design-reference/index.html .view-enter, 200ms, after the page is shown) and the 150ms fade of the row that
 // becomes current (.sb-item, .agent-tile), which runs beside it. A Card's sheet opens over the same page, which does not fade.
-const pageFadeIn = 200, rowFade = 150;
+// A step that opens the board (Marketing board, and the Inbox, which is the board on "Waiting on you") also waits for the
+// board's entrance (#131, #559): its progress bars grow for 700ms from when it is shown (app/board.css gw-bar-grow;
+// design-reference boardEnter), beside the page's fade.
+const pageFadeIn = 200, rowFade = 150, boardEnter = 700;
 const opensPage = { shown: 0, settled: Math.max(pageFadeIn, rowFade) };
+const opensBoard = { shown: 0, settled: Math.max(pageFadeIn, rowFade, boardEnter) };
 export const clickPath: Step[] = [
   { name: 'numbers', link: '.nav a[href$="/numbers"]', path: '/numbers', content: '.numbers-page', motion: opensPage },
-  { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board', motion: opensPage },
+  { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board', motion: opensBoard },
   { name: 'open sheet', link: '#board-cols .kcard[data-card-id="1"] a', path: '/work/board', search: '?card=1', content: '.sheet[open]', motion: { shown: 0, settled: 280 } },
   { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } },
   { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr', motion: opensPage },
   { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal', motion: opensPage },
-  { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal', motion: opensPage },
+  { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal', motion: opensBoard },
   { name: 'calendar', link: '.tabs a[href$="/work/calendar"]', path: '/work/calendar', content: '.calendar', motion: opensPage },
   // The Inbox opens from the approvals entry beside Marketing board; Activity log is the sidebar's last entry.
-  { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals', motion: opensPage },
+  { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals', motion: opensBoard },
   { name: 'activity log', link: '.nav a[href$="/log"]', path: '/log', content: '.log-page', motion: opensPage },
 ];
 // An Agent face's own life is not part of opening a page (#133): its look toward the pointer, its blink, its hop, the

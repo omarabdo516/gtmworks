@@ -21,9 +21,17 @@ RUN apt-get update \
 # Chromium is the browser the base image already ships for Playwright, which is the one the Engine's screen drives. One
 # browser, not two, so a page an Agent renders is the page the screen shows. A container cannot make Chromium's own
 # namespace sandbox (no capability, no new privilege), so it is off here: the container is the sandbox.
+# Playwright names Chromium's folder for the platform: chrome-linux64 on amd64, chrome-linux-arm64 on arm64 (#572). The
+# release builds both; any other platform stops here with its name, and so does a platform whose folder is missing.
 RUN set -eux; \
-    chrome=$(find /opt/playwright -maxdepth 3 -type f -path '*/chrome-linux64/chrome' | head -n 1); \
-    test -n "$chrome"; \
+    arch=$(dpkg --print-architecture); \
+    case "$arch" in \
+      amd64) folder=chrome-linux64 ;; \
+      arm64) folder=chrome-linux-arm64 ;; \
+      *) echo "no Chromium folder is known for $arch" >&2; exit 1 ;; \
+    esac; \
+    chrome=$(find /opt/playwright -maxdepth 3 -type f -path "*/$folder/chrome" | head -n 1); \
+    test -n "$chrome" || { echo "no Chromium at /opt/playwright/*/$folder/chrome on $arch" >&2; exit 1; }; \
     printf '%s\n' '#!/bin/sh' \
       'exec '"$chrome"' --no-sandbox --disable-dev-shm-usage "$@"' > /usr/local/bin/chromium; \
     chmod 0755 /usr/local/bin/chromium

@@ -176,16 +176,21 @@ test('a Card dropped in another column or moved with Shift and an arrow lands on
  } finally { await viewer.close(); }
 });
 
-test('the progress bars grow in when the board opens and the class that does it is gone after a second; with reduced motion they are drawn at their value',async({page})=>{
+test('the progress bars grow in when the board opens and the class that does it is gone after a second, leaving the edge fade; with reduced motion they are drawn at their value',async({page})=>{
  const id=cardIn('Bar','كتابة',{done:1,open:1});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  await page.reload();
  const bar=card(page,id).locator('.bar__fill');
  expect(await bar.evaluate(el=>{ const style=getComputedStyle(el); return {name:style.animationName,duration:style.animationDuration,fill:style.animationFillMode,transition:style.transition}; }))
   .toEqual({name:'gw-bar-grow',duration:'0.7s',fill:'both',transition:'transform 0.28s cubic-bezier(0.2, 0, 0, 1)'});
+ // More columns wait past the board's edge, so it fades there (BoardPager). The fade is the pager's, and taking the
+ // entrance class off must leave it (#572: React drew the board's class again and wiped it).
+ await expect(page.locator('#board-cols')).toHaveClass(/\bhas-more-end\b/);
  await page.waitForTimeout(1000);
  await expect(page.locator('#board-cols.board--enter')).toHaveCount(0);
  expect(await bar.evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
+ await expect(page.locator('#board-cols')).toHaveClass(/\bhas-more-end\b/);
+ expect(await page.locator('#board-cols').evaluate(el=>getComputedStyle(el).maskImage)).toContain('linear-gradient');
  await page.emulateMedia({reducedMotion:'reduce'});
  await page.reload();
  expect(await bar.evaluate(el=>({name:getComputedStyle(el).animationName,transform:getComputedStyle(el).transform}))).toEqual({name:'none',transform:'matrix(0.5, 0, 0, 1, 0, 0)'});
