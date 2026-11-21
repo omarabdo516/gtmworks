@@ -164,6 +164,10 @@ export const screens = {
   // The reference shows the request Omar answers in his chat with Lead; the product, where it waits.
   'ask-agent': { reference: { steps: [...asYoussef, { click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }] }, builtPath: '/c/rs-learning/chat?new=agent' },
   'request-sent': { reference: { steps: [...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
+  // #19. Lead's proposed model for Analyst: in Omar's chat with Lead, and where it waits on him. Built: the fixture's
+  // Conversation and Approvals.
+  'change-proposed': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }] }, builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000010' },
+  'change-waiting': { reference: { steps: [...board, { waitFor: '.kcard[data-card="c-chg-analyst"]' }, { scrollTo: '.kcard[data-card="c-chg-analyst"]' }] }, builtPath: '/c/rs-learning/approvals' },
   'request-waiting': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { waitFor: '.ac-card--req' }] }, builtPath: '/c/rs-learning/approvals' },
   'request-made': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { click: '#ac-yes-rq-seed' }, { waitFor: '.ac-card:not(.ac-card--req)' }, ...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
   // #153. The composer's "+" menu, opened: in the Conversation with Lead, and in the general channel.

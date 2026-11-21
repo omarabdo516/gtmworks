@@ -22,6 +22,7 @@ import AddIdea from './add-idea';
 import { ChatCardFoot, useShowCard, type CardAgent } from './board-show';
 import { decideAgentRule } from './skill-actions';
 import { OwnerRequestCard } from './agent-request-card';
+import { OwnerChangeCard } from './agent-change-card';
 import { AgentKeyWaitCard } from './agent-key-wait-card';
 import { Decision } from './decision';
 import { ActivityRow, Avatar, isMessage, MessageRow, NoteReplyRow, type WorkActivity, type WorkAttachment, type WorkMember, MemberPicker } from '@/lib/work-activity';
@@ -208,6 +209,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   rule_suggestion:ruleView,
   agent_request:item=><OwnerRequestCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} lead={lead} item={item}/>,
   agent_key:item=><AgentKeyWaitCard key={`${item.kind}:${item.id}`} item={item}/>,
+  agent_change:item=><OwnerChangeCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} item={item} alone={!!p.alone}/>,
  };
  const answeredHere=(item:WaitingItem)=>Object.hasOwn(decidedHere,item.kind);
  // A Member mentioned in a channel (#200) is named by the writer and opens the channel at that message: its initial, the

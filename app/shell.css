@@ -1014,3 +1014,24 @@
 .gw .install-update__line { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
 .gw .install-update__ask { display: grid; gap: 8px; }
 .gw .install-update .set-err { color: var(--gw-danger-text); }
+
+/* A proposed change to an Agent's settings (#19; design-reference: .chg-card, .pp-card): the Agent request's card, solid,
+   with the reference's narrower labels; the new instructions keep their lines. */
+.gw .chg-card .card__sub { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
+.gw .chg-card .kv__row { grid-template-columns: 104px minmax(0, 1fr); }
+.gw .chg-card .chg-text { white-space: pre-wrap; max-height: 12lh; overflow: auto; }
+.gw .chg-card { container-type: inline-size; }
+@container (max-width: 420px) { .gw .chg-card .kv__row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+/* Its badge and its buttons as the reference's card draws them (.badge--wait, .btn--primary, .btn--secondary). */
+.gw .chg-card .badge--wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
+.gw .chg-card .card__actions .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: 600;
+  white-space: nowrap;
+}
+.gw .chg-card .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .chg-card .btn--primary:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); }
+.gw .chg-card .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
+@media (hover: hover) {
+  .gw .chg-card .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); }
+  .gw .chg-card .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); }
+}
