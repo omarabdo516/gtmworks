@@ -1,5 +1,11 @@
 [
  {
+  "issue": 529,
+  "date": "2026-11-21",
+  "en": { "title": "An agent's face hops on a page that opens slowly", "body": "When you press an agent's tile, its face on the page that opens now hops however long that page takes to appear, not only when it appears at once." },
+  "ar": { "title": "وش الوكيل بينط في الصفحة اللي بتفتح ببطء", "body": "لما تدوس على مربع وكيل، وشه في الصفحة اللي بتفتح بقى بينط مهما الصفحة تاخد وقت عشان تظهر، مش بس لما تظهر على طول." }
+ },
+ {
   "issue": 502,
   "date": "2026-11-21",
   "en": { "title": "An update that cannot start keeps your old engine", "body": "When an update from an older install cannot start the new agent engine, your install now goes back to the engine it had, with all your agents' memory, so your company keeps working until you run the update again." },
