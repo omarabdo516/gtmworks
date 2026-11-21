@@ -24,8 +24,8 @@ async function bundled(page:Page,company:string,lead:string) {
  const connection=randomUUID();
  query(`do $$ begin
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profileOf(company)}');
-  insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profileOf(company)}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
-   on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+  insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profileOf(company)}',true from public.companies where id='${company}'
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
  end $$;`);
 }
 
@@ -42,7 +42,7 @@ test.beforeAll(async({browser},testInfo)=>{
   // Writer moved to its own profile (ADR 0016), as connected-tools.spec.ts sets it up: its profile's record first.
   const own=randomUUID();
   query(`do $$ begin
-   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) select '${writer}',id,agent_level,public.engine_tool_policy() from public.companies where id='${rs}';
+   insert into public.agent_profiles(agent_id,company_id,tools_confirmed) select '${writer}',id,true from public.companies where id='${rs}';
       insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${writer}','${rs}','${own}','Writer','Writing',false,'${writerProfile}');
   end $$;`);
  } finally { await page.close(); }

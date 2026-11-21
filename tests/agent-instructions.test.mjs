@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readAgentInstructions as readDriver, writeAgentInstructions as writeDriver } from '../lib/hermes.mjs';
 import { readAgentInstructions, changeAgentInstructions } from '../lib/agent-instructions.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #176: an Agent's standing instructions are read from its own Engine profile and saved by the Owner alone. The database

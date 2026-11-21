@@ -1,25 +1,25 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(35);
 -- #29: an Agent's model choice and its sub-agents switch are the Owner's, checked in the database; a member reads them;
 -- and the worker's list carries the switch so its profile is written with the policy's delegation variant.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('e9000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001'),
  ('e9000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000002','Writer','Writing',false,'co-10000000000000000000000000000001'),
  ('e9000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002','e9000000-0000-0000-0000-000000000012','Lead two','General',true,'co-10000000000000000000000000000002');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true),
- ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true),
+ ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',true,true);
 -- The Writer gets its own ag- profile, as the worker makes one: the record exists before the Agent names that profile.
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values
- ('e9000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy()),
- ('e9000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002',1,public.engine_tool_policy());
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values
+ ('e9000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',true),
+ ('e9000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002',true);
 update public.hermes_agents set profile=public.agent_engine_profile(id) where id in ('e9000000-0000-0000-0000-000000000002','e9000000-0000-0000-0000-000000000012');
 -- An Agent the worker is moving: its record exists, but the Agent still names the Company's profile, so it is not choosable.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('e9000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','e9000000-0000-0000-0000-000000000013','Mover','Writing',false,'co-10000000000000000000000000000001');
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values
- ('e9000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy());
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values
+ ('e9000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001',true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 
@@ -48,10 +48,19 @@ reset role;
 select is((select concat_ws('|',model_choice,learning_mode_choice,subagents,tools_pending) from public.company_profiles where company_id='10000000-0000-0000-0000-000000000001'),
  'openrouter/openai/gpt-5.5|ask|t|t','the choices are kept with the Company profile, which waits for its new toolset');
 select is((select subagents from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000001'),true,'the worker''s list carries the main Agent''s switch');
-select throws_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),false)$$,
+select throws_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',false)$$,
  '40001','companyProfileChanged','a read-back of a switch the Owner changed since is never recorded as applied');
-select public.record_company_profile('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001');
 select is((select tools_pending from public.company_profiles where company_id='10000000-0000-0000-0000-000000000001'),true,'a worker from before names no switch, and its read-back never clears one that is on');
+-- The health check reads the main Agent's switch where it is kept, on the Company profile (#425, #391), once for that
+-- profile however many Agents still name it; and its read-back refuses a switch the Owner changed since.
+select is((select string_agg(subagents::text,',') from public.engine_tools_due() where profile='co-10000000000000000000000000000001'),'true',
+ 'the health check reads the main Agent''s sub-agents switch from the Company profile, in one row');
+select is((select string_agg(subagents::text,',') from public.engine_tools_due() where profile=public.agent_engine_profile('e9000000-0000-0000-0000-000000000002')),'false',
+ 'an Agent on its own profile keeps its own switch, which the main Agent''s does not change');
+select throws_ok($$select public.record_profile_tools('co-10000000000000000000000000000001',false)$$,
+ '40001','agentProfileChanged','a health read-back without the main Agent''s sub-agents is never recorded as applied');
+select lives_ok($$select public.record_profile_tools('co-10000000000000000000000000000001',true)$$,'a read-back with them is recorded');
 set local role authenticated;
 select throws_ok($$select public.set_agent_model('e9000000-0000-0000-0000-0000000000ff','openrouter/openai/gpt-5.5')$$,'P0002','settingAgentUnknown','an Agent that is not this Company''s is never written');
 

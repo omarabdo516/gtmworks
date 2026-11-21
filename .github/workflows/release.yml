@@ -144,6 +144,7 @@ jobs:
       packages: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      sandbox-digest: ${{ steps.sandbox.outputs.digest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -155,6 +156,21 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
+      # The work sandbox image every Company's sandbox runs (#392, ADR 0020), built from its one build file and pushed
+      # before the app image from the same commit, which records its digest: the install gets it the way it gets the app
+      # image, pinned by digest.
+      - name: build and push the work sandbox image for linux/amd64 and linux/arm64
+        id: sandbox
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: sandbox
+          file: sandbox/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}-sandbox:${{ needs.provenance.outputs.tag }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=release-sandbox
+          cache-to: type=gha,mode=max,scope=release-sandbox
       - name: build and push linux/amd64 and linux/arm64
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -167,13 +183,18 @@ jobs:
           # The commit the image is built from, which the next main release reads back (#448).
           annotations: index:org.opencontainers.image.revision=${{ needs.provenance.outputs.sha }}
           # The image knows its own version (X.Y.Z or main) and so its channel, for Update ready (#442).
-          build-args: GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}
+          # It also names the work sandbox image built just before it from the same commit, by tag and digest, so a main
+          # build's install files pin that one (release-assets.mjs, Dockerfile).
+          build-args: |
+            GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}
+            GTMWORKS_SANDBOX_IMAGE=${{ env.IMAGE }}-sandbox:${{ needs.provenance.outputs.tag }}@${{ steps.sandbox.outputs.digest }}
           cache-from: type=gha,scope=release
           cache-to: type=gha,mode=max,scope=release
       - name: both platform digests pushed
         env:
           TAG: ${{ needs.provenance.outputs.tag }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          SANDBOX_DIGEST: ${{ steps.sandbox.outputs.digest }}
         run: |
           docker manifest inspect "$IMAGE:$TAG" | tee manifest.json
           for arch in amd64 arm64; do
@@ -182,6 +203,13 @@ jobs:
             echo "linux/$arch: $IMAGE@$digest"
           done
           echo "index: $IMAGE:$TAG@$DIGEST"
+          docker manifest inspect "$IMAGE-sandbox:$TAG" | tee sandbox-manifest.json
+          for arch in amd64 arm64; do
+            digest=$(jq -r --arg arch "$arch" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' sandbox-manifest.json)
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "no single linux/$arch image in $IMAGE-sandbox:$TAG" >&2; exit 1; }
+            echo "linux/$arch: $IMAGE-sandbox@$digest"
+          done
+          echo "sandbox index: $IMAGE-sandbox:$TAG@$SANDBOX_DIGEST"
 
   install-test:
     needs: [provenance, image]
@@ -202,10 +230,12 @@ jobs:
         env:
           TAG: ${{ needs.provenance.outputs.tag }}
           DIGEST: ${{ needs.image.outputs.digest }}
+          SANDBOX_DIGEST: ${{ needs.image.outputs.sandbox-digest }}
         run: |
-          node scripts/release-assets.mjs "$IMAGE:$TAG@$DIGEST" release
+          node scripts/release-assets.mjs "$IMAGE:$TAG@$DIGEST" release "$IMAGE-sandbox:$TAG@$SANDBOX_DIGEST"
           grep -n 'image:' release/docker-compose.install.yml
           if grep 'image:' release/docker-compose.install.yml | grep -v '@sha256:'; then echo 'an image is not pinned by digest' >&2; exit 1; fi
+          grep -Eq "^sandbox_image=$IMAGE-sandbox:$TAG@sha256:[a-f0-9]{64}$" release/install.sh || { echo 'the install script does not pin the work sandbox image by tag and digest' >&2; exit 1; }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-files
@@ -215,10 +245,12 @@ jobs:
       - name: the image reads with no account
         env:
           DIGEST: ${{ needs.image.outputs.digest }}
+          SANDBOX_DIGEST: ${{ needs.image.outputs.sandbox-digest }}
         run: |
-          if ! docker manifest inspect "$IMAGE@$DIGEST" > /dev/null; then
+          if ! docker manifest inspect "$IMAGE@$DIGEST" > /dev/null \
+            || ! docker manifest inspect "$IMAGE-sandbox@$SANDBOX_DIGEST" > /dev/null; then
             settings="https://github.com/users/$GITHUB_REPOSITORY_OWNER/packages/container/${GITHUB_REPOSITORY#*/}/settings"
-            echo "::error::$IMAGE cannot be read without an account. Its owner sets it to Public once ($settings, Change visibility), then re-runs this workflow's failed jobs."
+            echo "::error::$IMAGE or $IMAGE-sandbox cannot be read without an account. Its owner sets both to Public once ($settings, Change visibility), then re-runs this workflow's failed jobs."
             exit 1
           fi
       - name: install from only the compose file and install script
@@ -254,6 +286,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ needs.provenance.outputs.release }}
           APP_IMAGE: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}@${{ needs.image.outputs.digest }}
+          SANDBOX_IMAGE: ${{ env.IMAGE }}-sandbox:${{ needs.provenance.outputs.tag }}@${{ needs.image.outputs.sandbox-digest }}
         run: |
           # Every page, drafts included; a failed request stops here rather than reading as no release.
           state=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
@@ -271,7 +304,7 @@ jobs:
             none)
               gh release create "$TAG_NAME" release/docker-compose.install.yml release/install.sh -R "$GITHUB_REPOSITORY" \
                 --draft --verify-tag --title "$TAG_NAME" \
-                --notes "Image: $APP_IMAGE. Put both files in an empty directory and run: sh install.sh";;
+                --notes "Image: $APP_IMAGE. Work sandbox image: $SANDBOX_IMAGE. Put both files in an empty directory and run: sh install.sh";;
             *) echo "::error::$TAG_NAME has more than one draft release; delete the extra drafts, then re-run" >&2; exit 1;;
           esac
       - name: publish the draft once it holds the tested files

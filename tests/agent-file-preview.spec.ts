@@ -14,7 +14,8 @@ const company='10000000-0000-0000-0000-000000000001';
 const companyProfile=`co-${company.replaceAll('-','')}`;
 const agent=randomUUID();
 const profile=`ag-${agent.replaceAll('-','')}`;
-const work=`/opt/data/profiles/${profile}/workspace`;
+// The Agent's own folder of the Company's work folder, as the Engine's read-only mount of it lists it (#395).
+const work=`/opt/data/work/${profile}`;
 const at=Date.parse('2026-11-18T09:37:00Z')/1000;
 const brief='# Brief\n\nSell more.\n';
 const long='a'.repeat(600*1024);
@@ -44,8 +45,8 @@ test.beforeAll(async({},testInfo)=>{
  query(`do $$ begin
    insert into public.agent_profiles(agent_id,company_id) values ('${agent}','${company}');
    insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${agent}','${company}','Librarian','Keeps the files.',false,'${profile}');
-   insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${companyProfile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
-    on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${companyProfile}',true from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
    insert into public.member_agent_access(company_id,person_id,agent_id) values
     ('${company}','20000000-0000-0000-0000-000000000003','${agent}'),
     ('${company}','20000000-0000-0000-0000-000000000004','${agent}');

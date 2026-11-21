@@ -6,6 +6,24 @@
   "ar": { "title": "البورد بيتحرّك وانت شايل البطاقة", "body": "البطاقة وانت شايلها بتميل مع حركة الماوس، ولو سبتها مكانها بترجع لوحدها، ولما تنزّلها في عمود جديد بتنزل بإطار صغير، وشرايط التقدّم بتكبر، والبطاقة اللي لسه بقت مستنياك بتهزّ علامتها وعدّاد القايمة الجانبية." }
  },
  {
+  "issue": 399,
+  "date": "2026-11-21",
+  "en": { "title": "Backups keep your Agents' files", "body": "A backup now holds every Company's work folder, the files its Agents made, without the tool caches, and a restore puts them back in each Company's own work sandbox." },
+  "ar": { "title": "النسخة الاحتياطية بتحفظ ملفات وكلاءك", "body": "النسخة الاحتياطية بقت فيها فولدر الشغل بتاع كل شركة، يعني الملفات اللي وكلاءها عملوها، من غير الكاش بتاع الأدوات، والاسترجاع بيرجّعها في صندوق الشغل بتاع كل شركة." }
+ },
+ {
+  "issue": 398,
+  "date": "2026-11-21",
+  "en": { "title": "A work sandbox that is not running says so", "body": "When a Company's work sandbox is not running, Settings says so and a reply whose command could not run says so under it, and the Agent still answers." },
+  "ar": { "title": "صندوق الشغل لو مش شغال بيقولك", "body": "لما صندوق شغل الشركة ميكونش شغال، الإعدادات بتقول كده، والرد اللي أمره ماقدرش يشتغل بيقول كده تحته، والوكيل لسه بيرد." }
+ },
+ {
+  "issue": 389,
+  "date": "2026-11-21",
+  "en": { "title": "Agents work in a work sandbox", "body": "Every Company's Agents get a terminal, files and code execution that run in the Company's own work sandbox, not on the Engine's machine. The Library shows the files each Agent made there, and every Agent of the Company can read and change them." },
+  "ar": { "title": "الوكلاء بيشتغلوا في صندوق الشغل", "body": "وكلاء كل شركة بقى ليهم أوامر وملفات وتنفيذ كود في صندوق الشغل بتاع الشركة، مش على جهاز المحرك. والمكتبة بتعرض الملفات اللي كل وكيل عملها هناك، وأي وكيل في الشركة يقدر يقراها ويغيّرها." }
+ },
+ {
   "issue": 133,
   "date": "2026-11-21",
   "en": { "title": "Agent faces come alive", "body": "An Agent's face looks toward your pointer, blinks now and then, hops when you press it and lifts when you hover its tile; while the Agent works, its face in the chat's title and its details scans, three dots think beside it and its dot sends a ring, and a check shows when it is done." },

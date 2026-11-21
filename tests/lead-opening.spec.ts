@@ -34,9 +34,9 @@ test.beforeAll(async({},testInfo)=>{
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ('${companies.en.lead}','${companies.en.id}','e4340000-0000-0000-0000-000000000011','Lead','General',true,'${profilesOf(companies.en.id).co}'),
    ('${companies.ar.lead}','${companies.ar.id}','e4340000-0000-0000-0000-000000000012','Lead','General',true,'${profilesOf(companies.ar.id).co}');
-  insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared)
-   select id,public.company_engine_profile(id),agent_level,public.engine_tool_policy(),true from public.companies where id in ('${companies.en.id}','${companies.ar.id}')
-   on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+  insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared)
+   select id,public.company_engine_profile(id),true,true from public.companies where id in ('${companies.en.id}','${companies.ar.id}')
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   insert into public.company_shared_spaces(company_id,folder) values
    ('${companies.en.id}','/opt/data/profiles/${profilesOf(companies.en.id).space}/skills'),('${companies.ar.id}','/opt/data/profiles/${profilesOf(companies.ar.id).space}/skills') on conflict do nothing;
   update public.people set language='en' where id='${omar}';

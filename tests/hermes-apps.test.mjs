@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { provideProfile, readApps, prepareApp, prepareServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer } from '../lib/hermes.mjs';
-import { levelConfig, alwaysOff, companyProfile } from '../lib/agent-levels.mjs';
+import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { apps } from '../lib/app-catalogue.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -14,7 +14,7 @@ async function companyEngine() {
  const fake=await fakeHermes();
  const name=companyProfile(company);
  const install={address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'};
- await provideProfile(install,{name,soul:'',config:levelConfig(1),forbidden:alwaysOff});
+ await provideProfile(install,{name,soul:'',config:toolConfig({profile:name}),forbidden:toolConfig().agent.disabled_toolsets});
  return {fake,target:{...install,profile:name},servers:()=>fake.settings.profiles.get(name).config.mcp_servers||{}};
 }
 const states=async target=>Object.fromEntries((await readApps(target)).apps.map(app=>[app.key,app.state]));

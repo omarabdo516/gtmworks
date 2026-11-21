@@ -57,8 +57,8 @@ test.beforeAll(async({browser},testInfo)=>{
     ('${lead}','${company}','${id(4)}','Lead','General',true,'${profile}'),
     ('${ads}','${company}','${id(5)}','Ads','Runs the Meta ads.',false,'${own(ads)}'),
     ('${seo}','${company}','${id(6)}','SEO','Writes the blog.',false,'${own(seo)}');
-   insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
-    on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
    insert into public.company_profile_keepers(company_id,agent_id) values ('${company}','${lead}') on conflict (company_id) do update set agent_id=excluded.agent_id;
    insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${company}'),('${seo}','${company}');
    set local session_replication_role=origin;

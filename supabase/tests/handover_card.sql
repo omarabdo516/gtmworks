@@ -3,15 +3,15 @@ create extension if not exists pgtap with schema extensions;
 select plan(22);
 -- #147. RS Learning: Lead on the Company's profile, Ads and Writer on profiles of their own. The Contributor (…03) is
 -- shown Ads and not Writer; the Manager (…02) is shown Writer; the Viewer (…04) writes nothing.
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy,skills_shared) values
- ('a1470000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy(),true),
- ('a1470000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy(),true);
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed,skills_shared) values
+ ('a1470000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',true,true),
+ ('a1470000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',true,true);
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('a1470000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','f1470000-0000-0000-0000-000000000011','Lead','General',true,'co-10000000000000000000000000000001'),
  ('a1470000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001','f1470000-0000-0000-0000-000000000012','Ads','Runs the Meta ads.',false,'ag-a1470000000000000000000000000012'),
  ('a1470000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001','f1470000-0000-0000-0000-000000000013','Writer','Writes for search.',false,'ag-a1470000000000000000000000000013');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true);
 insert into public.member_agent_access(company_id,person_id,agent_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1470000-0000-0000-0000-000000000012'),
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a1470000-0000-0000-0000-000000000013');

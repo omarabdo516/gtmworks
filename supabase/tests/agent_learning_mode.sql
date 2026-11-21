@@ -5,8 +5,8 @@ select plan(8);
 -- for one Agent, or clears it so the Agent follows the Company, and a member reads each Agent's choice.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('e9200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','e9200000-0000-0000-0000-000000000011','Solo','Writing',false,'co-10000000000000000000000000000001');
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values
- ('e9200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy());
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values
+ ('e9200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',true);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { provideProfile, readApps, readUsage, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/hermes.mjs';
-import { levelConfig, alwaysOff, companyProfile } from '../lib/agent-levels.mjs';
+import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps, readAgentTools, readCompanyUsage } from '../lib/company-apps.mjs';
 import { changeCompanyServer } from '../lib/company-servers.mjs';
 import { mergedState } from '../lib/app-catalogue.mjs';
@@ -68,7 +68,7 @@ test('only an Owner connects, follows or disconnects an app; a Member reads the 
  const fake=await fakeHermes();
  try {
   const install={address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'};
-  await provideProfile(install,{name:companyProfile(company),soul:'',config:levelConfig(1),forbidden:alwaysOff});
+  await provideProfile(install,{name:companyProfile(company),soul:'',config:toolConfig({profile:companyProfile(company)}),forbidden:toolConfig().agent.disabled_toolsets});
   const driver=driverAt(fake);
   const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
   const signIns=[];

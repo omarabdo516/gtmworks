@@ -30,6 +30,7 @@ export async function GET(request:NextRequest) {
   if(read.state==='invalid') return reply({error:'agentLibraryInvalid'},400);
   if(read.state==='missing') return reply({error:'agentLibraryMissing'},404);
   if(read.state==='tooLarge') return reply({error:'agentLibraryInvalid'},413);
+  if(read.state==='sandboxStopped') return reply({error:'workSandboxNotRunning'},503);
   return reply({error:'agentLibraryUnreadable'},read.state==='refused'?502:503);
  } catch { return reply({error:'agentLibraryFailed'},500); }
 }

@@ -27,7 +27,7 @@ test('the Owner signs the company in to ChatGPT and out again; a member only see
   await signIn(page,'omar@example.com','/c/aleem/settings?section=models');
   // Lead on the company's own profile of the bundled Hermes, with the profile recorded, as the worker leaves it.
   query(`insert into public.hermes_agents(id,company_id,name,speciality,profile) values ('${agent}','${aleem}','Lead','General','${profile}')`);
-  query(`insert into public.company_profiles(company_id,profile,tools_level) values ('${aleem}','${profile}',1)`);
+  query(`insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${aleem}','${profile}',true)`);
 
   // A member: the state, no button, and the server refuses a start.
   const context=await browser.newContext(); const other=await context.newPage();

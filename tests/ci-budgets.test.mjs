@@ -10,10 +10,10 @@ import { load } from 'js-yaml';
 const budgets = {
   changes: { limit: 3, measured: 0.2 },
   fast: { limit: 5, measured: 2.7 },
-  image: { limit: 6, measured: 3.7 },
+  image: { limit: 10, measured: 6.5 }, // cold sandbox layer cache (#393), run 44735657345
   database: { limit: 4, measured: 2.1 },
   integration: { limit: 12, measured: 10.6 }, // its slowest shard
-  install: { limit: 12, measured: 9.5 }, // its slowest area, backup
+  install: { limit: 12, measured: 10.7 }, // its slowest area, update, run 44726291691 (#389)
   // One lane's stack, one build and the one chat-open test, with the machine to itself (#421). The first estimate for
   // the run that starts it; the job says its measured minutes in the pull request that adds it.
   'chat-open': { limit: 8, measured: 5 },

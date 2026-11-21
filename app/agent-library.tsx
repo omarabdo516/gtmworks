@@ -1,6 +1,6 @@
 'use client';
-// The Library of an Agent (#194, #353; design-reference: libraryHTML, libThumb, libDownload, fname, filesWord, the
-// .lib-* rules): the folders and files saved in the Agent's own Engine profile — its work folder, and the images it
+// The Library of an Agent (#194, #353, #395; design-reference: libraryHTML, libThumb, libDownload, fname, filesWord, the
+// .lib-* rules): the folders and files the Agent made — its own folder in the Company's work folder, and the images it
 // generated — read from GET /api/agent-files after the panel is drawn so no page waits on the Engine. The Owner and
 // Managers have it; a Contributor or a Viewer is drawn no Library at all and is refused by that route. A folder opens in
 // place with its own count and the newest file's day, a file downloads from the address beside it, and the preview dialog
@@ -129,6 +129,9 @@ export function AgentLibrary({company,slug,agent,name}:{company:string,slug:stri
   <h3 className="dp-label" id="dp-lib-h"><span>{t('agentLibraryOf',name)} <span className="muted num">{count}</span></span></h3>
   {drawn??blank}
   <p className="lib-hint">{t('agentLibraryHint',name)}</p>
+  {/* The work folder is the Company's, not the Agent's (#395, ADR 0018): every Agent of it can read and change these
+   files, so the Library says so in the hint's own style. */}
+  <p className="lib-hint">{t('agentLibraryShared')}</p>
  </section>{dialog}</>;
 
  const current=root==='images'?imagesLabel:place.path[place.path.length-1];

@@ -33,6 +33,21 @@ test('a session\'s turns are read from Hermes: each turn\'s tool calls in order,
  } finally { await fake.close(); }
 });
 
+test('a tool the Engine could not run because the work sandbox is not running is one failed step that says sandbox',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.sessions.set('session-down',{profile,messages:[
+   user(1000,'Trim the video'),
+   asked(1002,[call('call_1','terminal',{command:'ffmpeg -version'})]),
+   // What the pinned Engine answers when its ssh backend cannot reach the sandbox (tools/terminal_tool.py
+   // _degraded_result): a structured degraded result, not a command that merely failed.
+   result(1005,'call_1','terminal',{output:'',exit_code:-1,status:'degraded',reason:'SSH connection failed',retry_hint:'Check that sandbox is up.',error:'Terminal backend degraded: SSH connection failed'}),
+   replied(1010,'I could not run that.')]});
+  const read=await engineFor(connection(fake)).session('session-down');
+  assert.deepEqual(read.turns?.[0].steps,[{tool:'terminal',preview:'ffmpeg -version',state:'failed',sandbox:true}]);
+ } finally { await fake.close(); }
+});
+
 test('a session Hermes does not know is missing, a refused key refused, an Engine that cannot be asked unreachable',async()=>{
  const fake=await fakeHermes();
  try {

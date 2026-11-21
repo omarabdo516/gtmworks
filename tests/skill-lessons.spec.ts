@@ -36,8 +36,8 @@ test.beforeAll(async({},testInfo)=>{
    ('${company}','${theirs}','person','${reviewer}',null,'مراجع','${waiting}','${id(8)}','lesson-2',now()-interval '8 minutes');
   perform public.agent_save_rule('${theirs}','lesson-1','call-0','${approved}');
   perform public.agent_save_rule('${theirs}','lesson-2','call-0','${waiting}');
-  insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
-   on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+  insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
  end $$;`);
 });
 test.afterAll(async()=>{ await fake?.close(); });

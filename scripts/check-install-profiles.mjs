@@ -16,6 +16,26 @@
 //   capacity <with-skills|no-skills>: ten more Agent profiles in the first Company on its Engine, each printed with its
 //     name and the seconds it took to be ready. The install job measures that Engine's memory and the volume's disk around
 //     them; the check ends with a Run on the first Agent still answered.
+//   sandbox <marker>: one Agent's command, written file and code run in the Company's work sandbox (#393), a second Agent
+//     starts in a folder of its own inside the Company's work folder, and neither a profile write nor a settings write
+//     moves where a command runs. The job reads the host's Docker for where each marker landed, which a tool's own answer
+//     cannot fake.
+//   sandbox-key <marker> <refused|runs>: one Agent's command, when the install job has replaced the sandbox's host key
+//     (refused) or put it back (runs): the Engine's ssh client trusts a host it has not seen but refuses a changed key, and
+//     the install pre-seeds known_hosts with the sandbox's, so a swapped sandbox is refused.
+//   sandbox-sync <marker>: one Agent counts the files under /home/pn/.hermes in its sandbox (none, with file sync off) and
+//     writes the paths a sync would map (its own Skills, the Company's shared folder, its memories); the job plants the
+//     settings file there itself, and the profile names a credential file the job puts in the profile's home too. The
+//     job checks that none of it, the credential file included, reaches the Engine or the sandbox, and that the Run
+//     still works.
+//   library <marker>: one Agent writes a text file and a picture in its own folder of the Company's work folder (#395),
+//     and the Owner's Library of it lists, previews and downloads both with the bytes the Agent wrote. In the same Run it
+//     plants a link to the Company's second Agent's memory on the Engine's disk (the job wrote `<marker>-leak` in it), a
+//     link up into that Agent's folder, a link to a folder and a hidden file: none is listed or read, and no byte of the
+//     memory comes back.
+//   company-sandbox <marker> <Company>: the named Company's main Agent, on its own Engine, runs one command that prints
+//     where it ran and writes `<marker>.txt` in its own folder (#396). It needs no earlier step: the companies area runs
+//     it on a Company `company add` made, and reads the host's Docker for which sandbox holds the file.
 // The companies and their Owner's sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -23,7 +43,7 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 const {sendMessage}=await import(`${process.cwd()}/lib/conversation-runs.mjs`);
-const {companyProfile,levelConfig,alwaysOff,riskyToolsets,toolPolicy}=await import(`${process.cwd()}/lib/agent-levels.mjs`);
+const {companyProfile,toolConfig,noAgentGets,fixedToolsets,forbiddenOf,profileSettingsDiffer}=await import(`${process.cwd()}/lib/agent-toolsets.mjs`);
 const {agentSoul}=await import(`${process.cwd()}/lib/company-profiles.mjs`);
 const {provideProfile}=await import(`${process.cwd()}/lib/hermes.mjs`);
 const {writeProof,writeName}=await import(`${process.cwd()}/lib/install-proof.mjs`);
@@ -56,19 +76,29 @@ const pointAtFakeModel=async(engine,profile)=>{
 const credentials={email:process.env.PROOF_EMAIL||'proxy-owner@example.com',password:process.env.PROOF_PASSWORD||'proxy-owner-password'};
 const signedIn=async(email=credentials.email,password=credentials.password)=>{ const person=createClient(origin,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,options); await checked(person.auth.signInWithPassword({email,password})); return person; };
 const profileOf=async(person,agent)=>{ const [found]=await checked(person.from('hermes_agents').select('profile').eq('id',agent)); return found?.profile; };
-// A profile's saved config turns the dangerous toolsets off, and its Run API offers none of them; the marketing tools stay.
+// A profile's saved config offers the one fixed set of tools every Agent gets, and its Run API agrees: the terminal, the
+// files and code execution included (#393), no tool no Agent gets on, and every Agent's commands starting in the Company's
+// work folder with no person needed to approve each code call.
 const checkProfile=async(engine,profile)=>{
  const config=await (await manage(engine,`/api/config?profile=${encodeURIComponent(profile)}`)).json();
- for(const off of ['terminal','file','code_execution']) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${profile} disables ${off}`);
+ for(const off of noAgentGets) assert.ok(config.agent?.disabled_toolsets?.includes(off),`${profile} disables ${off}`);
  const toolsets=await (await fetch(`${engine.address}/p/${encodeURIComponent(profile)}/v1/toolsets`,{headers:{Authorization:`Bearer ${engine.key}`}})).json();
  const enabled=toolsets.data.filter(toolset=>toolset.enabled).map(toolset=>toolset.name);
- assert.deepEqual(riskyToolsets.filter(name=>enabled.includes(name)),[],`${profile} offers no terminal, file or code tools`);
- assert.ok(enabled.includes('web')&&enabled.includes('memory'),`${profile} keeps its marketing tools`);
+ assert.deepEqual(forbiddenOf(enabled),[],`${profile} offers no tool no Agent gets`);
+ assert.deepEqual([...enabled].sort(),[...fixedToolsets()].sort(),`${profile} offers exactly the fixed set`);
+ assert.equal(profileSettingsDiffer(config,profile),false,`${profile} starts in its own folder and needs no approval for code`);
 };
 const spaceOf=entry=>`cs-${entry.company.replaceAll('-','')}`;
 const shown=entry=>({company:entry.company,profile:entry.profile,space:entry.space,agent:entry.agent,second:entry.secondProfile});
-// The fake model: one Arabic reply, streamed or not, and every request it was sent.
-const fakeModel=async(requests,results=[])=>{
+// The fake model: one Arabic reply, streamed or not, the tool calls a step scripts, and every request it was sent. A
+// step that needs a tool call passes its plan; the default is the shared-Skill rewrite the verify step proves is refused.
+const skillCall={id:'call_lessons',type:'function',function:{name:'skill_manage',
+ arguments:JSON.stringify({operations:[{action:'patch',name:'team-lessons',content:'---\nname: team-lessons\ndescription: Changed by an agent\n---\nChanged.\n'}]})}};
+const skillPlan=messages=>{
+ const last=messages.at(-1);
+ return last?.role==='user'&&JSON.stringify(last.content).includes(trigger)?skillCall:null;
+};
+const fakeModel=async(requests,results=[],plan=skillPlan)=>{
  const reply='أهلاً، هذا رد من النموذج التجريبي.';
  const model=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
@@ -76,8 +106,7 @@ const fakeModel=async(requests,results=[])=>{
    const body=JSON.parse(raw||'{}'); requests.push(raw);
    const last=body.messages?.at(-1);
    if(last?.role==='tool') results.push(String(last.content));
-   const call=last?.role==='user'&&JSON.stringify(last.content).includes(trigger)?{id:'call_lessons',type:'function',function:{name:'skill_manage',
-    arguments:JSON.stringify({operations:[{action:'patch',name:'team-lessons',content:'---\nname: team-lessons\ndescription: Changed by an agent\n---\nChanged.\n'}]})}}:null;
+   const call=plan(body.messages||[]);
    const finish=call?'tool_calls':'stop';
    const usage={prompt_tokens:20,completion_tokens:8,total_tokens:28};
    if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message:call?{role:'assistant',content:null,tool_calls:[call]}:{role:'assistant',content:reply},finish_reason:finish}],usage})); }
@@ -181,7 +210,7 @@ try {
   // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
   // stores nothing, so the same send is made again until it is ready (#282).
   const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message};
-  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(client,service,send); return result.error==='conversationAgentLevelPending'?null:result; },180);
+  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(client,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
   assert.deepEqual(sent,{conversation});
   const answer=await until(`reply on ${label}`,async()=>(await checked(client.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
   assert.ok(answer.body.includes(reply),answer.body);
@@ -210,11 +239,11 @@ try {
  const [{run_id:secondRun}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',other.conversation).eq('author','person'));
  const call='install-second';
  const plan=await checked(service.rpc('lead_agent_profile',{conversation:other.conversation,run:secondRun,call,instructions:null}));
- assert.ok(plan?.profile&&plan.level,JSON.stringify(plan));
- const provided=await provideProfile({...otherEngine},{name:plan.profile,soul:agentSoul(plan.soul),config:levelConfig(plan.level),forbidden:alwaysOff});
+ assert.ok(plan?.profile,JSON.stringify(plan));
+ const provided=await provideProfile({...otherEngine},{name:plan.profile,soul:agentSoul(plan.soul),config:toolConfig({profile:plan.profile}),forbidden:toolConfig({profile:plan.profile}).agent.disabled_toolsets});
  assert.equal(provided.state,'configured',plan.profile);
  await pointAtFakeModel(otherEngine,plan.profile);
- const second=await checked(service.rpc('lead_create_agent',{conversation:other.conversation,run:secondRun,call,agent_name:'Install second',job:'Writes the install check.',apps:[],template:null,instructions:null,own_level:plan.level,own_policy:toolPolicy}));
+ const second=await checked(service.rpc('lead_create_agent',{conversation:other.conversation,run:secondRun,call,agent_name:'Install second',job:'Writes the install check.',apps:[],template:null,instructions:null,own_profile:true}));
  assert.equal(second.state,'created');
  await until(`${plan.profile} recorded for its Agent`,async()=>await profileOf(person,second.agent)===plan.profile,180);
  other.second=second.agent; other.secondProfile=plan.profile;
@@ -346,7 +375,7 @@ for(let index=1;index<=10;index++) {
  let profile;
  // The Engine may take a moment to serve a new profile's Run API; each attempt finishes the same profile, never clones.
  for(let attempt=1;attempt<=20;attempt++) {
-  profile=await provideProfile({...firstEngine},{name,soul:'An Agent profile the install check made for capacity.',config:levelConfig(1),forbidden:alwaysOff,noSkills:marker==='no-skills'});
+  profile=await provideProfile({...firstEngine},{name,soul:'An Agent profile the install check made for capacity.',config:toolConfig({profile:name}),forbidden:toolConfig({profile:name}).agent.disabled_toolsets,noSkills:marker==='no-skills'});
   if(profile.state==='configured') break;
   await new Promise(resolve=>setTimeout(resolve,1000));
  }
@@ -362,7 +391,7 @@ try {
  await pointAtFakeModel(firstEngine,first.profile);
  const person=await signedIn();
  const conversation=randomUUID();
- const sent=await until('the first Agent ready for a run',async()=>{ const result=await sendMessage(person,service,{person:first.person??(await person.auth.getUser()).data.user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:'مرحباً، اكتب عنواناً قصيراً.'}); return result.error==='conversationAgentLevelPending'?null:result; },180);
+ const sent=await until('the first Agent ready for a run',async()=>{ const result=await sendMessage(person,service,{person:first.person??(await person.auth.getUser()).data.user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:'مرحباً، اكتب عنواناً قصيراً.'}); return result.error==='conversationAgentToolsPending'?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until('the first Agent still answers',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);
@@ -371,4 +400,293 @@ try {
  writeFileSync(state,JSON.stringify(pair),{mode:0o600});
  writeProof({step:'capacity',kind:marker,made:made.length,state:'answered',company:first.company});
 } finally { model.close(); model.closeAllConnections(); }
-} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills>');
+} else if(step==='company-sandbox') {
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const name=process.argv[4];
+const person=await signedIn();
+const {data:{user}}=await person.auth.getUser();
+assert.ok(user,'the Owner signs in');
+const [company]=await checked(service.from('companies').select('id').eq('name',name));
+assert.ok(company,`the Company ${name}`);
+const agent=await until(`${name}'s main Agent`,async()=>(await checked(person.from('hermes_agents').select('id,profile,is_default').eq('company_id',company.id))).find(found=>found.is_default&&found.profile),180);
+const engine=await engineFor(company.id);
+await until(`${agent.profile} on its Engine`,async()=>(await (await manage(engine,'/api/profiles')).json()).profiles?.some(profile=>profile.name===agent.profile),180);
+await pointAtFakeModel(engine,agent.profile);
+const command=`hostname; pwd; printf '%s' '${marker}' > '${marker}.txt'`;
+const plan=messages=>messages.some(message=>message.role==='user'&&String(typeof message.content==='string'?message.content:JSON.stringify(message.content)).includes(`COMPANY-SANDBOX ${marker}`))
+ &&!messages.some(message=>message.role==='tool')
+ ? {id:'call_company_sandbox',type:'function',function:{name:'terminal',arguments:JSON.stringify({command})}}
+ : null;
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const conversation=randomUUID();
+ const send={person:user.id,company:company.id,conversation,sendKey:randomUUID(),agent:agent.id,message:`COMPANY-SANDBOX ${marker}: run the check.`};
+ const sent=await until(`${name}'s Agent ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until(`reply of ${name}'s Agent`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ assert.ok(answer.body.includes(reply),answer.body);
+ const terminal=(()=>{ try { return JSON.parse(String(results[0])); } catch { return null; } })();
+ assert.equal(terminal?.exit_code,0,String(results[0]));
+ const [host,cwd]=String(terminal.output).trim().split('\n');
+ assert.equal(cwd,`/work/${agent.profile}`,'the command starts in the Agent\'s own folder of its Company\'s work folder');
+ writeProof({step:'company-sandbox',marker,sandbox_host:host,profile:agent.profile,cwd});
+} finally { model.close(); model.closeAllConnections(); }
+} else if(step==='sandbox') {
+// The work sandbox (#393, ADR 0018): a command, a file and code an Agent asks for run in the Company's sandbox and never
+// on its Engine; two Agents start in a folder of their own inside the Company's work folder; and neither a profile write
+// nor a settings write can move where a command runs. The fake model scripts the calls; the install job reads the host's
+// Docker for where each marker landed, which a tool's own answer cannot fake.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const pair=JSON.parse(readFileSync(state,'utf8'));
+const first=pair[0];
+const firstEngine=await engineFor(first.company);
+// The verify step ends by setting and removing a provider's key, which leaves both profiles' model on that provider and
+// no key to reach it: each profile is pointed at the fake model again for this step's Runs.
+await pointAtFakeModel(firstEngine,first.profile);
+await pointAtFakeModel(firstEngine,first.secondProfile);
+const calls=[
+ {name:'terminal',arguments:{command:`id -un; hostname; pwd; printf '%s' '${marker}-terminal' > /work/${marker}-terminal.txt`}},
+ {name:'write_file',arguments:{path:`/work/${marker}-file.txt`,content:`${marker}-file`}},
+ {name:'execute_code',arguments:{code:`from pathlib import Path\nimport os, socket\nPath('/work/${marker}-code.txt').write_text('${marker}-code')\nprint(socket.gethostname(), os.getuid())`}},
+];
+const pwdCall={name:'terminal',arguments:{command:'hostname; pwd'}};
+const textOf=messages=>messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+const plan=messages=>{
+ const text=textOf(messages);
+ const done=messages.filter(message=>message.role==='tool').length;
+ const call=text.includes(`SANDBOX-RUN ${marker}`)?calls[done]:text.includes(`SANDBOX-PWD ${marker}`)&&done<1?pwdCall:null;
+ return call?{id:`call_sandbox_${done}`,type:'function',function:{name:call.name,arguments:JSON.stringify(call.arguments)}}:null;
+};
+const parsed=value=>{ try { return JSON.parse(value); } catch { return null; } };
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const ask=async(agent,label,message)=>{
+  const before=results.length;
+  const conversation=randomUUID();
+  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent,message};
+  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+  assert.deepEqual(sent,{conversation});
+  const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+  assert.ok(answer.body.includes(reply),answer.body);
+  return {conversation,tools:results.slice(before)};
+ };
+ // A command, a file and some code, asked for by name and run by the Engine's pinned backend.
+ const run=await ask(first.agent,first.profile,`SANDBOX-RUN ${marker}: run the sandbox check.`);
+ assert.equal(run.tools.length,3,JSON.stringify(run.tools));
+ const terminal=parsed(run.tools[0]);
+ const written=parsed(run.tools[1]);
+ const code=parsed(run.tools[2]);
+ const lines=String(terminal?.output??'').trim().split('\n');
+ const [userName,host,cwd]=lines;
+ assert.equal(terminal?.exit_code,0,run.tools[0]);
+ assert.equal(userName,'pn','the command runs as the sandbox\'s own user');
+ assert.equal(cwd,`/work/${first.profile}`,'the command starts in its own folder in the Company\'s work folder');
+ assert.equal(written?.verified,true,run.tools[1]);
+ assert.equal(written?.resolved_path,`/work/${marker}-file.txt`);
+ assert.equal(code?.status,'success',run.tools[2]);
+ const codeOutput=String(code?.output??'').trim().split(/\s+/);
+ assert.equal(codeOutput[0],host,'code runs in the same sandbox as the command');
+ assert.equal(codeOutput[1],'1000','code runs as the sandbox\'s ordinary user, never root');
+ // Two Agents, two folders: each starts in its own folder inside the Company's one work folder, and the sandbox's login
+ // shell makes the folder before the Engine's first command needs it (sandbox/work-shell).
+ const second=await ask(first.second,first.secondProfile,`SANDBOX-PWD ${marker}: where do I start?`);
+ const [secondHost,secondPwd]=String(parsed(second.tools[0])?.output??'').trim().split('\n');
+ assert.equal(secondHost,host,'the second Agent\'s command runs in the same sandbox');
+ assert.equal(secondPwd,`/work/${first.secondProfile}`,'the second Agent starts in a folder of its own');
+ assert.notEqual(secondPwd,cwd,'the two Agents start in two different folders');
+ // A profile write and a settings write, both answered as the probe measured (200 {"ok":true}), then a command again: it
+ // still runs in the sandbox, in the Agent's own folder. The managed scope pins the backend after both (probe section 5,
+ // rows 5 and 6).
+ const profileWrite=await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',
+  body:JSON.stringify({config:{terminal:{backend:'local',ssh_host:'127.0.0.1',ssh_user:'root'}}})});
+ assert.equal(profileWrite.status,200,`a profile write is answered as stored (HTTP ${profileWrite.status})`);
+ const settingsWrite=await manage(firstEngine,`/api/env?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',body:JSON.stringify({key:'TERMINAL_ENV',value:'local'})});
+ assert.equal(settingsWrite.status,200,`a settings write is answered as stored (HTTP ${settingsWrite.status})`);
+ const after=await ask(first.agent,first.profile,`SANDBOX-PWD ${marker}: where do I start?`);
+ const [afterHost,afterPwd]=String(parsed(after.tools[0])?.output??'').trim().split('\n');
+ assert.equal(afterHost,host,'a profile write and a settings write cannot move a command off the sandbox');
+ assert.equal(afterPwd,`/work/${first.profile}`,'the command still starts in the Agent\'s own folder');
+ // The profile is put back to the fixed configuration for any later step.
+ const restored=await (await import(`${process.cwd()}/lib/hermes.mjs`)).configureProfile(firstEngine,{name:first.profile,config:toolConfig({profile:first.profile}),forbidden:toolConfig({profile:first.profile}).agent.disabled_toolsets});
+ assert.equal(restored.state,'configured');
+ writeProof({step:'sandbox',marker,sandbox_host:host,user:userName,profile:first.profile,cwd,pwd:secondPwd,file:written?.resolved_path,code:code?.status});
+} finally { model.close(); model.closeAllConnections(); }
+} else if(step==='sandbox-key') {
+// The Engine's pinned ssh client is hard-coded `StrictHostKeyChecking=accept-new`, which trusts a host it has not seen
+// but refuses one whose key changed (tools/environments/ssh.py). The install pre-seeds the Engine's known_hosts with its
+// sandbox's host key, so this step proves the pin: the install job replaces the sandbox's host key and restarts it, and
+// an Agent's next command must fail (`refused`); after the key is put back the same command must run (`runs`). What it
+// wrote is read by the job from the sandbox, so a tool's own answer cannot fake it.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const want=process.argv[4];
+assert.ok(['refused','runs'].includes(want),'sandbox-key names refused or runs');
+const first=JSON.parse(readFileSync(state,'utf8'))[0];
+const firstEngine=await engineFor(first.company);
+await pointAtFakeModel(firstEngine,first.profile);
+const command=`printf '%s' '${marker}' > /work/${marker}-key.txt; id -un`;
+const pwdPlan=messages=>{
+ const text=messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+ const done=messages.filter(message=>message.role==='tool').length;
+ return text.includes(`SANDBOX-KEY ${marker}`)&&done<1
+  ? {id:'call_sandbox_key',type:'function',function:{name:'terminal',arguments:JSON.stringify({command})}}
+  : null;
+};
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,pwdPlan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const conversation=randomUUID();
+ const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-KEY ${marker}: run the check.`};
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until('reply on the sandbox key check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ assert.ok(answer.body.includes(reply),answer.body);
+ assert.ok(results.length>=1,JSON.stringify(results));
+ const terminal=(()=>{ try { return JSON.parse(String(results[0])); } catch { return null; } })();
+ const ran=terminal?.exit_code===0;
+ if(want==='runs') assert.equal(ran,true,String(results[0]));
+ else assert.notEqual(ran,true,`the Engine must refuse the sandbox's changed host key (${results[0]})`);
+ writeProof({step:'sandbox-key',marker,want,ran});
+} finally { model.close(); model.closeAllConnections(); }
+} else if(step==='sandbox-sync') {
+// Nothing is copied between the Engine and the sandbox (#393): the ssh backend runs with file sync off, so the sandbox's
+// /home/pn/.hermes holds no file when an Agent's command starts, and nothing an Agent writes there comes back. The Agent
+// counts the files it finds and writes the paths a sync would map (its own Skills, the shared Skills folder, its memories;
+// a redirect into ~/.hermes/config.yaml is a command the Engine holds for a person's approval, so the install job plants
+// the settings file itself); the install job checks the Engine's own Skills, shared folder, memory and settings after
+// the teardown and asserts none of it arrived, and that a Run still works.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const first=JSON.parse(readFileSync(state,'utf8'))[0];
+const firstEngine=await engineFor(first.company);
+await pointAtFakeModel(firstEngine,first.profile);
+// The profile names a credential file the sync would carry (the job writes it in the profile's home): with file sync off
+// it must not reach the sandbox.
+const named=await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',
+ body:JSON.stringify({config:{terminal:{credential_files:['sandbox-check-credentials/credential.json']}}})});
+assert.equal(named.status,200,`${first.profile} names the credential file the sync would carry (HTTP ${named.status})`);
+const command=[
+ `uploaded=$(find /home/pn/.hermes -type f 2> /dev/null | wc -l | tr -d ' ')`,
+ `mkdir -p /home/pn/.hermes/skills/agent-made /home/pn/.hermes/external_skills/0/shared-made /home/pn/.hermes/memories`,
+ `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/skills/agent-made/SKILL.md`,
+ `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/external_skills/0/shared-made/SKILL.md`,
+ `printf 'EDIT-${marker}\\n' > /home/pn/.hermes/memories/MEMORY.md`,
+ `printf 'uploaded=%s\\n' "$uploaded"`,
+].join('\n');
+const plan=messages=>{
+ const text=messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+ const done=messages.filter(message=>message.role==='tool').length;
+ return text.includes(`SANDBOX-SYNC ${marker}`)&&done<1
+  ? {id:'call_sandbox_sync',type:'function',function:{name:'terminal',arguments:JSON.stringify({command})}}
+  : null;
+};
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const conversation=randomUUID();
+ const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-SYNC ${marker}: write the paths a sync would copy.`};
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until('reply on the sandbox sync check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ assert.ok(answer.body.includes(reply),answer.body);
+ assert.ok(results.length>=1,JSON.stringify(results));
+ const terminal=(()=>{ try { return JSON.parse(String(results[0])); } catch { return null; } })();
+ assert.equal(terminal?.exit_code,0,String(results[0]));
+ const output=String(terminal?.output??'');
+ const uploaded=Number(output.match(/uploaded=(\d+)/)?.[1]);
+ assert.equal(uploaded,0,'the sandbox holds no file the Engine copied in');
+ writeProof({step:'sandbox-sync',marker,count:uploaded});
+} finally { model.close(); model.closeAllConnections(); }
+} else if(step==='library') {
+// The Library shows the Company's work folder (#395): an Agent writes a text file with its file tool and a picture with
+// its terminal, in its own folder of the work folder, and the Owner's Library of that Agent lists both, previews the
+// text and the picture, and downloads each with the same bytes the Agent wrote, all through gtmworks's own service and
+// the Engine contract. The job reads the sandbox and the Engine's mount for the same files, and tries a write from the
+// Engine's container, which must fail.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const {agentLibrary,agentFilePreview,agentFileDownload}=await import(`${process.cwd()}/lib/agent-files.mjs`);
+const first=JSON.parse(readFileSync(state,'utf8'))[0];
+const firstEngine=await engineFor(first.company);
+await pointAtFakeModel(firstEngine,first.profile);
+const text=`# ${marker}\n\nمسودة الحملة: Arabic and English in one file.\n`;
+const picture=[137,80,78,71,13,10,26,10,0,1,2,3,254,255];
+const textName=`${marker}-brief.md`; const pictureName=`${marker}-shot.png`;
+const octal=picture.map(byte=>`\\${byte.toString(8).padStart(3,'0')}`).join('');
+// The links an Agent could flip in the work folder: on the Engine's read-only mount, an absolute one resolves on the
+// Engine's own disk, where the other profile's memory is.
+const mine=`/work/${first.profile}`; const theirs=first.secondProfile; const memory=`/opt/data/profiles/${theirs}/memories`;
+const planted={leak:`${marker}-leak.md`,up:`${marker}-up`,folder:`${marker}-mem`,hidden:`.${marker}-hidden`};
+const calls=[
+ {name:'write_file',arguments:{path:`${mine}/${textName}`,content:text}},
+ {name:'terminal',arguments:{command:`printf '${octal}' > ${mine}/${pictureName}`}},
+ {name:'terminal',arguments:{command:[`mkdir -p /work/${theirs}`,`printf theirs > /work/${theirs}/${marker}-x`,
+  `ln -s ${memory}/MEMORY.md ${mine}/${planted.leak}`,`ln -s ../${theirs}/${marker}-x ${mine}/${planted.up}`,
+  `ln -s ${memory} ${mine}/${planted.folder}`,`printf hidden > ${mine}/${planted.hidden}`].join(' && ')}},
+];
+const plan=messages=>{
+ const said=messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+ const done=messages.filter(message=>message.role==='tool').length;
+ const call=said.includes(`LIBRARY-RUN ${marker}`)?calls[done]:null;
+ return call?{id:`call_library_${done}`,type:'function',function:{name:call.name,arguments:JSON.stringify(call.arguments)}}:null;
+};
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const conversation=randomUUID();
+ const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`LIBRARY-RUN ${marker}: save the brief and the shot.`};
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until('reply on the library check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ assert.ok(answer.body.includes(reply),answer.body);
+ assert.equal(results.length,3,JSON.stringify(results));
+ // The Owner's Library of that Agent, read as the app reads it: the signed-in person's own session, the Company's Engine.
+ const request={company:first.company,agent:first.agent,hermes:firstEngine};
+ const library=await agentLibrary(person,request);
+ assert.equal(library.state,'found',JSON.stringify(library));
+ const listed=new Map(library.entries.map(entry=>[entry.name,entry]));
+ assert.equal(listed.get(textName)?.size,Buffer.byteLength(text),'the Library lists the file the Agent wrote, with its size');
+ assert.equal(listed.get(pictureName)?.size,picture.length,'the Library lists the picture the Agent made, with its size');
+ assert.ok(!JSON.stringify(library).includes('/opt/')&&!JSON.stringify(library).includes('/work/'),'no Engine or sandbox path in the answer');
+ const preview=await agentFilePreview(person,{...request,name:textName});
+ assert.equal(preview.state,'found',JSON.stringify(preview));
+ assert.equal(preview.preview.kind,'text');
+ assert.equal(preview.preview.text,text,'the preview is the text the Agent wrote');
+ const shot=await agentFilePreview(person,{...request,name:pictureName});
+ assert.equal(shot.preview?.kind,'image','the picture previews as a picture');
+ const download=await agentFileDownload(person,{...request,name:textName});
+ assert.equal(download.state,'found',JSON.stringify({state:download.state}));
+ assert.equal(Buffer.from(download.body).toString('utf8'),text,'the download is the bytes the Agent wrote');
+ const image=await agentFileDownload(person,{...request,name:pictureName});
+ assert.equal(image.state,'found',JSON.stringify({state:image.state}));
+ assert.deepEqual([...image.body],picture,'the picture downloads with the same bytes');
+ // What the Agent planted is neither listed nor read, and nothing of the other profile's memory comes back.
+ for(const name of Object.values(planted)) assert.ok(!listed.has(name),`${name} is not listed`);
+ const answers=[];
+ for(const name of [planted.leak,planted.up,planted.hidden]) {
+  const got=await agentFileDownload(person,{...request,name}); const seen=await agentFilePreview(person,{...request,name});
+  assert.ok(['missing','invalid'].includes(got.state),`${name} does not download: ${got.state}`);
+  assert.ok(['missing','invalid'].includes(seen.state),`${name} does not preview: ${seen.state}`);
+  answers.push(got,seen);
+ }
+ const inside=await agentLibrary(person,{...request,folder:planted.folder});
+ assert.equal(inside.state,'missing','a link to a folder is not a folder of the Library');
+ const behind=await agentFileDownload(person,{...request,folder:planted.folder,name:'MEMORY.md'});
+ assert.equal(behind.state,'missing','nothing behind a link to a folder downloads');
+ answers.push(inside,behind,await agentFilePreview(person,{...request,folder:planted.folder,name:'MEMORY.md'}));
+ const said=JSON.stringify(answers,(key,value)=>value instanceof Uint8Array?Buffer.from(value).toString('utf8'):value);
+ assert.ok(!said.includes(`${marker}-leak`)&&!said.includes('theirs'),'no byte of the other profile comes back');
+ writeProof({step:'library',marker,profile:first.profile,count:library.entries.length,kind:preview.preview.kind,file:textName});
+} finally { model.close(); model.closeAllConnections(); }
+} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker>');

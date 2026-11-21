@@ -16,6 +16,10 @@ export function readModels(connection:import('./engine.mjs').EngineConnection):P
 export type ProfileModels={state:'found',models:Record<string,{provider:string,model:string}|null>}|{state:'refused'|'unreachable'|'failed',models:null};
 export function readProfileModels(connection:HermesConnection,profiles:string[]):Promise<ProfileModels>;
 export function writeProfileModel(connection:HermesConnection,change:{profile:string,provider:string,model:string}):Promise<{state:'saved',provider:string,model:string}|{state:'mismatch'|'refused'|'unreachable'|'failed',provider:null,model:null}>;
+// The Company's work sandbox (#398): whether the Engine's own ssh workspace, the backend its Agents' terminal, files and
+// code run in, answers. One read, no polling.
+export type WorkSandboxState={state:'running'|'notRunning'|'refused'|'unreachable'};
+export function readWorkSandbox(connection:{address:string,key:string,managementAddress?:string}|null):Promise<WorkSandboxState>;
 // The Library of an Agent (#194, #353): one folder of one of the Agent's Library roots in its own Engine profile — its
 // work folder, or the images it generated — and one of its files.
 export type LibraryEntry={name:string,isFolder:boolean,size:number|null,time:string|null};
