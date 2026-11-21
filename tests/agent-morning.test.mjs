@@ -607,3 +607,22 @@ test('a log write tried again after a lost answer sends the same change key, so 
   assert.equal(sent[1],sent[0]);
  } finally { await fake.close(); leases.clear(); }
 });
+
+test('a resume of the new copy that does not answer but lands later is overruled by the pause sent after it', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // The Engine takes the resume of Ads' copy but answers nothing in time; it finishes it before the next request to that
+  // job, as it works through one job's requests in order.
+  const {resumeRoutine,pauseRoutine}=await import('../lib/hermes.mjs');
+  let late=null;
+  const lateResume={
+   resume:async(connection,routine)=>{ late=()=>resumeRoutine(connection,routine); return {state:'unreachable'}; },
+   pause:async(connection,routine)=>{ if(late&&connection.profile===adsProfile) { await late(); late=null; } return pauseRoutine(connection,routine); },
+  };
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:lateResume})).state,'failed');
+  assert.equal(late,null,'the late resume landed');
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>job.state),['paused'],'and the pause after it is the last word');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused'],'the source sends from nowhere either');
+ } finally { await fake.close(); }
+});
