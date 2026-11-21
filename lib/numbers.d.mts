@@ -6,5 +6,8 @@ export function numbersTiles(readings: AppReading[] | null | undefined, period: 
 export type AppSource = (request: { company: string, period: Period }) => Promise<AppReading[]>;
 export const connectedApps: AppSource;
 export function readNumbers(request: { company: string, period: Period, source?: AppSource }): Promise<{ connected: boolean, tiles: NumbersTile[] }>;
+export function figureDigits(name: NumbersTile['name']): 0 | 1;
+export function formatNumber(value: number, digits: number, locale: string): string;
 export function formatFigure(tile: NumbersTile, locale: string): string | null;
+export function countAt(from: number, to: number, elapsed: number): number;
 export function feedSince(now?: number): string;
