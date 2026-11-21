@@ -27,7 +27,8 @@ export function RoutinesSection({company,state,agents,canManage,now}:{company:st
  const [adding,setAdding]=useState<string|null>(null);
  const sub=`${withAny.length?`${t('settingsRoutinesCount',on,all,withAny.length)} `:''}${t('settingsRoutinesSub')}`;
  const addable=agents.filter(agent=>agent.state==='found');
- const extra=canManage&&addable.length>0&&adding===null?<button type="button" className="link-btn" id="rt-add" onClick={()=>setAdding(addable[0].agent)}>{t('routineAdd')}</button>:undefined;
+ // The head's Add a task is for an Agent that has no Routine yet, so no section of its own to add from.
+ const extra=canManage&&addable.some(agent=>!agent.routines?.length)&&adding===null?<button type="button" className="link-btn" id="rt-add" onClick={()=>setAdding(addable.find(agent=>!agent.routines?.length)!.agent)}>{t('routineAdd')}</button>:undefined;
  const unread=agents.filter(agent=>agent.state!=='found');
  return <><Head title={t('settingsRoutines')} sub={sub} extra={extra}/>
   {state!=='found'?<div className="panel-card"><p className="panel-empty" role="status">{t('routineNoEngine')}</p></div>:<>
@@ -73,7 +74,7 @@ function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,
  const next=!routine.on?t('routinePausedNext'):routine.nextRunAt?t('routineNext',whenOf(t,locale,routine.nextRunAt,routine.timezone,at)):'';
  const last=routine.lastRunAt?t(routine.lastStatus==='failed'?'routineLastFailed':'routineLast',whenOf(t,locale,routine.lastRunAt,routine.timezone,at)):'';
  return <li className="panel-row rt-row" data-rt={routine.id}><span className="panel-row__icon"><SettingsIcon name="repeat"/></span>
-  <span className="panel-row__text"><span className="panel-row__t" id={id} dir="auto">{title}</span>
+  <span className="panel-row__text"><span className="panel-row__t" id={id}><bdi>{title}</bdi></span>
    <span className="panel-row__d"><bdi>{scheduleLabel(t,routine.schedule)}</bdi>{last&&` ${last}`}</span>
    <span className="rt-meta"><span className={`rt-next${routine.on?'':' is-off'}`}>{next}</span>
     {running?<span className="rt-running shimmer" role="status">{t('routineRunning')}</span>

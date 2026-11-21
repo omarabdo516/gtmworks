@@ -421,7 +421,7 @@
    Routine's row with its schedule, next run and Run now beside its switch, and the form that adds one or changes when it
    runs, set with the overlay's own inputs. */
 .gw .sov .sov-ag-l { display: inline-flex; align-items: center; gap: var(--s2); color: var(--gw-text-1); }
-.gw .sov .rt-row { align-items: flex-start; padding-block: 10px; }
+.gw .sov .panel-row.rt-row { align-items: flex-start; padding-block: 10px; }
 .gw .sov .rt-row .panel-row__icon { margin-top: 1px; }
 .gw .sov .rt-row .switch { margin-top: 2px; }
 .gw .sov .rt-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--s2); margin-top: 6px; }

@@ -7,6 +7,8 @@ import { idle } from './navigation-measure';
 import { appOrigin } from './lane.mjs';
 import { asAdmin } from './slow-reads';
 import { localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
+import { laneHermes } from './lane-hermes';
+import { levelConfig } from '../lib/agent-levels.mjs';
 
 // The visual lane (#257): each key screen in tests/visual-lane/screens.json, in Arabic at 1440 and 390, light and dark,
 // against its approved image. Each screen starts from the seed as built and signs in again, so the screens pass in any
@@ -42,7 +44,35 @@ const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
 const change = (n: number) => `69200000-0000-0000-0000-00000000000${n}`;
-const screenStates: Record<string, { set: string, unset: string }> = {
+const routine = (n: number) => `69300000-0000-0000-0000-00000000000${n}`;
+const ownProfile = (agent: string) => `ag-${agent.replaceAll('-', '')}`;
+const companyProfile = `co-${rsLearning.replaceAll('-', '')}`;
+// A Routine as the fake Engine keeps it (#31): no zone of its own, so it reads in UTC, and its next and last runs are
+// tomorrow and yesterday at fixed hours of the server's own clock, which draws the page.
+const day = (offset: number, hour: number) => `${new Date(Date.now() + offset * 864e5).toISOString().slice(0, 10)}T${String(hour).padStart(2, '0')}:00:00.000Z`;
+const routineJob = (id: string, name: string, expr: string, extra: object = {}) => ({ id, name, prompt: name, skills: [], skill: null, schedule: { kind: 'cron', expr, display: expr },
+  schedule_display: expr, repeat: { times: null, completed: 0 }, enabled: true, state: 'scheduled', paused_at: null, created_at: '2026-06-01T08:00:00Z', next_run_at: day(1, Number(expr.split(' ')[1]) || 9),
+  last_run_at: null, last_status: null, last_error: null, deliver: 'local', origin: null, ...extra });
+const screenStates: Record<string, { set: string, unset: string, engine?: (fake: Awaited<ReturnType<typeof laneHermes>>) => void }> = {
+  // Recurring tasks (#31): Lead's morning brief and two of Meta Ads's Routines, one switched off, on their own profiles.
+  routines: {
+    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+       ('${routine(1)}','${rsLearning}','${routine(3)}','Lead','General',true,'${companyProfile}'),
+       ('${routine(2)}','${rsLearning}','${routine(4)}','Meta Ads','Runs the Meta ads.',false,'${ownProfile(routine(2))}');
+      insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${companyProfile}',agent_level,public.engine_tool_policy() from public.companies where id='${rsLearning}'
+       on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+      insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${routine(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;
+      insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) select '${routine(2)}','${rsLearning}',agent_level,public.engine_tool_policy() from public.companies where id='${rsLearning}';`,
+    unset: `delete from public.agent_profiles where agent_id='${routine(2)}';
+      delete from public.company_profile_keepers where agent_id='${routine(1)}';
+      delete from public.hermes_agents where id in ('${routine(1)}','${routine(2)}');`,
+    engine: fake => {
+      for (const name of [companyProfile, ownProfile(routine(2))]) fake.settings.profiles.set(name, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: levelConfig(1), credentials: {} });
+      fake.settings.cron.set(companyProfile, [routineJob('aa00000000a1', 'ملخص الصبح للفريق', '0 8 * * *', { last_run_at: day(-1, 8), last_status: 'ok' })]);
+      fake.settings.cron.set(ownProfile(routine(2)), [routineJob('bb00000000b1', 'ابعتلي ملخص الإعلانات', '0 9 * * *', { last_run_at: day(-1, 9), last_status: 'ok' }),
+        routineJob('bb00000000b2', 'وقّف أي إعلان تكلفة الليد فيه عدّت 45 ج', '0 16 * * 4', { enabled: false, state: 'paused', next_run_at: null })]);
+    },
+  },
   // The general channel (#24): the Manager's note, Omar asking Lead, and Lead's answer.
   channel: {
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${talk(11)}','${rsLearning}','${talk(10)}','Lead','General',true,'visual-channel-lead');
@@ -160,6 +190,9 @@ for (const screen of screens) {
         forgetBlocked(context);
         const state = screen.state ? screenStates[screen.state] : undefined;
         if (state) { asAdmin(state.unset); asAdmin(state.set); }
+        // A screen whose data the Engine holds draws it from the lane's fake Engine, made for this picture alone.
+        const engine = state?.engine ? await laneHermes() : null;
+        if (engine) state!.engine!(engine);
         try {
           await page.emulateMedia({ colorScheme: theme });
           await page.setViewportSize({ width, height: 900 });
@@ -198,6 +231,7 @@ for (const screen of screens) {
             }
           }
         } finally {
+          await engine?.close();
           if (state) asAdmin(state.unset);
         }
       });

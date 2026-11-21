@@ -98,7 +98,9 @@ test('the Owner sees each Agent\'s Routines and pauses, resumes, runs now, resch
  expect(changes.map(request=>new URL(String(request.path),'http://m').searchParams.get('profile'))).toEqual(Array(changes.length).fill(own(ads)));
 
  // Add a task for Ads, with an empty sentence refused first.
- await overlay.locator('#rt-add').click();
+ // Every Agent has a Routine, so each adds from its own section, and the head offers no second way.
+ await expect(overlay.locator('#rt-add')).toHaveCount(0);
+ await overlay.locator('.dp-sec').filter({has:page.locator('.dp-label',{hasText:'Ads'})}).getByRole('button',{name:'Add a task'}).click();
  await overlay.getByRole('button',{name:'Add',exact:true}).click();
  await expect(overlay.locator('#rt-err')).toHaveText('Write the task first, even a short sentence.');
  await overlay.getByLabel('Agent').selectOption({label:'Ads'});

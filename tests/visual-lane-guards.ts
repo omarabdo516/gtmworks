@@ -45,6 +45,8 @@ export async function fixClockText(page: Page) {
     const skipped = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'TITLE']);
     for (const element of Array.from(document.querySelectorAll('body *'))) {
       if (element.children.length || skipped.has(element.tagName)) continue;
+      // A Routine's times are fixed hours of a fixed day before and after the server's own (visual-lane.spec.ts, #31).
+      if (element.closest('.rt-row')) continue;
       const text = (element.textContent ?? '').trim();
       if (element.matches('.lg-day__h')) element.textContent = 'Day';
       else if (element.closest('.chart-bars') && /\d/.test(text) && monthName.test(text)) element.textContent = 'Month 00';
