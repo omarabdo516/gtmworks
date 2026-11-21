@@ -32,10 +32,11 @@ const stored = {
 };
 const replied = '2026-06-10T09:42:00Z';
 type TiedCard = { id: number, column: string, made?: string, wait?: { person: string, kind: 'question' | 'hand', title: string } };
-function database(card: TiedCard | null, messages: typeof stored = stored) {
+type StoredHandover = { run_id: string, goal: string, state: string, target_outcome: string | null, answers_person: boolean, created_at: string, to_agent: { id: string, name: string, connection_id: string } };
+function database(card: TiedCard | null, messages: typeof stored = stored, agent_handovers: StoredHandover[] = []) {
  // The messages and how their runs ended are read through the Conversation, in one statement (lib/conversation-record.ts).
  const { conversation_run_ends, conversation_messages, ...rest } = messages;
- const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [] }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
+ const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [], agent_handovers }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
  const table = (name: string) => {
   const found = rows[name] ?? [];
   const query: Record<string, unknown> = { then: (resolve: (value: unknown) => unknown) => resolve({ data: found, error: null }), maybeSingle: async () => ({ data: found[0] ?? null, error: null }) };
@@ -99,6 +100,31 @@ test('a chat with Lead whose Card a handover made says so once, under the handov
  expect(turns).toEqual(['person:', 'agent:', 'agent:', ':boarded']);
  await expect.element(screen.getByText('This card was added to the board under “In progress”')).toBeVisible();
  await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toBeVisible();
+});
+
+// #375: the record says a handover did not finish when its target's leg ended without a report, though Lead followed it
+// up, or when the handover itself ended failed; one that finished says nothing of it, and none of them keeps the chat
+// asking. The row under Lead's reply then says the job did not finish.
+const handedTo = (state: string, target_outcome: string | null): StoredHandover => ({ run_id: 'r1', goal: 'Plan the Meta ads for the March intake', state, target_outcome,
+ answers_person: false, created_at: '2026-06-10T09:41:03Z', to_agent: { id: 'a-ads', name: 'Ads', connection_id: 'c-3' } });
+const handedRecord = (handover: StoredHandover) => conversationRecord(database(null, leadStored, [handover]), 'p-3', 'co-1', { id: 'cv-9', agent_id: 'a-lead', agent_name: 'Lead', hermes_agents: { connection_id: 'c-0', is_default: true } });
+const handedCard = (record: ConversationRecord) => record.messages.flatMap(message => message.cards ?? []).find(card => card.kind === 'handed');
+test('the record marks a handover that did not finish, whichever leg ended it, and leaves a finished one unmarked', async () => {
+ for (const [state, outcome, failed] of [['done', 'completed', false], ['done', 'failed', true], ['done', 'stopped', true], ['done', 'lost', true], ['failed', 'completed', true], ['failed', 'failed', true]] as const) {
+  const record = await handedRecord(handedTo(state, outcome));
+  expect(handedCard(record), `${state}/${outcome}`).toEqual({ kind: 'handed', name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake', ...(failed ? { failed: true } : {}) });
+  expect(record.handover, `${state}/${outcome}`).toBeUndefined();
+ }
+ const moving = await handedRecord(handedTo('target', null));
+ expect(handedCard(moving)).not.toHaveProperty('failed');
+ expect(moving.handover).toBe(true);
+});
+
+test('a handover that did not finish says so under Lead\'s reply, read through the record the page reads', async () => {
+ const screen = await show(await handedRecord(handedTo('done', 'failed')));
+ const row = screen.container.querySelector('.turn--agent [data-handover]');
+ expect(row?.hasAttribute('data-failed')).toBe(true);
+ expect(row?.querySelector('.handed__failed')?.textContent).toBe('The job didn’t finish');
 });
 
 test('a chat with no Card on the board has no pill and no line', async () => {
