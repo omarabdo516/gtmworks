@@ -31,12 +31,17 @@ grant execute on function public.release_queued_start(uuid,uuid,integer) to serv
 -- never reached fails its queued turn, as one whose start was lost for a day does. A reservation made again for the
 -- same key (reserve_conversation_turn, claim_conversation_turn) starts its minutes anew, so a mark older than it is not
 -- its own.
+-- While the Engine stays down each pass begins an attempt and hands it back, so the attempt this sees in flight on a
+-- reservation handed back within the last minute is that pass's, not a lost start: it is not marked unknown (which would
+-- turn the ten minutes into a day), and the next run of this, a minute on, gives the reservation up or, if the attempt
+-- is still counted then, marks it as before.
 create or replace function public.abandon_conversation_reservations() returns integer language plpgsql security definer set search_path='' as $$
 declare abandoned integer; stale public.conversation_run_reservations;
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  for stale in select r.* from public.conversation_run_reservations r
   where r.abandoned_at is null and r.start_unknown_at is null and r.start_attempts>0 and r.created_at<now()-interval '10 minutes'
+   and not coalesce(r.start_unreached_at>=r.created_at and r.start_unreached_at>now()-interval '1 minute',false)
    and exists(select 1 from public.hermes_agents a where a.id=r.agent_id and a.company_id=r.company_id)
    and exists(select 1 from public.members m where m.company_id=r.company_id and m.person_id=r.person_id and m.removed_at is null and m.role<>'viewer')
  loop perform public.queue_unknown_start(stale); end loop;

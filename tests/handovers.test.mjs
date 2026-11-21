@@ -37,8 +37,8 @@ function handover(overrides = {}) {
    }
    // #514: only the attempt that began is handed back, and only while its leg named no Run.
    if(name==='release_handover_start') {
-    const attempts=args.leg==='waiting'?'target_attempts':'return_attempts';
-    if(args.leg!==row.state||row[attempts]!==args.attempt) return ok(false);
+    const [attempts,run]=/** @type {Record<string,[string,string]>} */({waiting:['target_attempts','target_run'],handing:['answer_attempts','answer_run'],returning:['return_attempts','follow_up_run']})[args.leg]??[];
+    if(!attempts||args.leg!==row.state||row[run]||row[attempts]!==args.attempt) return ok(false);
     row[attempts]-=1; return ok(true);
    }
    if(name==='answer_handover') {

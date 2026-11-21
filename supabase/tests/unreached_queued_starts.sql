@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(39);
 -- #514: a queued Conversation turn's start, or a handover leg's, that never reached an Engine is handed back
 -- (release_queued_start, release_handover_start): the turn or leg stays due as never started, its next start is a first
 -- attempt, so a refusal of it fails the turn or the leg, and its own time limit still ends it. Only the attempt that
@@ -48,6 +48,23 @@ select ok((select abandoned_at is not null from public.conversation_run_reservat
 select ok((select failed_at is not null from public.conversation_queued_turns where send_key='e5140000-0000-0000-0000-000000000402'),'and its turn fails, so its sender sees it was not sent');
 set local role service_role;
 select is((select count(*)::int from public.claim_conversation_turn('e5140000-0000-0000-0000-000000000202')),0,'and nothing is claimed again');
+
+-- An attempt in flight on a reservation handed back within the last minute is that pass's own, not a lost start: it is
+-- not marked unknown, so the ten minutes stay. One counted a minute after the last hand back is marked as before.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.reserve_conversation_turn('e5140000-0000-0000-0000-000000000204','10000000-0000-0000-0000-000000000001','e5140000-0000-0000-0000-000000000001','e5140000-0000-0000-0000-000000000304','Fourth')->>'state','reserved','another run is reserved');
+reset role;
+update public.conversation_run_reservations set created_at=now()-interval '11 minutes', start_attempts=1, start_unreached_at=now()-interval '5 seconds' where send_key='e5140000-0000-0000-0000-000000000304';
+set local role service_role;
+select public.abandon_conversation_reservations();
+reset role;
+select ok((select start_unknown_at is null and abandoned_at is null from public.conversation_run_reservations where send_key='e5140000-0000-0000-0000-000000000304'),'an attempt in flight just after a hand back is not marked unknown');
+update public.conversation_run_reservations set start_unreached_at=now()-interval '2 minutes' where send_key='e5140000-0000-0000-0000-000000000304';
+set local role service_role;
+select public.abandon_conversation_reservations();
+reset role;
+select ok((select start_unknown_at is not null and abandoned_at is null from public.conversation_run_reservations where send_key='e5140000-0000-0000-0000-000000000304'),'one still counted a minute later is kept as a lost start, as before');
 
 -- A start marked unknown may hold a run: it is never handed back.
 select is(public.begin_start('e5140000-0000-0000-0000-000000000201','e5140000-0000-0000-0000-000000000499'),0,'no attempt begins without a reservation');

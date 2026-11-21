@@ -2,8 +2,8 @@
  {
   "issue": 514,
   "date": "2026-11-21",
-  "en": { "title": "Waiting messages and handed-over jobs wait for a stopped engine", "body": "When the agent engine is not running, a message that waited its turn, or a job one agent handed to another, now waits up to ten minutes for the engine to come back instead of failing at once." },
-  "ar": { "title": "الرسايل المستنية والشغل المتسلّم بيستنوا المحرك الواقف", "body": "لما محرك الوكلاء مايكونش شغال، الرسالة اللي كانت مستنية دورها، أو الشغلانة اللي وكيل سلّمها لوكيل تاني، دلوقتي بتستنى المحرك يرجع لحد عشر دقايق بدل ما تفشل على طول." }
+  "en": { "title": "Waiting messages and handed-over jobs wait for a stopped engine", "body": "When the agent engine is not running, a message that waited its turn, or a job one agent handed to another, now waits for the engine to come back instead of failing at once: a waiting message for up to ten minutes." },
+  "ar": { "title": "الرسايل المستنية والشغل المتسلّم بيستنوا المحرك الواقف", "body": "لما محرك الوكلاء مايكونش شغال، الرسالة اللي كانت مستنية دورها، أو الشغلانة اللي وكيل سلّمها لوكيل تاني، دلوقتي بتستنى المحرك يرجع بدل ما تفشل على طول: الرسالة المستنية لحد عشر دقايق." }
  },
  {
   "issue": 502,
