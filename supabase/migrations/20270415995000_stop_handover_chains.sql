@@ -171,6 +171,26 @@ end $$;
 revoke all on function public.handover_run_stopped(bigint,text) from public,anon,authenticated;
 grant execute on function public.handover_run_stopped(bigint,text) to service_role;
 
+-- A leg Stop marked never moves on to another leg: whatever path ends it (a start given up after its window, or once its
+-- person may no longer hand work over), it ends as stopped, so no answer or follow-up starts after Stop. Its lost start
+-- keeps the session held for its window, as any lost start given up does.
+create function public.keep_marked_handover_stopped() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+ if new.state='done' and (new.target_outcome='stopped' or new.follow_up_outcome='stopped') then return new; end if;
+ if old.state in ('waiting','handing') then
+  new.target_outcome:='stopped'; new.summary:=null; new.target_closed_at:=coalesce(new.target_closed_at,now());
+ elsif old.parent_id is null and not old.answers_person then
+  new.follow_up_outcome:='stopped'; new.reply:=null;
+ end if;
+ new.state:='done'; new.closed_at:=coalesce(new.closed_at,now()); new.attempted_at:=null;
+ return new;
+end $$;
+revoke all on function public.keep_marked_handover_stopped() from public,anon,authenticated,service_role;
+create trigger agent_handovers_marked_stays_stopped before update of state on public.agent_handovers
+ for each row when (old.stop_requested_at is not null and old.state not in ('done','failed') and new.state is distinct from old.state)
+ execute function public.keep_marked_handover_stopped();
+
 -- 20270415990000's answer_handover: a leg Stop marked while its start's answer was lost ends as stopped on its start's
 -- answer, whatever it is: a Run id is kept, in the same transaction, as the Run to stop, never as the leg's Run (the
 -- worker stops it, then keeps stopping it until it ended), and a refusal moves it to no other leg.

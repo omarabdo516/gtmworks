@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(54);
+select plan(56);
 -- #478 (spec #474): Stop ends the whole Handover chain. RS Learning has Lead, Writer, Ads and Critic, each on its own
 -- profile. The Owner (1) talks to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the
 -- Viewer (4) work with Writer, and the Manager (2) made the channel but is not in it.
@@ -138,6 +138,13 @@ update public.agent_handovers set target_attempts=1, attempted_at=now(), stop_re
 select is(public.answer_handover(current_setting('test.v')::bigint,1,null,'waiting'),false,'its start is refused');
 select is((select state||':'||target_outcome||':'||coalesce(follow_up_outcome,'-') from public.agent_handovers where id=current_setting('test.v')::bigint),'done:stopped:-',
  'it ended as stopped, with no follow-up to start');
+-- One whose start is given up by another path (its window ran out) ends as stopped too, never moving on.
+select is(public.lead_hand_to_agent('c4780000-0000-0000-0000-000000000001','run-writer','call-6','Critic','Once again',null),'{"state":"created","agent":"Critic"}'::jsonb,'Writer asks Critic once more');
+select set_config('test.w',(select id::text from public.agent_handovers where call_id='call-6'),true);
+update public.agent_handovers set target_attempts=1, attempted_at=now(), stop_requested_at=now() where id=current_setting('test.w')::bigint;
+update public.agent_handovers set state='returning', target_outcome='failed', target_closed_at=now(), return_started_at=now() where id=current_setting('test.w')::bigint;
+select is((select state||':'||target_outcome||':'||coalesce(follow_up_outcome,'-')||':'||(closed_at is not null) from public.agent_handovers where id=current_setting('test.w')::bigint),
+ 'done:stopped:-:true','a marked leg given up ends as stopped, with no follow-up to start');
 
 -- In a channel: two messages of the Contributor, each with a handover open; Stop on the first ends only its own.
 insert into public.channels(id,company_id,kind,name,created_by,create_key) values
