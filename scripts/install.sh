@@ -405,6 +405,10 @@ restore_previous_engine() {
   fi
   restored=0
   for name in $(engine_names); do
+    # Each sandbox gets its own Engine's key again, as engine_start gives it: the key last read belongs to another Company.
+    # A previous release from before the sandbox recorded no image and starts none, so it reads no key.
+    sandbox_key=
+    if [ -n "$(work_sandbox_ref)" ]; then sandbox_keys "$name" || { restored=1; continue; }; fi
     engine "$name" up -d --remove-orphans --wait --wait-timeout 300 || restored=1
   done
   return "$restored"
