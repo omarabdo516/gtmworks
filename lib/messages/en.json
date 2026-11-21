@@ -1014,6 +1014,7 @@
   "waitingChangeCannotApply": "This change can’t be made to this agent as it is now: for example, it still shares the main agent’s profile, or its sub-agents are off. Nothing changed; decline it, or change the agent first.",
   "waitingChangeApplying": "An approval of this change is still being written, so it can’t be declined now. Approve it again to finish it.",
   "waitingChangeBusy": "Another Owner is approving this change right now.",
+  "waitingChangeWrittenLate": "This change reached the agent’s settings after the proposal was answered by someone else. Check the agent’s settings and change them back if they should not have it.",
   "waitingChangeReasonMissing": "Write the reason for declining, so the agent knows why.",
   "logActChangeProposed": "proposed a change to {0} in the settings of {1}",
   "logActChangeApproved": "approved a change to {0} in the settings of {1}",

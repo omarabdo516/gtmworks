@@ -223,6 +223,26 @@ test('a lease another request holds answers busy, and a claim lost before the En
  } finally { await fake.close(); }
 });
 
+// The two windows Hermes leaves open: an approval that stalls after renewing its lease (another Owner declines once the lease
+// runs out), and an Engine write that lands after its request timed out. The Engine has no compare-and-set, so neither can
+// be stopped; the decline is recorded as maybe applied (agent_change_proposals.sql), and the Owner whose write landed late
+// is told so rather than "already answered".
+test('a write that lands after the proposal was declined meanwhile says so to the Owner who wrote it',async()=>{
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
+  const {model}=proposalsOf();
+  const declinedMeanwhile=owner([model],{answer:{data:null,error:{code:'22023',message:'agentChangeAnswered'}}});
+  assert.deepEqual(await answerChange(declinedMeanwhile.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'writtenLate'});
+  assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT').map(request=>request.path),[`/api/profiles/${own(ads)}/model`]);
+  // A write that timed out is uncertain: the lease ends, the proposal stays applying, and a decline then is maybe applied.
+  fake.settings.managementStatus=504;
+  const timedOut=owner([proposalsOf().model]);
+  assert.deepEqual((await answerChange(timedOut.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)})).state,'notApplied');
+  assert.deepEqual(timedOut.calls.filter(call=>call.name==='release_agent_change').map(call=>call.args.uncertain),[true]);
+ } finally { await fake.close(); }
+});
+
 test('only an Owner answers, an unknown proposal is not found, and an answered or busy one is never written again',async()=>{
  const engineless={company,hermes:null};
  const {model}=proposalsOf();
