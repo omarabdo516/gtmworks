@@ -3,7 +3,8 @@ import { render } from 'vitest-browser-react';
 import type { ComponentProps } from 'react';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { AgentMorning, type MorningProps } from '@/app/settings-agent-morning';
-import { AgentSaveBar } from '@/app/settings-agent-form';
+import { AgentAbout, AgentSaveBar } from '@/app/settings-agent-form';
+import { seedDraft } from '@/app/settings-draft';
 import { ToastHost } from '@/app/toast';
 import en from '@/lib/messages/en.json';
 import ar from '@/lib/messages/ar.json';
@@ -104,4 +105,19 @@ test('a schedule set in a chat that is no daily time is offered as it is, and ke
  await morningPage({made:true,on:true,time:null,expr:null,display:'every 720m',timezone:'Africa/Cairo',quietYesterday:false});
  await expect.poll(()=>select()?.value).toBe('keep');
  expect(select().options[0].textContent).toBe('every 720m');
+});
+
+test('a section drawn while a save is in flight, as Good morning is, does not make the page drop that save\'s answer',async()=>{
+ let answerSave:(response:Response)=>void=()=>{};
+ vi.stubGlobal('fetch',()=>new Promise<Response>(resolve=>{ answerSave=resolve; }));
+ const agent=`ag-morning-${++count}`;
+ const screen=await render(<LanguageProvider language="en"><ToastHost/>
+  <div className="gw"><div className="sov"><AgentAbout agent={agent} name="Lead" description="Old"/><AgentSaveBar company={company} agent={agent} name="Lead"/></div></div>
+ </LanguageProvider>);
+ await screen.getByRole('textbox').fill('New');
+ await screen.getByRole('button',{name:'Save',exact:true}).click();
+ // Good morning's keys arrive now, before the Engine answers the About save.
+ seedDraft(agent,{'morning.on':'off','morning.time':'9:00'});
+ answerSave(answer({saved:{about:'New'}}));
+ await expect.poll(()=>document.getElementById('dp-savebar')?.hidden).toBe(true);
 });
