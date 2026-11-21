@@ -40,7 +40,7 @@ insert into decisions
   'public.channel_run_card()','public.channel_reply_card()']) fn
  union all select 'public.work_card_moved()','exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller; the move it writes is read by its own mover alone, on a Card that mover can see (work_card_moves_read)'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
-  'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
+  'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',
   'public.answer_note_start(bigint,integer,text)','public.begin_note_start(bigint)','public.channel_hand_to_agent(bigint,text,text,text,text,text)','public.channel_show_card(bigint,text,text,text,text,jsonb)','public.close_note_run(bigint,text,text,text,bigint,bigint)',
   'public.lead_hand_to_agent(uuid,text,text,text,text,text)','public.move_company_profile(uuid)','public.note_runs_due(bigint,bigint)']) fn
  union all select 'public.close_handover_target(bigint,text,text,text)','exempt','the worker''s, callable by the service role only: it logs the handed-to Agent''s answer on the channel''s Card, whose log its channel''s members read under the channel''s own rule, and answers no Member'

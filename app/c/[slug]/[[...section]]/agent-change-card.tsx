@@ -44,7 +44,7 @@ export function OwnerChangeCard({slug,company,item,alone}:{slug:string,company:s
  const change=kinds.find(kind=>kind===item.body)??'setting';
  const read=item.change;
  const view:ChangeProposalView=read?{id:item.id,change,setting:read.setting,value:read.value,reason:read.reason,agent:read.agent,by:read.by,state:'waiting',owners:[]}
-  :{id:item.id,change,setting:null,value:null,reason:'',agent:{id:'',connection_id:`agent-change-${item.id}`,name:item.title},by:{id:'-',connection_id:'',name:item.asked_by},state:'waiting',owners:[]};
+  :{id:item.id,change,setting:null,value:null,reason:'',agent:{id:'',connection_id:`agent-change-${item.id}`,name:item.title},by:{id:item.asked_by===item.title?'':'-',connection_id:'',name:item.asked_by},state:'waiting',owners:[]};
  if(!read) return <ChangeCard change={view} owner unread answer={<>
   <div className="card__outcome" role="note"><ShellIcon name="clock"/><span>{c('changeUnread')}</span></div>
   <div className="card__actions"><button type="button" className="btn btn--secondary" disabled>{c('changeDecline')}</button><button type="button" className="btn btn--primary" disabled>{c('changeApprove')}</button></div>

@@ -66,6 +66,8 @@ create table public.agent_change_proposals (
  -- The Owner whose approval is being written to the Engine, and since when (state 'applying').
  claimed_by uuid references public.people(id),
  claimed_at timestamptz,
+ -- A decline of an approval whose Engine write was never confirmed: the change may be in the Agent's settings.
+ maybe_applied boolean not null default false,
  answer text constraint agent_change_proposals_answer_text check (answer is null or length(btrim(answer)) between 1 and 1000),
  created_at timestamptz not null default now(),
  unique (conversation_id,run_id,call_id),
@@ -130,7 +132,9 @@ begin
    order by (a.id=talk.agent_id) desc, a.id limit 1;
   if not found or (target.id<>talk.agent_id and not public.is_company_lead(talk.company_id,talk.agent_id)) then return jsonb_build_object('state','ignored'); end if;
  end if;
- listed:=public.agent_change_listed(change,setting) and public.agent_change_value_valid(change,value);
+ listed:=public.agent_change_listed(change,setting);
+ -- A listed change whose value does not read keeps nothing, so the Agent can propose it again correctly.
+ if listed and not public.agent_change_value_valid(change,value) then return jsonb_build_object('state','invalid'); end if;
  insert into public.agent_change_proposals(company_id,conversation_id,run_id,call_id,agent_id,proposed_by,asked_by,change,setting,value,reason,state)
   values(talk.company_id,conversation,run,call,target.id,talk.agent_id,talk.person_id,change,setting,value,said,case when listed then 'waiting' else 'refused' end)
   on conflict (conversation_id,run_id,call_id) do nothing returning * into kept;
@@ -164,11 +168,13 @@ begin
  select * into asked from public.agent_change_proposals p where p.id=proposal and p.company_id=c for update;
  if not found then raise exception 'agentChangeNotFound' using errcode='P0002'; end if;
  if asked.state in ('approved','declined','refused') then return jsonb_build_object('state',asked.state); end if;
+ -- A claim taken again (its own Owner's, or a stale one) may follow a write that reached the Engine unconfirmed: the app
+ -- then never gives it back.
  if asked.state='applying' and asked.claimed_by is distinct from auth.uid() and asked.claimed_at>now()-interval '2 minutes' then
   return jsonb_build_object('state','busy');
  end if;
  update public.agent_change_proposals set state='applying',claimed_by=auth.uid(),claimed_at=now() where id=asked.id;
- return jsonb_build_object('state','claimed','agent',asked.agent_id,'change',asked.change,'setting',asked.setting,'value',asked.value);
+ return jsonb_build_object('state','claimed','retry',asked.state='applying','agent',asked.agent_id,'change',asked.change,'setting',asked.setting,'value',asked.value);
 end $$;
 revoke all on function public.claim_agent_change(uuid,bigint) from public,anon,service_role;
 grant execute on function public.claim_agent_change(uuid,bigint) to authenticated;
@@ -196,15 +202,18 @@ begin
  if not found then raise exception 'agentChangeNotFound' using errcode='P0002'; end if;
  if asked.state=wanted then return wanted; end if;
  if approve and not (asked.state='applying' and asked.claimed_by=auth.uid()) then
-  raise exception '%',case when asked.state='waiting' then 'agentChangeNotClaimed' else 'agentChangeAnswered' end using errcode='22023';
+  raise exception '%',case asked.state when 'waiting' then 'agentChangeNotClaimed' when 'applying' then 'agentChangeBusy' else 'agentChangeAnswered' end using errcode='22023';
  end if;
- if not approve and asked.state='applying' then raise exception 'agentChangeApplying' using errcode='22023'; end if;
- if not approve and asked.state<>'waiting' then raise exception 'agentChangeAnswered' using errcode='22023'; end if;
+ -- A decline waits for an approval being written; one whose claim is stale (two minutes, its write never confirmed) may be
+ -- declined, and says the earlier approval may have reached the Engine, so the proposal never waits for good.
+ if not approve and asked.state='applying' and asked.claimed_at>now()-interval '2 minutes' then raise exception 'agentChangeApplying' using errcode='22023'; end if;
+ if not approve and asked.state not in ('waiting','applying') then raise exception 'agentChangeAnswered' using errcode='22023'; end if;
  if said is not null and length(said)>1000 then raise exception 'agentChangeReasonLong' using errcode='22023'; end if;
  if not approve and said is null and not exists(select 1 from public.companies co where co.id=c and co.work_mode='alone') then
   raise exception 'agentChangeReasonMissing' using errcode='22023';
  end if;
- update public.agent_change_proposals set state=wanted,answered_by=auth.uid(),answered_at=now(),answer=case when approve then null else said end where id=asked.id;
+ update public.agent_change_proposals set state=wanted,answered_by=auth.uid(),answered_at=now(),answer=case when approve then null else said end,
+  maybe_applied=(not approve and asked.state='applying') where id=asked.id;
  perform public.log_agent_event(c,auth.uid(),null,asked.agent_id,case when approve then 'AGENT_CHANGE_APPROVED' else 'AGENT_CHANGE_DECLINED' end,
   jsonb_build_object('setting',coalesce(asked.setting,asked.change),'new',case when asked.change='instructions' then null else asked.value end,
    'reason',case when approve then null else said end,'asked_by',(select a.name from public.hermes_agents a where a.id=asked.proposed_by),

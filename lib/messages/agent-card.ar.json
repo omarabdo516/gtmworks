@@ -56,6 +56,8 @@
   "changeApprovedModel": "{0} وافق · {1}. {2} بقى بيفكر بـ {3}.",
   "changeDeclined": "{0} رفض · {1}. مفيش حاجة اتغيّرت.",
   "changeDeclinedReason": "{0} رفض · {1}. مفيش حاجة اتغيّرت. السبب: «{2}»",
+  "changeDeclinedMaybe": "{0} رفض · {1}. ممكن موافقة قبل كده تكون وصلت لإعدادات {2}: راجعها.",
+  "changeReason": "السبب: «{0}»",
   "changeRefused": "ده مش إعداد ينفع الوكيل يقترحه، فمفيش حاجة اتغيّرت ومش مستني حد.",
   "changeDecline": "ارفض",
   "changeApprove": "وافق",

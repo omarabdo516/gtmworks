@@ -78,7 +78,7 @@ export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>
 // whom), approved or declined by one of them, or refused at once as not on the list of what can be proposed.
 type ChangeFace={id:string,connection_id:string,name:string};
 export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
- &({state:'waiting',owners:string[]}|{state:'approved',answeredBy:string,at:string}|{state:'declined',answeredBy:string,at:string,answer:string|null}|{state:'refused'});
+ &({state:'waiting',owners:string[]}|{state:'approved',answeredBy:string,at:string}|{state:'declined',answeredBy:string,at:string,answer:string|null,maybeApplied?:boolean}|{state:'refused'});
 export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};

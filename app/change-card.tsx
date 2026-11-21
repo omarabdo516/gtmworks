@@ -31,7 +31,8 @@ export function ChangeCard({change,owner=false,unread=false,answer}:{change:Chan
   :<span className="badge"><ShellIcon name={change.state==='approved'?'check':'x'}/>{c(change.state==='approved'?'changeBadgeApproved':change.state==='declined'?'changeBadgeDeclined':'changeBadgeRefused')}</span>;
  const outcome=change.state==='approved'?<div className="card__outcome"><ShellIcon name="check"/><span>{change.change==='model'
    ?cb('changeApprovedModel',change.answeredBy,when(change.at),change.agent.name,String(change.value)):cb('changeApproved',change.answeredBy,when(change.at),change.agent.name)}</span></div>
-  :change.state==='declined'?<div className="card__outcome pp-out"><ShellIcon name="x"/><span>{change.answer?cb('changeDeclinedReason',change.answeredBy,when(change.at),change.answer):cb('changeDeclined',change.answeredBy,when(change.at))}</span></div>
+  :change.state==='declined'?<div className="card__outcome pp-out"><ShellIcon name="x"/><span>{change.maybeApplied?cb('changeDeclinedMaybe',change.answeredBy,when(change.at),change.agent.name)
+   :change.answer?cb('changeDeclinedReason',change.answeredBy,when(change.at),change.answer):cb('changeDeclined',change.answeredBy,when(change.at))}{change.maybeApplied&&change.answer?<> {cb('changeReason',change.answer)}</>:null}</span></div>
   :change.state==='refused'?<div className="card__outcome pp-out"><ShellIcon name="x"/><span>{c('changeRefused')}</span></div>
   :owner?answer:<div className="card__outcome"><ShellIcon name="clock"/><span>{change.owners.length?cb('changeWaiting',owners):c('changeWaitingAnyOwner')}</span></div>;
  return <div id={`change-${change.id}`} className={`ac-card chg-card${change.state==='waiting'?'':' is-resolved'}`} role="group" aria-label={c('changeLabel',change.agent.name)} data-change={change.state}>

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(44);
+select plan(49);
 -- #19: an Agent proposes a change to its own profile, or Lead to another Agent's, and the proposal waits for an Owner.
 -- The database keeps what would change, the reason and the state; a change that is not on the list is kept as refused
 -- and waits on nobody. Only an active Owner approves or declines, and both answers are logged.
@@ -32,8 +32,8 @@ select is(public.agent_propose_change('ed000000-0000-0000-0000-000000000001','ch
  'a setting that is not on the list is refused');
 select is(public.agent_propose_change('ed000000-0000-0000-0000-000000000001','ch-1','call-2',null,'toolset','terminal','true','I need a shell.')->>'state','refused',
  'and so is a toolset above the Agent level');
-select is(public.agent_propose_change('ed000000-0000-0000-0000-000000000001','ch-1','call-3',null,'model',null,'"not a model"','Better.')->>'state','refused',
- 'and a model that is not provider/model');
+select is(public.agent_propose_change('ed000000-0000-0000-0000-000000000001','ch-1','call-3',null,'model',null,'"not a model"','Better.')->>'state','invalid',
+ 'a model that is not provider/model keeps nothing, so the Agent can propose it again as it should be');
 select is(public.agent_propose_change('ed000000-0000-0000-0000-000000000001','ch-1','call-4',null,'toolset','delegation','true',' ')->>'state','invalid',
  'a proposal with no reason keeps nothing');
 select is(public.agent_propose_change('ed000000-0000-0000-0000-000000000004','ch-4','call-0',null,'model',null,'"openai/gpt-5"','Faster.')->>'state','refused',
@@ -52,9 +52,8 @@ select results_eq($$select agent_id,proposed_by,asked_by,change,setting,value,re
  $$values ('ec000000-0000-0000-0000-000000000004'::uuid,'ec000000-0000-0000-0000-000000000004'::uuid,'20000000-0000-0000-0000-000000000002'::uuid,'model',null::text,'"anthropic/claude-sonnet-5-5"'::jsonb,'Faster on big numbers.','waiting',true),
   ('ec000000-0000-0000-0000-000000000004'::uuid,'ec000000-0000-0000-0000-000000000002'::uuid,'20000000-0000-0000-0000-000000000001'::uuid,'instructions',null,'"You write short ad copy."','Its copy runs long.','waiting',true),
   ('ec000000-0000-0000-0000-000000000002'::uuid,'ec000000-0000-0000-0000-000000000002'::uuid,'20000000-0000-0000-0000-000000000001'::uuid,'setting','terminal.backend','"local"','I need a shell.','refused',true),
-  ('ec000000-0000-0000-0000-000000000002'::uuid,'ec000000-0000-0000-0000-000000000002'::uuid,'20000000-0000-0000-0000-000000000001'::uuid,'toolset','terminal','true','I need a shell.','refused',true),
-  ('ec000000-0000-0000-0000-000000000002'::uuid,'ec000000-0000-0000-0000-000000000002'::uuid,'20000000-0000-0000-0000-000000000001'::uuid,'model',null,'"not a model"','Better.','refused',true)$$,
- 'two proposals wait, trimmed, each naming the Agent it would change and who proposed it; the three unlisted are refused');
+  ('ec000000-0000-0000-0000-000000000002'::uuid,'ec000000-0000-0000-0000-000000000002'::uuid,'20000000-0000-0000-0000-000000000001'::uuid,'toolset','terminal','true','I need a shell.','refused',true)$$,
+ 'two proposals wait, trimmed, each naming the Agent it would change and who proposed it; the two unlisted are refused');
 select results_eq($$select actor_id,actor_kind,agent_id,details->>'setting',details->'new',details->>'private',details->>'teller' from public.company_log where action='agent_change_proposed' order by id$$,
  $$values ('ec000000-0000-0000-0000-000000000004'::uuid,'agent','ec000000-0000-0000-0000-000000000004'::uuid,'model','"anthropic/claude-sonnet-5-5"'::jsonb,'owners','20000000-0000-0000-0000-000000000002'),
   ('ec000000-0000-0000-0000-000000000002'::uuid,'agent','ec000000-0000-0000-0000-000000000004'::uuid,'instructions',null::jsonb,'owners','20000000-0000-0000-0000-000000000001')$$,
@@ -73,7 +72,7 @@ insert into seen select 3,(select count(*) from public.agent_change_proposals),(
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 insert into seen select 4,(select count(*) from public.agent_change_proposals),(select count(*) from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_change');
 reset role;
-select results_eq('select n,proposals,waiting from seen order by n',$$values (1,5,2),(2,1,0),(3,0,0),(4,0,0)$$,
+select results_eq('select n,proposals,waiting from seen order by n',$$values (1,4,2),(2,1,0),(3,0,0),(4,0,0)$$,
  'the Owner reads every proposal and has the two waiting ones; the Manager reads the one from their Conversation and has none waiting; the others read none');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 set local role authenticated;
@@ -97,7 +96,7 @@ select throws_ok($$select public.answer_agent_change(current_setting('test.c')::
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true)$$,'22023','agentChangeNotClaimed','an approval is marked only after the Owner claimed it for the Engine write');
 select throws_ok($$select public.claim_agent_change('10000000-0000-0000-0000-000000000003',current_setting('test.model')::bigint)$$,'P0002','agentChangeNotFound','a proposal is claimed in its own Company only');
 select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint),
- jsonb_build_object('state','claimed','agent','ec000000-0000-0000-0000-000000000004','change','model','setting',null,'value','anthropic/claude-sonnet-5-5'),'the Owner claims one, with what to write to which Agent');
+ jsonb_build_object('state','claimed','retry',false,'agent','ec000000-0000-0000-0000-000000000004','change','model','setting',null,'value','anthropic/claude-sonnet-5-5'),'the Owner claims one, with what to write to which Agent');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,false,'No')$$,'22023','agentChangeApplying','it cannot be declined while its approval is being written');
 select is((select count(*)::int from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_change'),2,'it still waits on the Owner, so an approval whose outcome was lost can be sent again');
 select lives_ok($$select public.release_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)$$,'a write refused before it reached the Engine gives the claim back');
@@ -105,15 +104,29 @@ reset role;
 select is((select state from public.agent_change_proposals where id=current_setting('test.model')::bigint),'waiting','and the proposal waits again');
 set local role authenticated;
 select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)->>'state','claimed','it is claimed again');
+select is((public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)->>'retry')::boolean,true,'a claim taken again says so, so the app never gives it back');
 select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true),'approved','the Owner approves one');
 select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true),'approved','and approving again answers the same');
 select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint),jsonb_build_object('state','approved'),'an approved proposal is never claimed again');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,false)$$,'22023','agentChangeAnswered','but it cannot then be declined');
+-- Another Owner's fresh claim answers busy; once it is two minutes old the proposal may be declined, saying an earlier
+-- approval may have reached the Engine.
+select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint)->>'state','claimed','the second proposal is claimed');
+reset role;
+update public.agent_change_proposals set claimed_by='20000000-0000-0000-0000-000000000002' where id=current_setting('test.soul')::bigint;
+set local role authenticated;
+select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint)->>'state','busy','another approval being written answers busy');
+select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,true)$$,'22023','agentChangeBusy','and an approval of a claim taken over is busy, never answered');
+reset role;
+update public.agent_change_proposals set claimed_at=now()-interval '3 minutes' where id=current_setting('test.soul')::bigint;
+set local role authenticated;
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,repeat('x',1001))$$,'22023','agentChangeReasonLong','a reason over 1,000 characters is refused');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,'  ')$$,'22023','agentChangeReasonMissing','a team''s Owner declines only with a reason');
 select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,' Keep it as it is this month. '),'declined','and declines the other, with a reason');
 select is((select count(*)::int from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_change'),0,'nothing waits any more');
 reset role;
+select results_eq($$select maybe_applied from public.agent_change_proposals where id in (current_setting('test.model')::bigint,current_setting('test.soul')::bigint) order by id$$,
+ $$values (false),(true)$$,'a decline of a stale claim says its earlier approval may have reached the Engine');
 select results_eq($$select state,answered_by,answer from public.agent_change_proposals where id in (current_setting('test.model')::bigint,current_setting('test.soul')::bigint) order by id$$,
  $$values ('approved','20000000-0000-0000-0000-000000000001'::uuid,null::text),('declined','20000000-0000-0000-0000-000000000001'::uuid,'Keep it as it is this month.')$$,
  'each answer names the Owner, and the decline keeps its reason');

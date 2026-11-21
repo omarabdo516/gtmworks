@@ -71,7 +71,7 @@ test('arguments that do not read are ignored, and nothing is asked of the databa
 });
 
 test('the database\'s list of settings is #125\'s list, so nothing outside it can wait for an Owner',()=>{
- const migration=readFileSync(new URL('../supabase/migrations/20270414000000_agent_change_proposals.sql',import.meta.url),'utf8');
+ const migration=readFileSync(new URL('../supabase/migrations/20270415000000_agent_change_proposals.sql',import.meta.url),'utf8');
  const listed=/when 'setting' then setting in \(([^)]*)\)/.exec(migration)?.[1]?.match(/'[^']+'/g)?.map(value=>value.slice(1,-1));
  assert.deepEqual(listed,engineSettings.map(entry=>entry.key).filter(key=>key!=='model'));
 });
@@ -107,8 +107,8 @@ function owner(proposals,{isOwner=true,answer=null,busy=false}={}) {
     if(!row) return {data:null,error:{code:'P0002',message:'agentChangeNotFound'}};
     if(row.state!=='waiting'&&row.state!=='applying') return {data:{state:row.state},error:null};
     if(busy) return {data:{state:'busy'},error:null};
-    row.state='applying';
-    return {data:{state:'claimed',agent:row.agent_id,change:row.change,setting:row.setting,value:row.value},error:null};
+    const retry=row.state==='applying'; row.state='applying';
+    return {data:{state:'claimed',retry,agent:row.agent_id,change:row.change,setting:row.setting,value:row.value},error:null};
    }
    if(name==='release_agent_change') { const row=proposals.find(found=>found.id===args.proposal); if(row) row.state='waiting'; return {data:null,error:null}; }
    if(name==='answer_agent_change') return answer??{data:args.approve?'approved':'declined',error:null};
@@ -187,6 +187,17 @@ test('a change the writer refuses before any Engine write gives the claim back a
  } finally { await fake.close(); }
 });
 
+test('a claim taken again after an unconfirmed write is never given back, even when the next write is refused before the Engine',async()=>{
+ // The first approval reached the Engine but was never confirmed, so the proposal is still applying; now the Company has
+ // no Engine at all. The earlier write may hold, so the claim stays and a decline cannot say that nothing changed.
+ const pending={id:4,agent_id:ads,change:'model',setting:null,value:'openai/gpt-5',state:'applying'};
+ const {db,calls}=owner([pending]);
+ const noEngine={...db,rpc:async(name,args)=>name==='company_engine_target'?{data:[],error:null}:db.rpc(name,args)};
+ assert.deepEqual(await answerChange(noEngine,{company,proposal:4,approve:true,hermes:null}),{state:'notApplied',applied:'noEngine'});
+ assert.equal(pending.state,'applying');
+ assert.equal(calls.some(call=>call.name==='release_agent_change'),false);
+});
+
 test('only an Owner answers, an unknown proposal is not found, and an answered or busy one is never written again',async()=>{
  const engineless={company,hermes:null};
  const {model}=proposalsOf();
@@ -199,7 +210,7 @@ test('only an Owner answers, an unknown proposal is not found, and an answered o
  assert.deepEqual(await answerChange(done.db,{...engineless,proposal:1,approve:true}),{state:'approved'});
  assert.deepEqual(done.calls.map(call=>call.name),['is_company_owner','claim_agent_change'],'the Engine is not asked again');
  for(const [code,message,state] of [['42501','agentChangeNotAllowed','notAllowed'],['P0002','agentChangeNotFound','notFound'],['22023','agentChangeAnswered','answered'],
-  ['22023','agentChangeReasonLong','reasonLong'],['22023','agentChangeReasonMissing','reasonMissing'],['22023','agentChangeApplying','applying'],['22023','agentChangeAnswerMissing','failed'],['XX000','boom','failed']])
+  ['22023','agentChangeReasonLong','reasonLong'],['22023','agentChangeReasonMissing','reasonMissing'],['22023','agentChangeApplying','applying'],['22023','agentChangeBusy','busy'],['22023','agentChangeAnswerMissing','failed'],['XX000','boom','failed']])
   assert.deepEqual(await answerChange(owner([model],{answer:{data:null,error:{code,message}}}).db,{...engineless,proposal:1,approve:false,reason:'No'}),{state},`${code} ${message}`);
  const busy=owner([proposalsOf().model],{busy:true});
  assert.deepEqual(await answerChange(busy.db,{...engineless,proposal:1,approve:true}),{state:'busy'});
