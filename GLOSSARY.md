@@ -35,6 +35,10 @@ _Avoid_: default bot, assistant, orchestrator
 A Manager's or Contributor's ask for a new Agent, which the main Agent prepares in their Conversation and which waits in every Owner's "Waiting on you". An Owner makes it, exactly as when the Owner asks the main Agent, or says no with a reason that goes back to the Member's Conversation. Only an Owner makes Agents.
 _Avoid_: proposal, ticket
 
+**Handover / تسليم**:
+An Agent's ask to another Agent of the same Company for a job it needs done, made while it works for a person. Any Agent may hand over to any other Agent of its Company, in a Conversation or a channel, including an Agent outside that channel or one the person cannot talk to; the Agent asked may hand over in turn, with no limit on the chain. The Agent asked works with all its own tools but never speaks to the person: what it needs from them goes back in its answer. The answer always returns to the Agent that asked, which goes on with the job and replies; the person keeps talking to the Agent they started with. Each Handover shows where it happened as a quiet row naming both Agents, with the answer under the asked Agent's own name (Omar, 2026-11-20).
+_Avoid_: delegation, subagent, A2A, Handed to you
+
 **Run / تشغيل**:
 One attempt by an agent to work on one card in one company, with a short-lived credential limited to that card and run. A retry keeps the same card; execution happens outside gtmworks.
 
