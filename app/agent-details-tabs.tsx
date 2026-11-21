@@ -8,8 +8,9 @@ import { PageIcon } from '@/app/c/[slug]/log/icons';
 const Empty=({text}:{text:string})=><div className="panel-card"><p className="panel-empty">{text}</p></div>;
 
 // The details panel's tabs around the lists the server read (agent-details-server.tsx): a list left out is empty and
-// shows the reference's empty line. It imports no server code, so a component test draws the tabs as the server does.
-export function detailsTabs({t,slug,agent,activity,tools,tasks,files,fileCount,library,memory,log,logCount}:{t:I18n['t'],slug:string,agent:string,activity?:ReactNode,tools?:ReactNode,tasks?:ReactNode,files?:ReactNode,fileCount:number,library?:ReactNode,memory?:ReactNode,log?:ReactNode,logCount:number}):Record<DetailsTab,ReactNode> {
+// shows the reference's empty line. The Agent's standing permissions (#166) close the Activity tab, as activityHTML ends
+// with permsHTML. It imports no server code, so a component test draws the tabs as the server does.
+export function detailsTabs({t,slug,agent,activity,tools,permissions,tasks,files,fileCount,library,memory,log,logCount}:{t:I18n['t'],slug:string,agent:string,activity?:ReactNode,tools?:ReactNode,permissions?:ReactNode,tasks?:ReactNode,files?:ReactNode,fileCount:number,library?:ReactNode,memory?:ReactNode,log?:ReactNode,logCount:number}):Record<DetailsTab,ReactNode> {
  // design-reference: screenSecHTML. The pinned Engine shows no Agent's screen, and gtmworks keeps the browser and
  // computer tools off (lib/agent-levels.mjs), so the screen is always the reference's asleep frame: not a button.
  const screen=<section className="dp-sec" aria-labelledby="scr-h"><h3 className="dp-label"><span id="scr-h">{t('agentScreen')}</span></h3>
@@ -18,7 +19,7 @@ export function detailsTabs({t,slug,agent,activity,tools,tasks,files,fileCount,l
    <span className="scr__body"><span className="scr__off"><ShellIcon name="moon"/><span>{t('agentScreenOff')}</span></span></span>
   </div></div></div></section>;
  return {
-  activity:<>{screen}<section className="dp-sec"><h3 className="dp-label"><span>{t('agentLatestActivity')}</span></h3>{activity??<Empty text={t('agentActivityEmpty')}/>}</section>{tools}</>,
+  activity:<>{screen}<section className="dp-sec"><h3 className="dp-label"><span>{t('agentLatestActivity')}</span></h3>{activity??<Empty text={t('agentActivityEmpty')}/>}</section>{tools}{permissions}</>,
   tasks:tasks??<section className="dp-sec"><Empty text={t('agentTasksEmpty')}/></section>,
   // design-reference: filesTabHTML, without its Add button, which is not built: the Agent's Library (#194) above the
   // files of its Cards and of the reader's own Conversations with it.

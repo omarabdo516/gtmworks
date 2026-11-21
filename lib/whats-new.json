@@ -1,5 +1,11 @@
 [
  {
+  "issue": 166,
+  "date": "2026-11-21",
+  "en": { "title": "See and revoke what an Agent may do without asking", "body": "An Agent’s settings and the end of its Activity tab now list its standing permissions, every action someone answered with Always allow, with who allowed it and when; an Owner or a Manager can revoke one, and the Agent asks again next time." },
+  "ar": { "title": "شوف والغي اللي الوكيل يقدر يعمله من غير ما يستأذن", "body": "إعدادات الوكيل وآخر تبويب النشاط بقوا بيعرضوا صلاحياته الدايمة، كل حاجة حد رد عليها بـ«اسمح دايماً»، ومين سمح بيها وإمتى؛ والمالك أو المدير يقدر يلغي أي واحدة، والوكيل هيستأذن تاني المرة الجاية." }
+ },
+ {
   "issue": 132,
   "date": "2026-11-21",
   "en": { "title": "The chat moves as it was designed", "body": "A message that arrives while the chat is open rises gently into place, the working line breathes while the Agent works, and the send arrow takes off when you send." },

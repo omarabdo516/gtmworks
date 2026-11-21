@@ -43,6 +43,8 @@ import { AgentTabs } from './settings-agent-tabs';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
 import type { MemoryNote } from '@/lib/engine.mjs';
 import { BackupSection } from './settings-backup';
+import { StandingPermissions } from './standing-permissions';
+import { readAgentPermissions, type StandingPermission } from '@/lib/standing-permissions.mjs';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
@@ -101,6 +103,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The Agent's voice is its own profile's settings too (#162): the language it listens in, the voice of its provider and
  // the speed, read with the Engine's own defaults. Listen is the Engine speaking with them, asked for from the page.
  const [about,skills,how,voice]=agent&&tab==='settings'?await Promise.all([readAgentAbout(db,{company:company.id,agent:agent.id}),readAgentSkills(db,{company:company.id,agent:agent.id}),readAgentInstructions(db,{company:company.id,agent:agent.id}),readAgentVoice(db,{company:company.id,agent:agent.id})]):[null,null,null,null];
+ // What the Agent may do without asking again (#166): its own Engine profile's standing permissions, with who allowed
+ // each, for every Role that sees it. An Engine that cannot be read draws no section, as an empty list does.
+ const permissions=agent&&tab==='settings'?await readAgentPermissions(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed',permissions:null})):null;
  // The Agent's own model choices (#29), from the Engine for that Agent's profile, so its "Thinks with" rows can change it.
  const agentModel=agent&&tab==='settings'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,agent:agent.id,owner}); } catch { return {models:null}; } })():null;
  // The memory tab (#193) draws the same AgentMemory as the details panel from this Agent's own Engine profile (#350); an
@@ -117,7 +122,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} agentLevel={agentLevel} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} permissions={permissions?.permissions??[]} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
@@ -184,7 +189,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner}:{t:T
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,owner,canManage,canWrite,learning}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,permissions,owner,canManage,canWrite,learning}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,permissions:StandingPermission[],owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
@@ -265,6 +270,8 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
       </ul>}
     </section>
     <SoonSec t={t} id="set-h-settingsTools" label={t('settingsTools')}/>
+    {/* design-reference: settingsHTML, permsHTML after Tools (#166). */}
+    <StandingPermissions key={agent.id} company={company} agent={agent.id} permissions={permissions} canRevoke={canManage}/>
     {/* The Agent's own Skills and their switches (#180); the Company's shared skills stay on the team's Skills page. */}
     <AgentSkills agent={agent.id} name={agent.name} slug={slug} learning={learning} skills={skills?.state==='found'?skills.skills:null} editable={skillsEditable}/>
     {owner&&<section className="dp-sec" aria-labelledby="set-h-danger"><Label id="set-h-danger">{t('settingsDanger')}</Label><ul className="panel-card">

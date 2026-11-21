@@ -140,6 +140,15 @@ export const screens = {
   // th-seo card as permission-card's. Built: a channel whose Agent's Run waits on the signed-in Member (pass --built-path).
   'permission-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { waitFor: '[data-action="approve"]' }, { scrollTo: '.card__actions' }] }, builtPath: null,
    builtSteps: [{ waitFor: '[id^="permission-"] .card__actions' }, { scrollTo: '[id^="permission-"] .card__actions' }] },
+  // #166. An Agent's standing permissions: on the reference, Always allow on the SEO article chat's approval (th-seo)
+  // gives SEO its one standing permission, then SEO's details on Activity end with it, and its settings page shows it
+  // after Tools. Built: an Agent whose own profile keeps an entry an Always allow put there (pass --built-path).
+  'standing-activity': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { click: '[data-action="approve"][data-decision="always"]' },
+   { click: '#sb-agents [data-action="open-agent"][data-agent="seo"]' }, { waitFor: '#details [data-action="revoke"]' }, { scrollTo: '#details [data-action="revoke"]' }] }, builtPath: null,
+   builtSteps: [{ waitFor: '.details .sp' }, { scrollTo: '.details .sp' }] },
+  'standing-settings': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { click: '[data-action="approve"][data-decision="always"]' },
+   ...settingsSection('agents'), { click: '#sov-ag-seo' }, { waitFor: '#sov [data-action="revoke"]' }, { scrollTo: '#sov [data-action="revoke"]' }] }, builtPath: null,
+   builtSteps: [{ waitFor: '#sov-agent-panel .sp' }, { scrollTo: '#sov-agent-panel .sp' }] },
   // #203. The weekly report chat (th-report): Analyst's reply with the card asking to connect an app, open. Built: the
   // fixture's connectConversation (pass --built-path).
   'connect-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-report"]' }, { waitFor: '[data-action="connect"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },

@@ -1069,3 +1069,7 @@
   .gw .chg-card .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); }
   .gw .chg-card .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); }
 }
+
+/* #166: an Agent's standing permission names an entry the Engine wrote, which may be long and unbroken. */
+.sp-entry, .sp-tool { overflow-wrap: anywhere; }
+.sp-by[data-utc] { visibility: hidden; }

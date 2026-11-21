@@ -1354,5 +1354,14 @@
   "updateReload": "Reload",
   "updateRequestFailed": "The update couldn’t be asked for. Try again.",
   "updateButtonOff": "Update now is turned off on this server. Ask whoever installed gtmworks to run: gtmworks update",
-  "updateFailedRecently": "The last update failed less than an hour ago. Try again later, or ask whoever installed gtmworks to run: gtmworks status"
+  "updateFailedRecently": "The last update failed less than an hour ago. Try again later, or ask whoever installed gtmworks to run: gtmworks status",
+  "agentStandingPermissions": "Standing permissions",
+  "agentPermissionRevoke": "Revoke",
+  "agentPermissionRevokeLabel": "Revoke: {0}",
+  "agentPermissionAllowedBy": "Allowed by {0} · {1}",
+  "agentPermissionRevoked": "Permission revoked. The agent will ask you again",
+  "agentPermissionRevokeFailed": "Couldn’t revoke it. Try again.",
+  "logActPermissionRevoked": "revoked a permission of {0}",
+  "logPermissionStanding": "Standing",
+  "logPermissionAsksAgain": "Will ask again"
 }

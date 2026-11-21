@@ -12,7 +12,8 @@ export type RunInputMessage={role:'user',content:RunInputPart[]};
 export type RunInput=string|RunInputMessage[];
 export type RunQuestion={id:string,text:string,choices:string[],multiple:boolean};
 export type PermissionChoice='once'|'always'|'deny';
-export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[]};
+// `allows` is what an "always" answer keeps among the profile's standing permissions (#166), none when it is not offered.
+export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[],allows?:string[]};
 export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,noModel?:true,modelRefused?:'credit'|'key'|'model'};
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
 export type AnsweredPermission='answered'|'gone'|'unreachable';
@@ -45,6 +46,10 @@ export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed'};
 // One note rewritten or removed by the Engine's own id (#191); a note that changed since it was read is `stale`.
 export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed'};
 export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed'};
+// An Agent's standing permissions (#166): its own profile's entries, each as the Engine keeps it; revoking one is
+// revoked (read back without it), gone (it was not there), or why it could not be done.
+export type StandingPermissions={state:'found',entries:string[]}|{state:'refused'|'unreachable'|'failed',entries:null};
+export type StandingRevoke={state:'revoked'|'gone'|'refused'|'unreachable'|'failed'};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
