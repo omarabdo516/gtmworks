@@ -141,9 +141,16 @@ test('in the general channel a Viewer sees the working line breathe and the repl
   const reply=page.locator('.turn--agent').filter({hasText:'Reply to:'});
   await expect(reply).toBeVisible({timeout:30000});
   expect(await motionOf(reply)).toEqual(rises);
-  // The channel is read again (its next poll) and the reply does not rise a second time.
-  await page.waitForResponse(response=>response.url().includes('/api/channels?company=')&&response.request().method()==='GET',{timeout:15000});
-  await page.waitForResponse(response=>response.url().includes('/api/channels?company=')&&response.request().method()==='GET',{timeout:15000});
+  // Both pages have the reply and its rise; then each reads the channel again (two successful polls, drawn and a frame
+  // past) and the reply does not rise a second time.
+  await expect(caller.page.locator('.turn--agent').filter({hasText:'Reply to:'})).toBeVisible({timeout:30000});
+  await expect.poll(()=>starts(page,'gw-rise','Reply to:')).toBe(1);
+  await expect.poll(()=>starts(caller.page,'gw-rise','Reply to:')).toBe(1);
+  const read=(on:Page)=>on.waitForResponse(response=>response.url().includes('/api/channels?company=')&&response.request().method()==='GET'&&response.ok(),{timeout:15000});
+  for(const on of [page,caller.page]) {
+   await read(on); await read(on);
+   await on.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  }
   expect(await starts(page,'gw-rise','Reply to:')).toBe(1);
   expect(await starts(caller.page,'gw-rise','Reply to:')).toBe(1);
   await expect(page.locator('.composer__send')).toHaveCount(0);

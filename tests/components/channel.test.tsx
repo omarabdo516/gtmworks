@@ -446,3 +446,17 @@ test('a Viewer sees the working line breathe and the reply rise once when it arr
  expect(screen.container.querySelector('.composer__send')).toBeNull();
  expect(flew).toEqual([]);
 });
+
+// #132: a called Agent's question that arrives while the channel is open: its card turn rises, though the Agent was
+// already called when the channel opened.
+test('a question the called Agent asks while the channel is open rises in its own turn', async () => {
+ const question = { id: 31, kind: 'question' as const, title: 'Which angle first?', question: 'Which angle first?', choices: ['Graduates', 'Parents'], multiple: false, state: 'open' as const, chips: false };
+ const asking: ChannelMessage = { id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, files: [], mention: { agent: 'Lead', face: 'c-1', state: 'open', permissions: [], questions: [question] } };
+ // The channel's own first read still has no question; the next one brings it.
+ const reads = [record([called('open')])];
+ vi.stubGlobal('fetch', async () => new Response(JSON.stringify(reads.shift() ?? record([asking]))));
+ const screen = await render(<div className="gw"><LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-1" initial={record([called('open')])}/></LanguageProvider></div>);
+ await expect.element(screen.getByText('Which angle first?').first(), { timeout: 5000 }).toBeVisible();
+ const turn = screen.getByText('Which angle first?').first().element().closest('.turns > li')!;
+ expect(turn.classList.contains('msg-in')).toBe(true);
+});

@@ -33,7 +33,9 @@ const roleKeys={owner:'owner',manager:'manager',contributor:'contributor',viewer
 const mentionsOf=(message:ChannelMessage):ChannelMention[]=>message.author==='person'?message.mentions??(message.mention?[message.mention]:[]):[];
 
 // What each drawn message, and the cards turn under a person's message, is known by for its rise (lib/arrivals).
-const arrivals=(messages:ChannelMessage[]):Arrival[]=>messages.flatMap(message=>[`${message.author}:${message.id}`,...mentionsOf(message).map(mention=>`${message.author}:${message.id}:${mention.agent}`)]).map(key=>({key,element:key}));
+// A card turn is known only once it is drawn: a called Agent with no question or request yet has none, so the first one
+// to arrive rises.
+const arrivals=(messages:ChannelMessage[]):Arrival[]=>messages.flatMap(message=>[`${message.author}:${message.id}`,...mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=>`${message.author}:${message.id}:${mention.agent}`)]).map(key=>({key,element:key}));
 
 // Agent names inside a sentence, each isolated so a name in the other script never flips the text around it.
 const Names=({agents,c}:{agents:ChannelAgent[],c:Say})=><>{agents.map((agent,index)=><Fragment key={agent.id}>{index>0&&c('channelNamesJoin')}<bdi>{agent.name}</bdi></Fragment>)}</>;
