@@ -41,6 +41,7 @@ function fixPublishingDates(baseURL: string | undefined) {
 const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
+const change = (n: number) => `69200000-0000-0000-0000-00000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string }> = {
   // The general channel (#24): the Manager's note, Omar asking Lead, and Lead's answer.
   channel: {
@@ -81,6 +82,23 @@ const screenStates: Record<string, { set: string, unset: string }> = {
       delete from public.conversation_messages where conversation_id in ('${busy(6)}','${busy(8)}');
       delete from public.conversations where id in ('${busy(6)}','${busy(8)}');
       delete from public.hermes_agents where id in ('${busy(4)}','${busy(5)}');`,
+  },
+  // Omar's chat with Lead, in which Lead proposed a faster model for Analyst, waiting on his OK (#19).
+  'change-proposal': {
+    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+       ('${change(1)}','${rsLearning}','${change(5)}','Lead','General',true,'visual-change-lead'),
+       ('${change(2)}','${rsLearning}','${change(6)}','Analyst','Numbers',false,'visual-change-analyst');
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${change(3)}','${rsLearning}','${omar}','${change(1)}','Lead','2026-06-10T11:26:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${change(3)}','person','${omar}',null,'عمر','تقرير آخر 90 يوم لسه مخلصش؟ كنت محتاجه قبل اجتماع بكرة.','${change(4)}','visual-change','2026-06-10T11:26:00Z'),
+       ('${rsLearning}','${change(3)}','agent',null,'${change(1)}','Lead','Analyst لسه شغال عليه، والمرة اللي فاتت اتأخر ساعة عن ميعاده. اقترحت نغيّر موديله، ومش هيحصل غير بموافقة المالك.',null,'visual-change','2026-06-10T11:30:00Z');
+      insert into public.agent_change_proposals(company_id,conversation_id,run_id,call_id,agent_id,proposed_by,asked_by,change,value,reason,created_at) values
+       ('${rsLearning}','${change(3)}','visual-change','call-0','${change(2)}','${change(1)}','${omar}','model','"google/gemini-2.5-pro"',
+        'تقرير الـ 90 يوم بيقرا أرقام كتير وبيتأخر عن ميعاده. Gemini 2.5 Pro أسرع في الأرقام الكبيرة.','2026-06-10T11:30:00Z');`,
+    unset: `delete from public.agent_change_proposals where conversation_id='${change(3)}';
+      delete from public.conversation_messages where conversation_id='${change(3)}';
+      delete from public.conversations where id='${change(3)}';
+      delete from public.hermes_agents where id in ('${change(1)}','${change(2)}');`,
   },
 };
 for (const screen of screens) if (screen.state && !screenStates[screen.state]) throw new Error(`${screen.name}: no state "${screen.state}"`);

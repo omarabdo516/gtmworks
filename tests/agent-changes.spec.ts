@@ -100,7 +100,8 @@ test('the Owner approves one, which the Engine then holds in that Agent\'s profi
  await soul.getByRole('button',{name:'Decline'}).click();
  await expect(page.locator('.chg-card')).toHaveCount(0);
  expect(fake.settings.profiles.get(writerProfile)?.soul).toBe('You write long posts.');
- expect(engineWrites()).toEqual([`/api/profiles/${writerProfile}/model`],'a decline writes nothing');
+ // A decline writes nothing.
+ expect(engineWrites()).toEqual([`/api/profiles/${writerProfile}/model`]);
  expect(proposals()).toEqual([
   {change:'model',setting:null,state:'approved',answered_by:omar,answer:null},
   {change:'instructions',setting:null,state:'declined',answered_by:omar,answer:reason},
