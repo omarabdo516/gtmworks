@@ -38,7 +38,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
  type HandedRow={run_id:string,goal:string,state:string,answers_person:boolean,created_at:string,to_agent:{id:string,name:string,connection_id:string}|null};
  type Face={id:string,connection_id:string,name:string};
- type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,reason:string,state:ChangeProposalView['state'],answered_at:string|null,answer:string|null,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
+ type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
  const [{ends,messages,queued,requestRows,madeRows,handedRows,changeRows},notes,replyRows,rows,files,{data:working},{data:me},card]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
@@ -66,13 +66,14 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const states=apps&&found.agent_id&&replyRows.some(row=>row.kind==='connect'&&row.state==='open')?await apps(found.agent_id):null;
  const {data:isOwner}=asksForApps?await db.rpc('is_company_owner',{c:company}):{data:false};
  const connect=asksForApps?{owner:isOwner===true,owners:isOwner===true?[]:await ownerNames(db,company)}:null;
- const changeWaits=changeRows.some(row=>row.state==='waiting');
+ // A proposal whose approval is being written still waits on the Owner, who approves it again to finish it.
+ const changeWaits=changeRows.some(row=>row.state==='waiting'||row.state==='applying');
  const owners=requestRows.some(row=>row.state==='waiting')||changeWaits?await ownerNames(db,company):[];
  // The Owner answers a proposal from the chat too (design-reference: chgHTML), so the record says whether this person is one.
- const {data:ownsChanges}=changeWaits?await db.rpc('is_company_owner',{c:company}):{data:false};
+ const [{data:ownsChanges},{data:mode}]=changeWaits?await Promise.all([db.rpc('is_company_owner',{c:company}),db.from('companies').select('work_mode').eq('id',company).maybeSingle()]):[{data:false},{data:null}];
  const changeView=(row:ChangeRow&{agent:Face,by:Face}):ChangeProposalView=>{
   const base={id:row.id,change:row.change,setting:row.setting,value:row.value,reason:row.reason,agent:row.agent,by:row.by};
-  if(row.state==='waiting') return {...base,state:'waiting',owners};
+  if(row.state==='waiting'||row.state==='applying') return {...base,state:'waiting',owners};
   if(row.state==='refused') return {...base,state:'refused'};
   const by=row.answerer?.name||''; const at=row.answered_at||row.created_at;
   return row.state==='approved'?{...base,state:'approved',answeredBy:by,at}:{...base,state:'declined',answeredBy:by,at,answer:row.answer};
@@ -132,7 +133,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),
   ...(permit?{permit:permit as PermissionChoice[]}:{}),
   ...(connect?{connect}:{}),
-  ...(ownsChanges===true?{changeOwner:true as const}:{}),
+  ...(ownsChanges===true?{changeOwner:true as const,...((mode as {work_mode?:string}|null)?.work_mode==='alone'?{alone:true as const}:{})}:{}),
   failed:ended!==null,
   ...(ended==='no_model'?{noModel:{owner:ownsIt===true}}:{}),
   ...(reason?{modelRefused:{reason,owner:ownsIt===true}}:{}),

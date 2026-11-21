@@ -18,7 +18,13 @@ select json_build_object(
   and not has_function_privilege('anon','public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text)','execute')
   and has_function_privilege('authenticated','public.answer_agent_change(uuid,bigint,boolean,text)','execute')
   and not has_function_privilege('anon','public.answer_agent_change(uuid,bigint,boolean,text)','execute')
-  and not has_function_privilege('service_role','public.answer_agent_change(uuid,bigint,boolean,text)','execute'),
+  and not has_function_privilege('service_role','public.answer_agent_change(uuid,bigint,boolean,text)','execute')
+  and has_function_privilege('authenticated','public.claim_agent_change(uuid,bigint)','execute')
+  and not has_function_privilege('anon','public.claim_agent_change(uuid,bigint)','execute')
+  and has_function_privilege('authenticated','public.release_agent_change(uuid,bigint)','execute')
+  and not has_function_privilege('anon','public.release_agent_change(uuid,bigint)','execute'),
+ 'claimed_before_approved',exists(select 1 from pg_constraint where conrelid='public.agent_change_proposals'::regclass and conname='agent_change_proposals_claimed')
+  and position('claimed_by=auth.uid()' in pg_get_functiondef('public.answer_agent_change(uuid,bigint,boolean,text)'::regprocedure))>0,
  'helpers_private',(select bool_and(not has_function_privilege(r,'public.agent_change_listed(text,text)','execute')
    and not has_function_privilege(r,'public.agent_change_value_valid(text,jsonb)','execute')
    and not has_function_privilege(r,'public.may_propose_agent_change(uuid,uuid,uuid)','execute')) from unnest(array['anon','authenticated','service_role']) r),

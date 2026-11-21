@@ -50,7 +50,10 @@ export const answerAgentRequest=withActionLog('answerAgentRequest',async functio
 // (lib/agent-changes.mjs). The reason is never logged: a failure line names only the action and the answer's state.
 export const answerAgentChange=withActionLog('answerAgentChange',async function answerAgentChange(form:FormData) {
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug'));
- const back=String(form.get('back')||''); const path=back.startsWith(`/c/${slug}/`)&&!back.includes('?')&&!back.includes('//')?back:`/c/${slug}/approvals`;
+ // Only the two places a proposal is answered from, in this Company: never another path, however it is spelled.
+ const back=String(form.get('back')||''); const uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+ const place=/^[a-z0-9-]{1,100}$/.test(slug)&&new RegExp(`^/c/${slug}/(?:conversations/${uuid}|chat(?:/${uuid})?)$`).test(back);
+ const path=place?back:`/c/${slug}/approvals`;
  const {state}=!await actionAllowed(db,'answerAgentChange',company)?{state:'notAllowed'}:await answerChange(db,{company,proposal:Number(form.get('proposal')),approve:form.get('intent')==='approve',reason:String(form.get('reason')||'')});
  // An approved model or setting changes what the Agent's settings page and the chat read: the whole frame is refreshed.
  revalidatePath(`/c/${slug}`,'layout');

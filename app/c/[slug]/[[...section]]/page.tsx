@@ -63,7 +63,8 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const invitedEmail=typeof invitation?.email==='string'?invitation.email:undefined;
  const waitingFailures:Record<string,string>={rule:'waitingRuleFailed','request-engineNotReady':'waitingRequestNotReady','request-engineUnreachable':'waitingRequestUnreachable',
   'request-notMade':'waitingRequestNotMade','request-answered':'waitingRequestAnswered','request-notFound':'waitingRequestAnswered','request-reasonMissing':'waitingRequestReasonMissing',
-  'change-notApplied':'waitingChangeNotApplied','change-answered':'waitingChangeAnswered','change-notFound':'waitingChangeAnswered','change-reasonLong':'waitingChangeReasonLong'};
+  'change-notApplied':'waitingChangeNotApplied','change-answered':'waitingChangeAnswered','change-notFound':'waitingChangeAnswered','change-reasonLong':'waitingChangeReasonLong',
+  'change-cannotApply':'waitingChangeCannotApply','change-applying':'waitingChangeApplying','change-busy':'waitingChangeBusy','change-reasonMissing':'waitingChangeReasonMissing'};
  const failed=query.failed||''; const waitingFailure=Object.hasOwn(waitingFailures,failed)?t(waitingFailures[failed]):failed.startsWith('request-')?t('waitingRequestFailed'):failed.startsWith('change-')?t('waitingChangeFailed'):message;
  const {steps,cards:myCards,visible:myVisibleCards,items:waitingItems,count:waitingCount,available:approvalsAvailable}=await approvalQueue(db,company.id,user.id,membership?.role || '');
  const isWork=section.startsWith('work/')||section==='settings/work';

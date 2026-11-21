@@ -1,8 +1,9 @@
 -- #19: an Agent proposes a change to its own settings, or Lead to another Agent's (decision 2026-11-16, ADR 0016: the
 -- profile is the Agent, so a proposal names a real setting of that Agent's Engine profile). The call is kept as one row
 -- with what would change, the reason and its state, and nothing changes on the Engine until an active Owner approves it
--- from "Waiting on you"; the app then writes it through #125's writers to that Agent's own profile, reads it back, and
--- only then marks it approved (lib/agent-changes.mjs). A refusal writes nothing. A proposal for something that is not on
+-- from "Waiting on you": the app claims it first (claim_agent_change, state 'applying', so no other answer can land while
+-- the Engine is written), writes it through #125's writers to that Agent's own profile, reads it back, and only then
+-- marks it approved (lib/agent-changes.mjs). A refusal writes nothing. A proposal for something that is not on
 -- the list is kept as refused at once and waits on nobody.
 --
 -- What can be proposed, by `change`:
@@ -59,9 +60,12 @@ create table public.agent_change_proposals (
  setting text constraint agent_change_proposals_setting check (setting is null or setting ~ '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}$'),
  value jsonb not null,
  reason text not null constraint agent_change_proposals_reason check (length(btrim(reason)) between 1 and 500),
- state text not null default 'waiting' constraint agent_change_proposals_state check (state in ('waiting','approved','declined','refused')),
+ state text not null default 'waiting' constraint agent_change_proposals_state check (state in ('waiting','applying','approved','declined','refused')),
  answered_by uuid references public.people(id),
  answered_at timestamptz,
+ -- The Owner whose approval is being written to the Engine, and since when (state 'applying').
+ claimed_by uuid references public.people(id),
+ claimed_at timestamptz,
  answer text constraint agent_change_proposals_answer_text check (answer is null or length(btrim(answer)) between 1 and 1000),
  created_at timestamptz not null default now(),
  unique (conversation_id,run_id,call_id),
@@ -69,9 +73,10 @@ create table public.agent_change_proposals (
  -- Only a listed change with a valid value ever waits or is approved; anything else is kept as refused, answered by nobody.
  constraint agent_change_proposals_listed check (state='refused' or (public.agent_change_listed(change,setting) and public.agent_change_value_valid(change,value))),
  constraint agent_change_proposals_answered check ((state in ('approved','declined'))=(answered_by is not null) and (answered_by is null)=(answered_at is null)
-  and (answer is null or state='declined'))
+  and (answer is null or state='declined')),
+ constraint agent_change_proposals_claimed check ((claimed_by is null)=(claimed_at is null) and (state<>'applying' or claimed_at is not null))
 );
-create index agent_change_proposals_waiting on public.agent_change_proposals(company_id,created_at) where state='waiting';
+create index agent_change_proposals_waiting on public.agent_change_proposals(company_id,created_at) where state in ('waiting','applying');
 
 -- The Company's Owners read every proposal; the person whose Conversation it came from reads it there, while they still
 -- see the Agent it would change.
@@ -144,10 +149,42 @@ end $$;
 revoke all on function public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text) from public,anon,authenticated;
 grant execute on function public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text) to service_role;
 
--- An Owner's answer. `approve` is called by the app once the change is written to the Agent's own profile and read back
--- (lib/agent-changes.mjs), so an approved row always names a change the Engine holds; a decline writes nothing to the
--- Engine and may carry the Owner's reason. The same answer again answers the same and logs nothing more; the other
--- answer, or an answer to a refused proposal, is refused.
+-- Approving is three steps, so no other answer lands while the Engine is written. claim_agent_change takes a waiting
+-- proposal for this Owner (state 'applying') and returns what to write; one already claimed is answered busy while its
+-- claim is under two minutes old, and taken over after that (its write may have been lost). The app then writes the
+-- Engine and, once the change is read back, answer_agent_change marks it approved. A claim whose write was refused before
+-- anything reached the Engine is given back (release_agent_change); one whose outcome is unknown stays applying, so the
+-- Owner approves it again, which writes nothing new, and a decline cannot claim that nothing changed meanwhile. An Owner
+-- calling these functions directly can mark a claimed proposal approved without the write; it is their own record.
+create function public.claim_agent_change(c uuid, proposal bigint) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare asked public.agent_change_proposals;
+begin
+ if not public.is_company_owner(c) then raise exception 'agentChangeNotAllowed' using errcode='42501'; end if;
+ select * into asked from public.agent_change_proposals p where p.id=proposal and p.company_id=c for update;
+ if not found then raise exception 'agentChangeNotFound' using errcode='P0002'; end if;
+ if asked.state in ('approved','declined','refused') then return jsonb_build_object('state',asked.state); end if;
+ if asked.state='applying' and asked.claimed_by is distinct from auth.uid() and asked.claimed_at>now()-interval '2 minutes' then
+  return jsonb_build_object('state','busy');
+ end if;
+ update public.agent_change_proposals set state='applying',claimed_by=auth.uid(),claimed_at=now() where id=asked.id;
+ return jsonb_build_object('state','claimed','agent',asked.agent_id,'change',asked.change,'setting',asked.setting,'value',asked.value);
+end $$;
+revoke all on function public.claim_agent_change(uuid,bigint) from public,anon,service_role;
+grant execute on function public.claim_agent_change(uuid,bigint) to authenticated;
+
+create function public.release_agent_change(c uuid, proposal bigint) returns void
+language sql security definer set search_path='' as $$
+ update public.agent_change_proposals set state='waiting',claimed_by=null,claimed_at=null
+  where id=proposal and company_id=c and state='applying' and claimed_by=auth.uid() and public.is_company_owner(c);
+$$;
+revoke all on function public.release_agent_change(uuid,bigint) from public,anon,service_role;
+grant execute on function public.release_agent_change(uuid,bigint) to authenticated;
+
+-- An Owner's answer: an approval marks a proposal this Owner claimed (its change now held by the Engine); a decline needs
+-- a waiting one, writes nothing to the Engine, and needs the Owner's reason unless the Company is one person working
+-- alone. The same answer again answers the same and logs nothing more; the other answer, an answer to a refused
+-- proposal, or a decline while an approval is being written, is refused.
 create function public.answer_agent_change(c uuid, proposal bigint, approve boolean, reason text default null) returns text
 language plpgsql security definer set search_path='' as $$
 declare asked public.agent_change_proposals; wanted text:=case when approve then 'approved' when not approve then 'declined' end;
@@ -158,8 +195,15 @@ begin
  select * into asked from public.agent_change_proposals p where p.id=proposal and p.company_id=c for update;
  if not found then raise exception 'agentChangeNotFound' using errcode='P0002'; end if;
  if asked.state=wanted then return wanted; end if;
- if asked.state<>'waiting' then raise exception 'agentChangeAnswered' using errcode='22023'; end if;
+ if approve and not (asked.state='applying' and asked.claimed_by=auth.uid()) then
+  raise exception '%',case when asked.state='waiting' then 'agentChangeNotClaimed' else 'agentChangeAnswered' end using errcode='22023';
+ end if;
+ if not approve and asked.state='applying' then raise exception 'agentChangeApplying' using errcode='22023'; end if;
+ if not approve and asked.state<>'waiting' then raise exception 'agentChangeAnswered' using errcode='22023'; end if;
  if said is not null and length(said)>1000 then raise exception 'agentChangeReasonLong' using errcode='22023'; end if;
+ if not approve and said is null and not exists(select 1 from public.companies co where co.id=c and co.work_mode='alone') then
+  raise exception 'agentChangeReasonMissing' using errcode='22023';
+ end if;
  update public.agent_change_proposals set state=wanted,answered_by=auth.uid(),answered_at=now(),answer=case when approve then null else said end where id=asked.id;
  perform public.log_agent_event(c,auth.uid(),null,asked.agent_id,case when approve then 'AGENT_CHANGE_APPROVED' else 'AGENT_CHANGE_DECLINED' end,
   jsonb_build_object('setting',coalesce(asked.setting,asked.change),'new',case when asked.change='instructions' then null else asked.value end,
@@ -225,7 +269,7 @@ language sql stable set search_path='' as $$
    from public.agent_change_proposals p
    join public.hermes_agents g on g.company_id=p.company_id and g.id=p.agent_id
    join public.hermes_agents b on b.company_id=p.company_id and b.id=p.proposed_by
-   where p.company_id=c and p.state='waiting' and public.is_company_owner(c)
+   where p.company_id=c and p.state in ('waiting','applying') and public.is_company_owner(c)
  ) x(kind,id,title,body,asked_by,card_id,conversation_id,created_at)
  order by created_at desc, id desc;
 $$;

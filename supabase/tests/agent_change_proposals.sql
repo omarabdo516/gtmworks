@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(44);
 -- #19: an Agent proposes a change to its own profile, or Lead to another Agent's, and the proposal waits for an Owner.
 -- The database keeps what would change, the reason and the state; a change that is not on the list is kept as refused
 -- and waits on nobody. Only an active Owner approves or declines, and both answers are logged.
@@ -94,10 +94,23 @@ select throws_ok($$select public.answer_agent_change('10000000-0000-0000-0000-00
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.refused')::bigint,true)$$,'22023','agentChangeAnswered','a refused proposal cannot be approved');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,999999,true)$$,'P0002','agentChangeNotFound','a proposal that does not exist is not found');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,null)$$,'22023','agentChangeAnswerMissing','an answer needs yes or no');
+select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true)$$,'22023','agentChangeNotClaimed','an approval is marked only after the Owner claimed it for the Engine write');
+select throws_ok($$select public.claim_agent_change('10000000-0000-0000-0000-000000000003',current_setting('test.model')::bigint)$$,'P0002','agentChangeNotFound','a proposal is claimed in its own Company only');
+select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint),
+ jsonb_build_object('state','claimed','agent','ec000000-0000-0000-0000-000000000004','change','model','setting',null,'value','anthropic/claude-sonnet-5-5'),'the Owner claims one, with what to write to which Agent');
+select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,false,'No')$$,'22023','agentChangeApplying','it cannot be declined while its approval is being written');
+select is((select count(*)::int from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_change'),2,'it still waits on the Owner, so an approval whose outcome was lost can be sent again');
+select lives_ok($$select public.release_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)$$,'a write refused before it reached the Engine gives the claim back');
+reset role;
+select is((select state from public.agent_change_proposals where id=current_setting('test.model')::bigint),'waiting','and the proposal waits again');
+set local role authenticated;
+select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)->>'state','claimed','it is claimed again');
 select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true),'approved','the Owner approves one');
 select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true),'approved','and approving again answers the same');
+select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint),jsonb_build_object('state','approved'),'an approved proposal is never claimed again');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,false)$$,'22023','agentChangeAnswered','but it cannot then be declined');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,repeat('x',1001))$$,'22023','agentChangeReasonLong','a reason over 1,000 characters is refused');
+select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,'  ')$$,'22023','agentChangeReasonMissing','a team''s Owner declines only with a reason');
 select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,' Keep it as it is this month. '),'declined','and declines the other, with a reason');
 select is((select count(*)::int from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_change'),0,'nothing waits any more');
 reset role;
