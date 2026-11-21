@@ -150,6 +150,23 @@ test('the night holds every run that ended since the previous morning, also one 
  } finally { await fake.close(); }
 });
 
+test('with a paused extra marked job left before it, the worker reads the one that is on, as Settings does', async () => {
+ const fake=await engine();
+ try {
+  const hermes=install(fake); const {db,recorded}=service();
+  const {routine:extra}=await dailyJob(fake);
+  const {routine:kept}=await dailyJob(fake);
+  fake.settings.cronReply='Good morning from the extra.';
+  await triggerRoutine(at(fake,leadProfile),{id:extra.id});
+  await pauseRoutine(at(fake,leadProfile),{id:extra.id});
+  fake.settings.cronReply='Good morning. Here is today.';
+  await new Promise(resolve=>setTimeout(resolve,5));
+  await triggerRoutine(at(fake,leadProfile),{id:kept.id});
+  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes}),1);
+  assert.deepEqual(recorded.map(row=>row.greeting),['Good morning. Here is today.']);
+ } finally { await fake.close(); }
+});
+
 test('a Routine merely named "Good morning" is not the daily job: only the marked one is read', async () => {
  const fake=await engine();
  try {
