@@ -65,6 +65,9 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `agent-screen` | The SEO Agent's chat, details on Activity: its screen card, asleep (#21). The product always shows the empty frame: the pinned Engine shows no Agent's screen | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `agent-tools` | The Ads Agent's details, Activity: "Connected tools", Meta Ads and Google Ads connected and GA4 not (#204) | none (needs an Agent with apps in its own Engine profile; pass `--built-path /c/rs-learning/chat/<its id>`) |
 | `agent-tools-manage` | The same, with Manage pressed: each connected row ends in Disconnect and the heading reads Done (#204) | none (as `agent-tools`) |
+| `agent-routines` | The Ads Agent's details, Activity: "Routines" with its count and rows, each with its schedule, next run, Run now and the switch (#205) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002` (needs the fixture's Ads on a profile of its own whose Engine holds Routines) |
+| `agent-routines-add` | The same, with Add pressed: the one-line field under the rows (#205) | as `agent-routines` |
+| `agent-routines-empty` | A newly made Agent's details, Activity: "No routines yet" and Try writing (#205) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000003` (the fixture's SEO & Content on a profile of its own with no Routine) |
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
 | `invite` | Settings, Company: "Invite a member", one invitation sent (its row marked Invite sent and the toast), then the form opened again (#185). The same steps run on the built page | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |

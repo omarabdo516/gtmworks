@@ -46,7 +46,9 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // Commands. Its keys are the reference's: Arrow keys move and wrap, Enter or Tab picks in place of the token with one
 // space after it, Escape closes and keeps the text, and Enter sends only when the list is closed. Opening the list
 // closes the "+" menu and the other way round. A note field draws the same list without Commands (app/card-sheet.tsx).
-export type MessageBoxHandle={insert:(sentence:string)=>void};
+// `insert` adds a sentence after what is typed; `fill` puts it in the field in place of what is typed (#205's "Try
+// writing", design-reference: the routine-example case), the caret at its end. Neither sends.
+export type MessageBoxHandle={insert:(sentence:string)=>void,fill:(sentence:string)=>void};
 // design-reference: flySend. On every send, a copy of the arrow starts over the button, in the open dialog that holds
 // the composer or the page, and leaves upward; it is gone 420 milliseconds later and never takes the pointer, the keyboard or a screen
 // reader's attention. With reduced motion there is none.
@@ -155,6 +157,11 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   if(busy) return;
   const next=text.trim()?`${text.trimEnd()}\n${sentence}`:sentence;
   caret.current=next.length; setText(next); setKey(newId()); setList(null);
+ },fill(sentence) {
+  if(busy) return;
+  // The same text draws nothing new, so the caret is put at its end here.
+  if(sentence===text) { const box=field.current; box?.focus(); box?.setSelectionRange(sentence.length,sentence.length); return; }
+  caret.current=sentence.length; setText(sentence); setKey(newId()); setList(null);
  }}),[busy,text]);
  // design-reference: insertAtCaret. While a message is on its way the box keeps it, so nothing is put in.
  function insertAtCaret(insert:string) {

@@ -1,7 +1,8 @@
-import { expect, test, vi } from 'vitest';
+import { expect, onTestFinished, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { Frame } from '@/app/frame';
+import { continuePage } from '@/lib/page-fade';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -9,11 +10,12 @@ import '@/app/shell.css';
 const route = vi.hoisted(() => ({ pathname: '/c/rs-learning/home' }));
 vi.mock('next/navigation', () => ({ usePathname: () => route.pathname }));
 
-// Links stay on the test page: a new page is the pathname changing, as the app's router changes it.
+// Links stay on the test page: a new page is the pathname changing, as the app's router changes it. Each route draws
+// a frame of its own (`segment`, its key).
 const stay = (event: { preventDefault: () => void }) => event.preventDefault();
-const frame = () => <LanguageProvider language="en"><Frame title="Home" sidebar={<nav aria-label="Navigation">
+const frame = (segment = '') => <LanguageProvider language="en"><Frame key={segment} title="Home" sidebar={<nav aria-label="Navigation">
  <a href="#chats" onClick={stay}>Chats</a><a href="#board" onClick={stay}>Marketing board</a><button type="button">Account menu</button>
-</nav>}><a href="#card" onClick={stay}>A card on the page</a></Frame></LanguageProvider>;
+</nav>}><main className="page"><a href="#card" onClick={stay}>A card on the page</a></main></Frame></LanguageProvider>;
 const show = async (width: number) => { route.pathname = '/c/rs-learning/home'; await page.viewport(width, 900); return render(frame()); };
 
 const sidebar = () => document.querySelector<HTMLElement>('.sidebar')!;
@@ -82,4 +84,91 @@ test('the sidebar holds the keyboard only while it covers the page', async () =>
  expect(await tabLeaves(), 'wide: Tab leaves the sidebar').toBe(true);
  await userEvent.keyboard('{Escape}');
  await expect.element(menu).toHaveAttribute('aria-expanded', 'false');
+});
+
+// Each animation that starts in the page, as the test names it.
+const watchStarts = (name: (event: AnimationEvent) => string) => {
+ const starts: string[] = [];
+ const listen = (event: AnimationEvent) => { starts.push(name(event)); };
+ document.addEventListener('animationstart', listen);
+ onTestFinished(() => document.removeEventListener('animationstart', listen));
+ return starts;
+};
+
+// Every page fades in once when it opens, as the reference's view does (#135, design-reference setView): a new pathname
+// replays the fadeIn of the page drawn in the page region, whether its route keeps the frame or draws a new one (`segment`); a redraw of the same
+// page (a poll, a save, the details panel) and a frame mounting again on the same page do not, and the sidebar and the
+// menu button never fade. Each test starts on a page of its own, since the frame remembers the page it last showed.
+const settle = async () => { await Promise.all(document.getAnimations().map(animation => animation.finished)); };
+test('a new page fades in once; a redraw, a frame drawn again on the same page and the sidebar do not', async () => {
+ const screen = await show(1440);
+ const starts = watchStarts(event => `${(event.target as Element).className.split(' ')[0]} ${event.animationName}`);
+ await settle();
+ starts.length = 0;
+ for (const [path, segment] of [['/c/rs-learning/work/board', 'board'], ['/c/rs-learning/work/list', 'board'], ['/c/rs-learning/numbers', 'numbers'], ['/c/rs-learning/log', 'log'], ['/c/rs-learning/conversations/7', 'conversation']]) {
+  route.pathname = path;
+  await screen.rerender(frame(segment));
+  await expect.poll(() => starts.length, { message: path }).toBe(1);
+  expect(starts.pop()).toBe('page gw-fade-in');
+  const style = getComputedStyle(content().querySelector('.page')!);
+  expect([style.animationDuration, style.animationTimingFunction]).toEqual(['0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);
+  await settle();
+  for (let redraw = 0; redraw < 3; redraw++) await screen.rerender(frame(segment));
+  await screen.rerender(frame(`${segment} again`));
+  await new Promise(resolve => setTimeout(resolve, 250));
+  expect(starts, `${path}: a redraw or a frame drawn again does not fade`).toEqual([]);
+ }
+ for (const part of [sidebar(), document.querySelector('.mobile-menu')!]) expect(getComputedStyle(part).animationName).toBe('none');
+ expect(getComputedStyle(sidebar()).opacity).toBe('1');
+});
+
+// A new chat whose first message starts its Conversation goes on as the same page (lib/page-fade), as the reference's
+// send() draws the thread without setView; the next page fades again.
+test('a new chat going on as its Conversation does not fade again, in its frame or a new one; the next page does', async () => {
+ const screen = await show(1440);
+ const starts = watchStarts(event => event.animationName);
+ route.pathname = '/c/rs-learning/chat/lead';
+ await screen.rerender(frame('chat'));
+ await expect.poll(() => starts).toEqual(['gw-fade-in']);
+ await settle();
+ starts.length = 0;
+ continuePage('/c/rs-learning/conversations/8');
+ route.pathname = '/c/rs-learning/conversations/8';
+ await screen.rerender(frame('chat'));
+ await new Promise(resolve => setTimeout(resolve, 250));
+ expect(starts, 'in the same frame').toEqual([]);
+ route.pathname = '/c/rs-learning/chat/nour';
+ await screen.rerender(frame('chat'));
+ await expect.poll(() => starts).toEqual(['gw-fade-in']);
+ await settle();
+ continuePage('/c/rs-learning/conversations/9');
+ route.pathname = '/c/rs-learning/conversations/9';
+ await screen.rerender(frame('conversation'));
+ await new Promise(resolve => setTimeout(resolve, 250));
+ expect(starts, 'in a frame of its own').toEqual(['gw-fade-in']);
+ expect(content().classList.contains('view-enter')).toBe(false);
+ route.pathname = '/c/rs-learning/conversations/10';
+ await screen.rerender(frame('conversation'));
+ await expect.poll(() => starts).toEqual(['gw-fade-in', 'gw-fade-in']);
+});
+
+// On a chat page the chat fades and the details panel beside it does not, as the reference's #details sits outside the
+// view that fades (#135); the panel's scrim, over the chat on a narrow screen, does not fade either.
+const chatPage = (segment: string) => <LanguageProvider language="en"><Frame key={segment} title="Chats" chat sidebar={<nav aria-label="Navigation"><a href="#chats" onClick={stay}>Chats</a></nav>}>
+ <main className="convo-page"><div className="convo"><div className="chat">A chat</div><div className="dp-scrim"/><aside id="details" className="details">Lead</aside></div></main>
+</Frame></LanguageProvider>;
+test('on a chat page the chat fades in and the details panel and its scrim do not', async () => {
+ route.pathname = '/c/rs-learning/chat/lead'; await page.viewport(1440, 900);
+ const screen = await render(chatPage('chat'));
+ const starts = watchStarts(event => `${(event.target as Element).className} ${event.animationName}`);
+ await settle();
+ starts.length = 0;
+ for (const path of ['/c/rs-learning/chat/nour', '/c/rs-learning/chat/mona']) {
+  route.pathname = path;
+  await screen.rerender(chatPage('chat'));
+  await expect.poll(() => starts, { message: path }).toEqual(['chat gw-fade-in']);
+  for (const part of [content(), document.querySelector('.details')!, document.querySelector('.dp-scrim')!]) expect(getComputedStyle(part).animationName).toBe('none');
+  await settle();
+  starts.length = 0;
+ }
 });

@@ -93,6 +93,16 @@ export const screens = {
    builtPath: null, builtSteps: [{ waitFor: '.dp-tools .panel-row' }, { scrollTo: '.dp-tools' }] },
   'agent-tools-manage': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { click: '[data-action="manage-tools"]' }, { waitFor: '[data-action="disconnect"]' }, { scrollTo: '[data-action="manage-tools"]' }] },
    builtPath: null, builtSteps: [{ click: '.dp-tools .dp-label .link-btn' }, { waitFor: '.dp-tools .panel-row .link-btn' }, { scrollTo: '.dp-tools' }] },
+  // #205. Ads's details, Activity: "Routines" with its rows, then Add pressed (its one-line field). Built: the fixture's
+  // Ads on a profile of its own whose Engine holds Routines (pass --built-path for another Agent).
+  'agent-routines': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { waitFor: '#dp-routines .rt-row' }, { scrollTo: '#dp-routines' }] },
+   builtPath: `/c/rs-learning/chat/${fixture.agent}`, builtSteps: [{ waitFor: '#dp-routines .rt-row' }, { scrollTo: '#dp-routines' }] },
+  'agent-routines-add': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { waitFor: '#dp-routines .rt-row' }, { click: '[data-action="add-routine"]' }, { waitFor: '#rt-new' }, { scrollTo: '#rt-new' }] },
+   builtPath: `/c/rs-learning/chat/${fixture.agent}`, builtSteps: [{ waitFor: '#dp-routines .rt-row' }, { click: '#dp-routines .dp-label .link-btn' }, { waitFor: '#dp-rt-new' }, { scrollTo: '#dp-rt-new' }] },
+  // A new Agent's details with no Routine: the empty line and "Try writing". Built: the fixture's SEO & Content, on a
+  // profile of its own with no Routine.
+  'agent-routines-empty': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }, { click: '[data-action="tpl-add"][data-tpl="writer"]' }, { waitFor: '.card__actions [data-action="ac-open"]' }, { click: '.card__actions [data-action="ac-open"]' }, { waitFor: '#dp-routines .rt-try' }, { scrollTo: '#dp-routines' }] },
+   builtPath: `/c/rs-learning/chat/${fixture.newAgent}`, builtSteps: [{ waitFor: '#dp-routines .rt-try' }, { scrollTo: '#dp-routines' }] },
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },
