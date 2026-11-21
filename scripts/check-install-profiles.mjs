@@ -534,6 +534,9 @@ const {prepareCommandServer,testServer,readApps,disconnectApp}=await import(`${p
 const target={...firstEngine,profile:first.profile};
 const key='sandbox-proof';
 const command={command:'node',args:['/work/tools/sandbox-proof-mcp.mjs']};
+// The server is removed however the step ends, its setup included; the fake model is closed only once it started.
+let model=null;
+try {
 assert.equal(await prepareCommandServer(target,{key,...command}),null,'the command server is added and on');
 const config=await (await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`)).json();
 assert.equal(config.mcp_servers?.[key]?.command,'ssh','the Engine starts ssh into the sandbox, never the command');
@@ -549,8 +552,9 @@ const plan=(messages,body)=>{
  return offered?{id:'call_sandbox_mcp',type:'function',function:{name:offered,arguments:JSON.stringify({marker})}}:null;
 };
 const asked=[]; const results=[];
-const {model,reply}=await fakeModel(asked,results,plan);
-try {
+const started=await fakeModel(asked,results,plan);
+model=started.model; const {reply}=started;
+{
  const person=await signedIn();
  const {data:{user}}=await person.auth.getUser();
  assert.ok(user,'the first-run Owner signs in');
@@ -566,7 +570,8 @@ try {
  assert.equal(cwd,`/work/${first.profile}`,'the server starts in the Agent\'s own folder of the Company\'s work folder');
  assert.equal((await disconnectApp(target,key)).state,'disconnected','Remove takes the server out of the profile');
  writeProof({step:'sandbox-mcp',marker,sandbox_host:host,profile:first.profile,cwd});
-} finally { model.close(); model.closeAllConnections(); await disconnectApp(target,key).catch(()=>{}); }
+}
+} finally { if(model) { model.close(); model.closeAllConnections(); } await disconnectApp(target,key).catch(()=>{}); }
 } else if(step==='sandbox-key') {
 // The Engine's pinned ssh client is hard-coded `StrictHostKeyChecking=accept-new`, which trusts a host it has not seen
 // but refuses one whose key changed (tools/environments/ssh.py). The install pre-seeds the Engine's known_hosts with its
