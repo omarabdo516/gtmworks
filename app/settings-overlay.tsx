@@ -48,7 +48,7 @@ import { BackupSection } from './settings-backup';
 import { RoutinesSection } from './settings-routines';
 import { readCompanyRoutines } from '@/lib/agent-routines.mjs';
 import { ProposalNote, ProposalMark } from './settings-proposal';
-import { readWaitingChanges, countWaitingChanges, waitingChangeFor, waitingChangeHref, type WaitingChange } from '@/lib/agent-change-waiting.mjs';
+import { readWaitingChange, readWaitingAgents, countWaitingChanges, waitingChangeHref } from '@/lib/agent-change-waiting.mjs';
 import { ownerNames } from '@/lib/company-owners.mjs';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
@@ -125,20 +125,20 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const learningWaiting=canManage?(await db.from('waiting_items').select('id',{count:'exact',head:true}).eq('company_id',company.id).eq('kind','rule_suggestion').is('resolved_at',null)).count||0:0;
  // The changes Agents proposed for their own settings that wait for the Owner (#19, #178): every one for an Owner, and for
  // anyone else only one made in their own Conversation while they see both Agents (the database's agent_change_proposals_read).
- // An Owner's number on "Agents" is drawn on every section; the rows (an Owner's) and the note (an Agent's page) are read on
- // the Agents section alone. A read that fails leaves Settings as if nothing waited, and says so in the server's log; with
- // the Owners' names unread the note waits for "the Owner".
+ // An Owner's number on "Agents" is counted on every section; the Owner's rows are the Agents with one, read on the list,
+ // and the note is the open Agent's oldest one. A read that fails leaves Settings as if nothing waited, and says so in the
+ // server's log; with the Owners' names unread the note waits for "the Owner".
  const failed=<T,>(what:string,fallback:T)=>(failure:unknown):T=>{ console.error(`Settings: ${what} not read:`,company.id,(failure as {message?:string})?.message||'unknown error'); return fallback; };
- const changes:WaitingChange[]=section==='agents'&&(owner||agent)?await readWaitingChanges(db,company.id).catch(failed<WaitingChange[]>('waiting proposals',[])):[];
- const agentsWaiting=owner?(section==='agents'?changes.length:await countWaitingChanges(db,company.id).catch(failed('waiting proposals count',0))):0;
- const change=agent?waitingChangeFor(changes,agent.id):null;
+ const agentsWaiting=owner?await countWaitingChanges(db,company.id).catch(failed('waiting proposals count',0)):0;
+ const waitingAgents=owner&&section==='agents'&&!agent&&agentsWaiting>0?await readWaitingAgents(db,company.id).catch(failed('Agents with a waiting proposal',new Set<string>())):new Set<string>();
+ const change=agent?await readWaitingChange(db,company.id,agent.id).catch(failed('waiting proposal',null)):null;
  const owners=change&&!owner?await ownerNames(db,company.id).catch(failed<string[]>('Owners',[])):[];
  const pend=change&&<ProposalNote change={change} owner={owner} owners={owners} href={waitingChangeHref(slug,change,{person:userId,owner})}/>;
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro} sandbox={workSandbox?.state==='notRunning'}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner} waiting={new Set(owner?changes.map(item=>item.agent):[])}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)

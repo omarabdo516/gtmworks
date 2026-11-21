@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { page } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { ProposalNote, ProposalMark } from '@/app/settings-proposal';
@@ -50,6 +51,13 @@ test('a switch or a setting is named with its new value; a Company with no Owner
  const zone = await inSettings(<ProposalNote change={{ ...model, change: 'setting', setting: 'timezone', value: 'Africa/Cairo' }} owner owners={[]} href="/c/rs/approvals#change-7"/>);
  await expect.element(zone.getByRole('note')).toBeVisible();
  expect(said(zone.getByRole('note'))).toBe('Lead proposed New value for Time zone: Africa/Cairo · waiting for your OK. Nothing changes here before that.');
+});
+
+test('on a phone a long value wraps inside the note', async () => {
+ await page.viewport(390, 800);
+ const screen = await inSettings(<div style={{ width: 358 }}><ProposalNote change={{ ...model, value: `openrouter/${'a'.repeat(150)}` }} owner owners={[]} href="/c/rs/approvals#change-7"/></div>);
+ const note = screen.getByRole('note').element();
+ expect(note.scrollWidth).toBe(note.clientWidth);
 });
 
 test('the row ends with "Proposal waiting" and the waiting dot, in the wait colour', async () => {

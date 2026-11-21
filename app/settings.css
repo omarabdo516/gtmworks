@@ -92,12 +92,12 @@
 .gw :is(.sov, .modal.team-dlg) .panel-row__icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: none; color: var(--gw-text-2); --od-icon-size: 18px; }
 .gw :is(.sov, .modal.team-dlg) .panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
 .gw :is(.sov, .modal.team-dlg) .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; text-align: start; }
-.gw :is(.sov, .modal.team-dlg) .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
+.gw :is(.sov, .modal.team-dlg) .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw :is(.sov, .modal.team-dlg) .panel-row__meta { font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; display: inline-flex; align-items: center; gap: 4px; --od-icon-size: 14px; }
 .gw :is(.sov, .modal.team-dlg) .panel-empty { margin: 0; padding: 10px var(--s2); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
 .gw :is(.sov, .apps-sheet) .ro-note { display: flex; align-items: flex-start; gap: 6px; padding: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); --od-icon-size: 16px; }
 .gw :is(.sov, .apps-sheet) .ro-note .sov-icon { margin-top: 3px; color: var(--gw-text-3); }
-.gw .sov .ro-text { padding: 10px var(--s2); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .sov .ro-text { padding: 10px var(--s2); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
 /* The standing instructions keep their line breaks, as the reference draws them one line per `<br>` (#176). */
 .gw .sov .ro-text--lines { white-space: pre-line; }
 .gw .sov .set-card { gap: var(--s4); padding: var(--s3); }
@@ -204,7 +204,7 @@
 /* A change an Agent proposed waits for the Owner (#178; design-reference: .sov-pend, .panel-row__meta--wait, .dot) */
 .gw .sov .sov-pend { display: flex; align-items: flex-start; gap: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-wait-bg); color: var(--gw-wait-text); font-size: var(--gw-fs-sm); line-height: 1.6; --od-icon-size: 16px; }
 .gw .sov .sov-pend > .sov-icon { margin-top: 3px; }
-.gw .sov .sov-pend > span { flex: 1 1 0; min-width: 0; }
+.gw .sov .sov-pend > span { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
 .gw .sov .sov-pend .link-btn { flex: none; color: var(--gw-wait-text); font-weight: 600; }
 .gw .sov .panel-row__meta.panel-row__meta--wait { color: var(--gw-wait-text); }
 .gw .sov .panel-row__meta > .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
@@ -279,7 +279,7 @@
 .gw .sov .know-page__top .btn { --od-icon-size: 15px; }
 .gw .sov .know-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .sov .know-meta .me__av { width: 20px; height: 20px; font-size: 10px; }
-.gw .sov .know-body { display: grid; gap: var(--s2); padding-top: var(--s3); border-top: 0.5px solid var(--gw-border-2); font-size: var(--gw-fs-msg); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .sov .know-body { display: grid; gap: var(--s2); padding-top: var(--s3); border-top: 0.5px solid var(--gw-border-2); font-size: var(--gw-fs-msg); line-height: 1.7; color: var(--gw-text-1); }
 .gw .sov .know-ul { margin: 0; padding-inline-start: var(--s5); display: grid; gap: var(--s1); list-style: disc; }
 .gw .sov .know-empty { padding: var(--s3) 0 0; border-top: 0.5px solid var(--gw-border-2); }
 .gw .sov .know-ta { min-height: 300px; font-size: var(--gw-fs-msg); }
@@ -329,7 +329,7 @@
 .gw .sov .ln-row + .ln-row::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
 .gw .sov .ln-ic { width: 32px; height: 32px; flex: none; border-radius: var(--gw-r-sm); background: var(--gw-bg-tertiary); display: inline-flex; align-items: center; justify-content: center; color: var(--gw-text-2); --od-icon-size: 16px; }
 .gw .sov .ln-body { display: grid; gap: 4px; min-width: 0; }
-.gw .sov .ln-t { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .sov .ln-t { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
 .gw .sov .ln-row.is-off .ln-t { color: var(--gw-text-3); text-decoration: line-through; }
 .gw .sov .ln-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw .sov .ln-meta .badge { height: 20px; --od-icon-size: 12px; }
@@ -346,7 +346,7 @@
 .gw .sov .sk-col.is-cur { box-shadow: var(--gw-text-1) 0 0 0 1px inset; }
 .gw .sov .sk-col h4 { margin: 0; font-size: var(--gw-fs-sm); font-weight: 400; color: var(--gw-text-2); }
 .gw .sov .sk-col ol { margin: 0; padding-inline-start: var(--s5); display: grid; gap: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-1); }
-.gw .sov .sk-col li { overflow-wrap: anywhere; }
+.gw .sov .sk-col li { }
 
 /* Authored text inside the English interface takes its direction from its own words. */
 [dir="ltr"] .gw .sov :is(.panel-row__t, .panel-row__d, .dp-id__name, .set-input, .ta-name) { unicode-bidi: plaintext; }
