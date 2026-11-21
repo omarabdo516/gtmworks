@@ -22,7 +22,8 @@ export const companyAppItems=cache(async(company:string,language:Language):Promi
   if(!apps) return null;
   const text:Text=language==='ar'?ar:en;
   return apps.map(entry=>{
-   const style=entry.source==='custom'?'custom':entry.key;
+   // A command server the Owner added (#459) reads as one that runs in the work sandbox.
+   const style=entry.source==='custom'?entry.auth==='command'?'command':'custom':entry.key;
    const name=entry.source==='own'?text.ownName:entry.name;
    const use=text[`use.${style}`], can=text[`can.${style}`];
    return {...entry,name,use,can,
