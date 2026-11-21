@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 
 // #485: every Claude Code cloud session brings the whole local app up with one repo-owned command. The SessionStart hook
 // (scripts/cloud-session-setup.sh) prepares the machine; `npm run cloud:up` starts the stack and the app.
@@ -145,6 +145,23 @@ test('`docker` leaves the pid files of a containerd or dockerd that really runs'
   assert.deepEqual(m.containerdLeft(),containerdFiles);
   assert.equal(m.dockerPidLeft(),true);
  });
+});
+
+test('a slow dockerd keeps the start\'s lock until it shows, so a second start launches no second daemon',async()=>{
+ const m=machine();
+ try {
+  // This dockerd takes 7 seconds before the process list shows it.
+  writeFileSync(join(m.dir,'bin/dockerd'),`#!/usr/bin/env bash\necho "dockerd $*" >> "${m.dir}/calls.log"\nsleep 7\ntouch "${m.dir}/dockerd-started"\n`);
+  const start=()=>new Promise(resolve=>{
+   const child=spawn('bash',[join(m.dir,'scripts/cloud-session-setup.sh')],{cwd:m.dir,env:{PATH:join(m.dir,'bin'),HOME:m.dir,TMPDIR:m.dir,GTMWORKS_DOCKER_RUN_DIR:join(m.dir,'run'),CLAUDE_CODE_REMOTE:'true'}});
+   child.on('exit',resolve);
+  });
+  const first=start();
+  await new Promise(resolve=>setTimeout(resolve,500));
+  const codes=await Promise.all([first,start()]);
+  assert.deepEqual(codes,[0,0]);
+  assert.equal(m.calls().filter(call=>call.startsWith('dockerd')).length,1,m.calls().join('\n'));
+ } finally { m.done(); }
 });
 
 test('outside a cloud session the hook leaves stale pid files alone',()=>{

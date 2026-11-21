@@ -57,7 +57,9 @@ docker_up() {
   clear_stale_pid_files "${sudo[@]}"
   # The daemon must not inherit the lock, or it would hold it as long as it runs.
   setsid nohup "${sudo[@]}" dockerd > "$log_dir/gtmworks-dockerd.log" 2>&1 < /dev/null 9>&- &
-  for _ in $(seq 1 50); do pgrep -x dockerd > /dev/null 2>&1 && break; sleep 0.1; done
+  # However slow it is to show, the lock is held while the launch is still alive; one that died releases it at once.
+  local launch=$!
+  until pgrep -x dockerd > /dev/null 2>&1 || ! kill -0 "$launch" 2> /dev/null; do sleep 0.1; done
  fi
  exec 9>&-
  [[ ${1:-} == wait ]] || return 0
