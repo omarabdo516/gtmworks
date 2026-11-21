@@ -17,20 +17,21 @@ ARG OPEN_DESIGN_COMMIT=b83646f4afb9b21b415d98c4d073477d077d7943
 RUN apt-get update \
  && apt-get install --yes --no-install-recommends ca-certificates git g++ make python3 \
  && rm -rf /var/lib/apt/lists/*
-WORKDIR /src
 # The build machine's extra CA, when scripts/docker-build.sh hands one over as the secret build-ca (a cloud session's
-# network re-signs TLS, #562), is trusted only while these steps run; nothing of it reaches a layer.
+# network re-signs TLS, #562), is trusted only while this step runs; nothing of it reaches a layer. One step, which ends
+# by removing the source, the workspace's packages and pnpm's store, so the stage's one layer holds only the daemon and
+# a build cache keeps no more than that.
 RUN --mount=type=secret,id=build-ca set -eu; \
     if [ -f /run/secrets/build-ca ]; then export GIT_SSL_CAINFO=/run/secrets/build-ca NODE_EXTRA_CA_CERTS=/run/secrets/build-ca; fi; \
-    git init --quiet . && git fetch --quiet --depth 1 https://github.com/nexu-io/open-design.git "$OPEN_DESIGN_COMMIT" \
- && git checkout --quiet FETCH_HEAD && test "$(git rev-parse HEAD)" = "$OPEN_DESIGN_COMMIT"
-RUN --mount=type=secret,id=build-ca set -eu; \
-    if [ -f /run/secrets/build-ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build-ca; fi; \
     export CI=true ONNXRUNTIME_NODE_INSTALL_CUDA=skip ELECTRON_SKIP_BINARY_DOWNLOAD=1 PUPPETEER_SKIP_DOWNLOAD=1 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1; \
-    npm install --prefix /opt/pnpm --no-fund --no-audit pnpm@10.33.2 && export PATH="/opt/pnpm/node_modules/.bin:$PATH" \
+    mkdir /src && cd /src \
+ && git init --quiet . && git fetch --quiet --depth 1 https://github.com/nexu-io/open-design.git "$OPEN_DESIGN_COMMIT" \
+ && git checkout --quiet FETCH_HEAD && test "$(git rev-parse HEAD)" = "$OPEN_DESIGN_COMMIT" \
+ && npm install --prefix /opt/pnpm --no-fund --no-audit pnpm@10.33.2 && export PATH="/opt/pnpm/node_modules/.bin:$PATH" \
  && pnpm install --frozen-lockfile \
  && pnpm --filter @open-design/daemon deploy --prod --legacy /opt/open-design/app \
- && test -f /opt/open-design/app/dist/cli.js
+ && test -f /opt/open-design/app/dist/cli.js \
+ && cd / && rm -rf /src /opt/pnpm /root/.local/share/pnpm /root/.cache /root/.npm
 
 FROM base
 

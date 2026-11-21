@@ -250,9 +250,11 @@ case "${1:-check}" in
   # The work sandbox image every Company's sandbox runs (#392, #393): CI builds it in the run's image job and loads that
   # build; here it is built on this host from the committed checkout's sandbox/Dockerfile on every run (Docker reuses the
   # layers that did not change), so the lane runs HEAD's image, never an earlier commit's tag or uncommitted files.
-  # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's.
+  # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's. It is built through
+  # scripts/docker-build.sh too: its Open Design stage fetches a source and packages (#544), which a cloud session's CA
+  # must reach (#562).
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
-  docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
+  bash scripts/docker-build.sh -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
   # The app image the same way, as CI's install jobs load the image job's build under the compose file's tag and set
   # GTMWORKS_IMAGE_PREBUILT (#411): built here through scripts/docker-build.sh, so a cloud session's CA reaches its npm
   # steps (#562), and never inside the machine, whose nested network stalls.
