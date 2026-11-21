@@ -149,9 +149,10 @@ exit_id=$(docker ps -q --filter 'name=^gtmworks-exit-first$') || fail 'the first
 [[ $(docker exec "$exit_id" id -u) == 1000 ]] || fail 'the exit runs as an ordinary user, never root'
 [[ $(docker inspect -f '{{join .HostConfig.CapDrop ","}}' "$exit_id") == ALL ]] || fail 'the exit drops every capability'
 [[ $(docker inspect -f '{{join .HostConfig.SecurityOpt ","}}' "$exit_id") == *no-new-privileges* ]] || fail 'the exit has no new privileges'
-# The only mounts are the anonymous volumes the image itself declares: no folder of the server and no volume of the install.
+# The only mounts are anonymous volumes the image itself may declare: no folder of the server and no volume of the
+# install. The port the image exposes for its sshd is listed unpublished; no host port is bound.
 exit_mounts=$(docker inspect -f '{{range .Mounts}}{{println .Type .Name}}{{end}}' "$exit_id" | grep . || true)
-[[ -z $(grep -Ev '^volume [0-9a-f]{64}$' <<< "$exit_mounts") && $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$exit_id") == 0 ]] \
+[[ -z $(grep -Ev '^volume [0-9a-f]{64}$' <<< "$exit_mounts") && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$exit_id") != *HostPort* ]] \
   || fail "the exit mounts no folder and no volume of the install, and publishes no port (mounts: $exit_mounts)"
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$exit_id" | grep . | sort) == $'gtmworks-exit-first\ngtmworks-work-first' ]] \
   || fail 'the exit joins the work network and its own outbound network only'
@@ -417,7 +418,7 @@ for folder in .engines/*/; do
   [[ $(docker exec "$exit_id" id -u) == 1000 ]] || fail "the exit of $slug runs as an ordinary user"
   [[ $(docker inspect -f '{{join .HostConfig.CapDrop ","}}' "$exit_id") == ALL && $(docker inspect -f '{{join .HostConfig.SecurityOpt ","}}' "$exit_id") == *no-new-privileges* ]] \
     || fail "the exit of $slug drops every capability and has no new privileges"
-  [[ -z $(docker inspect -f '{{range .Mounts}}{{println .Type .Name}}{{end}}' "$exit_id" | grep . | grep -Ev '^volume [0-9a-f]{64}$') && $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$exit_id") == 0 ]] \
+  [[ -z $(docker inspect -f '{{range .Mounts}}{{println .Type .Name}}{{end}}' "$exit_id" | grep . | grep -Ev '^volume [0-9a-f]{64}$') && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$exit_id") != *HostPort* ]] \
     || fail "the exit of $slug mounts no folder and no volume of the install, and publishes no port"
   [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$exit_id" | grep . | sort) == $(printf '%s\n' "gtmworks-exit-$slug" "gtmworks-work-$slug" | sort) ]] \
     || fail "the exit of $slug joins its work network and its own outbound network only"
