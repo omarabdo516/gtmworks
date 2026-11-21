@@ -167,27 +167,13 @@ test('a host Docker that refuses its listing as the run ends keeps the work fold
   cleanedUp(run.state);
 });
 
-test('a machine that starts after the trap has stopped waiting for it is removed by the guard', async t => {
-  const run = lane(t, { env: { FAKE_DOCKER_RUN_WAIT: '3', INSTALL_LANE_START_WAIT: '1' } });
+test('a machine that starts after the trap has stopped waiting for it is removed by the guard, with no other run', async t => {
+  const run = lane(t, { env: { FAKE_DOCKER_RUN_WAIT: '5', INSTALL_LANE_START_WAIT: '1' } });
   await run.reached('starting');
   process.kill(run.child.pid, 'SIGTERM');
   assert.equal((await run.ended).signal, 'SIGTERM');
   await run.reached('started');
   await settled(run.state);
-  cleanedUp(run.state);
-});
-
-test('a start that outlasts even the guard\'s wait keeps the work folder, and the next run removes its machine', async t => {
-  const run = lane(t, { env: { FAKE_DOCKER_RUN_WAIT: '4', INSTALL_LANE_START_WAIT: '1', INSTALL_LANE_GUARD_START_WAIT: '1' } });
-  await run.reached('starting');
-  process.kill(run.child.pid, 'SIGTERM');
-  await run.ended;
-  await run.reached('started');
-  await sleep(1500);
-  assert.equal(machines(run.state).length, 1, 'the late machine is there');
-  assert.equal(workFolders().length, 1, 'its work folder is kept for the next run');
-  const next = lane(t, { env: { FAKE_DOCKER_STATE: run.state } });
-  assert.equal((await next.ended).code, 0);
   cleanedUp(run.state);
 });
 

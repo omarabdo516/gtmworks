@@ -99,12 +99,12 @@ case "${1:-}" in
   ;;
  sweep)
   # The guard's part, once the lane has ended: nothing to do when the trap removed WORK; otherwise wait for a machine
-  # still starting, then try every few seconds until Docker lists none, for at most an hour; after that the next run's
-  # start removes what is left.
+  # still starting, then try every few seconds until Docker lists none, for at most an hour (a host Docker that answers
+  # no listing for that long); after that the next run's start removes what is left.
   work=$2
   [[ -d $work ]] || exit 0
-  # A start that outlasts even this wait keeps WORK, so the next run's start removes its machine.
-  start_done "${INSTALL_LANE_GUARD_START_WAIT:-3600}" || exit 0
+  # The guard waits for a start as long as its `docker run` runs, so the machine it makes is removed here too.
+  start_done 0
   for _ in $(seq 1 720); do machine_gone && { remove_files; exit 0; }; sleep 5; done
   ;;
  guard)
