@@ -1,5 +1,11 @@
 [
  {
+  "issue": 530,
+  "date": "2026-11-21",
+  "en": { "title": "Channels and Card notes say why an agent could not reply", "body": "When an agent called in a channel, asked by another agent, or called in a Card's note cannot reply because the company has no model, its key ran out of credit or was refused, or its model is missing, it now says so there, with the way to fix it in Subscription and models, instead of only that it could not reply." },
+  "ar": { "title": "القنوات وملاحظات البطاقات بتقول الوكيل مقدرش يرد ليه", "body": "لما وكيل اتنادى في قناة، أو طلب منه وكيل تاني، أو اتنادى في ملاحظة على بطاقة، مايقدرش يرد علشان الشركة مفيهاش موديل، أو مفتاحها خلص رصيده أو اترفض، أو الموديل بتاعه مش موجود، بقى بيقول كده في مكانه، ومعاه طريقة الحل من الاشتراك والموديلات، بدل ما يقول بس إنه مقدرش يرد." }
+ },
+ {
   "issue": 502,
   "date": "2026-11-21",
   "en": { "title": "An update that cannot start keeps your old engine", "body": "When an update from an older install cannot start the new agent engine, your install now goes back to the engine it had, with all your agents' memory, so your company keeps working until you run the update again." },

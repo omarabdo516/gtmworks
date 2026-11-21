@@ -78,10 +78,11 @@ test('a channel Run shows its draft and review cards once, ignores a call that d
  assert.equal(cards.length,2,'the same message, run and call keep one card');
 });
 
-// #428: a channel Run the Engine failed for want of any model provider (the contract's `noModel`, #422) ends as
-// no_model, so the channel says the Company has no model connected, as a Conversation does. Any other failure, and a
-// note's Run, still ends as failed.
-test('a channel Run that failed for want of any model ends as no_model, any other failure and a note\'s Run as failed',async()=>{
+// #428, #530: a channel Run or a Card note's Run the Engine failed for want of any model provider (the contract's
+// `noModel`, #422) ends as no_model, and one whose model call cannot succeed on a retry (`modelRefused`, #457) as
+// no_credit, key_refused or model_missing, so the channel or the Card says what to fix, as a Conversation does. Any other
+// failure still ends as failed.
+test('a channel or note Run that failed for want of a model, credit, key or model keeps that cause, any other failure ends as failed',async()=>{
  /** @param {'channel'|'note'} kind @param {object} read */
  const closedAs=async(kind,read)=>{
   const closed=[];
@@ -96,10 +97,14 @@ test('a channel Run that failed for want of any model ends as no_model, any othe
   assert.deepEqual(await drive(/** @type {any} */(service),{hermes,engineFor:()=>/** @type {any} */(engine)}),{started:0,closed:1});
   return closed;
  };
- assert.deepEqual(await closedAs('channel',{state:'failed',noModel:true}),['no_model']);
- assert.deepEqual(await closedAs('channel',{state:'failed'}),['failed']);
- assert.deepEqual(await closedAs('channel',{state:'stopped',noModel:true}),['stopped'],'only a failure is read for its cause');
- assert.deepEqual(await closedAs('note',{state:'failed',noModel:true}),['failed'],'a note keeps a plain failure');
+ for(const kind of /** @type {const} */(['channel','note'])) {
+  assert.deepEqual(await closedAs(kind,{state:'failed',noModel:true}),['no_model'],kind);
+  assert.deepEqual(await closedAs(kind,{state:'failed',modelRefused:'credit'}),['no_credit'],kind);
+  assert.deepEqual(await closedAs(kind,{state:'failed',modelRefused:'key'}),['key_refused'],kind);
+  assert.deepEqual(await closedAs(kind,{state:'failed',modelRefused:'model'}),['model_missing'],kind);
+  assert.deepEqual(await closedAs(kind,{state:'failed'}),['failed'],kind);
+  assert.deepEqual(await closedAs(kind,{state:'stopped',noModel:true}),['stopped'],'only a failure is read for its cause');
+ }
 });
 
 // #413: a start that never reached an Engine (the Company has no Engine record yet, or its Engine is not running) is no

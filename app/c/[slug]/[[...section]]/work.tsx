@@ -33,12 +33,14 @@ import { sortWorkCards } from '@/lib/work-sort.mjs';
 import { boardColumns, blockReason, cardAgent, chatPlace, chatWait, columnLabel, columnOf, keyboardTarget, onCard, orderColumn, placeByOne, progressOf, type CardWait } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import { withMention } from '@/lib/channels';
+import { modelCauseOf } from '@/lib/model-causes';
+import { ModelLine, modelOutcome } from '@/app/model-line';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
 type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // An open Card's notes (#22): each note's current text, the Runs its Agent mentions started and their replies in the
 // log, the Agents those are drawn with, the reader and the moment the page was drawn (for the edit countdown).
-type CardNotes={me:string,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
+type CardNotes={me:string,owner:boolean,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
 // workAction is the board's server action (work-actions.ts), handed in so this client file never imports the server module.
 export type WorkAction=(form:FormData)=>Promise<void>;
 // "Undo" on a move (#168): the server's answer, and nothing else, decides whether the Card went back. The shape lives here
@@ -251,14 +253,17 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   <span className="mcard__q od-clamp-3" dir="auto">{item.kind==='mention'?item.body:inChannel(item)?marked(item.body):<>{item.title}{item.body&&<> {item.body}</>}</>}</span>
  </Link>;
  // A Card's conversation: each message with its current text; under a Member's note, the reply of the Agent it called,
- // or the line that it is working on it while its Run is open.
+ // or the line that it is working on it while its Run is open, or why it could not reply when its Run ended for a cause
+ // a retry cannot fix (#530): no model at all, no credit, a refused key or a missing model, as a Conversation says.
  const noteView=(a:Activity)=>{ const id=Number(a.details.id); const notes=p.notes; const comment=notes?.comments.find(c=>c.id===id);
   const reply=notes?.replies.find(r=>r.reply_to===id); const run=notes?.runs.find(r=>r.note_id===id); const agentOf=(agent:string)=>notes?.agents.find(x=>x.id===agent);
+  const cause=!reply&&run?modelCauseOf(run.outcome):null;
   return <Fragment key={a.id}>
    <MessageRow activity={comment?{...a,details:{...a.details,body:comment.body}}:a} members={p.members} slug={p.slug} anchor={`note-${id}`} files={p.attachments.filter(f=>f.comment_id===id)}
     note={comment&&notes?(files,time)=><NoteText note={comment} me={notes.me} canWrite={p.canCreate} company={p.company} slug={p.slug} drawnAt={notes.drawnAt} surface="card" meta={time}>{files}</NoteText>:undefined}/>
    {reply?<NoteReplyRow name={agentOf(reply.actor_id)?.name||reply.actor_name||''} face={agentOf(reply.actor_id)?.connection_id||null} body={reply.body} at={reply.created_at}/>
-    :run&&!run.outcome?<NoteReplyRow name={agentOf(run.agent_id)?.name||run.agent_name} face={agentOf(run.agent_id)?.connection_id||null} working={p.members.find(m=>m.person_id===a.actor_id)?.people?.name?.split(' ')[0]||''}/>:null}
+    :run&&!run.outcome?<NoteReplyRow name={agentOf(run.agent_id)?.name||run.agent_name} face={agentOf(run.agent_id)?.connection_id||null} working={p.members.find(m=>m.person_id===a.actor_id)?.people?.name?.split(' ')[0]||''}/>
+    :run&&cause?<li className="note" role="alert" data-outcome={modelOutcome(cause)}><ModelLine cause={cause} agent={agentOf(run.agent_id)?.name||run.agent_name} slug={p.slug} owner={!!notes?.owner}/></li>:null}
   </Fragment>; };
  // A Card opened over the board (#116; design-reference: renderSheetHead): its channel's mark, else its Agent, and where it stands.
  const sheetView=(c:Card,sheet:CardSheetData)=>{ const agent=agentOfCard(c); const own=cardAgentOf(c); const column=columnOfCard(c); const chat=chatOf(c);

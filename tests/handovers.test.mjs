@@ -154,6 +154,25 @@ test('a Target and a follow-up that fail for want of any model end as no_model, 
  assert.deepEqual(messages,[]);
 });
 
+// #530: a leg whose model call cannot succeed on a retry (`modelRefused`, #457) keeps its cause, so a command's target
+// that ran out of credit closes the person's Run as no_credit and the chat says what to fix instead of offering a retry.
+test('a Target and a follow-up whose model refused them keep the cause, so the chat says what to fix',async()=>{
+ for(const [reason,outcome] of /** @type {const} */([['credit','no_credit'],['key','key_refused'],['model','model_missing']])) {
+  const {row,service,messages,ends}=handover();
+  const {lead,target,engineFor}=engines();
+  target.settings.ending=reason; lead.settings.ending=reason;
+  await drive(service,engineFor,row);
+  assert.equal(row.state,'done');
+  assert.equal(row.target_outcome,outcome);
+  assert.equal(row.summary,null);
+  assert.equal(row.follow_up_outcome,outcome);
+  const followUp=lead.runs.find(run=>run.key===`handover:${row.id}:return`);
+  assert.ok(followUp,'Lead is still asked to report it');
+  assert.deepEqual(ends,[{run:followUp.id,outcome}]);
+  assert.deepEqual(messages,[]);
+ }
+});
+
 test('a start whose answer was lost is asked again with the same key, never failed, and nothing is reported to Lead yet',async()=>{
  const {row,service,calls}=handover();
  const fake=fakeEngine(); const asked=/** @type {{idempotencyKey:string,input:string}[]} */([]);

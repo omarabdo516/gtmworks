@@ -78,5 +78,5 @@ export type Engine={
  apps?():Promise<ProfileApps>,
 };
 export function engineFor(connection:EngineConnection):Engine;
-export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;
-export function endOf(run:Pick<RunState,'state'|'reply'|'noModel'>):'completed'|'failed'|'no_model'|'stopped'|'lost'|null;
+export type RunEnd='completed'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'|'stopped'|'lost';
+export function endOf(run:Pick<RunState,'state'|'reply'|'noModel'|'modelRefused'>):RunEnd|null;

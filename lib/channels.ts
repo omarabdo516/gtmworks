@@ -2,13 +2,15 @@ import type { supabase } from './supabase';
 import type { BoardColumn } from './board-columns.mjs';
 import { agentStatus, type AgentStatus } from './agent-details.mjs';
 import type { SessionUsage } from './engine.mjs';
+import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
 import { handoverUnfinished, replyCardColumns, replyCardOf, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type MemberRole='owner'|'manager'|'contributor'|'viewer';
-// `noModel`: its Run failed because the Company has no model connected at all (#428), which the channel says as a
-// Conversation does (#422), instead of that the Agent could not reply.
-type MentionState='open'|'answered'|'unanswered'|'noModel';
+// A Run that failed for a cause a retry cannot fix is that cause (lib/model-causes.ts): the Company has no model
+// connected at all (#428), or its model call was refused for no credit, a refused key or a missing model (#530), which
+// the channel says as a Conversation does (#422, #457), instead of that the Agent could not reply.
+type MentionState='open'|'answered'|'unanswered'|ModelCause;
 type ChannelPermission=Extract<ReplyCard,{kind:'permission'}>;
 // One Agent a message called (#152): its Run's state, what that Run asked to be allowed (#165), drawn as the Agent's
 // turn under the message, and the questions that Run asked (#149), drawn in that same turn; `face` is the Agent's, for
@@ -25,8 +27,8 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // pick up (#149) is `handDone`: nothing draws a bubble of it, and the card shows the press instead.
 // A handover in the channel (#150) is a quiet row between turns, with its own id: the two Agents and their faces, the
 // other Agent's answer marked `to` the Agent that handed it over, and then that Agent's own reply. A handover that did
-// not finish (#375) marks its row `failed`, and one that ended with no reply because the Company has no model connected
-// (#428) also says so under its row (`noModel`).
+// not finish (#375) marks its row `failed`, and one that ended with no reply for a cause a retry cannot fix (#428, #530)
+// also says so under its row (`model`: the cause, and the Agent whose leg it was).
 // A message may carry images (#156), drawn as chips under it for every Member.
 type ChannelFile={id:number,name:string};
 type ChannelFace={name:string,face:string};
@@ -35,7 +37,7 @@ export type ChannelMessage=
  | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[]}
  | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
  | {id:number,author:'note',kind:'card',at:string}
- | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true,noModel?:true};
+ | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true,model?:{cause:ModelCause,agent:string}};
 // One handover of a channel, as its details draw it: both faces, the Agent handed the work, and the job, newest first,
 // and that it did not finish when so (#375).
 export type ChannelHandoff={id:number,from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true};
@@ -70,9 +72,9 @@ export type ChannelRecord={
  may:PermissionChoice[],
  // The channel's Card on the board (#151), when it has one the reader may see; absent otherwise.
  board?:ChannelBoard,
- // A Run or a handover shown failed because the Company has no model connected (#428): the Owner gets the link to
+ // A Run or a handover shown failed for a cause a retry cannot fix (#428, #530): the Owner gets the link to
  // Subscription and models, a Member is told to ask the Owner. Absent otherwise.
- noModel?:{owner:boolean},
+ modelLine?:{owner:boolean},
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string};
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
@@ -85,13 +87,14 @@ type StoredSession={message_id:number,agent_id:string,profile:string,session:str
 // One handover of the channel (#150) as channel_handovers answers it: both Agents and their faces, the job, what the
 // target reported, Lead's reply and when each came. Only what the chat draws; never the context or the Engine's runs.
 export type StoredHandover={id:number,message:number,from_agent:string,from_name:string,from_connection:string,to_agent:string,to_name:string,
- to_connection:string,goal:string,summary:string|null,reply:string|null,state:string,target_outcome:string|null,created_at:string,answered_at:string|null,closed_at:string|null,no_model?:boolean};
+ to_connection:string,goal:string,summary:string|null,reply:string|null,state:string,target_outcome:string|null,created_at:string,answered_at:string|null,closed_at:string|null,model_end?:string|null,model_agent?:string|null};
 // The lines each handover adds to the transcript (#150, #476): its row, the asked Agent's answer once it came, and the
 // asking Agent's reply once it came. A chain (#477) adds each of its steps the same way, a step handed on having no reply
 // of its own: its answer is the Agent's that asked it, whose own answer follows.
+const handoverModel=(row:StoredHandover)=>{ const cause=modelCauseOf(row.model_end); return cause?{cause,agent:row.model_agent??row.to_name}:null; };
 export const handoverLines=(rows:StoredHandover[]):ChannelMessage[]=>rows.flatMap((row):ChannelMessage[]=>[
  {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
-  ...(handoverUnfinished(row)?{failed:true as const}:{}),...(row.no_model?{noModel:true as const}:{})},
+  ...(handoverUnfinished(row)?{failed:true as const}:{}),...(handoverModel(row)?{model:handoverModel(row)!}:{})},
  ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
  ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,body:row.reply,at:row.closed_at}]:[]),
 ]);
@@ -103,7 +106,7 @@ export const inWrittenOrder=(lines:ChannelMessage[]):ChannelMessage[]=>[...lines
 type ReadSession=(agent:string,session:string,profile:string)=>Promise<{turns:SessionTurn[],usage:SessionUsage|null}|null>;
 const shownMessages=200;
 
-const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome==='completed'?'answered':outcome==='no_model'?'noModel':'unanswered';
+const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome==='completed'?'answered':modelCauseOf(outcome)??'unanswered';
 const nameOf=(row:{kind:string,name:string|null}):ChannelName=>row.kind==='team'&&row.name?{kind:'team',name:row.name}:{kind:'general'};
 export const channelTitle=(t:(key:string)=>string,channel:ChannelName)=>channel.kind==='team'?channel.name:t('shellGeneralChannel');
 
@@ -226,9 +229,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // completed asked Agent's answer and the asking Agent's reply appear as soon as each comes in.
  const shownIds=new Set(ordered.map(message=>message.id));
  const messages=inWrittenOrder([...written.flat(),...handoverLines(((handed||[]) as StoredHandover[]).filter(row=>shownIds.has(row.message)))]);
- // Only a channel that shows a no-model failure asks whether the reader owns the Company, for its line's link (#428).
- const noModel=messages.some(message=>message.author==='handoff'?message.noModel===true:message.author==='person'&&(message.mentions??[]).some(mention=>mention.state==='noModel'));
- const {data:owner}=noModel?await db.rpc('is_company_owner',{c:company}):{data:false};
+ // Only a channel that shows a model failure asks whether the reader owns the Company, for its line's link (#428, #530).
+ const modelLine=messages.some(message=>message.author==='handoff'?!!message.model:message.author==='person'&&(message.mentions??[]).some(mention=>isModelCause(mention.state)));
+ const {data:owner}=modelLine?await db.rpc('is_company_owner',{c:company}):{data:false};
  if(read&&newest!==undefined) await db.rpc('read_channel',{ch:channel,through:newest});
  return {
   channel:{id:found.id,company:found.company_id,...name},
@@ -248,7 +251,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   handover:((handed||[]) as StoredHandover[]).some(row=>row.state!=='done'&&row.state!=='failed'),
   may:(may||[]) as PermissionChoice[],
   ...(board?{board:board as ChannelBoard}:{}),
-  ...(noModel?{noModel:{owner:owner===true}}:{}),
+  ...(modelLine?{modelLine:{owner:owner===true}}:{}),
  };
 }
 
