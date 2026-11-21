@@ -1,5 +1,11 @@
 [
  {
+  "issue": 413,
+  "date": "2026-11-21",
+  "en": { "title": "A stopped Engine no longer fails a channel or note mention", "body": "When you call an Agent in a channel or a card note while its Company's Engine is not running, the Run waits up to ten minutes for the Engine and starts once it is back, instead of failing at once." },
+  "ar": { "title": "المحرك الواقف مبقاش بيفشّل المنشن في القناة أو الملاحظة", "body": "لما تنادي وكيل في قناة أو في ملاحظة على بطاقة ومحرك الشركة مش شغال، التشغيل بيستنى المحرك لحد عشر دقايق ويبدأ أول ما يرجع، بدل ما يفشل على طول." }
+ },
+ {
   "issue": 31,
   "date": "2026-11-21",
   "en": { "title": "Recurring tasks in Settings", "body": "Settings now lists every recurring task of every agent with when it runs next and how its last run went; the Owner and Managers can switch one off or on, run it now, change when it runs, add one or delete one, and each change is in the log." },
