@@ -22,7 +22,7 @@ function session({agents=rows,refuse=null,grants=[]}={}) {
  const db={rpc:async(name,args)=>{
   asked.push(name);
   if(name==='company_app_agents') return {data:agents,error:null};
-  if(name==='agent_permission_grants') return {data:grants.filter(grant=>grant.agent===args.agent).map(({agent,...grant})=>grant),error:null};
+  if(name==='agent_permission_grants') return {data:grants.filter(grant=>grant.agent===args.agent).map(grant=>({entry:grant.entry,allowed_by:grant.allowed_by,allowed_at:grant.allowed_at})),error:null};
   if(name==='check_permission_revoke') return {data:null,error:refuse?{message:refuse}:null};
   if(name==='log_permission_revoked') { logged.push(args); return {data:null,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};

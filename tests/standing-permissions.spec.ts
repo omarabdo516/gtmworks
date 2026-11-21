@@ -32,7 +32,8 @@ test.beforeAll(async({browser},testInfo)=>{
  fake=await laneHermes();
  for(const name of [profile,own(ads),own(seo)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.approvals=input=>input.includes(asking)?[{app:{server:'meta-ads',tool:'create_campaign'}}]:[];
- fake.settings.reply=(input,_answers,choices)=>`Reply to: ${input} (${choices.map(choice=>choice??'not allowed').join(', ')})`;
+ const reply=(input:string,_answers:unknown[],choices:(string|null)[])=>`Reply to: ${input} (${choices.map(choice=>choice??'not allowed').join(', ')})`;
+ fake.settings.reply=reply as unknown as typeof fake.settings.reply;
  query(`update public.people set language='en' where id::text like '20000000-%'`);
  const page=await browser.newPage();
  try {

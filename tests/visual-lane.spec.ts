@@ -7,6 +7,7 @@ import { idle } from './navigation-measure';
 import { appOrigin } from './lane.mjs';
 import { asAdmin } from './slow-reads';
 import { localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
+import { laneHermes } from './lane-hermes';
 
 // The visual lane (#257): each key screen in tests/visual-lane/screens.json, in Arabic at 1440 and 390, light and dark,
 // against its approved image. Each screen starts from the seed as built and signs in again, so the screens pass in any
@@ -42,7 +43,10 @@ const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
 const change = (n: number) => `69200000-0000-0000-0000-00000000000${n}`;
-const screenStates: Record<string, { set: string, unset: string }> = {
+const standing = (n: number) => `69300000-0000-0000-0000-00000000000${n}`;
+// A state whose page reads the Engine names what the lane's fake Engine holds (`engine`); it runs only for that screen.
+type EngineHolds = (fake: Awaited<ReturnType<typeof laneHermes>>) => void;
+const screenStates: Record<string, { set: string, unset: string, engine?: EngineHolds }> = {
   // The general channel (#24): the Manager's note, Omar asking Lead, and Lead's answer.
   channel: {
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${talk(11)}','${rsLearning}','${talk(10)}','Lead','General',true,'visual-channel-lead');
@@ -100,6 +104,31 @@ const screenStates: Record<string, { set: string, unset: string }> = {
       delete from public.conversations where id='${change(3)}';
       delete from public.hermes_agents where id in ('${change(1)}','${change(2)}');`,
   },
+  // Meta Ads's page in Settings, with the one standing permission Omar gave it after Tools (#166):
+  // Always allow on the Meta Ads app's create_campaign, kept in Meta Ads's own profile in the Engine.
+  'standing-permissions': {
+    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+       ('${standing(1)}','${rsLearning}','${standing(5)}','Lead','General',true,'visual-standing-lead'),
+       ('${standing(2)}','${rsLearning}','${standing(6)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'ag-${standing(2).replaceAll('-', '')}');
+      insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values ('${standing(2)}','${rsLearning}',1,public.engine_tool_policy());
+      insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values ('${rsLearning}','co-${rsLearning.replaceAll('-', '')}',1,public.engine_tool_policy())
+       on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+      insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${standing(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${standing(3)}','${rsLearning}','${omar}','${standing(2)}','Meta Ads','2026-06-15T11:00:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${standing(3)}','person','${omar}','عمر','اطلق حملة يونيو','${standing(4)}','visual-standing','2026-06-15T11:00:00Z');
+      insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,decided_by,decided_at,allows,created_at) values
+       ('${rsLearning}','${standing(3)}','visual-standing','visual-standing-1','permission','Launch the campaign',
+        '{"description":"Launch the campaign","command":"create_campaign","choices":["once","always","deny"],"choice":"always"}','decided','${omar}','2026-06-15T11:01:00Z',
+        '{mcp:meta-ads/create_campaign}','2026-06-15T11:00:30Z');`,
+    unset: `delete from public.reply_cards where conversation_id='${standing(3)}';
+      delete from public.conversation_messages where conversation_id='${standing(3)}';
+      delete from public.conversations where id='${standing(3)}';
+      delete from public.agent_profiles where agent_id='${standing(2)}';
+      delete from public.company_profile_keepers where agent_id='${standing(1)}';
+      delete from public.hermes_agents where id in ('${standing(1)}','${standing(2)}');`,
+    engine: fake => { fake.settings.profiles.set(`ag-${standing(2).replaceAll('-', '')}`, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: { command_allowlist: ['mcp:meta-ads/create_campaign'] }, credentials: {} }); },
+  },
 };
 for (const screen of screens) if (screen.state && !screenStates[screen.state]) throw new Error(`${screen.name}: no state "${screen.state}"`);
 
@@ -127,8 +156,11 @@ for (const screen of screens) {
   test.describe(screen.name, () => {
     let context: BrowserContext;
     let page: Page;
+    let engine: Awaited<ReturnType<typeof laneHermes>> | undefined;
     test.beforeAll(async ({ browser, baseURL }) => {
       test.setTimeout(120000);
+      const holds = screen.state ? screenStates[screen.state].engine : undefined;
+      if (holds) { engine = await laneHermes(); holds(engine); }
       // A visitor's screen draws no Company data: sign-in needs nothing, and first run empties the installation itself.
       if (screen.name === 'first-run') resetFirstRun(baseURL);
       if (!screen.anonymous) {
@@ -151,6 +183,7 @@ for (const screen of screens) {
     });
     test.afterAll(async ({ baseURL }) => {
       await context?.close();
+      await engine?.close();
       // First run empties the installation; the seed goes back for whatever runs next, as the old screens did.
       if (screen.name === 'first-run') resetFirstRun(baseURL, true);
     });
