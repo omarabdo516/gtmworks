@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(44);
+select plan(46);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -183,6 +183,17 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002'
 select public.end_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002');
 reset role;
 select is((select count(*)::int from public.agent_permission_revokes),1,'another person''s hold is not ended by them');
+-- The holder keeps it a full minute from now; another person cannot.
+update public.agent_permission_revokes set held_until=now()+interval '5 seconds';
+set local role authenticated;
+select public.extend_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002');
+reset role;
+select ok((select held_until<now()+interval '10 seconds' from public.agent_permission_revokes),'another person''s extension changes nothing');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.extend_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002');
+reset role;
+select ok((select held_until>=now()+interval '59 seconds' from public.agent_permission_revokes),'the holder''s own extension runs a full minute from now (CodeRabbit on #499)');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select public.end_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002');

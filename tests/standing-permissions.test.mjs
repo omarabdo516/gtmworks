@@ -30,6 +30,7 @@ function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=fal
   if(name==='check_permission_revoke') return {data:null,error:refuse?{message:refuse}:null};
   if(name==='begin_permission_revoke') { if(refuse) return {data:null,error:{message:refuse}}; if(holder.held) return {data:false,error:null}; holder.held=true; return {data:true,error:null}; }
   if(name==='end_permission_revoke') { holder.held=false; return {data:null,error:null}; }
+  if(name==='extend_permission_revoke') { holder.extended=(holder.extended??0)+1; return {data:null,error:null}; }
   if(name==='note_permission_revoked') { if(noteFail) return {data:null,error:{message:'down'}}; const kept=new Date().toISOString(); store.noted.set(args.entry,kept); return {data:kept,error:null}; }
   if(name==='forget_permission_revoked') { if(store.noted.get(args.entry)===args.kept) store.noted.delete(args.entry); return {data:null,error:null}; }
   if(name==='log_permission_revoked') { if(logDelay) await new Promise(resolve=>setTimeout(resolve,logDelay)); logged.push(args); return {data:null,error:logFail?{message:'refused',code:'22023'}:null}; }
@@ -225,6 +226,7 @@ test('a write that timed out before the Engine applied it keeps the record and t
   assert.equal(shared.noted.has('mcp:notion/create_page'),true,'the record stays');
   assert.equal(first.asked.includes('end_permission_revoke'),false,'the hold is left to end by itself');
   assert.equal(hold.held,true);
+  assert.equal(hold.extended,1,'for a full minute from when the write was given up (CodeRabbit on #499)');
   // The Engine applies the late write; the hold then ends by itself and another process revokes the other entry.
   await late();
   hold.held=false;

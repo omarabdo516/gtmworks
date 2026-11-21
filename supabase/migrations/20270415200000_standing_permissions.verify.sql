@@ -33,6 +33,8 @@ select json_build_object(
   and has_function_privilege('authenticated','public.forget_permission_revoked(uuid,uuid,text,timestamptz)','execute')
   and position('check_permission_revoke' in pg_get_functiondef('public.agent_permission_sending(uuid,uuid)'::regprocedure))>0
   and not has_function_privilege('anon','public.agent_permission_sending(uuid,uuid)','execute')
+  and has_function_privilege('authenticated','public.extend_permission_revoke(uuid,uuid)','execute')
+  and not has_function_privilege('anon','public.extend_permission_revoke(uuid,uuid)','execute')
   and not has_function_privilege('anon','public.forget_permission_revoked(uuid,uuid,text,timestamptz)','execute'),
  'helpers_private',(select bool_and(not has_function_privilege(r,'public.permission_allows_of(jsonb,jsonb)','execute')
    and not has_function_privilege(r,'public.permission_allows_valid(text[])','execute')) from unnest(array['anon','authenticated','service_role']) r)

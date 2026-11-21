@@ -199,6 +199,15 @@ $$;
 revoke all on function public.end_permission_revoke(uuid,uuid) from public,anon,service_role;
 grant execute on function public.end_permission_revoke(uuid,uuid) to authenticated;
 
+-- Keeps the caller's own hold for another minute from now: a revoke whose write the Engine never confirmed leaves its
+-- hold to run a full minute from the moment it gave up, not from when it was taken. Any other hold is left as it is.
+create function public.extend_permission_revoke(c uuid, agent uuid) returns void
+language sql security definer set search_path='' as $$
+ update public.agent_permission_revokes set held_until=now()+interval '60 seconds' where agent_id=agent and company_id=c and held_by=auth.uid();
+$$;
+revoke all on function public.extend_permission_revoke(uuid,uuid) from public,anon,service_role;
+grant execute on function public.extend_permission_revoke(uuid,uuid) to authenticated;
+
 -- The entries an Always allow may be adding to the Agent's profile right now: an always answer of a Conversation or a
 -- channel of this Agent that is being delivered (sending), or that the Engine took in the last five minutes, unless it
 -- was revoked since. The Engine's config route has no versioned write and shares no lock with its own save of an always
