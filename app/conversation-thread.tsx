@@ -52,6 +52,10 @@ const arrivals=(messages:ConversationRecord['messages']):Arrival[]=>{
 // A card can be drawn first in a turn of its own and moved into the Agent's reply once it is in, which draws it again
 // as a new element: the element names its turn, so the moved card stays still.
 const madeArrival=(message:ConversationRecord['messages'][number],agent:string):Arrival=>({key:`made:${agent}`,element:`${message.kind||'m'}${message.id}/made:${agent}`});
+// A saved or suggested rule's line moves the same way, from under the person's message to under the Agent's reply: it
+// is known by its rule, and its element names its turn.
+const ruleArrival=(message:ConversationRecord['messages'][number],rule:string):Arrival=>({key:`rule:${rule}`,element:`${message.kind||'m'}${message.id}/rule:${rule}`});
+const ruleArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.kind==='saved'?message.saved?.map(rule=>ruleArrival(message,rule.id))??[]:[]);
 const madeArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='made'?[madeArrival(message,card.agent.id)]:[])??[]);
 const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);
 // The words and the recorded outcome for a model error a retry cannot fix (#457).
@@ -202,14 +206,14 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
  // So does a message, a line or the card of an Agent Lead made (design-reference: msg-in, agentCardHTML's card-in):
  // what the Conversation held when it opened stays still, unless it was opened by the first message just sent into it.
  const drawn=arrivals(messages);
- const {rises}=useArrivals([...drawn,...madeArrivals(messages)],{fresh:useSentIntoNewChat(conversation.id)});
+ const {rises}=useArrivals([...drawn,...madeArrivals(messages),...ruleArrivals(messages)],{fresh:useSentIntoNewChat(conversation.id)});
  const rise=(index:number)=>rises(drawn[index])?' msg-in':'';
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
  const face=(size:number,connection?:string,name=conversation.agent_name)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:connection||conversation.face,name}} size={size}/></span>;
  return <>
-  <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rise(index)}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rise(index)}/>)}</Fragment>
+  <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}${rise(index)}`} data-author="person" data-kind={message.kind}>
    {!!message.body.trim()&&<div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
    {!!message.files?.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/conversation/${file.id}`} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}

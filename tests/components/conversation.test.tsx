@@ -348,3 +348,20 @@ test('the made card moved from its own turn into the Agent\'s reply does not ris
  await expect.poll(() => turnOf('Made it.')).toBeTruthy();
  expect(document.querySelector('.ac-card')!.className).toBe('ac-card');
 });
+
+test('a saved rule\'s line moved from under the person\'s message to under the reply does not rise again', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const rule = { id: 'r-1', agent: 'ag-1', removed: false, said_at: at };
+ const early = { id: 1, author: 'agent' as const, author_name: 'Mona', body: '', created_at: at, kind: 'saved' as const, saved: [rule] };
+ const reply = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'Noted.', created_at: at };
+ const late = { id: 2, author: 'agent' as const, author_name: 'Mona', body: '', created_at: at, kind: 'saved' as const, saved: [rule] };
+ const answers = [talk([sent, early], { pending: true }), talk([sent, reply, late])];
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? talk([sent, reply, late]))));
+ await render(inShell(talk([sent], { pending: true })));
+ const line = () => document.querySelector('[data-kind="saved"]');
+ await vi.advanceTimersByTimeAsync(500);
+ await expect.poll(() => line()?.classList.contains('msg-in')).toBe(true);
+ await vi.advanceTimersByTimeAsync(1500);
+ await expect.poll(() => turnOf('Noted.')).toBeTruthy();
+ expect(line()!.classList.contains('msg-in')).toBe(false);
+});
