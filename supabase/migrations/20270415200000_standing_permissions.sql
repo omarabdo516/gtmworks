@@ -246,13 +246,17 @@ language plpgsql stable security definer set search_path='' as $$
 #variable_conflict use_column
 begin
  perform public.check_permission_revoke(c,agent);
+ -- A request kept before this migration has no `allows`: its entry is unknown (null), and a revoke waits for it as for
+ -- one of its own entry (Codex on #499).
  return query select g.entry,bool_or(g.handed) from (
   select a entry,coalesce(r.delivering_at>now()-interval '15 seconds',false) handed from public.reply_cards r
-   join public.conversations v on v.id=r.conversation_id and v.company_id=r.company_id cross join unnest(r.allows) a
+   join public.conversations v on v.id=r.conversation_id and v.company_id=r.company_id
+   cross join unnest(coalesce(r.allows,array[null::text])) a
    where r.company_id=c and v.agent_id=agent and r.kind='permission' and r.state='sending' and r.content->>'choice'='always'
   union all
   select a,coalesce(q.delivering_at>now()-interval '15 seconds',false) from public.channel_permissions q
-   join public.channel_runs u on u.message_id=q.message_id and u.run_id=q.run_id cross join unnest(q.allows) a
+   join public.channel_runs u on u.message_id=q.message_id and u.run_id=q.run_id
+   cross join unnest(coalesce(q.allows,array[null::text])) a
    where q.company_id=c and u.agent_id=agent and q.state='sending' and q.content->>'choice'='always'
  ) g group by g.entry;
 end $$;

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(47);
+select plan(48);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -205,6 +205,13 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select results_eq($$select * from public.agent_permission_sending('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('mcp:canva/create_design',true)$$,
  'once handed to a closer it may reach the Engine, so every revoke waits for it to settle (Codex on #499)');
+reset role;
+-- A request kept before this migration has no `allows`: its delivery is still drained, with its entry unknown.
+update public.reply_cards set allows=null where call_id='b6';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select results_eq($$select * from public.agent_permission_sending('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values (null::text,true)$$,
+ 'a delivery whose entry is unknown is never invisible to the drain (Codex on #499)');
 reset role;
 select ok(not has_function_privilege('anon','public.agent_permission_grants(uuid,uuid)','execute')
  and not has_function_privilege('anon','public.check_permission_revoke(uuid,uuid)','execute')

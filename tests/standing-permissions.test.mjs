@@ -293,5 +293,10 @@ test('a revoke waits for another entry\'s Always allow already handed to a close
   const stuck=session({sending:()=>[{entry:'mcp:notion/create_page',handed:true}]});
   assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
+  // An answer whose entry is unknown (a request kept before #166 recorded it) may be this very entry: it is waited for
+  // too, even when not handed out.
+  const unknown=session({sending:()=>[{entry:null,handed:false}]});
+  assert.deepEqual(await revokeAgentPermission(unknown.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
  } finally { await fake.close(); }
 });
