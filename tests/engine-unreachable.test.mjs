@@ -73,9 +73,9 @@ test('a Company with no Engine at all refuses the message the same way, and keep
 test('a work sandbox that is not running reads as one state, and reads as running again once it answers', async () => {
  const fake=await fakeHermes();
  try {
-  fake.settings.sandboxRunning=false;
+  fake.settings.sandboxDown=true;
   assert.deepEqual(await readWorkSandbox(hermesOf(fake)),{state:'notRunning'});
-  fake.settings.sandboxRunning=true;
+  fake.settings.sandboxDown=false;
   assert.deepEqual(await readWorkSandbox(hermesOf(fake)),{state:'running'});
   // The Engine itself not answering is that other state, never "the sandbox is not running".
   fake.settings.managementStatus=500;
