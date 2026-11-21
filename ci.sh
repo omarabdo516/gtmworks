@@ -247,6 +247,13 @@ case "${1:-check}" in
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
   DOCKER_HOST=$host_docker docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
   images="$images $sandbox_tag"
+  # The app image, as CI's image job builds it once and every area loads it (#403, GTMWORKS_IMAGE_PREBUILT): built here on
+  # this host from the committed checkout, under the tag the source install's compose file names, because a build inside
+  # the machine cannot pull its base images. The release areas make their test releases from it.
+  web_tag=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1)
+  DOCKER_HOST=$host_docker docker build -q --build-arg NEXT_SKIP_CHECKS=true -t "$web_tag" "$work/src" > /dev/null
+  images="$images $web_tag"
+  export GTMWORKS_IMAGE_PREBUILT=true
   # Behind an HTTPS proxy (a cloud session) Node reaches GitHub through it, as curl and git do.
   [[ -z ${HTTPS_PROXY:-}${https_proxy:-} ]] || export NODE_USE_ENV_PROXY=1
   # The release-update area installs the latest published release, whose files pin images of their own (#483): read
