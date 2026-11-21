@@ -91,71 +91,66 @@ test('`docker` waits for the daemon it started, and names the failure when none 
 // can belong to another process by then. dockerd and its containerd take any live pid as theirs still running and never
 // start, so the start removes a pid file whose process is not a running containerd or dockerd, and containerd's sockets.
 const containerdFiles=['containerd.pid','containerd.sock','containerd.sock.ttrpc','containerd-debug.sock'];
-function staleMachine(processes) {
+// A machine whose containerd.pid says 180 and docker.pid 181; `processes` names what runs under each pid now.
+function withStalePids(processes,check) {
  const m=machine();
  const containerd=join(m.dir,'run/docker/containerd');
  for(const file of containerdFiles) writeFileSync(join(containerd,file),file==='containerd.pid'?'180\n':'');
  writeFileSync(join(containerd,'containerd.toml'),'');
  writeFileSync(join(m.dir,'run/docker.pid'),'181');
  for(const [pid,name] of Object.entries(processes)) writeFileSync(join(m.dir,'proc',pid),`${name}\n`);
- return {...m,containerd,left:()=>containerdFiles.filter(file=>existsSync(join(containerd,file))),dockerPid:()=>existsSync(join(m.dir,'run/docker.pid'))};
+ const containerdLeft=()=>containerdFiles.filter(file=>existsSync(join(containerd,file)));
+ const dockerPidLeft=()=>existsSync(join(m.dir,'run/docker.pid'));
+ try { check({...m,containerd,containerdLeft,dockerPidLeft}); } finally { m.done(); }
 }
 
 test('`docker` removes pid files whose pid is another process, and containerd\'s sockets, before it starts dockerd',()=>{
  // 180 is now the session's worker, 181 runs nothing at all.
- for(const processes of [{180:'claude'},{180:'claude',181:'node'},{}]) {
-  const m=staleMachine(processes);
-  try {
-   const result=m.run(['docker']);
-   assert.equal(result.status,0,result.stderr);
-   assert.deepEqual(m.left(),[],JSON.stringify(processes));
-   assert.equal(m.dockerPid(),false);
-   assert.ok(existsSync(join(m.containerd,'containerd.toml')),'only the pid file and the sockets go');
-   assert.ok(m.calls().some(call=>call.startsWith('dockerd')));
-   assert.match(result.stdout,/stale/);
-  } finally { m.done(); }
- }
+ for(const processes of [{180:'claude'},{180:'claude',181:'node'},{}]) withStalePids(processes,m=>{
+  const result=m.run(['docker']);
+  assert.equal(result.status,0,result.stderr);
+  assert.deepEqual(m.containerdLeft(),[],JSON.stringify(processes));
+  assert.equal(m.dockerPidLeft(),false);
+  assert.ok(existsSync(join(m.containerd,'containerd.toml')),'only the pid file and the sockets go');
+  assert.ok(m.calls().some(call=>call.startsWith('dockerd')));
+  assert.match(result.stdout,/Removing the stale .*containerd\.pid \(pid 180 is (claude|not running)\)/);
+ });
  // The hook's start, in a cloud session, clears them the same way.
- const m=staleMachine({180:'claude'});
- try {
+ withStalePids({180:'claude'},m=>{
   assert.equal(m.run([],{CLAUDE_CODE_REMOTE:'true'}).status,0);
-  assert.deepEqual(m.left(),[]);
-  assert.equal(m.dockerPid(),false);
- } finally { m.done(); }
+  assert.deepEqual(m.containerdLeft(),[]);
+  assert.equal(m.dockerPidLeft(),false);
+ });
 });
 
 test('`docker` leaves the pid files of a containerd or dockerd that really runs',()=>{
- const m=staleMachine({180:'containerd',181:'dockerd'});
- try {
+ withStalePids({180:'containerd',181:'dockerd'},m=>{
   assert.equal(m.run(['docker']).status,0);
-  assert.deepEqual(m.left(),containerdFiles);
-  assert.equal(m.dockerPid(),true);
- } finally { m.done(); }
+  assert.deepEqual(m.containerdLeft(),containerdFiles);
+  assert.equal(m.dockerPidLeft(),true);
+ });
  // A live containerd keeps its files while a stale docker.pid still goes.
- const n=staleMachine({180:'containerd',181:'bash'});
- try {
-  assert.equal(n.run(['docker']).status,0);
-  assert.deepEqual(n.left(),containerdFiles);
-  assert.equal(n.dockerPid(),false);
- } finally { n.done(); }
+ withStalePids({180:'containerd',181:'bash'},m=>{
+  assert.equal(m.run(['docker']).status,0);
+  assert.deepEqual(m.containerdLeft(),containerdFiles);
+  assert.equal(m.dockerPidLeft(),false);
+ });
  // A daemon that answers: nothing is looked at or removed.
- const o=staleMachine({});
- try {
-  writeFileSync(join(o.dir,'dockerd-started'),'');
-  assert.equal(o.run(['docker']).status,0);
-  assert.deepEqual(o.left(),containerdFiles);
-  assert.equal(o.dockerPid(),true);
- } finally { o.done(); }
+ withStalePids({},m=>{
+  writeFileSync(join(m.dir,'dockerd-started'),'');
+  assert.equal(m.run(['docker']).status,0);
+  assert.deepEqual(m.containerdLeft(),containerdFiles);
+  assert.equal(m.dockerPidLeft(),true);
+ });
 });
 
 test('outside a cloud session the hook leaves stale pid files alone',()=>{
- const m=staleMachine({});
- try {
+ withStalePids({},m=>{
   assert.equal(m.run([]).status,0);
-  assert.deepEqual(m.left(),containerdFiles);
-  assert.equal(m.dockerPid(),true);
+  assert.deepEqual(m.containerdLeft(),containerdFiles);
+  assert.equal(m.dockerPidLeft(),true);
   assert.deepEqual(m.calls(),[]);
- } finally { m.done(); }
+ });
 });
 
 test('`browser` installs Chromium only when the Playwright build it needs is missing',()=>{

@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 stamp=node_modules/.gtmworks-lock-hash
 log_dir=${TMPDIR:-/tmp}
-docker_run=${GTMWORKS_DOCKER_RUN_DIR:-/var/run}
+docker_run_dir=${GTMWORKS_DOCKER_RUN_DIR:-/var/run}
 
 deps() {
  local hash
@@ -29,16 +29,18 @@ deps() {
 # never start (#522). Removes each pid file whose pid is not a running containerd or dockerd, with containerd's sockets.
 clear_stale_pid_files() {
  local file pid name
- for file in "$docker_run/docker/containerd/containerd.pid" "$docker_run/docker.pid"; do
-  [[ -f $file ]] || continue
-  pid=$(tr -dc 0-9 < "$file")
-  name=$( [[ -n $pid ]] && ps -o comm= -p "$pid" 2> /dev/null || true)
+ for file in "$docker_run_dir/docker/containerd/containerd.pid" "$docker_run_dir/docker.pid"; do
+  # Read and removed with the same rights dockerd will run with (the sudo prefix in "$@", if any).
+  pid=$("$@" cat "$file" 2> /dev/null | tr -dc 0-9) || continue
+  [[ -n $pid ]] && name=$(ps -o comm= -p "$pid" 2> /dev/null) || name=''
   [[ $name == containerd || $name == dockerd ]] && continue
   echo "Removing the stale $file (pid ${pid:-none} is ${name:-not running})"
-  "$@" rm -f "$file"
-  [[ $file == */containerd.pid ]] && "$@" rm -f "${file%/*}"/containerd.sock* "${file%/*}/containerd-debug.sock"
+  if [[ $file == */containerd.pid ]]; then
+   "$@" bash -c 'rm -f "$1"/containerd.pid "$1"/containerd.sock* "$1"/containerd-debug.sock' _ "${file%/*}"
+  else
+   "$@" rm -f "$file"
+  fi
  done
- return 0
 }
 
 # Starts dockerd detached when no daemon answers and none is running. With `wait`, waits up to 90 seconds for it.

@@ -8,8 +8,9 @@ setup of the account's own. Only the local stack's credentials are used: no prod
 
 `.claude/settings.json` runs `scripts/cloud-session-setup.sh` at every session start. Outside a cloud session
 (`CLAUDE_CODE_REMOTE` is not `true`) it does nothing. In one it starts `dockerd` in the background when no Docker daemon
-answers (first removing any pid file left from before the VM restarted, below), and runs `npm ci` when `package-lock.json` changed since the last install (or `node_modules` is missing). It
-prints one line when it is done.
+answers (first removing any pid file left from before the VM restarted, see "When it does not start"), and runs `npm ci`
+when `package-lock.json` changed since the last install (or `node_modules` is missing). It prints one line when it is
+done, after a `Removing the stale …` line for each pid file it removed.
 
 ## 1. Bring it up: `npm run cloud:up`
 
