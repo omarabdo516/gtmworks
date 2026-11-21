@@ -221,7 +221,7 @@ direct_json=$(for item in "${probe_direct[@]}"; do printf '{"host":"%s","port":%
 # own services and Engine, the sandbox's own network and the exit's own.
 sandbox_work_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-work-first").IPAddress}}' "$sandbox_id")
 refused_json=$(for host in 10.20.30.40 172.16.5.6 192.168.7.8 fd00::1 100.64.0.1 169.254.1.1 fe80::1 127.0.0.1 ::1 0.0.0.0 2130706433 ::ffff:127.0.0.1 \
-  169.254.169.254 fd00:ec2::254 ::ffff:169.254.169.254 100.100.100.200 "$db_ip" "$engine_install_ip" "$work_engine_ip" "$sandbox_work_ip" "$exit_outbound_ip" \
+  169.254.169.254 fd00:ec2::254 ::ffff:169.254.169.254 100.100.100.200 168.63.129.16 "$db_ip" "$engine_install_ip" "$work_engine_ip" "$sandbox_work_ip" "$exit_outbound_ip" \
   localhost private.exit.test private172.exit.test private192.exit.test ula.exit.test shared.exit.test link-local.exit.test link-local6.exit.test loopback.exit.test \
   loopback6.exit.test metadata.exit.test metadata6.exit.test metadata-shared.exit.test db.exit.test engine.exit.test exit-own.exit.test sandbox gtmworks-engine-first; do
   printf '"%s",' "$host"; done | sed 's/,$//')
@@ -1102,6 +1102,11 @@ previous_release_install() {
 # build this release's own shape twice and prove nothing (#378, C1).
 previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6
 git cat-file -e "$previous_release^{commit}" 2> /dev/null || git fetch --no-tags origin "$previous_release" || fail 'the previous release commit'
+# The update and previous-archive areas each make this install in the same places: one that ran before this one in
+# the same checkout (./ci.sh install, all of them) leaves its worktree and folder, which go first.
+git worktree remove --force "$RUNNER_TEMP/previous-release" > /dev/null 2>&1 || true
+docker run --rm -v "$RUNNER_TEMP:/temp" -v "$root:/root-folder" alpine:3.21 rm -rf /temp/previous-release /root-folder/release-install /root-folder/release-previous
+git worktree prune
 git worktree add "$RUNNER_TEMP/previous-release" "$previous_release" || fail 'the previous release checkout'
 docker build -q -t localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release" > /dev/null || fail 'build the previous release image'
 previous=$(publish 0.0.0-main) || fail 'push the previous release image'

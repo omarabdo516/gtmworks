@@ -400,8 +400,9 @@ Engine record), the Storage files, each Company's Engine data volume, each Compa
 work folder (the files its Agents made in its work sandbox), each Engine's key file
 (`.engines/`) and `.env.install`, then starts every Engine, sandbox and the stack again.
 It leaves out the tool caches an Agent's commands leave in a work folder (folders named
-`.cache`, `node_modules` or `__pycache__`), which a command makes again, and whatever
-lives only on a sandbox's own disk. Each
+`.cache`, `node_modules` or `__pycache__`), which a command makes again, the links an
+Agent made in a work folder (a symbolic link, and the second name of a file with two,
+whose file is kept), and whatever lives only on a sandbox's own disk. Each
 Engine's data holds that Company's Agents, their profiles, rules, memory, skills and
 history, so a restore brings every Company back as it was. An
 optional directory after `backup` changes the destination.

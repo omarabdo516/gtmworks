@@ -14,6 +14,9 @@ fail_update() { cat update.log >&2; fail "$1"; }
 # as the release and one-line steps never printed it.
 area_setup() {
   fail_prefix='install check failed: '
+  # The rollback area's failing migration stays in the checkout when that area stops on a failed check: no later area
+  # in the same checkout (./ci.sh install, all of them) applies it.
+  rm -f supabase/migrations/99999999999999_failure.sql
   trap 'status=$?; if [ "$status" -ne 0 ]; then bash scripts/install-diagnostics.sh || true; fi; exit "$status"' EXIT
 }
 # The install's own Compose project and its database (docker-compose.install.yml).
@@ -139,6 +142,12 @@ start_registry() {
 # This release and the next as registry images and release files, from the app image this checkout built (or CI loaded
 # and tagged): the update and the one-line areas each make what they need from the same steps (#406).
 publish_releases() {
+  # CI loads the run's one app and sandbox image (GTMWORKS_IMAGE_PREBUILT); on a fresh Docker machine an area that makes
+  # its releases before it installs anything builds them from the checkout first, as a source install would.
+  if [[ ${GTMWORKS_IMAGE_PREBUILT:-} != true ]]; then
+    docker image inspect "$(web_image_tag)" > /dev/null 2>&1 || docker build -q -t "$(web_image_tag)" . > /dev/null || fail 'build this release image'
+    docker image inspect gtmworks-work-sandbox:local > /dev/null 2>&1 || docker build -q -t gtmworks-work-sandbox:local sandbox > /dev/null || fail 'build the work sandbox image'
+  fi
   docker tag "$(web_image_tag)" localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'
   first=$(publish 0.0.0-ci) || fail 'push this release image'
   # Every release file below pins the work sandbox image too (#392); `sandbox` stays set for the area's later releases.

@@ -34,13 +34,15 @@ from urllib.parse import urlsplit
 PORT = int(os.environ.get('EXIT_PORT', '3128'))
 # The ranges no request may reach, whatever name it gives. Each is a place inside a server or its provider, never a
 # public site: the install's own Docker networks are private ranges, and the metadata services of the clouds sit on
-# link-local (169.254.169.254, fd00:ec2::254 within fc00::/7) or shared (100.100.100.200) addresses.
+# link-local (169.254.169.254, fd00:ec2::254 within fc00::/7) or shared (100.100.100.200) addresses, and Azure's
+# WireServer on a public one (168.63.129.16), which an Azure host answers for its machines' platform settings.
 REFUSED = [(ipaddress.ip_network(network), reason) for network, reason in (
     ('0.0.0.0/8', 'this network'),
     ('10.0.0.0/8', 'a private address'),
     ('100.64.0.0/10', 'a shared address'),
     ('127.0.0.0/8', 'loopback'),
     ('169.254.169.254/32', 'cloud metadata'),
+    ('168.63.129.16/32', 'cloud metadata'),
     ('169.254.0.0/16', 'a link-local address'),
     ('172.16.0.0/12', 'a private address'),
     ('192.0.0.0/24', 'a reserved address'),

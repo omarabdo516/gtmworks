@@ -634,8 +634,12 @@ company_limits() {
   write_limits "$slug" "${memory:-$old_memory}" "${cpus:-$old_cpus}" || return 1
   if ! sandbox_restart "$slug" >&2; then
     write_limits "$slug" "$old_memory" "$old_cpus" || return 1
-    sandbox_restart "$slug" >&2 || true
-    echo "The limits of Company \"$name\" were not changed: its work sandbox did not start with them. It runs with its earlier limits."
+    # The earlier limits are said to run only when the sandbox started with them again and its Engine reaches it.
+    if sandbox_restart "$slug" >&2; then
+      echo "The limits of Company \"$name\" were not changed: its work sandbox did not start with them. It runs with its earlier limits."
+    else
+      echo "The limits of Company \"$name\" were not changed, and its work sandbox did not start again with its earlier limits either: it is not running. Run this command again, or the install command." >&2
+    fi
     return 1
   fi
   docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$(sandbox_container "$slug")" \
@@ -915,12 +919,18 @@ if [ "$operation" = backup ]; then
   # Every Company's work folder goes in too, under work/ by its Engine folder's name (#399), without the tool caches an
   # Agent's commands leave in it (`.cache`, `node_modules`, `__pycache__`): each one found under work/ is excluded by its
   # own path, so a file of the same name anywhere else in the archive (an upload in Storage) is kept. Caches outside the
-  # work folder live on the sandbox's own disk, which nothing keeps.
+  # work folder live on the sandbox's own disk, which nothing keeps. A restore refuses an archive with a link member, so
+  # the links an Agent makes in a work folder stay out too: each symbolic link, and every name of a file with several
+  # but its first, which keeps the file itself.
   mkdir -p .engines
   volumes ro -v "$PWD/.env.install:/.env.install:ro" -v "$PWD/.engines:/.engines:ro" \
     -v "$PWD/.install-lock/engines.list:/engines.list:ro" alpine:3.21 sh -ec '
       cd /
-      find work -mindepth 1 -type d \( -name .cache -o -name node_modules -o -name __pycache__ \) -prune > /tmp/caches
+      {
+        find work -mindepth 1 -type d \( -name .cache -o -name node_modules -o -name __pycache__ \) -prune -print
+        find work -mindepth 1 -type l -print
+        find work -mindepth 1 -type f -links +1 -exec stat -c "%i %n" {} + | sort -n | awk "seen[\$1]++ { sub(/^[0-9]+ /, \"\"); print }"
+      } > /tmp/caches
       tar -czf - -X /tmp/caches -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines work .env.install .engines engines.list
     ' > .install-lock/backup.tgz
   archive="$destination/gtmworks-$(date -u +%Y%m%dT%H%M%SZ)-$$.tgz"

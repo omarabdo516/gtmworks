@@ -18,7 +18,7 @@ test('the exit refuses private, shared, link-local, loopback, metadata and reser
   'fd00::1':'a private address','fc00::1':'a private address','100.64.0.1':'a shared address','100.100.100.200':'a shared address',
   '169.254.1.1':'a link-local address','fe80::1':'a link-local address','fe80::1%eth0':'a link-local address',
   '127.0.0.1':'loopback','127.8.9.10':'loopback','::1':'loopback','0.0.0.0':'this network','::':'this network',
-  '169.254.169.254':'cloud metadata','fd00:ec2::254':'cloud metadata',
+  '169.254.169.254':'cloud metadata','fd00:ec2::254':'cloud metadata','168.63.129.16':'cloud metadata','::ffff:168.63.129.16':'cloud metadata',
   // An IPv4 address written as IPv6, or wrapped in a tunnel or a translation prefix, is never a way round the rules.
   '::ffff:127.0.0.1':'loopback','::ffff:169.254.169.254':'cloud metadata','::ffff:10.0.0.1':'a private address',
   '::a00:1':'an IPv4-compatible address','::8.8.8.8':'an IPv4-compatible address','::ffff:0:a00:1':'a translated address','::ffff:0:808:808':'a translated address',

@@ -28,7 +28,10 @@ case "$*" in
  *' up -d '*)
   printf 'limits memory=%s cpus=%s\\n' "\${SANDBOX_MEMORY:-}" "\${SANDBOX_CPUS:-}" >> "$COMMANDS"
   if [ "\${KILL_ON_UP:-}" = 1 ]; then kill -TERM "$PPID"; exit 1; fi
-  case "$*" in *' sandbox') exit "\${SANDBOX_UP_EXIT:-0}";; esac
+  case "$*" in *' sandbox')
+   # A sandbox that starts only with some limits: SANDBOX_UP_FAIL_CPUS names the CPUs it does not start with.
+   if [ -n "\${SANDBOX_UP_FAIL_CPUS:-}" ] && [ "\${SANDBOX_CPUS:-}" = "\${SANDBOX_UP_FAIL_CPUS}" ]; then exit 1; fi
+   exit "\${SANDBOX_UP_EXIT:-0}";; esac
   exit "\${ENGINE_EXIT:-0}";;
  *'exec -T db psql'*) printf '%s\\n' "\${COMPANY_ROW-http://gtmworks-engine-second-company-0000abcd:8642|Second Company}";;
  *'ps -aq --filter name=^gtmworks-sandbox-'*) echo sandbox-id;;
@@ -405,7 +408,7 @@ test('company limits changes one Company\'s limits and starts only its sandbox a
 });
 
 test('company limits that the sandbox cannot start with puts the earlier limits back', t => {
- const installDir=withCompany(t,{SANDBOX_UP_EXIT:'1'});
+ const installDir=withCompany(t,{SANDBOX_UP_FAIL_CPUS:'512'});
  const result=installDir.run('company','limits','Second Company','--cpus','512');
  assert.notEqual(result.status,0);
  assert.equal(result.stdout.trim(),'The limits of Company "Second Company" were not changed: its work sandbox did not start with them. It runs with its earlier limits.');
@@ -413,6 +416,17 @@ test('company limits that the sandbox cannot start with puts the earlier limits 
  assert.match(env,/^SANDBOX_MEMORY=2g$/m);
  assert.match(env,/^SANDBOX_CPUS=1\.5$/m);
  assert.ok(installDir.lines().includes('limits memory=2g cpus=1.5'),'the sandbox is started again with its earlier limits');
+});
+
+test('company limits whose sandbox does not start again with the earlier limits says it is not running', t => {
+ const installDir=withCompany(t,{SANDBOX_UP_EXIT:'1'});
+ const result=installDir.run('company','limits','Second Company','--cpus','512');
+ assert.notEqual(result.status,0);
+ assert.doesNotMatch(result.stdout,/runs with its earlier limits/);
+ assert.match(result.stderr,/The limits of Company "Second Company" were not changed, and its work sandbox did not start again with its earlier limits either: it is not running\./);
+ const env=readFileSync(installDir.envFile('second-company-0000abcd'),'utf8');
+ assert.match(env,/^SANDBOX_CPUS=1\.5$/m,'the earlier limits are kept for its next start');
+ assert.ok(installDir.lines().includes('limits memory=2g cpus=1.5'),'a start with its earlier limits was tried');
 });
 
 test('company limits needs a known Company and a limit', t => {

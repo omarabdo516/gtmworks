@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, statSync, existsSync, symlinkSync, linkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
@@ -663,6 +663,9 @@ test('backup and restore round-trip every Engine\'s volume and key; failed extra
  writeFileSync(join(directory,'volumes',secondVolume,'profiles','co-second','memories','MEMORY.md'),'the second team says this',{mode:0o600});
  // Each Company's work folder (#399), with a file its Agent made and the tool caches its commands left.
  writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),'the first brief',{mode:0o644});
+ // The links an Agent can make in it: a restore refuses a link member, so the backup leaves them out and keeps the file.
+ symlinkSync('brief.md',join(directory,'volumes/gtmworks-work-first/co-first/latest.md'));
+ linkSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),join(directory,'volumes/gtmworks-work-first/co-first/brief-again.md'));
  writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/.cache/big.bin'),'cache');
  writeFileSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site/index.html'),'the second site',{mode:0o644});
  writeFileSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site/node_modules/pkg/index.js'),'module');
@@ -769,8 +772,10 @@ if(args[0]==='compose') {
  }
  assert.ok(entries.includes('var/lib/storage/'));
  // Every Company's work folder is in the archive under its Engine folder's name, without its tool caches (#399).
- for(const entry of ['work/first/co-first/brief.md','work/second-company/ag-second/site/index.html']) assert.ok(entries.includes(entry),entry);
+ assert.ok(entries.includes('work/second-company/ag-second/site/index.html'));
  assert.ok(!entries.some(entry=>/\/(\.cache|node_modules)\//.test(entry)),'the archive holds no tool cache');
+ assert.ok(!entries.includes('work/first/co-first/latest.md'),'the archive holds no symbolic link of a work folder');
+ assert.equal(entries.filter(entry=>/^work\/first\/co-first\/brief(-again)?\.md$/.test(entry)).length,1,'a file with two names is archived once, by one of them');
  assert.ok(!entries.some(entry=>entry==='opt/data/'||entry.startsWith('opt/data/')),'the new layout holds no opt/data');
  // The archive names the Engines its Companies name, so a restore knows every one it must hold (#378, C4).
  assert.ok(entries.includes('engines.list'),'the archive holds the Engines manifest');
@@ -806,8 +811,9 @@ if(args[0]==='compose') {
  assert.equal(readFileSync(join(directory,'.engines/first/.env'),'utf8'),firstEnv);
  assert.equal(readFileSync(join(directory,'.engines/second-company/.env'),'utf8'),secondEnv);
  // Each Company's work folder is emptied and put back as the archive kept it, its caches left out (#399).
- assert.deepEqual(readdirSync(join(directory,'volumes/gtmworks-work-first/co-first')),['brief.md']);
- assert.equal(readFileSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),'utf8'),'the first brief');
+ const brief=readdirSync(join(directory,'volumes/gtmworks-work-first/co-first'));
+ assert.equal(brief.length,1,brief.join());
+ assert.equal(readFileSync(join(directory,'volumes/gtmworks-work-first/co-first',brief[0]),'utf8'),'the first brief');
  assert.deepEqual(readdirSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site')),['index.html']);
  assert.doesNotMatch(restore.stdout,/Hermes data was not in this backup/);
  assert.match(readFileSync(join(directory,'commands'),'utf8'),/--force-recreate/);
