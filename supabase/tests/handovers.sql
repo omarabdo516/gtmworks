@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(81);
+select plan(85);
 -- #317, #475. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor
 -- (…03) is shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads. Any Agent of a
 -- Company hands work to any other Agent of it, seen by the person or not (decision 0057).
@@ -204,5 +204,18 @@ select is(public.command_handover('c3170000-0000-0000-0000-000000000006','100000
 select is(public.command_handover('c3170000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000011',gen_random_uuid(),'/write three headlines','writer','three headlines'),
  true,'and one typed to the main Agent still hands its job over');
 reset role;
+-- #475: the writer must be a current Member. Once removed from the Company, their Run with any Agent lists no target,
+-- is offered no hand_to_agent, and a call it made is refused, so a Conversation they kept hands nothing over.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c3170000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','a3170000-0000-0000-0000-000000000012','Ads');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000008','person','20000000-0000-0000-0000-000000000005','Multi','Write it',gen_random_uuid(),'run-removed');
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id) values
+ ('c3170000-0000-0000-0000-000000000008','e4750000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'20000000-0000-0000-0000-000000000005','a3170000-0000-0000-0000-000000000012');
+select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000008','e4750000-0000-0000-0000-000000000008'))>0,true,'a current Contributor''s Run lists the Company''s other Agents');
+update public.members set removed_at=now() where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
+select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000008','e4750000-0000-0000-0000-000000000008')),0,'once removed from the Company, their Run lists none');
+select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000005')),false,'and is offered no hand_to_agent');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000008','run-removed','call-1','Writer','Write it',null),'{"state":"refused"}'::jsonb,'and a call it made is refused');
 select * from finish();
 rollback;
