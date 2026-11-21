@@ -49,6 +49,12 @@ test.beforeAll(async({},testInfo)=>{
  end $$;`);
  query(`select public.agent_propose_change('${managerTalk}','pw-1','call-0',null,'model',null,'"anthropic/claude-sonnet-5-5"','The weekly report keeps running late.')`);
  query(`select public.agent_propose_change('${ownerTalk}','pw-2','call-0','Analyst','instructions',null,'"You answer in three lines."','Its answers run long.')`);
+ // The Owner's chat goes on long after the proposal, so its card is far above the newest message.
+ query(`insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+  select '${company}','${ownerTalk}',x.author,case when x.author='person' then '${omar}'::uuid end,case when x.author='agent' then '${lead}'::uuid end,
+   case when x.author='person' then 'عمر' else 'Lead' end,repeat('A later line about the weekly report. ',12),case when x.author='person' then gen_random_uuid() end,
+   'pw-later-'||n,now()+make_interval(secs=>n*2+case when x.author='agent' then 1 else 0 end)
+  from generate_series(1,15) n cross join (values ('person'),('agent')) x(author)`);
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
@@ -88,10 +94,15 @@ test('the Owner sees each waiting proposal on its Agent\'s row, its number on Ag
  // Analyst's was proposed by Lead in the Owner's own chat: it opens there, on its card.
  await page.goto(settings(analyst));
  await expect(note(page).locator(':scope > span')).toHaveText('Lead proposed New core instructions · waiting for your OK. Nothing changes here before that.');
+ // The chat lands on the card, then its address is the chat's own again, so a reload opens on the newest message.
+ await expect(note(page).getByRole('link',{name:'Open the proposal'})).toHaveAttribute('href',`/c/rs-learning/conversations/${ownerTalk}#change-${proposalId(analyst)}`);
  await note(page).getByRole('link',{name:'Open the proposal'}).click();
- await expect(page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${ownerTalk}#change-${proposalId(analyst)}$`));
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${ownerTalk}$`));
  await expect(page.locator('.sov')).toHaveCount(0);
- await expect(page.getByRole('group',{name:'Proposed change: Analyst'})).toBeVisible();
+ // The card is brought into view and focused, not the newest message.
+ const card=page.getByRole('group',{name:'Proposed change: Analyst'});
+ await expect(card).toBeInViewport();
+ await expect(card).toBeFocused();
 });
 
 test('the Manager whose chat it came from reads the note waiting for the Owner, with the Agent\'s state on its row and no number',async({page})=>{
@@ -103,8 +114,9 @@ test('the Manager whose chat it came from reads the note waiting for the Owner, 
  await expect(agentsEntry(page)).toHaveAccessibleName('Agents');
  await page.goto(settings(writer));
  await expect(note(page).locator(':scope > span')).toHaveText('Writer proposed New model: anthropic/claude-sonnet-5-5 · waiting for عمر. Nothing changes here before that.');
+ await expect(note(page).getByRole('link',{name:'Open the proposal'})).toHaveAttribute('href',`/c/rs-learning/conversations/${managerTalk}#change-${proposalId(writer)}`);
  await note(page).getByRole('link',{name:'Open the proposal'}).click();
- await expect(page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${managerTalk}#change-${proposalId(writer)}$`));
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${managerTalk}$`));
  await expect(page.getByRole('group',{name:'Proposed change: Writer'})).toBeVisible();
 });
 
