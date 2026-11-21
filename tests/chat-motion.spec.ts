@@ -77,7 +77,8 @@ test('in a Conversation the sent message, the reply and the card for the Agent L
  await expect(page.locator('.thinking .shimmer')).toHaveText(/^Lead is working on a reply for .+…$/);
  expect(await motion(page,'.thinking .shimmer')).toEqual(breathes);
  // Lead makes an Agent during the Run, as lead_create_agent writes it; then the Run ends with its reply. The made Agent is
- // tied to this Conversation in the transaction that writes the reply (close_conversation_run), so the open chat, which
+ // tied to this Conversation by a test-only trigger, in the transaction that writes the reply (close_conversation_run; the
+ // app's lead_create_agent writes it itself, during the Run), so the open chat, which
  // keeps asking for the record, reads the card and the reply together: a read in between would draw the card in a turn of
  // its own first, and a card moved into the reply stays still by design (#547).
  const [{run_id:run}]=rows(`select run_id from public.conversation_messages where conversation_id='${conversation}' and author='person'`) as {run_id:string}[];
