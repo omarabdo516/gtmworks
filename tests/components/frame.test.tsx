@@ -11,9 +11,9 @@ const route = vi.hoisted(() => ({ pathname: '/c/rs-learning/home' }));
 vi.mock('next/navigation', () => ({ usePathname: () => route.pathname }));
 
 // Links stay on the test page: a new page is the pathname changing, as the app's router changes it. Each route draws
-// a frame of its own (`route`, its key).
+// a frame of its own (`segment`, its key).
 const stay = (event: { preventDefault: () => void }) => event.preventDefault();
-const frame = (route = '') => <LanguageProvider language="en"><Frame key={route} title="Home" sidebar={<nav aria-label="Navigation">
+const frame = (segment = '') => <LanguageProvider language="en"><Frame key={segment} title="Home" sidebar={<nav aria-label="Navigation">
  <a href="#chats" onClick={stay}>Chats</a><a href="#board" onClick={stay}>Marketing board</a><button type="button">Account menu</button>
 </nav>}><a href="#card" onClick={stay}>A card on the page</a></Frame></LanguageProvider>;
 const show = async (width: number) => { route.pathname = '/c/rs-learning/home'; await page.viewport(width, 900); return render(frame()); };
@@ -96,25 +96,27 @@ const watchStarts = (name: (event: AnimationEvent) => string) => {
 };
 
 // Every page fades in once when it opens, as the reference's view does (#135, design-reference setView): a new pathname
-// replays the page region's fadeIn, a redraw of the same page (a poll, a save, the details panel) does not, and the
-// sidebar and the menu button never fade.
-test('a new page fades the page region in once; a redraw of the same page and the sidebar do not fade', async () => {
+// replays the page region's fadeIn, whether its route keeps the frame or draws a new one (`segment`); a redraw of the same
+// page (a poll, a save, the details panel) and a frame mounting again on the same page do not, and the sidebar and the
+// menu button never fade. Each test starts on a page of its own, since the frame remembers the page it last showed.
+const settle = async () => { await Promise.all(document.getAnimations().map(animation => animation.finished)); };
+test('a new page fades the page region in once; a redraw, a frame drawn again on the same page and the sidebar do not', async () => {
  const screen = await show(1440);
  const starts = watchStarts(event => `${(event.target as Element).className.split(' ')[0]} ${event.animationName}`);
- const style = getComputedStyle(content());
- expect([style.animationName, style.animationDuration, style.animationTimingFunction]).toEqual(['gw-fade-in', '0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);
- const settle = async () => { await Promise.all(document.getAnimations().map(animation => animation.finished)); };
  await settle();
  starts.length = 0;
- for (const path of ['/c/rs-learning/work/board', '/c/rs-learning/numbers', '/c/rs-learning/log', '/c/rs-learning/conversations/7']) {
+ for (const [path, segment] of [['/c/rs-learning/work/board', 'board'], ['/c/rs-learning/work/list', 'board'], ['/c/rs-learning/numbers', 'numbers'], ['/c/rs-learning/log', 'log'], ['/c/rs-learning/conversations/7', 'conversation']]) {
   route.pathname = path;
-  await screen.rerender(frame());
+  await screen.rerender(frame(segment));
   await expect.poll(() => starts.length, { message: path }).toBe(1);
   expect(starts.pop()).toBe('app-content gw-fade-in');
+  const style = getComputedStyle(content());
+  expect([style.animationDuration, style.animationTimingFunction]).toEqual(['0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);
   await settle();
-  for (let redraw = 0; redraw < 3; redraw++) await screen.rerender(frame());
+  for (let redraw = 0; redraw < 3; redraw++) await screen.rerender(frame(segment));
+  await screen.rerender(frame(`${segment} again`));
   await new Promise(resolve => setTimeout(resolve, 250));
-  expect(starts, `${path}: a redraw does not fade`).toEqual([]);
+  expect(starts, `${path}: a redraw or a frame drawn again does not fade`).toEqual([]);
  }
  for (const part of [sidebar(), document.querySelector('.mobile-menu')!]) expect(getComputedStyle(part).animationName).toBe('none');
  expect(getComputedStyle(sidebar()).opacity).toBe('1');
@@ -125,29 +127,27 @@ test('a new page fades the page region in once; a redraw of the same page and th
 test('a new chat going on as its Conversation does not fade again, in its frame or a new one; the next page does', async () => {
  const screen = await show(1440);
  const starts = watchStarts(event => event.animationName);
- await Promise.all(document.getAnimations().map(animation => animation.finished));
+ route.pathname = '/c/rs-learning/chat/lead';
+ await screen.rerender(frame('chat'));
+ await expect.poll(() => starts).toEqual(['gw-fade-in']);
+ await settle();
  starts.length = 0;
  continuePage('/c/rs-learning/conversations/8');
  route.pathname = '/c/rs-learning/conversations/8';
- await screen.rerender(frame());
+ await screen.rerender(frame('chat'));
  await new Promise(resolve => setTimeout(resolve, 250));
- expect(starts).toEqual([]);
- route.pathname = '/c/rs-learning/work/board';
- await screen.rerender(frame());
+ expect(starts, 'in the same frame').toEqual([]);
+ route.pathname = '/c/rs-learning/chat/nour';
+ await screen.rerender(frame('chat'));
  await expect.poll(() => starts).toEqual(['gw-fade-in']);
- // Another route draws a frame of its own: it fades as it mounts, unless it is the new chat going on.
- await Promise.all(document.getAnimations().map(animation => animation.finished));
+ await settle();
  continuePage('/c/rs-learning/conversations/9');
  route.pathname = '/c/rs-learning/conversations/9';
  await screen.rerender(frame('conversation'));
  await new Promise(resolve => setTimeout(resolve, 250));
- expect(starts).toEqual(['gw-fade-in']);
+ expect(starts, 'in a frame of its own').toEqual(['gw-fade-in']);
  expect(content().classList.contains('view-enter')).toBe(false);
  route.pathname = '/c/rs-learning/conversations/10';
  await screen.rerender(frame('conversation'));
  await expect.poll(() => starts).toEqual(['gw-fade-in', 'gw-fade-in']);
- await Promise.all(document.getAnimations().map(animation => animation.finished));
- route.pathname = '/c/rs-learning/log';
- await screen.rerender(frame('log'));
- await expect.poll(() => starts).toEqual(['gw-fade-in', 'gw-fade-in', 'gw-fade-in']);
 });
