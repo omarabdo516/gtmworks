@@ -6,6 +6,12 @@
   "ar": { "title": "شوف والغي اللي الوكيل يقدر يعمله من غير ما يستأذن", "body": "إعدادات الوكيل وآخر تبويب النشاط بقوا بيعرضوا صلاحياته الدايمة، كل حاجة حد رد عليها بـ«اسمح دايماً»، ومين سمح بيها وإمتى؛ والمالك أو المدير يقدر يلغي أي واحدة، والوكيل هيستأذن تاني المرة الجاية." }
  },
  {
+  "issue": 178,
+  "date": "2026-11-21",
+  "en": { "title": "Settings show a waiting proposal", "body": "While an Agent’s proposed change waits for the Owner, its page in Settings says who proposed what with a link to the proposal, its row in the Agents list says Proposal waiting, and Agents carries the number waiting." },
+  "ar": { "title": "الإعدادات بتوريك الاقتراح اللي مستني", "body": "طول ما فيه تغيير اقترحه وكيل ومستني موافقة المالك، صفحته في الإعدادات بتقول مين اقترح إيه ومعاها لينك للاقتراح، وصفّه في قايمة الوكلاء بيقول «اقتراح مستنيك»، و«الوكلاء» عليها عدد الاقتراحات اللي مستنية." }
+ },
+ {
   "issue": 31,
   "date": "2026-11-21",
   "en": { "title": "Recurring tasks in Settings", "body": "Settings now lists every recurring task of every agent with when it runs next and how its last run went; the Owner and Managers can switch one off or on, run it now, change when it runs, add one or delete one, and each change is in the log." },

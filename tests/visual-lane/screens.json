@@ -12,6 +12,6 @@
   "numbers": { "path": "/c/rs-learning/numbers", "ready": ".numbers-page" },
   "approvals": { "path": "/c/rs-learning/approvals", "ready": ".approvals" },
   "change-proposal": { "path": "/c/rs-learning/conversations/69200000-0000-0000-0000-000000000003", "state": "change-proposal", "ready": ".chg-card" },
-  "standing-permissions": { "path": "/c/rs-learning/settings?section=agents&agent=69400000-0000-0000-0000-000000000002", "state": "standing-permissions", "ready": "#sov-agent-panel .sp" },
-  "routines": { "path": "/c/rs-learning/settings?section=routines", "state": "routines", "ready": ".rt-row" }
+  "routines": { "path": "/c/rs-learning/settings?section=routines", "state": "routines", "ready": ".rt-row" },
+  "settings-proposal": { "path": "/c/rs-learning/settings?agent=69400000-0000-0000-0000-000000000002", "state": "settings-proposal", "ready": ".sov-pend" }
 }
