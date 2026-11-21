@@ -673,6 +673,9 @@
 .gw .details .rt-add .panel-form__row .btn { flex: 1 1 0; }
 .gw .details .rt-ask { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); margin: 0; }
 @media (prefers-reduced-motion: reduce) { .gw .details .rt-row.is-flash { animation: none; } }
+/* The details' own secondary button (design-reference: .btn--secondary), for the Routine's Cancel and the time question. */
+.gw .details .btn--secondary { background: var(--gw-btn2-bg); color: var(--gw-text-1); box-shadow: var(--gw-btn2-ring) 0 0 0 1px inset; }
+@media (hover: hover) { .gw .details .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); } }
 /* The Agent's screen (design-reference: .scr, .scr__off, .scr-card, .scr-thumb), drawn in code from tokens so it follows
    the theme. Sizes inside are container units, as the reference's are; only the empty frame is built (#21). */
 .gw .details .scr {
