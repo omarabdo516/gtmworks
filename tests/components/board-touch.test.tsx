@@ -40,8 +40,8 @@ test('on a phone a swipe that starts on a card scrolls the board and moves no ca
 
 test('on a phone a card held for a moment is carried to the next list and moved there, while the board holds still under the finger', async () => {
  const board = await phoneBoard();
- // dnd-kit scrolls the board by itself, on real time, while the finger is within 20% of its edge (78px at 390). The finger
- // starts and ends outside those bands, so only the browser could move the board, which is what the test is about.
+ // The board scrolls by itself, 12px a frame, while the finger is within 72px of its edge (#131); the bands kept here are
+ // wider (20% of its width, 78px at 390). The finger starts and ends outside them, so only the browser could move the board, which is what the test is about.
  const edge = board.getBoundingClientRect(), band = edge.width * 0.2 + 12;
  board.scrollLeft += column('planned').left - (edge.right - band - 48);
  const scrolled = await settled(board);
