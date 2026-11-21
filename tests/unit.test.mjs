@@ -24,7 +24,9 @@ test('card creation allows editing roles only', async () => {
  for(const role of ['viewer','unknown','',undefined]) assert.equal(canCreateCard(/** @type {any} */({role,agencyAccess:true})),false,role);
 });
 
-test('app motion contains no broad transitions or page entrance animations', () => {
+// A page fades in as the reference's view does (app/shell.css .app-content.view-enter, #135); the product's older page
+// entrances (the work view's slide, the veil, view transitions) stay gone, as does a transition of every property.
+test('app motion contains no broad transitions or the old page entrances', () => {
  for (const file of readdirSync('app', {recursive:true}).filter(file => /\.(?:css|tsx)$/.test(file))) {
   assert.doesNotMatch(readFileSync(`app/${file}`, 'utf8'), /transition\s*:\s*all\b|work-enter|work-in|view-transition|420ms|veil-out|card-close|modal-wrap\.closing/, file);
  }

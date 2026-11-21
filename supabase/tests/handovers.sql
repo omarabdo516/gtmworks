@@ -1,8 +1,9 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(53);
--- #317. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor (…03) is
--- shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads.
+select plan(88);
+-- #317, #475. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor
+-- (…03) is shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads. Any Agent of a
+-- Company hands work to any other Agent of it, seen by the person or not (decision 0057).
 insert into public.agent_profiles(agent_id,company_id,tools_confirmed,skills_shared) values
  ('a3170000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',true,true),
  ('a3170000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',true,true),
@@ -29,15 +30,19 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
  ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000004','person','20000000-0000-0000-0000-000000000004','Viewer','Plan the March intake',gen_random_uuid(),'run-viewer'),
  ('10000000-0000-0000-0000-000000000003','c3170000-0000-0000-0000-000000000021','person','20000000-0000-0000-0000-000000000001','Omar','Plan the March intake',gen_random_uuid(),'run-aleem');
 
--- Only the Lead is offered the tool, and only to a writer of the Company.
+-- Every Agent is offered the tool, and only to a writer of the Company (#475: not only the Lead).
 select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000011','20000000-0000-0000-0000-000000000001')),true,'the Lead offers hand_to_agent to the Owner');
-select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000001')),false,'another Agent never hands work on');
+select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000001')),true,'any other Agent hands work on too, to the Owner');
+select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000002')),true,'to a Manager');
+select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000003')),true,'and to a Contributor');
+select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000004')),false,'but never to a Viewer');
+select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000022','20000000-0000-0000-0000-000000000001')),false,'nor for an Agent of another Company');
 select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000011','20000000-0000-0000-0000-000000000003')),true,'a Contributor talking to the Lead is offered it');
 select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000011','20000000-0000-0000-0000-000000000004')),false,'a Viewer writes nothing, so it is offered nothing');
 select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000021','20000000-0000-0000-0000-000000000003')),false,'and a non-member is offered nothing');
-select is('create_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000001')) or 'hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000001')),false,'the target is offered neither tool');
+select is('create_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000001')),false,'another Agent is not offered the Lead''s own create_agent');
 
--- The handover Lead's call keeps: one per call, to an Agent of the same Company the person sees.
+-- The handover Lead's call keeps: one per call, to an Agent of the same Company, seen by the person or not.
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000001','run-owner','call-1',' Ads ','Plan the Meta ads for the March intake','EGP 9,000 for 30 days.'),
  '{"state":"created","agent":"Ads"}'::jsonb,'the Lead keeps a handover to an Agent of its Company');
 select is((select from_agent||'>'||to_agent||':'||state||':'||goal||':'||context from public.agent_handovers where run_id='run-owner'),
@@ -46,24 +51,30 @@ select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000001','run-
 select is((select count(*)::int from public.agent_handovers),1,'and keeps one handover');
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000001','run-owner','call-2','Nobody','Plan',''),'{"state":"ignored"}'::jsonb,'a name no Agent of the Company has is ignored');
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000001','run-owner','call-3','Lead','Plan',''),'{"state":"ignored"}'::jsonb,'and the Lead never hands work to itself');
-select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000003','run-contributor','call-1','Writer','Plan',''),'{"state":"ignored"}'::jsonb,'an Agent the sender does not see is no target');
-select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000003','run-contributor','call-2','Ads','Plan the March intake',null),'{"state":"created","agent":"Ads"}'::jsonb,'and one they see is');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000003','run-contributor','call-1','Writer','Plan',''),'{"state":"created","agent":"Writer"}'::jsonb,'an Agent the sender does not see is a target all the same (#475)');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000003','run-contributor','call-2','Ads','Plan the March intake',null),'{"state":"created","agent":"Ads"}'::jsonb,'and so is one they see');
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000021','run-aleem','call-1','Writer','Plan',''),'{"state":"ignored"}'::jsonb,'an Agent of another Company is never a target');
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000021','run-aleem','call-2','Ads','Plan the March intake',null),'{"state":"created","agent":"Ads"}'::jsonb,'the name picks the sender''s own Company''s Agent');
 select is((select company_id from public.agent_handovers where run_id='run-aleem'),'10000000-0000-0000-0000-000000000003'::uuid,'and the row belongs to that Company');
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000004','run-viewer','call-1','Ads','Plan',''),'{"state":"refused"}'::jsonb,'a Viewer''s Conversation hands nothing over, and its Run still closes');
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000001','run-nobody','call-1','Ads','Plan',''),'{"state":"refused"}'::jsonb,'a run of no message of the Conversation is refused');
 
--- The person reads the handovers of their own Conversation, and only those made with Agents they see.
+-- The person reads every handover of their own Conversation, an Agent hidden from them included (#475).
 insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal) values
  ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000003','run-contributor','call-9','a3170000-0000-0000-0000-000000000011','a3170000-0000-0000-0000-000000000013','A hidden one');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select string_agg(to_agent::text,',' order by to_agent) from public.agent_handovers),'a3170000-0000-0000-0000-000000000012,a3170000-0000-0000-0000-000000000022','the Owner reads the handovers of their own Conversations in both Companies');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is((select string_agg(to_agent::text,',' order by to_agent) from public.agent_handovers),'a3170000-0000-0000-0000-000000000012','a Contributor reads theirs, without the Agent hidden from them');
+select is((select string_agg(to_agent::text,',' order by to_agent) from public.agent_handovers),'a3170000-0000-0000-0000-000000000012,a3170000-0000-0000-0000-000000000013,a3170000-0000-0000-0000-000000000013','a Contributor reads theirs, with the Agent hidden from them');
+select is((select string_agg(from_name||'>'||to_name||':'||to_connection||':'||goal,',' order by id) from public.conversation_handovers('c3170000-0000-0000-0000-000000000003')),
+ 'Lead>Writer:f3170000-0000-0000-0000-000000000013:Plan,Lead>Ads:f3170000-0000-0000-0000-000000000012:Plan the March intake,Lead>Writer:f3170000-0000-0000-0000-000000000013:A hidden one',
+ 'and the Conversation draws both Agents'' names and faces, the hidden one''s too, which hermes_agents keeps from them');
+select is((select count(*)::int from public.hermes_agents where id='a3170000-0000-0000-0000-000000000013'),0,'while the Agent itself stays hidden from them');
+select is((select count(*)::int from public.conversation_handovers('c3170000-0000-0000-0000-000000000001')),0,'nobody reads another person''s Conversation''s handovers through it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select is((select count(*)::int from public.agent_handovers),0,'a Viewer reads another person''s handovers from none');
+select is((select count(*)::int from public.conversation_handovers('c3170000-0000-0000-0000-000000000003')),0,'nor through the Conversation''s function');
 select throws_ok($$select * from public.handovers_due()$$,'42501',null,'nor can any person list the worker''s due handovers');
 reset role;
 
@@ -115,8 +126,8 @@ select is((select state||':'||(closed_at is not null)::text from public.agent_ha
 select is((select attempt from public.begin_handover((select id from public.agent_handovers where call_id='call-fresh'))),1,
  'while one that began an hour ago is asked for again');
 
--- #354: a queued handover re-checks that its target is still the person's to call. One hidden from them after the job
--- was kept starts no Run: the leg ends as failed, so Lead still tells them the job did not happen.
+-- #475: a target need not be the person's to call (#354's re-check is a job command's alone now): one hidden from them
+-- after the job was kept still starts its Run.
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('c3170000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000011','Lead');
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
@@ -125,9 +136,97 @@ select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000005','run-
  '{"state":"created","agent":"Ads"}'::jsonb,'a job is kept for an Agent the sender sees');
 delete from public.member_agent_access where company_id='10000000-0000-0000-0000-000000000001'
  and person_id='20000000-0000-0000-0000-000000000003' and agent_id='a3170000-0000-0000-0000-000000000012';
-select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-hidden'))),0,
- 'a target hidden since the job was kept starts no Run');
-select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where run_id='run-hidden'),'returning:failed:0',
- 'the leg ends as failed, so Lead still reports it to the person');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-hidden'))),1,
+ 'a target hidden since the job was kept still starts its Run');
+select is((select state||':'||coalesce(target_outcome,'-')||':'||target_attempts from public.agent_handovers where run_id='run-hidden'),'waiting:-:1',
+ 'its first attempt, with nothing ended');
+
+-- #475: an Agent that is not the main one hands work over from its own Conversation. The Contributor talks to Ads and
+-- Ads asks Writer, an Agent hidden from them; the job runs on Writer's own profile and Ads's follow-up in Ads's chat.
+insert into public.member_agent_access(company_id,person_id,agent_id) values
+ ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000012');
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c3170000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000012','Ads'),
+ ('c3170000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','a3170000-0000-0000-0000-000000000012','Ads');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000006','person','20000000-0000-0000-0000-000000000003','Contributor','Write the ad copy',gen_random_uuid(),'run-ads'),
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000007','person','20000000-0000-0000-0000-000000000004','Viewer','Write the ad copy',gen_random_uuid(),'run-ads-viewer');
+-- The Run's reservation names its Agent and person, as pin_run reads them; a first message has no Conversation yet.
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id) values
+ ('c3170000-0000-0000-0000-000000000006','e4750000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'20000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000012'),
+ ('c3170000-0000-0000-0000-000000000099','e4750000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'20000000-0000-0000-0000-000000000004','a3170000-0000-0000-0000-000000000012'),
+ ('c3170000-0000-0000-0000-000000000098','e4750000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',gen_random_uuid(),'20000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000022');
+select is((select string_agg(name||':'||job,',' order by name) from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000006','e4750000-0000-0000-0000-000000000001')),'Lead:General,Writer:SEO',
+ 'the tool names the Company''s other Agents with their job line, never the asking Agent');
+select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000099','e4750000-0000-0000-0000-000000000002')),0,'and none to a Viewer''s Run');
+select is((select string_agg(name,',' order by name) from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000098','e4750000-0000-0000-0000-000000000003')),'Lead',
+ 'another Company''s Run names that Company''s Agents alone');
+select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000006',gen_random_uuid())),0,'and a send with no reservation names none');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000006','run-ads','call-1','Writer','Write three headlines','For the March intake.'),
+ '{"state":"created","agent":"Writer"}'::jsonb,'Ads keeps a handover to Writer, which the person does not see');
+select is((select from_agent||'>'||to_agent from public.agent_handovers where run_id='run-ads'),'a3170000-0000-0000-0000-000000000012>a3170000-0000-0000-0000-000000000013','from Ads to Writer');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000006','run-ads','call-2','Ads','Write it yourself',null),'{"state":"ignored"}'::jsonb,'an Agent never hands work to itself');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000006','run-ads','call-3','Nobody','Write it',null),'{"state":"ignored"}'::jsonb,'a name no Agent has is ignored');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000007','run-ads-viewer','call-1','Writer','Write it',null),'{"state":"refused"}'::jsonb,'a Viewer''s Run hands nothing over');
+select is((select count(*)::int from public.work_cards where conversation_id='c3170000-0000-0000-0000-000000000006'),0,'a non-main Agent''s handover makes no Card of its own');
+-- Ads's first reply puts its chat on the board (#144), and that Card carries the handover kept before it, staying Ads's.
+insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000006','agent','a3170000-0000-0000-0000-000000000012','Ads','I asked Writer for the headlines.','run-ads');
+set constraints all immediate;
+select is((select agent_id from public.work_cards where conversation_id='c3170000-0000-0000-0000-000000000006'),'a3170000-0000-0000-0000-000000000012'::uuid,'Ads''s first reply makes the chat''s Card, which stays Ads''s');
+select is((select string_agg(l.actor_id||'>'||l.agent_id||':'||(l.details->>'to_name')||':'||(l.details->>'goal'),',') from public.company_log l
+  join public.work_cards w on w.id=l.card_id where w.conversation_id='c3170000-0000-0000-0000-000000000006' and l.action='agent_handed_to'),
+ 'a3170000-0000-0000-0000-000000000012>a3170000-0000-0000-0000-000000000013:Writer:Write three headlines','and the handover kept before it is on that Card''s log, once');
+set constraints all deferred;
+create temporary table asked as select * from public.begin_handover((select id from public.agent_handovers where run_id='run-ads'));
+select is((select profile||':'||session from asked),'ag-a3170000000000000000000000000013:'||md5('c3170000-0000-0000-0000-000000000006:a3170000-0000-0000-0000-000000000013')::uuid,
+ 'the job runs on Writer''s own profile, in its own session of this chat');
+select is((select input from asked) like 'Ads in the team is handing you a job%' and (select input from asked) like '%Reply with your result for Ads:%',true,
+ 'and names Ads as the Agent that asked');
+select is(public.answer_handover((select id from public.agent_handovers where run_id='run-ads'),1,'run-writer','waiting'),true,'Writer''s Run is kept');
+select is(public.close_handover_target((select id from public.agent_handovers where run_id='run-ads'),'run-writer','completed','Three headlines.'),true,'and ends with its answer');
+create temporary table followed as select * from public.begin_handover((select id from public.agent_handovers where run_id='run-ads'));
+select is((select profile||':'||session from followed),'ag-a3170000000000000000000000000012:c3170000-0000-0000-0000-000000000006','Ads''s follow-up runs on Ads''s own profile in the Conversation''s session');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select from_name||'>'||to_name||':'||coalesce(answer,'-')||':'||(answered_at is not null)::text from public.conversation_handovers('c3170000-0000-0000-0000-000000000006')),
+ 'Ads>Writer:Three headlines.:true','the Contributor reads the row and Writer''s answer in their chat with Ads');
+reset role;
+
+-- #358 is unchanged: a job command hands over only from the main Agent's Conversation.
+update public.hermes_agents set template='writer' where id='a3170000-0000-0000-0000-000000000013';
+insert into public.member_agent_access(company_id,person_id,agent_id) values
+ ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000013');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is(public.command_handover('c3170000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012',gen_random_uuid(),'/write three headlines','writer','three headlines'),
+ false,'a command typed to another Agent is sent as plain text');
+select is(public.command_handover('c3170000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000011',gen_random_uuid(),'/write three headlines','writer','three headlines'),
+ true,'and one typed to the main Agent still hands its job over');
+reset role;
+-- #475: a handover kept while its person was a writer, and not yet started when they were removed, starts no Run: the
+-- leg ends as failed, as for any target that cannot run, and the Company's Agent does no work for someone who left.
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000006','run-ads','call-4','Lead','Plan the week',null),
+ '{"state":"created","agent":"Lead"}'::jsonb,'a Contributor''s chat with Ads keeps a handover to Lead');
+update public.members set role='viewer' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-ads' and call_id='call-4'))),0,
+ 'once they are no writer of the Company, the queued handover starts no Run');
+select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where run_id='run-ads' and call_id='call-4'),'returning:failed:0',
+ 'its leg ends as failed, never started');
+update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';
+
+-- #475: the writer must be a current Member. Once removed from the Company, their Run with any Agent lists no target,
+-- is offered no hand_to_agent, and a call it made is refused, so a Conversation they kept hands nothing over.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c3170000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','a3170000-0000-0000-0000-000000000012','Ads');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000008','person','20000000-0000-0000-0000-000000000005','Multi','Write it',gen_random_uuid(),'run-removed');
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id) values
+ ('c3170000-0000-0000-0000-000000000008','e4750000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'20000000-0000-0000-0000-000000000005','a3170000-0000-0000-0000-000000000012');
+select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000008','e4750000-0000-0000-0000-000000000008'))>0,true,'a current Contributor''s Run lists the Company''s other Agents');
+update public.members set removed_at=now() where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
+select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000008','e4750000-0000-0000-0000-000000000008')),0,'once removed from the Company, their Run lists none');
+select is('hand_to_agent'=any(public.run_tools('10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000012','20000000-0000-0000-0000-000000000005')),false,'and is offered no hand_to_agent');
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000008','run-removed','call-1','Writer','Write it',null),'{"state":"refused"}'::jsonb,'and a call it made is refused');
 select * from finish();
 rollback;

@@ -1,7 +1,5 @@
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
-import { computedMotion, referenceComputed, type ComputedStyle } from './tests/motion-css.mjs';
-import { languages, widths } from './tests/motion-table.mjs';
 // Offline by default (#266): the runner refuses outside connections and names the host; the browser runs behind a proxy
 // nothing answers (`nowhere`), and each outside address it tried is named.
 import { nowhere, watchOutside } from './tests/offline.mjs';
@@ -19,15 +17,10 @@ export default defineConfig({
   resolve: { alias: { '@': import.meta.dirname } },
   test: {
     include: ['tests/components/**/*.test.tsx'],
-    // tests/components/motion.test.tsx runs in the browser, which cannot read files, so the motion table's widths and
-    // languages and the reference's motion (tests/motion-css.mjs) come from here in Node.
-    provide: { languages, widths },
     setupFiles: ['tests/components/offline-setup.ts'],
     browser: {
       enabled: true, headless: true, provider: playwright({ launchOptions: { proxy: nowhere } }), instances: [{ browser: 'chromium' }],
       commands: {
-        referenceComputed: (_, selector: string, width: number) => referenceComputed(selector, width),
-        computedMotion: (_, style: ComputedStyle) => computedMotion(style),
         watchOutside: ({ context }) => {
           if (outside.has(context)) return;
           const hosts: string[] = [];

@@ -66,12 +66,9 @@ test('cost per lead needs spend and leads from the same apps; an unknown period 
  assert.equal(feedSince(Date.parse('2026-11-13T12:00:00Z')), '2026-11-06T12:00:00.000Z');
 });
 
-// The reference's demo figures (design-reference/app.js: DATA, PRICE and the dashboard's sample-data line) are not in
-// the product's source, catalogues or styles. Each constant is first found in the reference, so a wrong list fails.
+// The reference's demo figures (design-reference/app.js: DATA, PRICE and the dashboard's sample-data line, read once
+// when #35 was built; #271 keeps CI off the frozen reference) are not in the product's source, catalogues or styles.
 test('no demo figure from the reference is in the build', () => {
- const reference = readFileSync('design-reference/app.js', 'utf8');
- const demo = ['3480', '2150', '5210', '50400', '14900', '9300', '22800', '196800', 'const PRICE = 2400', 'بيانات تجريبية للنموذج', 'Sample data for this prototype', 'سعر الكورس', 'Course price'];
- for (const value of demo) assert.ok(reference.includes(value), `the reference has ${value}`);
  const files = dir => readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]);
  const product = [...files('app'), ...files('lib'), ...files('components')].filter(file => /\.(tsx?|mjs|css|json)$/.test(file));
  assert.ok(product.some(file => file.endsWith(join('numbers', 'page.tsx'))), 'the Numbers page is scanned');

@@ -21,6 +21,7 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake,role='owner
   calls.push([name,args]);
   if(name==='conversation_agent') return ok(agent);
   if(name==='reserve_conversation_turn') return ok({state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',profile:'writer',note:null});
+  if(name==='conversation_handover_agents') return ok([]);
   if(name==='pin_run') return ok({tools:null});
   if(name==='pin_run_history'||name==='pin_run_model') return ok(null);
   if(name==='pin_lead_brief') return ok({...brief,role});

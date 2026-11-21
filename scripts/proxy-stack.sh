@@ -9,7 +9,7 @@ work=$(mktemp -d)
 stop_containers() { docker rm -f gtmworks-proxy-app gtmworks-proxy-caddy >/dev/null 2>&1 || true; docker volume rm gtmworks-proxy-caddy-data >/dev/null 2>&1 || true; }
 trap 'stop_containers; rm -rf "$work"' EXIT INT TERM
 stop_containers
-[[ -n "$(docker image ls -q gtmworks:ci)" ]] || docker build -t gtmworks:ci .
+[[ -n "$(docker image ls -q gtmworks:ci)" ]] || bash scripts/docker-build.sh -t gtmworks:ci .
 status=$(npx supabase status -o env)
 api_url=$(printf '%s\n' "$status" | sed -n 's/^API_URL="\(.*\)"$/\1/p')
 service_key=$(printf '%s\n' "$status" | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')
@@ -41,11 +41,13 @@ chmod 644 "$work/root.crt"
 # and resolves the public name to this machine.
 docker run -d --name gtmworks-proxy-app --network host --add-host "$host:127.0.0.1" -v "$work/root.crt:/ca/root.crt:ro" -e NODE_EXTRA_CA_CERTS=/ca/root.crt \
   -e NEXT_PUBLIC_SUPABASE_URL -e NEXT_PUBLIC_SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY -e WEBHOOK_ENCRYPTION_KEY -e APP_ORIGIN gtmworks:ci >/dev/null
+# Straight to the local proxy, never through the machine's own HTTPS_PROXY: a cloud session's (#562) cannot reach this
+# made-up host and answers 502.
 for attempt in $(seq 1 60); do
-  curl -fsS --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" >/dev/null 2>&1 && break
+  curl -fsS --noproxy '*' --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" >/dev/null 2>&1 && break
   sleep 1
 done
-curl -fsS --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" || { docker logs gtmworks-proxy-app; docker logs gtmworks-proxy-caddy; exit 1; }
+curl -fsS --noproxy '*' --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" || { docker logs gtmworks-proxy-app; docker logs gtmworks-proxy-caddy; exit 1; }
 echo
 echo "PROXY STACK READY"
 # Keep the server log in the test output: a rejected request leaves its reason here.

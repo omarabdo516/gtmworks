@@ -38,6 +38,7 @@ function databases({reserve={state:'reserved',connection,profile:'writer',note:n
   // begin_start answers which attempt of the key this is (0: the reservation is no longer active).
   if(name==='begin_start') return {data:attempt,error:null};
   // The run's note: its first start pins the tools offered then, as the text sent, and its rules; every later start
+  if(name==='conversation_handover_agents') return {data:[],error:null};
   // reads them (pin_run). A run the previous app version already started keeps its tools and is told no rules.
   if(name==='pin_run') {
    if(runNote.rules===undefined&&!runNote.started) { runNote.tools=runNote.offersTools?`[${given.specs.create_agent}]`:null; runNote.rules=[]; }
