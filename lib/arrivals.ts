@@ -19,10 +19,11 @@ export function useArrivals(items:readonly Arrival[],{fresh=false}:{fresh?:boole
  return book;
 }
 
-// The Conversations a new chat has just sent its first message into, until their page has drawn them once. Kept in the
-// page's memory only: a reload, or coming back later, opens the Conversation as history.
+// The Conversations a new chat has just sent its first message into, until their page has drawn them once, or for 15
+// seconds when it never does (the person went elsewhere first). Kept in the page's memory only: a reload, or coming back
+// later, opens the Conversation as history.
 const sentInto=new Set<string>();
-export function sentIntoNewChat(conversation:string) { sentInto.add(conversation); }
+export function sentIntoNewChat(conversation:string) { sentInto.add(conversation); setTimeout(()=>sentInto.delete(conversation),15000); }
 export function useSentIntoNewChat(conversation:string):boolean {
  const [fresh]=useState(()=>sentInto.has(conversation));
  useEffect(()=>{ sentInto.delete(conversation); },[conversation]);

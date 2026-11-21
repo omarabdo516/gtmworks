@@ -205,6 +205,8 @@ test('a Card with an Agent and no chat opens on Chat; the first message starts t
  await userEvent.type(field, 'Plan three ads for the course{Enter}');
  await expect.element(chatPanel(screen).getByText('Plan three ads for the course')).toBeVisible();
  await expect.element(screen.getByText('Ads is working on a reply…')).toBeVisible();
+ // The first message rises in, as one sent in an open Conversation does (#132).
+ expect(chatPanel(screen).getByText('Plan three ads for the course').element().closest('.turn')!.classList.contains('msg-in')).toBe(true);
  const posted = JSON.parse(String(asks.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body));
  expect(posted).toMatchObject({ company: 'co-1', card: 7, message: 'Plan three ads for the course' });
  expect(posted.conversation).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);

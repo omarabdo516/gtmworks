@@ -12,6 +12,7 @@ import { firstName, type ChannelRecord } from '@/lib/channels';
 import { named } from '@/lib/bidi';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import '@/app/channel.css';
+import { sentIntoNewChat } from '@/lib/arrivals';
 
 type Say=(key:string,...values:unknown[])=>string;
 type SheetAgent={id:string,name:string,connection_id:string};
@@ -72,6 +73,8 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
    const failure=files.length?await postMessageWithFiles({company,conversation:id,card,message,sendKey},files):await postMessage({company,conversation:id,card,message,sendKey});
    if(failure==='sheetChatTaken') router.refresh();
    if(failure) return failure;
+   // Its first message rises in, as one sent in an open Conversation does (#132).
+   sentIntoNewChat(id);
    setStarted({conversation:{id,agent_id:chat.agent.id,agent_name:chat.agent.name,face:chat.agent.connection_id},messages:[{id:0,author:'person',author_name:'',body:message,created_at:new Date().toISOString()}],
     usage:null,pending:true,failed:false,working:null,canStop:false});
    router.refresh();

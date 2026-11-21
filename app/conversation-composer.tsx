@@ -47,8 +47,8 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // space after it, Escape closes and keeps the text, and Enter sends only when the list is closed. Opening the list
 // closes the "+" menu and the other way round. A note field draws the same list without Commands (app/card-sheet.tsx).
 export type MessageBoxHandle={insert:(sentence:string)=>void};
-// design-reference: flySend. On every send, a copy of the arrow starts over the button, in the open dialog the composer
-// is in or the page, and leaves upward; it is gone 420 milliseconds later and never takes the pointer, the keyboard or a screen
+// design-reference: flySend. On every send, a copy of the arrow starts over the button, in the open dialog that holds
+// the composer or the page, and leaves upward; it is gone 420 milliseconds later and never takes the pointer, the keyboard or a screen
 // reader's attention. With reduced motion there is none.
 type Flight={id:number,host:Element,left:number,top:number,width:number,height:number};
 let flightCount=0;
@@ -59,7 +59,7 @@ function useSendFlights() {
  const fly=(button:HTMLElement|null)=>{
   if(!button||prefersReducedMotion()) return;
   const {left,top,width,height}=button.getBoundingClientRect(); if(!width) return;
-  const flight={id:++flightCount,host:[...document.querySelectorAll('dialog[open]')].pop()??document.body,left,top,width,height};
+  const flight={id:++flightCount,host:button.closest('dialog[open]')??document.body,left,top,width,height};
   setShown(current=>[...current,flight]);
   const timer=setTimeout(()=>{ timers.current.delete(timer); setShown(current=>current.filter(other=>other.id!==flight.id)); },420);
   timers.current.add(timer);

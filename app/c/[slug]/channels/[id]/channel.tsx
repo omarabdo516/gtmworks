@@ -46,7 +46,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel(); const zone=useZone();
  const {channel,members,agents,writer,messages,open,handover,may,board}=record;
  // A message that arrives while the channel is open rises in once (design-reference: msg-in); what it held when opened,
- // its own first read included, stays still.
+ // its own first read included (only when that read is the one drawn), stays still.
  const {rises,settled}=useArrivals(arrivals(messages));
  const rise=(key:string)=>rises({key,element:key})?' msg-in':'';
  const refresh=useCallback(async()=>{
@@ -62,7 +62,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
   const mention=/^#mention-\d+$/.test(location.hash)?location.hash.slice('#mention-'.length):null;
   void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}${mention?`&mention=${mention}`:''}`,{cache:'no-store'}).then(async response=>{
    if(mention) history.replaceState(history.state,'',location.pathname+location.search);
-   if(response.ok) { const fresh=await response.json() as ChannelRecord; settled(arrivals(fresh.messages)); setRecord(current=>current===initial?fresh:current); } else await response.arrayBuffer();
+   if(response.ok) { const fresh=await response.json() as ChannelRecord; setRecord(current=>{ if(current!==initial) return current; settled(arrivals(fresh.messages)); return fresh; }); } else await response.arrayBuffer();
   }).catch(()=>{});
  },[channel.company,channel.id,initial,settled]);
  useEffect(()=>{
