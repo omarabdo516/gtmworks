@@ -24,6 +24,12 @@
   "ar": { "title": "المحرك الواقف مبقاش بيفشّل المنشن في القناة أو الملاحظة", "body": "لما تنادي وكيل في قناة أو في ملاحظة على بطاقة ومحرك الشركة مش شغال، التشغيل بيستنى المحرك لحد عشر دقايق ويبدأ أول ما يرجع، بدل ما يفشل على طول." }
  },
  {
+  "issue": 135,
+  "date": "2026-11-21",
+  "en": { "title": "Pages fade in when they open", "body": "Every page beside the sidebar now fades in when it opens, and the sidebar row you open fades to its new fill, as in the approved design; with reduced motion on, both change at once." },
+  "ar": { "title": "الصفحات بتظهر بهدوء وهي بتفتح", "body": "كل صفحة جنب القايمة الجانبية بقت بتظهر بهدوء وهي بتفتح، والسطر اللي بتفتحه في القايمة بيتلوّن بهدوء، زي التصميم المعتمد؛ ولو مشغّل تقليل الحركة، الاتنين بيتغيّروا على طول." }
+ },
+ {
   "issue": 131,
   "date": "2026-11-21",
   "en": { "title": "The board moves as you carry a Card", "body": "A carried Card leans with your pointer, flies back when you let it go where it was, lands with a short ring in its new column, progress bars grow in, and a Card newly waiting on you nudges its badge and the sidebar count." },
