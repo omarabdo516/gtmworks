@@ -1236,12 +1236,15 @@ test('any Agent hands a job to another Agent of its Company, one hidden from the
  const handed=()=>JSON.parse(query(`select from_agent,to_agent,state,target_outcome from public.agent_handovers where conversation_id='${conversation}'`));
  try {
   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent:salma.agent,message:'Write the March ad copy',hermes})).toEqual({conversation});
-  // The tool Salma's Run was sent names the Company's other Agents, Tarek with its job among them, never Salma.
-  const pinned=JSON.parse(JSON.parse(query(`select tools from public.conversation_run_notes where conversation_id='${conversation}'`))[0].tools);
-  const hand=pinned.find((tool:{name:string})=>tool.name==='hand_to_agent');
-  expect(hand.parameters.properties.agent.enum).toContain('Tarek');
-  expect(hand.parameters.properties.agent.enum).not.toContain('Salma');
-  expect(hand.description).toContain('- Tarek: Reads the campaign numbers.');
+  // The tool Salma's Run was sent, as the Engine reads it in the Run's instructions (lib/hermes.mjs), names the
+  // Company's other Agents, Tarek with its job among them, never Salma.
+  const sent=fake.settings.runs.find(run=>JSON.stringify(run.input).includes('Write the March ad copy'));
+  const offered=(sent?.instructions??'').split('\n- hand_to_agent: ')[1]??'';
+  const schema=offered.slice(offered.indexOf('Its arguments, as JSON Schema: ')+'Its arguments, as JSON Schema: '.length).split('\n')[0];
+  const enumOf=JSON.parse(schema).properties.agent.enum as string[];
+  expect(enumOf).toContain('Tarek');
+  expect(enumOf).not.toContain('Salma');
+  expect(sent?.instructions).toContain('- Tarek: Reads the campaign numbers.');
   await expect.poll(async()=>{ await drive(); return handed()[0]?.state; },{timeout:60000}).toBe('done');
   expect(handed()).toEqual([{from_agent:salma.agent,to_agent:tarek.agent,state:'done',target_outcome:'completed'}]);
   // The tool's block is the Engine's, never the chat's: Salma's message keeps its words alone.
