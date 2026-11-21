@@ -130,7 +130,7 @@ const fakeModel=async(requests,results=[],plan=skillPlan)=>{
 
 // A message from the Owner to an Agent of the Company in a new Conversation, answered: whether the marker reached the
 // model, the Conversation, and what the model was sent. The verify and second steps each ask through their own fake model.
-const asker=({asked,reply,person})=>async(entry,agent,label,message='مرحباً، اكتب عنواناً قصيراً.',client=person)=>{
+const askerFor=({asked,reply,person})=>async(entry,agent,label,message='مرحباً، اكتب عنواناً قصيراً.',client=person)=>{
  const before=asked.length;
  const conversation=randomUUID();
  // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
@@ -146,7 +146,7 @@ const asker=({asked,reply,person})=>async(entry,agent,label,message='مرحبا�
 // The first Company's second Agent, made on the company profile as the previous app version made one and moved by the
 // worker to its own profile (#121), keeps its Conversation and starts empty. The verify step makes it before its checks;
 // the second step makes it alone, for the sandbox steps of the agents-sandbox area (#553).
-const firstSecond=async(ask,person,first,firstEngine)=>{
+const makeFirstSecondAgent=async(ask,person,first,firstEngine)=>{
  first.conversation=(await ask(first,first.agent,first.profile)).conversation;
  const [{run_id:run}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',first.conversation).eq('author','person'));
  const made=await checked(service.rpc('lead_create_agent',{conversation:first.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check.',apps:[]}));
@@ -240,10 +240,10 @@ try {
  assert.ok(user,'the first-run Owner signs in');
  const personOf=()=>person;
  for(const entry of pair) entry.person=user.id;
- const ask=asker({asked,reply,person});
+ const ask=askerFor({asked,reply,person});
  const first=pair[0], other=pair[1];
  const firstEngine=engines[0], otherEngine=engines[1];
- await firstSecond(ask,person,first,firstEngine);
+ await makeFirstSecondAgent(ask,person,first,firstEngine);
  // The second Company's second Agent, on its own profile at creation, on the second Company's own Engine: the Engine
  // provides the profile it will be named for, and the database attaches the Agent to it (#126, #120).
  other.conversation=(await ask(other,other.agent,other.profile)).conversation;
@@ -385,7 +385,7 @@ try {
  const {data:{user}}=await person.auth.getUser();
  assert.ok(user,'the first-run Owner signs in');
  for(const entry of pair) entry.person=user.id;
- await firstSecond(asker({asked,reply,person}),person,first,firstEngine);
+ await makeFirstSecondAgent(askerFor({asked,reply,person}),person,first,firstEngine);
  await checkProfile(firstEngine,first.secondProfile);
  writeFileSync(state,JSON.stringify(pair),{mode:0o600});
  writeProof({step:'second',companies:pair.map(shown)});
@@ -468,8 +468,9 @@ assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
 const pair=JSON.parse(readFileSync(state,'utf8'));
 const first=pair[0];
 const firstEngine=await engineFor(first.company);
-// The verify step ends by setting and removing a provider's key, which leaves both profiles' model on that provider and
-// no key to reach it: each profile is pointed at the fake model again for this step's Runs.
+// Each profile is pointed at the fake model again for this step's Runs, whatever an earlier step left in its model
+// setting: the verify step, for one, ends by setting and removing a provider's key, which leaves a profile's model on
+// that provider and no key to reach it.
 await pointAtFakeModel(firstEngine,first.profile);
 await pointAtFakeModel(firstEngine,first.secondProfile);
 const calls=[

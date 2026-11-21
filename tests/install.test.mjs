@@ -512,11 +512,11 @@ test('the backup areas make the install, the Companies and the archives they nee
  assert.ok(at("fail 'backup'")<at('first_archive=$(find backups'));
  assert.ok(at('first_archive=$(find backups')<at('sh scripts/install.sh restore "$first_archive" ||'));
  // The every-Engine archive: its own install and first run, then the second Company, the archive and its restore.
- const on=order(areaOf('backup_engines() {','# proxy:'));
- assert.ok(on('reset_install\ninstall_source backup-engines-install.log')<on('complete_setup ||'));
- assert.ok(on('complete_setup ||')<on('second_company scripts/install.sh --memory'));
- assert.ok(on('second_company scripts/install.sh --memory')<on("sh scripts/install.sh backup || fail 'backup of every Engine'"));
- assert.ok(on("fail 'backup of every Engine'")<on('sh scripts/install.sh restore "$every_engine"'));
+ const atEngines=order(areaOf('backup_engines() {','# proxy:'));
+ assert.ok(atEngines('reset_install\ninstall_source backup-engines-install.log')<atEngines('complete_setup ||'));
+ assert.ok(atEngines('complete_setup ||')<atEngines('second_company scripts/install.sh --memory'));
+ assert.ok(atEngines('second_company scripts/install.sh --memory')<atEngines("sh scripts/install.sh backup || fail 'backup of every Engine'"));
+ assert.ok(atEngines("fail 'backup of every Engine'")<atEngines('sh scripts/install.sh restore "$every_engine"'));
 });
 
 // #386: a release that pins another Engine image recreates every Company's Engine, and a Run on each answers.
