@@ -1,5 +1,11 @@
 [
  {
+  "issue": 205,
+  "date": "2026-11-21",
+  "en": { "title": "Routines in an agent's details", "body": "An agent's details now list its routines with when each runs next; the Owner and Managers add one by writing one sentence, such as “leads summary every day at 8 in the morning”, and a sentence with no time asks for one first." },
+  "ar": { "title": "الروتينات في تفاصيل الوكيل", "body": "تفاصيل الوكيل بقت بتعرض روتيناته وإمتى كل واحد هيشتغل المرة الجاية؛ والمالك والمديرين يضيفوا روتين بجملة واحدة، زي «ملخص الليدز كل يوم 8 الصبح»، ولو الجملة مفيهاش ميعاد بيتسألوا عنه الأول." }
+ },
+ {
   "issue": 178,
   "date": "2026-11-21",
   "en": { "title": "Settings show a waiting proposal", "body": "While an Agent’s proposed change waits for the Owner, its page in Settings says who proposed what with a link to the proposal, its row in the Agents list says Proposal waiting, and Agents carries the number waiting." },

@@ -629,8 +629,9 @@
 .gw :is(.sov, .modal.team-dlg, .details) .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
 .gw :is(.sov, .modal.team-dlg, .details) .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
 .gw :is(.sov, .modal.team-dlg, .details) .set-input[readonly] { cursor: default; }
-   Routine's row with its schedule, next run and Run now beside its switch, and the form that adds one or changes when it
-   runs, set with the overlay's own inputs. */
+/* Recurring tasks (#31) and an Agent's Routines in its details (#205; design-reference/index.html: "routines: next run,
+   run now, empty state", .panel-form): each Routine's row with its schedule, next run and Run now beside its switch, the
+   form that adds one or changes when it runs, the switch and the inputs they share. */
 .gw :is(.sov, .details) .panel-row.rt-row { align-items: flex-start; padding-block: 10px; }
 .gw :is(.sov, .details) .rt-row .panel-row__icon { margin-top: 1px; }
 .gw :is(.sov, .details) .rt-row .switch { margin-top: 2px; }

@@ -90,7 +90,7 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  const panel=details.getByRole('tabpanel');
  await expect(panel).toHaveAttribute('aria-labelledby','dp-tab-activity');
 
- await expect(panel.locator('.dp-label')).toHaveText(['Agent’s screen','Latest activity','Connected tools']);
+ await expect(panel.locator('.dp-label')).toHaveText(['Agent’s screen','Latest activity','Connected tools','Routines']);
  const rows=panel.locator('.panel-row');
  await expect(rows).toHaveCount(2);
  await expect(rows.nth(0).locator('.panel-row__t')).toHaveText('Working now');

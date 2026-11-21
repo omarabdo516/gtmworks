@@ -409,6 +409,8 @@
 .gw .sov .bk-cmd .panel-row__text { gap: 2px; }
 .gw .sov .bk-cmd .sub-code { margin-top: 2px; max-width: 100%; }
 .gw .sov .bk-copy { flex: none; }
-/* A Routine section's Agent in Settings, Recurring tasks (#31; design-reference/index.html: .sov-ag-l). */
-/* Recurring tasks (#31; design-reference/index.html: "routines: next run, run now", .sov-ag-l, .panel-form): each
+
+/* A Routine section's Agent in Settings, Recurring tasks (#31; design-reference/index.html: .sov-ag-l). The rows and
+   their form are drawn in the details too, so they live in app/shell.css. */
+.gw .sov .sov-ag-l { display: inline-flex; align-items: center; gap: var(--s2); color: var(--gw-text-1); }
 
