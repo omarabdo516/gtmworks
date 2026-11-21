@@ -16,8 +16,10 @@ const saudi='From now on, write every Saudi ad in a light Saudi dialect';
 const emojis='From now on, no emojis';
 
 test.describe.configure({mode:'serial'});
+// A serial file's retry starts again from its first test, so its seed starts again from the snapshot too (#451): on the
+// lane that ran it the rows the first attempt inserted are still there, and inserting them again would fail.
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo.file,true);
  query(`do $$ begin
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${ads}','${rsLearning}','${connection}','Ads','Runs the ads.','suggest-ads'),('${alone}','${rsConsultations}','${elsewhere}','Ads','Runs the ads.','suggest-alone');
   insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${ads}' from public.members where company_id='${rsLearning}' and removed_at is null and role<>'owner';
@@ -35,6 +37,19 @@ test.beforeAll(({},testInfo)=>{
 test.afterAll(()=>{ query(`update public.companies set work_mode='team' where id='${rsConsultations}'`); });
 
 const suggestion=(page:import('@playwright/test').Page,rule:string)=>page.getByRole('group',{name:'A rule for Ads, told by مراجع'}).filter({hasText:rule});
+// A decision is saved by a server action whose answer redirects back to "Waiting on you" with the decision in the
+// address, and the toast is drawn only once that page is read again (#451), which on a loaded runner takes longer than
+// the default 5 s (#420). Wait for the action's own answer and the rule's saved decision, then give the toast the
+// re-read's time. The answer's body is not awaited: Next stops reading it once the page is drawn, which the browser
+// reports as an aborted request.
+const reread={timeout:15000};
+const decide=async(page:import('@playwright/test').Page,rule:string,button:string,saved:'approved'|'rejected')=>{
+ const answered=page.waitForResponse(response=>response.request().method()==='POST'&&!!response.request().headers()['next-action']);
+ await suggestion(page,rule).getByRole('button',{name:button}).click();
+ expect((await answered).headers()['x-action-redirect']).toMatch(new RegExp(`\\?decided=${saved==='approved'?'approve':'reject'}&item=\\d+`));
+ const decision=()=>(JSON.parse(query(`select suggestion from public.agent_rules where agent_id='${ads}' and body='${rule}'`)) as {suggestion:string}[])[0]?.suggestion;
+ await expect.poll(decision).toBe(saved);
+};
 
 test('in a team a direct Conversation says it is private; worked alone it does not',async({page})=>{
  await signIn(page,'reviewer@example.com',`/c/rs-learning/conversations/${theirs}`);
@@ -75,8 +90,8 @@ test('the Owner makes one team-wide from "Waiting on you"; the Contributor reads
  await page.goto('/c/rs-learning/settings?section=learning');
  await expect(page.locator('#sov-nav-learning')).toHaveAccessibleName(/^Learning\s*2 waiting for your OK$/);
  await page.goto('/c/rs-learning/approvals');
- await suggestion(page,saudi).getByRole('button',{name:'Make it team-wide'}).click();
- await expect(page.locator('.toast')).toHaveText('The rule now applies team-wide for Ads');
+ await decide(page,saudi,'Make it team-wide','approved');
+ await expect(page.locator('.toast')).toHaveText('The rule now applies team-wide for Ads',reread);
  await expect(suggestion(page,saudi)).toHaveCount(0);
  await expect(suggestion(page,emojis)).toBeVisible();
  await page.goto(`/c/rs-learning/settings?agent=${ads}`);
@@ -99,8 +114,8 @@ test('the Owner makes one team-wide from "Waiting on you"; the Contributor reads
 test('a Manager declines the other; the Contributor reads that the agent won’t follow it, and the log names it',async({page})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/approvals');
  await expect(suggestion(page,saudi)).toHaveCount(0);
- await suggestion(page,emojis).getByRole('button',{name:'Decline'}).click();
- await expect(page.locator('.toast')).toHaveText('Ads won’t save it');
+ await decide(page,emojis,'Decline','rejected');
+ await expect(page.locator('.toast')).toHaveText('Ads won’t save it',reread);
  await expect(suggestion(page,emojis)).toHaveCount(0);
  await page.goto('/c/rs-learning/settings?section=learning');
  await expect(page.locator('#sov-nav-learning .sov-count')).toHaveCount(0);
