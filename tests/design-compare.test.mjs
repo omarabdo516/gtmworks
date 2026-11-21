@@ -111,10 +111,11 @@ test('every screen says how to reach it in the reference and which built page it
     assert.ok(Array.isArray(screen.reference.steps), `${name} steps`);
     // The alone screens (#10) start by viewing the prototype as Omar working alone, and a Member's request screens (#17)
     // view it as Youssef in the team; the lock on another Member's Card chat (#145) has Youssef start the chat, then views
-    // it as Omar in the team again. Every other screen never touches it.
+    // it as Omar in the team again; Lead's card asking for a hidden Agent (#167) views it as Youssef too. Every other
+    // screen never touches it.
     const youssef = '[data-action="set-as"][data-person="youssef"][data-world="team"]';
     const omarInTeam = '[data-action="set-as"][data-person="omar"][data-world="team"]';
-    const asYoussef = ['ask-agent', 'request-sent', 'request-made', 'card-chat-locked'].includes(name);
+    const asYoussef = ['ask-agent', 'request-sent', 'request-made', 'card-chat-locked', 'access-ask', 'access-sent', 'access-no'].includes(name);
     if (asYoussef) assert.ok(screen.reference.steps.some(step => step.click === youssef), `${name} views as Youssef`);
     const switches = name === 'card-chat-locked' ? [youssef, omarInTeam] : [youssef];
     const steps = [...(name.endsWith('-alone') ? screen.reference.steps.slice(3) : asYoussef ? screen.reference.steps.filter(step => !switches.includes(step.click)) : screen.reference.steps), ...(screen.builtSteps ?? [])];

@@ -27,6 +27,8 @@ const inviteSteps = [{ click: '#inv-toggle' }, { fill: ['#inv-email', 'nour.hass
 const board = [{ click: '#sb-nav [data-view="board"]' }, { waitFor: '#board-cols' }];
 const pickChat = [{ click: '#sh-tab-chat' }, { waitFor: '.priv-sheet' }];
 const youssefAsks = 'Plan the Saudi ads for January';
+// #167. Youssef asks the main Agent for an article, the job of SEO & Content, which is hidden from him.
+const askForHidden = [{ click: '#btn-newchat' }, { fill: ['#ta-main', 'Write an SEO article about the accounting course'] }, { click: '[data-action="send"][data-key="main"]' }, { waitFor: '[data-action="ask-mgr"]' }];
 const settingsSection = section => [...settings, { click: `#sov-nav-${section}` }, { waitFor: `#sov-nav-${section}[aria-current]` }];
 // The ids of the optional comparison fixture (design/COMPARE.md, "Representative captures"). The tool never applies
 // it: a person loads it by hand into a throwaway local database, then passes these ids with --built-path.
@@ -117,7 +119,7 @@ export const screens = {
   // The morning message (#183): the reference's morning thread with Lead's greeting and the card under it. Built: the
   // fixture's morning Conversation (its foot reads the Engine's job, so `npm run cloud:up`'s fake Engine draws it off).
   morning: { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-morning"]' }, { waitFor: '.ckcard' }, { scrollTo: '.ckcard' }] },
-   builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000020', builtSteps: [{ waitFor: '.ckcard' }, { scrollTo: '.ckcard' }] },
+   builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000030', builtSteps: [{ waitFor: '.ckcard' }, { scrollTo: '.ckcard' }] },
   'home-alone': { reference: { steps: alone }, builtPath: '/c/rs-consultations/chat' },
   'settings-alone': { reference: { steps: [...alone, ...settings] }, builtPath: '/c/rs-consultations/settings' },
   // #13. "New agent" opens Lead's chat ready to type, with one hint line.
@@ -185,6 +187,12 @@ export const screens = {
   // Conversation and Approvals.
   'change-proposed': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }] }, builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000010' },
   'change-waiting': { reference: { steps: [...board, { waitFor: '.kcard[data-card="c-chg-analyst"]' }, { scrollTo: '.kcard[data-card="c-chg-analyst"]' }] }, builtPath: '/c/rs-learning/approvals' },
+  // #167. Lead's card asking whether to request an Agent hidden from the first Contributor (SEO & Content, as the
+  // reference hides it from Youssef): offered, then after "Ask", then after "No, never mind". Built: the fixture's three
+  // Conversations of the first Contributor with Lead, captured with --sign-in reviewer@example.com.
+  'access-ask': { reference: { steps: [...asYoussef, ...askForHidden] }, builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000020' },
+  'access-sent': { reference: { steps: [...asYoussef, ...askForHidden, { click: '[data-action="ask-mgr"][data-answer="yes"]' }, { waitFor: '.card.is-resolved .card__outcome' }, { waitGone: '#toast-host .toast' }] }, builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000021' },
+  'access-no': { reference: { steps: [...asYoussef, ...askForHidden, { click: '[data-action="ask-mgr"][data-answer="no"]' }, { waitFor: '.card.is-resolved .card__outcome' }, { waitGone: '#toast-host .toast' }] }, builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000022' },
   'request-waiting': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { waitFor: '.ac-card--req' }] }, builtPath: '/c/rs-learning/approvals' },
   'request-made': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-wa-req"]' }, { click: '#ac-yes-rq-seed' }, { waitFor: '.ac-card:not(.ac-card--req)' }, ...asYoussef, ...youssefRequest] }, builtPath: '/c/rs-learning/conversations/6b000000-0000-0000-0000-000000000003' },
   // #153. The composer's "+" menu, opened: in the Conversation with Lead, and in the general channel.

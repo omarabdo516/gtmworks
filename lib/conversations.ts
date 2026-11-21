@@ -79,11 +79,21 @@ export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>
 type ChangeFace={id:string,connection_id:string,name:string};
 export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
  &({state:'waiting',owners:string[]}|{state:'approved',answeredBy:string,at:string}|{state:'declined',answeredBy:string,at:string,answer:string|null,maybeApplied?:boolean}|{state:'refused'});
-// The morning's card (#183) sits under the main Agent's greeting in a Conversation the morning opened.
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string}|{kind:'morning',morning:import('./good-morning-card').MorningCard};
+// #167: the main Agent asks whether to request an Agent hidden from its person, naming who opens Agents for them
+// (`named`: their first name, whole name and Role). Its Agent is never part of the card. Offered, the card has its two
+// buttons; once pressed, it says what was sent and when (`at`), whatever answer came later. One its person sees the Agent
+// of by now, unanswered, says the Agent is open for them (`available`).
+// A sent request not answered yet `waits`, so the open chat keeps reading the record until its answer is in.
+export type AgentAccessView={id:number,named:{first:string,name:string,role:string}}&({state:'offered'|'available'}|{state:'dismissed',at:string}|{state:'asked',at:string,waits:boolean});
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string}
+ // The morning's card (#183) sits under the main Agent's greeting in a Conversation the morning opened.
+ |{kind:'morning',morning:import('./good-morning-card').MorningCard};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
-export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
+// An Owner's or a Manager's answer to a request for a hidden Agent (#167): opened, naming the Agent the person now sees
+// (null when they no longer do), or no, naming nothing of it.
+export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}))
+ |({kind:'access',by:string,at:string}&({opened:true,agent:{id:string,connection_id:string,name:string}|null}|{opened:false}));
 // The tool calls the Engine made for the Run of an Agent's reply (#141), in the Engine's order, and the Run's length in
 // seconds, read from the Agent's session when the chat opens (#346). A call whose result never came is `started`; one
 // the Engine could not run because the Company's work sandbox is down is `failed` with `sandbox` (#398).
