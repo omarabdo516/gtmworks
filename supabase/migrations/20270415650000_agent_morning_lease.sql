@@ -65,3 +65,15 @@ language sql security definer set search_path='' as $$
 $$;
 revoke all on function public.drop_morning_lease(uuid,uuid) from public,anon,service_role;
 grant execute on function public.drop_morning_lease(uuid,uuid) to authenticated;
+
+-- Make it main and removing an Agent, under the lease (the route's only way to change the main Agent): the lease is
+-- renewed and the change made in one transaction, and the renewal's row lock holds until it commits, so no other holder
+-- takes the lease between the check and the change. A holder whose lease ran out changes nothing.
+create function public.manage_hermes_agent_leased(c uuid, holder uuid, intent text, a uuid, replacement uuid default null) returns void
+language plpgsql set search_path='' as $$
+begin
+ if not public.renew_morning_lease(c,holder) then raise exception 'morningLeaseLost' using errcode='55P03'; end if;
+ perform public.manage_hermes_agent(c,intent,a,replacement);
+end $$;
+revoke all on function public.manage_hermes_agent_leased(uuid,uuid,text,uuid,uuid) from public,anon,service_role;
+grant execute on function public.manage_hermes_agent_leased(uuid,uuid,text,uuid,uuid) to authenticated;

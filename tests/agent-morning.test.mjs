@@ -527,3 +527,45 @@ test('a move follows an interval set on the source while the copy is made, and f
   assert.deepEqual(jobs(second,adsProfile).map(job=>job.state),['paused']);
  } finally { await second.close(); }
 });
+
+test('a copy that will not go beside the moved one fails the move, and later reads and saves keep the one that is on', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // Ads already holds an old paused 7:00 copy that the Engine will not delete.
+  await createRoutine(at(fake,adsProfile),{name:morningName,prompt:`${morningMarker}\nOld`,schedule:'0 7 * * *',timezone:'Africa/Cairo',paused:true});
+  const [stale]=jobs(fake,adsProfile);
+  const keepStale={delete:async(connection,routine)=>routine.id===stale.id?{state:'refused'}:(await import('../lib/hermes.mjs')).deleteRoutine(connection,routine)};
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:keepStale})).state,'failed','the main Agent holds more than one: said');
+  const shown=await readAgentMorning(session({agents:agentRows(ads)}).db,{company,agent:ads,hermes:install(fake)});
+  assert.deepEqual([shown.routine?.on,shown.routine?.time],[true,'9:00'],'the page reads the moved copy, not the old one');
+  // A later save keeps the one that is on and changes it; the old one still will not go, so it answers failed.
+  const saved=await changeAgentMorning(session({agents:agentRows(ads)}).db,{company,agent:ads,on:true,time:'10:00',hermes:install(fake),driver:keepStale});
+  assert.equal(saved.state,'failed');
+  const on=jobs(fake,adsProfile).filter(job=>job.state==='scheduled');
+  assert.deepEqual(on.map(job=>job.schedule.expr),['0 10 * * *'],'the moved copy was kept and retimed');
+  assert.equal(jobs(fake,adsProfile).find(job=>job.id===stale.id)?.state,'paused');
+ } finally { await fake.close(); leases.clear(); }
+});
+
+test('a create the Engine finishes late, after the next move, lands paused and never sends from the old Agent', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // Lead → Ads: the Engine gets the create but answers nothing in time; it finishes the create later.
+  let late=null;
+  const slow={create:async(connection,routine)=>{ late=()=>createRoutine(connection,routine); return {state:'unreachable'}; }};
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:slow})).state,'failed');
+  // Ads → Lead again before the Engine finished it: the message is on Lead.
+  const back=await moveAgentMorning(session({agents:agentRows(lead)}).db,{company,agents:agentRows(ads),hermes:install(fake)});
+  assert.equal(back.state,'moved');
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',hermes:install(fake)});
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['scheduled']);
+  // Now the late create lands on Ads: paused, so nothing sends from an Agent that is not the main one.
+  await late();
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>job.state),['paused']);
+  assert.equal((await moveAgentMorning(session().db,{company,agents:agentRows(lead),hermes:install(fake)})).state,'moved');
+  assert.equal(jobs(fake,adsProfile).length,0,'and the next settle removes it');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>[job.state,job.schedule.expr]),[['scheduled','0 9 * * *']]);
+ } finally { await fake.close(); leases.clear(); }
+});

@@ -29,10 +29,12 @@ async function respond(request:NextRequest) {
     if(listingError||!Array.isArray(listing)) return reply({error:'hermesAgentFailed'},503);
     const listed=listing as {agent:string,main:boolean,profile?:string}[];
     // The change is a write as the Engine's are: it runs only while the lease is still this request's (a request whose
-    // lease ran out stops here, before anything is changed), and only once the Agents' profiles are kept with the lease,
-    // so a removed Agent's copy of the message is reached by a later settle even if this one does not finish.
-    if(!await fence()||!await fence.profiles?.(listed.map(row=>row.profile).filter((profile):profile is string=>typeof profile==='string'&&/^(co|ag)-[0-9a-f]{32}$/.test(profile)))) return {state:'busy'};
-    const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,a:body.agent,replacement:body.replacement??null});
+    // lease ran out changes nothing), and only once the Agents' profiles are kept with the lease, so a removed Agent's copy
+    // of the message is reached by a later settle even if this one does not finish.
+    if(!await fence.profiles?.(listed.map(row=>row.profile).filter((profile):profile is string=>typeof profile==='string'&&/^(co|ag)-[0-9a-f]{32}$/.test(profile)))) return {state:'busy'};
+    // The lease is renewed and the change made in one transaction (manage_hermes_agent_leased).
+    const {error}=await db.rpc('manage_hermes_agent_leased',{c:body.company,holder:fence.holder,intent:body.intent,a:body.agent,replacement:body.replacement??null});
+    if(error?.message==='morningLeaseLost') return {state:'busy'};
     if(error) {
      const key=['hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
      return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesNextDefault'?409:400);

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(28);
+select plan(32);
 -- #182: the main Agent's daily message is changed by an active Owner or Manager of its Company only (check_agent_setting,
 -- asked before the Engine), and each change is one row of the Company log on the Agent naming who did it and the old and
 -- the new value (log_agent_morning: "off" or the time). RS Learning: 1 Owner, 2 Manager, 3 Contributor,
@@ -57,6 +57,13 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000004');
 select is(public.morning_lease_profiles('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000004','{}',array['co-10000000000000000000000000000001']),
  array['ag-e1000000000000000000000000000184'],'the next holder finds the profiles still to settle and takes off the settled ones');
+-- The main Agent changes only under a running lease, checked and changed in one transaction.
+select throws_ok($$select public.manage_hermes_agent_leased('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','default','e1000000-0000-0000-0000-000000000184')$$,
+ '55P03','morningLeaseLost','a holder whose lease ran out changes no Agent');
+select is((select is_default from public.hermes_agents where id='e1000000-0000-0000-0000-000000000182'),true,'so Lead is still the main Agent');
+select lives_ok($$select public.manage_hermes_agent_leased('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000004','default','e1000000-0000-0000-0000-000000000184')$$,
+ 'the holder makes another Agent main');
+select is((select is_default from public.hermes_agents where id='e1000000-0000-0000-0000-000000000184'),true,'and it is the main Agent');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.renew_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000003')$$,'42501','agentSettingNotAllowed','a Contributor renews none');
 select throws_ok($$select public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000003')$$,'42501','agentSettingNotAllowed','a Contributor takes none');

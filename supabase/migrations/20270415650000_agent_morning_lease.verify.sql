@@ -8,6 +8,8 @@ select json_build_object(
   and not has_function_privilege('anon','public.renew_morning_lease(uuid,uuid)','execute'),
  'profiles_for_members',has_function_privilege('authenticated','public.morning_lease_profiles(uuid,uuid,text[],text[])','execute')
   and not has_function_privilege('anon','public.morning_lease_profiles(uuid,uuid,text[],text[])','execute'),
+ 'leased_change_for_members',has_function_privilege('authenticated','public.manage_hermes_agent_leased(uuid,uuid,text,uuid,uuid)','execute')
+  and not has_function_privilege('anon','public.manage_hermes_agent_leased(uuid,uuid,text,uuid,uuid)','execute'),
  'drop_for_members',has_function_privilege('authenticated','public.drop_morning_lease(uuid,uuid)','execute')
   and not has_function_privilege('anon','public.drop_morning_lease(uuid,uuid)','execute'),
  'managers_checked',position('can_manage_company' in pg_get_functiondef('public.take_morning_lease(uuid,uuid)'::regprocedure))>0
