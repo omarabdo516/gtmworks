@@ -47,10 +47,42 @@ first, and moving to another release is an update, backup first.
 
 Requirements: Docker Engine with Docker Compose v2.20+ (`docker compose`), POSIX
 `sh`, `curl`, `flock` (from util-linux, present on nearly every Linux install),
-internet access to pull images, 2 CPU cores, **8 GB RAM** and **20 GB
-free disk**, plus room for your data. No host Node.js, Git, Supabase CLI, cloud
-project or external account is required. These are initial sizing
-recommendations, not measured capacity guarantees.
+internet access to pull images, **20 GB free disk** plus room for your data, and
+the CPU and RAM of one of the two server sizes below. No host Node.js, Git,
+Supabase CLI, cloud project or external account is required.
+
+**Server size.** Two sizes, from the install job's measurement (`install-sizes`,
+run 44848354569, which prints these numbers on every run):
+
+- **Without video: 2 CPU cores and 4 GB RAM.** Idle, the install's own services
+  (web app, worker, Postgres, sign-in, REST, Storage, gateway and mail inbox) use
+  493 MiB, the first Company's Engine 466 MiB and its work sandbox 2 MiB: about
+  1 GB for one Company, which leaves room for the system, an Engine at work and a
+  few more Companies.
+- **With video: 4 CPU cores and 8 GB RAM.** One short render (60 frames of
+  1280x720 drawn by Chromium and joined by ffmpeg into a two-second video) took
+  13.7 s and peaked at 337 MiB in its sandbox. A sandbox may use up to its limit,
+  **1 GB of RAM and 2 CPUs** by default, so each Company rendering at the same time
+  needs up to 1 GB and 2 cores more than the size without video.
+- **Each added Company** costs its Engine, 466 to 473 MiB idle (775 MiB before its
+  Agents' profiles and 825 MiB with twenty of them, see below), and its sandbox, under
+  4 MiB idle and up to its 1 GB limit while it works.
+
+The limits are the install's defaults, set in one place (the sandbox service of
+`scripts/engine-template.yml`), and the install job runs the render at them on every
+run. A render that needs more memory than its Company's limit is stopped at the
+limit, and every other Company's sandbox keeps answering: one Company's video cannot
+starve the others.
+
+**The sandbox shares the server's kernel.** A work sandbox is a container, not a
+virtual machine: every Company's sandbox, the Engines and the install run on the
+one Linux kernel of the server. What holds a sandbox in is Docker: an ordinary user,
+no capabilities, no new privileges, a network of its own and its memory, CPU and
+process limits. So a flaw in the Linux kernel or in Docker that lets a process leave
+its container would let a command an Agent runs (and so a Member, or a web page that
+steers the Agent) reach the server and every Company on it. Keep the server's kernel
+and Docker updated, run nothing else of value on it, and give a client whose work
+must not share a kernel with another's a server of its own.
 
 On a fresh install, the installer's last line is a one-time **setup link**:
 `<APP_ORIGIN>/first-run#code=<code>` (http://localhost:3000 unless you set
