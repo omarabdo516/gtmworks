@@ -31,14 +31,13 @@ test.beforeAll(async({},testInfo)=>{
  fake.settings.profiles.set(profileOf(writer),profile('You write long posts.'));
  fake.settings.profiles.set(profileOf(analyst),profile('You read the numbers.'));
  query(`do $$ begin
-  insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values
-   ('${writer}','${company}',1,public.engine_tool_policy()),('${analyst}','${company}',1,public.engine_tool_policy());
+  insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${writer}','${company}',true),('${analyst}','${company}',true);
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ('${lead}','${company}','e9300000-0000-0000-0000-000000000011','Lead','General',true,'${co}'),
    ('${writer}','${company}','e9300000-0000-0000-0000-000000000012','Writer','Writing',false,'${profileOf(writer)}'),
    ('${analyst}','${company}','e9300000-0000-0000-0000-000000000013','Analyst','Numbers',false,'${profileOf(analyst)}');
-  insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('${company}','${co}',1,public.engine_tool_policy(),true)
-   on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+  insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) values ('${company}','${co}',true,true)
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   -- The Manager and the Contributor both see Writer; only the Manager's chat holds its proposal.
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${manager}','${writer}'),('${company}','${contributor}','${writer}');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
