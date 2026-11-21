@@ -11,13 +11,14 @@ pointed at by the Agent skills section of `CLAUDE.md`.
 
 ## Which skills
 
-Every skill the upstream plugin ships (its `.claude-plugin/plugin.json`), less two:
+Every skill the upstream plugin ships (its `.claude-plugin/plugin.json`), less `teach`, which turns the working folder
+into a teaching workspace. `setup-matt-pocock-skills` is kept because the other skills send a session that lacks this
+repo's setup to it. It reads the existing `docs/agents/` and asks before it writes, so it does not need to run here.
 
-- `setup-matt-pocock-skills`: it writes `docs/agents/`, which this repo already configured by hand.
-- `teach`: it turns the working folder into a teaching workspace.
-
-The list is in `scripts/vendor-matt-skills.sh`. `code-review`, `prototype` and `research` share a name with a Claude
-Code built-in; which one a bare `/code-review` reaches is the harness's choice, and the skill text is the same either way.
+The list is in `scripts/vendor-matt-skills.sh`. `code-review`, `prototype` and `research` share a name with a skill
+bundled with Claude Code. Claude Code's skills documentation (https://code.claude.com/docs/en/skills) gives a project
+skill precedence over a bundled one of the same name, so in this repo `/code-review` runs Matt's two-axis review
+(`.claude/skills/code-review/SKILL.md`), the skill `AGENTS.md` names for every pull request.
 
 ## Refreshing the copy
 

@@ -19,9 +19,10 @@ test('the script pins one upstream commit and lists the skills it vendors',()=>{
  assert.ok(pin,'pin=<40-character commit> in scripts/vendor-matt-skills.sh');
  assert.ok(listed.length>=20,`${listed.length} skills listed`);
  assert.equal(new Set(listed).size,listed.length,'no skill listed twice');
- // Left out on purpose: setup rewrites docs/agents/, which this repo already configured by hand; teach turns the working
- // folder into a teaching workspace.
- for(const name of ['setup-matt-pocock-skills','teach']) assert.ok(!listed.includes(name),name);
+ // teach is left out (it turns the working folder into a teaching workspace); setup stays, since the other skills send a
+ // session that lacks docs/agents/ to it.
+ assert.ok(!listed.includes('teach'));
+ assert.ok(listed.includes('setup-matt-pocock-skills'));
 });
 
 test('every listed skill is in .claude/skills/ under its own name, and nothing else is',()=>{

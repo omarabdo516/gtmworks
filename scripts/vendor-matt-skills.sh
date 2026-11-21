@@ -8,9 +8,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 pin=abeeaf95660ba9e8b7c753eb38f441ca707a8823
-# The skills the upstream plugin ships (its .claude-plugin/plugin.json), less two that do not fit this repo:
-# setup-matt-pocock-skills rewrites docs/agents/, which this repo configured by hand; teach turns the working folder
-# into a teaching workspace.
+# The skills the upstream plugin ships (its .claude-plugin/plugin.json), less teach, which turns the working folder into
+# a teaching workspace. setup-matt-pocock-skills stays: the other skills send a session without docs/agents/ to it, and
+# it reads the existing docs/agents/ and asks before it writes.
 skills='
   engineering/ask-matt
   engineering/code-review
@@ -25,6 +25,7 @@ skills='
   engineering/prototype
   engineering/research
   engineering/retro
+  engineering/setup-matt-pocock-skills
   engineering/tdd
   engineering/to-spec
   engineering/to-tickets
