@@ -18,8 +18,8 @@ const agentRows=(main=lead)=>[
  {agent:lead,name:'Lead',connection:'f0000000-0000-0000-0000-000000000011',profile:leadProfile,main:main===lead,own:true},
  {agent:ads,name:'Meta Ads',connection:'f0000000-0000-0000-0000-000000000021',profile:adsProfile,main:main===ads,own:true},
 ];
-// The signed-in person's database as the lib uses it: the Agents they see, the Company's level, the Role check and the log.
-function session({agents=agentRows(),level=3,refuse=null}={}) {
+// The signed-in person's database as the lib uses it: the Agents they see, the Role check and the log.
+function session({agents=agentRows(),refuse=null}={}) {
  const logged=[];
  const db={
   rpc:async(name,args)=>{
@@ -28,7 +28,6 @@ function session({agents=agentRows(),level=3,refuse=null}={}) {
    if(name==='log_agent_morning') { if(refuse) return {data:null,error:{message:refuse}}; logged.push(args); return {data:null,error:null}; }
    throw new Error(`unexpected rpc ${name}`);
   },
-  from:table=>{ assert.equal(table,'companies'); const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{agent_level:level},error:null})}; return chain; },
  };
  return {db,logged};
 }
@@ -41,7 +40,7 @@ test('switching on makes one job at the chosen time and zone; a new time changes
  try {
   const hermes=install(fake); const {db,logged}=session();
   const before=await readAgentMorning(db,{company,agent:lead,hermes});
-  assert.deepEqual([before.state,before.allowed,before.routine],['found',true,null],'nothing is made until it is switched on');
+  assert.deepEqual([before.state,before.routine],['found',null],'nothing is made until it is switched on');
   const made=await changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes});
   assert.deepEqual(made,{state:'written',morning:{on:true,time:'9:00'}});
   const create=writes(fake).at(-1);
@@ -109,23 +108,6 @@ test('a Contributor or a Viewer is refused before the Engine is asked, and nothi
  } finally { await fake.close(); }
 });
 
-test('below Agent level 3 the daily message is never switched on and the Engine is not asked to make it', async () => {
- const fake=await engine();
- try {
-  for(const level of [1,2]) {
-   const {db,logged}=session({level});
-   const read=await readAgentMorning(db,{company,agent:lead,hermes:install(fake)});
-   assert.deepEqual([read.state,read.allowed,read.level],['found',false,level]);
-   assert.equal((await changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)})).state,'levelLow');
-   assert.deepEqual(writes(fake),[],`level ${level}: no call changes the Engine`);
-   assert.deepEqual(logged,[]);
-  }
-  // One left on from level 3 may still be switched off.
-  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nSummary`,schedule:'0 9 * * *'});
-  assert.deepEqual((await changeAgentMorning(session({level:1}).db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake)})).morning,{on:false,time:'9:00'});
-  assert.equal(jobs(fake,leadProfile)[0].state,'paused');
- } finally { await fake.close(); }
-});
 
 test('making another Agent the main one moves the daily message to its profile with the same time and state, and leaves none behind', async () => {
  for(const on of [true,false]) {

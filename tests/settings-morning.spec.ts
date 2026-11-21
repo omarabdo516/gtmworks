@@ -2,13 +2,12 @@ import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { levelConfig } from '../lib/agent-levels.mjs';
+import { toolConfig } from '../lib/agent-toolsets.mjs';
 
 // #182: Good morning on the main Agent's page. The Owner switches the daily message on and picks its time, saved with
 // the page's bar: the Engine holds one job in the main Agent's own profile at that time and in the browser's zone, the
 // page reads it back, and each change is one row of the Company log with the old and new value. A Contributor reads
-// "Morning summary: Every day at …" and the server refuses their save. Below Agent level 3 the switch cannot be turned on
-// and nothing reaches the Engine. Making another Agent the main one moves the job to its profile. RS Learning: Lead, the
+// "Morning summary: Every day at …" and the server refuses their save. Making another Agent the main one moves the job to its profile. RS Learning: Lead, the
 // main Agent, and Ads. The Engine is the fake.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
@@ -21,17 +20,13 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 const morningJobs=(name:string)=>(fake.settings.cron.get(name)??[]).filter(job=>job.name==='Good morning');
 const cronWrites=()=>fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/cron/')&&request.method!=='GET');
 const logRows=()=>rows(`select actor_id,agent_id,details from public.company_log where company_id='${company}' and action='agent_setting_changed' and details->>'field'='morning' order by id`);
-const level=(value:number)=>{
- query(`do $$ begin update public.companies set agent_level=${value} where id='${company}'; update public.company_profiles set tools_level=${value},tools_pending=false where company_id='${company}'; end $$;`);
- for(const name of [profile,own(ads)]) fake.settings.profiles.get(name)!.config=levelConfig(value);
-};
 
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000,timezoneId:'Africa/Cairo'});
 test.beforeAll(async({browser},testInfo)=>{
  freshSeed(testInfo.file,testInfo.retry>0);
  fake=await laneHermes();
- for(const name of [profile,own(ads)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:levelConfig(3),credentials:{}});
+ for(const name of [profile,own(ads)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:toolConfig({profile:name}),credentials:{}});
  query(`update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003')`);
  const page=await browser.newPage();
  try {
@@ -41,13 +36,12 @@ test.beforeAll(async({browser},testInfo)=>{
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
     ('${lead}','${company}','${id(4)}','Lead','General',true,'${profile}'),
     ('${ads}','${company}','${id(5)}','Ads','Runs the Meta ads.',false,'${own(ads)}');
-   insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',3,public.engine_tool_policy() from public.companies where id='${company}'
-    on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
    insert into public.company_profile_keepers(company_id,agent_id) values ('${company}','${lead}') on conflict (company_id) do update set agent_id=excluded.agent_id;
-   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) select '${ads}','${company}',3,public.engine_tool_policy() from public.companies where id='${company}';
+   insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${ads}','${company}',true);
    set local session_replication_role=origin;
   end $$;`);
-  level(3);
  } finally { await page.close(); }
 });
 test.afterAll(async()=>{ await fake?.close(); });
@@ -125,26 +119,6 @@ test('a Contributor reads one row and the server refuses their save',async({page
  expect(morningJobs(profile)[0]?.state).toBe('scheduled');
 });
 
-test('below Agent level 3 the switch cannot be turned on, the line says why, and no job is made',async({page})=>{
- fake.settings.cron.set(profile,(fake.settings.cron.get(profile)??[]).filter(job=>job.name!=='Good morning'));
- level(1);
- try {
-  await signIn(page,'omar@example.com',agentPage(lead));
-  const section=morning(page);
-  await hydrated(page);
-  await expect(section.locator('#set-ck-level')).toHaveText('Scheduled work is off for this company. The Owner turns it on in Settings, Company, “What the agents may do”.');
-  const toggle=section.getByRole('switch',{name:'Send me a morning summary every day'});
-  await expect(toggle).toHaveAttribute('aria-disabled','true');
-  await toggle.dispatchEvent('click');
-  await expect(toggle).toHaveAttribute('aria-checked','false');
-  await expect(page.locator('#dp-savebar')).toBeHidden();
-  const before=cronWrites().length;
-  const refused=await page.request.post('/api/agent-page',{data:{company,agent:lead,changes:{morning:{on:true,time:'9:00',zone:'Africa/Cairo'}}}});
-  expect(refused.status()).toBe(409);
-  expect(cronWrites().length).toBe(before);
-  expect(morningJobs(profile)).toHaveLength(0);
- } finally { level(3); }
-});
 
 test('making another Agent the main one moves the daily message to its profile with the same time and state, and leaves none behind',async({page})=>{
  await signIn(page,'omar@example.com',agentPage(lead));

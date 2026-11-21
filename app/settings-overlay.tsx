@@ -225,7 +225,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
  const effortEditable=owner&&agentModel?.models?.agents[0]?.own===true&&agentModel.models.agents[0].effort!==null;
  // Good morning (#182) is the Owner's and the Managers' on the main Agent's own profile, once the Engine was read.
  const morningEditable=canManage&&morning?.state==='found';
- const morningProps=morning?.state==='found'?{made:!!morning.routine,on:morning.routine?.on===true,time:morning.routine?.time??null,expr:morning.routine?.schedule.expr??null,display:morning.routine?.schedule.display??null,timezone:morning.routine?.timezone??null,allowed:morning.allowed,quietYesterday:morning.quietYesterday}:null;
+ const morningProps=morning?.state==='found'?{made:!!morning.routine,on:morning.routine?.on===true,time:morning.routine?.time??null,expr:morning.routine?.schedule.expr??null,display:morning.routine?.schedule.display??null,timezone:morning.routine?.timezone??null,quietYesterday:morning.quietYesterday}:null;
  const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>

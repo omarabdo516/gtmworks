@@ -758,7 +758,6 @@
   "zoneCityIstanbul": "Istanbul",
   "settingsCheckinHint": "If there’s nothing new, it won’t send anything.",
   "settingsCheckinQuiet": "That’s why there was no good-morning message yesterday.",
-  "settingsCheckinLevel": "Scheduled work is off for this company. The Owner turns it on in Settings, Company, “What the agents may do”.",
   "settingsCheckinRO": "Morning summary",
   "settingsCheckinEvery": "Every day at {0}",
   "settingsCheckinOff": "Off",

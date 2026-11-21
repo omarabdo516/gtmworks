@@ -16,10 +16,10 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
 
 // #182: Good morning on the main Agent's page. The switch and the time are two keys of the page's draft and join its save
-// bar as one `morning` part; the time select is disabled while the switch is off in the draft; below Agent level 3 the
-// switch cannot be turned on and one line says why; a Contributor and a Viewer read one row.
+// bar as one `morning` part; the time select is disabled while the switch is off in the draft; a Contributor and a
+// Viewer read one row.
 const company='10000000-0000-0000-0000-000000000001';
-const off:MorningProps={made:false,on:false,time:null,expr:null,display:null,timezone:null,allowed:true,quietYesterday:false};
+const off:MorningProps={made:false,on:false,time:null,expr:null,display:null,timezone:null,quietYesterday:false};
 let count=0;
 const morningPage=(morning:MorningProps|null=off,editable=true,language:'en'|'ar'='en')=>{
  const agent=`ag-morning-${++count}`;
@@ -40,7 +40,6 @@ test('the reference\'s switch, time and hint; the select offers every half hour 
  expect([...select().options].map(option=>option.textContent)).toEqual(['7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM']);
  expect(select().value).toBe('9:00');
  expect(document.getElementById('set-ck-hint')?.textContent).toBe(en.settingsCheckinHint);
- expect(document.getElementById('set-ck-level')).toBeNull();
  await screen.getByRole('switch',{name:en.settingsCheckin}).click();
  await expect.element(screen.getByRole('switch',{name:en.settingsCheckin})).toHaveAttribute('aria-checked','true');
  await expect.poll(()=>select().disabled).toBe(false);
@@ -75,7 +74,7 @@ test('the switch and the time join the save bar and go in one request as one par
 });
 
 test('the job\'s own zone names the time, a time changed in a chat is shown as it is, and the quiet day is said',async()=>{
- await morningPage({made:true,on:true,time:'6:15',expr:'15 6 * * *',display:null,timezone:'Africa/Cairo',allowed:true,quietYesterday:true});
+ await morningPage({made:true,on:true,time:'6:15',expr:'15 6 * * *',display:null,timezone:'Africa/Cairo',quietYesterday:true});
  await expect.poll(()=>document.getElementById('set-ck-zone')?.textContent).toBe('Cairo time');
  expect(select().value).toBe('6:15');
  expect(select().options[0].textContent).toBe('6:15 AM');
@@ -83,25 +82,15 @@ test('the job\'s own zone names the time, a time changed in a chat is shown as i
 });
 
 test('in Arabic the reference\'s words and the zone\'s city',async()=>{
- const screen=await morningPage({made:true,on:true,time:'9:00',expr:'0 9 * * *',display:null,timezone:'Africa/Cairo',allowed:true,quietYesterday:false},true,'ar');
+ const screen=await morningPage({made:true,on:true,time:'9:00',expr:'0 9 * * *',display:null,timezone:'Africa/Cairo',quietYesterday:false},true,'ar');
  await expect.element(screen.getByRole('switch',{name:ar.settingsCheckin})).toHaveAttribute('aria-checked','true');
  await expect.poll(()=>document.getElementById('set-ck-zone')?.textContent).toBe('بتوقيت القاهرة');
  expect(select().selectedOptions[0].textContent).toBe('9:00 الصبح');
 });
 
-test('below Agent level 3 the switch cannot be turned on and one line says why',async()=>{
- const screen=await morningPage({...off,allowed:false});
- await expect.poll(()=>document.getElementById('set-ck-level')?.textContent).toBe(en.settingsCheckinLevel);
- const control=screen.getByRole('switch',{name:en.settingsCheckin});
- await expect.element(control).toHaveAttribute('aria-disabled','true');
- // Playwright will not press a control marked disabled, so it is pressed as a script would.
- (control.element() as HTMLElement).click();
- await expect.element(control).toHaveAttribute('aria-checked','false');
- expect(document.getElementById('dp-savebar')?.hidden).toBe(true);
-});
 
 test('a Contributor and a Viewer read one row: Every day at the time, or Off',async()=>{
- const on=await morningPage({made:true,on:true,time:'9:00',expr:'0 9 * * *',display:null,timezone:'Africa/Cairo',allowed:true,quietYesterday:false},false);
+ const on=await morningPage({made:true,on:true,time:'9:00',expr:'0 9 * * *',display:null,timezone:'Africa/Cairo',quietYesterday:false},false);
  await expect.poll(()=>document.getElementById('set-ck-val')?.textContent).toBe('Every day at 9:00 AM');
  expect(document.querySelector('[role=switch]')).toBeNull();
  expect(document.getElementById('set-ck-time')).toBeNull();
@@ -110,16 +99,9 @@ test('a Contributor and a Viewer read one row: Every day at the time, or Off',as
  await expect.poll(()=>document.getElementById('set-ck-val')?.textContent).toBe(en.settingsCheckinOff);
 });
 
-test('a save refused below Agent level 3 says why in the bar, not only that it failed',async()=>{
- vi.stubGlobal('fetch',()=>Promise.resolve(new Response(JSON.stringify({error:'agentPageLevelLow'}),{status:409,headers:{'Content-Type':'application/json'}})));
- const screen=await morningPage();
- await screen.getByRole('switch',{name:en.settingsCheckin}).click();
- await screen.getByRole('button',{name:'Save',exact:true}).click();
- await expect.poll(()=>document.querySelector('#dp-savebar .set-err')?.textContent).toBe(en.settingsCheckinLevel);
-});
 
 test('a schedule set in a chat that is no daily time is offered as it is, and kept',async()=>{
- await morningPage({made:true,on:true,time:null,expr:null,display:'every 720m',timezone:'Africa/Cairo',allowed:true,quietYesterday:false});
+ await morningPage({made:true,on:true,time:null,expr:null,display:'every 720m',timezone:'Africa/Cairo',quietYesterday:false});
  await expect.poll(()=>select()?.value).toBe('keep');
  expect(select().options[0].textContent).toBe('every 720m');
 });

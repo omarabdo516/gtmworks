@@ -29,7 +29,6 @@ const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'C
 // Each refusal of a field, as the page's answer: a person not allowed or an Agent not theirs, a malformed or too long
 // field or a voice the Engine does not offer, no Engine, or the Engine's own failure.
 const refused=(state:string)=>state==='notOwn'||state==='notAllowed'?reply({error:'agentPageNotAllowed'},403)
- :state==='levelLow'?reply({error:'agentPageLevelLow'},409)
  :state==='invalid'||state==='tooLong'||state==='noVoices'||state==='shared'||state==='essential'||state==='notMain'?reply({error:'agentPageInvalid'},400)
  :state==='noEngine'?reply({error:'agentPageNoEngine'},503):reply({error:'agentPageFailed'},502);
 export async function POST(request:NextRequest) {
@@ -61,7 +60,7 @@ export async function POST(request:NextRequest) {
  if(!await routeAllowed(db,'app/api/agent-page/route.ts','POST',body.company,user.id)) return reply({error:'agentPageNotAllowed'},403);
  try {
   const saved:Record<string,unknown>={}; let sectionChars:number|undefined;
-  // Good morning first: a refusal of it (below level 3, say) then leaves every other field of the save unwritten too.
+  // Good morning first: a refusal of it leaves every other field of the save unwritten too.
   if(morning!==undefined) {
    const changed=await changeAgentMorning(db,{company:body.company,agent:body.agent,on:morning.on,time:morning.time,zone:morning.zone});
    if(changed.state!=='written') return refused(changed.state);

@@ -10,6 +10,7 @@ import { localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { laneHermes } from './lane-hermes';
 import { levelConfig } from '../lib/agent-levels.mjs';
 import { morningMarker } from '../lib/morning-schedule.mjs';
+import { toolConfig } from '../lib/agent-toolsets.mjs';
 
 // The visual lane (#257): each key screen in tests/visual-lane/screens.json, in Arabic at 1440 and 390, light and dark,
 // against its approved image. Each screen starts from the seed as built and signs in again, so the screens pass in any
@@ -75,19 +76,17 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
         routineJob('bb00000000b2', 'وقّف أي إعلان تكلفة الليد فيه عدّت 45 ج', '0 16 * * 4', { enabled: false, state: 'paused', next_run_at: null })]);
     },
   },
-  // Good morning (#182): the main Agent's page with its daily message on at 9:00, Cairo time, at Agent level 3.
+  // Good morning (#182): the main Agent's page with its daily message on at 9:00, Cairo time.
   'good-morning': {
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
        ('${morning(1)}','${rsLearning}','${morning(2)}','Lead','General',true,'${companyProfile}');
-      insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${companyProfile}',3,public.engine_tool_policy() from public.companies where id='${rsLearning}'
-       on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
-      insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${morning(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;
-      update public.companies set agent_level=3 where id='${rsLearning}';`,
-    unset: `update public.companies set agent_level=1 where id='${rsLearning}';
-      delete from public.company_profile_keepers where agent_id='${morning(1)}';
+      insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${companyProfile}',true from public.companies where id='${rsLearning}'
+       on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
+      insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${morning(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;`,
+    unset: `delete from public.company_profile_keepers where agent_id='${morning(1)}';
       delete from public.hermes_agents where id='${morning(1)}';`,
     engine: fake => {
-      fake.settings.profiles.set(companyProfile, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: levelConfig(3), credentials: {} });
+      fake.settings.profiles.set(companyProfile, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: toolConfig({ profile: companyProfile }), credentials: {} });
       fake.settings.cron.set(companyProfile, [routineJob('cc00000000c1', 'Good morning', '0 9 * * *', { timezone: 'Africa/Cairo', prompt: `${morningMarker}\nThe morning summary.` })]);
     },
   },
