@@ -153,7 +153,8 @@ end $$;
 revoke all on function public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text) from public,anon,authenticated;
 grant execute on function public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text) to service_role;
 
--- Approving is four steps, so no other answer lands while the Engine is written. claim_agent_change takes a waiting
+-- Approving is four steps, so no other answer lands while an approval's lease holds (the two windows it cannot close are
+-- named below). claim_agent_change takes a waiting
 -- proposal for this Owner (state 'applying') under a lease of five minutes and a token of its own, and returns what to
 -- write. While a lease holds, every other claim, the same Owner's from another tab included, is answered busy; an expired
 -- one is taken over with a new token (`retry`: its write may have been lost, so the app never gives that claim back).
