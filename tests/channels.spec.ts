@@ -65,7 +65,7 @@ test('the Viewer reads the channel, with the writer and their role, and has no c
  const lead=randomUUID(); const companyProfile=`co-${company.replaceAll('-','')}`;
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default) values ('${lead}','${company}','${randomUUID()}','Lead','Runs the launch.','${companyProfile}',true)`);
  query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${lead}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
- query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${companyProfile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}' on conflict (company_id) do update set tools_pending=false,skills_shared=true`);
+ query(`insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) select id,'${companyProfile}',true,true from public.companies where id='${company}' on conflict (company_id) do update set tools_pending=false,skills_shared=true`);
  const session=randomUUID(); const profile=`ag-148-${randomUUID().slice(0,8)}`; const run=`run-148-${randomUUID().slice(0,8)}`;
  const sent=Date.parse('2026-11-16T10:12:00Z')/1000;
  try {

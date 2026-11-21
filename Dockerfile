@@ -36,13 +36,18 @@ COPY --from=build --chown=node:node /app/components/paperclip/fonts/*.txt /app/c
 # Everything an install reads from a source checkout, so a release install needs only its compose file and install
 # script: in release mode scripts/install.sh copies /app/install into the install directory (#49).
 COPY --from=build --chown=node:node /app/lib ./install/lib
-COPY --from=build --chown=node:node /app/scripts/install-db.sql /app/scripts/local-default-privileges.sql /app/scripts/install-key.sh /app/scripts/install-nginx.conf /app/scripts/install-gateway-real-ip.sh /app/scripts/engine-template.yml ./install/scripts/
+COPY --from=build --chown=node:node /app/scripts/install-db.sql /app/scripts/local-default-privileges.sql /app/scripts/install-key.sh /app/scripts/install-nginx.conf /app/scripts/install-gateway-real-ip.sh /app/scripts/engine-template.yml /app/scripts/engine-managed.yml /app/scripts/engine-listener-address.py /app/scripts/engine-listener-address.sh /app/scripts/engine-ssh-sync-files.sh ./install/scripts/
 COPY --from=build --chown=node:node /app/supabase/migrations ./install/supabase/migrations
 # The main channel (scripts/get.sh --channel main) has no GitHub Release: its compose file and install script are written
 # from these source files by release-assets.mjs, run inside the main image for the digest the install just pulled. Every
 # image also carries its own get.sh, the gtmworks command an install or update of it leaves behind (#437).
 COPY --from=build --chown=node:node /app/docker-compose.install.yml ./release-source/
-COPY --from=build --chown=node:node /app/scripts/install.sh /app/scripts/get.sh /app/scripts/release-assets.mjs /app/scripts/engine-template.yml ./release-source/scripts/
+COPY --from=build --chown=node:node /app/scripts/install.sh /app/scripts/get.sh /app/scripts/release-assets.mjs /app/scripts/engine-template.yml /app/scripts/engine-managed.yml /app/scripts/engine-listener-address.py /app/scripts/engine-listener-address.sh /app/scripts/engine-ssh-sync-files.sh ./release-source/scripts/
+# The work sandbox image built from the same commit (#392, ADR 0020), by tag and digest: the release workflow builds it
+# first and passes it here, so release-assets.mjs pins the sandbox the image was built with and never another build's. A
+# local or CI build has none.
+ARG GTMWORKS_SANDBOX_IMAGE=
+RUN if [ -n "$GTMWORKS_SANDBOX_IMAGE" ]; then printf '%s\n' "$GTMWORKS_SANDBOX_IMAGE" > ./release-source/sandbox-image; fi
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

@@ -8,8 +8,8 @@ import { downloadAgentFile, libraryRoot, listAgentFiles, readAgentFile, workSegm
 import { agentFileDownload, agentLibrary } from '../lib/agent-files.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
-// The Library of an Agent (#194): one folder of the Agent's work folder in its own Engine profile, read through the
-// dashboard's file routes and never copied into gtmworks. A Contributor or a Viewer is refused on the server, a hidden
+// The Library of an Agent (#194, #395): one folder of the Agent's own folder in its Company's work folder, read through
+// the Engine and never copied into gtmworks. A Contributor or a Viewer is refused on the server, a hidden
 // Agent and another Company's Agent are not found, and no answer carries an Engine address or a path on its disk.
 const company='10000000-0000-0000-0000-000000000001';
 const otherCompany='10000000-0000-0000-0000-000000000002';
@@ -19,7 +19,10 @@ const person='9a000000-0000-0000-0000-000000000001';
 const profile=`ag-${agent.replaceAll('-','')}`;
 const otherProfile=`ag-${otherAgent.replaceAll('-','')}`;
 const home=`/opt/data/profiles/${profile}`;
-const work=`${home}/workspace`;
+// The Agent's own folder in the Company's work folder (#395): the Engine lists it on its read-only mount of the work
+// volume, and reads a file's bytes in the work sandbox, where the same folder is /work/<profile> (lib/hermes.mjs).
+const work=`/opt/data/work/${profile}`;
+const sandbox=`/work/${profile}`;
 // The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
 const images=`${home}/cache/generated/images`;
 const mtime=1763500000;
@@ -36,15 +39,15 @@ function load(file,imports,globals={}) {
  return exports;
 }
 
-// A fake Engine with one Agent's profile and the work folder the Engine makes in every profile (hermes_cli/profiles.py
-// line 40, _PROFILE_DIRS).
+// A fake Engine with one Agent's profile and its own folder in the Company's work folder, which the sandbox makes at the
+// Agent's first command (sandbox/work-shell).
 async function engine() {
  const fake=await fakeHermes();
  for(const name of [profile,otherProfile]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.files.set(work,[]);
  return {fake,at:{address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'}};
 }
-const downloaded=fake=>fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/fs/download'));
+const downloaded=fake=>fake.settings.managementRequests.filter(request=>/^\/api\/(fs|files)\/download/.test(String(request.path)));
 
 // The database as the signed-in person reaches it: their Role in the Company, and the Agents they see there.
 function database({role='owner',agents=[{agent,name:'Lead',connection:'c',profile,main:true,own:true}],signedIn=person,companyRow={id:company}}={}) {
@@ -58,7 +61,7 @@ function database({role='owner',agents=[{agent,name:'Lead',connection:'c',profil
  return {db,asked};
 }
 
-test('an Agent\'s library is the folders and files in its profile\'s work folder, read from the Engine with no path in the answer', async () => {
+test('an Agent\'s library is the folders and files in its own folder of the Company\'s work folder, read from the Engine with no path in the answer', async () => {
  const {fake,at}=await engine();
  try {
   fake.settings.files.set(work,[{name:'reports',isFolder:true},{name:'brief.md',size:2048,mtime},{name:'shot.png',size:4096,mtime}]);
@@ -71,7 +74,7 @@ test('an Agent\'s library is the folders and files in its profile\'s work folder
   // The folder's own path and the profile's home never leave the contract.
   assert.ok(!JSON.stringify(read).includes('/opt/'),'no Engine path in the answer');
   assert.ok(!JSON.stringify(read).includes(fake.address),'no Engine address in the answer');
-  // It is the profile's own work folder the Engine is asked about.
+  // It is the Agent's own folder of the work folder the Engine is asked about, never a folder of its profile's home.
   assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(work)}`));
 
   // A folder inside it is asked about by its relative name.
@@ -85,6 +88,74 @@ test('an Agent\'s library is the folders and files in its profile\'s work folder
   assert.deepEqual(await listAgentFiles(at),{state:'unreachable',entries:null});
   assert.deepEqual(await listAgentFiles({...at,key:'another-key'}),{state:'refused',entries:null});
   assert.deepEqual(await listAgentFiles({...at,profile:'ag-nothing'}),{state:'missing',entries:null});
+ } finally { await fake.close(); }
+});
+
+test('an Agent\'s work root is the empty folder it is before its first command, not a missing one', async () => {
+ const {fake,at}=await engine();
+ try {
+  // The sandbox makes the Agent's folder at its first command: until then the Engine has none (404).
+  fake.settings.files.delete(work);
+  assert.deepEqual(await listAgentFiles(at),{state:'found',entries:[]});
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(work)}`),'the Engine was asked, and answered 404');
+  // A folder inside it is not made for it: only the root itself is empty rather than missing.
+  assert.deepEqual(await listAgentFiles(at,'reports'),{state:'missing',entries:null});
+ } finally { await fake.close(); }
+});
+
+test('the work root never shows the profile\'s old workspace on the Engine\'s disk', async () => {
+ const {fake,at}=await engine();
+ try {
+  // The folder in the profile's own home that the Library showed until now is never read: nothing could write to it.
+  fake.settings.files.set(`${home}/workspace`,[{name:'old.md',size:2,mtime}]);
+  fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
+  assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['made.md']);
+  assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).includes(encodeURIComponent(`${home}/workspace`))),'the old workspace is never asked about');
+ } finally { await fake.close(); }
+});
+
+test('another Agent\'s folder of the same work folder is that Agent\'s Library, not this one\'s', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
+  fake.settings.files.set(`/opt/data/work/${otherProfile}`,[{name:'theirs.md',size:1,mtime}]);
+  assert.deepEqual((await listAgentFiles({...at,profile:otherProfile})).entries?.map(entry=>entry.name),['theirs.md']);
+  assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['made.md']);
+ } finally { await fake.close(); }
+});
+
+test('a work file\'s text is read in the sandbox, by the path the sandbox holds it at', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
+  fake.settings.fileBytes.set(`${work}/made.md`,{body:'Made',type:'text/markdown'});
+  assert.deepEqual(await readAgentFile(at,{name:'made.md'}),{state:'found',name:'made.md',type:'text/markdown',byteSize:4,truncated:false,text:'Made'});
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/read-text?path=${encodeURIComponent(`${sandbox}/made.md`)}&profile=${profile}`));
+ } finally { await fake.close(); }
+});
+
+test('a stopped work sandbox still lists the work folder, and its files read as unreachable, not missing', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'brief.md',size:4,mtime}]);
+  fake.settings.sandboxDown=true;
+  assert.deepEqual(await listAgentFiles(at),{state:'found',entries:[{name:'brief.md',isFolder:false,size:4,time:clock}]});
+  assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'unreachable'});
+  assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'unreachable'});
+ } finally { await fake.close(); }
+});
+
+test('a listed file the Engine refuses to read (403) is missing, in both roots; only a refused key (401) is refused', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'brief.md',size:4,mtime}]);
+  fake.settings.images.set(profile,[{name:'promo.txt',size:4,mtime}]);
+  fake.settings.filesRefused.add(`${sandbox}/brief.md`).add(`${images}/promo.txt`);
+  assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  assert.deepEqual(await readAgentFile(at,{root:'images',name:'promo.txt'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile(at,{root:'images',name:'promo.txt'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile({...at,key:'another-key'},{name:'brief.md'}),{state:'refused'});
  } finally { await fake.close(); }
 });
 
@@ -108,11 +179,12 @@ test('a name that could leave the work folder is refused in gtmworks before the 
 test('a file that resolves outside the work folder, or a broken link, is not listed and cannot be downloaded', async () => {
  const {fake,at}=await engine();
  try {
-  fake.settings.files.set(work,[{name:'brief.md',size:2,mtime},{name:'passwd',size:9,mtime,resolves:'/etc/passwd'},{name:'elsewhere',size:9,mtime,resolves:`/opt/data/profiles/${otherProfile}/workspace/x`},{name:'dangling',broken:true}]);
+  fake.settings.files.set(work,[{name:'brief.md',size:2,mtime},{name:'passwd',size:9,mtime,resolves:'/etc/passwd'},{name:'elsewhere',size:9,mtime,resolves:`/opt/data/profiles/${otherProfile}/memories/MEMORY.md`},{name:'beside',size:9,mtime,resolves:`/opt/data/work/${otherProfile}/x`},{name:'dangling',broken:true}]);
   const read=await listAgentFiles(at);
   assert.deepEqual(read.entries.map(entry=>entry.name),['brief.md'],'only what is in this folder, and no broken link');
   assert.deepEqual(await downloadAgentFile(at,{name:'passwd'}),{state:'missing'});
   assert.deepEqual(await downloadAgentFile(at,{name:'elsewhere'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile(at,{name:'beside'}),{state:'missing'});
   assert.equal(downloaded(fake).length,0,'no bytes were asked for');
  } finally { await fake.close(); }
 });
@@ -153,7 +225,9 @@ test('one file of the work folder is fetched through gtmworks, with its type and
   assert.equal(file.type,'text/markdown');
   assert.equal(file.size,Buffer.byteLength(text));
   assert.equal(Buffer.from(file.body).toString(),text);
-  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/download?path=${encodeURIComponent(`${work}/brief.md`)}&profile=${profile}`));
+  // Its bytes are read in the work sandbox, by the profile's ssh workspace, and never through the Engine's own mount.
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/download?path=${encodeURIComponent(`${sandbox}/brief.md`)}&profile=${profile}`));
+  assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/files/download')),'no work file is read on the Engine\'s disk');
   assert.deepEqual(await downloadAgentFile(at,{name:'reports'}),{state:'invalid'},'a folder is not a file');
   assert.deepEqual(await downloadAgentFile(at,{name:'nothing.md'}),{state:'missing'});
   // A file the Engine no longer has, in a folder that still lists it, is missing rather than a failure.
@@ -181,12 +255,61 @@ test('the generated images folder is the Library\'s second root, listed, downloa
   assert.equal(file.type,'image/png');
   assert.equal(file.size,png.length);
   assert.deepEqual([...file.body], [...png]);
-  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/download?path=${encodeURIComponent(`${images}/promo.png`)}&profile=${profile}`));
+  // A generated image is on the Engine's own disk, where no Agent writes: it is read there, never in the sandbox.
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files/download?path=${encodeURIComponent(`${images}/promo.png`)}`));
+  assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/fs/')),'no generated image is asked of the sandbox');
   // A picture has no text to preview: its bytes are the Engine's and its answer carries none of them as text.
   assert.deepEqual(await readAgentFile(at,{root:'images',name:'promo.png'}),{state:'found',name:'promo.png',type:'image/png',byteSize:png.length,truncated:false,text:null});
   // The two roots are read apart: the work folder never carries the generated image.
   fake.settings.files.set(work,[{name:'brief.md',size:2,mtime}]);
   assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['brief.md']);
+ } finally { await fake.close(); }
+});
+
+test('a long text in the generated images folder is previewed from its first 512 KB, asked for as a range, with its whole size', async () => {
+ const {fake,at}=await engine();
+ try {
+  const long='a'.repeat(600*1024);
+  fake.settings.images.set(profile,[{name:'caption.txt',size:long.length,mtime}]);
+  fake.settings.fileBytes.set(`${images}/caption.txt`,{body:long,type:'text/plain'});
+  const read=await readAgentFile(at,{root:'images',name:'caption.txt'});
+  assert.equal(read.state,'found');
+  if(read.state!=='found') return;
+  assert.equal(read.byteSize,long.length);
+  assert.equal(read.truncated,true);
+  assert.equal(read.text?.length,512*1024);
+  assert.ok(fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/files/download')&&request.range===`bytes=0-${512*1024-1}`),'only the first 512 KB is asked for');
+ } finally { await fake.close(); }
+});
+
+test('an empty file in the generated images folder previews as empty, and a character cut at 512 KB is left out', async () => {
+ const {fake,at}=await engine();
+ try {
+  // A range on an empty file is refused (416): the preview is the empty file, not a read that failed.
+  const arabic=`a${'ب'.repeat(300*1024)}`;
+  fake.settings.images.set(profile,[{name:'empty.txt',size:0,mtime},{name:'arabic.txt',size:Buffer.byteLength(arabic),mtime}]);
+  fake.settings.fileBytes.set(`${images}/empty.txt`,{body:'',type:'text/plain'});
+  fake.settings.fileBytes.set(`${images}/arabic.txt`,{body:arabic,type:'text/plain'});
+  assert.deepEqual(await readAgentFile(at,{root:'images',name:'empty.txt'}),{state:'found',name:'empty.txt',type:'text/plain',byteSize:0,truncated:false,text:''});
+  // Two bytes a letter after one ASCII byte: the first 512 KB end halfway through a letter.
+  const read=await readAgentFile(at,{root:'images',name:'arabic.txt'});
+  assert.equal(read.state,'found');
+  if(read.state!=='found') return;
+  assert.equal(read.truncated,true);
+  assert.ok(!read.text?.includes('\uFFFD'),'no replacement character at the cut');
+ } finally { await fake.close(); }
+});
+
+test('a file in the generated images folder reads as binary by the Engine\'s rule: a NUL, or more than 12% control bytes', async () => {
+ const {fake,at}=await engine();
+ try {
+  const noisy=new Uint8Array(100).fill(97); for(let at=0;at<13;at++) noisy[at*7]=1;
+  const plain=new Uint8Array(100).fill(97); for(let at=0;at<12;at++) plain[at*7]=1;
+  fake.settings.images.set(profile,[{name:'noisy.txt',size:100,mtime},{name:'plain.txt',size:100,mtime}]);
+  fake.settings.fileBytes.set(`${images}/noisy.txt`,{body:noisy,type:'text/plain'});
+  fake.settings.fileBytes.set(`${images}/plain.txt`,{body:plain,type:'text/plain'});
+  assert.equal((await readAgentFile(at,{root:'images',name:'noisy.txt'})).text,null);
+  assert.equal(typeof (await readAgentFile(at,{root:'images',name:'plain.txt'})).text,'string');
  } finally { await fake.close(); }
 });
 
@@ -346,6 +469,9 @@ test('the download route serves the bytes as an attachment to an Owner and a Man
   const before=downloaded(fake).length;
   assert.equal((await ask(route(database().db),{name:'../../etc/passwd'})).status,404);
   assert.equal(downloaded(fake).length,before);
+  // A stopped work sandbox is a service that is down, not a file that is gone.
+  fake.settings.sandboxDown=true;
+  assert.equal((await ask(route(database().db),{name:'brief.md'})).status,503);
  } finally { await fake.close(); }
 });
 

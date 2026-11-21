@@ -25,6 +25,7 @@ const rows: Row[] = [
  { name: 'q3.csv', isFolder: false, size: 26, time: at, files: null, latest: null },
  { name: 'shot.png', isFolder: false, size: 4096, time: at, files: null, latest: null },
  { name: 'logo.svg', isFolder: false, size: 29, time: at, files: null, latest: null },
+ { name: 'kept.md', isFolder: false, size: 12, time: at, files: null, latest: null },
 ];
 const bodies: Record<string, Body> = {
  'brief.md': { name: 'brief.md', kind: 'text', type: 'text/markdown', byteSize: 19, truncated: false, text: '# Brief\n\nSell more.\n' },
@@ -37,6 +38,8 @@ const bodies: Record<string, Body> = {
 const engine = () => vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
  const url = new URL(String(input), 'http://localhost');
  if (url.pathname === '/api/agent-files/preview') {
+  // The work sandbox that holds kept.md's bytes is stopped (#395): the Engine listed it, but cannot read it.
+  if (url.searchParams.get('name') === 'kept.md') return new Response(JSON.stringify({ error: 'workSandboxNotRunning' }), { status: 503 });
   const body = bodies[url.searchParams.get('name') ?? ''];
   return body ? new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
    : new Response(JSON.stringify({ error: 'agentLibraryMissing' }), { status: 404 });
@@ -186,4 +189,17 @@ test('in Arabic the preview reads as the reference words it', async () => {
  await expect.poll(() => dialog()).toBeNull();
  await open(screen, 'long.txt');
  await expect.element(screen.getByText('ده أول جزء بس. الملف كامل 600 KB.')).toBeVisible();
+});
+
+test('a file whose work sandbox is stopped says so in the preview, in English and in Arabic, and still offers Download', async () => {
+ await page.viewport(1280, 900);
+ engine();
+ const screen = await drawn();
+ await open(screen, 'kept.md');
+ await expect.element(screen.getByText('This Company’s work sandbox is not running. Ask the install owner to start it.')).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'Download' })).toBeVisible();
+ screen.unmount();
+ const arabic = await drawn('ar');
+ await open(arabic, 'kept.md');
+ await expect.element(arabic.getByText('صندوق الشغل بتاع الشركة دي مش شغال. اسأل صاحب التثبيت يشغّله.')).toBeVisible();
 });

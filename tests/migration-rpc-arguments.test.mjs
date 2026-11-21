@@ -97,7 +97,7 @@ test('every rpc call names parameters the migrations create, so PostgREST finds 
 
 test('the worker records an Agent\'s tools with the sub-agents parameter the migration names', () => {
  const worker=readFileSync(`${root}lib/company-profiles.mjs`,'utf8');
- assert.match(worker,/record:\['record_agent_profile',\{agent:row\.agent_id,engine_profile:row\.profile,level:row\.agent_level,policy:toolPolicy,subagents_written:row\.subagents===true\}\]/);
+ assert.match(worker,/record:\['record_agent_profile',\{agent:row\.agent_id,engine_profile:row\.profile,subagents_written:row\.subagents===true\}\]/);
  const record=signatures().get('record_agent_profile').at(-1);
  assert.ok(record.includes('subagents_written'),'the migration keeps the optional sub-agents read-back named subagents_written');
 });

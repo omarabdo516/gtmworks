@@ -5,9 +5,9 @@ select plan(51);
 -- its own profile. Aleem (3) has its own profile too. The Writer is shown to the Manager (2), the Contributor (3) and
 -- the Viewer (4).
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('c5000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c5000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy()),
- ('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy());
+insert into public.company_profiles(company_id,profile,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true),
+ ('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',true);
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('c5100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','c5000000-0000-0000-0000-000000000002','Lead');
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
@@ -17,10 +17,13 @@ grant select on named to authenticated;
 grant all on named to service_role;
 set local role service_role;
 insert into named(name,agent) select 'writer',(public.lead_create_agent(conversation=>'c5100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{}',
- own_level=>1,own_policy=>public.engine_tool_policy())->>'agent')::uuid;
+ own_profile=>true)->>'agent')::uuid;
 reset role;
 insert into named values ('lead','c5000000-0000-0000-0000-000000000002');
 update named n set profile=a.profile,connection=a.connection_id from public.hermes_agents a where a.id=n.agent;
+set local role service_role;
+select public.record_agent_profile((select agent from named where name='writer'),(select profile from named where name='writer'),false);
+reset role;
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,agent from named,generate_series(2,4) n where name='writer';
 select is((select profile from named where name='writer'),public.agent_engine_profile((select agent from named where name='writer')),'the Writer runs on its own profile');
@@ -83,8 +86,8 @@ begin
  return 'reserved';
 exception when others then reset role; return sqlerrm;
 end $$;
-select is(pg_temp.reserved('lead','c5200000-0000-0000-0000-000000000001','c5300000-0000-0000-0000-000000000001'),'agentLevelPending','no Run starts on the Company''s profile before its shared folder is confirmed');
-select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c5300000-0000-0000-0000-000000000002'),'agentLevelPending','nor on an Agent''s own profile');
+select is(pg_temp.reserved('lead','c5200000-0000-0000-0000-000000000001','c5300000-0000-0000-0000-000000000001'),'agentToolsPending','no Run starts on the Company''s profile before its shared folder is confirmed');
+select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c5300000-0000-0000-0000-000000000002'),'agentToolsPending','nor on an Agent''s own profile');
 select ok(not public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'the Company''s profile is not ready');
 update public.company_shared_spaces set seen_at=now()-interval '11 minutes';
 select ok(public.company_profile_ready('10000000-0000-0000-0000-000000000001'),'once that worker has not listed its work for ten minutes, the wait lapses');
@@ -101,7 +104,7 @@ reset role;
 select is((select string_agg(company_id::text||'='||skills_shared::text,',' order by company_id) from public.company_profiles),
  '10000000-0000-0000-0000-000000000001=true,10000000-0000-0000-0000-000000000003=false','only it');
 select is(pg_temp.reserved('lead','c5200000-0000-0000-0000-000000000001','c5300000-0000-0000-0000-000000000001'),'reserved','a Run on the Company''s profile is reserved once confirmed');
-select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c5300000-0000-0000-0000-000000000002'),'agentLevelPending','the Writer''s profile still waits');
+select is(pg_temp.reserved('writer','c5200000-0000-0000-0000-000000000002','c5300000-0000-0000-0000-000000000002'),'agentToolsPending','the Writer''s profile still waits');
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
 select ok(public.record_shared_skills('10000000-0000-0000-0000-000000000001',(select profile from named where name='writer')),'the Writer''s profile is confirmed');
@@ -115,7 +118,7 @@ set local role service_role;
 select ok(public.forget_company_profile((select profile from named where name='writer')),'tool health forgets the Writer''s lost profile');
 reset role;
 select is((select skills_shared from public.agent_profiles where agent_id=(select agent from named where name='writer')),false,'and its shared folder is no longer confirmed');
-update public.agent_profiles set tools_level=1,tools_policy=public.engine_tool_policy(),skills_shared=true where agent_id=(select agent from named where name='writer');
+update public.agent_profiles set tools_confirmed=true,tools_pending=false,skills_shared=true where agent_id=(select agent from named where name='writer');
 set local role service_role;
 select lives_ok($$select public.forget_shared_space('10000000-0000-0000-0000-000000000001')$$,'the worker forgets a space the Engine lost');
 reset role;

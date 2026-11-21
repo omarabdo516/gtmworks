@@ -5,7 +5,7 @@ select plan(52);
 -- Agent. One Conversation with Ads each, and in it the whole message of each run that tells a rule.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('e5000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000001','Ads','Ads','suggest-test');
 -- Ads has its own profile in the bundled Engine, whose SOUL.md holds the team's rules (#345).
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values ('e5000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy());
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('e5000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',true);
 insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e5000000-0000-0000-0000-000000000002' from generate_series(2,5) n;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)

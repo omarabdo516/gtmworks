@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { fakeHermes } from './fake-hermes.mjs';
 import { readCompanySignIns } from '../lib/company-sign-in.mjs';
 import { sendMessage } from '../lib/conversation-runs.mjs';
+import { readWorkSandbox } from '../lib/hermes.mjs';
 
 // A Company whose Engine is not running (#387): its Settings read one plain state (noEngine), and a message is refused
 // with the one plain conversation error without starting or recording a Run. A later send on the same install works
@@ -64,5 +65,21 @@ test('a Company with no Engine at all refuses the message the same way, and keep
   assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k-3',message:'Hello',hermes:null}),{error:'conversationHermesFailed',status:502});
   assert.equal(calls.some(call=>call.name==='send_conversation_message'),false);
   assert.equal(fake.settings.runs.length,0);
+ } finally { await fake.close(); }
+});
+
+// #398: the Company's work sandbox is a second container its Engine reaches over ssh. One read of the Engine's own ssh
+// workspace names whether it is there, and it answers the same way again once the container runs again, with no restart.
+test('a work sandbox that is not running reads as one state, and reads as running again once it answers', async () => {
+ const fake=await fakeHermes();
+ try {
+  fake.settings.sandboxDown=true;
+  assert.deepEqual(await readWorkSandbox(hermesOf(fake)),{state:'notRunning'});
+  fake.settings.sandboxDown=false;
+  assert.deepEqual(await readWorkSandbox(hermesOf(fake)),{state:'running'});
+  // The Engine itself not answering is that other state, never "the sandbox is not running".
+  fake.settings.managementStatus=500;
+  assert.deepEqual(await readWorkSandbox(hermesOf(fake)),{state:'unreachable'});
+  assert.deepEqual(await readWorkSandbox(null),{state:'unreachable'});
  } finally { await fake.close(); }
 });

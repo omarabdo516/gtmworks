@@ -132,8 +132,8 @@ select throws_ok($$update public.work_cards set channel_id=null where channel_id
 -- "handed to Writer"; Writer's answer is logged on the Card as a reply in the channel is.
 reset role;
 -- Lead runs on the Company's own profile, as the handover rule asks (only a channel's Lead hands work over).
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true);
 update public.hermes_agents set profile='co-10000000000000000000000000000001' where id='a1510000-0000-0000-0000-000000000002';
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('a1510000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1510000-0000-0000-0000-000000000003','Writer','Writes for search.',false,'default');
