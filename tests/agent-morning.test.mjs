@@ -341,3 +341,33 @@ test('the settle carries how the message is now: a stale paused copy never wins,
   assert.deepEqual(jobs(third,leadProfile).map(job=>job.state),['paused']);
  } finally { await third.close(); }
 });
+
+test('an extra copy that will not go is paused, a change the log cannot hold answers failed, and a switch-off made during a move is kept', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const [kept]=jobs(fake,leadProfile);
+  fake.settings.cron.get(leadProfile).push({...kept,id:'abcdefabcdef'});
+  const refusing={delete:async()=>({state:'refused'})};
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',hermes:install(fake),driver:refusing});
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>[job.id,job.state]),[[kept.id,'scheduled'],['abcdefabcdef','paused']],'the extra never sends beside the one kept');
+ } finally { await fake.close(); }
+ const second=await engine();
+ try {
+  const {db}=session();
+  const failing={...db,rpc:async(name,args)=>name==='log_agent_morning'?{data:null,error:{message:'down'}}:db.rpc(name,args)};
+  const said=console.error; console.error=()=>{};
+  try { assert.equal((await changeAgentMorning(failing,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(second)})).state,'failed'); }
+  finally { console.error=said; }
+  assert.equal(jobs(second,leadProfile).length,1,'the Engine holds it all the same');
+ } finally { await second.close(); }
+ const third=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(third)});
+  // The move reads Lead's job as on; a save switches it off on Lead while the copy is being made on Ads.
+  const savingOff={create:async(connection,routine)=>{ const made=await createRoutine(connection,routine); Object.assign(jobs(third,leadProfile)[0],{enabled:false,state:'paused'}); return made; }};
+  await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(third),driver:savingOff});
+  assert.deepEqual(jobs(third,adsProfile).map(job=>job.state),['paused'],'the switch-off is kept');
+  assert.equal(jobs(third,leadProfile).length,0);
+ } finally { await third.close(); }
+});
