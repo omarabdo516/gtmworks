@@ -111,3 +111,39 @@ test('a Conversation\'s file opens for its own person and for nobody else',async
   expect((await page.request.get(address)).status()).toBe(404);
  } finally { await fake.close(); }
 });
+
+// #465: a turn with an image that waits behind a busy Agent, whose start was attempted and its answer lost, keeps its
+// image while it may still need it: its sender's resend of the same key finds it waiting and removes nothing, and once
+// the Agent is free the worker starts it as a retry with the same image (the service role reads the waiting turn's
+// files). supabase/tests/queued_turn_files_kept.sql proves the discard rule case by case.
+test('an image turn that waited, its start unknown, keeps its image and starts with it once the Agent is free',async({page})=>{
+ test.setTimeout(120000);
+ const fake=await laneHermes();
+ try {
+  await ownerSignIn(page); const agent=defaultAgent();
+  const conversation=randomUUID(); const key=randomUUID(); const blocker=randomUUID();
+  expect((await page.request.post('/api/conversations',{multipart:{company,conversation,sendKey:randomUUID(),message:'First, the plan'}})).ok()).toBe(true);
+  // The Agent is busy with another Run of this Conversation, already attempted.
+  const reserve=(sendKey:string,message:string,unknown:boolean)=>query(`insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile,start_attempts,start_unknown_at)
+   select '${conversation}','${sendKey}','${company}',a.connection_id,'20000000-0000-0000-0000-000000000001',a.id,'${message}',a.profile,1,${unknown?'now()':'null'} from public.hermes_agents a where a.id='${agent.id}'`);
+  reserve(blocker,'busy',false);
+  const send=()=>page.request.post('/api/conversations',{multipart:{company,conversation,sendKey:key,message:'Look at this chart',files:image}});
+  const queued=await send();
+  expect(await queued.json()).toEqual({conversation,queued:true});
+  // The worker attempted its start and the answer was lost: the start is marked unknown, and a Run may exist.
+  reserve(key,'Look at this chart',true);
+  const files=()=>rows<{path:string}>(`select path from public.conversation_attachments where send_key='${key}'`);
+  const stored=()=>rows<{n:number}>(`select count(*)::int as n from storage.objects o join public.conversation_attachments a on o.name=a.path where o.bucket_id='creatives' and a.send_key='${key}'`)[0].n;
+  expect([files().length,stored()]).toEqual([1,1]);
+  // Its sender sends it again: it is still waiting, and its image stays.
+  expect(await (await send()).json()).toEqual({conversation,queued:true});
+  expect([files().length,stored()]).toEqual([1,1]);
+  // The Run ahead of it settles: the worker starts the turn as a retry, with the image it was sent with.
+  query(`delete from public.conversation_run_reservations where send_key='${blocker}'`);
+  await expect.poll(async()=>{ await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`);
+   return rows<{n:number}>(`select count(*)::int as n from public.conversation_messages m join public.conversation_attachments a on a.message_id=m.id where m.send_key='${key}'`)[0].n; },{timeout:60000}).toBe(1);
+  const run=fake.settings.runs.find(each=>JSON.stringify(each.input).includes('Look at this chart'));
+  expect(run?.input).toEqual([{role:'user',content:[{type:'text',text:'Look at this chart'},{type:'image_url',image_url:{url:`data:image/png;base64,${png.toString('base64')}`}}]}]);
+  expect(stored()).toBe(1);
+ } finally { await fake.close(); }
+});

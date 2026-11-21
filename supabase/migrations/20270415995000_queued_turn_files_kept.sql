@@ -1,0 +1,44 @@
+-- #465: a send's images stay while its turn or its Run may still need them.
+-- A Conversation's images are kept under the send key before the Agent is asked (#155) and linked to the message once it
+-- is stored. Until then the send route gives them back when a send of that key is refused, errors or stores no message
+-- (discard_conversation_files, then the server removes the paths it returns). A resend of a key that is already a queued
+-- turn, or whose Run start was attempted or marked unknown, took that path too, so gtmworks removed the images of a live
+-- request: the turn then read a missing image, and one whose start may already hold a Run can neither fail nor start
+-- (fail_conversation_turn rightly refuses), so it held up its Conversation for the worker's one day.
+--
+-- The rule is kept here, in the one function every caller goes through: nothing is given back while the send key is a
+-- queued turn that has neither started nor failed, or holds a Run reservation that is not abandoned (attempted, marked
+-- unknown, a retry of either, or reserved and not yet started). Once the turn settles in an ordinary way (its message is
+-- stored and takes the files, it fails, or its reservation is abandoned or released), cleanup gives them back as before.
+-- An image missing for outside reasons is unchanged: the worker's fail-safe (#368) still handles it.
+--
+-- Same signature and grants: the previous app version calls it as it did, and only gets fewer paths back.
+create or replace function public.discard_conversation_files(conversation uuid, c uuid, message_key uuid)
+returns setof text language plpgsql security definer set search_path='' as $$
+begin
+ if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
+ if not exists(select 1 from public.conversations v where v.id=conversation and v.company_id=c and v.person_id=auth.uid()) then
+  raise exception 'conversationNotFound' using errcode='P0002'; end if;
+ -- Under the Conversation's turn lock, the one a queued turn is claimed, started or failed under, and then the agents
+ -- lock a reservation is begun, released, kept unknown or abandoned under, so neither changes while this decides.
+ perform pg_advisory_xact_lock(hashtextextended('conversation_turn:'||conversation::text,0));
+ perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
+ if exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation and q.send_key=message_key
+   and q.started_at is null and q.failed_at is null)
+  or exists(select 1 from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key
+   and r.abandoned_at is null) then
+  return;
+ end if;
+ return query delete from public.conversation_attachments a
+  where a.conversation_id=conversation and a.company_id=c and a.send_key=message_key and a.message_id is null
+  returning a.path;
+end;
+$$;
+revoke all on function public.discard_conversation_files(uuid,uuid,uuid) from public,anon,service_role;
+grant execute on function public.discard_conversation_files(uuid,uuid,uuid) to authenticated;
+
+-- The worker starts a waiting turn with its images read from these rows (lib/conversation-runs.mjs pinnedImages), as
+-- the service role. It was never granted the read (#155 granted it for channels only), so a waiting turn with images
+-- failed every pass on "permission denied" before its start and never started. The read only: the rows are still
+-- written and given back by their sender's own functions above.
+grant select on public.conversation_attachments to service_role;

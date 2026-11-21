@@ -1,5 +1,11 @@
 [
  {
+  "issue": 465,
+  "date": "2026-11-21",
+  "en": { "title": "A waiting message with images reaches the agent", "body": "A message with images that waits while the agent is busy now starts with its images once the agent is free, and sending it again no longer removes them." },
+  "ar": { "title": "الرسالة اللي فيها صور وبتستنى بتوصل للوكيل", "body": "الرسالة اللي فيها صور وبتستنى لحد ما الوكيل يفضى، دلوقتي بتبدأ بصورها أول ما يفضى، ولو بعتها تاني صورها مش بتتشال." }
+ },
+ {
   "issue": 502,
   "date": "2026-11-21",
   "en": { "title": "An update that cannot start keeps your old engine", "body": "When an update from an older install cannot start the new agent engine, your install now goes back to the engine it had, with all your agents' memory, so your company keeps working until you run the update again." },
