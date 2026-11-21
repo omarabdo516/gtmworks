@@ -62,7 +62,7 @@ export function ChangeCard({change,company,owner=false,unread=false,answer}:{cha
  // An approval the Owner edited names the value approved, with the one the Agent proposed beside it.
  const edited=change.state!=='waiting'&&change.state!=='refused'&&change.approved!==undefined;
  // A waiting approval being finished shows the value it is writing, as an edited approval does.
- const finishing=change.state==='waiting'&&read&&read!=='loading'&&read.approved!==undefined?read.approved:undefined;
+ const finishing=change.state!=='waiting'?undefined:change.approved!==undefined?change.approved:read&&read!=='loading'&&read.approved!==undefined?read.approved:undefined;
  const after=edited?change.approved:finishing!==undefined?finishing:change.value;
  // A proposal read in part names what would change and nothing of its value.
  const what=words.what({...change,value:after},unread);

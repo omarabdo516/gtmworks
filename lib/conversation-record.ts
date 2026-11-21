@@ -76,7 +76,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // The Owner answers a proposal from the chat too (design-reference: chgHTML), so the record says whether this person is one.
  const [{data:ownsChanges},{data:mode}]=changeWaits?await Promise.all([db.rpc('is_company_owner',{c:company}),db.from('companies').select('work_mode').eq('id',company).maybeSingle()]):[{data:false},{data:null}];
  const changeView=(row:ChangeRow&{agent:Face,by:Face}):ChangeProposalView=>{
-  const base={id:row.id,change:row.change,setting:row.setting,value:row.value,...(row.approved_value!==null&&row.approved_value!==undefined&&row.state!=='waiting'&&row.state!=='applying'?{approved:row.approved_value}:{}),reason:row.reason,agent:row.agent,by:row.by};
+  const base={id:row.id,change:row.change,setting:row.setting,value:row.value,...(row.approved_value!==null&&row.approved_value!==undefined?{approved:row.approved_value}:{}),reason:row.reason,agent:row.agent,by:row.by};
   if(row.state==='waiting'||row.state==='applying') return {...base,state:'waiting',owners};
   if(row.state==='refused') return {...base,state:'refused'};
   const by=row.answerer?.name||''; const at=row.answered_at||row.created_at;

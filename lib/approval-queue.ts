@@ -13,7 +13,8 @@ type AgentRequest={apps:string[],asked_with:string};
 // A proposed change to an Agent's settings (#19, kind agent_change: title the Agent it would change, body what, asked_by
 // the Agent that proposed it) also carries the setting, the value after the change, the reason and both Agents' faces,
 // or null when those could not be read, so the Owner never approves a change seen in part.
-type ChangeProposal={setting:string|null,value:unknown,reason:string,agent:{id:string,connection_id:string,name:string},by:{id:string,connection_id:string,name:string}};
+// `approved_value`: an approval whose Engine write was never confirmed, which approving again finishes with that value (#484).
+type ChangeProposal={setting:string|null,value:unknown,approved_value?:unknown,reason:string,agent:{id:string,connection_id:string,name:string},by:{id:string,connection_id:string,name:string}};
 // A request to open an Agent hidden from a Member (#167, kind agent_access: title the Agent, body its job, asked_by the
 // Member) also carries the Agent's face.
 // A permission request (#165, kind permission in a Conversation, channel_permission in a channel: title what it asks,
@@ -59,7 +60,7 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   channelIds.length?db.from('channel_permissions').select('id,channel_id,message_id,ordinal').eq('company_id',company).in('id',channelIds):{data:[],error:null},
   channelCardIds.length?db.from('reply_cards').select('id,channel_message_id,channel_ordinal,channel_messages(channel_id)').eq('company_id',company).in('id',channelCardIds):{data:[],error:null},
   channelMentionIds.length?db.from('waiting_items').select('id,channel_message_id').in('id',channelMentionIds):{data:[],error:null},
-  changeIds.length?db.from('agent_change_proposals').select('id,setting,value,reason,agent:hermes_agents!agent_id(id,connection_id,name),by:hermes_agents!proposed_by(id,connection_id,name)').eq('company_id',company).in('id',changeIds):{data:[],error:null},
+  changeIds.length?db.from('agent_change_proposals').select('id,setting,value,approved_value,reason,agent:hermes_agents!agent_id(id,connection_id,name),by:hermes_agents!proposed_by(id,connection_id,name)').eq('company_id',company).in('id',changeIds):{data:[],error:null},
   accessIds.length?db.from('agent_access_requests').select('id,agent:hermes_agents!agent_id(connection_id,name)').eq('company_id',company).in('id',accessIds):{data:[],error:null},
  ]);
  type ChatRow={id:string,agent_id:string}; type ChannelRow={id:number,channel_id:string,message_id:number,ordinal:number|null};
@@ -86,7 +87,7 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
  type RuleRow={id:number,agent_rules:{body:string,hermes_agents:{connection_id:string,name:string}|null}|null};
  const rules=new Map(((ruleResult.data || []) as unknown as RuleRow[]).map(row=>[row.id,row.agent_rules]));
  const requests=new Map(((requestResult.data || []) as (AgentRequest&{id:number})[]).map(({id,...request})=>[id,request]));
- type ChangeRow={id:number,setting:string|null,value:unknown,reason:string,agent:ChangeProposal['agent']|null,by:ChangeProposal['by']|null};
+ type ChangeRow={id:number,setting:string|null,value:unknown,approved_value?:unknown,reason:string,agent:ChangeProposal['agent']|null,by:ChangeProposal['by']|null};
  const accessFaces=new Map(((accessResult.data || []) as unknown as {id:number,agent:{connection_id:string,name:string}|null}[]).map(row=>[row.id,row.agent]));
  const changes=new Map(((changeResult.data || []) as unknown as ChangeRow[]).flatMap(({id,agent,by,...change})=>agent&&by?[[id,{...change,agent,by}] as const]:[]));
  type MentionRow={id:number,note_id:number|null,work_comments:{body:string}|null};

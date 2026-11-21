@@ -106,7 +106,8 @@ export function ChangeAnswer({slug,company,change,alone=false,back}:{slug:string
    <button className="btn btn--primary" disabled={sending} aria-busy={sending||undefined}>{c('changeDecline')}</button></div>
  </>}</Held></form>;
  // «Edit, then approve» waits for the Agent's settings to be read, and is left out when there is no field to edit in.
- const editable=read==='loading'||!!field;
+ // An unconfirmed approval being finished is approved again as it was, never edited.
+ const editable=change.approved===undefined&&(read==='loading'||!!field);
  return <form action={answerAgentChange} className="card__actions">{fields}<Held>{sending=><>
   <button ref={no} type="button" className="btn btn--secondary" disabled={sending} onClick={()=>setDeclining(true)}>{c('changeDecline')}</button>
   {editable&&<button ref={edit} type="button" className="btn btn--secondary" disabled={sending} aria-disabled={!field||undefined} aria-busy={!field||undefined}
@@ -121,7 +122,7 @@ export function ChangeAnswer({slug,company,change,alone=false,back}:{slug:string
 const viewOf=(item:WaitingItem):{view:ChangeProposalView,read:boolean}=>{
  const change=kinds.find(kind=>kind===item.body)??'setting';
  const read=item.change;
- return {read:!!read,view:read?{id:item.id,change,setting:read.setting,value:read.value,reason:read.reason,agent:read.agent,by:read.by,state:'waiting',owners:[]}
+ return {read:!!read,view:read?{id:item.id,change,setting:read.setting,value:read.value,...(read.approved_value!==null&&read.approved_value!==undefined?{approved:read.approved_value}:{}),reason:read.reason,agent:read.agent,by:read.by,state:'waiting',owners:[]}
   :{id:item.id,change,setting:null,value:null,reason:'',agent:{id:'',connection_id:`agent-change-${item.id}`,name:item.title},by:{id:item.asked_by===item.title?'':'-',connection_id:'',name:item.asked_by},state:'waiting',owners:[]}};
 };
 export function OwnerChangeCard({slug,company,item,alone}:{slug:string,company:string,item:WaitingItem,alone?:boolean}) {

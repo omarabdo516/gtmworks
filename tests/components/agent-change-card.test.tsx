@@ -342,3 +342,20 @@ test('an approval whose write was never confirmed shows the value it is writing,
  expect([...proposal.element().querySelectorAll('.kv__row')].map(row => row.textContent)).toEqual(['ChangeNew model: claude-opus-5-5anthropic', 'Nowgpt-5.5', 'After the OKclaude-opus-5-5', 'Proposedgemini-7', 'WhyFaster on big numbers.']);
  expect([...proposal.element().querySelectorAll('button')].map(button => button.textContent)).toEqual(['Decline', 'Approve']);
 });
+
+test('the value an unconfirmed approval is writing is on the card before, and without, the Agent\'s settings being read', async () => {
+ // The read never answers: the card already names the value it is finishing.
+ reads.mockImplementation(() => new Promise<Response>(() => {}));
+ const pending = await render(<LanguageProvider language="en"><OwnerChangeCard slug="rs-learning" company="co-1" item={{ ...item(7), change: { ...item(7).change, approved_value: 'anthropic/claude-opus-5-5' } }}/></LanguageProvider>);
+ const loading = pending.getByRole('group', { name: 'Proposed change: Analyst' });
+ await expect.element(loading.getByText('After the OK')).toBeVisible();
+ expect([...loading.element().querySelectorAll('.kv__row')].map(row => row.textContent)).toEqual(['ChangeNew model: claude-opus-5-5anthropic', 'After the OKclaude-opus-5-5', 'Proposedgemini-7', 'WhyFaster on big numbers.']);
+ expect([...loading.element().querySelectorAll('button')].map(button => button.textContent)).toEqual(['Decline', 'Approve']);
+ await pending.unmount();
+ // The read fails: the same.
+ reads.mockImplementation(async () => new Response('{}', { status: 502 }));
+ const failed = await render(<LanguageProvider language="en"><ChangeCard company="co-1" owner change={{ ...model, approved: 'anthropic/claude-opus-5-5', state: 'waiting', owners: [] }}/></LanguageProvider>);
+ onTestFinished(() => failed.unmount());
+ await expect.poll(() => reads.mock.calls.length).toBeGreaterThan(0);
+ expect([...failed.getByRole('group', { name: 'Proposed change: Analyst' }).element().querySelectorAll('.kv__row')].map(row => row.textContent)).toContain('After the OKclaude-opus-5-5');
+});
