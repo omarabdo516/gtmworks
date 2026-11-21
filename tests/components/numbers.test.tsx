@@ -183,6 +183,23 @@ test('a period change counts each figure from the value it showed to the new one
  expect(seen('leads')).toBe('0');
 });
 
+test('a period picked mid-count counts on from the number shown, not from the value it was counting to', async () => {
+ const time = clock();
+ const screen = await render(numbers('7', 'en', [ads('7', 400)]));
+ time.to(325);
+ await expect.poll(() => seen('leads')).toBe('350');
+ const stay = (event: Event) => event.preventDefault();
+ document.addEventListener('click', stay, { once: true });
+ await screen.getByRole('link', { name: 'Last 30 days' }).click();
+ await screen.rerender(numbers('30', 'en', [ads('30', 1000)]));
+ expect(seen('leads')).toBe('350');
+ time.to(650);
+ // 650 more leads from 350, 87.5% of the way halfway through.
+ await expect.poll(() => seen('leads')).toBe(String(Math.round(350 + 650 * 0.875)));
+ time.to(975);
+ await expect.poll(() => seen('leads')).toBe('1,000');
+});
+
 test('with reduced motion the figures are drawn at their value at once', async () => {
  await reducedMotion(true);
  const frame = vi.spyOn(window, 'requestAnimationFrame');

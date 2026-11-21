@@ -1,7 +1,7 @@
 'use client';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
-// The Agents each Company's grid last showed during this visit. It lives as long as the page does, so a page the router
+// The Agents each Company's grid has shown during this visit. It lives as long as the page does, so a page the router
 // draws next (or the same page drawn again) knows what the grid held before it, and a page load starts it empty.
 const shown=new Map<string,Set<string>>();
 
@@ -14,7 +14,8 @@ export default function AgentGrid({company,agents,children}:{company:string,agen
  useLayoutEffect(()=>{
   const now=listed?listed.split(' '):[];
   const before=shown.get(company);
-  shown.set(company,new Set(now));
+  // Kept, not replaced: an Agent the grid left out for a moment (a read between two writes) does not flash again.
+  shown.set(company,new Set([...(before||[]),...now]));
   if(!before) return;
   for(const id of now) {
    if(before.has(id)) continue;

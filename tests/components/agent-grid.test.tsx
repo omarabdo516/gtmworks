@@ -31,6 +31,10 @@ test('a tile that arrives in the grid during the visit flashes once for 1.4s and
  // Drawn again with the same Agents (another page of the visit), nothing flashes.
  await screen.rerender(grid('company-a', ['lead', 'ads', 'analyst']));
  expect(document.querySelectorAll('.is-flash')).toHaveLength(0);
+ // A tile the grid left out for a moment (a read between two writes) does not flash when it is back.
+ await screen.rerender(grid('company-a', ['lead', 'ads']));
+ await screen.rerender(grid('company-a', ['lead', 'ads', 'analyst']));
+ expect(document.querySelectorAll('.is-flash')).toHaveLength(0);
  // Another Company the visit has not shown yet: its tiles are all new to the grid, and none flashes.
  await screen.rerender(grid('company-b', ['lead-b', 'writer']));
  expect(document.querySelectorAll('.is-flash')).toHaveLength(0);

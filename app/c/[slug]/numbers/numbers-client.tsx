@@ -12,7 +12,7 @@ let chosen:Period|null=null;
 // The period a person just picked, for the figures it draws, and the figures the page last drew (#134): the figures of a
 // period just picked count from what was shown, and figures the page opens with count from zero.
 let picked:Period|null=null;
-let drawn=new Map<string,number>();
+const drawn=new Map<string,number>();
 
 // The Numbers page's "Last 7 days / Last 30 days" (design-reference: renderDashboard's segmented). After a change the
 // focus stays on the period chosen (design-reference: the period's click and loadDashboard).
@@ -43,15 +43,16 @@ export function NumbersPlaceholder() {
  </div>;
 }
 
-// The four figures (parts.tsx: NumbersFigures). Once its counts have started, the row keeps what it drew for the next
-// period's counts and forgets the period just picked, so a later opening of the page counts from zero again. A child's
-// layout effect runs before its parent's, so every count has read both by then.
+// The four figures (parts.tsx: NumbersFigures). Each count keeps in `drawn` the number it shows, frame by frame, so the
+// next period's counts start from what the eye saw, even mid-count. Once the counts have read it, the row forgets the
+// period just picked and the figures it now draws as unavailable, so a later opening of the page counts from zero again.
+// A child's layout effect runs before its parent's, so every count has read both by then.
 export function FigureRow({period,connected,figures,children}:{period:Period,connected:boolean,figures:{name:string,value:number|null}[],children:ReactNode}) {
- const values=JSON.stringify(figures);
+ const unavailable=figures.flatMap(({name,value})=>value==null?[name]:[]).join(' ');
  useLayoutEffect(()=>{
-  drawn=new Map((JSON.parse(values) as {name:string,value:number|null}[]).flatMap(({name,value})=>value==null?[]:[[name,value] as const]));
+  for(const name of unavailable.split(' ')) drawn.delete(name);
   picked=null;
- },[period,values]);
+ },[period,unavailable]);
  return <div className="kpis" data-connected={connected}>{children}</div>;
 }
 
@@ -67,12 +68,13 @@ export function FigureCount({name,value,digits,locale,period}:{name:NumbersTile[
  const at=useRef(start);
  useLayoutEffect(()=>{
   const from=at.current;
-  if(from===value||prefersReducedMotion()) { at.current=value; setShown(value); return; }
+  const show=(now:number)=>{ at.current=now; drawn.set(name,now); setShown(now); };
+  if(from===value||prefersReducedMotion()) { show(value); return; }
   const start=performance.now(); let frame=0;
-  const step=()=>{ const now=countAt(from,value,performance.now()-start); at.current=now; setShown(now); if(now!==value) frame=requestAnimationFrame(step); };
-  setShown(from); frame=requestAnimationFrame(step);
+  const step=()=>{ const now=countAt(from,value,performance.now()-start); show(now); if(now!==value) frame=requestAnimationFrame(step); };
+  show(from); frame=requestAnimationFrame(step);
   // Drawn again with another value mid-count, it counts on from where it stands.
   return ()=>cancelAnimationFrame(frame);
- },[value]);
+ },[name,value]);
  return <><span className="kpi__count" aria-hidden="true">{formatNumber(shown,digits,locale)}</span><span className="kpi__final">{formatNumber(value,digits,locale)}</span></>;
 }
