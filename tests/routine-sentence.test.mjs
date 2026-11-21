@@ -108,3 +108,8 @@ test('a clock with minutes is a time, and the "when" is cut out where it was sai
  assert.equal(readRoutineSentence('Review campaign 123 every day 23')?.prompt,'Review campaign 123');
  assert.equal(readRoutineSentence('Send me the top 9 ads every day 9')?.prompt,'Send me the top 9 ads');
 });
+
+test('an Arabic day named after «every week», with or without «ال» and «يوم», is the day it runs', () => {
+ assert.deepEqual(read('ابعتلي تقرير كل أسبوع يوم الاتنين الساعة 9 الصبح'),{name:'تقرير',cron:'0 9 * * 1'});
+ assert.equal(read('ابعتلي تقرير كل أسبوع يوم الاتنين والخميس الساعة 9 الصبح')?.cron,null,'two days ask');
+});
