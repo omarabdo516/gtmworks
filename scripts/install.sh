@@ -162,6 +162,7 @@ sandbox_keys() {
   docker volume create "$volume" > /dev/null || return 1
   docker volume create "$(host_key_volume "$slug")" > /dev/null || return 1
   docker volume create "$(work_volume "$slug")" > /dev/null || return 1
+  keys_failed=0
   keys=$(docker run --rm --user 0 --entrypoint sh -v "$volume:/data" -v "$(host_key_volume "$slug"):/keys" \
     -v "$(work_volume "$slug"):/work" "$image" -ec '
       set -e
@@ -203,11 +204,12 @@ sandbox_keys() {
       chmod 600 /data/.ssh/known_hosts
       printf "client %s\n" "$(cat /data/ssh/id_ed25519.pub)"
       printf "host %s\n" "$(cat /keys/ssh_host_ed25519_key.pub)"
-    ') || return 1
-  sandbox_key=$(printf '%s\n' "$keys" | sed -n 's/^client //p')
+    ') || keys_failed=1
   # An Engine whose key this run made is named in the scratch folder, so an update that goes back takes that key out
-  # again (remove_new_sandbox_parts, #479).
+  # again (remove_new_sandbox_parts, #479); also when a later step of the same run failed, since the key stays made.
   if printf '%s\n' "$keys" | grep -qx made; then printf '%s\n' "$slug" >> .install-lock/sandbox-keys-made; fi
+  [ "$keys_failed" = 0 ] || return 1
+  sandbox_key=$(printf '%s\n' "$keys" | sed -n 's/^client //p')
   sandbox_host_key=$(printf '%s\n' "$keys" | sed -n 's/^host //p')
   test -n "$sandbox_key" && test -n "$sandbox_host_key" \
     || { echo "The work sandbox keys of the Engine $slug could not be made." >&2; return 1; }

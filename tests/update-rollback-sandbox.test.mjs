@@ -173,5 +173,22 @@ test('nothing is removed without a list, and a list Docker cannot give stops the
 
 test('the rollback removes the new sandbox parts after the previous Engines start again', () => {
   const restore = fn('restore_previous_engine');
-  assert.ok(restore.indexOf('engine "$name" up -d --remove-orphans') < restore.indexOf('remove_new_sandbox_parts'));
+  const start = restore.indexOf('engine "$name" up -d --remove-orphans');
+  const cleanup = restore.indexOf('remove_new_sandbox_parts');
+  assert.ok(start >= 0 && cleanup >= 0, 'the rollback starts the Engines and removes the new parts');
+  assert.ok(start < cleanup);
+});
+
+test('a key made before a later step of its preparation failed is still named, so the rollback takes it out', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'gtmworks-keys-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, '.install-lock'));
+  mkdirSync(join(dir, '.engines/acme'), { recursive: true });
+  writeFileSync(join(dir, '.engines/acme/.env'), 'ENGINE_VOLUME=gtmworks-engine-acme\n');
+  writeFileSync(join(dir, '.work-sandbox-image'), 'gtmworks-work-sandbox:local\n');
+  // The key is made, then the host key cannot be written: the container prints `made` and fails.
+  const docker = `docker() { case "$1" in run) echo made; return 1;; *) return 0;; esac; }\n`;
+  const result = spawnSync('sh', ['-c', `${docker}${fn('engine_folder')}${fn('work_volume')}${fn('host_key_volume')}${fn('work_sandbox_ref')}${fn('sandbox_keys')}sandbox_keys acme`], { cwd: dir, encoding: 'utf8' });
+  assert.notEqual(result.status, 0, 'the preparation still fails');
+  assert.equal(readFileSync(join(dir, '.install-lock/sandbox-keys-made'), 'utf8'), 'acme\n');
 });
