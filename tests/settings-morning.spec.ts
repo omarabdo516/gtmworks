@@ -49,8 +49,14 @@ test.afterAll(async()=>{ await fake?.close(); });
 const overlay=(page:Page)=>page.getByRole('dialog',{name:'Settings'});
 const agentPage=(agent:string)=>`/c/rs-learning/settings?section=agents&agent=${agent}`;
 const morning=(page:Page)=>overlay(page).locator('#set-checkin');
-// The zone line is drawn in the browser only (the server knows no zone), so once it reads, the page answers presses.
-const hydrated=(page:Page)=>expect(morning(page).locator('#set-ck-zone')).toHaveText('Cairo time');
+// A press before React hydrated the switch does nothing: wait until it has its handlers, then for the zone line.
+const hydrated=async(page:Page)=>{
+ await page.waitForFunction(()=>{
+  const control=document.querySelector('#set-ck-on');
+  return !!control&&Object.getOwnPropertyNames(control).some(name=>name.startsWith('__reactFiber$')||name.startsWith('__reactProps$'));
+ });
+ await expect(morning(page).locator('#set-ck-zone')).toHaveText('Cairo time');
+};
 
 test('the Owner switches the daily message on and changes its time with the save bar; the Engine holds one job, and each change is logged',async({page})=>{
  await signIn(page,'omar@example.com',agentPage(lead));
@@ -124,7 +130,8 @@ test('making another Agent the main one moves the daily message to its profile w
  await signIn(page,'omar@example.com',agentPage(lead));
  const section=morning(page);
  await hydrated(page);
- await section.getByRole('switch',{name:'Send me a morning summary every day'}).click();
+ // The message is on at 10:00 since the first case; a new time, saved, is what moves.
+ await expect(section.getByRole('switch',{name:'Send me a morning summary every day'})).toHaveAttribute('aria-checked','true');
  await section.getByRole('combobox',{name:'Time'}).selectOption('7:30');
  await page.locator('#set-save').click();
  await expect(page.locator('#dp-savebar')).toBeHidden();
