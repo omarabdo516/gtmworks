@@ -138,6 +138,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   images:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
   fileBytes:/** @type {Map<string,{body:string|Uint8Array,type?:string}>} */(new Map()),
   filesUnreadable:/** @type {Set<string>} */(new Set()),
+  // Whether the Company's work sandbox answers (#398): the ssh workspace routes answer a listing while it runs, and the
+  // Engine's `SSH workspace is unavailable` (503) while it does not.
+  sandboxRunning:true,
   // The path `/api/files?path=` and `/api/fs/read-text?path=` answer with, when it is not the one asked for: a folder or
   // a file that is a link somewhere else, which the Engine resolves and reports as its own `path` (by the path asked).
   resolved:/** @type {Map<string,string>} */(new Map()),
@@ -343,6 +346,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    };
    // The sandbox's /work is the Engine's /opt/data/work; a path the sandbox does not hold is null.
    const inSandbox=path=>path.startsWith('/work/')&&!path.split('/').includes('..')?`/opt/data${path}`:null;
+   // The Engine's one read that names its ssh workspace (#398): `/api/fs/list?path=` lists a folder the sandbox holds,
+   // and answers its 503 while the sandbox is not running (hermes_cli/web_routers/files.py 1012 through _fs_backend).
+   if(url.pathname==='/api/fs/list'&&request.method==='GET') {
+    if(!settings.sandboxRunning) return send(response,503,{detail:'SSH workspace is unavailable'});
+    return send(response,200,{entries:[]});
+   }
    const attachment=(name,type,body)=>{
     response.writeHead(200,{'Content-Type':type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(name)}`,'Content-Length':body.length});
     return response.end(request.method==='HEAD'?undefined:body);

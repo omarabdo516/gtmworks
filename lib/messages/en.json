@@ -861,6 +861,7 @@
   "signInNotConnected": "Not connected",
   "signInUnknown": "Can’t check the sign-in right now.",
   "noEngine": "This company’s agent engine isn’t running. Ask the install owner to start it.",
+  "workSandboxNotRunning": "This Company's work sandbox is not running. Ask the install owner to start it.",
   "signInNoProfile": "Sign-in isn’t available for this company: its agent engine can’t be reached.",
   "signInConnect": "Connect",
   "signInDisconnect": "Disconnect",
