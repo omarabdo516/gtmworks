@@ -248,7 +248,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread}:{slu
    {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
   </li>:<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
-   <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
+   <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}<time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {/* A tool the Engine could not run because the Company's work sandbox is down (#398): one plain line under the reply,
@@ -258,7 +258,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread}:{slu
     :card.kind==='change'?<ChangeCard key={`change${card.change.id}`} change={card.change} owner={record.changeOwner===true}
      answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
     :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
-    :card.kind==='handed'?<HandedRow key={`handed${message.id}`} from={{connection_id:conversation.face,name:conversation.agent_name}} to={card} cb={cb}/>
+    :card.kind==='handed'?<HandedRow key={`handed${message.id}:${card.name}:${card.goal}`} card={card} cb={cb}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status"><span className="shimmer">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</span></p>}
@@ -300,15 +300,16 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
 // The tool calls the Engine reported for the reply's Run (#141; design-reference: stepsHTML, toggle-steps) are drawn by
 // StepsList (app/run-steps.tsx), as a channel's are (#148).
 
-// A job Lead handed to another Agent in this chat (#317; design-reference: the handoff row, `.handoff`): a quiet line
-// under Lead's reply with both faces and an arrow, "Handed to {Agent}", and the job. It is drawn from gtmworks's own
-// record of the handover, never from the Engine's helper events, and it has nothing to press.
-function HandedRow({from,to,cb}:{from:{connection_id:string,name:string},to:Extract<LeadCard,{kind:'handed'}>,cb:BidiText}) {
+// A job the chat's Agent handed to another Agent in this chat (#317, #475; design-reference: the handoff row, `.handoff`):
+// a quiet line under the asking Agent's reply with both faces and an arrow, "{asking Agent} asked {asked Agent}", and
+// the job. It is drawn from gtmworks's own record of the handover, never from the Engine's helper events, and it has
+// nothing to press. The asked Agent's answer follows as its own message (`kind` handed).
+function HandedRow({card,cb}:{card:Extract<LeadCard,{kind:'handed'}>,cb:BidiText}) {
  const {language}=useI18n();
  return <p className="handed" role="note" data-handover>
-  <span className="handed__faces"><CompanyAgentFace agent={from} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:to.face,name:to.name}} size={18}/></span>
-  <span className="handed__t">{cb('handedTo',to.name)}</span>
-  {to.goal&&<span className="handed__d"><bdi>{to.goal}</bdi></span>}
+  <span className="handed__faces"><CompanyAgentFace agent={{connection_id:card.from.face,name:card.from.name}} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:card.face,name:card.name}} size={18}/></span>
+  <span className="handed__t">{cb('handoverAsked',card.from.name,card.name)}</span>
+  {card.goal&&<span className="handed__d"><bdi>{card.goal}</bdi></span>}
  </p>;
 }
 

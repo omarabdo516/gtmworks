@@ -39,7 +39,11 @@ test('the first step of the levels removal keeps the level, and the cutover remo
  for(const removed of [/alter table public\.companies drop column agent_level;/,/drop column tools_level;/,/drop column tools_policy;/,
   /drop function if exists public\.set_agent_level\(uuid,integer\);/,/drop function if exists public\.engine_tool_policy\(\);/])
   assert.match(last,removed);
- assert.equal(migrations.at(-1),cutover,'the cutover sorts after every migration it follows');
+ assert.ok(migrations.filter(name=>name>=firstStep&&name<cutover).length>0&&migrations.includes(cutover),'the cutover sorts after every migration it follows');
+ // A migration that sorts after the cutover is still applied before it by an update from a release before the cutover
+ // (the installer applies every _cutover file last), so it never names what the cutover takes away.
+ for(const name of migrations.filter(name=>name>cutover&&!name.endsWith('_cutover.sql')))
+  assert.doesNotMatch(read(name),/\b(agent_level|tools_level|tools_policy|set_agent_level|engine_tool_policy)\b/,`${name} names what the cutover removes`);
 });
 
 test('the installer applies the cutover only once this release answers, and puts the previous Engines back when an update cannot start its own', () => {

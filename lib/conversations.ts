@@ -8,8 +8,9 @@ export type { PermissionChoice };
 // What Lead's turn of a run holds besides its words is a card: an Agent Lead made in it (#13), or a Member's request for
 // an Agent kept in it (#17), which shows the Owner's answer once there is one. The card is in Lead's reply of that run;
 // when Lead wrote nothing but the call, it is Lead's whole turn (`kind` made) after the message that asked. A card any
-// Agent shows with its reply (#136) is placed the same way. A job Lead handed another Agent (#317) is a quiet row under
-// that reply (`kind` handed), drawn from gtmworks's own record of the handover.
+// Agent shows with its reply (#136) is placed the same way. A job the chat's Agent handed another Agent (#317, #475) is a
+// quiet row under that reply (`kind` handed), drawn from gtmworks's own record of the handover, and the other Agent's
+// answer is its own message after it (withHandoverAnswers).
 // A lasting rule the Agent saved in a run (#18) shows as a saved line (`kind` saved) after the Agent's reply of that run,
 // or after the message that told it when the reply was nothing but the call. A rule since removed keeps its line, since
 // the Conversation is the record as people saw it; only its way to the Agent's page goes, with the Agent's.
@@ -85,7 +86,7 @@ export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset
 // of by now, unanswered, says the Agent is open for them (`available`).
 // A sent request not answered yet `waits`, so the open chat keeps reading the record until its answer is in.
 export type AgentAccessView={id:number,named:{first:string,name:string,role:string}}&({state:'offered'|'available'}|{state:'dismissed',at:string}|{state:'asked',at:string,waits:boolean});
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',from:{name:string,face:string},name:string,face:string,goal:string};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 // An Owner's or a Manager's answer to a request for a hidden Agent (#167): opened, naming the Agent the person now sees
@@ -113,7 +114,7 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
 }
 // A file a person sent with a message (#155; design-reference: filesHTML): its name, and the id its own route serves it by.
 type MessageFile={id:number,name:string};
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_session_id,hermes_agents(connection_id,is_default)';
@@ -165,6 +166,16 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
 // the handover).
 export const withBoardNote=(record:ConversationMessage[],reply:number|undefined):ConversationMessage[]=>record.flatMap(message=>
  message.author==='agent'&&!message.kind&&message.id===reply?[message,{id:message.id,author:'agent',author_name:message.author_name,body:'',created_at:message.created_at,kind:'boarded'}]:[message]);
+// #475: the asked Agent's answer to a handover, drawn as that Agent's own message, with "to {asking Agent}" on its
+// sender line (`kind` handed, `to`), where it came in: after the reply that handed the job over and before the asking
+// Agent's own reply, which was written after it. It is gtmworks's record, never a message of the Conversation.
+export type HandoverAnswer={id:number,from:string,name:string,face:string,body:string,at:string};
+export const withHandoverAnswers=(record:ConversationMessage[],answers:HandoverAnswer[]):ConversationMessage[]=>{
+ const left=[...answers].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((answer):ConversationMessage=>({id:answer.id,author:'agent',author_name:answer.name,face:answer.face,body:answer.body,created_at:answer.at,kind:'handed',to:answer.from}));
+ const merged:ConversationMessage[]=[];
+ for(const message of record) { while(left.length&&left[0].created_at<message.created_at) merged.push(left.shift()!); merged.push(message); }
+ return [...merged,...left];
+};
 // Each decision goes before the first item shown after it.
 export const withDecisions=(record:ConversationMessage[],decisions:Decision[],agentName=''):ConversationMessage[]=>{
  const left=[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided}));

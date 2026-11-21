@@ -114,6 +114,7 @@ function runDatabases(fake,{history}) {
   if(name==='reserve_conversation_turn') return {data:{state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',profile:own(writer),note:null},error:null};
   if(name==='queued_conversations') return {data:[{conversation:'c'}],error:null};
   if(name==='claim_conversation_turn') return {data:[{company,agent:writer,person:'p',send_key:'q',message:'Next draft',connection:'f9000000-0000-0000-0000-000000000001',profile:own(writer),note:null,retry:false}],error:null};
+  if(name==='conversation_handover_agents') return {data:[],error:null};
   if(name==='pin_run') return {data:{tools:null,rules:[]},error:null};
   if(name==='pin_run_history') return {data:history,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
