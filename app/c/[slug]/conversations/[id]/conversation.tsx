@@ -2,7 +2,7 @@
 import { Suspense, createContext, memo, use, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type Ref } from 'react';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { LiveFace } from '@/app/agent-face-dot';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent, type DetailsPanel } from '@/app/agent-details';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 import type { DetailsTab } from '@/lib/agent-details.mjs';
@@ -60,7 +60,7 @@ function ChatHead({panel,slug,agent,conversation,title,writer,board}:{panel:Deta
  const record=live?.record; const corner=record?record.board:board;
  // The pill shakes once when its Card starts waiting while the chat is open (design-reference: syncWaitMarks).
  const fresh=useNewlyWaiting(corner?.column==='waiting'?[corner.card]:[]);
- return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><CompanyAgentFace agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
+ return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><LiveFace agentId={conversation.agent_id??undefined} agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
 }
 
 // The composer, told the record when it is there and given the send made before it as the transcript asks for its reply
