@@ -50,6 +50,8 @@ create table public.agent_permission_revoked (
  company_id uuid not null,
  entry text not null check (length(entry) between 1 and 1000),
  revoked_at timestamptz not null,
+ -- The record this one replaced, if any: a revoke the Engine did not take puts it back rather than leave no record.
+ previous_at timestamptz,
  primary key (agent_id, entry)
 );
 alter table public.agent_permission_revoked enable row level security;
@@ -232,18 +234,23 @@ begin
  perform public.check_permission_revoke(c,agent);
  if entry is null or length(entry) not between 1 and 1000 then raise exception 'permissionInvalid' using errcode='22023'; end if;
  insert into public.agent_permission_revoked(agent_id,company_id,entry,revoked_at) values(agent,c,note_permission_revoked.entry,kept)
-  on conflict on constraint agent_permission_revoked_pkey do update set company_id=excluded.company_id,revoked_at=excluded.revoked_at;
+  on conflict on constraint agent_permission_revoked_pkey do update set company_id=excluded.company_id,revoked_at=excluded.revoked_at,previous_at=public.agent_permission_revoked.revoked_at;
  return kept;
 end $$;
 revoke all on function public.note_permission_revoked(uuid,uuid,text) from public,anon,service_role;
 grant execute on function public.note_permission_revoked(uuid,uuid,text) to authenticated;
 
--- Withdraws the record a revoke kept when the Engine did not take the revoke; a later revoke's record is left alone.
+-- Withdraws the record a revoke kept when the Engine did not take the revoke, putting back the record it replaced if
+-- there was one; a later revoke's record is left alone.
 create function public.forget_permission_revoked(c uuid, agent uuid, entry text, kept timestamptz) returns void
 language plpgsql security definer set search_path='' as $$
 begin
  perform public.check_permission_revoke(c,agent);
- delete from public.agent_permission_revoked x where x.agent_id=agent and x.company_id=c and x.entry=forget_permission_revoked.entry and x.revoked_at=kept;
+ -- An earlier revoke's record comes back (a retry of a revoke that already succeeded keeps its exclusion); with none,
+ -- the record goes.
+ update public.agent_permission_revoked x set revoked_at=x.previous_at,previous_at=null
+  where x.agent_id=agent and x.company_id=c and x.entry=forget_permission_revoked.entry and x.revoked_at=kept and x.previous_at is not null;
+ delete from public.agent_permission_revoked x where x.agent_id=agent and x.company_id=c and x.entry=forget_permission_revoked.entry and x.revoked_at=kept and x.previous_at is null;
 end $$;
 revoke all on function public.forget_permission_revoked(uuid,uuid,text,timestamptz) from public,anon,service_role;
 grant execute on function public.forget_permission_revoked(uuid,uuid,text,timestamptz) to authenticated;

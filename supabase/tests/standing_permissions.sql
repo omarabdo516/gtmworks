@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(40);
+select plan(42);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -130,6 +130,16 @@ select is((select count(*)::int from public.agent_permission_grants('10000000-00
 select public.forget_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete',current_setting('test.kept')::timestamptz);
 select results_eq($$select entry from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('recursive delete')$$,
  'its own withdrawal brings the grant''s person back');
+-- Codex on #499: a revoke that succeeded, then a retry of it the Engine does not take. The retry's withdrawal puts the
+-- first record back rather than leave none, so the grant still names no one and is never written back.
+select set_config('test.first',public.note_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete')::text,true);
+select set_config('test.retry',public.note_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete')::text,true);
+select public.forget_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete',current_setting('test.retry')::timestamptz);
+select is((select count(*)::int from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')),0,
+ 'a failed retry keeps the successful revoke''s record');
+select public.forget_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete',current_setting('test.first')::timestamptz);
+select results_eq($$select entry from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('recursive delete')$$,
+ 'and withdrawing that one too brings the person back');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.note_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete')$$,'42501','permissionNotAllowed','a Contributor keeps no record');
 select throws_ok($$select public.forget_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','mcp:meta-ads/create_campaign',now())$$,'42501','permissionNotAllowed','nor withdraws one');
