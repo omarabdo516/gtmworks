@@ -255,6 +255,26 @@ for (const [language, line, to] of [['en', 'Writer asked Ads', 'to Writer'], ['a
   expect(getComputedStyle(row!.querySelector('.handed__d')!).color).toBe(quiet);
   expect(getComputedStyle(turns[1].querySelector('.sender__to')!).color).toBe(quiet);
  });
+// #375: a handover that did not finish says so on its row, after the job, in the interface's language; one that finished
+// says nothing of it.
+for (const [language, line] of [['en', 'The job didn’t finish'], ['ar', 'الشغل ماخلصش']] as const) test(`in ${language} a job Lead handed that did not finish says so on its row`, async () => {
+ const record: ConversationRecord = talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'I handed the March intake to Ads.', created_at: at,
+  cards: [{ kind: 'handed', from: { name: 'Lead', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake', failed: true }] }]);
+ const screen = await render(view(record, language));
+ const row = screen.container.querySelector('.turn--agent [data-handover]');
+ expect(row?.hasAttribute('data-failed')).toBe(true);
+ expect([...row!.children].map(part => part.className)).toEqual(['handed__faces', 'handed__t', 'handed__d', 'handed__failed']);
+ expect(row?.querySelector('.handed__failed')?.textContent).toBe(line);
+ expect(row?.textContent).toContain('Plan the Meta ads for the March intake');
+});
+test('a job Lead handed that finished draws no line saying it did not', async () => {
+ const record: ConversationRecord = talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'I handed the March intake to Ads.', created_at: at,
+  cards: [{ kind: 'handed', from: { name: 'Lead', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads' }] }]);
+ const screen = await render(view(record));
+ const row = screen.container.querySelector('.turn--agent [data-handover]');
+ expect(row?.hasAttribute('data-failed')).toBe(false);
+ expect(row?.querySelector('.handed__failed')).toBeNull();
+});
 
 // #358: the Agent a job command hands the work to answers in the same chat, drawn from that Agent: its own name on the
 // reply and its own face, the one the row that handed the job over shows — never the Conversation's Agent's.

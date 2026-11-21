@@ -53,6 +53,7 @@
   "channelInviteNote": "{0} invited {1}, who joined “{2}” right away",
   "channelHandoffs": "Handoffs",
   "channelHandedTo": "Handed to {0}",
+  "channelHandedFailed": "The job didn’t finish",
   "channelSenderTo": "to {0}",
   "channelOnTheBoard": "On the board:",
   "channelOnTheBoardSection": "On the board",

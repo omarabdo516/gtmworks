@@ -2,7 +2,7 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
+import { faceOf, handTurn, handoverUnfinished, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
@@ -24,7 +24,8 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // says whether this person is the Owner who connects it, and else who does (`connect`). A job the chat's Agent handed
 // another Agent (#317, #475) is a quiet row under that reply, then the other Agent's answer under its own name, read
 // through conversation_handovers by this Conversation's person whether or not they see that Agent; while its two Runs
-// move, the record says so (`handover`), so the chat keeps asking for the follow-up reply.
+// move, the record says so (`handover`), so the chat keeps asking for the follow-up reply, and once it ended without
+// finishing the row says so (`failed`, #375).
 export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>,session?:(agent:string,session:string)=>Promise<{turns:{at:number,seconds:number,steps:RunStep[]}[],usage:SessionUsage|null}|null>) {
  const conversation=found.id;
  // The session is read beside the database, so the Engine adds no wait of its own to opening the chat.
@@ -37,7 +38,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type RequestRow={id:number,run_id:string,call_id:string,agent_name:string,job:string,apps:string[],asked_with:string,state:AgentRequestView['state'],answered_at:string|null,reason:string|null,created_at:string,answerer:{name:string}|null,asker:{name:string}|null};
  type Message={id:number,author:'person'|'agent',author_name:string,agent_id:string|null,body:string,run_id:string,hand_card:number|null,created_at:string};
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
- type HandedRow={id:number,run:string,from_name:string,from_connection:string,to_agent:string,to_name:string,to_connection:string,goal:string,answer:string|null,state:string,answers_person:boolean,created_at:string,answered_at:string|null};
+ type HandedRow={id:number,run:string,from_name:string,from_connection:string,to_agent:string,to_name:string,to_connection:string,goal:string,answer:string|null,state:string,target_outcome:string|null,answers_person:boolean,created_at:string,answered_at:string|null};
  type Face={id:string,connection_id:string,name:string};
  type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,maybe_applied?:boolean,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
  type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,available:boolean,created_at:string};
@@ -102,7 +103,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   return {...base,state:'made',by,at,agent:agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name}:null};
  };
  const requested=new Set(requestRows.map(row=>`${row.run_id}:${row.call_id}`));
- const handed=handedRows.map(row=>({run_id:row.run,at:row.created_at,card:{kind:'handed',from:{name:row.from_name,face:row.from_connection},name:row.to_name,face:row.to_connection,goal:row.goal} satisfies LeadCard}));
+ const handed=handedRows.map(row=>({run_id:row.run,at:row.created_at,card:{kind:'handed',from:{name:row.from_name,face:row.from_connection},name:row.to_name,face:row.to_connection,goal:row.goal,...(handoverUnfinished(row)?{failed:true as const}:{})} satisfies LeadCard}));
  // The asked Agent's answer, once it came, for the asking Agent to reply with (a job command's answer is the chat's own
  // message instead, and none comes here).
  const answers=handedRows.flatMap(row=>row.answer&&row.answered_at?[{id:row.id,from:row.from_name,name:row.to_name,face:row.to_connection,body:row.answer,at:row.answered_at}]:[]);

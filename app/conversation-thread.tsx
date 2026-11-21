@@ -10,8 +10,9 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
+import { HandedRow } from '@/app/handed-row';
 import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
-import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
+import type { Decision, SavedRule } from '@/lib/conversations';
 import { StepsList } from '@/app/run-steps';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ChangeCard } from '@/app/change-card';
@@ -258,7 +259,8 @@ export function ConversationTurns({slug,company,record,writer,asked,reread}:{slu
     :card.kind==='change'?<ChangeCard key={`change${card.change.id}`} change={card.change} owner={record.changeOwner===true}
      answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
     :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
-    :card.kind==='handed'?<HandedRow key={`handed${message.id}:${card.name}:${card.goal}`} card={card} cb={cb}/>
+    :card.kind==='handed'?<HandedRow key={`handed${message.id}:${card.name}:${card.goal}`} as="p" from={{connection_id:card.from.face,name:card.from.name}} to={{connection_id:card.face,name:card.name}}
+     title={cb('handoverAsked',card.from.name,card.name)} goal={card.goal} failed={card.failed?c('handedFailed'):null}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status"><span className="shimmer">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</span></p>}
@@ -300,18 +302,6 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
 // The tool calls the Engine reported for the reply's Run (#141; design-reference: stepsHTML, toggle-steps) are drawn by
 // StepsList (app/run-steps.tsx), as a channel's are (#148).
 
-// A job the chat's Agent handed to another Agent in this chat (#317, #475; design-reference: the handoff row, `.handoff`):
-// a quiet line under the asking Agent's reply with both faces and an arrow, "{asking Agent} asked {asked Agent}", and
-// the job. It is drawn from gtmworks's own record of the handover, never from the Engine's helper events, and it has
-// nothing to press. The asked Agent's answer follows as its own message (`kind` handed).
-function HandedRow({card,cb}:{card:Extract<LeadCard,{kind:'handed'}>,cb:BidiText}) {
- const {language}=useI18n();
- return <p className="handed" role="note" data-handover>
-  <span className="handed__faces"><CompanyAgentFace agent={{connection_id:card.from.face,name:card.from.name}} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:card.face,name:card.name}} size={18}/></span>
-  <span className="handed__t">{cb('handoverAsked',card.from.name,card.name)}</span>
-  {card.goal&&<span className="handed__d"><bdi>{card.goal}</bdi></span>}
- </p>;
-}
 
 // The line under the Agent's reply when it saved a lasting rule it was told (#18; design-reference: ruleTurn, the
 // note--saved message): "Saved", whose rule it is, that it is in the log, and the way to the Agent's page while the rule

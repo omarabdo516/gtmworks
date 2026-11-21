@@ -304,16 +304,16 @@ alter policy agent_handovers_read on public.agent_handovers using (exists(select
 
 -- What the Conversation draws of its handovers, oldest first: both Agents' names and faces (an asked Agent hidden from
 -- the person included, which the person cannot read from hermes_agents), the job, what the asked Agent answered and
--- when, and how far the handover got. Never the context or the Engine's run ids of the legs; `run` is the asking
+-- when, how far the handover got, and how the asked Agent's leg ended (#375 draws a job that did not finish). Never the context or the Engine's run ids of the legs; `run` is the asking
 -- Agent's Run the row sits under, which its person already reads. Only the Conversation's own person reads them, by the
 -- read rule above.
 create function public.conversation_handovers(conversation uuid)
 returns table(id bigint, run text, from_agent uuid, from_name text, from_connection uuid, to_agent uuid, to_name text,
- to_connection uuid, goal text, answer text, state text, answers_person boolean, created_at timestamptz, answered_at timestamptz)
+ to_connection uuid, goal text, answer text, state text, target_outcome text, answers_person boolean, created_at timestamptz, answered_at timestamptz)
 language sql stable security definer set search_path='' as $$
  select h.id,h.run_id,h.from_agent,f.name,f.connection_id,h.to_agent,t.name,t.connection_id,h.goal,
   case when h.target_outcome='completed' and not h.answers_person then h.summary end,
-  h.state,h.answers_person,h.created_at,h.target_closed_at
+  h.state,h.target_outcome,h.answers_person,h.created_at,h.target_closed_at
  from public.agent_handovers h
   join public.conversations c on c.id=h.conversation_id and c.company_id=h.company_id
   join public.hermes_agents f on f.id=h.from_agent and f.company_id=h.company_id

@@ -12,6 +12,7 @@ import { named } from '@/lib/bidi';
 import { AgentFaceDot } from '@/app/agent-face-dot';
 import { statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
+import { HandedRow } from '@/app/handed-row';
 import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/app/agent-details';
 import { MessageBox, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { madeDay, useZone } from '@/app/agent-made';
@@ -196,7 +197,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
 }
 
 function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done}:{message:ChannelMessage,rise:string,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone}) {
- const {t,language}=useI18n();
+ const {t}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
  // The quiet line an invitation adds (#207): not a message, and the channel's own name is the one it joined. The quiet
@@ -205,12 +206,9 @@ function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done}:{me
   <ShellIcon name={message.kind==='card'?'board':'team'} className="note__icon"/><span>{message.kind==='card'?c('channelCardNote',t('boardColProgress')):c('channelInviteNote',firstName(message.actor),message.name,name)}</span>
  </li>;
  // A job the main Agent handed another Agent of the channel (#150; design-reference: the handoff row, `.handoff`): both
- // faces with the arrow between them, the Agent it went to, and the job. It has nothing to press.
- if(message.author==='handoff') return <li className={`handed${rise}`} role="note" data-handover>
-  <span className="handed__faces"><CompanyAgentFace agent={{connection_id:message.from.face,name:message.from.name}} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:message.to.face,name:message.to.name}} size={18}/></span>
-  <span className="handed__t">{named(c,'channelHandedTo',message.to.name)}</span>
-  {message.goal&&<span className="handed__d"><bdi>{message.goal}</bdi></span>}
- </li>;
+ // faces with the arrow between them, the Agent it went to, the job, and that it did not finish when so (#375).
+ if(message.author==='handoff') return <HandedRow className={rise.trim()} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}}
+  title={named(c,'channelHandedTo',message.to.name)} goal={message.goal} failed={message.failed?c('channelHandedFailed'):null}/>;
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
   <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
@@ -319,10 +317,10 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
    {handoffs.length>0&&<section className="dp-sec" aria-labelledby="ch-h-h">
     <h3 className="dp-label" id="ch-h-h"><span>{c('channelHandoffs')} <span className="muted num">{count(handoffs.length)}</span></span></h3>
     <ul className="panel-card">
-     {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row">
+     {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.failed?{'data-failed':''}:{})}>
       <span className="handed__faces"><CompanyAgentFace agent={{connection_id:handoff.from.face,name:handoff.from.name}} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:handoff.to.face,name:handoff.to.name}} size={20}/></span>
       <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandedTo',handoff.to.name)}</span>
-       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{time(handoff.at)}</span></span>
+       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}{time(handoff.at)}</span></span>
      </li>)}
     </ul>
    </section>}
