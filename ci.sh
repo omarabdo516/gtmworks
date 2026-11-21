@@ -227,7 +227,7 @@ case "${1:-check}" in
   # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
   images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local' | grep -v '\$'
     awk '/^FROM/ && $2 ~ /[:@]/ {print $2}' Dockerfile
-    grep -o -h -E '(alpine:[0-9.]+|node:[0-9a-z.-]+|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
+    grep -o -h -E '(alpine:[0-9.]+|node:[0-9][0-9a-z.-]*|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
   # The work sandbox image every Company's sandbox runs (#392, #393): CI builds it in the run's image job and loads that
   # build; here it is built from sandbox/Dockerfile on this host when missing, so the lane runs the same image.
   # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's.
