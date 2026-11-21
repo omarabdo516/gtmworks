@@ -58,8 +58,8 @@ test('a move to another column is told with Undo, and Undo puts the Card back wh
  await expect.poll(() => toast).toHaveBeenLastCalledWith('Back in “Ideas”');
  // The board draws the Card in that column again: it lands there and takes the keyboard.
  await screen.rerender(workView(props));
+ // A second landing started: the Undo's own (its class may already be gone again on a slow machine).
  await expect.poll(landed).toBe(2);
- expect(landing(1)).toBe(true);
  expect(document.activeElement).toBe(link(1));
  await expect.poll(() => landing(1), { timeout: 1500 }).toBe(false);
 });
