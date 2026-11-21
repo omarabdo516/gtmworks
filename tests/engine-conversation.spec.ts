@@ -1252,6 +1252,8 @@ test('any Agent hands a job to another Agent of its Company, one hidden from the
   // Salma's chat put its own Card on the board with its first reply (#144); the handover leaves that Card Salma's.
   await expect.poll(kinds).toEqual(['person','agent','null:boarded','agent:handed','agent']);
   expect(JSON.parse(query(`select agent_id from public.work_cards where conversation_id='${conversation}'`))).toEqual([{agent_id:salma.agent}]);
+  // The handover, kept before that first reply made the Card, is on the Card's log once.
+  expect(JSON.parse(query(`select l.actor_id,l.agent_id from public.company_log l join public.work_cards w on w.id=l.card_id where w.conversation_id='${conversation}' and l.action='agent_handed_to'`))).toEqual([{actor_id:salma.agent,agent_id:tarek.agent}]);
   await expect(page.locator('.turns [data-handover] .handed__t')).toHaveText('Salma asked Tarek');
   await expect(page.locator('.turns [data-handover] .handed__d')).toHaveText('Last campaign\'s leads and cost per lead');
   const answer=page.locator('.turns > li[data-kind="handed"]');

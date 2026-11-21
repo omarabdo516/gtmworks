@@ -113,6 +113,42 @@ end $$;
 revoke all on function public.lead_hand_to_agent(uuid,text,text,text,text,text) from public,anon,authenticated;
 grant execute on function public.lead_hand_to_agent(uuid,text,text,text,text,text) to service_role;
 
+-- 20270101000000's conversation_reply_card, which puts any other Agent's chat on the board with that Agent's first
+-- reply (#144). A handover made in that first Run is kept before the reply is written, when the chat has no Card yet, so
+-- lead_hand_to_agent could not write its log row: the Card made here writes it, once per handover, and stays the asking
+-- Agent's.
+create or replace function public.conversation_reply_card() returns trigger language plpgsql security definer set search_path='' as $$
+declare chat public.conversations; agent public.hermes_agents; asked public.conversation_messages; stage bigint; card bigint;
+begin
+ select * into chat from public.conversations where id=new.conversation_id;
+ select * into agent from public.hermes_agents where id=chat.agent_id and company_id=chat.company_id;
+ if not found or agent.is_default then return null; end if;
+ select * into asked from public.conversation_messages where conversation_id=chat.id and author='person' order by id limit 1;
+ if asked.run_id is distinct from new.run_id
+  or exists(select 1 from public.agent_rules where conversation_id=chat.id and run_id=new.run_id)
+  or exists(select 1 from public.lead_made_agents where conversation_id=chat.id and run_id=new.run_id)
+  or exists(select 1 from public.lead_agent_requests where conversation_id=chat.id and run_id=new.run_id) then return null; end if;
+ -- A stage after review takes a Card only through an approval (approval_card_guard), which a new Card has not had.
+ select id into stage from public.work_stages where company_id=chat.company_id and board_column='progress' and kind='before_review' order by position,id limit 1;
+ if stage is null then return null; end if;
+ insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
+  values(chat.company_id,stage,public.chat_card_title(asked.body,agent.name),agent.id,chat.id)
+  on conflict (conversation_id) where conversation_id is not null do nothing returning id into card;
+ if card is not null then
+  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,details,source,source_id,created_at)
+   select h.company_id,h.from_agent,'agent',f.name,'card',card,h.to_agent,'agent_handed_to',
+    jsonb_build_object('agent_name',f.name,'to_name',t.name,'goal',h.goal),'agent_handovers',h.id,h.created_at
+   from public.agent_handovers h
+    join public.hermes_agents f on f.id=h.from_agent and f.company_id=h.company_id
+    join public.hermes_agents t on t.id=h.to_agent and t.company_id=h.company_id
+   where h.conversation_id=chat.id and h.company_id=chat.company_id
+   order by h.id
+   on conflict (source,source_id) do nothing;
+ end if;
+ return null;
+end $$;
+revoke all on function public.conversation_reply_card() from public,anon,authenticated,service_role;
+
 -- 20270413000000's begin_handover, with two changes for a Conversation's handover. The target is no longer checked
 -- against what the person sees: any Agent of the Company may be asked (a job command still is, since the command picks
 -- an Agent the person sees). The job names the Agent that asked, not "Lead", since any Agent may ask.

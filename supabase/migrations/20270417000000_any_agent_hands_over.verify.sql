@@ -6,6 +6,7 @@ select json_build_object(
  'command_stays_the_main_agents',position('is_company_lead(c,lead.id)' in pg_get_functiondef('public.command_handover(uuid,uuid,uuid,uuid,text,text,text)'::regprocedure))>0,
  'any_target_of_the_company',position('agent_visible_to' in pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure))=0
   and position('r.answers_person and not public.agent_visible_to' in pg_get_functiondef('public.begin_handover(bigint)'::regprocedure))>0,
+ 'first_reply_card_logs_the_handover',position('agent_handed_to' in pg_get_functiondef('public.conversation_reply_card()'::regprocedure))>0,
  'targets_listed_for_the_worker',has_function_privilege('service_role','public.conversation_handover_agents(uuid,uuid)','execute')
   and not has_function_privilege('authenticated','public.conversation_handover_agents(uuid,uuid)','execute')
   and not has_function_privilege('anon','public.conversation_handover_agents(uuid,uuid)','execute'),

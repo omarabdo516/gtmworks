@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(79);
+select plan(81);
 -- #317, #475. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor
 -- (…03) is shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads. Any Agent of a
 -- Company hands work to any other Agent of it, seen by the person or not (decision 0057).
@@ -169,6 +169,15 @@ select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000006','run-
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000006','run-ads','call-3','Nobody','Write it',null),'{"state":"ignored"}'::jsonb,'a name no Agent has is ignored');
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000007','run-ads-viewer','call-1','Writer','Write it',null),'{"state":"refused"}'::jsonb,'a Viewer''s Run hands nothing over');
 select is((select count(*)::int from public.work_cards where conversation_id='c3170000-0000-0000-0000-000000000006'),0,'a non-main Agent''s handover makes no Card of its own');
+-- Ads's first reply puts its chat on the board (#144), and that Card carries the handover kept before it, staying Ads's.
+insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000006','agent','a3170000-0000-0000-0000-000000000012','Ads','I asked Writer for the headlines.','run-ads');
+set constraints all immediate;
+select is((select agent_id from public.work_cards where conversation_id='c3170000-0000-0000-0000-000000000006'),'a3170000-0000-0000-0000-000000000012'::uuid,'Ads''s first reply makes the chat''s Card, which stays Ads''s');
+select is((select string_agg(l.actor_id||'>'||l.agent_id||':'||(l.details->>'to_name')||':'||(l.details->>'goal'),',') from public.company_log l
+  join public.work_cards w on w.id=l.card_id where w.conversation_id='c3170000-0000-0000-0000-000000000006' and l.action='agent_handed_to'),
+ 'a3170000-0000-0000-0000-000000000012>a3170000-0000-0000-0000-000000000013:Writer:Write three headlines','and the handover kept before it is on that Card''s log, once');
+set constraints all deferred;
 create temporary table asked as select * from public.begin_handover((select id from public.agent_handovers where run_id='run-ads'));
 select is((select profile||':'||session from asked),'ag-a3170000000000000000000000000013:'||md5('c3170000-0000-0000-0000-000000000006:a3170000-0000-0000-0000-000000000013')::uuid,
  'the job runs on Writer''s own profile, in its own session of this chat');
