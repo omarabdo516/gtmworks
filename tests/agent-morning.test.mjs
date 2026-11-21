@@ -787,3 +787,23 @@ test('a change to Good morning from Recurring tasks takes the Company lease, so 
   assert.equal((await changeAgentRoutine(db,{company,agent:lead,action:'pause',routine:other.id,hermes:install(fake),leaseWait:300})).state,'done');
  } finally { await fake.close(); leases.clear(); }
 });
+
+test('a Good morning copy left on an Agent that is not main is never switched on or run from Recurring tasks', async () => {
+ const fake=await engine();
+ try {
+  // A move left Lead's copy paused beside the message on Ads, the main Agent.
+  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nLeft`,schedule:'0 9 * * *',timezone:'Africa/Cairo',paused:true});
+  await createRoutine(at(fake,adsProfile),{name:morningName,prompt:`${morningMarker}\nNow`,schedule:'0 9 * * *',timezone:'Africa/Cairo'});
+  const [left]=jobs(fake,leadProfile);
+  const {db}=session({agents:agentRows(ads)});
+  assert.equal((await changeAgentRoutine(db,{company,agent:lead,action:'resume',routine:left.id,hermes:install(fake)})).state,'invalid');
+  assert.equal((await changeAgentRoutine(db,{company,agent:lead,action:'run',routine:left.id,hermes:install(fake)})).state,'invalid');
+  assert.equal(jobs(fake,leadProfile)[0].state,'paused','it stays paused');
+  // It can still be deleted there, and the main Agent's own copy is resumed as before.
+  assert.equal((await changeAgentRoutine(db,{company,agent:lead,action:'delete',routine:left.id,hermes:install(fake)})).state,'done');
+  assert.equal(jobs(fake,leadProfile).length,0);
+  const [own]=jobs(fake,adsProfile);
+  assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'pause',routine:own.id,hermes:install(fake)})).state,'done');
+  assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'resume',routine:own.id,hermes:install(fake)})).state,'done');
+ } finally { await fake.close(); leases.clear(); }
+});
