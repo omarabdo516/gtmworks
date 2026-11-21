@@ -151,7 +151,8 @@ test('the app and the worker read no install-wide Engine address or key: the Eng
   // Nothing puts an Engine key or address in .env.install any more (#385), so no null entry is needed to mask one.
   assert.equal(Object.hasOwn(env,'BUNDLED_HERMES_URL'),false,`${name} names no BUNDLED_HERMES_URL`);
   assert.equal(Object.hasOwn(env,'HERMES_API_KEY'),false,`${name} names no HERMES_API_KEY`);
-  assert.equal(compose.services[name].env_file,'.env.install');
+  // Each container names the values it gets (#446, tests/container-env.test.mjs): no file hands it the whole install's.
+  assert.equal(compose.services[name].env_file,undefined);
  }
  assert.equal(compose.services.worker.depends_on?.hermes,undefined);
  assert.equal(compose.volumes?.hermes,undefined);
