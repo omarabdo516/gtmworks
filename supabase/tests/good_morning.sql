@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(18);
 -- #182, #183: Good morning is changed by an active Owner or Manager of its Company, for the main Agent, and each change is one row of the log; each run of its job is recorded once, and opens a new
 -- Conversation with the main Agent for each Member with anything in a part of their card, never one for a Member with
 -- nothing. RS Learning: 1 Owner, 2 Manager, 3 Contributor, 4 Viewer, 5 Contributor. Written without the guards, as
@@ -78,5 +78,19 @@ select is(public.record_good_morning('10000000-0000-0000-0000-000000000001','e10
  2,'the Members something they may see waits on get the morning: the Owner, with the seed''s approvals, and the Contributor 5');
 select ok(not exists(select 1 from public.conversations c join public.good_mornings g on g.id=c.good_morning where g.session_id='local-0004' and c.person_id='20000000-0000-0000-0000-000000000002'),
  'the Manager, whose only item is on a Card of an Agent hidden from them, gets none');
+-- A mention still open in a team channel the Viewer has left is no reason either: their own read of "Waiting on you"
+-- drops it (waiting_items_read), and each Member's part is decided under the very policies of their own read.
+set local session_replication_role=replica;
+insert into public.channels(id,company_id,kind,name,created_by,create_key) values
+ ('e1830000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','team','launch','20000000-0000-0000-0000-000000000001','e1837000-0000-0000-0000-000000000001');
+insert into public.channel_messages(id,company_id,channel_id,author,person_id,author_name,body,send_key) overriding system value values
+ (-1831,'10000000-0000-0000-0000-000000000001','e1830000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Omar','@Viewer look',gen_random_uuid());
+insert into public.waiting_items(company_id,person_id,kind,title,channel_message_id) values
+ ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','mention','Omar mentioned you',-1831);
+set local session_replication_role=origin;
+select is(public.record_good_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000181','local-0005','2026-11-15','2026-11-15T07:00:00Z','Morning.','[]'::jsonb),
+ 2,'the same two Members get the morning');
+select ok(not exists(select 1 from public.conversations c join public.good_mornings g on g.id=c.good_morning where g.session_id='local-0005' and c.person_id='20000000-0000-0000-0000-000000000004'),
+ 'the Viewer, whose only item is a mention in a channel they are not in, gets none');
 select * from finish();
 rollback;

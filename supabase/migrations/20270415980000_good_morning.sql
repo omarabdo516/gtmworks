@@ -88,6 +88,26 @@ grant execute on function public.good_morning_seen(uuid,text[]) to service_role;
 -- an item of their own "Waiting on you" (waiting_list, read as that Member) or a result of an Agent they see. A run
 -- with no greeting makes none. Answers how many Conversations it opened, or null when the run
 -- was recorded already.
+-- Whether anything waits on the signed-in Member in their own "Waiting on you". It runs as the authenticated role, not as
+-- its definer, so every row-level policy of that read applies exactly as in the Member's own session (a mention in a
+-- channel they left, an item on a Card or a Conversation of an Agent hidden from them); record_good_morning, which reads
+-- past those policies, asks it for each Member as that Member. Nobody calls it directly.
+create function public.good_morning_waits(c uuid) returns boolean
+language sql stable security definer set search_path='' as $$
+ select exists(select 1 from public.waiting_list(c) x
+  where (x.card_id is null or public.can_see_card(c,x.card_id))
+   and (x.kind<>'approval' or not exists(select 1 from public.work_cards w where w.company_id=c and w.id=x.id
+    and w.agent_id is not null and not public.can_see_agent(c,w.agent_id))));
+$$;
+-- Owning it needs CREATE on the schema at that moment only: granted for the change and taken back, so the role keeps no
+-- new right.
+grant create on schema public to authenticated;
+alter function public.good_morning_waits(uuid) owner to authenticated;
+revoke create on schema public from authenticated;
+revoke all on function public.good_morning_waits(uuid) from public,anon,authenticated,service_role;
+-- record_good_morning runs as its owner, postgres, and is its one caller.
+grant execute on function public.good_morning_waits(uuid) to postgres;
+
 create function public.record_good_morning(c uuid, agent uuid, session text, greeting_day date, ran timestamptz, greeting text, results jsonb)
 returns integer language plpgsql security definer set search_path='' as $$
 declare morning bigint; main public.hermes_agents; member record; opened integer:=0; talk uuid; reader text;
@@ -108,13 +128,9 @@ begin
  for member in select m.person_id from public.members m where m.company_id=c and m.removed_at is null order by m.person_id loop
   -- Each Member's parts are read as that Member, with the very reads their own card makes.
   perform set_config('request.jwt.claim.sub',member.person_id::text,true);
-  -- The reader's own card shows only what their session may read: an item on a Card only while they see that Card
-  -- (card_agent_visible), and an approval only while they see its Agent (lib/board-columns.mjs visibleApprovals). This
-  -- function reads past row-level security, so it asks the same two questions itself.
-  if exists(select 1 from public.waiting_list(c) x
-    where (x.card_id is null or public.can_see_card(c,x.card_id))
-     and (x.kind<>'approval' or not exists(select 1 from public.work_cards w where w.company_id=c and w.id=x.id
-      and w.agent_id is not null and not public.can_see_agent(c,w.agent_id))))
+  -- What the Member's own card would show: their "Waiting on you" under their own policies, or a result of the night
+  -- from an Agent they see.
+  if public.good_morning_waits(c)
    or exists(select 1 from public.good_morning_results r where r.morning_id=morning and public.can_see_agent(c,r.agent_id)) then
    talk:=gen_random_uuid();
    insert into public.conversations(id,company_id,person_id,agent_id,agent_name,good_morning,good_morning_day)
