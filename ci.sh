@@ -263,13 +263,8 @@ case "${1:-check}" in
   export GTMWORKS_IMAGE_PREBUILT=true
   # Behind an HTTPS proxy (a cloud session) Node reaches GitHub through it, as curl and git do.
   [[ -z ${HTTPS_PROXY:-}${https_proxy:-} ]] || export NODE_USE_ENV_PROXY=1
-  # The release-update area installs the latest published release, whose files pin images of their own (#483): read
-  # from the same releases list the area reads, pulled here and loaded in with the rest.
-  if [[ -z ${1:-} || $1 == release-update ]]; then
-    node --no-warnings scripts/latest-release.mjs "$work/latest-release" > /dev/null
-    images="$images $( { grep -h -E '^[[:space:]]*image:' "$work/latest-release/docker-compose.install.yml" | awk '{print $2}' | grep -v '\$'
-      sed -n 's/^sandbox_image=//p' "$work/latest-release/install.sh"; } | sort -u | tr '\n' ' ')"
-  fi
+  # The release-update area installs the latest published release with that release's own install.sh, which pulls the
+  # images it pins itself (#483): this machine must reach their registries, as CI's does, or the area stops there.
   for image in $images; do docker image inspect "$image" > /dev/null 2>&1 || docker pull -q "$image" > /dev/null; done
   docker save $images | DOCKER_HOST=$machine docker load > /dev/null
   # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it

@@ -83,6 +83,7 @@ test('the latest stable release is the highest vX.Y.Z on every page, never a dra
    { tag_name: 'v1.2.1', published_at: '2026-11-19T10:00:00Z' },
    { tag_name: 'v1.9.0', published_at: '2026-11-18T10:00:00Z' },
    { tag_name: 'v1.10.0-rc.1', published_at: '2026-11-19T10:00:00Z' },
+   { tag_name: '2.0.0', published_at: '2026-11-19T10:00:00Z' },
   ],
  })(url); };
  const release = await latestStableRelease({ source, fetch, headers: { authorization: 'Bearer t' } });
