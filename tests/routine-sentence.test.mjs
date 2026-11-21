@@ -113,3 +113,8 @@ test('an Arabic day named after «every week», with or without «ال» and «�
  assert.deepEqual(read('ابعتلي تقرير كل أسبوع يوم الاتنين الساعة 9 الصبح'),{name:'تقرير',cron:'0 9 * * 1'});
  assert.equal(read('ابعتلي تقرير كل أسبوع يوم الاتنين والخميس الساعة 9 الصبح')?.cron,null,'two days ask');
 });
+
+test('«كل يوم الاتنين», a day with its article right after «every day», runs on that day, not every day', () => {
+ assert.deepEqual(read('ابعتلي تقرير كل يوم الاتنين الساعة 9 الصبح'),{name:'تقرير',cron:'0 9 * * 1'});
+ assert.deepEqual(read('ابعتلي تقرير كل يوم 9 الصبح'),{name:'تقرير',cron:'0 9 * * *'},'every day alone stays daily');
+});
