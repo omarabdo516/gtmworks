@@ -221,6 +221,18 @@ test('SIGTERM while the machine is still starting waits for it, then removes it'
   cleanedUp(run.state);
 });
 
+test('SIGKILL of the lane alone, which runs no trap, stops its proof and area before the guard removes everything', async t => {
+  const run = lane(t, { proof: 'wait' });
+  await run.reached('proving');
+  process.kill(run.child.pid, 'SIGKILL');
+  assert.equal((await run.ended).signal, 'SIGKILL');
+  await settled(run.state);
+  cleanedUp(run.state);
+  const area = Number(readFileSync(join(run.state, 'area-pid'), 'utf8'));
+  assert.equal(alive(area), false, 'the area is not left running against a machine that is gone');
+  assert.equal(existsSync(join(run.state, 'area-at-removal')), false, 'the area had ended before the machine was removed');
+});
+
 test('SIGKILL of the whole run, which runs no trap, still removes everything within seconds', async t => {
   const run = lane(t, { proof: 'wait' });
   await run.reached('proving');

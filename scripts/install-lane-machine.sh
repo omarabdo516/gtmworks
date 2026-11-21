@@ -38,9 +38,10 @@ tree() {
   done
 }
 running() { local p; for p in "$@"; do [[ $(ps -o stat= -p "$p" 2> /dev/null) =~ ^[^Z] ]] && return 0; done; return 1; }
-stop_tree() {
-  local pids
-  pids=$(tree "$1")
+stop_tree() { stop $(tree "$1"); }
+# Stops these processes: SIGTERM, then SIGKILL for whatever is still running after 5 s, and returns once none runs.
+stop() {
+  local pids="$*"
   [[ -n $pids ]] || return 0
   kill -TERM $pids 2> /dev/null
   for _ in $(seq 1 20); do running $pids || return 0; sleep 0.25; done
@@ -102,20 +103,27 @@ case "${1:-}" in
   # The guard's part, once the lane has ended: nothing to do when the trap removed WORK; otherwise wait for a machine
   # still starting, then try every few seconds until Docker lists none, for at most an hour (a host Docker that answers
   # no listing for that long); after that the next run's start removes what is left.
-  work=$2
+  work=$2 group=${3:-}
   [[ -d $work ]] || exit 0
   # The guard waits for a start as long as its `docker run` runs, so the machine it makes is removed here too.
   start_done 0
+  # A lane killed alone leaves its proof running, no longer under it but still in its process group: that group stops
+  # before its machine and checkout go.
+  [[ -z $group ]] || stop $(pgrep -g "$group" 2> /dev/null)
   for _ in $(seq 1 720); do machine_gone && { remove_files; exit 0; }; sleep 5; done
   ;;
  guard)
   pid=$2 work=$3
   # Out of the lane's session and process tree, so whatever kills the lane does not reach the guard. It also ends once
   # the work folder is gone, which the trap's removal does last, so a lane PID taken by another process keeps no guard.
-  watch="while kill -0 $pid 2> /dev/null && [ -d $(printf %q "$work") ]; do sleep 1; done; exec bash $(printf %q "$0") sweep $(printf %q "$work")"
+  # The lane's process group is the guard's to stop only when the lane leads it, as a command run from a terminal does;
+  # a group the lane only joined is its caller's.
+  group=$(ps -o pgid= -p "$pid" 2> /dev/null | tr -d ' ')
+  [[ $group == "$pid" ]] || group=
+  watch="while kill -0 $pid 2> /dev/null && [ -d $(printf %q "$work") ]; do sleep 1; done; exec bash $(printf %q "$0") sweep $(printf %q "$work") $group"
   if command -v setsid > /dev/null; then setsid -f bash -c "$watch" < /dev/null > /dev/null 2>&1
   else perl -MPOSIX -e 'fork and exit; POSIX::setsid() or die "setsid: $!"; exec @ARGV' bash -c "$watch" < /dev/null > /dev/null 2>&1
   fi
   ;;
- *) echo 'usage: scripts/install-lane-machine.sh start WORK PORT | remove WORK LANE_PID | sweep WORK | guard LANE_PID WORK' >&2; exit 2;;
+ *) echo 'usage: scripts/install-lane-machine.sh start WORK PORT | remove WORK LANE_PID | sweep WORK [LANE_GROUP] | guard LANE_PID WORK' >&2; exit 2;;
 esac
