@@ -7,6 +7,7 @@ import { CardSheet, type CardSheetData } from '@/app/card-sheet';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import type { ChannelRecord } from '@/lib/channels';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { fakeClock } from './fake-clock';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 
@@ -24,7 +25,6 @@ const show = (value: CardSheetData, canWrite = true, more: Pick<ComponentProps<t
  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={<bdi>Ads</bdi>} badge={<span className="badge">Ideas</span>} sheet={value} canWrite={canWrite} alone={false} send={sent} {...more}/>
 </LanguageProvider>);
 const dialog = () => document.querySelector('dialog')!;
-const fakeClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
 test('a Card opens as a modal sheet on its Log, with the count, the note field ready and the Card page one link away', async () => {
  const screen = await show(sheet());

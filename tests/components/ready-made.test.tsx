@@ -6,6 +6,7 @@ import ReadyMade from '@/app/ready-made';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { readyRoles } from '@/lib/ready-roles';
 import type { Language } from '@/lib/i18n.mjs';
+import { untilDrawn, fakeClock } from './fake-clock';
 
 const replace = vi.fn<(href: string) => void>();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace, push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
@@ -14,7 +15,7 @@ vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...p
 
 let answer: (response: Response) => void = () => {};
 const sent = vi.fn<(body: { conversation: string, message: string }) => void>();
-afterEach(() => { replace.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); replace.mockReset(); sent.mockReset(); vi.unstubAllGlobals(); });
 const gallery = async ({ owner = true, owners = [], language = 'en' }: { owner?: boolean, owners?: string[], language?: Language } = {}) => {
  vi.stubGlobal('fetch', (_: string, init: RequestInit) => { sent(JSON.parse(String(init.body))); return new Promise<Response>(resolve => { answer = resolve; }); });
  const lead = language === 'ar' ? 'ليد' : 'Lead';
@@ -119,23 +120,32 @@ test('a send still on its way when the gallery closes does not move the page tha
 });
 
 // #130: the gallery leaves with the dialog's exit (design-reference: closeModal) and the page moves only once it has run.
+// The leave is timed on a fake clock (#501).
+
 test('closing keeps the gallery and its scrim in the page while its leave runs, then the gallery is gone and the address moves once', async () => {
  const screen = await gallery();
  const dialog = screen.getByRole('dialog');
  await expect.element(dialog).toBeVisible();
- await screen.getByRole('button', { name: 'Close' }).click();
+ // Pressed and keyed in the page itself, so no driver round trip runs inside the leave.
+ fakeClock();
+ (screen.getByRole('button', { name: 'Close' }).element() as HTMLButtonElement).click();
+ await vi.advanceTimersByTimeAsync(0);
  expect(dialog.element()).toHaveClass('is-closing');
  // Nothing in it can be pressed while it leaves: an Add then would ask for a role nobody sees opened.
  expect((dialog.element() as HTMLElement).inert).toBe(true);
  expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
- expect(replace).not.toHaveBeenCalled();
  // A second way out during the leave adds nothing.
- await userEvent.keyboard('{Escape}');
- await expect.poll(() => replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
+ document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+ await vi.advanceTimersByTimeAsync(189);
+ expect(dialog.element()).toHaveClass('is-closing');
+ expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
+ expect(replace).not.toHaveBeenCalled();
+ await vi.advanceTimersByTimeAsync(1);
+ expect(replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
  // useLeave marks the gallery gone and navigates in one callback; React draws it gone on its next render.
- await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
- await expect.poll(() => document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
- await new Promise(resolve => setTimeout(resolve, 250));
+ await untilDrawn(() => !document.querySelector('[role="dialog"]'), 'the gallery gone');
+ expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
+ await vi.advanceTimersByTimeAsync(1000);
  expect(replace).toHaveBeenCalledOnce();
 });
 
@@ -143,9 +153,12 @@ test('after Add the gallery leaves first and the new Conversation opens after it
  const screen = await gallery();
  await screen.getByRole('button', { name: 'Add SEO content writer' }).click();
  await expect.poll(() => sent.mock.calls.length).toBe(1);
+ fakeClock();
  answer(new Response('{}', { status: 200 }));
- await expect.poll(() => document.querySelector('[role="dialog"]')?.classList.contains('is-closing')).toBe(true);
+ await untilDrawn(() => !!document.querySelector('[role="dialog"]')?.classList.contains('is-closing'), 'the leave');
+ await vi.advanceTimersByTimeAsync(189);
  expect(replace).not.toHaveBeenCalled();
- await expect.poll(() => replace.mock.calls.length).toBe(1);
+ await vi.advanceTimersByTimeAsync(1);
+ expect(replace.mock.calls.length).toBe(1);
  expect(replace.mock.calls[0][0]).toBe(`/c/rs-learning/conversations/${sent.mock.calls[0][0].conversation}`);
 });

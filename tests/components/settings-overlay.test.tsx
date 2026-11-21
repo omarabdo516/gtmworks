@@ -7,6 +7,7 @@ import { BackLink, CloseButton, FocusReturn, OverlayFrame } from '@/app/settings
 import AccountChoicesView from '@/app/account-choices-view';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n, type Language } from '@/lib/i18n.mjs';
+import { untilDrawn, fakeClock } from './fake-clock';
 import '@/app/globals.css';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -17,7 +18,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), 
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
 
 const saveLanguage = vi.fn<(state: string, form: FormData) => Promise<string>>();
-afterEach(() => { saveLanguage.mockReset(); push.mockReset(); sessionStorage.clear(); });
+afterEach(() => { vi.useRealTimers(); saveLanguage.mockReset(); push.mockReset(); sessionStorage.clear(); });
 
 // The Owner's Settings open on Your account, as the server draws them.
 const account = (language: Language) => render(<LanguageProvider language={language}>
@@ -26,7 +27,7 @@ const account = (language: Language) => render(<LanguageProvider language={langu
  </OverlayChrome>
 </LanguageProvider>);
 
-// What a finger can reach: the control's box, grown by an invisible ring drawn around it.
+// What a finger can reach: the control's box, grown by an invisible ring untilDrawn around it.
 const tapArea = (node: Element) => {
  const own = node.getBoundingClientRect(), ring = getComputedStyle(node, '::before');
  const top = parseFloat(ring.top) || 0, bottom = parseFloat(ring.bottom) || 0, left = parseFloat(ring.left) || 0, right = parseFloat(ring.right) || 0;
@@ -106,18 +107,25 @@ test('closing goes back to where the gear was pressed and leaves the gear its fo
 // #130: the overlay leaves with the dialog's exit (design-reference: sovClose) and returns only once it has run.
 test('closing keeps the overlay in the page with its exit running, then takes it out and goes back, once', async () => {
  const screen = await agentPage();
- await screen.getByRole('button', { name: 'Close settings and go back' }).click();
+ // The leave is timed on a fake clock (#501), and pressed and keyed in the page so no driver round trip runs inside it.
+ fakeClock();
+ (screen.getByRole('button', { name: 'Close settings and go back' }).element() as HTMLButtonElement).click();
+ await vi.advanceTimersByTimeAsync(0);
  const overlay = document.querySelector<HTMLElement>('.sov')!;
  expect(overlay).toHaveClass('is-closing');
  // A section link pressed during the leave cannot move the page the leave is about to leave.
  expect(overlay.inert).toBe(true);
  expect(getComputedStyle(overlay).animationName).toBe('gw-modal-out');
+ // A second way out during the leave adds nothing.
+ document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+ await vi.advanceTimersByTimeAsync(189);
+ expect(overlay).toHaveClass('is-closing');
  expect(push).not.toHaveBeenCalled();
- await userEvent.keyboard('{Escape}');
- await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat']]);
+ await vi.advanceTimersByTimeAsync(1);
+ expect(push.mock.calls).toEqual([['/c/rs-learning/chat']]);
  // useLeave marks the overlay gone and navigates in one callback; React draws it gone on its next render.
- await expect.poll(() => document.querySelector<HTMLElement>('.sov-root')?.hidden).toBe(true);
- await new Promise(resolve => setTimeout(resolve, 250));
+ await untilDrawn(() => document.querySelector<HTMLElement>('.sov-root')?.hidden === true, 'the overlay gone');
+ await vi.advanceTimersByTimeAsync(1000);
  expect(push).toHaveBeenCalledOnce();
 });
 

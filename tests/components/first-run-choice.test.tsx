@@ -4,6 +4,7 @@ import { userEvent } from 'vitest/browser';
 import FirstRunChoice, { type FirstRunState } from '@/app/first-run-choice';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
+import { untilDrawn, fakeClock } from './fake-clock';
 import '@/app/tokens.css';
 import '@/app/first-run-choice.css';
 
@@ -12,7 +13,7 @@ import '@/app/first-run-choice.css';
 const push = vi.hoisted(() => vi.fn<(href: string) => void>());
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 const finish = vi.fn<(state: FirstRunState, form: FormData) => Promise<FirstRunState>>();
-afterEach(() => { finish.mockReset(); finish.mockResolvedValue({}); push.mockReset(); });
+afterEach(() => { vi.useRealTimers(); finish.mockReset(); finish.mockResolvedValue({}); push.mockReset(); });
 
 const show = (language: Language = 'en') => render(<LanguageProvider language={language}>
  <FirstRunChoice slug="acme-abcd1234" company="10000000-0000-0000-0000-000000000090" companyName="Acme" personName="Omar"
@@ -192,12 +193,17 @@ test('a saved answer leaves with the exit, then opens the Conversation the serve
  finish.mockResolvedValue({ opened: '/c/acme-abcd1234/conversations/cv-1?first=alone' });
  const screen = await show();
  await screen.getByRole('radio', { name: 'Alone' }).click();
- await screen.getByRole('button', { name: 'Open the workspace' }).click();
- await expect.poll(() => document.querySelector('.fr')?.classList.contains('is-closing')).toBe(true);
+ // The leave is timed on a fake clock (#501), and pressed in the page so no driver round trip runs inside it.
+ fakeClock();
+ (screen.getByRole('button', { name: 'Open the workspace' }).element() as HTMLButtonElement).click();
+ await untilDrawn(() => !!document.querySelector('.fr')?.classList.contains('is-closing'), 'the leave');
+ await vi.advanceTimersByTimeAsync(189);
+ expect(document.querySelector<HTMLElement>('.fr-root')?.hidden).toBe(false);
  expect(push).not.toHaveBeenCalled();
- await expect.poll(() => push.mock.calls).toEqual([['/c/acme-abcd1234/conversations/cv-1?first=alone']]);
+ await vi.advanceTimersByTimeAsync(1);
+ expect(push.mock.calls).toEqual([['/c/acme-abcd1234/conversations/cv-1?first=alone']]);
  // useLeave marks the question gone and navigates in one callback; React draws it gone on its next render.
- await expect.poll(() => document.querySelector<HTMLElement>('.fr-root')?.hidden).toBe(true);
+ await untilDrawn(() => document.querySelector<HTMLElement>('.fr-root')?.hidden === true, 'the question gone');
 });
 
 test('a save that fails keeps the question with its error and never leaves', async () => {
