@@ -89,7 +89,7 @@ const useView=()=>use(ChatView)!;
 // The transcript once its record is read, in place of the placeholder.
 export function ConversationLoaded({initial,team}:{initial:ConversationRecord,team:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
- const {record,asked}=useConversationRecord({company,initial});
+ const {record,asked,reread}=useConversationRecord({company,initial});
  const {messages}=record;
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  // `asked` only sets this transcript's own state, so the one it was first given stays good.
@@ -120,7 +120,7 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  return <div className="transcript" ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  <ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} details={!!agent}/>
+  <ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread} details={!!agent}/>
  </div></div>;
 }
 

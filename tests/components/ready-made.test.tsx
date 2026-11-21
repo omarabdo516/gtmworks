@@ -132,8 +132,9 @@ test('closing keeps the gallery and its scrim in the page while its leave runs, 
  // A second way out during the leave adds nothing.
  await userEvent.keyboard('{Escape}');
  await expect.poll(() => replace.mock.calls).toEqual([['/c/rs-learning/chat?new=agent']]);
- expect(document.querySelector('[role="dialog"]')).toBeNull();
- expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
+ // useLeave marks the gallery gone and navigates in one callback; React draws it gone on its next render.
+ await expect.poll(() => document.querySelector('[role="dialog"]')).toBeNull();
+ await expect.poll(() => document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
  await new Promise(resolve => setTimeout(resolve, 250));
  expect(replace).toHaveBeenCalledOnce();
 });
