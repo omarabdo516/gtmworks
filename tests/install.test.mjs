@@ -56,7 +56,7 @@ ${lines.slice(start,end).join('\n')}`;
  assert.equal(passed.stderr,'');
 });
 
-test('update preserves the serving containers on migration failure and safely replaces its own source', t => {
+test('update preserves the serving containers on migration failure and hands the run to the installer it downloaded', t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-update-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
@@ -105,10 +105,15 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
  assert.doesNotMatch(readFileSync(env.DOWNLOAD_ARGS,'utf8'),/Authorization/);
  assert.equal(existsSync(join(directory,'.install-lock')),false);
  const replacement=join(directory,'replacement.sh');
- writeFileSync(replacement,`${readFileSync('scripts/install.sh','utf8')}\n${'# padding\n'.repeat(2000)}exit 42\n`);
+ // The downloaded installer says it runs and finishes the update (#389): the previous release's steps know neither the
+ // new release's migration stages nor its sandboxes.
+ writeFileSync(replacement,readFileSync('scripts/install.sh','utf8').replace('set -eu\n','set -eu\necho "downloaded installer: ${GTMWORKS_UPDATE_DOWNLOADED:-}"\n'));
  const success=spawnSync('sh',['scripts/install.sh','update','main'],{cwd:directory,
   env:{...env,FAIL_MIGRATION:'0',UPDATE_SOURCE:replacement,GH_TOKEN:'test-github-token'},encoding:'utf8'});
  assert.equal(success.status,0,success.stderr);
+ assert.match(success.stdout,/^downloaded installer: 1$/m);
+ assert.equal(success.stdout.match(/Downloading update source/g).length,1,'the downloaded installer downloads nothing again');
+ assert.equal(existsSync(join(directory,'.install-lock')),false,'the scratch folder goes when the downloaded installer ends');
  assert.match(readFileSync(env.DOWNLOAD_ARGS,'utf8'),/--header\nAuthorization: Bearer test-github-token\nhttps:\/\/api.github.com\/repos\/omarabdo516\/gtmworks\/tarball\/main/);
  assert.match(readFileSync(commands,'utf8'),/run --rm -e GH_TOKEN -v/);
  assert.doesNotMatch(success.stdout+success.stderr+readFileSync(commands,'utf8'),/test-github-token/);

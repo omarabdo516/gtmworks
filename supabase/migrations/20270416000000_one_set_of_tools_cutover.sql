@@ -10,6 +10,18 @@
 -- Kept on purpose: the Company's log rows of past level changes, and the audit shape that names them, so history still
 -- reads. Nothing else stored is dropped, and no grant changes: every function keeps the role that held it.
 
+-- 0. A cutover never lands in the transaction that applied its first step. An installer from before ADR 0023 applies every
+-- migration in one transaction before it starts anything: it fails here, the whole transaction rolls back, and the
+-- release it runs keeps serving on the schema it was built for. The installer the update downloaded applies both steps
+-- in their stages (scripts/install.sh).
+do $$ begin
+ if to_regclass('gtmworks_install.schema_migrations') is not null then
+  if exists(select 1 from gtmworks_install.schema_migrations m where m.name='20270408100000_one_set_of_tools.sql' and m.xmin=pg_current_xact_id()::xid) then
+   raise exception 'This update is finished by the installer it downloaded: run sh scripts/install.sh update again. The database and the running release were not changed.';
+  end if;
+ end if;
+end $$;
+
 -- 1. The functions that read the level, the policy or either profile's tool state, and the previous release's own
 -- writers. Dropped before the columns so their dependencies go with them; each reader is made again below.
 drop function if exists public.set_agent_level(uuid,integer);

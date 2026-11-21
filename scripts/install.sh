@@ -18,6 +18,12 @@ command -v flock > /dev/null 2>&1 || {
   echo 'The installer needs flock to run one install at a time. It comes with util-linux, which nearly every Linux install has; install it, then run this again.' >&2
   exit 1
 }
+# A source update hands its run to the installer it downloaded (below): that installer inherits the lock on descriptor 9
+# and this run's scratch folder, which holds the previous release's Engine files.
+if [ "${GTMWORKS_UPDATE_DOWNLOADED:-}" = 1 ] && flock -n 9 2> /dev/null; then
+  mkdir -p .install-lock
+else
+GTMWORKS_UPDATE_DOWNLOADED=
 exec 9>.install.lock
 flock -n 9 || { echo 'Another install is running: wait for it to finish, then run this again.' >&2; exit 1; }
 # shortcut: an installer from before #67 locks with the folder and its owner file, not flock; while one still runs it keeps
@@ -26,6 +32,7 @@ old_pid=; if [ -f .install-lock/owner ]; then read -r _ old_pid _ < .install-loc
 case "$old_pid" in ''|*[!0-9]*) ;; *) if kill -0 "$old_pid" 2> /dev/null; then echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; fi;; esac
 rm -rf .install-lock
 mkdir .install-lock
+fi
 resume=no
 worker_stopped=no
 cleanup() {
@@ -1058,6 +1065,11 @@ elif [ "$operation" = update ] && [ -n "$release_image" ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   test -z "${2:-}" || { echo 'A release install updates to the next release: put its docker-compose.install.yml and install.sh here, then run sh install.sh update.' >&2; exit 1; }
   refuse_several_companies || return 1
+elif [ "$operation" = update ] && [ "$GTMWORKS_UPDATE_DOWNLOADED" = 1 ]; then
+  # The installer the update downloaded, which finishes it with its own steps: its migrations in their stages (ADR 0023),
+  # its work sandbox image and keys, its Engines.
+  # The run that downloaded it kept the previous release's Engine files in the scratch folder this one inherited.
+  :
 elif [ "$operation" = update ]; then
   keep_previous_engine || exit 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
@@ -1075,6 +1087,10 @@ elif [ "$operation" = update ]; then
     echo "Extracting update source..."
     tar -xzf /install/.install-lock/source.tgz -C /install --strip-components=1
   ' sh "$ref"
+  # The release this update downloaded finishes it with its own installer (#389): this one's steps are the previous
+  # release's, which know neither the new release's migration stages nor its sandboxes. The lock, held on descriptor 9,
+  # and the scratch folder with the previous Engine files pass to it; this run's exit cleanup does not run.
+  GTMWORKS_UPDATE_DOWNLOADED=1 exec sh scripts/install.sh update "$ref"
 elif [ "$operation" = sign-in ]; then
   shift
   sign_in "$@"
