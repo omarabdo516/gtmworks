@@ -151,7 +151,20 @@
 .gw .agent-tile .dot--waiting { background: var(--gw-wait); }
 .gw .agent-tile[aria-current="true"] .face-wrap .dot { box-shadow: 0 0 0 2.5px var(--gw-bg-active-solid); }
 /* An Agent at work: eyes scan, three dots think, the dot pulses; when it ends, a check (design-reference: applyLive) */
-.gw .face-wrap.is-thinking .face__f { animation: gw-face-scan 2.4s ease-in-out infinite; }
+/* Faces of 24px or more are alive (design-reference: .face__f, .face__eye, .face.is-blink, .face.is-happy, faceHop and the
+   hover lift; components/face-motion sets --fx and --fy and the marks). The head never moves, only its features. */
+.gw .face--look .face__f { transform: translate(var(--fx, 0px), var(--fy, 0px)); transition: transform 240ms var(--gw-ease-out); }
+.gw .face--look .face__eye { transform-box: fill-box; transform-origin: center; transition: transform 90ms var(--gw-ease-in); }
+.gw .face.is-blink .face__eye { transform: scaleY(0.12); }
+.gw .face.is-happy { animation: gw-face-hop 460ms var(--gw-ease-spring); }
+.gw .face.is-happy .face__eye { transform: scaleY(0.45); transition-duration: 120ms; }
+@keyframes gw-face-hop { 0% { transform: none; } 35% { transform: translateY(-4px) scale(1.07); } 100% { transform: none; } }
+.gw .agent-tile .face, .gw .head-pill .face { transition: transform var(--gw-dur) var(--gw-ease-out); }
+@media (hover: hover) {
+  .gw .agent-tile:hover .face { transform: translateY(-2px); }
+  .gw .head-pill:hover .face { transform: translateY(-1px); }
+}
+.gw .face.is-thinking .face__f { animation: gw-face-scan 2.4s ease-in-out infinite; }
 @keyframes gw-face-scan { 0%, 100% { transform: translate(-1.4px, 0); } 45%, 55% { transform: translate(1.4px, -0.4px); } }
 .gw .face-wrap .think {
   position: absolute; top: -6px; inset-inline-start: -6px; display: inline-flex; align-items: center; gap: 2px;
@@ -172,12 +185,14 @@
   box-shadow: 0 0 0 2px var(--gw-bg-sidebar); animation: gw-ck-pop 320ms var(--gw-ease-spring);
 }
 .gw .face-wrap .done-ck .gw-icon { width: 11px; height: 11px; }
+.gw .face-wrap--lg .done-ck { width: 20px; height: 20px; box-shadow: 0 0 0 3px var(--gw-bg-chrome); }
+.gw .face-wrap--lg .done-ck .gw-icon { width: 13px; height: 13px; }
 .gw .face-wrap .done-ck .gw-icon path { stroke-width: 2.6; stroke-dasharray: 40; stroke-dashoffset: 40; animation: gw-draw-check 360ms var(--gw-ease-out) 140ms forwards; }
 @keyframes gw-ck-pop { from { transform: scale(.4); opacity: 0; } }
 @keyframes gw-draw-check { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .gw .face-wrap .face__f { transform: none !important; }
-  .gw .face-wrap.is-thinking .face__f, .gw .face-wrap .think i, .gw .face-wrap.is-thinking > .dot::after { animation: none !important; }
+  .gw .face .face__f, .gw .face .face__eye, .gw .agent-tile .face, .gw .head-pill .face { transform: none !important; }
+  .gw .face.is-happy, .gw .face.is-thinking .face__f, .gw .face-wrap .think i, .gw .face-wrap.is-thinking > .dot::after { animation: none !important; }
 }
 .gw .agent-tile__plus {
   width: 52px; height: 52px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;

@@ -160,7 +160,13 @@ export const motionTable = [
   { ref: '.cr-kind', built: '.gw .cr-kind', file: 'app/first-run-choice.css', html: '<div class="gw"><label class="cr-kind fr-choice"></label></div>' },
   // An Agent at work on its sidebar tile (#184): its eyes scan, three dots think; when the Run ends, a check pops and draws.
   // The dot's ping is a ::after, which a row cannot name: tests/components/agent-face-dot.test.tsx reads it.
-  { ref: '.face.is-thinking .face__f', built: '.gw .face-wrap.is-thinking .face__f', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap is-thinking"><svg><g class="face__f"></g></svg></span></div>' },
+  { ref: '.face.is-thinking .face__f', built: '.gw .face.is-thinking .face__f', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap is-thinking"><svg class="agent-face face is-thinking"><g class="face__f"></g></svg></span></div>' },
+  // A face of 24px or more looks, blinks and hops, and a tile's or the title pill's face lifts on hover (#133).
+  { ref: '.face__f', built: '.gw .face--look .face__f', file: 'app/shell.css', html: '<div class="gw"><svg class="agent-face face face--look"><g class="face__f"></g></svg></div>' },
+  { ref: '.face__eye', built: '.gw .face--look .face__eye', file: 'app/shell.css', html: '<div class="gw"><svg class="agent-face face face--look"><g class="face__f"><circle class="face__eye"></circle></g></svg></div>' },
+  { ref: '.face.is-happy', built: '.gw .face.is-happy', file: 'app/shell.css', html: '<div class="gw"><svg class="agent-face face face--look is-happy"></svg></div>' },
+  { ref: '.agent-tile .face', built: '.gw .agent-tile .face', file: 'app/shell.css', html: '<div class="gw"><a class="agent-tile" href="#"><span class="face-wrap"><svg class="agent-face face face--look"></svg></span></a></div>' },
+  { ref: '.head-pill > .face', built: '.gw .head-pill .face', file: 'app/shell.css', html: '<div class="gw"><button type="button" class="head-pill"><span><svg class="agent-face face face--look"></svg></span></button></div>' },
   { ref: '.face-wrap .think', built: '.gw .face-wrap .think', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="think"></span></span></div>' },
   { ref: '.face-wrap .think i', built: '.gw .face-wrap .think i', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="think"><i></i></span></span></div>' },
   { ref: '.face-wrap .done-ck', built: '.gw .face-wrap .done-ck', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="done-ck"></span></span></div>' },
