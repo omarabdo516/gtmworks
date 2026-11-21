@@ -149,21 +149,32 @@ test('the Owner opens the Agent\'s Library above its files, its generated images
  await expect(panel.locator('.dp-library')).not.toContainText(/hermes|\/opt\//i);
 });
 
-test('the Library says every Agent of the Company can read and change its work folder, in both languages',async({page})=>{
+test('the Library says every Agent of the Company can read and change its work folder, and its empty state promises only what the Agent makes, in both languages',async({page})=>{
  const {panel}=await openFiles(page,'omar@example.com');
  // The line sits beside the Library's own hint, in the hint style, and names the one work folder its Agents share.
  const shared={en:'Every Agent in the Company can read and change these files.',ar:'كل وكلاء الشركة يقدروا يقراوا الملفات دي ويغيّروها.'};
+ const empty={en:'Nothing here yet. Files Librarian makes in its work folder, and the images it generates, show here, and you can download them.',
+  ar:'مفيش حاجة هنا لسه. الملفات اللي Librarian بيعملها في فولدر شغله، والصور اللي بيعملها، بتظهر هنا، وتقدر تنزّلها.'};
  await expect(panel.locator('.dp-library .lib-hint')).toHaveCount(2);
- for(const language of ['en','ar'] as const) {
-  await chooseLanguageInSettings(page,language);
-  await page.goto(`/c/rs-learning/chat/${agent}`);
-  const details=page.getByRole('complementary',{name:language==='en'?'Details: Librarian':'تفاصيل Librarian',exact:true});
-  await expect(details).toBeVisible();
-  await details.getByRole('tab',{name:language==='en'?'Files':'ملفات',exact:true}).click();
-  const library=details.getByRole('tabpanel').locator('.dp-library');
-  await expect(library.locator('.lib-hint').nth(1)).toHaveText(language==='en'?shared.en:shared.ar);
+ // An Agent that has made nothing yet: its folder in the work folder is not made, and it generated no image.
+ const files=fake.settings.files.get(work)!; const pictures=fake.settings.images.get(profile)!;
+ fake.settings.files.delete(work); fake.settings.images.delete(profile);
+ try {
+  for(const language of ['en','ar'] as const) {
+   await chooseLanguageInSettings(page,language);
+   await page.goto(`/c/rs-learning/chat/${agent}`);
+   const details=page.getByRole('complementary',{name:language==='en'?'Details: Librarian':'تفاصيل Librarian',exact:true});
+   await expect(details).toBeVisible();
+   await details.getByRole('tab',{name:language==='en'?'Files':'ملفات',exact:true}).click();
+   const library=details.getByRole('tabpanel').locator('.dp-library');
+   await expect(library.locator('.lib-empty')).toHaveText(empty[language]);
+   await expect(library.locator('.lib-empty')).not.toContainText(language==='en'?/card/i:/كارت/);
+   await expect(library.locator('.lib-hint').nth(1)).toHaveText(shared[language]);
+  }
+ } finally {
+  fake.settings.files.set(work,files); fake.settings.images.set(profile,pictures);
+  await chooseLanguageInSettings(page,'en');
  }
- await chooseLanguageInSettings(page,'en');
 });
 
 test('a Contributor and a Viewer have no Library, and the server refuses them',async({page})=>{
