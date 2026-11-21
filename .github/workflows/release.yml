@@ -156,23 +156,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
-      - name: build and push linux/amd64 and linux/arm64
-        id: build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}
-          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
-          # The commit the image is built from, which the next main release reads back (#448).
-          annotations: index:org.opencontainers.image.revision=${{ needs.provenance.outputs.sha }}
-          # The image knows its own version (X.Y.Z or main) and so its channel, for Update ready (#442).
-          build-args: GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}
-          cache-from: type=gha,scope=release
-          cache-to: type=gha,mode=max,scope=release
       # The work sandbox image every Company's sandbox runs (#392, ADR 0020), built from its one build file and pushed
-      # beside the app image from the same commit: the install gets it the way it gets the app image, pinned by digest.
+      # before the app image from the same commit, which records its digest: the install gets it the way it gets the app
+      # image, pinned by digest.
       - name: build and push the work sandbox image for linux/amd64 and linux/arm64
         id: sandbox
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -185,6 +171,25 @@ jobs:
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=release-sandbox
           cache-to: type=gha,mode=max,scope=release-sandbox
+      - name: build and push linux/amd64 and linux/arm64
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          # The commit the image is built from, which the next main release reads back (#448).
+          annotations: index:org.opencontainers.image.revision=${{ needs.provenance.outputs.sha }}
+          # The image knows its own version (X.Y.Z or main) and so its channel, for Update ready (#442).
+          # It also names the work sandbox image built just before it from the same commit, by tag and digest, so a main
+          # build's install files pin that one (release-assets.mjs, Dockerfile).
+          build-args: |
+            GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}
+            GTMWORKS_SANDBOX_IMAGE=${{ env.IMAGE }}-sandbox:${{ needs.provenance.outputs.tag }}@${{ steps.sandbox.outputs.digest }}
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,mode=max,scope=release
       - name: both platform digests pushed
         env:
           TAG: ${{ needs.provenance.outputs.tag }}

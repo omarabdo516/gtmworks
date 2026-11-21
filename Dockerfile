@@ -43,6 +43,11 @@ COPY --from=build --chown=node:node /app/supabase/migrations ./install/supabase/
 # image also carries its own get.sh, the gtmworks command an install or update of it leaves behind (#437).
 COPY --from=build --chown=node:node /app/docker-compose.install.yml ./release-source/
 COPY --from=build --chown=node:node /app/scripts/install.sh /app/scripts/get.sh /app/scripts/release-assets.mjs /app/scripts/engine-template.yml /app/scripts/engine-managed.yml /app/scripts/engine-listener-address.py /app/scripts/engine-listener-address.sh /app/scripts/engine-ssh-sync-files.sh ./release-source/scripts/
+# The work sandbox image built from the same commit (#392, ADR 0020), by tag and digest: the release workflow builds it
+# first and passes it here, so release-assets.mjs pins the sandbox the image was built with and never another build's. A
+# local or CI build has none.
+ARG GTMWORKS_SANDBOX_IMAGE=
+RUN if [ -n "$GTMWORKS_SANDBOX_IMAGE" ]; then printf '%s\n' "$GTMWORKS_SANDBOX_IMAGE" > ./release-source/sandbox-image; fi
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

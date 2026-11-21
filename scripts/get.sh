@@ -26,9 +26,6 @@ set -eu
 main() {
 repository=omarabdo516/gtmworks
 image=ghcr.io/$repository
-# The work sandbox image every Company's sandbox runs (#392, ADR 0020), published beside the app image from the same
-# source and pushed by the same release run.
-work_sandbox=$image-sandbox
 marker='# gtmworks get.sh: the one-line installer, and the gtmworks command it leaves behind (#51, #52).'
 releases=${GTMWORKS_RELEASES:-}
 # The folder of the last install the line made on this machine, named when another folder finds its data.
@@ -302,15 +299,10 @@ download_release() {
       | sed -n "s#^$image@\(sha256:[a-f0-9]\{64\}\)\$#\1#p" | head -n 1)
     [ -n "$digest" ] || fail "Could not read the digest of $image:main."
     ref=$image:main@$digest
-    # The work sandbox image of the same main build (#392, ADR 0020), pinned by its own digest beside the app image.
-    say "Pulling the newest main work sandbox image: $work_sandbox:main"
-    docker pull "$work_sandbox:main"
-    sandbox_digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$work_sandbox:main" \
-      | sed -n "s#^$work_sandbox@\(sha256:[a-f0-9]\{64\}\)\$#\1#p" | head -n 1)
-    [ -n "$sandbox_digest" ] || fail "Could not read the digest of $work_sandbox:main."
-    sandbox_ref=$work_sandbox:main@$sandbox_digest
+    # The main image names the work sandbox image built from its own commit (#392, ADR 0020), by tag and digest, so its
+    # install script pins that one and never a sandbox another main build pushed under the same tag.
     docker run --rm --user "$(id -u):$(id -g)" -v "$2:/out" -w /app/release-source "$ref" \
-      node scripts/release-assets.mjs "$ref" /out "$sandbox_ref" \
+      node scripts/release-assets.mjs "$ref" /out \
       || fail "The main build $ref cannot write its install files (it predates the main channel). Install a release instead."
   else
     base=${releases:-https://github.com/$repository/releases/download}

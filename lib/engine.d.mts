@@ -57,7 +57,7 @@ export type Engine={
  session(session:string):Promise<SessionRead>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
- provideAgent(agent:{name:string,instructions:string}):Promise<ProvidedAgent>,
+ provideAgent(agent:{name:string,instructions:string,subagents?:boolean}):Promise<ProvidedAgent>,
  removeAgent(name:string):Promise<RemovedAgent>,
  readKeys?(space:string):Promise<ProviderKeys>,
  models?():Promise<AgentModels>,

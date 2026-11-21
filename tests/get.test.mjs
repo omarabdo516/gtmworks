@@ -112,7 +112,8 @@ case "$*" in
    case "$1" in
     -v) out=\${2%:/out}; shift 2;;
     -w) wd=$2; shift 2;;
-    scripts/release-assets.mjs) ref=$2; sandbox=$4; shift 4;;
+    # A main image names the sandbox image built with it (#392); a third argument is one named on the command line.
+    scripts/release-assets.mjs) ref=$2; sandbox=\${4:-ghcr.io/${repo}-sandbox:main@sha256:$SANDBOX_HEX}; shift $(( $# < 4 ? $# : 4 ));;
     *) shift;;
    esac
   done
@@ -351,9 +352,10 @@ test('--channel main installs the main image by its digest, with the two files w
  ok(m.line(['--channel','main']));
  const docker=m.docker();
  assert.match(docker,new RegExp(`^pull ghcr\\.io/${repo}:main$`,'m'));
- // The work sandbox image of the same main build is pulled and pinned by its own digest beside the app image (#392).
- assert.match(docker,new RegExp(`^pull ghcr\\.io/${repo}-sandbox:main$`,'m'));
- assert.match(docker,new RegExp(`^run --rm --user \\d+:\\d+ -v ${m.dir}/\\.gtmworks-download\\.\\w+:/out -w /app/release-source ${mainRef.replace(/[.]/g,'\\.')} node scripts/release-assets\\.mjs ${mainRef.replace(/[.]/g,'\\.')} /out ${mainSandboxRef.replace(/[.]/g,'\\.')}$`,'m'));
+ // The main image names the work sandbox image built from its own commit (#392), so no sandbox is pulled by the
+ // `:main` tag, which another main build may have moved, and the install script pins the one the image names.
+ assert.doesNotMatch(docker,new RegExp(`^pull ghcr\\.io/${repo}-sandbox`,'m'));
+ assert.match(docker,new RegExp(`^run --rm --user \\d+:\\d+ -v ${m.dir}/\\.gtmworks-download\\.\\w+:/out -w /app/release-source ${mainRef.replace(/[.]/g,'\\.')} node scripts/release-assets\\.mjs ${mainRef.replace(/[.]/g,'\\.')} /out$`,'m'));
  assert.equal(m.curl().includes('releases'),false);
  assert.match(m.file('install.sh'),new RegExp(`^release_image=${mainRef.replace(/[.]/g,'\\.')}$`,'m'));
  assert.match(m.file('install.sh'),new RegExp(`^sandbox_image=${mainSandboxRef.replace(/[.]/g,'\\.')}$`,'m'));
@@ -374,7 +376,11 @@ test('the main image holds what --channel main runs, and release-assets.mjs writ
  mkdirSync(join(source,'scripts'));
  cpSync('docker-compose.install.yml',join(source,'docker-compose.install.yml'));
  for(const file of ['install.sh','release-assets.mjs','engine-template.yml','engine-managed.yml','engine-listener-address.py','engine-listener-address.sh','engine-ssh-sync-files.sh']) cpSync(join('scripts',file),join(source,'scripts',file));
- const result=spawnSync(process.execPath,['scripts/release-assets.mjs',mainRef,join(source,'out'),mainSandboxRef],{cwd:source,encoding:'utf8'});
+ // The release workflow builds the sandbox image first and the main image records it (Dockerfile, sandbox-image), so the
+ // two arguments get.sh passes, also the command of an install from before the work sandbox, pin that sandbox (#392).
+ assert.match(dockerfile,/^RUN if \[ -n "\$GTMWORKS_SANDBOX_IMAGE" \]; then printf '%s\\n' "\$GTMWORKS_SANDBOX_IMAGE" > \.\/release-source\/sandbox-image; fi$/m);
+ writeFileSync(join(source,'sandbox-image'),`${mainSandboxRef}\n`);
+ const result=spawnSync(process.execPath,['scripts/release-assets.mjs',mainRef,join(source,'out')],{cwd:source,encoding:'utf8'});
  assert.equal(result.status,0,result.stderr);
  assert.match(readFileSync(join(source,'out/install.sh'),'utf8'),new RegExp(`^release_image=${mainRef.replace(/[.]/g,'\\.')}$`,'m'));
  assert.match(readFileSync(join(source,'out/install.sh'),'utf8'),new RegExp(`^sandbox_image=${mainSandboxRef.replace(/[.]/g,'\\.')}$`,'m'));

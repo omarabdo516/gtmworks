@@ -483,21 +483,25 @@ test('a vX.Y.Z tag only requests a release; the publishing workflow runs from ma
  }
  assert.equal(workflow.jobs.image.if,"${{ needs.provenance.outputs.tag != '' }}");
  assert.equal(workflow.jobs['install-test'].if,"${{ needs.provenance.outputs.release != '' }}");
- const build=workflow.jobs.image.steps.find(step=>step.uses?.startsWith('docker/build-push-action@'));
+ const build=workflow.jobs.image.steps.find(step=>step.id==='build');
  assert.equal(build.with.tags,'${{ env.IMAGE }}:${{ needs.provenance.outputs.tag }}');
- // The image carries the version it is published as, which Update ready compares with the newest (#442).
- assert.equal(build.with['build-args'],'GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}');
+ // The image carries the version it is published as, which Update ready compares with the newest (#442), and the work
+ // sandbox image built before it from the same commit, by tag and digest, which a main build's install files pin (#392).
+ assert.deepEqual(build.with['build-args'].trim().split('\n'),['GTMWORKS_VERSION=${{ needs.provenance.outputs.tag }}',
+  'GTMWORKS_SANDBOX_IMAGE=${{ env.IMAGE }}-sandbox:${{ needs.provenance.outputs.tag }}@${{ steps.sandbox.outputs.digest }}']);
  assert.match(readFileSync('Dockerfile','utf8'),/ARG GTMWORKS_VERSION=\n.*GTMWORKS_VERSION=\$GTMWORKS_VERSION/);
  assert.equal(build.with.platforms,'linux/amd64,linux/arm64');
  assert.equal(build.with.push,true);
  // The work sandbox image of the same release is built and pushed beside it (#392, ADR 0020), from its one build file.
+ // It is built first, so the app image can record its digest.
  const builds=workflow.jobs.image.steps.filter(step=>step.uses?.startsWith('docker/build-push-action@'));
  assert.equal(builds.length,2);
- assert.equal(builds[1].with.context,'sandbox');
- assert.equal(builds[1].with.file,'sandbox/Dockerfile');
- assert.equal(builds[1].with.tags,'${{ env.IMAGE }}-sandbox:${{ needs.provenance.outputs.tag }}');
- assert.equal(builds[1].with.platforms,'linux/amd64,linux/arm64');
- assert.equal(builds[1].with.push,true);
+ assert.deepEqual(builds.map(step=>step.id),['sandbox','build']);
+ assert.equal(builds[0].with.context,'sandbox');
+ assert.equal(builds[0].with.file,'sandbox/Dockerfile');
+ assert.equal(builds[0].with.tags,'${{ env.IMAGE }}-sandbox:${{ needs.provenance.outputs.tag }}');
+ assert.equal(builds[0].with.platforms,'linux/amd64,linux/arm64');
+ assert.equal(builds[0].with.push,true);
  assert.equal(workflow.jobs.image.outputs['sandbox-digest'],'${{ steps.sandbox.outputs.digest }}');
  assert.match(runs('image'),/docker manifest inspect "\$IMAGE:\$TAG"/);
  assert.match(runs('image'),/docker manifest inspect "\$IMAGE-sandbox:\$TAG"/);

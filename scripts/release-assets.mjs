@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -72,10 +72,18 @@ export function writeReleaseAssets(app, directory, sandbox) {
  writeFileSync(join(directory, 'install.sh'), installer);
 }
 
+// The sandbox image a main image was built with, which the release workflow writes beside its release sources
+// (Dockerfile, /app/release-source/sandbox-image). Named on the command line it is that one; left out, the image's own is
+// used, so a gtmworks command from before the work sandbox, which names two arguments, still writes a main build's files.
+export function ownSandbox(file = 'sandbox-image') {
+ return existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
- const [app, directory, sandbox, ...rest] = process.argv.slice(2);
+ const [app, directory, named, ...rest] = process.argv.slice(2);
+ const sandbox = named || ownSandbox();
  if (!app || !directory || !sandbox || rest.length) {
-  console.error('usage: node scripts/release-assets.mjs <image>:<tag>@sha256:<digest> <directory> <sandbox-image>:<tag>@sha256:<digest>');
+  console.error('usage: node scripts/release-assets.mjs <image>:<tag>@sha256:<digest> <directory> [<sandbox-image>:<tag>@sha256:<digest>]');
   process.exit(2);
  }
  writeReleaseAssets(app, directory, sandbox);

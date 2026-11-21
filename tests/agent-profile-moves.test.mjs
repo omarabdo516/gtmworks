@@ -34,16 +34,18 @@ function moveDatabase(rows,{log=[],begun=true,fail={}}={}) {
 const answering=(log,state=()=>'provided')=>({provideAgent:async agent=>{ log.push(`provideAgent ${agent.name}`); return {state:state(agent)}; }});
 
 test('the worker begins, has the Agent\'s own profile provided, records its tools and moves it, one Agent after another',async()=>{
- const db=moveDatabase([row(writer),row(critic,{recorded:true,instructions:null})]);
+ const db=moveDatabase([row(writer),row(critic,{recorded:true,instructions:null,subagents:true})]);
  const asked=[];
  const driver={provideAgent:async agent=>{ asked.push(agent); db.log.push(`provideAgent ${agent.name}`); return {state:'provided'}; }};
  assert.deepEqual(await moveAgentProfiles(db,{hermes,driver}),{moved:2});
  assert.deepEqual(db.log,['agent_move_work',
   `begin_agent_profile_move ${writer}`,`provideAgent ${own(writer)}`,`record_agent_profile ${writer}`,`move_agent_profile ${writer}`,
   `provideAgent ${own(critic)}`,`record_agent_profile ${critic}`,`move_agent_profile ${critic}`]);
- assert.deepEqual(asked[0],{name:own(writer),instructions:`You are ${writer}.`});
+ assert.deepEqual(asked[0],{name:own(writer),instructions:`You are ${writer}.`,subagents:false});
+ // An Agent whose Owner turned sub-agents on has its profile made with them, the switch recorded below (#29).
+ assert.equal(asked[1].subagents,true);
  assert.match(asked[1].instructions,/^You are a marketing agent working for one company in gtmworks\./,'an Agent with no instructions gets the Company profile\'s soul');
- assert.deepEqual(db.calls.filter(call=>call.name==='record_agent_profile').map(call=>call.args),[writer,critic].map(agent=>({agent,engine_profile:own(agent),subagents_written:false})));
+ assert.deepEqual(db.calls.filter(call=>call.name==='record_agent_profile').map(call=>call.args),[[writer,false],[critic,true]].map(([agent,subagents_written])=>({agent,engine_profile:own(agent),subagents_written})));
  assert.deepEqual(await moveAgentProfiles(db,{hermes:null,driver}),{moved:0});
 });
 

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(35);
 -- #29: an Agent's model choice and its sub-agents switch are the Owner's, checked in the database; a member reads them;
 -- and the worker's list carries the switch so its profile is written with the policy's delegation variant.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -52,6 +52,15 @@ select throws_ok($$select public.record_company_profile('10000000-0000-0000-0000
  '40001','companyProfileChanged','a read-back of a switch the Owner changed since is never recorded as applied');
 select public.record_company_profile('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001');
 select is((select tools_pending from public.company_profiles where company_id='10000000-0000-0000-0000-000000000001'),true,'a worker from before names no switch, and its read-back never clears one that is on');
+-- The health check reads the main Agent's switch where it is kept, on the Company profile (#425, #391), once for that
+-- profile however many Agents still name it; and its read-back refuses a switch the Owner changed since.
+select is((select string_agg(subagents::text,',') from public.engine_tools_due() where profile='co-10000000000000000000000000000001'),'true',
+ 'the health check reads the main Agent''s sub-agents switch from the Company profile, in one row');
+select is((select string_agg(subagents::text,',') from public.engine_tools_due() where profile=public.agent_engine_profile('e9000000-0000-0000-0000-000000000002')),'false',
+ 'an Agent on its own profile keeps its own switch, which the main Agent''s does not change');
+select throws_ok($$select public.record_profile_tools('co-10000000000000000000000000000001',false)$$,
+ '40001','agentProfileChanged','a health read-back without the main Agent''s sub-agents is never recorded as applied');
+select lives_ok($$select public.record_profile_tools('co-10000000000000000000000000000001',true)$$,'a read-back with them is recorded');
 set local role authenticated;
 select throws_ok($$select public.set_agent_model('e9000000-0000-0000-0000-0000000000ff','openrouter/openai/gpt-5.5')$$,'P0002','settingAgentUnknown','an Agent that is not this Company''s is never written');
 

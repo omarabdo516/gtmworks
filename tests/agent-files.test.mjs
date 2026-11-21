@@ -282,6 +282,24 @@ test('a long text in the generated images folder is previewed from its first 512
  } finally { await fake.close(); }
 });
 
+test('an empty file in the generated images folder previews as empty, and a character cut at 512 KB is left out', async () => {
+ const {fake,at}=await engine();
+ try {
+  // A range on an empty file is refused (416): the preview is the empty file, not a read that failed.
+  const arabic=`a${'ب'.repeat(300*1024)}`;
+  fake.settings.images.set(profile,[{name:'empty.txt',size:0,mtime},{name:'arabic.txt',size:Buffer.byteLength(arabic),mtime}]);
+  fake.settings.fileBytes.set(`${images}/empty.txt`,{body:'',type:'text/plain'});
+  fake.settings.fileBytes.set(`${images}/arabic.txt`,{body:arabic,type:'text/plain'});
+  assert.deepEqual(await readAgentFile(at,{root:'images',name:'empty.txt'}),{state:'found',name:'empty.txt',type:'text/plain',byteSize:0,truncated:false,text:''});
+  // Two bytes a letter after one ASCII byte: the first 512 KB end halfway through a letter.
+  const read=await readAgentFile(at,{root:'images',name:'arabic.txt'});
+  assert.equal(read.state,'found');
+  if(read.state!=='found') return;
+  assert.equal(read.truncated,true);
+  assert.ok(!read.text?.includes('\uFFFD'),'no replacement character at the cut');
+ } finally { await fake.close(); }
+});
+
 test('a file in the generated images folder reads as binary by the Engine\'s rule: a NUL, or more than 12% control bytes', async () => {
  const {fake,at}=await engine();
  try {

@@ -238,6 +238,9 @@ language plpgsql security definer set search_path='' as $$
 begin
  if subagents_written is not null and exists(select 1 from public.agent_profiles p where p.profile=record_profile_tools.profile and p.subagents is distinct from subagents_written) then
   raise exception 'agentProfileChanged' using errcode='40001'; end if;
+ -- The main Agent's switch, on its Company profile (#425), is checked the same way.
+ if subagents_written is not null and exists(select 1 from public.company_profiles p where p.profile=record_profile_tools.profile and p.subagents is distinct from subagents_written) then
+  raise exception 'agentProfileChanged' using errcode='40001'; end if;
  update public.company_profiles set tools_confirmed=true,tools_pending=false where profile=record_profile_tools.profile;
  update public.agent_profiles set tools_confirmed=true,tools_pending=false where profile=record_profile_tools.profile;
 end $$;
@@ -269,7 +272,10 @@ create function public.engine_tools_due() returns table(company_id uuid, profile
 language sql stable security definer set search_path='' as $$
  select due.company_id,due.profile,due.subagents from (
   select distinct a.company_id,a.profile,
-   coalesce((select p.subagents from public.agent_profiles p where p.profile=a.profile and p.agent_id=a.id),false) as subagents,
+   -- The main Agent's switch is kept on its Company profile (#425), so a co- profile reads it there, the same for every
+   -- Agent that still names that profile; an Agent's own profile reads its own.
+   case when a.profile like 'co-%' then coalesce((select c.subagents from public.company_profiles c where c.profile=a.profile),false)
+    else coalesce((select p.subagents from public.agent_profiles p where p.profile=a.profile and p.agent_id=a.id),false) end as subagents,
    md5(a.profile||date_trunc('minute',now())::text) as turn
   from public.hermes_agents a where a.profile ~ '^(co|ag)-[0-9a-f]{32}$') due
  order by due.turn limit 500;

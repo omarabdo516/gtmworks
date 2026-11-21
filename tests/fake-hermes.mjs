@@ -366,6 +366,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     // FileResponse does.
     const whole=Buffer.from(found.file.body); const range=/^bytes=0-(\d+)$/.exec(String(request.headers.range||''));
     if(!range) return attachment(found.entry.name,mimeOf(found.entry.name),whole);
+    // An empty file has no first byte: the range cannot be satisfied (416), as Starlette answers it.
+    if(!whole.length) { response.writeHead(416,{'Content-Range':'bytes */0'}); return response.end(); }
     const part=whole.subarray(0,Number(range[1])+1);
     response.writeHead(206,{'Content-Type':mimeOf(found.entry.name),'Content-Range':`bytes 0-${Math.max(part.length-1,0)}/${whole.length}`,'Content-Length':part.length});
     return response.end(part);
