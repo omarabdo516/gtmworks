@@ -61,6 +61,9 @@ test('an Engine publishes no host port, joins its install network and its work n
  // either hold or the Engine does not serve, never an Engine that started without them.
  assert.equal(engine.environment.S6_BEHAVIOUR_IF_STAGE2_FAILS,2);
  assert.ok(engine.volumes.includes('data:/opt/data'));
+ // The Company's work folder, read-only: the Library reads an Agent's folder in it through this Engine's file routes,
+ // and nothing on the Engine may write what its Agents made (#395).
+ assert.ok(engine.volumes.includes('work:/opt/data/work:ro'));
  assert.ok(engine.volumes.includes('./engine-managed.yml:/etc/hermes/config.yaml:ro'));
  assert.ok(engine.volumes.includes('./engine-listener-address.py:/etc/hermes/listener-address.py:ro'));
  assert.equal(template.volumes.data.name,'${ENGINE_VOLUME:?Run scripts/install.sh}');
