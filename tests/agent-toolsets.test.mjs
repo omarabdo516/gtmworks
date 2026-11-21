@@ -93,6 +93,9 @@ test('a Company\'s own App is beside the fixed set, and a toolset the Engine add
  assert.equal(toolsDiffer([...fixedToolsets(),'klaviyo'],{apps:[]}),true,'an App toolset the Company does not have is a difference');
  assert.equal(toolsDiffer([...fixedToolsets(),'acme'],{apps:['klaviyo']}),true,'a toolset the Engine added later is a difference');
  assert.equal(toolsDiffer(fixedToolsets().filter(name=>name!=='web').concat('klaviyo'),{apps:['klaviyo']}),true,'and an App covers no fixed tool that is missing');
+ // An App named like a fixed toolset is its own `mcp-` toolset: the fixed one stays wanted, with or without the App's.
+ assert.equal(toolsDiffer([...fixedToolsets(),'mcp-web'],{apps:['web']}),false,'an App called web leaves the fixed web wanted');
+ assert.equal(toolsDiffer(fixedToolsets().filter(name=>name!=='web').concat('mcp-web'),{apps:['web']}),true,'and does not stand in for it');
  // A toolset no Agent gets is never let through, whatever an App is called.
  assert.equal(toolsDiffer([...fixedToolsets(),'browser'],{apps:['browser']}),true);
  assert.equal(toolsDiffer([...fixedToolsets(),'mcp-browser'],{apps:['browser']}),true);

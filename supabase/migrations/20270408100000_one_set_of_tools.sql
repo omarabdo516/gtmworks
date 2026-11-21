@@ -43,6 +43,7 @@ create function public.record_agent_profile(agent uuid, engine_profile text, sub
 language plpgsql security definer set search_path='' as $$
 begin
  if engine_profile is distinct from public.agent_engine_profile(agent) then raise exception 'agentProfileInvalid' using errcode='22023'; end if;
+ perform 1 from public.agent_profiles p where p.agent_id=record_agent_profile.agent for update;
  if subagents_written is not null and exists(select 1 from public.agent_profiles p where p.agent_id=record_agent_profile.agent and p.subagents is distinct from subagents_written) then
   raise exception 'agentProfileChanged' using errcode='40001'; end if;
  update public.agent_profiles set tools_confirmed=true,tools_pending=false where agent_id=agent;
@@ -64,6 +65,9 @@ create function public.record_profile_tools(profile text, subagents_written bool
 language plpgsql security definer set search_path='' as $$
 #variable_conflict use_column
 begin
+ -- Both profiles' rows are locked first, so an Owner's switch cannot land between the checks and the record below.
+ perform 1 from public.company_profiles p where p.profile=record_profile_tools.profile for update;
+ perform 1 from public.agent_profiles p where p.profile=record_profile_tools.profile for update;
  if subagents_written is not null and exists(select 1 from public.agent_profiles p where p.profile=record_profile_tools.profile and p.subagents is distinct from subagents_written) then
   raise exception 'agentProfileChanged' using errcode='40001'; end if;
  -- The main Agent's switch, on its Company profile (#425), is checked the same way.
