@@ -35,7 +35,8 @@ test.afterAll(async()=>{ await fake?.close(); });
 test('Settings names a work sandbox that is not running in English and Arabic, and stops when it answers again',async({page})=>{
  fake.settings.sandboxRunning=false;
  try {
-  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=company');
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
+  await page.goto('/c/rs-learning/settings?section=company');
   await expect(page.locator('#co-sandbox')).toHaveText(english);
   query(`update public.people set language='ar' where id='${omar}'`);
   await page.reload();
@@ -64,7 +65,8 @@ test('a reply whose command could not run because the sandbox is down says so un
   // What the pinned Engine answers when its ssh backend cannot reach the sandbox (tools/terminal_tool.py _degraded_result).
   {role:'tool',tool_call_id:'call_1',tool_name:'terminal',content:JSON.stringify({output:'',exit_code:-1,status:'degraded',reason:'SSH connection failed',error:'Terminal backend degraded: SSH connection failed'}),timestamp:sent+5},
   {role:'assistant',content:'I could not run that.',timestamp:sent+42}]});
- await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ await page.goto(`/c/rs-learning/conversations/${conversation}`);
  await expect(page.locator('.msg[data-author=agent] .bubble').last()).toHaveText('I could not run that.');
  await expect(page.locator('[data-outcome=sandbox]')).toHaveText(english);
 
