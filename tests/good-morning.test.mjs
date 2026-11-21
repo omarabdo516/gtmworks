@@ -122,6 +122,31 @@ test('a night the Engine could not read in full holds the morning for a later pa
  } finally { await fake.close(); }
 });
 
+test('the night holds every run that ended since the previous morning, also one that started before it, and reads the Engine\'s whole list', async () => {
+ const fake=await engine();
+ try {
+  const hermes=install(fake); const {db}=service();
+  const {routine:morning}=await dailyJob(fake);
+  const {routine:often}=await createRoutine(at(fake,adsProfile),{name:'Every 15 minutes',prompt:'Check',schedule:'*/15 * * * *'});
+  fake.settings.cronReply=job=>job.name==='Every 15 minutes'?'Checked the leads':'Good morning.';
+  await triggerRoutine(at(fake,adsProfile),{id:often.id});
+  await new Promise(resolve=>setTimeout(resolve,20));
+  await triggerRoutine(at(fake,leadProfile),{id:morning.id});
+  const asked=[];
+  const runs=(connection,request)=>{ asked.push(request.limit); return readRoutineRuns(connection,request); };
+  // The Routine's last start is earlier than the night: the previous morning was recorded after it started.
+  const started=fake.settings.cron.get(adsProfile)[0].last_run_at;
+  const {db:later,recorded:kept}=service();
+  later.rpc=(name,args)=>name==='good_morning_work'?Promise.resolve({data:[{company_id:company,agent_id:lead,profile:leadProfile,last_ran_at:new Date(Date.parse(started)+1).toISOString()}],error:null}):db.rpc(name,args).then(answer=>{ if(name==='record_good_morning') kept.push(args); return answer; });
+  // Its run started before the previous morning and ended after it, so it is this night's.
+  const session=[...fake.settings.sessions.entries()].find(([,found])=>found.profile===adsProfile);
+  session[1].ended_at=Date.parse(started)/1000+0.005;
+  assert.equal(await driveGoodMornings(later,{engineOf:async()=>hermes,driver:{runs}}),1);
+  assert.deepEqual(kept[0].results.map(result=>result.line),['Checked the leads']);
+  assert.ok(asked.includes(100),'the whole list the Engine gives is read');
+ } finally { await fake.close(); }
+});
+
 test('a Routine merely named "Good morning" is not the daily job: only the marked one is read', async () => {
  const fake=await engine();
  try {
