@@ -162,6 +162,53 @@ for (const [language, line] of [['en', 'The job didn’t finish'], ['ar', 'ال�
  expect(rows[0].nextElementSibling?.querySelector('.bubble')?.textContent).toBe('Ads could not finish the plan.');
 });
 
+// #478: Stop ends the whole chain. Writer asked Ads and Ads asked Critic when the person stopped the message: each step,
+// put together from the record's rows as the channel's record is (handoverLines), says "Stopped" on its row in place of
+// "the job didn't finish", and the details' Handoffs say so too.
+for (const [language, line] of [['en', 'Stopped'], ['ar', 'اتوقّف']] as const) test(`in ${language} each step of a chain its person stopped says so on its row and in the details`, async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const ended = { state: 'done', target_outcome: 'stopped', stopped: true, answered_at: '2026-06-10T09:08:00Z', closed_at: '2026-06-10T09:08:00Z' };
+ const messages = inWrittenOrder([
+  { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Writer the March post', at: '2026-06-10T09:05:00Z', files: [], mention: { agent: 'Writer', face: 'c-Writer', state: 'stopped', permissions: [], questions: [] } },
+  ...handoverLines([
+   { ...stored(7, 'Writer', 'Ads', 'Last campaign\'s numbers', ['06', null, null]), ...ended },
+   { ...stored(8, 'Ads', 'Critic', 'Check the figures', ['07', null, null]), ...ended }]),
+ ]);
+ const handoffs: ChannelHandoff[] = [{ ...handoff(8, 'Check the figures', '07'), stopped: true }, { ...handoff(7, 'Last campaign\'s numbers', '06'), stopped: true }];
+ const screen = await view(record(messages, handoffs), language);
+ const rows = Array.from(screen.container.querySelectorAll('.turns [data-handover]'));
+ expect(rows.map(row => [row.querySelector('.handed__d')?.textContent, row.querySelector('.handed__failed')?.textContent, row.hasAttribute('data-stopped'), row.hasAttribute('data-failed')]))
+  .toEqual([['Last campaign\'s numbers', line, true, false], ['Check the figures', line, true, false]]);
+ expect(screen.container.querySelectorAll('.turns [data-author="agent"]').length).toBe(0);
+ // A Run its person stopped is no Run that could not reply: the message says nothing more of it.
+ expect(screen.container.querySelector('.turns .note[role="alert"]')).toBeNull();
+ const details = Array.from(screen.container.querySelectorAll('#ch-h-h ~ .panel-card .panel-row'));
+ expect(details.map(row => row.hasAttribute('data-stopped'))).toEqual([true, true]);
+ expect(details[0].querySelector('.panel-row__d')?.textContent).toBe(`Check the figures · ${line} · ${timeOf('2026-06-10T09:07:00Z', language)}`);
+});
+
+// #478: while a message the reader may stop has work open (`stop`), the empty box's send arrow is the stop square,
+// named for the Agent working on it; pressing it asks the channel to stop that message, by its id alone.
+for (const [language, label] of [['en', 'Stop Writer'], ['ar', 'وقّف Writer']] as const) test(`in ${language} the stop square stops the message whose work is open`, async () => {
+ const posted: unknown[] = [];
+ vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+  if (init?.method === 'POST') { posted.push({ url, body: JSON.parse(String(init.body)) }); return Promise.resolve(new Response(JSON.stringify({ stopped: true }), { status: 200 })); }
+  return new Promise<Response>(() => {});
+ });
+ const messages: ChannelMessage[] = [{ id: 4, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Writer the March post', at, files: [], mention: { agent: 'Writer', face: 'c-Writer', state: 'answered', permissions: [], questions: [] } }];
+ const screen = await view(record(messages, [], { handover: true, stop: { message: 4, agent: 'Writer' } }), language);
+ const stop = screen.getByRole('button', { name: label });
+ await expect.element(stop).toBeVisible();
+ expect(stop.element().classList.contains('is-stop')).toBe(true);
+ await stop.click();
+ await expect.poll(() => posted).toEqual([{ url: '/api/channels', body: { company: 'co-1', channel: 'ch-1', intent: 'stop', message: 4 } }]);
+});
+test('with nothing the reader may stop, the box keeps its send arrow', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await view(record([], [], { handover: true }), 'en');
+ expect(screen.container.querySelector('.composer__send.is-stop')).toBeNull();
+});
+
 // #375: the details' Handoffs list marks a handover that did not finish too, before its time.
 test('the details mark a handover that did not finish, and leave a finished one as it was', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));

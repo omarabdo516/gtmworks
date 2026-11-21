@@ -7,6 +7,7 @@
 --
 -- The previous app version runs against this: it sends `failed` and `no_model` as before, and channel_handovers answers
 -- it two columns more, which it does not read.
+-- It sorts after 20270415995000 (#478), whose channel_handovers it makes again with that migration's `stopped` column.
 alter table public.channel_runs drop constraint channel_runs_outcome_check;
 alter table public.channel_runs add constraint channel_runs_outcome_check
  check (outcome in ('completed','failed','no_model','no_credit','key_refused','model_missing','stopped','lost'));
@@ -38,7 +39,7 @@ begin
  execute replace(def,was,'run_outcome not in (''completed'',''failed'',''no_model'',''no_credit'',''key_refused'',''model_missing'',''stopped'',''lost'')');
 end $$;
 
--- 20270415650000's channel_handovers, and after its last column the cause a retry cannot fix of the leg that ended a
+-- 20270415995000's channel_handovers, and after its last column the cause a retry cannot fix of the leg that ended a
 -- handover with no reply from the asking Agent (`model_end`: no_model, no_credit, key_refused or model_missing) and the
 -- name of the Agent whose leg it was (`model_agent`): the asking Agent's follow-up, or the asked Agent's leg when no
 -- follow-up ran. The channel draws that cause's line under the handover's row. `no_model` stays for the previous app
@@ -47,11 +48,11 @@ drop function public.channel_handovers(uuid);
 create function public.channel_handovers(ch uuid)
 returns table(id bigint, message bigint, from_agent uuid, from_name text, from_connection uuid, to_agent uuid, to_name text,
  to_connection uuid, goal text, summary text, reply text, state text, target_outcome text, created_at timestamptz, answered_at timestamptz,
- closed_at timestamptz, no_model boolean, model_end text, model_agent text)
+ closed_at timestamptz, no_model boolean, stopped boolean, model_end text, model_agent text)
 language sql stable security definer set search_path='' as $$
  select h.id,h.channel_message_id,h.from_agent,f.name,f.connection_id,h.to_agent,t.name,t.connection_id,h.goal,h.summary,h.reply,
   h.state,h.target_outcome,h.created_at,h.target_closed_at,h.closed_at,
-  coalesce(e.ended='no_model',false),e.ended,case when e.ended is not null then case when h.follow_up_outcome is not null then f.name else t.name end end
+  coalesce(e.ended='no_model',false),coalesce(h.target_outcome='stopped' or h.follow_up_outcome='stopped',false),e.ended,case when e.ended is not null then case when h.follow_up_outcome is not null then f.name else t.name end end
  from public.agent_handovers h
   join public.channel_messages m on m.id=h.channel_message_id
   join public.hermes_agents f on f.id=h.from_agent and f.company_id=h.company_id

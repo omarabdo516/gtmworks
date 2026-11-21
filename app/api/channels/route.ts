@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { decideChannelPermission, driveChannelRuns, postChannelMessage, answerChannelQuestion, markChannelHandDone } from '@/lib/channel-runs.mjs';
+import { decideChannelPermission, driveChannelRuns, postChannelMessage, answerChannelQuestion, markChannelHandDone, stopChannelMessage } from '@/lib/channel-runs.mjs';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
@@ -53,6 +53,16 @@ async function done(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,u
  return reply({state:'done',at:made.at,first:made.first});
 }
 
+// Stop on a channel message's Run (#478): the message's id, never its text. The person who wrote it, or a Manager or Owner
+// of the Company, ends its Runs and every Handover started from it, down the whole chain (stop_channel_message); other
+// messages' work goes on. Its stopped Runs are closed after the answer.
+async function stop(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
+ if(!(typeof body.message==='number'&&Number.isSafeInteger(body.message)&&body.message>0)) return refuse('channelFailed',400);
+ const stopped=await stopChannelMessage(db,{company:body.company as string,channel:body.channel as string,message:body.message,service:service(),later:after});
+ if('code' in stopped) return refuse(...(refusals[stopped.code||'']||['channelFailed',500]));
+ return reply(stopped);
+}
+
 async function respond(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -84,6 +94,7 @@ async function respond(request:NextRequest) {
   if(writing&&body.intent==='permit') return await permit(db,body);
  if(writing&&body.intent==='answer') return await answer(db,body);
  if(writing&&body.intent==='done') return await done(db,body);
+  if(writing&&body.intent==='stop') return await stop(db,body);
   if(writing) {
    if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||body.message.length>20000) return refuse('channelFailed',400);
    // An image the Engine cannot read, more of them than a message carries, or text and images past its request limit:

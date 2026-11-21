@@ -30,6 +30,7 @@
   "handoverAsked": "{0} طلب من {1}",
   "handoverTo": "لـ {0}",
   "handedFailed": "الشغل ماخلصش",
+  "handedStopped": "اتوقّف",
   "accessTitle": "أطلبه من {0}؟",
   "accessLine": "اختيار الوكلاء اللي كل واحد بيشتغل معاهم عند {0} ({1}).",
   "accessLabel": "اطلبه من {0}",

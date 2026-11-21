@@ -294,6 +294,31 @@ for (const [language, first, second, toAds, toWriter] of [['en', 'Writer asked A
   expect([...step.querySelectorAll('.agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['Ads', 'Critic']);
   expect(step.closest('.turn')).toBeNull();
  });
+// #478: Stop ends the whole chain. Writer asked Ads and Ads asked Critic when the person pressed Stop: both steps say
+// "Stopped" on their rows, quietly (the person asked for it: no failure's colour), in place of "the job didn't finish",
+// and no answer or reply follows. Light and dark.
+const stoppedChain = (): ConversationRecord => {
+ const base = [
+  { ...sent, body: 'Write the March post with last campaign\'s numbers' },
+  { id: 2, author: 'agent' as const, author_name: 'Writer', body: 'I asked Ads for the numbers.', created_at: '2026-06-10T09:41:00Z',
+   cards: [{ kind: 'handed' as const, from: { name: 'Writer', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Last campaign\'s numbers', stopped: true as const }] },
+ ];
+ const steps = withHandedOn(base, [{ id: 12, at: '2026-06-10T09:42:00Z', card: { kind: 'handed', from: { name: 'Ads', face: 'c-3' }, name: 'Critic', face: 'c-4', goal: 'Check the figures', stopped: true } }]);
+ return { ...talk(steps), conversation: { id: 'cv-4', agent_id: null, agent_name: 'Writer', face: 'c-2' } };
+};
+for (const [language, line] of [['en', 'Stopped'], ['ar', 'اتوقّف']] as const)
+ for (const theme of ['light', 'dark'] as const) test(`in ${language}, ${theme}, each step of a chain its person stopped says so on its row`, async () => {
+  document.documentElement.dataset.theme = theme;
+  onTestFinished(() => { delete document.documentElement.dataset.theme; });
+  const screen = await render(<div className="gw">{view(stoppedChain(), language)}</div>);
+  const rows = [...screen.container.querySelectorAll('ol.turns [data-handover]')];
+  expect(rows.map(row => row.querySelector('.handed__d')?.textContent)).toEqual(['Last campaign\'s numbers', 'Check the figures']);
+  expect(rows.map(row => row.querySelector('.handed__failed')?.textContent)).toEqual([line, line]);
+  expect(rows.map(row => [row.hasAttribute('data-stopped'), row.hasAttribute('data-failed')])).toEqual([[true, false], [true, false]]);
+  expect(screen.container.querySelectorAll('ol.turns .turn--agent').length).toBe(1);
+  const danger = theme === 'dark' ? 'rgb(255, 100, 99)' : 'rgb(205, 40, 52)';
+  expect(getComputedStyle(rows[1].querySelector('.handed__failed')!).color).not.toBe(danger);
+ });
 // #375: a handover that did not finish says so on its row, after the job, in the interface's language; one that finished
 // says nothing of it.
 for (const [language, line] of [['en', 'The job didn’t finish'], ['ar', 'الشغل ماخلصش']] as const) test(`in ${language} a job Lead handed that did not finish says so on its row`, async () => {
