@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readRoutines, createRoutine, triggerRoutine, isSilentReply, readRoutineReplies } from '../lib/hermes.mjs';
-import { readAgentMorning, changeAgentMorning, moveAgentMorning, morningName } from '../lib/agent-morning.mjs';
+import { readAgentMorning, changeAgentMorning, moveAgentMorning, withMorningLease, morningName } from '../lib/agent-morning.mjs';
 import { morningTime, morningCron, morningMarker } from '../lib/morning-schedule.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -25,8 +25,10 @@ function session({agents=agentRows(),refuse=null,keyProfiles=[]}={}) {
  const logged=[];
  const db={
   rpc:async(name,args)=>{
-   if(name==='take_morning_lease') { const held=leases.get(args.c); if(held&&held!==args.holder) return {data:false,error:null}; leases.set(args.c,args.holder); return {data:true,error:null}; }
-   if(name==='drop_morning_lease') { if(leases.get(args.c)===args.holder) leases.delete(args.c); return {data:null,error:null}; }
+   if(name==='take_morning_lease') { const held=leases.get(args.c); if(held?.live&&held.holder!==args.holder) return {data:false,error:null}; leases.set(args.c,{holder:args.holder,live:true,profiles:held?.profiles??[]}); return {data:true,error:null}; }
+   if(name==='renew_morning_lease') { const held=leases.get(args.c); return {data:held?.live===true&&held.holder===args.holder,error:null}; }
+   if(name==='morning_lease_profiles') { const held=leases.get(args.c); if(!held?.live||held.holder!==args.holder) return {data:null,error:null}; held.profiles=[...new Set([...held.profiles,...args.adding])].filter(profile=>!args.settled.includes(profile)).sort(); return {data:held.profiles,error:null}; }
+   if(name==='drop_morning_lease') { const held=leases.get(args.c); if(held?.holder===args.holder) held.live=false; return {data:null,error:null}; }
    if(name==='company_app_agents') return {data:agents,error:null};
    if(name==='company_key_profiles') return {data:keyProfiles,error:null};
    if(name==='check_agent_setting') return refuse?{data:null,error:{message:refuse}}:{data:null,error:null};
@@ -389,7 +391,7 @@ test('saves and main-Agent changes run one at a time under the Company lease; a 
   assert.deepEqual([one.state,two.state],['written','written']);
   assert.equal(jobs(fake,leadProfile).length,1);
   assert.deepEqual(logged.map(row=>[row.old_value,row.new_value]),[['off','9:00'],['9:00','10:00']]);
-  assert.equal(leases.size,0,'every lease is given back');
+  assert.ok([...leases.values()].every(held=>!held.live),'every lease is given back');
   // An extra copy that can be neither deleted nor paused: the save answers failed, never written.
   const [kept]=jobs(fake,leadProfile);
   fake.settings.cron.get(leadProfile).push({...kept,id:'abcdefabcdef'});
@@ -417,10 +419,20 @@ test('a holder whose lease ran out and was taken stops before its next Engine wr
  try {
   await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
   // The save's lease is taken by another holder (it ran out) while the save reads the Engine.
-  const stealing={read:async connection=>{ const listed=await readRoutines(connection); leases.set(company,'someone-else'); return listed; }};
+  const stealing={read:async connection=>{ const listed=await readRoutines(connection); leases.set(company,{holder:'someone-else',live:true,profiles:[]}); return listed; }};
   const before=writes(fake).length;
   assert.equal((await changeAgentMorning(session().db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake),driver:stealing})).state,'busy');
   assert.equal(writes(fake).length,before,'no write after the lease was lost');
+  assert.equal(jobs(fake,leadProfile)[0].state,'scheduled');
+  // Taken and given back again before this holder goes on: the lease is free, but this holder's reads may be stale (a
+  // save meanwhile retimed it), so it stops all the same, never pausing the job at a time it did not read.
+  const takenAndGiven={read:async connection=>{ const listed=await readRoutines(connection); leases.set(company,{holder:'someone-else',live:false,profiles:[]}); return listed; }};
+  assert.equal((await changeAgentMorning(session().db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake),driver:takenAndGiven})).state,'busy');
+  assert.equal(writes(fake).length,before,'no write after the lease ran out, taken or not');
+  // Ran out with nobody taking it: stopped too.
+  const ranOut={read:async connection=>{ const listed=await readRoutines(connection); leases.get(company).live=false; return listed; }};
+  assert.equal((await changeAgentMorning(session().db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake),driver:ranOut})).state,'busy');
+  assert.equal(writes(fake).length,before);
   assert.equal(jobs(fake,leadProfile)[0].state,'scheduled');
   leases.clear();
  } finally { await fake.close(); leases.clear(); }
@@ -474,4 +486,44 @@ test('a create whose answer is lost is found again for an interval schedule as f
   assert.equal(made.routine.schedule.minutes,720);
   assert.equal(jobs(fake,adsProfile).length,1);
  } finally { await fake.close(); }
+});
+
+test('a removed Agent\'s profile is kept with the lease until a settle succeeds, whatever forgets it meanwhile', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const onlyAds=[{...agentRows(ads)[1],main:true}];
+  // Lead is removed with Ads as its replacement; the settle that follows cannot make the copy on Ads, so it fails.
+  const failedMove=await withMorningLease(session({agents:onlyAds}).db,company,fence=>moveAgentMorning(session({agents:onlyAds}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:{create:async()=>({state:'refused'})},fence}));
+  assert.equal(failedMove.state,'failed');
+  assert.deepEqual(leases.get(company).profiles,[adsProfile,leadProfile],'every profile it looked at is still to settle');
+  // The Company's own list forgot Lead's profile meanwhile (a key cleanup); the next settle still reaches it.
+  const db=session({agents:onlyAds,keyProfiles:[]}).db;
+  assert.equal((await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,hermes:install(fake),fence}))).state,'moved');
+  // The failed settle paused Lead's copy so it sent from nowhere; it arrives on Ads as it was left.
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>[job.state,job.schedule.expr]),[['paused','0 9 * * *']]);
+  assert.equal(jobs(fake,leadProfile).length,0);
+  assert.deepEqual(leases.get(company).profiles,[],'and once settled, nothing is left to settle');
+ } finally { await fake.close(); leases.clear(); }
+});
+
+test('a move follows an interval set on the source while the copy is made, and fails when the source cannot be read again', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const toInterval={create:async(connection,routine)=>{ const made=await createRoutine(connection,routine); Object.assign(jobs(fake,leadProfile)[0],{schedule:{kind:'interval',minutes:720,display:'every 720m'},schedule_display:'every 720m'}); return made; }};
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:toInterval})).state,'moved');
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>[job.schedule.kind,job.schedule.minutes,job.state]),[['interval',720,'scheduled']],'the interval set meanwhile is kept');
+  assert.equal(jobs(fake,leadProfile).length,0);
+ } finally { await fake.close(); }
+ const second=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(second)});
+  // The source's second read is not answered: how the message is now is unknown, so the source is kept, paused.
+  let reads=0;
+  const blind={read:async connection=>connection.profile===leadProfile&&++reads>1?{state:'unreachable'}:readRoutines(connection)};
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(second),driver:blind})).state,'failed');
+  assert.deepEqual(jobs(second,leadProfile).map(job=>[job.state,job.schedule.expr]),[['paused','0 9 * * *']],'kept, never deleted');
+  assert.deepEqual(jobs(second,adsProfile).map(job=>job.state),['paused']);
+ } finally { await second.close(); }
 });

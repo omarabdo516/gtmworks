@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(28);
 -- #182: the main Agent's daily message is changed by an active Owner or Manager of its Company only (check_agent_setting,
 -- asked before the Engine), and each change is one row of the Company log on the Agent naming who did it and the old and
 -- the new value (log_agent_morning: "off" or the time). RS Learning: 1 Owner, 2 Manager, 3 Contributor,
@@ -41,7 +41,24 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select public.drop_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is(public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'),true,'once given back, a Manager takes it');
+select is(public.renew_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'),true,'and renews it before each Engine write');
+select is(public.renew_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001'),false,'a holder that gave it back renews nothing');
+select is(public.morning_lease_profiles('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002',
+ array['ag-e1000000000000000000000000000184','co-10000000000000000000000000000001'],'{}'),
+ array['ag-e1000000000000000000000000000184','co-10000000000000000000000000000001'],'the profiles still to settle are kept with the lease');
+select is(public.morning_lease_profiles('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001','{}','{}'),null,'only for its holder');
+select throws_ok($$select public.morning_lease_profiles('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002',array['../etc'],'{}')$$,'22023','agentSettingInvalid','and only Engine profiles');
+-- A holder whose time ran out renews nothing, even with nobody holding it since: what it read may be stale.
+reset role;
+update public.agent_morning_leases set until=now()-interval '1 second' where company_id='10000000-0000-0000-0000-000000000001';
+set local role authenticated;
+select is(public.renew_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'),false,'a lease that ran out is not renewed');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000004');
+select is(public.morning_lease_profiles('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000004','{}',array['co-10000000000000000000000000000001']),
+ array['ag-e1000000000000000000000000000184'],'the next holder finds the profiles still to settle and takes off the settled ones');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.renew_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000003')$$,'42501','agentSettingNotAllowed','a Contributor renews none');
 select throws_ok($$select public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000003')$$,'42501','agentSettingNotAllowed','a Contributor takes none');
 select throws_ok($$select * from public.agent_morning_leases$$,'42501',null,'and nobody reads the table itself');
 reset role;
