@@ -206,6 +206,7 @@ test('the image build skips the lint and type check the fast job ran, and only i
   const dockerfile = readFileSync('Dockerfile', 'utf8');
   const stage = dockerfile.indexOf('FROM dependencies AS build');
   const argument = dockerfile.indexOf('ARG NEXT_SKIP_CHECKS=false');
-  const buildRun = dockerfile.indexOf('RUN npm run build');
+  // The build step may mount the build CA first (#562).
+  const buildRun = dockerfile.search(/^RUN .*\bnpm run build$/m);
   assert.ok(stage >= 0 && stage < argument && argument < buildRun, 'the build stage declares NEXT_SKIP_CHECKS, defaulting to the checks');
 });

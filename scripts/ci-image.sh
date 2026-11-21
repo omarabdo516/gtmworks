@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # CI builds the image in its own job and the browser suite loads it (CI_IMAGE_PREBUILT=true, #403); a local run builds
 # it here.
-[[ "${CI_IMAGE_PREBUILT:-}" == "true" ]] || docker build -t gtmworks:ci .
+[[ "${CI_IMAGE_PREBUILT:-}" == "true" ]] || bash scripts/docker-build.sh -t gtmworks:ci .
 status=$(npx supabase status -o env)
 api_url=$(printf '%s\n' "$status" | sed -n 's/^API_URL="\(.*\)"$/\1/p')
 service_key=$(printf '%s\n' "$status" | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')

@@ -82,6 +82,7 @@ function databases({ stored = null, chosen = null, agents = visible, handed = tr
   if (name === 'pin_lead_brief') return { data: null, error: null };
   if (name === 'command_handover') return { data: handed, error: null };
   if (name === 'reserve_conversation_turn') return { data: { state: 'reserved', connection: 'f9000000-0000-0000-0000-000000000001', profile: 'writer', note: null }, error: null };
+  if (name === 'conversation_handover_agents') return { data: [], error: null };
   if (['pin_run', 'pin_run_history', 'pin_run_model'].includes(name)) return { data: null, error: null };
   if (name === 'begin_start') return { data: 1, error: null };
   if (name === 'send_conversation_message') return { data: true, error: null };

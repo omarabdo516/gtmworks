@@ -5,18 +5,23 @@ type Step = { name: string, link: string, path: string, content: string, search?
 // first entry, and Activity log opens /log (#11). On the board a Card opens as its sheet (#116). The sheet's approved
 // motion is its allowance over the budgets (design-reference/index.html, .sheet): the 280ms slide-in runs after it is
 // shown, and the 190ms slide-out runs before the board is shown again. The Card's page still opens from the list.
+// A step that opens a new page counts `settled` from the end of the reference's own motion (#135): the page region's
+// fadeIn (design-reference/index.html .view-enter, 200ms, after the page is shown) and the 150ms fade of the row that
+// becomes current (.sb-item, .agent-tile), which runs beside it. A Card's sheet opens over the same page, which does not fade.
+const pageFadeIn = 200, rowFade = 150;
+const opensPage = { shown: 0, settled: Math.max(pageFadeIn, rowFade) };
 export const clickPath: Step[] = [
-  { name: 'numbers', link: '.nav a[href$="/numbers"]', path: '/numbers', content: '.numbers-page' },
-  { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board' },
+  { name: 'numbers', link: '.nav a[href$="/numbers"]', path: '/numbers', content: '.numbers-page', motion: opensPage },
+  { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board', motion: opensPage },
   { name: 'open sheet', link: '#board-cols .kcard[data-card-id="1"] a', path: '/work/board', search: '?card=1', content: '.sheet[open]', motion: { shown: 0, settled: 280 } },
   { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } },
-  { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr' },
-  { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal' },
-  { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal' },
-  { name: 'calendar', link: '.tabs a[href$="/work/calendar"]', path: '/work/calendar', content: '.calendar' },
+  { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr', motion: opensPage },
+  { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal', motion: opensPage },
+  { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal', motion: opensPage },
+  { name: 'calendar', link: '.tabs a[href$="/work/calendar"]', path: '/work/calendar', content: '.calendar', motion: opensPage },
   // The Inbox opens from the approvals entry beside Marketing board; Activity log is the sidebar's last entry.
-  { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals' },
-  { name: 'activity log', link: '.nav a[href$="/log"]', path: '/log', content: '.log-page' },
+  { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals', motion: opensPage },
+  { name: 'activity log', link: '.nav a[href$="/log"]', path: '/log', content: '.log-page', motion: opensPage },
 ];
 // An Agent face's own life is not part of opening a page (#133): its look toward the pointer, its blink, its hop, the
 // tile's hover lift and a working Agent's loop (design-reference: faceSVG, applyLive). These animations, by name, and
