@@ -82,7 +82,7 @@ function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,
     {canManage&&!editing&&<button type="button" className="link-btn rt-change" disabled={pending} aria-label={t('routineChangeLabel',title)} onClick={()=>setEditing(true)}>{t('routineChange')}</button>}</span>
    {failed&&<span className="set-err" role="alert">{t(failed)}</span>}
    {editing&&<SchedulePicker t={t} idPrefix={`rt-e-${routine.id}`} initial={formOf(routine.schedule.expr)} busy={pending} submitLabel={t('routineSave')}
-    onCancel={()=>setEditing(false)} onSubmit={form=>act('change',{routine:routine.id,schedule:cronOf(form),timezone:browserZone()},()=>{ setEditing(false); toast(t('routineSaved')); })}
+    onCancel={()=>setEditing(false)} onSubmit={form=>act('change',{routine:routine.id,schedule:cronOf(form),timezone:routine.timezone},()=>{ setEditing(false); toast(t('routineSaved')); })}
     onDelete={()=>act('delete',{routine:routine.id},()=>toast(t('routineDeleted',title)))} deleteLabel={t('routineDeleteLabel',title)}/>}
   </span>
   {canManage?<button type="button" className="switch" role="switch" aria-checked={routine.on} aria-labelledby={id} disabled={pending} onClick={()=>act(routine.on?'pause':'resume',{routine:routine.id})}/>
@@ -90,7 +90,8 @@ function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,
  </li>;
 }
 
-// When a Routine runs: every day, every week on one day, or every hour, at a time on the person's own clock.
+// When a Routine runs: every day, every week on one day, or every hour. A new Routine runs on the person's own clock;
+// a changed one keeps the zone it runs in, so the time the form shows (read in that zone) is the time it keeps.
 function SchedulePicker({t,idPrefix,initial,busy,submitLabel,onSubmit,onCancel,onDelete,deleteLabel,children,check}:{t:T,idPrefix:string,initial:ScheduleForm|null,busy:boolean,submitLabel:string,onSubmit:(form:ScheduleForm)=>void,onCancel:()=>void,onDelete?:()=>void,deleteLabel?:string,children?:React.ReactNode,check?:()=>boolean}) {
  const [kind,setKind]=useState<ScheduleForm['kind']>(initial?.kind??'daily');
  const [dow,setDow]=useState(initial?.kind==='weekly'?initial.dow:1);
@@ -115,7 +116,7 @@ function SchedulePicker({t,idPrefix,initial,busy,submitLabel,onSubmit,onCancel,o
   </div>
   <div className="panel-form__row panel-form__row--end">
    {onDelete&&<button type="button" className="btn btn--secondary btn--sm rt-delete" disabled={busy} aria-label={deleteLabel} onClick={onDelete}>{t('routineDelete')}</button>}
-   <button type="button" className="btn btn--secondary btn--sm" onClick={onCancel}>{t('routineCancel')}</button>
+   <button type="button" className="btn btn--secondary btn--sm" disabled={busy} onClick={onCancel}>{t('routineCancel')}</button>
    <button type="submit" className="btn btn--primary btn--sm" disabled={busy}>{submitLabel}</button></div>
  </form>;
 }

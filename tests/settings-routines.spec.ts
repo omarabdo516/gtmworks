@@ -17,11 +17,12 @@ const id=(n:number)=>`6a000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [lead,ads]=[1,2].map(id);
 const own=(agent:string)=>`ag-${agent.replaceAll('-','')}`;
 let fake:Awaited<ReturnType<typeof laneHermes>>;
-// Tomorrow at 9:00 in Cairo (UTC+2 in winter), as the Engine would have worked out for "0 9 * * *" there.
-const tomorrowAt9=()=>{ const day=new Date(Date.now()+2*3600e3+864e5); return `${day.toISOString().slice(0,10)}T07:00:00.000Z`; };
+// Tomorrow at 9:00 UTC, as the Engine works out "0 9 * * *" for a Routine that runs in UTC: one time basis for the fixture
+// and the words it is read back in, whatever the season.
+const tomorrowAt9=()=>`${new Date(Date.now()+864e5).toISOString().slice(0,10)}T09:00:00.000Z`;
 const job=(jobId:string,name:string,expr:string,extra:object={})=>({id:jobId,name,prompt:name,skills:[],skill:null,schedule:{kind:'cron',expr,display:expr},schedule_display:expr,
  repeat:{times:null,completed:0},enabled:true,state:'scheduled',paused_at:null,paused_reason:null,created_at:'2026-11-20T08:00:00Z',
- next_run_at:tomorrowAt9(),last_run_at:null,last_status:null,last_error:null,deliver:'local',origin:null,timezone:'Africa/Cairo',...extra});
+ next_run_at:tomorrowAt9(),last_run_at:null,last_status:null,last_error:null,deliver:'local',origin:null,timezone:'UTC',...extra});
 const logRows=(act:string)=>rows(`select actor_id,agent_id,details from public.company_log where company_id='${company}' and action='${act}' order by id`);
 const level=(value:number)=>{
  query(`do $$ begin update public.companies set agent_level=${value} where id='${company}'; update public.company_profiles set tools_level=${value},tools_pending=false where company_id='${company}'; end $$;`);
