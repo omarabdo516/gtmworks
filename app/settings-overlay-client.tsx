@@ -10,9 +10,7 @@ import { setAgentVisible, setInvitationAgentVisible } from './agent-visibility-a
 import { inviteMember } from './invite-actions';
 import { InviteSection, type InviteRole } from './invite-section';
 import { TeamTable, type TeamAgent, type TeamInvitation, type TeamMember } from './team-table';
-import { madeDay, useZone } from './agent-made';
-import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
-import { localeFor } from '@/lib/i18n.mjs';
+import { useSaidWhen } from './agent-made';
 import { toast } from './toast';
 
 // "Your account": the look and the interface language, each saved as soon as it is chosen (account-choices-view.tsx).
@@ -96,11 +94,7 @@ export function SettingsTeamTable({company,slug,members,invitations,agents,allow
 // Who told the Agent a rule and when (#18; design-reference: rulesHTML, "Said by Omar · Yesterday · 6:40 PM"), in the
 // reader's own time zone once the page has hydrated, as the made line is.
 export function RuleSaid({by,at}:{by:string,at:string}) {
- const {t,language}=useI18n(); const zone=useZone();
- const day=dayOf(at,zone); const today=dayOf(new Date().toISOString(),zone);
- const yesterday=new Date(new Date(`${today}T00:00:00Z`).getTime()-86400000).toISOString().slice(0,10);
- const time=dateFormatter(localeFor(language),{hour:'numeric',minute:'2-digit',timeZone:zone}).format(new Date(at));
- const when=day===today?`${t('logToday')} · ${time}`:day===yesterday?`${t('logYesterday')} · ${time}`:madeDay(at,language,zone);
+ const {t}=useI18n(); const {zone,when}=useSaidWhen(at);
  return <span className="panel-row__d rl-said" data-utc={zone}>{t('settingsRuleSaidBy',by,when)}</span>;
 }
 

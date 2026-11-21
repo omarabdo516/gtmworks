@@ -1161,6 +1161,9 @@
   .gw .chg-card .btn--secondary:hover:not(:disabled) { background: var(--gw-btn2-hover); }
 }
 
+/* #166: an Agent's standing permission names an entry the Engine wrote, which may be long and unbroken. */
+.sp-entry, .sp-tool { overflow-wrap: anywhere; }
+.sp-by[data-utc] { visibility: hidden; }
 /* "Edit, then approve" (#484; design-reference: chgHTML's edit form, .segmented--field, .switch): the Owner's field for
    the change inside the card. The models wrap, as a profile's Engine can list more than the reference's three. */
 .gw .chg-card fieldset.pp-form { border: 0; margin: 0; min-width: 0; }

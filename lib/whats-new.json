@@ -6,6 +6,12 @@
   "ar": { "title": "صباح الخير بقى ممكن يتفتح", "body": "في صفحة الوكيل الرئيسي، المالك والمديرين يقدروا يفتحوا ملخص الصبح كل يوم ويختاروا ميعاده؛ مش بيبعت حاجة لو مفيش جديد، وبيتنقل مع الوكيل الرئيسي." }
  },
  {
+  "issue": 166,
+  "date": "2026-11-21",
+  "en": { "title": "See and revoke what an Agent may do without asking", "body": "An Agent’s settings and the end of its Activity tab now list its standing permissions, every action someone answered with Always allow, with who allowed it and when; an Owner or a Manager can revoke one, and the Agent asks again next time." },
+  "ar": { "title": "شوف والغي اللي الوكيل يقدر يعمله من غير ما يستأذن", "body": "إعدادات الوكيل وآخر تبويب النشاط بقوا بيعرضوا صلاحياته الدايمة، كل حاجة حد رد عليها بـ«اسمح دايماً»، ومين سمح بيها وإمتى؛ والمالك أو المدير يقدر يلغي أي واحدة، والوكيل هيستأذن تاني المرة الجاية." }
+ },
+ {
   "issue": 428,
   "date": "2026-11-21",
   "en": { "title": "Channels say when no model is connected", "body": "When an agent called in a channel, or a job Lead hands to another agent, can’t answer because the company has no AI subscription or model key yet, the channel or chat now says so, with the link to Subscription and models for the Owner, instead of only saying the reply failed." },
@@ -148,6 +154,12 @@
   "date": "2026-11-21",
   "en": { "title": "Update ready offers only what is published", "body": "On an install that follows main, Update ready now offers a version only when the published main image carries it, so Update now installs it instead of coming back unchanged; when there is nothing newer, it says you already run the newest gtmworks." },
   "ar": { "title": "تحديث جاهز بيعرض اللي اتنشر بس", "body": "على تثبيت ماشي على main، تحديث جاهز بقى بيعرض نسخة بس لما تكون موجودة في صورة main المنشورة، فزر حدّث دلوقتي بيثبّتها بدل ما يرجع من غير حاجة؛ ولما مايكونش في أحدث، بيقولك إنك أصلاً على أحدث gtmworks." }
+ },
+ {
+  "issue": 459,
+  "date": "2026-11-21",
+  "en": { "title": "Add a tool that runs as a command", "body": "Your own tool in Apps now takes a command and its arguments as well as an address: it runs in your company’s work sandbox, never in the engine, and you turn it on for the agents you choose." },
+  "ar": { "title": "ضيف أداة بتشتغل كأمر", "body": "«أداة بتاعتك» في التطبيقات بقت بتاخد أمر وخياراته كمان، مش عنوان بس: بيشتغل في صندوق الشغل بتاع شركتك، عمره ما بيشتغل في المحرك، وانت بتشغّله للوكلاء اللي تختارهم." }
  },
  {
   "issue": 358,

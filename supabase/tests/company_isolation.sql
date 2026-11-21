@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 -- the first test red until it is added here.
 create temp table isolation_matrix(name text primary key, fixed jsonb not null default '{}');
 insert into isolation_matrix(name) values
- ('agent_access_requests'),('agent_change_proposals'),('agent_grants'),('agent_handovers'),('agent_key_waits'),('agent_morning_leases'),('agent_profile_leftovers'),('agent_profiles'),
+ ('agent_access_requests'),('agent_change_proposals'),('agent_grants'),('agent_permission_revoked'),('agent_permission_revokes'),('agent_handovers'),('agent_key_waits'),('agent_morning_leases'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
  ('channel_agents'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
@@ -30,6 +30,10 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  -- Good morning's lease (#182) names who holds it and until when.
  ('agent_morning_leases', $${"holder": "gen_random_uuid()", "until": "now() + interval '1 minute'"}$$),
  ('agent_profile_leftovers', $${"profile": "'ag-' || md5('isolation')"}$$),
+ -- An entry a revoke took out (#166) names it and when.
+ ('agent_permission_revoked', $${"entry": "'isolation'", "revoked_at": "now()"}$$),
+ -- A revoke's hold on an Agent (#166) names who holds it.
+ ('agent_permission_revokes', $${"held_by": "'e3370000-0000-0000-0000-000000000001'", "held_until": "now()"}$$),
  ('approval_steps', $${"person_id": "'e3370000-0000-0000-0000-000000000001'", "role": "null"}$$),
  ('channel_attachments', $${"channel_id": "'e3370000-0000-0000-0000-00000000000d'",
    "path": "'10000000-0000-0000-0000-000000000001/channels/e3370000-0000-0000-0000-00000000000d/isolation'"}$$),
