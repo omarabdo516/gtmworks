@@ -12,7 +12,7 @@ import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { HandedRow } from '@/app/handed-row';
 import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
-import type { Decision, SavedRule } from '@/lib/conversations';
+import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
 import { StepsList } from '@/app/run-steps';
 import { showRoutines } from '@/app/details-routines';
 import { formOf, scheduleLabel } from '@/lib/routine-schedule.mjs';
@@ -241,8 +241,14 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
  const face=(size:number,connection?:string,name=conversation.agent_name)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:connection||conversation.face,name}} size={size}/></span>;
+ // A job one Agent handed another (#317, #475): inside the asking Agent's turn (`p`), or, for one an asked Agent handed on
+ // (#477), its own row between the turns (`li`), as a channel draws every handover.
+ const handed=(card:Extract<LeadCard,{kind:'handed'}>,key:string,as:'li'|'p',className?:string)=><HandedRow key={key} as={as} className={className} from={{connection_id:card.from.face,name:card.from.name}} to={{connection_id:card.face,name:card.name}}
+  title={cb('handoverAsked',card.from.name,card.name)} goal={card.goal} failed={card.failed?c('handedFailed'):null}/>;
  return <>
   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
+   // #477: a job an asked Agent handed on is its own quiet row between the turns, as a channel draws every handover.
+   :message.kind==='handedOn'&&message.cards?.[0]?.kind==='handed'?handed(message.cards[0],`handedOn${message.id}`,'li',rise(index).trim()||undefined)
    :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}${rise(index)}`} data-author="person" data-kind={message.kind}>
    {!!message.body.trim()&&<div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
    {!!message.files?.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/conversation/${file.id}`} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
@@ -262,8 +268,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='change'?<ChangeCard key={`change${card.change.id}`} change={card.change} company={company} owner={record.changeOwner===true}
      answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
     :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
-    :card.kind==='handed'?<HandedRow key={`handed${message.id}:${card.name}:${card.goal}`} as="p" from={{connection_id:card.from.face,name:card.from.name}} to={{connection_id:card.face,name:card.name}}
-     title={cb('handoverAsked',card.from.name,card.name)} goal={card.goal} failed={card.failed?c('handedFailed'):null}/>
+    :card.kind==='handed'?handed(card,`handed${message.id}:${card.name}:${card.goal}`,'p')
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status"><span className="shimmer">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</span></p>}

@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-react';
 import ChannelView from '@/app/c/[slug]/channels/[id]/channel';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import type { ChannelHandoff, ChannelMessage, ChannelRecord } from '@/lib/channels';
+import { handoverLines, inWrittenOrder, type ChannelHandoff, type ChannelMessage, type ChannelRecord, type StoredHandover } from '@/lib/channels';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 
@@ -98,6 +98,35 @@ test('the transcript draws the row, then the other Agent\'s answer marked "to Le
  expect(items[3].querySelector('.bubble')?.textContent).toBe('Three ad sets, 30 days, EGP 9,000.');
  expect(items[4].querySelector('.sender__to')).toBeNull();
 });
+
+// #477: an asked Agent hands on. Writer asks Ads, outside the channel, and Ads asks Critic: each step is its own row with
+// its answer, in order, put together from the record's rows as the channel's record is (handoverLines), then Writer's
+// reply. A step handed on has no reply of its own: its answer goes to Ads, whose answer goes to Writer.
+const stored = (id: number, from: string, to: string, goal: string, minutes: [string, string | null, string | null], words: { summary?: string, reply?: string } = {}): StoredHandover => ({
+ id, message: 1, from_agent: from, from_name: from, from_connection: `c-${from}`, to_agent: to, to_name: to, to_connection: `c-${to}`, goal,
+ summary: words.summary ?? null, reply: words.reply ?? null, state: 'done', target_outcome: 'completed',
+ created_at: `2026-06-10T09:${minutes[0]}:00Z`, answered_at: minutes[1] && `2026-06-10T09:${minutes[1]}:00Z`, closed_at: minutes[2] && `2026-06-10T09:${minutes[2]}:00Z` });
+for (const [language, first, second, toAds, toWriter] of [['en', 'Writer asked Ads', 'Ads asked Critic', 'to Ads', 'to Writer'], ['ar', 'Writer طلب من Ads', 'Ads طلب من Critic', 'لـ Ads', 'لـ Writer']] as const)
+ test(`in ${language} every step of a chain of handovers is its own row with its answer, in order, in the channel`, async () => {
+  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+  const messages = inWrittenOrder([
+   { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Writer the March post', at: '2026-06-10T09:05:00Z', files: [], mention: { agent: 'Writer', face: 'c-Writer', state: 'answered', permissions: [], questions: [] } },
+   { id: 2, author: 'agent', name: 'Writer', face: 'c-Writer', body: 'I asked Ads for the numbers.', at: '2026-06-10T09:05:30Z' },
+   ...handoverLines([
+    stored(7, 'Writer', 'Ads', 'Last campaign\'s numbers', ['06', '09', '10'], { summary: 'February: 120 leads, checked by Critic.', reply: 'The post leads with 120 leads.' }),
+    stored(8, 'Ads', 'Critic', 'Check the figures', ['07', '08', null], { summary: 'The figures check out.' })]),
+  ]);
+  const screen = await view(record(messages), language);
+  const items = Array.from(screen.container.querySelectorAll('.turns > li')).filter(row => row.matches('[data-author="agent"], [data-handover]'));
+  expect(items.map(row => row.matches('[data-handover]') ? `row:${row.querySelector('.handed__t')?.textContent}`
+   : `${row.querySelector('.sender bdi')?.textContent}${row.querySelector('.sender__to') ? ` ${row.querySelector('.sender__to')?.textContent}` : ''}:${row.querySelector('.bubble')?.textContent}`)).toEqual([
+   'Writer:I asked Ads for the numbers.',
+   `row:${first}`,
+   `row:${second}`,
+   `Critic ${toAds}:The figures check out.`,
+   `Ads ${toWriter}:February: 120 leads, checked by Critic.`,
+   'Writer:The post leads with 120 leads.']);
+ });
 
 test('in Arabic the row and the sender line read in the interface\'s own words', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));

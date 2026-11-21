@@ -1,5 +1,11 @@
 [
  {
+  "issue": 477,
+  "date": "2026-11-21",
+  "en": { "title": "An asked agent can ask another", "body": "An agent you asked for a job can now ask any other agent of your company in turn, as far as the job needs: each step shows in the chat or channel with its answer, and the agent you talk to replies once every answer came back." },
+  "ar": { "title": "الوكيل اللي اتطلب منه يقدر يطلب من غيره", "body": "الوكيل اللي طلبت منه شغل بقى يقدر هو كمان يطلب من أي وكيل تاني في شركتك، على قد ما الشغل محتاج: كل خطوة بتظهر في المحادثة أو القناة بردها، والوكيل اللي بتكلمه بيرد بعد ما كل الردود ترجع." }
+ },
+ {
   "issue": 476,
   "date": "2026-11-21",
   "en": { "title": "Agents ask the team in channels too", "body": "In a channel, any agent of it can now ask any agent of your company for a job, even one that isn’t in the channel: everyone in the channel sees who asked whom and the answer under that agent’s name." },

@@ -8,7 +8,7 @@ import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversatio
 import { LanguageProvider } from '@/lib/i18n-client';
 import { MessageBox } from '@/app/conversation-composer';
 import type { ConversationRecord } from '@/lib/conversation-record';
-import { latestEnd, shown, type AgentRequestView } from '@/lib/conversations';
+import { latestEnd, shown, withHandedOn, withHandoverAnswers, type AgentRequestView } from '@/lib/conversations';
 import '@/app/tokens.css';
 import '@/app/shell.css';
 // The loaded chat once its record is read, as the page streams it.
@@ -254,6 +254,39 @@ for (const [language, line, to] of [['en', 'Writer asked Ads', 'to Writer'], ['a
   expect(getComputedStyle(row!.querySelector('.handed__t bdi')!).color).toBe(first);
   expect(getComputedStyle(row!.querySelector('.handed__d')!).color).toBe(quiet);
   expect(getComputedStyle(turns[1].querySelector('.sender__to')!).color).toBe(quiet);
+ });
+// #477: an asked Agent hands on. Writer asks Ads, Ads asks Critic: each step is its own row with its answer, in order —
+// Writer's row under its reply, Ads's own row among the turns, Critic's answer to Ads, Ads's answer to Writer, then
+// Writer's reply. The record is put together as the server does (withHandoverAnswers, withHandedOn).
+const chained = (): ConversationRecord => {
+ const base = [
+  { ...sent, body: 'Write the March post with last campaign\'s numbers' },
+  { id: 2, author: 'agent' as const, author_name: 'Writer', body: 'I asked Ads for the numbers.', created_at: '2026-06-10T09:41:00Z',
+   cards: [{ kind: 'handed' as const, from: { name: 'Writer', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Last campaign\'s numbers' }] },
+  { id: 3, author: 'agent' as const, author_name: 'Writer', body: 'The post leads with 120 leads.', created_at: '2026-06-10T09:45:00Z' },
+ ];
+ const answers = withHandoverAnswers(base, [
+  { id: 11, from: 'Writer', name: 'Ads', face: 'c-3', body: 'February: 120 leads, checked by Critic.', at: '2026-06-10T09:44:00Z' },
+  { id: 12, from: 'Ads', name: 'Critic', face: 'c-4', body: 'The figures check out.', at: '2026-06-10T09:43:00Z' }]);
+ const steps = withHandedOn(answers, [{ id: 12, at: '2026-06-10T09:42:00Z', card: { kind: 'handed', from: { name: 'Ads', face: 'c-3' }, name: 'Critic', face: 'c-4', goal: 'Check the figures' } }]);
+ return { ...talk(steps), conversation: { id: 'cv-4', agent_id: null, agent_name: 'Writer', face: 'c-2' } };
+};
+for (const [language, first, second, toAds, toWriter] of [['en', 'Writer asked Ads', 'Ads asked Critic', 'to Ads', 'to Writer'], ['ar', 'Writer طلب من Ads', 'Ads طلب من Critic', 'لـ Ads', 'لـ Writer']] as const)
+ test(`in ${language} every step of a chain of handovers is its own row with its answer, in order`, async () => {
+  const screen = await render(<div className="gw">{view(chained(), language)}</div>);
+  const items = [...screen.container.querySelectorAll('ol.turns > li')].filter(item => item.matches('.turn--agent, [data-handover]'));
+  expect(items.map(item => item.matches('[data-handover]') ? `row:${item.querySelector('.handed__t')?.textContent}`
+   : `${item.querySelector('.sender bdi')?.textContent}${item.querySelector('.sender__to') ? ` ${item.querySelector('.sender__to')?.textContent}` : ''}:${item.querySelector('.bubble')?.textContent}`)).toEqual([
+   'Writer:I asked Ads for the numbers.',
+   `row:${second}`,
+   `Critic ${toAds}:The figures check out.`,
+   `Ads ${toWriter}:February: 120 leads, checked by Critic.`,
+   'Writer:The post leads with 120 leads.']);
+  expect(items[0].querySelector('[data-handover] .handed__t')?.textContent).toBe(first);
+  const step = items[1];
+  expect(step.querySelector('.handed__d')?.textContent).toBe('Check the figures');
+  expect([...step.querySelectorAll('.agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['Ads', 'Critic']);
+  expect(step.closest('.turn')).toBeNull();
  });
 // #375: a handover that did not finish says so on its row, after the job, in the interface's language; one that finished
 // says nothing of it.
