@@ -101,9 +101,9 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   budget is one second (decision 0042) and is never raised. A change to it runs it with the browser suite's own area,
   on a draft as on a ready pull request, and `check` is red when its job failed or was cancelled or was skipped while
   the browser suite was asked for (`scripts/ci-verdict.mjs`).
-- `visual` is the visual lane (#257), on `main` and on a manual run only: the thirteen key screens in
+- `visual` is the visual lane (#257), on `main` and on a manual run only: the fourteen key screens in
   `tests/visual-lane/screens.json` (sign-in, first run, Home, the board, a Card, the chat, a channel, Agents, an
-  Agent's details, Members, Numbers, Approvals and a proposed change in Omar's chat with Lead (#19); the list is capped
+  Agent's details, Members, Numbers, Approvals, a proposed change in Omar's chat with Lead (#19) and Recurring tasks (#31); the list is capped
   at 15), each in Arabic at 1440 and 390 in the light and dark themes, compared byte for byte with
   `tests/visual-lane/images/` (52 images). One browser pinned by
   digest (`tests/visual-lane/renderer`) draws them in its container through Playwright's own server, so every machine
