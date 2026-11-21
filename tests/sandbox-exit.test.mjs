@@ -2,13 +2,12 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer, connect } from 'node:net';
-import { readFileSync } from 'node:fs';
-import { load } from 'js-yaml';
 
 // A Company's work sandbox reaches the internet through one exit (#394, ADR 0018): sandbox/exit.py, run by the Company's
 // template from the work sandbox image. These tests run the program itself on loopback: what it refuses by the address a
 // name resolves to, the ports and protocols it refuses, and what it answers. The install job proves the same from inside a
-// real sandbox, with a stand-in public host it does reach (scripts/check-install-sandbox-exit.mjs).
+// real sandbox, with a stand-in public host it does reach (scripts/check-install-sandbox-exit.mjs), and proves by docker
+// inspect how the Company's template runs the exit: its image, privileges, mounts and networks.
 
 const exitProgram='sandbox/exit.py';
 const verdicts=(...addresses)=>spawnSync('python3',[exitProgram,'--verdict',...addresses],{encoding:'utf8'}).stdout.trim().split('\n');
@@ -22,6 +21,7 @@ test('the exit refuses private, shared, link-local, loopback, metadata and reser
   '169.254.169.254':'cloud metadata','fd00:ec2::254':'cloud metadata',
   // An IPv4 address written as IPv6, or wrapped in a tunnel or a translation prefix, is never a way round the rules.
   '::ffff:127.0.0.1':'loopback','::ffff:169.254.169.254':'cloud metadata','::ffff:10.0.0.1':'a private address',
+  '::a00:1':'an IPv4-compatible address','::8.8.8.8':'an IPv4-compatible address','::ffff:0:a00:1':'a translated address','::ffff:0:808:808':'a translated address',
   '64:ff9b::a00:1':'a translated address','2002:a00:1::1':'a tunnelled address','2001:0:a00:1::1':'a tunnelled address',
   '224.0.0.1':'a multicast address','ff02::1':'a multicast address','240.0.0.1':'a reserved address','255.255.255.255':'a reserved address',
   'not-an-address':'not an address',
@@ -44,9 +44,10 @@ before(async () => {
 });
 after(() => child?.kill());
 
-/** What the exit answers on one connection to `request`, until it closes; `then` is written after its first answer. */
-const ask=(request,then)=>new Promise((resolve,reject)=>{
- const socket=connect({host:'127.0.0.1',port});
+/** What the exit answers on one connection to `request`, until it closes; `then` is written after its first answer;
+ * `at` is the exit's port. */
+const ask=(request,then,at=port)=>new Promise((resolve,reject)=>{
+ const socket=connect({host:'127.0.0.1',port:at});
  const chunks=[];
  let followed=false;
  socket.setTimeout(10000,()=>{ socket.destroy(); reject(new Error('the exit kept the connection open')); });
@@ -69,8 +70,10 @@ test('a request to a refused address is answered by the exit itself, by number a
 });
 
 test('only HTTP and HTTPS leave: another port, another protocol and a tunnel that is not TLS are refused', async () => {
- for(const blocked of [22,25,53,445,1023]) assert.match(refusal(await ask(`CONNECT 1.1.1.1:${blocked} HTTP/1.1\r\n\r\n`)),new RegExp(`refuses port ${blocked}`));
- assert.match(refusal(await ask('GET http://1.1.1.1:25/ HTTP/1.1\r\n\r\n')),/refuses port 25/);
+ // A tunnel opens to HTTPS's port alone and a plain request goes to HTTP's alone: every other port, high ones too, is
+ // refused before the exit resolves or connects anywhere.
+ for(const blocked of [22,25,53,80,445,1023,1024,2525,6379,8443,65535]) assert.match(refusal(await ask(`CONNECT 1.1.1.1:${blocked} HTTP/1.1\r\n\r\n`)),new RegExp(`refuses port ${blocked}`));
+ for(const blocked of [25,443,6379,8080]) assert.match(refusal(await ask(`GET http://1.1.1.1:${blocked}/ HTTP/1.1\r\n\r\n`)),new RegExp(`refuses port ${blocked}`));
  assert.match(await ask('SSH-2.0-OpenSSH_9.6\r\n\r\n'),/^HTTP\/1\.1 400 /);
  assert.match(await ask('GET / HTTP/1.1\r\nHost: example.com\r\n\r\n'),/^HTTP\/1\.1 400 /);
  assert.match(await ask('GET https://example.com/ HTTP/1.1\r\n\r\n'),/^HTTP\/1\.1 400 /);
@@ -84,34 +87,48 @@ test('only HTTP and HTTPS leave: another port, another protocol and a tunnel tha
  assert.doesNotMatch(logged,/exit: tunnel 203\.0\.113\.9/);
 });
 
-test('the Company template runs the exit from the sandbox image, hardened, the one way from the work network out', () => {
- const template=load(readFileSync('scripts/engine-template.yml','utf8'));
- const exit=template.services.exit;
- assert.equal(exit.image,template.services.sandbox.image,'the exit runs the work sandbox image: no second image to load, pin and update');
- assert.equal(exit.container_name,'${EXIT_NAME:-gtmworks-exit}');
- assert.deepEqual(exit.entrypoint,['python3','/usr/local/lib/gtmworks/exit.py']);
- assert.deepEqual(exit.cap_drop,['ALL']);
- assert.deepEqual(exit.security_opt,['no-new-privileges:true']);
- for(const key of ['ports','expose','volumes','env_file','environment','user','network_mode','privileged','cap_add']) assert.equal(exit[key],undefined,`the exit sets no ${key}`);
- assert.deepEqual(JSON.parse(JSON.stringify(exit.networks)),{work:{aliases:['exit']},outbound:null});
- // The sandbox and the Engine stay on networks that route nowhere but through the exit.
- assert.deepEqual(Object.keys(template.services.sandbox.networks),['work']);
- assert.equal(template.networks.work.internal,true);
- assert.equal(template.networks.outbound.internal,undefined);
- assert.equal(template.networks.outbound.name,'${EXIT_NETWORK:-gtmworks-exit-first}');
- for(const [name,service] of Object.entries(template.services)) if(name!=='exit') assert.equal(Object.keys(service.networks||{}).includes('outbound'),false,`${name} is not on the exit's network`);
- // The image carries the program, and every session of the sandbox is pointed at the exit by the alias and port above.
- const dockerfile=readFileSync('sandbox/Dockerfile','utf8');
- assert.match(dockerfile,/^COPY exit\.py \/usr\/local\/lib\/gtmworks\/exit\.py$/m);
- for(const name of ['HTTP_PROXY','HTTPS_PROXY','http_proxy','https_proxy']) {
-  assert.match(dockerfile,new RegExp(`^(?:ENV)?\\s+${name}=http://exit:3128 \\\\$`,'m'),`the image names the exit in ${name}`);
-  assert.match(readFileSync('sandbox/sshd_config','utf8'),new RegExp(`^SetEnv .*\\b${name}=http://exit:3128\\b`,'m'),`every ssh session names the exit in ${name}`);
+test('a tunnel opens only behind a whole TLS ClientHello record header, never behind two TLS-looking bytes', async () => {
+ // Each stream starts as a TLS record would, then is not one: a wrong version, an impossible length, or a record that
+ // is not a ClientHello (the Redis command below is what a two-byte check let through to a high port).
+ const streams=['\x16\x03\x01\r\nCONFIG GET *\r\n','\x16\x03\x05\x00\x40\x01probe','\x16\x03\x01\x00\x00\x01probe','\x16\x03\x01\xff\xff\x01probe','\x16\x03\x03\x00\x40\x02probe'];
+ for(const [index,stream] of streams.entries()) {
+  const host=`203.0.113.${20+index}`;
+  assert.equal(await ask(`CONNECT ${host}:443 HTTP/1.1\r\n\r\n`,Buffer.from(stream,'latin1')),'HTTP/1.1 200 Connection Established\r\n\r\n');
+  for(let attempt=0;attempt<50&&!logged.includes(`refused (not TLS) ${host}:443`);attempt++) await new Promise(resolve=>setTimeout(resolve,20));
+  assert.match(logged,new RegExp(`exit: refused \\(not TLS\\) ${host.replaceAll('.','\\.')}:443`));
  }
- assert.match(readFileSync(exitProgram,'utf8'),/^PORT = int\(os\.environ\.get\('EXIT_PORT', '3128'\)\)$/m);
- // The installer names the exit and its network from the Company's folder, and removes both with the Company.
- const installer=readFileSync('scripts/install.sh','utf8');
- assert.match(installer,/EXIT_NAME=\$\(exit_container "\$slug"\)/);
- assert.match(installer,/EXIT_NETWORK=\$\(exit_network "\$slug"\)/);
- assert.match(installer,/docker rm -f .*"\$\(exit_container "\$slug"\)"/);
- assert.match(installer,/docker network rm .*"\$\(exit_network "\$slug"\)"/);
+});
+
+// The exit's own program, with the two things outside it a test cannot control stood in for: the DNS answer for the
+// names below, and the outbound connection, which prints the address it was asked for and fails.
+const resolverStandIn=`import asyncio, runpy, socket, sys
+answers = {'mixed.exit.test': ['10.0.0.1', '203.0.113.7', '127.0.0.1'], 'refused.exit.test': ['10.0.0.1', '127.0.0.1']}
+real = socket.getaddrinfo
+def getaddrinfo(host, port, *rest, **named):
+    if host in answers:
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (address, port)) for address in answers[host]]
+    return real(host, port, *rest, **named)
+async def open_connection(host, port, **named):
+    print(f'upstream {host}:{port}', flush=True)
+    raise OSError('no route in the test')
+socket.getaddrinfo = getaddrinfo
+asyncio.open_connection = open_connection
+runpy.run_path(sys.argv[1], run_name='__main__')`;
+
+test('a name that resolves to a public and a refused address is reached only at the public one, and a name with none is refused', async () => {
+ const standInPort=await freePort();
+ const standIn=spawn('python3',['-c',resolverStandIn,exitProgram],{env:{...process.env,EXIT_LISTEN:'127.0.0.1',EXIT_PORT:String(standInPort)},stdio:['ignore','pipe','pipe']});
+ let said='';
+ standIn.stdout.on('data',chunk=>{ said+=chunk; });
+ standIn.stderr.on('data',chunk=>{ said+=chunk; });
+ try {
+  for(let attempt=0;attempt<100&&!said.includes('listening');attempt++) await new Promise(resolve=>setTimeout(resolve,50));
+  assert.match(await ask('GET http://mixed.exit.test/ HTTP/1.1\r\n\r\n',undefined,standInPort),/^HTTP\/1\.1 502 /);
+  const hello=Buffer.from([0x16,0x03,0x01,0x00,0x40,0x01]);
+  assert.equal(await ask('CONNECT mixed.exit.test:443 HTTP/1.1\r\n\r\n',hello,standInPort),'HTTP/1.1 200 Connection Established\r\n\r\n');
+  for(let attempt=0;attempt<50&&!said.includes('unreachable mixed.exit.test:443');attempt++) await new Promise(resolve=>setTimeout(resolve,20));
+  assert.deepEqual(said.match(/^upstream .*$/gm),['upstream 203.0.113.7:80','upstream 203.0.113.7:443']);
+  assert.match(refusal(await ask('CONNECT refused.exit.test:443 HTTP/1.1\r\n\r\n',undefined,standInPort)),/it is a private address/);
+  assert.equal(said.match(/^upstream .*$/gm).length,2,'a name with no public address is never connected to');
+ } finally { standIn.kill(); }
 });

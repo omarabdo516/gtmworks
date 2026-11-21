@@ -5,8 +5,10 @@ The sandbox's own network is internal: it routes nowhere. This program is the ex
 template on that network with a second network that routes out. It is an HTTP proxy, and only that:
 
 - a plain HTTP request is read, its head is checked and rebuilt, and only that request leaves;
-- an HTTPS connection is a CONNECT tunnel, and it opens only when the first bytes the client sends are a TLS handshake;
-- a port other than 80, 443 or 1024 and above is refused, so no mail, ssh or other well-known service is reached.
+- an HTTPS connection is a CONNECT tunnel to port 443, and it opens only when the first bytes the client sends are the
+  header of a TLS ClientHello record;
+- a plain request goes to port 80 and a tunnel to port 443, and every other port is refused, so no mail, ssh, database
+  or other service is reached, whatever its port.
 
 The name a request names is resolved here, and every address it resolves to is checked: private, shared, loopback,
 link-local (cloud metadata among them), multicast and reserved addresses, and the networks this exit is on, are refused.
@@ -48,6 +50,8 @@ REFUSED = [(ipaddress.ip_network(network), reason) for network, reason in (
     ('240.0.0.0/4', 'a reserved address'),
     ('::/128', 'this network'),
     ('::1/128', 'loopback'),
+    ('::/96', 'an IPv4-compatible address'),
+    ('::ffff:0:0:0/96', 'a translated address'),
     ('64:ff9b::/96', 'a translated address'),
     ('64:ff9b:1::/48', 'a translated address'),
     ('100::/64', 'a reserved address'),
@@ -119,8 +123,11 @@ def verdict(address):
     return None
 
 
-def allowed_port(port):
-    return port in (80, 443) or 1024 <= port <= 65535
+def client_hello(header):
+    """True when six bytes open a TLS record as a client's first flight does: a handshake record (0x16) of version
+    0x0301-0x0304, a length a record may have, and a handshake message that is a ClientHello (0x01)."""
+    length = int.from_bytes(header[3:5], 'big')
+    return header[0] == 0x16 and header[1] == 0x03 and 0x01 <= header[2] <= 0x04 and 4 <= length <= 16384 and header[5] == 0x01
 
 
 def printable(text):
@@ -213,11 +220,11 @@ def split_host_port(authority, default_port):
     return host, int(port_text)
 
 
-async def checked(writer, host, port):
+async def checked(writer, host, port, allowed):
     """The addresses the request may reach, or None once the refusal is answered."""
-    if not allowed_port(port):
+    if port != allowed:
         log('refused (port)', host, port)
-        await answer(writer, 403, 'Forbidden', f"The work sandbox's exit refuses port {port}: only HTTP and HTTPS leave.")
+        await answer(writer, 403, 'Forbidden', f"The work sandbox's exit refuses port {port}: only HTTP to port 80 and HTTPS to port 443 leave.")
         return None
     addresses, reachable = await resolve(host, port)
     if not addresses:
@@ -233,23 +240,23 @@ async def checked(writer, host, port):
 
 
 async def tunnel(reader, writer, target):
-    """CONNECT: HTTPS only. The tunnel opens to the checked address when the client's first bytes are a TLS handshake
-    record; anything else is closed before a byte or a connection leaves."""
+    """CONNECT: HTTPS to port 443 only. The tunnel opens to the checked address when the client's first bytes are a TLS
+    ClientHello record header; anything else is closed before a byte or a connection leaves."""
     parsed = split_host_port(target, 443)
     if parsed is None:
         await answer(writer, 400, 'Bad Request', "The work sandbox's exit needs host:port to open a tunnel.")
         return
     host, port = parsed
-    reachable = await checked(writer, host, port)
+    reachable = await checked(writer, host, port, 443)
     if reachable is None:
         return
     writer.write(b'HTTP/1.1 200 Connection Established\r\n\r\n')
     await writer.drain()
     try:
-        first = await asyncio.wait_for(reader.readexactly(3), FIRST_BYTES_SECONDS)
+        first = await asyncio.wait_for(reader.readexactly(6), FIRST_BYTES_SECONDS)
     except (asyncio.IncompleteReadError, asyncio.TimeoutError, OSError):
         return
-    if first[0] != 0x16 or first[1] != 0x03:
+    if not client_hello(first):
         log('refused (not TLS)', host, port)
         return
     upstream = await open_upstream(reachable, port)
@@ -263,8 +270,9 @@ async def tunnel(reader, writer, target):
 
 
 async def forward(reader, writer, method, target, version, header_lines):
-    """A plain HTTP request in absolute form: its head is rebuilt for the origin, without the proxy's own headers, and
-    the connection closes after the answer, so each request is checked on its own."""
+    """A plain HTTP request in absolute form to port 80: its first head is rebuilt for the origin, without the proxy's
+    own headers. The connection is then spliced to that origin, so a request pipelined after it on the same connection
+    goes, unread, to the same checked address and nowhere else."""
     url = urlsplit(target)
     if url.scheme.lower() != 'http' or not url.netloc or '@' in url.netloc:
         await answer(writer, 400, 'Bad Request', "The work sandbox's exit forwards http:// requests and tunnels HTTPS with CONNECT.")
@@ -274,7 +282,7 @@ async def forward(reader, writer, method, target, version, header_lines):
         await answer(writer, 400, 'Bad Request', "The work sandbox's exit cannot read the request's host.")
         return
     host, port = parsed
-    reachable = await checked(writer, host, port)
+    reachable = await checked(writer, host, port, 80)
     if reachable is None:
         return
     upstream = await open_upstream(reachable, port)

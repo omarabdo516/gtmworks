@@ -234,6 +234,9 @@ sandbox_exit_probe "$engine_id" "$probe_config" | tee sandbox-exit.log || { dock
 # Read once: grep -q ending a pipe early would fail it under pipefail.
 exit_log=$(docker logs "$exit_id" 2>&1) || fail "read the exit's log"
 grep -qx 'exit: refused (cloud metadata) 169.254.169.254:443' <<< "$exit_log" || fail "the exit's log names what it refused"
+for line in "refused (port) $standin:2525" "refused (port) $standin:8443" "refused (not TLS) $standin:443"; do
+  grep -qxF "exit: $line" <<< "$exit_log" || fail "the exit's log names what it refused: $line"
+done
 if grep -qF "$standin_token" <<< "$exit_log"; then fail "the exit's log holds no page it carried"; fi
 docker rm -f exit-standin > /dev/null || true
 # The repeat install leaves the settings file as it was, so keep a copy to compare after it. The data a restore must
