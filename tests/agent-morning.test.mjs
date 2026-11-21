@@ -626,3 +626,22 @@ test('a resume of the new copy that does not answer but lands later is overruled
   assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused'],'the source sends from nowhere either');
  } finally { await fake.close(); }
 });
+
+test('a move whose lease runs out before its safety pause still sends that pause', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // The resume of Ads' copy does not answer, and the lease runs out meanwhile, before the move pauses what it made.
+  const {resumeRoutine}=await import('../lib/hermes.mjs');
+  let late=null;
+  const lostThenLate={resume:async(connection,routine)=>{ late=()=>resumeRoutine(connection,routine); leases.get(company).live=false; return {state:'unreachable'}; }};
+  const db=session({agents:agentRows(ads)}).db;
+  const answer=await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,agents:agentRows(lead),hermes:install(fake),driver:lostThenLate,fence}));
+  assert.equal(answer.state,'failed');
+  assert.ok(late,'the resume was sent and did not answer');
+  const pauses=fake.settings.managementRequests.filter(request=>/\/pause\?/.test(String(request.path))&&new URL(String(request.path),'http://m').searchParams.get('profile')===adsProfile);
+  assert.ok(pauses.length>=1,'the safety pause was sent although the lease had run out');
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>job.state),['paused']);
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused'],'and the source is paused too');
+ } finally { await fake.close(); leases.clear(); }
+});
