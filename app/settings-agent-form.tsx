@@ -110,6 +110,8 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
  const flash=useBarFlash();
  const [saving,setSaving]=useState(false);
  const [failed,setFailed]=useState(false);
+ // Why a save was refused, when the page has words for it: below Agent level 3, Good morning cannot be switched on (#182).
+ const [reason,setReason]=useState<string|null>(null);
  const bar=useRef<HTMLDivElement>(null);
  const save=useRef<HTMLButtonElement>(null);
  useEffect(()=>{ registerSave(save.current); return ()=>registerSave(null); },[]);
@@ -122,7 +124,7 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
   if(!flash) return;
   element.classList.remove('is-flash'); void element.offsetWidth; element.classList.add('is-flash');
  },[flash,dirty]);
- const discard=()=>{ setFailed(false); restoreDraft(); toast(t('settingsBackSaved'),{icon:'x'}); };
+ const discard=()=>{ setFailed(false); setReason(null); restoreDraft(); toast(t('settingsBackSaved'),{icon:'x'}); };
  const write=async()=>{
   // The request belongs to this Agent's draft as it is now: a response that arrives after another Agent was opened, a
   // newer read or Cancel is dropped, and the values it carried are the snapshot a later edit is compared with.
@@ -136,13 +138,13 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
    changes.morning={on:morningOn==='on',time:morningTime,...(zone?{zone}:{})};
   }
   if(!Object.keys(changes).length) return;
-  setSaving(true); setFailed(false);
+  setSaving(true); setFailed(false); setReason(null);
   try {
    const response=await fetch('/api/agent-page',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,changes})});
    const answer=await response.json().catch(()=>null);
    if(!isCurrentDraft(stamp)) return;
    const kept=answer?.saved&&typeof answer.saved==='object'?answer.saved as Record<string,unknown>:null;
-   if(!response.ok||!kept) { setFailed(true); return; }
+   if(!response.ok||!kept) { setReason(answer?.error==='agentPageLevelLow'?'settingsCheckinLevel':null); setFailed(true); return; }
    const patch:Record<string,string>={};
    const sent:Record<string,string>={};
    for(const key of Object.keys(changes)) {
@@ -175,7 +177,7 @@ export function AgentSaveBar({company,agent,name}:{company:string,agent:string,n
   } catch { if(isCurrentDraft(stamp)) setFailed(true); } finally { setSaving(false); }
  };
  return <div className="dp-savebar sov-savebar" id="dp-savebar" role="region" aria-label={t('settingsSaveLabel')} hidden={!dirty} ref={bar}>
-  <span className="dp-savebar__t">{t('settingsSaveBar')}{failed&&<span className="set-err" role="alert">{t('settingsSaveFailed')}</span>}</span>
+  <span className="dp-savebar__t">{t('settingsSaveBar')}{failed&&<span className="set-err" role="alert">{t(reason??'settingsSaveFailed')}</span>}</span>
   <button type="button" className="btn btn--secondary btn--sm" id="set-cancel" onClick={discard}>{t('settingsCancel')}</button>
   <button type="button" className="btn btn--primary btn--sm" id="set-save" onClick={write} disabled={saving} ref={save}>{t('settingsSave')}</button>
  </div>;

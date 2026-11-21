@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readRoutines, createRoutine, triggerRoutine, isSilentReply, readRoutineLastReply } from '../lib/hermes.mjs';
+import { readRoutines, createRoutine, triggerRoutine, isSilentReply, readRoutineReplies } from '../lib/hermes.mjs';
 import { readAgentMorning, changeAgentMorning, moveAgentMorning, morningName } from '../lib/agent-morning.mjs';
-import { morningTime, morningCron } from '../lib/morning-schedule.mjs';
+import { morningTime, morningCron, morningMarker } from '../lib/morning-schedule.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // Good morning (#182): the main Agent's daily message is one job of its own Engine profile, made, timed, paused and
@@ -78,7 +78,7 @@ test('switching on makes one job at the chosen time and zone; a new time changes
 test('a job whose schedule was changed in a chat shows that time as it is, and a save that keeps it changes nothing', async () => {
  const fake=await engine();
  try {
-  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:'Summary',schedule:'15 6 * * *',timezone:'Africa/Cairo'});
+  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nSummary`,schedule:'15 6 * * *',timezone:'Africa/Cairo'});
   const {db}=session();
   const read=await readAgentMorning(db,{company,agent:lead,hermes:install(fake)});
   assert.equal(read.routine?.time,'6:15');
@@ -121,7 +121,7 @@ test('below Agent level 3 the daily message is never switched on and the Engine 
    assert.deepEqual(logged,[]);
   }
   // One left on from level 3 may still be switched off.
-  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:'Summary',schedule:'0 9 * * *'});
+  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nSummary`,schedule:'0 9 * * *'});
   assert.deepEqual((await changeAgentMorning(session({level:1}).db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake)})).morning,{on:false,time:'9:00'});
   assert.equal(jobs(fake,leadProfile)[0].state,'paused');
  } finally { await fake.close(); }
@@ -156,21 +156,27 @@ test('making another Agent the main one moves the daily message to its profile w
 test('the hint\'s second sentence is drawn only when the job ran yesterday and sent nothing', async () => {
  const fake=await engine();
  try {
-  const {routine}=await createRoutine(at(fake,leadProfile),{name:morningName,prompt:'Summary',schedule:'0 9 * * *',timezone:'Africa/Cairo'});
+  const {routine}=await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nSummary`,schedule:'0 9 * * *',timezone:'Africa/Cairo'});
   const {db}=session();
   fake.settings.cronReply='[SILENT]';
   await triggerRoutine(at(fake,leadProfile),{id:routine.id});
-  const last=await readRoutineLastReply(at(fake,leadProfile),{id:routine.id});
-  assert.deepEqual([last.state,last.reply],['found','[SILENT]']);
+  const last=await readRoutineReplies(at(fake,leadProfile),{id:routine.id,limit:1});
+  assert.deepEqual([last.state,last.runs?.[0]?.reply],['found','[SILENT]']);
   const ranAt=new Date(jobs(fake,leadProfile)[0].last_run_at);
   const tomorrow=new Date(ranAt.getTime()+864e5);
   assert.equal((await readAgentMorning(db,{company,agent:lead,hermes:install(fake),now:tomorrow})).quietYesterday,true);
   assert.equal((await readAgentMorning(db,{company,agent:lead,hermes:install(fake),now:ranAt})).quietYesterday,false,'today is not yesterday');
   assert.equal((await readAgentMorning(db,{company,agent:lead,hermes:install(fake),now:new Date(ranAt.getTime()+3*864e5)})).quietYesterday,false);
+  // Today's run has happened too: yesterday's silence is still explained.
+  const [silent]=[...fake.settings.sessions].find(([id])=>id.startsWith(`cron_${routine.id}_`));
+  const yesterdayRun=fake.settings.sessions.get(silent);
+  yesterdayRun.started_at-=864e5/1000; yesterdayRun.messages.forEach(message=>{ message.timestamp-=864e5/1000; });
   fake.settings.cronReply='Good morning. Two drafts wait on you.';
   await triggerRoutine(at(fake,leadProfile),{id:routine.id});
-  const after=new Date(new Date(jobs(fake,leadProfile)[0].last_run_at).getTime()+864e5);
-  assert.equal((await readAgentMorning(db,{company,agent:lead,hermes:install(fake),now:after})).quietYesterday,false,'a message was sent');
+  const today=new Date(jobs(fake,leadProfile)[0].last_run_at);
+  assert.equal((await readAgentMorning(db,{company,agent:lead,hermes:install(fake),now:today})).quietYesterday,true,'yesterday was quiet, whatever today sent');
+  const tomorrowAgain=new Date(today.getTime()+864e5);
+  assert.equal((await readAgentMorning(db,{company,agent:lead,hermes:install(fake),now:tomorrowAgain})).quietYesterday,false,'a message was sent');
  } finally { await fake.close(); }
  for(const silent of ['[SILENT]',' silent ','NO_REPLY','Nothing new.\n[SILENT]','[SILENT] nothing changed']) assert.equal(isSilentReply(silent),true,silent);
  for(const spoken of ['','Two drafts wait. Reply [SILENT] if not.','Good morning']) assert.equal(isSilentReply(spoken),false,spoken);
@@ -187,5 +193,81 @@ test('readRoutines still lists the daily message beside the other Routines of th
  try {
   await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
   assert.deepEqual((await readRoutines(at(fake,leadProfile))).routines.map(routine=>routine.name),[morningName]);
+ } finally { await fake.close(); }
+});
+
+test('the daily message is the job gtmworks marked, whatever its name: one renamed in a chat stays it, and a Routine merely named "Good morning" never becomes it', async () => {
+ const fake=await engine();
+ try {
+  const {db}=session();
+  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:'Tell me the weather',schedule:'0 7 * * *'});
+  assert.equal((await readAgentMorning(db,{company,agent:lead,hermes:install(fake)})).routine,null,'a Routine someone named so is not the daily message');
+  await changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  assert.equal(jobs(fake,leadProfile).find(job=>job.prompt==='Tell me the weather').schedule.expr,'0 7 * * *','and it is never changed from this page');
+  const marked=jobs(fake,leadProfile).find(job=>job.prompt.startsWith(morningMarker));
+  marked.name='Morning digest';
+  const read=await readAgentMorning(db,{company,agent:lead,hermes:install(fake)});
+  assert.deepEqual([read.routine?.on,read.routine?.time],[true,'9:00'],'renamed, it is still the daily message');
+  await changeAgentMorning(db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake)});
+  assert.equal(jobs(fake,leadProfile).filter(job=>job.prompt.startsWith(morningMarker)).length,1,'never a second');
+ } finally { await fake.close(); }
+});
+
+test('a schedule set in a chat that is no cron expression is kept as it is when the switch is saved', async () => {
+ const fake=await engine();
+ try {
+  const {db,logged}=session();
+  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nSummary`,schedule:'0 9 * * *'});
+  Object.assign(fake.settings.cron.get(leadProfile)[0],{schedule:{kind:'interval',minutes:720,display:'every 720m'},schedule_display:'every 720m'});
+  const read=await readAgentMorning(db,{company,agent:lead,hermes:install(fake)});
+  assert.deepEqual([read.routine?.time,read.routine?.schedule.expr,read.routine?.schedule.display],[null,null,'every 720m']);
+  const saved=await changeAgentMorning(db,{company,agent:lead,on:false,time:'keep',hermes:install(fake)});
+  assert.deepEqual(saved,{state:'written',morning:{on:false,time:'keep'}});
+  const [job]=jobs(fake,leadProfile);
+  assert.deepEqual([job.schedule.kind,job.state],['interval','paused'],'paused, its schedule untouched');
+  assert.ok(!writes(fake).some(request=>request.method==='PUT'),'no schedule was sent');
+  assert.deepEqual(logged.map(row=>[row.old_value,row.new_value]),[['other','off']]);
+ } finally { await fake.close(); }
+});
+
+test('a save whose second step fails still logs what the Engine holds', async () => {
+ const fake=await engine();
+ try {
+  const {db,logged}=session();
+  await changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const busy={pause:async()=>({state:'busy'})};
+  const answer=await changeAgentMorning(db,{company,agent:lead,on:false,time:'7:30',hermes:install(fake),driver:busy});
+  assert.equal(answer.state,'busy');
+  assert.equal(jobs(fake,leadProfile)[0].schedule.expr,'30 7 * * *');
+  assert.deepEqual(logged.map(row=>[row.old_value,row.new_value]),[['off','9:00'],['9:00','7:30']],'the new time the Engine holds is in the log');
+ } finally { await fake.close(); }
+});
+
+test('a daily message that cannot move to the new main Agent is paused where it is, never left sending from another Agent', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'8:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // Ads is main now, but its profile is not its own yet.
+  const rows=agentRows(ads).map(row=>row.agent===ads?{...row,own:false}:row);
+  assert.equal((await moveAgentMorning(session({agents:rows}).db,{company,from:lead,to:ads,hermes:install(fake)})).state,'paused');
+  assert.equal(jobs(fake,leadProfile)[0].state,'paused');
+  assert.equal(jobs(fake,adsProfile).length,0);
+  // A new copy whose old one will not go is taken back: never two.
+  const fresh=await engine();
+  try {
+   await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'8:00',zone:'Africa/Cairo',hermes:install(fresh)});
+   const stuck={delete:async(connection,{id})=>connection.profile===leadProfile?{state:'busy'}:(await import('../lib/hermes.mjs')).deleteRoutine(connection,{id})};
+   assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,from:lead,to:ads,hermes:install(fresh),driver:stuck})).state,'paused');
+   assert.equal(jobs(fresh,adsProfile).length,0,'the copy was taken back');
+   assert.equal(jobs(fresh,leadProfile)[0].state,'paused');
+  } finally { await fresh.close(); }
+  // Agents read before the change name a removed main Agent's profile, so its message still moves to the replacement.
+  const third=await engine();
+  try {
+   await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'8:00',zone:'Africa/Cairo',hermes:install(third)});
+   const gone=session({agents:[agentRows(ads)[1]]});
+   assert.equal((await moveAgentMorning(gone.db,{company,from:lead,to:ads,agents:agentRows(lead),hermes:install(third)})).state,'moved');
+   assert.equal(jobs(third,adsProfile).length,1); assert.equal(jobs(third,leadProfile).length,0);
+  } finally { await third.close(); }
  } finally { await fake.close(); }
 });

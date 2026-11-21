@@ -86,7 +86,7 @@ export function pauseRoutine(connection:import('./engine.mjs').EngineConnection,
 export function resumeRoutine(connection:import('./engine.mjs').EngineConnection,routine:{id:string}):Promise<import('./engine.mjs').RoutineChange>;
 export function triggerRoutine(connection:import('./engine.mjs').EngineConnection,routine:{id:string}):Promise<import('./engine.mjs').RoutineChange>;
 export function deleteRoutine(connection:import('./engine.mjs').EngineConnection,routine:{id:string}):Promise<{state:'deleted'|'missing'|'refused'|'unreachable'|'failed'|'busy'}>;
-export function readRoutineLastReply(connection:import('./engine.mjs').EngineConnection,routine:{id:string}):Promise<{state:'found',at:string|null,reply:string|null}|{state:'missing'|'refused'|'unreachable'|'failed',at:null,reply:null}>;
+export function readRoutineReplies(connection:import('./engine.mjs').EngineConnection,routine:{id:string,limit?:number}):Promise<{state:'found',runs:{at:string|null,reply:string|null}[]}|{state:'missing'|'refused'|'unreachable'|'failed',runs:null}>;
 export function isSilentReply(reply:unknown):boolean;
 export type ProviderKey={provider:string,label:string,set:boolean};
 export function readProviderKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',keys:ProviderKey[],lacking:string[],leftover:string[],unread:string[]}|{state:'refused'|'unreachable'|'failed',keys:null,lacking:null,leftover:null,unread:null}>;

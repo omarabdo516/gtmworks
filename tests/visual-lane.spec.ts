@@ -9,6 +9,7 @@ import { asAdmin } from './slow-reads';
 import { localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { laneHermes } from './lane-hermes';
 import { levelConfig } from '../lib/agent-levels.mjs';
+import { morningMarker } from '../lib/morning-schedule.mjs';
 
 // The visual lane (#257): each key screen in tests/visual-lane/screens.json, in Arabic at 1440 and 390, light and dark,
 // against its approved image. Each screen starts from the seed as built and signs in again, so the screens pass in any
@@ -87,7 +88,7 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
       delete from public.hermes_agents where id='${morning(1)}';`,
     engine: fake => {
       fake.settings.profiles.set(companyProfile, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: levelConfig(3), credentials: {} });
-      fake.settings.cron.set(companyProfile, [routineJob('cc00000000c1', 'Good morning', '0 9 * * *', { timezone: 'Africa/Cairo' })]);
+      fake.settings.cron.set(companyProfile, [routineJob('cc00000000c1', 'Good morning', '0 9 * * *', { timezone: 'Africa/Cairo', prompt: `${morningMarker}\nThe morning summary.` })]);
     },
   },
   // The general channel (#24): the Manager's note, Omar asking Lead, and Lead's answer.

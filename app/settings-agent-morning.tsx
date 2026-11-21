@@ -11,7 +11,7 @@ import { seedDraft, setDraftValue, useDraftValue } from './settings-draft';
 // zone. The time select is disabled while the switch is off in the draft. Below Agent level 3 the switch cannot be
 // turned on, and one line says why and where the Owner changes it (the only text here the reference does not have). The
 // zone is the job's own, or the browser's until the message is first switched on. A Contributor and a Viewer read one row.
-export type MorningProps={on:boolean,time:string|null,expr:string|null,display:string|null,timezone:string|null,allowed:boolean,quietYesterday:boolean};
+export type MorningProps={made:boolean,on:boolean,time:string|null,expr:string|null,display:string|null,timezone:string|null,allowed:boolean,quietYesterday:boolean};
 
 const never=()=>()=>{};
 const readZone=()=>{ try { return Intl.DateTimeFormat().resolvedOptions().timeZone||null; } catch { return null; } };
@@ -25,16 +25,19 @@ function cityOf(zone:string,t:(key:string,...values:unknown[])=>string) {
 export function AgentMorning({agent,editable,morning}:{agent:string,editable:boolean,morning:MorningProps|null}) {
  const {t}=useI18n();
  const savedOn=morning?.on===true?'on':'off';
- const savedTime=morning?.time??morning?.expr??morningDefault;
+ // The job's daily time, else its own cron expression, else "keep" for a schedule that is neither (an interval set in a
+ // chat), which a save leaves as it is; the reference's 9:00 before any job is made.
+ const savedTime=morning?.time??morning?.expr??(morning?.made?'keep':morningDefault);
  const on=useDraftValue(agent,'morning.on',savedOn)==='on';
  const time=useDraftValue(agent,'morning.time',savedTime);
  // The browser's zone; the server draws none, so the first frame is the same on both.
  const browserZone=useSyncExternalStore(never,readZone,()=>null);
  // The draft starts from what the Engine holds, once for this Agent; a read that changed while nothing is unsaved wins.
  useEffect(()=>{ if(editable&&morning) seedDraft(agent,{'morning.on':savedOn,'morning.time':savedTime}); },[agent,editable,morning,savedOn,savedTime]);
- const label=(value:string)=>{ const parts=clockParts.exec(value); return parts?clockLabel(t,Number(parts[1]),Number(parts[2])):scheduleLabel(t,{expr:value,display:morning?.display??null}); };
+ const label=(value:string)=>{ const parts=clockParts.exec(value); return parts?clockLabel(t,Number(parts[1]),Number(parts[2])):scheduleLabel(t,{expr:value==='keep'?null:value,display:morning?.display??null}); };
  if(!editable) {
-  const value=!morning?'—':morning.on&&morning.allowed?(morning.time?t('settingsCheckinEvery',label(morning.time)):scheduleLabel(t,{expr:morning.expr,display:morning.display})):t('settingsCheckinOff');
+  // What the Engine holds, whatever the level: a message left on below level 3 still sends, so it reads as on.
+  const value=!morning?'—':morning.on?(morning.time?t('settingsCheckinEvery',label(morning.time)):scheduleLabel(t,{expr:morning.expr,display:morning.display})):t('settingsCheckinOff');
   return <section className="dp-sec" id="set-checkin" aria-labelledby="set-h-ck"><h4 className="dp-label" id="set-h-ck"><span>{t('settingsGoodMorning')}</span></h4>
    <ul className="panel-card"><li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsCheckinRO')}</span>
     <span className="panel-row__d ro-val" id="set-ck-val">{value}</span></span></li></ul></section>;

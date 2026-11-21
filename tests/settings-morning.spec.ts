@@ -172,3 +172,17 @@ test('making another Agent the main one moves the daily message to its profile w
  await expect(overlay(page).locator('#set-make-main')).toBeVisible();
  await expect(morning(page)).toHaveCount(0);
 });
+
+test('removing the main Agent with a replacement moves the daily message to the replacement',async({page})=>{
+ // Ads is the main Agent now, with the message on at 7:30 (the case above).
+ await signIn(page,'omar@example.com',agentPage(ads));
+ expect(morningJobs(own(ads))).toHaveLength(1);
+ const removed=await page.request.post('/api/hermes-agents',{data:{company,intent:'remove',agent:ads,replacement:lead}});
+ expect(removed.status()).toBe(200);
+ await expect.poll(()=>morningJobs(profile).length).toBe(1);
+ expect(morningJobs(own(ads))).toHaveLength(0);
+ expect([morningJobs(profile)[0].schedule.expr,morningJobs(profile)[0].state]).toEqual(['30 7 * * *','scheduled']);
+ await page.goto(agentPage(lead));
+ await hydrated(page);
+ await expect(morning(page).getByRole('combobox',{name:'Time'})).toHaveValue('7:30');
+});

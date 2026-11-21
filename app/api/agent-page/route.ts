@@ -61,6 +61,12 @@ export async function POST(request:NextRequest) {
  if(!await routeAllowed(db,'app/api/agent-page/route.ts','POST',body.company,user.id)) return reply({error:'agentPageNotAllowed'},403);
  try {
   const saved:Record<string,unknown>={}; let sectionChars:number|undefined;
+  // Good morning first: a refusal of it (below level 3, say) then leaves every other field of the save unwritten too.
+  if(morning!==undefined) {
+   const changed=await changeAgentMorning(db,{company:body.company,agent:body.agent,on:morning.on,time:morning.time,zone:morning.zone});
+   if(changed.state!=='written') return refused(changed.state);
+   saved.morning=changed.morning;
+  }
   if(about!==undefined) {
    const changed=await changeAgentAbout(db,{company:body.company,agent:body.agent,description:about});
    if(changed.state!=='written') return refused(changed.state);
@@ -80,11 +86,6 @@ export async function POST(request:NextRequest) {
    const changed=await changeAgentVoice(db,{company:body.company,agent:body.agent,voice});
    if(changed.state!=='written') return refused(changed.state);
    saved.voice=changed.voice;
-  }
-  if(morning!==undefined) {
-   const changed=await changeAgentMorning(db,{company:body.company,agent:body.agent,on:morning.on,time:morning.time,zone:morning.zone});
-   if(changed.state!=='written') return refused(changed.state);
-   saved.morning=changed.morning;
   }
   for(const [name,enabled] of Object.entries(skills)) {
    const changed=await changeCompanySkillEnabled(db,{company:body.company,agent:body.agent,name,enabled});
