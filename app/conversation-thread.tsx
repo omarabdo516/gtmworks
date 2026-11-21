@@ -245,7 +245,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // A job one Agent handed another (#317, #475): inside the asking Agent's turn (`p`), or, for one an asked Agent handed on
  // (#477), its own row between the turns (`li`), as a channel draws every handover.
  const handed=(card:Extract<LeadCard,{kind:'handed'}>,key:string,as:'li'|'p',className?:string)=><HandedRow key={key} as={as} className={className} from={{connection_id:card.from.face,name:card.from.name}} to={{connection_id:card.face,name:card.name}}
-  title={cb('handoverAsked',card.from.name,card.name)} goal={card.goal} failed={card.stopped?c('handedStopped'):card.failed?c('handedFailed'):null} stopped={card.stopped===true}/>;
+  title={cb('handoverAsked',card.from.name,card.name)} goal={card.goal} ending={card} said={{stopped:c('handedStopped'),failed:c('handedFailed')}}/>;
  return <>
   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
    // #477: a job an asked Agent handed on is its own quiet row between the turns, as a channel draws every handover.

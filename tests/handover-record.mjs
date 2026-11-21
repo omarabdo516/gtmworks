@@ -43,6 +43,8 @@ export function record(place,...tops) {
    :was==='follow_up'?{run:row.follow_up_run,profile:team[row.from].profile}:null;
   return [run??{run:null,profile:null}];
  });
+ // The chat's own Run still open, when a test starts one (its Agent is the first handover's asking Agent).
+ const chat=/** @type {{run:string|null,agent:string}} */ ({run:null,agent:tops[0]?.from??'Writer'});
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
   const row=rows.find(entry=>entry.id===args.h);
   if(name==='handovers_due') return ok(rows.filter(entry=>open(entry)&&entry.id>args.after&&!(entry.state==='handing'&&rows.some(child=>child.parent===entry.id&&open(child)))).map(entry=>({id:entry.id,state:entry.state,conversation:place==='conversation'?where:null,company,
@@ -97,11 +99,11 @@ export function record(place,...tops) {
   }
   // The person's side (#478): the Conversation's Stop, and a channel message's.
   if(name==='stop_conversation_handovers') return ok(place==='conversation'&&args.conversation===where?stop(null):[]);
-  if(name==='conversation_stop_target') return {data:null,error:{code:'P0002',message:'conversationNothingToStop'}};
+  if(name==='conversation_stop_target') return chat.run?ok([{run:chat.run,profile:team[chat.agent].profile}]):{data:null,error:{code:'P0002',message:'conversationNothingToStop'}};
   if(name==='stop_channel_message') return ok(place==='channel'?stop(args.message):[]);
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
- return {rows,replies,pins,service,session,where};
+ return {rows,replies,pins,service,session,where,chat};
 }
 
 /** One fake Engine per Agent, routed by profile, with every start logged in order. `ends` names the runs (by key) the

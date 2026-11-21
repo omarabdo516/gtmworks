@@ -32,6 +32,25 @@ test('Stop in a Conversation stops every open handover of a two-level chain, eac
  assert.deepEqual(replies,[],'and nothing is replied in the chat');
 });
 
+test('Stop in a Conversation whose own Run is still open stops that Run and the chain together',async()=>{
+ const {rows,replies,service,where,chat}=record('conversation',job);
+ const {fakes,started,stops,engineFor}=engines();
+ fakes.Ads.settings.toolCalls=input=>input.startsWith('Writer asks you')?handOn('Critic','Check the figures'):[];
+ fakes.Critic.settings.pendingReads=1000;
+ await drive(service,engineFor,rows,{until:()=>rows[1]?.state==='target'});
+ // The person wrote again meanwhile, and the Writer is working on that message in the chat.
+ fakes.Writer.settings.pendingReads=1000;
+ chat.run=/** @type {string} */ (await engineFor({...hermes,profile:'ag-04770000000000000000000000000013'}).start({conversation:where,input:'And add a call to action',idempotencyKey:'chat:2'}));
+ assert.deepEqual(await stopConversationRun(service,{company,conversation:where,hermes,engineFor}),{stopped:true});
+ assert.deepEqual(stops.map(stop=>`${stop.agent}:${stop.run}`),[`Writer:${chat.run}`,`Critic:${rows[1].target_run}`],'the chat\'s own Run first, then the chain\'s');
+ assert.equal(fakes.Writer.runs.find(run=>run.id===chat.run)?.stopped,true);
+ assert.deepEqual(state(rows),['Writer>Ads:done:stopped:-','Ads>Critic:done:stopped:-']);
+ const before=started.length;
+ await drive(service,engineFor,rows);
+ assert.equal(started.length,before);
+ assert.deepEqual(replies,[]);
+});
+
 test('Stop while the asking Agent\'s follow-up runs stops that Run too, and keeps no reply',async()=>{
  const {rows,replies,service,where}=record('conversation',job);
  const {fakes,stops,engineFor}=engines();

@@ -218,7 +218,7 @@ function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done,owne
  // (#428) says so under its row, as a Conversation does.
  if(message.author==='handoff') {
   const row=<HandedRow className={rise.trim()} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}}
-   title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} failed={message.stopped?c('channelHandedStopped'):message.failed?c('channelHandedFailed'):null} stopped={message.stopped===true}/>;
+   title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} ending={message} said={{stopped:c('channelHandedStopped'),failed:c('channelHandedFailed')}}/>;
   return message.noModel?<>{row}<li className="note" role="alert" data-outcome="no-model"><NoModelLine slug={slug} owner={owner}/></li></>:row;
  }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">

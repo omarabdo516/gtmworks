@@ -69,7 +69,7 @@ begin
  if auth.uid() is null or not public.is_member(c) or talk.id is null or not public.can_see_conversation_agent(c,talk.id) then
   raise exception 'conversationNotFound' using errcode='P0002'; end if;
  if not exists(select 1 from public.agent_handovers h where h.conversation_id=talk.id and h.state not in ('done','failed')) then return; end if;
- if talk.person_id<>auth.uid() and not public.can_manage_company(c) then raise exception 'conversationStopNotAllowed' using errcode='42501'; end if;
+ if talk.person_id is distinct from auth.uid() and not public.can_manage_company(c) then raise exception 'conversationStopNotAllowed' using errcode='42501'; end if;
  return query select s.run, s.profile from public.stop_open_handovers(talk.id,null) s;
 end $$;
 revoke all on function public.stop_conversation_handovers(uuid,uuid) from public,anon,service_role;
@@ -88,7 +88,7 @@ begin
  select * into m from public.channel_messages x where x.id=stop_channel_message.message;
  if m.id is null or m.company_id<>c or m.channel_id<>ch or m.author<>'person' or not public.in_channel(ch) then
   raise exception 'channelNotFound' using errcode='P0002'; end if;
- if m.person_id<>auth.uid() and not public.can_manage_company(c) then raise exception 'channelNotAllowed' using errcode='42501'; end if;
+ if m.person_id is distinct from auth.uid() and not public.can_manage_company(c) then raise exception 'channelNotAllowed' using errcode='42501'; end if;
  return query
   with unstarted as (
    update public.channel_runs r set outcome='stopped', closed_at=now()
