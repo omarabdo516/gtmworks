@@ -7,7 +7,7 @@ export const fakeClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearT
 
 // Waits for what React draws next without moving the fake clock, as expect.poll would (it advances fake timers by its
 // interval). It yields to the page's tasks and gives up after five seconds of real time.
-export const drawn = async (seen: () => boolean, what = 'the change') => {
+export const untilDrawn = async (seen: () => boolean, what = 'the change') => {
  const deadline = performance.now() + 5000;
  while (!seen()) {
   if (performance.now() > deadline) throw new Error(`${what} was never drawn`);

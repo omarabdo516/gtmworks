@@ -7,7 +7,7 @@ import { BackLink, CloseButton, FocusReturn, OverlayFrame } from '@/app/settings
 import AccountChoicesView from '@/app/account-choices-view';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n, type Language } from '@/lib/i18n.mjs';
-import { drawn, fakeClock } from './fake-clock';
+import { untilDrawn, fakeClock } from './fake-clock';
 import '@/app/globals.css';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -27,7 +27,7 @@ const account = (language: Language) => render(<LanguageProvider language={langu
  </OverlayChrome>
 </LanguageProvider>);
 
-// What a finger can reach: the control's box, grown by an invisible ring drawn around it.
+// What a finger can reach: the control's box, grown by an invisible ring untilDrawn around it.
 const tapArea = (node: Element) => {
  const own = node.getBoundingClientRect(), ring = getComputedStyle(node, '::before');
  const top = parseFloat(ring.top) || 0, bottom = parseFloat(ring.bottom) || 0, left = parseFloat(ring.left) || 0, right = parseFloat(ring.right) || 0;
@@ -124,7 +124,7 @@ test('closing keeps the overlay in the page with its exit running, then takes it
  await vi.advanceTimersByTimeAsync(1);
  expect(push.mock.calls).toEqual([['/c/rs-learning/chat']]);
  // useLeave marks the overlay gone and navigates in one callback; React draws it gone on its next render.
- await drawn(() => document.querySelector<HTMLElement>('.sov-root')?.hidden === true, 'the overlay gone');
+ await untilDrawn(() => document.querySelector<HTMLElement>('.sov-root')?.hidden === true, 'the overlay gone');
  await vi.advanceTimersByTimeAsync(1000);
  expect(push).toHaveBeenCalledOnce();
 });

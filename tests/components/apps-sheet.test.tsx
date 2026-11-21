@@ -64,7 +64,7 @@ const appsButton = () => document.querySelector<HTMLButtonElement>('#btn-apps')!
 // and the focus to come back allow for the whole component suite sharing one busy browser (#501), where the 190 ms leave
 // and the render after it can take longer than expect's default second; so can the sheet's opening, which the same tests
 // wait for.
-const settled = { timeout: 5000 };
+const busyBrowser = { timeout: 5000 };
 const closedBack = async (opener: HTMLElement, close: () => Promise<unknown>) => {
  let left = false;
  const watch = new MutationObserver(records => {
@@ -73,10 +73,10 @@ const closedBack = async (opener: HTMLElement, close: () => Promise<unknown>) =>
  watch.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
  try {
   await close();
-  await expect.poll(() => document.querySelector('dialog.apps-sheet'), settled).toBeNull();
+  await expect.poll(() => document.querySelector('dialog.apps-sheet'), busyBrowser).toBeNull();
  } finally { watch.disconnect(); }
  expect(left, 'the leave is drawn first').toBe(true);
- await expect.element(opener, settled).toHaveFocus();
+ await expect.element(opener, busyBrowser).toHaveFocus();
 };
 
 test('the sidebar button opens the sheet with the keyboard in the search field, and the close button, Escape and a press on the backdrop each close it back to the button', async () => {
@@ -86,8 +86,8 @@ test('the sidebar button opens the sheet with the keyboard in the search field, 
  await expect.element(appsButton()).toHaveAttribute('aria-haspopup', 'dialog');
  const open = async () => {
   await screen.getByRole('button', { name: /^Connect apps/ }).click();
-  await expect.element(screen.getByRole('dialog', { name: 'Connect apps' }), settled).toBeVisible();
-  await expect.element(screen.getByRole('searchbox', { name: 'Search apps' }), settled).toHaveFocus();
+  await expect.element(screen.getByRole('dialog', { name: 'Connect apps' }), busyBrowser).toBeVisible();
+  await expect.element(screen.getByRole('searchbox', { name: 'Search apps' }), busyBrowser).toHaveFocus();
  };
  await open();
  await closedBack(appsButton(), () => screen.getByRole('button', { name: 'Close', exact: true }).click());
@@ -106,8 +106,8 @@ test('the account menu item carries the count, closes the menu and opens the she
  await expect.element(item).toHaveTextContent('Connect apps2 connected');
  // Pressed in the page itself: with the shell's styles and no sidebar around it, the menu opens above the window's top.
  (item.element() as HTMLButtonElement).click();
- await expect.element(screen.getByRole('menu'), settled).not.toBeInTheDocument();
- await expect.element(screen.getByRole('searchbox', { name: 'Search apps' }), settled).toHaveFocus();
+ await expect.element(screen.getByRole('menu'), busyBrowser).not.toBeInTheDocument();
+ await expect.element(screen.getByRole('searchbox', { name: 'Search apps' }), busyBrowser).toHaveFocus();
  await closedBack(document.querySelector<HTMLElement>('#btn-me')!, () => userEvent.keyboard('{Escape}'));
 });
 

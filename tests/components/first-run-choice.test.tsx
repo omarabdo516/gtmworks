@@ -4,7 +4,7 @@ import { userEvent } from 'vitest/browser';
 import FirstRunChoice, { type FirstRunState } from '@/app/first-run-choice';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { Language } from '@/lib/i18n.mjs';
-import { drawn, fakeClock } from './fake-clock';
+import { untilDrawn, fakeClock } from './fake-clock';
 import '@/app/tokens.css';
 import '@/app/first-run-choice.css';
 
@@ -196,14 +196,14 @@ test('a saved answer leaves with the exit, then opens the Conversation the serve
  // The leave is timed on a fake clock (#501), and pressed in the page so no driver round trip runs inside it.
  fakeClock();
  (screen.getByRole('button', { name: 'Open the workspace' }).element() as HTMLButtonElement).click();
- await drawn(() => !!document.querySelector('.fr')?.classList.contains('is-closing'), 'the leave');
+ await untilDrawn(() => !!document.querySelector('.fr')?.classList.contains('is-closing'), 'the leave');
  await vi.advanceTimersByTimeAsync(189);
  expect(document.querySelector<HTMLElement>('.fr-root')?.hidden).toBe(false);
  expect(push).not.toHaveBeenCalled();
  await vi.advanceTimersByTimeAsync(1);
  expect(push.mock.calls).toEqual([['/c/acme-abcd1234/conversations/cv-1?first=alone']]);
  // useLeave marks the question gone and navigates in one callback; React draws it gone on its next render.
- await drawn(() => document.querySelector<HTMLElement>('.fr-root')?.hidden === true, 'the question gone');
+ await untilDrawn(() => document.querySelector<HTMLElement>('.fr-root')?.hidden === true, 'the question gone');
 });
 
 test('a save that fails keeps the question with its error and never leaves', async () => {
