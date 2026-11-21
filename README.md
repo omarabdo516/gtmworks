@@ -312,6 +312,18 @@ release, no migration is applied, no container is changed, and the release you
 run keeps serving. Running the install command again on an updated install keeps
 the Engine it adopted.
 
+An install made before the work sandbox gets one for each Company it has, one
+or many, from the update: the Company's sandbox, its exit and its work folder,
+made beside its Engine as `company add` makes them. Each Engine is recreated on
+its own data volume and pinned to its Company's sandbox, so every Agent's
+terminal, files and code run there, and the worker brings every Agent, those
+made before the update included, to the one fixed set of tools. Agents, their
+memory, Skills, history and the Company's sign-in are kept. The Company's Agent
+level is gone, and its past level changes still read in the Company's log. An
+update whose migration fails leaves the release you ran serving with no sandbox
+begun, and running the install command again on an updated install keeps every
+sandbox and its work folder.
+
 It refuses a release older than the data: when the database has applied a
 migration the chosen release does not carry, a later release migrated it, and
 the update stops with a plain message before changing anything. Going back past
