@@ -1474,6 +1474,9 @@ probe 'after the update whose sandbox image cannot be pulled'
 second_slug=$(ls .engines | grep -vx first)
 [[ -n $second_slug && $second_slug != *$'\n'* ]] || fail "read the second Company's one Engine folder"
 printf 'SANDBOX_CPUS=100000\n' >> ".engines/$second_slug/.env"
+# The updates that failed above left this release's Engine files on disk, as a real one leaves them; the previous release's
+# own go back with its command (scripts/get.sh), here by hand from the commit its image was built from.
+cp "$RUNNER_TEMP/sandbox-previous-release/scripts/"engine-* scripts/ || fail "the previous release's Engine files back before the failed sandbox start"
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place for the failed sandbox start'
 if GTMWORKS_ENGINE_WAIT=60 sh install.sh update > update.log 2>&1; then fail_update "the update whose second Company's sandbox does not start must fail"; fi
 grep -Fq 'Applying migration:' update.log || fail_update "the update whose second Company's sandbox does not start applies its migrations first"
