@@ -266,4 +266,27 @@ values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-00000000
  'تقرير الـ 90 يوم بيقرا أرقام كتير من 4 مصادر وبيتأخر عن ميعاده. Gemini 2.5 Pro أسرع في الأرقام الكبيرة، والتقرير الأسبوعي هيفضل بنفس الشكل.','2026-11-16T11:30:00Z')
 on conflict do nothing;
 
+-- The first Contributor's three Conversations with Lead in which they ask for an article, the job of SEO & Content,
+-- which is hidden from them, and Lead's card asks whether to request it from the Manager, who sees it (#167; the
+-- reference's mainTurn for Youssef): still offered, after "Ask", and after "No, never mind". The card never names the Agent.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
+select ('62000000-0000-0000-0000-0000000000'||x.n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','61000000-0000-0000-0000-000000000001','Lead','2026-11-16T12:00:00Z'::timestamptz
+from (values (20),(21),(22)) x(n)
+on conflict (id) do nothing;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+select '10000000-0000-0000-0000-000000000001',('62000000-0000-0000-0000-0000000000'||t.n)::uuid,x.author,x.person_id,x.agent_id,x.author_name,x.body,
+ case when x.author='person' then ('63000000-0000-0000-0000-0000000000'||t.n)::uuid end,'design-compare-fixture-access',x.at
+from (values (20),(21),(22)) t(n)
+cross join (values
+ (1,'person','20000000-0000-0000-0000-000000000003'::uuid,null::uuid,'مراجع','اكتبلي مقال SEO عن كورس المحاسبة','2026-11-16T12:00:00Z'::timestamptz),
+ (2,'agent',null,'61000000-0000-0000-0000-000000000001','Lead','الشغلانة دي عند وكيل تاني في الشركة، والوكيل ده مش متاح ليك. تحب أبعت لـمدير (مدير) طلب إنه يتفتح ليك؟','2026-11-16T12:00:20Z')
+) x(k,author,person_id,agent_id,author_name,body,at)
+where not exists(select 1 from public.conversation_messages m where m.conversation_id=('62000000-0000-0000-0000-0000000000'||t.n)::uuid)
+order by t.n,x.k;
+insert into public.agent_access_requests(company_id,conversation_id,run_id,call_id,agent_id,asked_by,named_to,state,pressed_at,created_at)
+select '10000000-0000-0000-0000-000000000001',('62000000-0000-0000-0000-0000000000'||x.n)::uuid,'design-compare-fixture-access','call-0','61000000-0000-0000-0000-000000000003',
+ '20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000002',x.state,x.pressed,'2026-11-16T12:00:20Z'
+from (values (20,'offered',null::timestamptz),(21,'asked','2026-11-16T12:01:00Z'),(22,'dismissed','2026-11-16T12:01:00Z')) x(n,state,pressed)
+on conflict do nothing;
+
 commit;
