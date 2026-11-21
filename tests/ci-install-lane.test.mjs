@@ -26,7 +26,8 @@ case $1 in
    for f in "$host"/*; do [ -e "$f" ] || continue; read -r n _ < "$f"
     if [ "$(basename "$f")" = "$arg" ] || [ "$n" = "$arg" ]; then rm -f "$f"; found=1; fi; done
    [ -n "$found" ] || { echo "No such container: $arg" >&2; status=1; }; done; exit $status;;
- ps) label=; while (($#)); do [ "$1" != --filter ] || label=${'${2#label=}'}; shift; done
+ ps) [ ! -e "$state/refused" ] || { echo 'Cannot connect to the Docker daemon' >&2; exit 1; }
+  label=; while (($#)); do [ "$1" != --filter ] || label=${'${2#label=}'}; shift; done
   for f in "$host"/*; do [ -e "$f" ] || continue; read -r _ l < "$f"; [ -z "$label" ] || [ "$l" = "$label" ] && basename "$f"; done;;
  load) cat > /dev/null; if [ -n "${'${FAKE_DOCKER_LOAD_WAIT:-}'}" ]; then touch "$state/loading"; sleep "$FAKE_DOCKER_LOAD_WAIT"; fi;;
 esac
@@ -34,10 +35,10 @@ exit 0
 `;
 
 // The proof the lane runs, standing in for scripts/ci-install-check.sh: it says which Docker it was given, then passes,
-// fails, or waits to be stopped.
+// fails, or waits to be stopped in an area of its own subshell, as the real proof runs its areas.
 const proof = `#!/usr/bin/env bash
 printf %s "\${DOCKER_HOST:-}" > "$FAKE_DOCKER_STATE/proof-docker-host"; echo $$ > "$FAKE_DOCKER_STATE/proof-pid"
-case $LANE_PROOF in pass) exit 0;; fail) exit 1;; wait) touch "$FAKE_DOCKER_STATE/proving"; sleep 60;; esac
+case $LANE_PROOF in pass) exit 0;; fail) exit 1;; wait) (echo $BASHPID > "$FAKE_DOCKER_STATE/area-pid"; touch "$FAKE_DOCKER_STATE/proving"; sleep 60);; esac
 `;
 
 let root, repo, bin;
@@ -114,18 +115,51 @@ test('after a failed proof the run fails and everything is gone', async t => {
   cleanedUp(run.state);
 });
 
-const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// A process that has ended but is not yet reaped (a zombie, until its new parent waits for it) is not running.
+const alive = pid => {
+  try { return /^[^Z]/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).trim()); } catch { return false; }
+};
 
-test('SIGTERM to the lane alone while the proof runs stops the proof and removes everything as it ends', async t => {
+test('SIGTERM to the lane alone while the proof runs stops the proof and its area, and removes everything as it ends', async t => {
   const run = lane(t, { proof: 'wait' });
   await run.reached('proving');
   assert.equal(machines(run.state).length, 1, 'the machine is running');
   process.kill(run.child.pid, 'SIGTERM');
   assert.equal((await run.ended).signal, 'SIGTERM');
   cleanedUp(run.state);
-  const proof = Number(readFileSync(join(run.state, 'proof-pid'), 'utf8'));
-  for (let i = 0; i < 20 && alive(proof); i++) await sleep(50);
-  assert.equal(alive(proof), false, 'the proof is not left running against a machine that is gone');
+  for (const file of ['proof-pid', 'area-pid']) {
+    const pid = Number(readFileSync(join(run.state, file), 'utf8'));
+    for (let i = 0; i < 20 && alive(pid); i++) await sleep(50);
+    assert.equal(alive(pid), false, `${file}: the proof is not left running against a machine that is gone`);
+  }
+});
+
+const settled = async state => {
+  for (let i = 0; i < 300 && (machines(state).length || workFolders().length || worktrees() > 1); i++) await sleep(100);
+};
+
+test('a host Docker that refuses its listing as the run ends keeps the work folder, and the guard removes everything once Docker answers', async t => {
+  const run = lane(t, { proof: 'wait' });
+  await run.reached('proving');
+  writeFileSync(join(run.state, 'refused'), '');
+  process.kill(run.child.pid, 'SIGTERM');
+  const { stderr } = await run.ended;
+  assert.match(stderr, /not removed yet: a guard goes on removing it/);
+  assert.equal(machines(run.state).length, 1, 'Docker refused, so the machine is still there');
+  assert.equal(workFolders().length, 1, 'the work folder stays while the machine may be there');
+  rmSync(join(run.state, 'refused'));
+  await settled(run.state);
+  cleanedUp(run.state);
+});
+
+test('a machine that starts after the trap has stopped waiting for it is removed by the guard', async t => {
+  const run = lane(t, { env: { FAKE_DOCKER_RUN_WAIT: '3', INSTALL_LANE_START_WAIT: '1' } });
+  await run.reached('starting');
+  process.kill(run.child.pid, 'SIGTERM');
+  assert.equal((await run.ended).signal, 'SIGTERM');
+  await run.reached('started');
+  await settled(run.state);
+  cleanedUp(run.state);
 });
 
 test('Ctrl-C (SIGINT to the whole run) while the proof runs removes everything as it ends', async t => {
@@ -159,6 +193,6 @@ test('SIGKILL of the whole run, which runs no trap, still removes everything wit
   await run.reached('proving');
   process.kill(-run.child.pid, 'SIGKILL');
   assert.equal((await run.ended).signal, 'SIGKILL');
-  for (let i = 0; i < 100 && (machines(run.state).length || workFolders().length || worktrees() > 1); i++) await sleep(100);
+  await settled(run.state);
   cleanedUp(run.state);
 });

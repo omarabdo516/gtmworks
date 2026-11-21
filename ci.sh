@@ -225,12 +225,12 @@ case "${1:-check}" in
     || { echo "Push HEAD to a branch on GitHub first: the install job downloads it ($(git rev-parse --short HEAD))." >&2; exit 2; }
   work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
   # The machine, its checkout and the work folder go however the run ends (scripts/install-lane-machine.sh, #416): the
-  # EXIT trap after a pass, a failure or SIGINT, SIGTERM or SIGHUP, and a guard outside the lane's process tree after a
-  # kill that runs no trap. Both are in place before anything is made. A signal to this shell alone would leave the proof
-  # running on, so the trap stops this shell's own commands first. `set -e` holds inside the trap too, so no command in it
-  # may fail before the removal.
+  # EXIT trap after a pass, a failure or SIGINT, SIGTERM or SIGHUP, which first stops this shell's own commands (a signal
+  # to this shell alone would leave the proof's areas running on), and a guard outside the lane's process tree after a
+  # kill that runs no trap, or for what the trap could not remove. Both are in place before anything is made. `set -e`
+  # holds inside the trap too, so nothing in it may fail before the removal.
   lane="$here/scripts/install-lane-machine.sh"
-  trap 'pkill -TERM -P $$ 2> /dev/null || true; bash "$lane" remove "$work"' EXIT
+  trap 'bash "$lane" remove "$work" $$ || true' EXIT
   bash "$lane" guard $$ "$work"
   git worktree add -q --detach "$work/src" HEAD
   bash "$lane" start "$work" "$port"
