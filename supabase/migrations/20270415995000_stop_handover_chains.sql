@@ -168,15 +168,19 @@ revoke all on function public.handover_run_stopped(bigint,text) from public,anon
 grant execute on function public.handover_run_stopped(bigint,text) to service_role;
 
 -- 20270415990000's answer_handover: a leg Stop marked while its start's answer was lost ends as stopped on its start's
--- answer, whatever it is: a Run id is not kept as the leg's Run (the worker hears it was stopped and stops it,
--- stop_late_handover_run), and a refusal moves it to no other leg.
+-- answer, whatever it is: a Run id is kept, in the same transaction, as the Run to stop, never as the leg's Run (the
+-- worker stops it, then keeps stopping it until it ended), and a refusal moves it to no other leg.
 do $$
 declare def text; was text;
 begin
  def:=pg_get_functiondef('public.answer_handover(bigint,integer,text,text)'::regprocedure);
  was:=' if r.id is null or r.state not in (''waiting'',''handing'',''returning'') then return false; end if;';
  if position(was in def)=0 then raise exception 'answer_handover changed: %',def; end if;
- execute replace(def,was,was||E'\n if r.stop_requested_at is not null then perform public.end_handovers_stopped(array[h]); return false; end if;');
+ execute replace(def,was,was||E'\n if r.stop_requested_at is not null then\n'
+  || E'  perform public.end_handovers_stopped(array[h]);\n'
+  || E'  if run is not null then update public.agent_handovers x set stopping_run=coalesce(x.stopping_run,run) where x.id=h; end if;\n'
+  || E'  return false;\n'
+  || E' end if;');
 end $$;
 
 -- 20270415950000's lead_hand_to_agent, 20270415960000's channel_hand_to_agent and 20270415990000's

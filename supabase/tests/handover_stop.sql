@@ -121,7 +121,8 @@ reset role;
 select is((select state||':'||(stop_requested_at is not null) from public.agent_handovers where id=current_setting('test.u')::bigint),'waiting:true',
  'the leg is left to the worker, marked to stop');
 select is(public.answer_handover(current_setting('test.u')::bigint,1,'run-critic-found','waiting'),false,'its Run id, come back on a retry, is not kept as its Run');
-select is((select state||':'||target_outcome from public.agent_handovers where id=current_setting('test.u')::bigint),'done:stopped','the leg ended as stopped');
+select is((select state||':'||target_outcome||':'||stopping_run from public.agent_handovers where id=current_setting('test.u')::bigint),'done:stopped:run-critic-found',
+ 'the leg ended as stopped, its Run kept to stop in the same transaction');
 select is(public.stop_late_handover_run(current_setting('test.u')::bigint,'run-critic-found'),true,'and its Run is kept to stop');
 -- One whose start is then refused ends as stopped too, and moves to no follow-up.
 select is(public.lead_hand_to_agent('c4780000-0000-0000-0000-000000000001','run-writer','call-5','Critic','And again',null),'{"state":"created","agent":"Critic"}'::jsonb,'Writer asks Critic again');

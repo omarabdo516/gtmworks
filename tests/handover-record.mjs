@@ -73,7 +73,7 @@ export function record(place,...tops) {
   }
   if(name==='pin_handover_tools') { pins.push(row.id); row.tools??=args.spec??''; return ok(row.tools); }
   if(name==='answer_handover') {
-   if(row.stop_requested) { end(row); return ok(false); }
+   if(row.stop_requested) { end(row); if(args.run) row.stopping_run??=args.run; return ok(false); }
    if(args.run===null||args.leg!==row.state) return ok(false);
    if(row.state==='waiting') Object.assign(row,{target_run:args.run,state:'target'});
    else if(row.state==='handing') Object.assign(row,{answer_run:args.run,state:'answering'});
