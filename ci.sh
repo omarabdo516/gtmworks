@@ -7,8 +7,17 @@ lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
 install_chromium() {
   # The visual lane's browser and its system packages, as it has always installed them (#257); the browser suite's
-  # shards get theirs from the workflow's cache, and install no system package (#404).
-  npx playwright install --with-deps chromium
+  # shards get theirs from the workflow's cache, and install no system package (#404). It starts in the background beside
+  # start_lane's npm ci (#359), so it runs the locked Playwright from a folder of its own: npm ci is rewriting the
+  # checkout's node_modules meanwhile. The browser lands in the cache the checkout's Playwright reads.
+  local version
+  version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")
+  mkdir -p playwright-report
+  (cd "$(mktemp -d)" && npx --yes "playwright@$version" install --with-deps chromium) > playwright-report/chromium.log 2>&1 &
+  chromium=$!
+}
+chromium_installed() {
+  wait "$chromium" || { cat playwright-report/chromium.log >&2; echo 'Chromium did not install' >&2; exit 1; }
 }
 start_lanes() {
   mkdir -p playwright-report
@@ -180,13 +189,16 @@ case "${1:-check}" in
   ;;
  visual)
   # The visual lane's key screens on the pinned renderer, and its guard tests (#257). Then the navigation time budgets,
-  # which need a machine of their own (#224).
+  # which need a machine of their own (#224). In CI the budgets' browser installs beside the lane (#359).
+  if [[ "${CI:-}" == "true" ]]; then
+    install_chromium
+  fi
   start_lane
   dir=$(ledger_dir visual)
   status=0
   PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/lane.json" lane_test || status=$?
   if [[ "${CI:-}" == "true" ]]; then
-    install_chromium
+    chromium_installed
   fi
   # Its own output folder: Playwright empties the one it writes to, and test-results/lane/ holds the lane's differences.
   # The budgets serve the build the lane's web server made; with none (the lane stopped before it), they build their own.
