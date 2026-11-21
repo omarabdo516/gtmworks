@@ -64,7 +64,7 @@ select pg_temp.as_person('20000000-0000-0000-0000-000000000004');
 select throws_ok($$select public.start_card_conversation('10000000-0000-0000-0000-000000000001',pg_temp.card('hidden'),'e1450000-0000-0000-0000-000000000006')$$,'42501','conversationNotAllowed',
  'the Viewer cannot start a chat');
 select pg_temp.as_person('20000000-0000-0000-0000-000000000005');
-select is((select count(*)::int from public.work_cards where id=pg_temp.card('hidden')),1,'the second Contributor sees the untied Card of Ads');
+select is((select count(*)::int from public.work_cards where id=pg_temp.card('hidden')),0,'the second Contributor does not read the untied Card of Ads, hidden from them (#367)');
 select throws_ok($$select public.start_card_conversation('10000000-0000-0000-0000-000000000001',pg_temp.card('hidden'),'e1450000-0000-0000-0000-000000000007')$$,'P0002','conversationNotFound',
  'and cannot start a chat with Ads, which is hidden from them');
 select pg_temp.as_person('20000000-0000-0000-0000-000000000002');

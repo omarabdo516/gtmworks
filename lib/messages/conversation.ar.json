@@ -28,5 +28,19 @@
   "stepsSecondsMany": "{0} ثواني",
   "stepsMinutesMany": "{0} دقايق",
   "handedTo": "سلّم الشغل لـ {0}",
-  "handedFailed": "الشغل ماخلصش"
+  "handedFailed": "الشغل ماخلصش",
+  "accessTitle": "أطلبه من {0}؟",
+  "accessLine": "اختيار الوكلاء اللي كل واحد بيشتغل معاهم عند {0} ({1}).",
+  "accessLabel": "اطلبه من {0}",
+  "accessNo": "لا خلاص",
+  "accessAsk": "اطلب من {0}",
+  "accessSent": "اتبعت لـ{0} · {1}. هيوصلك رد هنا أول ما الطلب يتوافق عليه.",
+  "accessNotSent": "تمام، مفيش طلب اتبعت.",
+  "accessWaitingFor": "مستني رد {0}",
+  "accessToastSent": "الطلب اتبعت لـ{0}",
+  "accessToastNotSent": "مفيش طلب اتبعت",
+  "accessAnsweredOpened": "{0} وافق على طلبك، و{1} بقى بيشتغل معاك. هتلاقيه في الوكلاء عندك، افتحه واديله الشغلانة.",
+  "accessAnsweredOpenedGone": "{0} وافق على طلبك، والوكيل اتفتح ليك.",
+  "accessAnsweredDeclined": "{0} قال لأ على طلبك دلوقتي، فالوكيل ده لسه مش متاح ليك. لو لسه محتاج الشغلانة دي، قولّي هنا.",
+  "accessAvailable": "الوكيل ده بقى متاح ليك: هتلاقيه في الوكلاء عندك."
 }

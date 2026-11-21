@@ -196,7 +196,8 @@ test('a saved answer leaves with the exit, then opens the Conversation the serve
  await expect.poll(() => document.querySelector('.fr')?.classList.contains('is-closing')).toBe(true);
  expect(push).not.toHaveBeenCalled();
  await expect.poll(() => push.mock.calls).toEqual([['/c/acme-abcd1234/conversations/cv-1?first=alone']]);
- expect(document.querySelector<HTMLElement>('.fr-root')?.hidden).toBe(true);
+ // useLeave marks the question gone and navigates in one callback; React draws it gone on its next render.
+ await expect.poll(() => document.querySelector<HTMLElement>('.fr-root')?.hidden).toBe(true);
 });
 
 test('a save that fails keeps the question with its error and never leaves', async () => {

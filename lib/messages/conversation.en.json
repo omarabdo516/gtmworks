@@ -28,5 +28,19 @@
   "stepsSecondsMany": "{0} sec",
   "stepsMinutesMany": "{0} min",
   "handedTo": "Handed to {0}",
-  "handedFailed": "The job didn’t finish"
+  "handedFailed": "The job didn’t finish",
+  "accessTitle": "Ask {0} for it?",
+  "accessLine": "{0} ({1}) chooses which agents each person works with.",
+  "accessLabel": "Ask {0} for it",
+  "accessNo": "No, never mind",
+  "accessAsk": "Ask {0}",
+  "accessSent": "Sent to {0} · {1}. You’ll get an answer here when they approve.",
+  "accessNotSent": "OK, no request was sent.",
+  "accessWaitingFor": "Waiting for {0}",
+  "accessToastSent": "Request sent to {0}",
+  "accessToastNotSent": "No request sent",
+  "accessAnsweredOpened": "{0} said yes to your request, and {1} now works with you. You’ll find it in your agents: open it and give it the job.",
+  "accessAnsweredOpenedGone": "{0} said yes to your request, and the agent was opened for you.",
+  "accessAnsweredDeclined": "{0} said no to your request for now, so that agent stays unavailable to you. If you still need the work done, tell me here.",
+  "accessAvailable": "That agent is open for you now: you’ll find it in your agents."
 }
