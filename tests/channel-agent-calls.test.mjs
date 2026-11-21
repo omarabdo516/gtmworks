@@ -34,7 +34,7 @@ function runDatabase(runs) {
      session: `s-${next.ordinal}`, input: `Sara: ${next.text ?? ''}`, instructions: null }], error: null };
    }
    if (name === 'pin_channel_run') return { data: { tools: null }, error: null };
-   if (name === 'channel_handover_agents') return { data: [], error: null };
+   if (name === 'channel_handover_targets') return { data: [], error: null };
    if (name === 'answer_channel_start') {
     if (args.run && runs.some(run => run.message === args.message && run.run_id === args.run && run.outcome === null))
      return { data: true, error: null };
@@ -135,7 +135,7 @@ test('a channel Run whose Company has no reachable Engine waits for a later star
    called.push(name);
    if(name==='channel_runs_due') return {data:args.after?[]:[{message:7,run:null,profile:'ag-00000000000000000000000000000001',ordinal:1,company:'c'}],error:null};
    if(name==='begin_channel_start') return {data:[{profile:'ag-00000000000000000000000000000001',company:'c',attempt:1,session:'s',input:'hi',ordinal:1}],error:null};
-   if(name==='channel_handover_agents') return {data:[],error:null};
+   if(name==='channel_handover_targets') return {data:[],error:null};
    if(name==='pin_channel_run') return {data:{tools:null},error:null};
    if(name==='answer_channel_start') return {data:true,error:null};
    return {data:null,error:{message:`unexpected ${name}`}};

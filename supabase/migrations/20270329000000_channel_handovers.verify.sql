@@ -22,7 +22,8 @@ select json_build_object(
   and position('channel_can_hand_over' in pg_get_functiondef('public.pin_channel_run(bigint,jsonb)'::regprocedure))>0,
  'agents_named',has_function_privilege('service_role','public.channel_handover_agents(bigint)','execute')
   and not has_function_privilege('authenticated','public.channel_handover_agents(bigint)','execute')
-  and position('channel_agent' in pg_get_functiondef('public.channel_handover_agents(bigint)'::regprocedure))>0,
+  -- #476: the names are the Company's other Agents, in the channel or not, read from channel_handover_targets.
+  and position('channel_handover_targets' in pg_get_functiondef('public.channel_handover_agents(bigint)'::regprocedure))>0,
  'channel_legs',position('channel_message_id' in pg_get_functiondef('public.handovers_due(uuid,bigint,uuid)'::regprocedure))>0
   and has_function_privilege('service_role','public.handovers_due(uuid,bigint,uuid)','execute')
   and not has_function_privilege('authenticated','public.handovers_due(uuid,bigint,uuid)','execute')
