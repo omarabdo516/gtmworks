@@ -23,6 +23,7 @@ import type { AnswerQuestion } from '@/app/question-card';
 import type { MarkHandDone } from '@/app/hand-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
 import { offeredChoices } from '@/lib/conversations';
+import { useArrivals, type Arrival } from '@/lib/arrivals';
 
 type Say=(key:string,...values:unknown[])=>string;
 type Choices=NonNullable<Awaited<ReturnType<typeof channelChoices>>>;
@@ -30,6 +31,11 @@ const roleKeys={owner:'owner',manager:'manager',contributor:'contributor',viewer
 // The Agents a message called (#152), in the order they were named. A message from an older drawing carries only the
 // first one, which is the one Agent it called.
 const mentionsOf=(message:ChannelMessage):ChannelMention[]=>message.author==='person'?message.mentions??(message.mention?[message.mention]:[]):[];
+
+// What each drawn message, and the cards turn under a person's message, is known by for its rise (lib/arrivals).
+// A card turn is known only once it is drawn: a called Agent with no question or request yet has none, so the first one
+// to arrive rises.
+const arrivals=(messages:ChannelMessage[]):Arrival[]=>messages.flatMap(message=>[`${message.author}:${message.id}`,...mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=>`${message.author}:${message.id}:${mention.agent}`)]).map(key=>({key,element:key}));
 
 // Agent names inside a sentence, each isolated so a name in the other script never flips the text around it.
 const Names=({agents,c}:{agents:ChannelAgent[],c:Say})=><>{agents.map((agent,index)=><Fragment key={agent.id}>{index>0&&c('channelNamesJoin')}<bdi>{agent.name}</bdi></Fragment>)}</>;
@@ -41,6 +47,10 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const cb:StepsBidiText=(key,...values)=>own[key].split(/\{(\d+)\}/).map((part,index)=>index%2?<bdi key={index}>{values[Number(part)]}</bdi>:part);
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0); const panel=useDetailsPanel(); const zone=useZone();
  const {channel,members,agents,writer,messages,open,handover,may,board}=record;
+ // A message that arrives while the channel is open rises in once (design-reference: msg-in); what it held when opened,
+ // its own first read included (only when that read is the one drawn), stays still.
+ const {rises,settled}=useArrivals(arrivals(messages));
+ const rise=(key:string)=>rises({key,element:key})?' msg-in':'';
  const refresh=useCallback(async()=>{
   try {
    const response=await fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'});
@@ -54,9 +64,9 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
   const mention=/^#mention-\d+$/.test(location.hash)?location.hash.slice('#mention-'.length):null;
   void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}${mention?`&mention=${mention}`:''}`,{cache:'no-store'}).then(async response=>{
    if(mention) history.replaceState(history.state,'',location.pathname+location.search);
-   if(response.ok) { const fresh=await response.json() as ChannelRecord; setRecord(current=>current===initial?fresh:current); } else await response.arrayBuffer();
+   if(response.ok) { const fresh=await response.json() as ChannelRecord; setRecord(current=>{ if(current!==initial) return current; settled(arrivals(fresh.messages)); return fresh; }); } else await response.arrayBuffer();
   }).catch(()=>{});
- },[channel.company,channel.id,initial]);
+ },[channel.company,channel.id,initial,settled]);
  useEffect(()=>{
   let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined;
   const poll=async()=>{
@@ -162,8 +172,8 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined}/>
-    {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className="turn turn--agent msg" data-author="agent">
+    <Turn message={message} rise={rise(`${message.author}:${message.id}`)} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined}/>
+    {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {mention.questions.map(card=><ReplyCard key={`question${card.id}`} card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
        team
@@ -172,7 +182,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
      {mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
     </li>)}
    </Fragment>)}</ol>
-   {workingNow&&<p className="thinking convo-status" role="status">{t('conversationWorking',workingNow.agent)}</p>}
+   {workingNow&&<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>}
   </div></div>
   <div className="composer-area">
    {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name,role:member.role}]:[]),agents}} send={async(message,sendKey,files)=>{
@@ -185,23 +195,23 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} time={time} refresh={refresh}/></div>;
 }
 
-function Turn({message,time,c,slug,name,cb,drawnCards,memberNames,done}:{message:ChannelMessage,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone}) {
+function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done}:{message:ChannelMessage,rise:string,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone}) {
  const {t,language}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
  // The quiet line an invitation adds (#207): not a message, and the channel's own name is the one it joined. The quiet
  // line a channel's Card adds (#151) says where the Card went, in the time it was added.
- if(message.author==='note') return <li className="note note--icon" data-kind={message.kind}>
+ if(message.author==='note') return <li className={`note note--icon${rise}`} data-kind={message.kind}>
   <ShellIcon name={message.kind==='card'?'board':'team'} className="note__icon"/><span>{message.kind==='card'?c('channelCardNote',t('boardColProgress')):c('channelInviteNote',firstName(message.actor),message.name,name)}</span>
  </li>;
  // A job the main Agent handed another Agent of the channel (#150; design-reference: the handoff row, `.handoff`): both
  // faces with the arrow between them, the Agent it went to, and the job. It has nothing to press.
- if(message.author==='handoff') return <li className="handed" role="note" data-handover>
+ if(message.author==='handoff') return <li className={`handed${rise}`} role="note" data-handover>
   <span className="handed__faces"><CompanyAgentFace agent={{connection_id:message.from.face,name:message.from.name}} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:message.to.face,name:message.to.name}} size={18}/></span>
   <span className="handed__t">{named(c,'channelHandedTo',message.to.name)}</span>
   {message.goal&&<span className="handed__d"><bdi>{message.goal}</bdi></span>}
  </li>;
- if(message.author==='agent') return <li className="turn turn--agent msg" data-author="agent">
+ if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
   <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
@@ -215,12 +225,12 @@ function Turn({message,time,c,slug,name,cb,drawnCards,memberNames,done}:{message
  // The images the message carries (#156), under its bubble on the writer's side for the writer and on the start side for
  // every other Member (design-reference: filesHTML; `.turn--user` and `.turn--peer` put them on their own side).
  const files=!!message.files.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>;
- if(message.mine) return <li className="turn turn--user msg" data-author="person" data-msg={message.id}>
+ if(message.mine) return <li className={`turn turn--user msg${rise}`} data-author="person" data-msg={message.id}>
   {!!message.body.trim()&&<div className="bubble-row"><time className="bubble__time" dateTime={message.at}>{time(message.at)}</time><div className="bubble bubble--user" dir="auto">{body}</div></div>}
   {files}
   {failed}
  </li>;
- return <li className="turn turn--peer msg" data-author="person" data-msg={message.id}>
+ return <li className={`turn turn--peer msg${rise}`} data-author="person" data-msg={message.id}>
   <div className="sender"><Initial name={message.name} size={20}/><bdi>{firstName(message.name)}</bdi>{message.role&&<span className="sender__role">{t(roleKeys[message.role])}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   {!!message.body.trim()&&<div className="bubble bubble--peer" dir="auto">{body}</div>}
   {files}

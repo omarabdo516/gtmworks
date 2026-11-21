@@ -1,6 +1,8 @@
 'use client';
 import { createContext, lazy, Suspense, useContext, useEffect, useImperativeHandle, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type ReactNode, type Ref } from 'react';
+import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { prefersReducedMotion } from '@/lib/motion';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
 import { commandList, insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
 import { useI18n } from '@/lib/i18n-client';
@@ -45,6 +47,26 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // space after it, Escape closes and keeps the text, and Enter sends only when the list is closed. Opening the list
 // closes the "+" menu and the other way round. A note field draws the same list without Commands (app/card-sheet.tsx).
 export type MessageBoxHandle={insert:(sentence:string)=>void};
+// design-reference: flySend. On every send, a copy of the arrow starts over the button, in the open dialog that holds
+// the composer or the page, and leaves upward; it is gone 420 milliseconds later and never takes the pointer, the keyboard or a screen
+// reader's attention. With reduced motion there is none.
+type Flight={id:number,host:Element,left:number,top:number,width:number,height:number};
+let flightCount=0;
+function useSendFlights() {
+ const [shown,setShown]=useState<Flight[]>([]);
+ const timers=useRef(new Set<ReturnType<typeof setTimeout>>());
+ useEffect(()=>{ const pending=timers.current; return ()=>pending.forEach(clearTimeout); },[]);
+ const fly=(button:HTMLElement|null)=>{
+  if(!button||prefersReducedMotion()) return;
+  const {left,top,width,height}=button.getBoundingClientRect(); if(!width) return;
+  const flight={id:++flightCount,host:button.closest('dialog[open]')??document.body,left,top,width,height};
+  setShown(current=>[...current,flight]);
+  const timer=setTimeout(()=>{ timers.current.delete(timer); setShown(current=>current.filter(other=>other.id!==flight.id)); },420);
+  timers.current.add(timer);
+ };
+ const drawn=shown.map(({id,host,left,top,width,height})=>createPortal(<span key={id} className="gw send-fly" aria-hidden="true" style={{left,top,width,height}}><ShellIcon name="send"/></span>,host,String(id)));
+ return {fly,drawn};
+}
 export type CallablePerson={id:string,name:string,role?:'owner'|'manager'|'contributor'|'viewer'};
 export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:keyof typeof statusKeys,role?:string|null};
 export type Callable={people:CallablePerson[],agents:CallableAgent[]};
@@ -114,6 +136,14 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
  // The reference's one picker (#file-input): opened from the menu, it appends to what is already chosen.
  const picker=useRef<HTMLInputElement>(null);
  const canSend=!!text.trim()||files.length>0;
+ const sendButton=useRef<HTMLButtonElement>(null); const flights=useSendFlights();
+ // design-reference: syncComposer's is-morph. When the button turns between the send arrow and the stop square, the new
+ // icon pops in, once; typing with the button unchanged, and the first draw, play nothing. The mark goes once it has
+// played, so the next change is the only thing that plays it again.
+ const shape=stop&&!canSend?'stop':'send';
+ const [shapeShown,setShapeShown]=useState(shape); const [morphed,setMorphed]=useState(false);
+ if(shape!==shapeShown) { setShapeShown(shape); setMorphed(true); }
+ const morph=morphed?'is-morph':'';
  useEffect(()=>{ const typed=field.current?.value; if(typed) setText(current=>current||typed); },[]);
  const caret=useRef<number|null>(null);
  // A waiting message the Engine refused for its model comes back to an empty box with the model line, as a sent one stays.
@@ -185,6 +215,7 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   const problem=conversationFilesProblem(files,text);
   if(problem) { setError(refusalOf(problem)); return; }
   setBusy(true); setError(''); setRefusalLine(false); setList(null);
+  flights.fly(sendButton.current);
   const failure=await send(text,key,files);
   setBusy(false);
   if(failure) setError(failure); else { setText(''); setFiles([]); setKey(newId()); }
@@ -206,11 +237,12 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
    {dictation.recording&&dictation.wave}
    {dictation.recording&&dictation.clock}
    {voice?dictation.button:<button type="button" className="composer__btn composer__mic" aria-disabled="true" aria-label={`${t('chatDictation')} · ${t('soon')}`} title={t('soon')}><ShellIcon name="mic"/></button>}
-   {stop&&!canSend?<button type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)}><svg className="gw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
-   :<button type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!canSend||busy} onClick={()=>void submit()}><ShellIcon name="send"/></button>}
+   {stop&&shape==='stop'?<button ref={sendButton} type="button" className="composer__send is-stop" aria-label={stop.label} title={stop.label} disabled={busy} onClick={()=>void halt(stop)} onAnimationEnd={()=>setMorphed(false)}><svg key="stop" className={`gw-icon ${morph}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg></button>
+   :<button ref={sendButton} type="button" className="composer__send" aria-label={t('conversationSend')} disabled={!canSend||busy} onClick={()=>void submit()} onAnimationEnd={()=>setMorphed(false)}><ShellIcon key="send" name="send" className={morph}/></button>}
   </div>
   {error&&<p role="alert" className="composer-error">{t(error,maxFiles)}</p>}
   {dictation.error&&<p role="alert" className="composer-error">{t(dictation.error)}{dictation.help}</p>}
+  {flights.drawn}
  </div>;
 }
 

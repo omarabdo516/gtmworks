@@ -30,6 +30,7 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 import { useReportRun } from '@/lib/live-runs';
+import { useArrivals, useSentIntoNewChat, type Arrival } from '@/lib/arrivals';
 
 export type ThreadConversation=ConversationRecord['conversation'];
 type Text=(key:string,...values:unknown[])=>string;
@@ -37,6 +38,27 @@ type BidiText=(key:string,...values:ReactNode[])=>ReactNode[];
 const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
 const replyCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='reply'?[card.card.id]:[])??[]);
 const accessCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='access'?[card.access.id]:[])??[]);
+// What each drawn message is known by for its rise (lib/arrivals), and the element it is drawn as (its key in the list).
+// A turn still waiting (`queued`) is drawn again as the sent message once its Run starts, under a new id, so the
+// person's words are known by their text and how many times it was said before: the started turn is the same message,
+// drawn as another element, and does not rise again. A made Agent's card is known by its Agent.
+const arrivals=(messages:ConversationRecord['messages']):Arrival[]=>{
+ const said=new Map<string,number>();
+ return messages.map(message=>{
+  const element=`${message.kind||'m'}${message.id}`;
+  if(message.author!=='person'||(message.kind&&message.kind!=='queued')) return {key:element,element};
+  const times=said.get(message.body)??0; said.set(message.body,times+1);
+  return {key:`said:${times}:${message.body}`,element};
+ });
+};
+// A card can be drawn first in a turn of its own and moved into the Agent's reply once it is in, which draws it again
+// as a new element: the element names its turn, so the moved card stays still.
+const madeArrival=(message:ConversationRecord['messages'][number],agent:string):Arrival=>({key:`made:${agent}`,element:`${message.kind||'m'}${message.id}/made:${agent}`});
+// A saved or suggested rule's line moves the same way, from under the person's message to under the Agent's reply: it
+// is known by its rule, and its element names its turn.
+const ruleArrival=(message:ConversationRecord['messages'][number],rule:string):Arrival=>({key:`rule:${rule}`,element:`${message.kind||'m'}${message.id}/rule:${rule}`});
+const ruleArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.kind==='saved'?message.saved?.map(rule=>ruleArrival(message,rule.id))??[]:[]);
+const madeArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='made'?[madeArrival(message,card.agent.id)]:[])??[]);
 const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);
 // The words and the recorded outcome for a model error a retry cannot fix (#457).
 const refusalLine={credit:'modelNoCredit',key:'modelKeyRefused',model:'modelMissing'};
@@ -197,13 +219,18 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
  const [drawnCards]=useState(()=>new Set(replyCardIds(messages)));
  const [drawnAccess]=useState(()=>new Set(accessCardIds(messages)));
+ // So does a message, a line or the card of an Agent Lead made (design-reference: msg-in, agentCardHTML's card-in):
+ // what the Conversation held when it opened stays still, unless it was opened by the first message just sent into it.
+ const drawn=arrivals(messages);
+ const {rises}=useArrivals([...drawn,...madeArrivals(messages),...ruleArrivals(messages)],{fresh:useSentIntoNewChat(conversation.id)});
+ const rise=(index:number)=>rises(drawn[index])?' msg-in':'';
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
  const face=(size:number,connection?:string,name=conversation.agent_name)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:connection||conversation.face,name}} size={size}/></span>;
  return <>
-  <ol className="turns" aria-label={t('conversationMessages')}>{messages.map(message=>message.kind==='boarded'?<li key={`boarded${message.id}`} className="note" data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c}/>)}</Fragment>
-   :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}`} data-author="person" data-kind={message.kind}>
+  <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
+   :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}${rise(index)}`} data-author="person" data-kind={message.kind}>
    {!!message.body.trim()&&<div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
    {!!message.files?.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/conversation/${file.id}`} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
    {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
@@ -211,18 +238,18 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    {message.kind==='answer'&&message.failed&&<p className="note" role="status">{c('conversationAnswerNotDelivered')}</p>}
    {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
-  </li>:<li key={`${message.kind||'m'}${message.id}`} className="turn turn--agent msg" data-author="agent" data-kind={message.kind}>
+  </li>:<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
    <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
-   {message.cards?.map(card=>card.kind==='made'?<Fragment key={card.agent.id}><MadeCard slug={slug} agent={card.agent}/>{card.agent.fresh&&<AgentMadeToast company={company} slug={slug} agent={card.agent}/>}</Fragment>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
+   {message.cards?.map(card=>card.kind==='made'?<Fragment key={card.agent.id}><MadeCard slug={slug} agent={card.agent} fresh={rises(madeArrival(message,card.agent.id))}/>{card.agent.fresh&&<AgentMadeToast company={company} slug={slug} agent={card.agent}/>}</Fragment>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
     :card.kind==='change'?<ChangeCard key={`change${card.change.id}`} change={card.change} owner={record.changeOwner===true}
      answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
     :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
     :card.kind==='handed'?<HandedRow key={`handed${message.id}`} from={{connection_id:conversation.face,name:conversation.agent_name}} to={card} cb={cb}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>)}</ol>
-  {pending&&!record.asking&&<p className="thinking convo-status" role="status">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</p>}
+  {pending&&!record.asking&&<p className="thinking convo-status" role="status"><span className="shimmer">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</span></p>}
   {failed&&(record.noModel
    // The Company has no model at all (#422): sending again cannot work, so the line says where one is connected.
    ?<p className="note convo-status" role="alert" data-outcome="no-model">{t('noModelLine')} {record.noModel.owner?<Link className="note__link" href={overlayHref(slug,'models')}>{t('noModelConnect')}</Link>:t('noModelAskOwner')}</p>
@@ -276,31 +303,31 @@ function HandedRow({from,to,cb}:{from:{connection_id:string,name:string},to:Extr
 // The line under the Agent's reply when it saved a lasting rule it was told (#18; design-reference: ruleTurn, the
 // note--saved message): "Saved", whose rule it is, that it is in the log, and the way to the Agent's page while the rule
 // is still there.
-function SavedLine({slug,agent,rule,c}:{slug:string,agent:string,rule:SavedRule,c:Text}) {
- return <li className="note note--saved" data-kind="saved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{c('ruleSavedFor',agent)}</span>
+function SavedLine({slug,agent,rule,c,rise}:{slug:string,agent:string,rule:SavedRule,c:Text,rise:string}) {
+ return <li className={`note note--saved${rise}`} data-kind="saved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{c('ruleSavedFor',agent)}</span>
   {rule.agent&&!rule.removed&&<Link className="note__link" href={overlayHref(slug,'agents',{agent:rule.agent})}>{c('ruleSeeIt')}</Link>}</li>;
 }
 
 // A Contributor's rule became a suggestion for the team (#25; design-reference: suggestTurn's note): who it was sent to,
 // and where they decide it.
-function SuggestedLine({to,cb}:{to:string[],cb:BidiText}) {
+function SuggestedLine({to,cb,rise}:{to:string[],cb:BidiText,rise:string}) {
  const {language}=useI18n();
  const names=new Intl.ListFormat(localeFor(language),{type:'conjunction'}).formatToParts(to).map((part,index)=>part.type==='element'?<bdi key={index}>{part.value}</bdi>:part.value);
- return <li className="note note--icon" data-kind="suggested"><ShellIcon name="clock" className="note__icon"/><span>{cb('ruleSuggested',names)}</span></li>;
+ return <li className={`note note--icon${rise}`} data-kind="suggested"><ShellIcon name="clock" className="note__icon"/><span>{cb('ruleSuggested',names)}</span></li>;
 }
 
 // An Owner's or a Manager's decision on it, where it happened among the messages (design-reference: lnApprove's notes):
 // approved, it is saved for the whole team; refused, it stays in this person's own work. An Owner's answer to this
 // person's request for an Agent (#17; design-reference: approveRequest and refuseRequest's messages) is drawn as Lead's
 // message, as the reference posts it, though it is read from the request rather than written.
-function DecidedLine({decided,c,cb,lead}:{decided:Decision,c:Text,cb:BidiText,lead:ReactNode}) {
+function DecidedLine({decided,c,cb,rise,lead}:{decided:Decision,c:Text,cb:BidiText,rise:string,lead:ReactNode}) {
  // An Owner's or a Manager's answer to this person's request for a hidden Agent (#167), drawn as Lead's message as #17's
  // answer is: opened, it names the Agent they now see; a no names nothing of it.
- if(decided.kind==='access') return <li className="turn turn--agent msg" data-author="agent" data-kind="decided" data-decision={decided.opened?'opened':'kept'}>
+ if(decided.kind==='access') return <li className={`turn turn--agent msg${rise}`} data-author="agent" data-kind="decided" data-decision={decided.opened?'opened':'kept'}>
   {lead}<div className="bubble bubble--agent" dir="auto">{decided.opened?(decided.agent?cb('accessAnsweredOpened',decided.by,decided.agent.name):cb('accessAnsweredOpenedGone',decided.by)):cb('accessAnsweredDeclined',decided.by)}</div></li>;
- if(decided.kind==='request') return <li className="turn turn--agent msg" data-author="agent" data-kind="decided" data-decision={decided.made?'made':'declined'}>
+ if(decided.kind==='request') return <li className={`turn turn--agent msg${rise}`} data-author="agent" data-kind="decided" data-decision={decided.made?'made':'declined'}>
   {lead}<div className="bubble bubble--agent" dir="auto">{decided.made?cb('requestAnsweredMade',decided.by,decided.name):cb('requestAnsweredDeclined',decided.by,decided.name,decided.reason)}</div></li>;
  return decided.approved
-  ?<li className="note note--saved" data-kind="decided" data-decision="approved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{cb('ruleApproved',decided.by,decided.rule)}</span></li>
-  :<li className="note note--icon" data-kind="decided" data-decision="declined"><ShellIcon name="x" className="note__icon"/><span>{cb('ruleDeclined',decided.by)}</span></li>;
+  ?<li className={`note note--saved${rise}`} data-kind="decided" data-decision="approved"><ShellIcon name="check" className="note__icon"/><b className="note__saved">{c('ruleSaved')}</b><span>{cb('ruleApproved',decided.by,decided.rule)}</span></li>
+  :<li className={`note note--icon${rise}`} data-kind="decided" data-decision="declined"><ShellIcon name="x" className="note__icon"/><span>{cb('ruleDeclined',decided.by)}</span></li>;
 }
