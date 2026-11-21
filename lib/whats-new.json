@@ -6,6 +6,12 @@
   "ar": { "title": "صباح الخير بقى ممكن يتفتح", "body": "في صفحة الوكيل الرئيسي، المالك والمديرين يقدروا يفتحوا ملخص الصبح كل يوم ويختاروا ميعاده؛ مش بيبعت حاجة لو مفيش جديد، وبيتنقل مع الوكيل الرئيسي." }
  },
  {
+  "issue": 413,
+  "date": "2026-11-21",
+  "en": { "title": "A stopped Engine no longer fails a channel or note mention", "body": "When you call an Agent in a channel or a card note while its Company's Engine is not running, the Run waits up to ten minutes for the Engine and starts once it is back, instead of failing at once." },
+  "ar": { "title": "المحرك الواقف مبقاش بيفشّل المنشن في القناة أو الملاحظة", "body": "لما تنادي وكيل في قناة أو في ملاحظة على بطاقة ومحرك الشركة مش شغال، التشغيل بيستنى المحرك لحد عشر دقايق ويبدأ أول ما يرجع، بدل ما يفشل على طول." }
+ },
+ {
   "issue": 131,
   "date": "2026-11-21",
   "en": { "title": "The board moves as you carry a Card", "body": "A carried Card leans with your pointer, flies back when you let it go where it was, lands with a short ring in its new column, progress bars grow in, and a Card newly waiting on you nudges its badge and the sidebar count." },
