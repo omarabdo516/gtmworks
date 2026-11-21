@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(49);
+select plan(52);
 -- #478 (spec #474): Stop ends the whole Handover chain. RS Learning has Lead, Writer, Ads and Critic, each on its own
 -- profile. The Owner (1) talks to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the
 -- Viewer (4) work with Writer, and the Manager (2) made the channel but is not in it.
@@ -123,6 +123,13 @@ select is((select state||':'||(stop_requested_at is not null) from public.agent_
 select is(public.answer_handover(current_setting('test.u')::bigint,1,'run-critic-found','waiting'),false,'its Run id, come back on a retry, is not kept as its Run');
 select is((select state||':'||target_outcome from public.agent_handovers where id=current_setting('test.u')::bigint),'done:stopped','the leg ended as stopped');
 select is(public.stop_late_handover_run(current_setting('test.u')::bigint,'run-critic-found'),true,'and its Run is kept to stop');
+-- One whose start is then refused ends as stopped too, and moves to no follow-up.
+select is(public.lead_hand_to_agent('c4780000-0000-0000-0000-000000000001','run-writer','call-5','Critic','And again',null),'{"state":"created","agent":"Critic"}'::jsonb,'Writer asks Critic again');
+select set_config('test.v',(select id::text from public.agent_handovers where call_id='call-5'),true);
+update public.agent_handovers set target_attempts=1, attempted_at=now(), stop_requested_at=now() where id=current_setting('test.v')::bigint;
+select is(public.answer_handover(current_setting('test.v')::bigint,1,null,'waiting'),false,'its start is refused');
+select is((select state||':'||target_outcome||':'||coalesce(follow_up_outcome,'-') from public.agent_handovers where id=current_setting('test.v')::bigint),'done:stopped:-',
+ 'it ended as stopped, with no follow-up to start');
 
 -- In a channel: two messages of the Contributor, each with a handover open; Stop on the first ends only its own.
 insert into public.channels(id,company_id,kind,name,created_by,create_key) values

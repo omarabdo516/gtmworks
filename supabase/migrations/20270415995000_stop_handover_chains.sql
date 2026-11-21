@@ -109,6 +109,13 @@ begin
    where r.message_id=stop_open_handovers.message and r.outcome is null and r.run_id is not null
    on conflict do nothing;
  end if;
+ -- The chain's rows next, so a start's answer landing now is either in before they are read, or waits for Stop
+ -- (answer_handover locks its row), and every leg is judged as it is.
+ perform 1 from public.agent_handovers h
+ where h.state not in ('done','failed')
+  and ((stop_open_handovers.conversation is not null and h.conversation_id=stop_open_handovers.conversation)
+   or (stop_open_handovers.message is not null and h.channel_message_id=stop_open_handovers.message))
+ for update;
  select coalesce(array_agg(h.id) filter (where not public.handover_start_unsure(h)),'{}'),
   coalesce(array_agg(h.id) filter (where public.handover_start_unsure(h)),'{}')
   into chain, unsure
@@ -160,16 +167,16 @@ end $$;
 revoke all on function public.handover_run_stopped(bigint,text) from public,anon,authenticated;
 grant execute on function public.handover_run_stopped(bigint,text) to service_role;
 
--- 20270415990000's answer_handover: a leg Stop marked while its start's answer was lost ends as stopped when its Run id
--- comes back, and that id is not kept as the leg's Run: the worker hears it was stopped and stops it
--- (stop_late_handover_run).
+-- 20270415990000's answer_handover: a leg Stop marked while its start's answer was lost ends as stopped on its start's
+-- answer, whatever it is: a Run id is not kept as the leg's Run (the worker hears it was stopped and stops it,
+-- stop_late_handover_run), and a refusal moves it to no other leg.
 do $$
 declare def text; was text;
 begin
  def:=pg_get_functiondef('public.answer_handover(bigint,integer,text,text)'::regprocedure);
  was:=' if r.id is null or r.state not in (''waiting'',''handing'',''returning'') then return false; end if;';
  if position(was in def)=0 then raise exception 'answer_handover changed: %',def; end if;
- execute replace(def,was,was||E'\n if r.stop_requested_at is not null and run is not null then perform public.end_handovers_stopped(array[h]); return false; end if;');
+ execute replace(def,was,was||E'\n if r.stop_requested_at is not null then perform public.end_handovers_stopped(array[h]); return false; end if;');
 end $$;
 
 -- 20270415950000's lead_hand_to_agent, 20270415960000's channel_hand_to_agent and 20270415990000's
