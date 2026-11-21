@@ -79,13 +79,18 @@ export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>
 type ChangeFace={id:string,connection_id:string,name:string};
 export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
  &({state:'waiting',owners:string[]}|{state:'approved',answeredBy:string,at:string}|{state:'declined',answeredBy:string,at:string,answer:string|null,maybeApplied?:boolean}|{state:'refused'});
+// A handover did not finish (#375) when its target's leg ended without a report (failed, stopped or lost: it ran out of
+// time, could not start or was never answered), or when the handover itself ended failed (Lead's follow-up did). A
+// Conversation's "Handed to" row and a channel's handoff row both say so, from this one rule.
+export const handoverUnfinished=(row:{state:string,target_outcome:string|null}):boolean=>
+ row.state==='failed'||(row.target_outcome??'completed')!=='completed';
 // #167: the main Agent asks whether to request an Agent hidden from its person, naming who opens Agents for them
 // (`named`: their first name, whole name and Role). Its Agent is never part of the card. Offered, the card has its two
 // buttons; once pressed, it says what was sent and when (`at`), whatever answer came later. One its person sees the Agent
 // of by now, unanswered, says the Agent is open for them (`available`).
 // A sent request not answered yet `waits`, so the open chat keeps reading the record until its answer is in.
 export type AgentAccessView={id:number,named:{first:string,name:string,role:string}}&({state:'offered'|'available'}|{state:'dismissed',at:string}|{state:'asked',at:string,waits:boolean});
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string,failed?:true};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 // An Owner's or a Manager's answer to a request for a hidden Agent (#167): opened, naming the Agent the person now sees
