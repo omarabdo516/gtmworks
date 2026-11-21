@@ -89,6 +89,34 @@ test('each finished run of the job is recorded once with its greeting and the ni
  } finally { await fake.close(); }
 });
 
+test('a night the Engine could not read in full holds the morning for a later pass, and after an hour it goes with what was read', async () => {
+ const fake=await engine();
+ try {
+  const hermes=install(fake); const {db,recorded}=service();
+  const {routine:morning}=await dailyJob(fake);
+  const {routine:ads1}=await createRoutine(at(fake,adsProfile),{name:'Ad-pause routine',prompt:'Pause',schedule:'0 * * * *'});
+  fake.settings.cronReply=job=>job.name==='Ad-pause routine'?'Paused the Video 2 ad':'Good morning.';
+  await triggerRoutine(at(fake,adsProfile),{id:ads1.id});
+  await new Promise(resolve=>setTimeout(resolve,20));
+  await triggerRoutine(at(fake,leadProfile),{id:morning.id});
+  // The Ads profile's run history does not answer: nothing is recorded, so the run is read again later.
+  let away=true;
+  const runs=async(connection,request)=>connection.profile===adsProfile&&away?{state:'unreachable',runs:null}:readRoutineRuns(connection,request);
+  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes,driver:{runs}}),0);
+  assert.deepEqual(recorded,[]);
+  away=false;
+  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes,driver:{runs}}),1);
+  assert.deepEqual(recorded[0].results.map(result=>result.line),['Paused the Video 2 ad'],'recorded once the night is whole');
+  // An Engine away for over an hour: the next morning goes with what could be read.
+  fake.settings.cronReply='Good morning again.';
+  await new Promise(resolve=>setTimeout(resolve,5));
+  await triggerRoutine(at(fake,leadProfile),{id:morning.id});
+  away=true;
+  assert.equal(await driveGoodMornings(db,{engineOf:async()=>hermes,driver:{runs},now:()=>new Date(Date.now()+2*3600*1000)}),1);
+  assert.deepEqual([recorded.at(-1).greeting,recorded.at(-1).results],['Good morning again.',[]]);
+ } finally { await fake.close(); }
+});
+
 test('a Routine merely named "Good morning" is not the daily job: only the marked one is read', async () => {
  const fake=await engine();
  try {
