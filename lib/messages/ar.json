@@ -1486,5 +1486,22 @@
   "routineWeekday5": "الجمعة",
   "routineEvery6": "سبت",
   "routineWeekday6": "السبت",
-  "routineNotLogged": "اتعمل، بس ماتسجّلش في السجل. قول للمالك."
+  "routineNotLogged": "اتعمل، بس ماتسجّلش في السجل. قول للمالك.",
+  "routineEveryMonth": "أول كل شهر {0}",
+  "routineMonthly": "كل شهر",
+  "agentRoutines": "الروتينات",
+  "agentRoutineAdd": "إضافة",
+  "agentRoutineNew": "الروتين الجديد",
+  "agentRoutineHint": "مثلاً: ملخص الليدز كل يوم 8 الصبح",
+  "agentRoutineEmpty": "اكتب الروتين الأول، ولو جملة قصيرة.",
+  "agentRoutineSave": "ضيف",
+  "agentRoutineIsOn": "«{0}» اشتغل",
+  "agentRoutinesNone": "مفيش روتينات لسه. اكتب في الشات اللي عايزه يتكرر، و{0} يظبطه لوحده.",
+  "agentRoutineTry": "جرّب تكتب",
+  "routineExample": "ابعتلي ملخص اللي عملته كل خميس 4 العصر",
+  "agentRoutineAskTime": "يشتغل إمتى؟ كل مرة بيشتغل فيها بتتحسب من اشتراك الشركة.",
+  "agentRoutineUnread": "مش قادرين نقرا روتينات الوكيل ده دلوقتي.",
+  "agentRoutineNewName": "روتين جديد",
+  "chatRoutineMade": "اتعمل روتين: {0} · {1}",
+  "chatRoutineSee": "شوفه في التفاصيل"
 }
