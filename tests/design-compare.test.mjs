@@ -123,7 +123,7 @@ test('every screen says how to reach it in the reference and which built page it
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, value]] = Object.entries(step);
-      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press', 'goto', 'finish'].includes(action), `${name}: known action ${action}`);
+      assert.ok(['click', 'clickIf', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press', 'goto', 'finish'].includes(action), `${name}: known action ${action}`);
       if (action === 'goto') { assert.match(value, /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f-]{36})?$/, `${name}: a built page`); continue; }
       // A press names one key as Playwright does (a letter, or a name such as ArrowDown or KeyN), not a selector.
       if (action === 'press') { assert.match(value, /^([a-z]|[A-Z][A-Za-z]+)$/, `${name}: a key`); continue; }

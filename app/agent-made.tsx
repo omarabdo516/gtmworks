@@ -48,6 +48,15 @@ export function madeDay(at:string,language:Language,zone:string|undefined) {
 
 // "Made on Jun 10 at the request of Omar", or today with the time, and "See the ask" for the person who asked, except in
 // the Agent's empty chat (design-reference: bornText, bornHTML).
+// When a person said or allowed something, as a rule's row reads it (#18) and a standing permission's (#166): today or
+// yesterday with the time, else the day. Drawn in the reader's own zone once mounted, in UTC on the server.
+export function useSaidWhen(at:string) {
+ const {t,language}=useI18n(); const zone=useZone();
+ const day=dayOf(at,zone); const today=dayOf(new Date().toISOString(),zone);
+ const yesterday=new Date(new Date(`${today}T00:00:00Z`).getTime()-86400000).toISOString().slice(0,10);
+ const time=dateFormatter(localeFor(language),{hour:'numeric',minute:'2-digit',timeZone:zone}).format(new Date(at));
+ return {zone,when:day===today?`${t('logToday')} · ${time}`:day===yesterday?`${t('logYesterday')} · ${time}`:madeDay(at,language,zone)};
+}
 export function MadeLine({made,where}:{made:Made,where:'panel'|'sov'|'empty'}) {
  const {t,language}=useI18n(); const zone=useZone();
  const today=dayOf(new Date().toISOString(),zone)===dayOf(made.at,zone);

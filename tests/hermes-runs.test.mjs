@@ -245,9 +245,9 @@ test('a waiting Run reads as running with the request: its id, its words and its
   const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Clean up',idempotencyKey:'k'}));
   const [first,second]=fake.settings.runs[0].approvals;
   assert.deepEqual(await engine.read(run),{state:'running',reply:null,session:'s',usage:null,toolCalls:[],
-   permission:{id:first.request_id,description:'recursive delete',command:'rm -rf /tmp/exports',choices:['once','always','deny']}});
+   permission:{id:first.request_id,description:'recursive delete',command:'rm -rf /tmp/exports',choices:['once','always','deny'],allows:['recursive delete']}});
   assert.equal(await engine.permit(run,first.request_id,'once'),'answered');
-  assert.deepEqual((await engine.read(run)).permission,{id:second.request_id,description:'',command:'curl -X POST https://example.com',choices:['once','deny']},
+  assert.deepEqual((await engine.read(run)).permission,{id:second.request_id,description:'',command:'curl -X POST https://example.com',choices:['once','deny'],allows:[]},
    'a request Hermes will not keep for later offers once and deny only');
  } finally { await fake.close(); }
 });

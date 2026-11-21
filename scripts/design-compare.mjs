@@ -25,6 +25,8 @@ async function runStep(page, step) {
   if (action === 'waitGone') return page.locator(selector).waitFor({ state: 'hidden' });
   if (action === 'scrollTo') return target.scrollIntoViewIfNeeded();
   if (action === 'press') return page.keyboard.press(value);
+  // A click only where its target is drawn: the details panel's pill below 1024 px, which a wide window has open already.
+  if (action === 'clickIf') return await target.isVisible() ? target.click() : undefined;
   if (action === 'finish') {
     await target.waitFor({ state: 'attached' });
     return target.evaluate(element => element.getAnimations().forEach(animation => animation.finish()));
