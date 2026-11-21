@@ -69,7 +69,12 @@ work_sandbox_image() {
       echo "Building the work sandbox image: $work_sandbox_tag"
       # The image the sandboxes run now keeps a name of its own while the build replaces the tag, so an update whose
       # sandboxes do not start puts it back (restore_previous_engine, ADR 0023).
-      docker tag "$work_sandbox_tag" "$work_sandbox_tag-previous" 2> /dev/null || true
+      if docker image inspect "$work_sandbox_tag" > /dev/null 2>&1; then
+        docker tag "$work_sandbox_tag" "$work_sandbox_tag-previous" || return 1
+      else
+        # No image yet: no earlier one stands in for it on a rollback.
+        docker image rm "$work_sandbox_tag-previous" > /dev/null 2>&1 || true
+      fi
       docker build --tag "$work_sandbox_tag" sandbox || return 1
     fi
     printf '%s\n' "$work_sandbox_tag" > .install-lock/work-sandbox-image
@@ -409,7 +414,9 @@ restore_previous_engine() {
     # A previous release from before the sandbox recorded no image and starts none, so it reads no key.
     sandbox_key=
     if [ -n "$(work_sandbox_ref)" ]; then sandbox_keys "$name" || { restored=1; continue; }; fi
-    engine "$name" up -d --remove-orphans --wait --wait-timeout 300 || restored=1
+    engine "$name" up -d --remove-orphans --wait --wait-timeout 300 || { restored=1; continue; }
+    # A restored sandbox counts only once its own Engine reaches it over SSH: its health check sees the port, not the key.
+    if [ -n "$sandbox_key" ]; then sandbox_reachable "$name" > /dev/null 2>&1 || restored=1; fi
   done
   return "$restored"
 }
@@ -1069,7 +1076,7 @@ elif [ "$operation" = restore ]; then
   fi
   # The image the restored install's sandboxes start from is recorded only now that the restore is whole (#393).
   mv .install-lock/work-sandbox-image .work-sandbox-image || { echo 'The restored install could not record its work sandbox image.' >&2; return 1; }
-  # The cutover (ADR 0023), once this release's app and worker answer on the restored database.
+  # The cutover (ADR 0023), once this release's app answers on the restored database and its worker runs.
   apply_migrations cutover || { echo 'The restore finished, but its cutover migrations did not apply: run the install command again.' >&2; return 1; }
   return
 elif [ "$operation" = check-restore ]; then

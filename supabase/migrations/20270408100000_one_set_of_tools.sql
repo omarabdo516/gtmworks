@@ -6,7 +6,7 @@
 -- profile records with a level and a policy, and its eight-argument call that makes an Agent for Lead.
 --
 -- The removal itself is 20270416000000_one_set_of_tools_cutover.sql, which scripts/install.sh applies only once this
--- release's app and worker answer: until then a failed update leaves the previous release serving on a schema it was
+-- release's app answers its health check and its worker runs: until then a failed update leaves the previous release serving on a schema it was
 -- built for (ADR 0023).
 
 -- 1. The confirmation, beside the level the previous release still reads and writes.

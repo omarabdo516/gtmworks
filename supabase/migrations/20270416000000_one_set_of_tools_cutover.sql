@@ -1,5 +1,5 @@
 -- #391, ADR 0018, ADR 0023: the second step of removing Agent levels, the cutover. scripts/install.sh applies a
--- migration whose name ends in _cutover only once this release's app and worker answer, so the release it replaced has
+-- migration whose name ends in _cutover only once this release's app answers its health check and its worker runs, so the release it replaced has
 -- stopped serving and a failed update has already left it running on the first step's schema
 -- (20270408100000_one_set_of_tools.sql), which it was built for.
 --
