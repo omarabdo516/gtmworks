@@ -418,3 +418,28 @@
 .gw .sov .bk-cmd .panel-row__text { gap: 2px; }
 .gw .sov .bk-cmd .sub-code { margin-top: 2px; max-width: 100%; }
 .gw .sov .bk-copy { flex: none; }
+
+/* Recurring tasks (#31; design-reference/index.html: "routines: next run, run now", .sov-ag-l, .panel-form): each
+   Routine's row with its schedule, next run and Run now beside its switch, and the form that adds one or changes when it
+   runs, set with the overlay's own inputs. */
+.gw .sov .sov-ag-l { display: inline-flex; align-items: center; gap: var(--s2); color: var(--gw-text-1); }
+.gw .sov .panel-row.rt-row { align-items: flex-start; padding-block: 10px; }
+.gw .sov .rt-row .panel-row__icon { margin-top: 1px; }
+.gw .sov .rt-row .switch { margin-top: 2px; }
+.gw .sov .rt-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--s2); margin-top: 6px; }
+.gw .sov .rt-next { flex: 1 1 auto; min-width: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-1); }
+.gw .sov .rt-next.is-off { color: var(--gw-text-3); }
+.gw .sov .rt-run { margin-inline-start: auto; font-size: var(--gw-fs-xs); font-weight: 600; color: var(--gw-text-1); }
+.gw .sov .rt-change { font-size: var(--gw-fs-xs); margin-inline-end: -6px; }
+.gw .sov .rt-running { margin-inline-start: auto; font-size: var(--gw-fs-xs); line-height: 22px; color: var(--gw-text-2); animation: gw-breathe 1.4s ease-in-out infinite; }
+.gw .sov :is(.rt-row, .rt-new) .set-err { display: block; margin-top: 4px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw .sov .rt-form { display: grid; gap: var(--s2); padding: var(--s2) 0 0; }
+.gw .sov .rt-new .rt-form { padding: var(--s3); }
+.gw .sov .rt-when { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.gw .sov .rt-when .rt-field { flex: 1 1 120px; }
+.gw .sov .rt-field { display: grid; gap: 4px; min-width: 0; }
+.gw .sov .rt-field__l { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
+.gw .sov .rt-form select.set-input { appearance: auto; padding-inline-end: 6px; }
+.gw .sov .rt-form .panel-form__err { font-size: var(--gw-fs-xs); color: var(--gw-danger-text); }
+.gw .sov .rt-delete { margin-inline-end: auto; }
+@media (prefers-reduced-motion: reduce) { .gw .sov .rt-running { animation: none; } }
