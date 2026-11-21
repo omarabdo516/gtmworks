@@ -74,6 +74,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `knowledge` | Settings, Company knowledge, on its first part, Brand voice (#27) | `/c/rs-learning/settings?section=knowledge` |
 | `routines` | Settings, Recurring tasks: every Agent's Routines with schedule, next run, Run now and the switch (#31) | `/c/rs-learning/settings?section=routines` (needs an Engine holding Routines: the visual lane's `routines` state and its fake Engine) |
 | `good-morning` | An Agent's page, Good morning: the main Agent's daily message, its switch, time and hint (#182) | `/c/rs-learning/settings?agent=<main Agent>` (needs an Engine holding the main Agent's profile: `npm run cloud:up`'s fake Engine, or the visual lane's `good-morning` state) |
+| `morning` | The morning message: Lead's greeting and its card, Waiting on you, Ran overnight and the foot (#183) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000020` (needs the fixture's morning Conversation) |
 | `new-agent` | Sidebar, New agent: Lead's chat with the hint line (#13) | `/c/rs-learning/chat?new=agent` |
 | `ready-roles` | New agent, then the hint line's "or pick a ready-made one": the ready-made gallery (#14) | `/c/rs-learning/chat?new=ready` (needs the fixture's Lead) |
 | `main-empty` | New chat: the main Agent's empty chat with its paragraph and suggestions (#170) | `/c/rs-learning/chat` (needs the fixture's Agents) |

@@ -108,6 +108,10 @@ export const screens = {
   // so they need an Engine that holds the main Agent's profile (`npm run cloud:up`'s fake Engine, or the comparison fixture).
   'good-morning': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#set-checkin' }, { scrollTo: '#set-checkin' }] },
    builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}`, builtSteps: [{ waitFor: '#set-checkin' }, { scrollTo: '#set-checkin' }] },
+  // The morning message (#183): the reference's morning thread with Lead's greeting and the card under it. Built: the
+  // fixture's morning Conversation (its foot reads the Engine's job, so `npm run cloud:up`'s fake Engine draws it off).
+  morning: { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-morning"]' }, { waitFor: '.ckcard' }, { scrollTo: '.ckcard' }] },
+   builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000020', builtSteps: [{ waitFor: '.ckcard' }, { scrollTo: '.ckcard' }] },
   'home-alone': { reference: { steps: alone }, builtPath: '/c/rs-consultations/chat' },
   'settings-alone': { reference: { steps: [...alone, ...settings] }, builtPath: '/c/rs-consultations/settings' },
   // #13. "New agent" opens Lead's chat ready to type, with one hint line.

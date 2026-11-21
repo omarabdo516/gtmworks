@@ -266,4 +266,25 @@ values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-00000000
  'تقرير الـ 90 يوم بيقرا أرقام كتير من 4 مصادر وبيتأخر عن ميعاده. Gemini 2.5 Pro أسرع في الأرقام الكبيرة، والتقرير الأسبوعي هيفضل بنفس الشكل.','2026-11-16T11:30:00Z')
 on conflict do nothing;
 
+-- #183: the morning message (design-reference: th-morning, checkinHTML): Lead's greeting of Wednesday 11 November in a
+-- Conversation of its own, with the night's results of Ads and SEO under it. What waits on Omar is read from the fixture's
+-- other rows when the card is read.
+insert into public.good_mornings(company_id,agent_id,session_id,day,ran_at,greeting)
+select '10000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000001','design-compare-morning','2026-11-11','2026-11-11T07:00:00Z',
+ 'صباح الخير يا عمر. ده اللي مستنيك النهارده، واللي اشتغل بالليل.'
+where not exists(select 1 from public.good_mornings where session_id='design-compare-morning');
+insert into public.good_morning_results(morning_id,company_id,agent_id,routine,line,ran_at)
+select g.id,g.company_id,x.agent::uuid,x.routine,x.line,x.at::timestamptz from public.good_mornings g,
+ (values ('61000000-0000-0000-0000-000000000002','روتين وقف الإعلان','وقّف إعلان «فيديو 2 · الرياض» لما تكلفة الليد وصلت 52 ج','2026-11-11T00:40:00Z'),
+  ('61000000-0000-0000-0000-000000000002','إعادة الاستهداف','إعادة الاستهداف جابت 11 ليد بالليل بـ 24 ج لليد','2026-11-11T06:00:00Z'),
+  ('61000000-0000-0000-0000-000000000003','من Search Console','مقال «إزاي تبقى محاسب من البيت» طلع للمركز السادس على Google','2026-11-11T04:05:00Z')) x(agent,routine,line,at)
+where g.session_id='design-compare-morning' and not exists(select 1 from public.good_morning_results r where r.morning_id=g.id);
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at,good_morning,good_morning_day)
+select '62000000-0000-0000-0000-000000000020','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000001','Lead','2026-11-11T07:00:00Z',g.id,g.day
+from public.good_mornings g where g.session_id='design-compare-morning' on conflict (id) do nothing;
+insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at)
+select g.company_id,'62000000-0000-0000-0000-000000000020','agent','61000000-0000-0000-0000-000000000001','Lead',g.greeting,'good-morning:'||g.id,g.ran_at
+from public.good_mornings g where g.session_id='design-compare-morning'
+ and not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000020');
+
 commit;
