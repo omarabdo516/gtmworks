@@ -28,7 +28,7 @@ import { ReplyCard } from '@/app/reply-card';
 import type { DecidePermission, PermissionOutcome } from '@/app/permission-card';
 import type { ConnectApps } from '@/app/connect-card';
 import { signInToApp } from '@/app/app-sign-in';
-import { useAppsSheet } from '@/app/apps-sheet-open';
+import { useAppsReader, useAppsSheet } from '@/app/apps-sheet-open';
 import { appsChanged } from '@/app/company-apps-read';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
@@ -167,7 +167,7 @@ export function ChatPlaceholder() {
 // line.
 // `details`: the Agent's details are beside this chat, so a Routine the Agent made is a way into them (#205).
 export function ConversationTurns({slug,company,record,writer,asked,reread,details=false}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>,details?:boolean}) {
- const openSheet=useAppsSheet();
+ const openSheet=useAppsSheet(); const appsReader=useAppsReader(company);
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
  const here=usePathname();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
@@ -220,7 +220,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   start:async(app,signal)=>{
    if(!agent) return {error:'connectFailed'};
    const result=await signInToApp({company,agent,app,signal,openApp:key=>openSheet?.(null,key,agent)});
-   if('state' in result) void appsChanged(company,language);
+   if('state' in result) void appsChanged(appsReader);
    return result;
   },
   later:async card=>{

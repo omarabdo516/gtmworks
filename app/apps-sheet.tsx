@@ -10,7 +10,7 @@ import ar from '@/lib/messages/apps.ar.json';
 import './sheet.css';
 import './settings.css';
 import './apps.css';
-import { AppsContext, useAppsCompany, useAppsSheet, type Apps, type OpenApps } from './apps-sheet-open';
+import { AppsContext, useAppsCompany, useAppsReader, useAppsSheet, type Apps, type OpenApps } from './apps-sheet-open';
 
 // Connect apps (#201; design-reference: openApps, renderApps, renderAppsBtn, the open-apps, apps-close, app-open and
 // apps-back cases, closeDlg): the apps Settings, Apps holds, drawn by the same components in a sheet docked at the
@@ -27,14 +27,14 @@ const leaveMs=190;
 
 // The apps are read by the browser after the page is drawn (app/company-apps-read.ts), again each time the sheet opens,
 // and after an app is connected or disconnected; the last good read stays shown meanwhile.
-export function AppsSheetProvider({company,owner,rtl,children}:{company:string,owner:boolean,rtl:boolean,children:ReactNode}) {
+export function AppsSheetProvider({company,person,owner,rtl,children}:{company:string,person:string,owner:boolean,rtl:boolean,children:ReactNode}) {
  const {language}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
- const items=useCompanyApps(company,language);
+ const items=useCompanyApps({company,person,language});
  const [sheet,setSheet]=useState<Sheet>({phase:'closed'});
  const box=useRef<HTMLDialogElement>(null); const stopLeaving=useRef(()=>{});
  // Where the keyboard goes once the sheet has drawn the view it moved to; after back, the app's button keeps it.
  const focusNext=useRef<string|null>(null); const kept=useRef<string|null>(null);
- const open=(opener:HTMLElement|null,app?:string,agent?:string)=>{ void readApps(company,language); focusNext.current=app?'apps-back':'apps-q'; kept.current=null; setSheet({phase:'open',view:app??null,opener,agent}); };
+ const open=(opener:HTMLElement|null,app?:string,agent?:string)=>{ void readApps({company,person,language}); focusNext.current=app?'apps-back':'apps-q'; kept.current=null; setSheet({phase:'open',view:app??null,opener,agent}); };
  const close=()=>{
   const dialog=box.current; if(!dialog?.open||sheet.phase!=='open') return;
   stopLeaving.current=leave(leaveMs,()=>setSheet(now=>now.phase==='open'?{...now,phase:'closing'}:now),()=>dialog.close());
@@ -59,7 +59,7 @@ export function AppsSheetProvider({company,owner,rtl,children}:{company:string,o
  useEffect(()=>()=>stopLeaving.current(),[]);
  const item=sheet.phase!=='closed'&&sheet.view?items?.find(entry=>entry.key===sheet.view):undefined;
  const opening=useRef(open); useLayoutEffect(()=>{ opening.current=open; });
- const value=useMemo<Apps>(()=>({company,open:(opener,app,agent)=>opening.current(opener,app,agent)}),[company]);
+ const value=useMemo<Apps>(()=>({company,person,open:(opener,app,agent)=>opening.current(opener,app,agent)}),[company,person]);
  return <AppsContext.Provider value={value}>
   {children}
   {/* Drawn only while open or leaving, so a page with the sheet closed holds no dialog. It sits beside the frame, as the
@@ -78,7 +78,7 @@ export function AppsCount({company,className}:{company:string,className:string})
  return <Count company={company} className={className}/>;
 }
 function Count({company,className}:{company:string,className:string}) {
- const {language}=useI18n(); const items=useHeldApps(company,language);
+ const {language}=useI18n(); const items=useHeldApps(useAppsReader(company));
  if(!items) return null;
  return <span className={className}>{connectedCount(items)} {(language==='ar'?ar:en).connected}</span>;
 }

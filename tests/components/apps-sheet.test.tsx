@@ -50,8 +50,8 @@ function engine(first: Read, step: (body: Record<string, string>) => object = ()
 }
 // Each test draws its own Company: the browser keeps each Company's last read across the pages it is drawn on.
 let companies = 0;
-const shell = (owner = true, company = `c-${++companies}`, language: 'en' | 'ar' = 'en') => <div className="gw"><LanguageProvider language={language}>
- <AppsSheetProvider company={company} owner={owner} rtl={language === 'ar'}>
+const shell = (owner = true, company = `c-${++companies}`, language: 'en' | 'ar' = 'en', person = 'p-owner') => <div className="gw"><LanguageProvider language={language}>
+ <AppsSheetProvider company={company} person={person} owner={owner} rtl={language === 'ar'}>
   <AppsButton/>
   <AccountMenuView saveLanguage={async () => ''} saveTheme={async () => ''} slug="rs-learning" personName="Omar" role="Owner" theme="light" companyName="RS Learning"/>
  </AppsSheetProvider>
@@ -119,6 +119,28 @@ test('the count on the button and on the menu item is the sheet\'s badge, read o
  await screen.getByRole('button', { name: /^Connect apps/ }).click();
  await expect.element(screen.getByRole('dialog').getByText('2 connected')).toBeVisible();
  expect(seen.reads).toBe(2);
+});
+
+// #552: a sign-out and sign-in in another tab leaves this tab open; the next page it draws is the new person's, and the
+// copy the browser held for the one before (an Owner's, with a command server's command) is neither shown nor kept.
+test('when the signed-in person changes, the apps held for the one before are not shown', async () => {
+ const seen = engine([{ ...items[0], state: 'connected' }, { ...items[1], state: 'connected' }, { ...items[2], state: 'connected' }]);
+ const screen = await render(shell(true, 'c-handover', 'en', 'p-owner'));
+ await expect.element(appsButton()).toHaveTextContent('Connect apps3 connected');
+ seen.read = 'hang';
+ await screen.rerender(shell(false, 'c-handover', 'en', 'p-member'));
+ await expect.poll(() => seen.reads).toBe(2);
+ expect(appsButton().textContent).toBe('Connect apps');
+ await screen.getByRole('button', { name: /^Connect apps/ }).click();
+ await expect.element(screen.getByRole('searchbox', { name: 'Search apps' })).toHaveFocus();
+ expect(dialog().querySelectorAll('.app-card, .apps-count, .tpl-cats')).toHaveLength(0);
+ await userEvent.keyboard('{Escape}');
+ await expect.poll(() => document.querySelector('dialog.apps-sheet'), busyBrowser).toBeNull();
+ // The Owner signing back in reads again rather than finding their old copy.
+ seen.read = items;
+ await screen.rerender(shell(true, 'c-handover', 'en', 'p-owner'));
+ await expect.poll(() => seen.reads).toBe(4);
+ await expect.element(appsButton()).toHaveTextContent('Connect apps2 connected');
 });
 
 test('while the apps are being read the sheet draws its head with the search field and no list', async () => {
@@ -281,7 +303,7 @@ function Opener() {
 test('the sheet can open at one app\'s page from outside it', async () => {
   engine(items);
   const screen = await render(<div className="gw"><LanguageProvider language="en">
-    <AppsSheetProvider company="c-direct" owner rtl={false}><Opener/></AppsSheetProvider>
+    <AppsSheetProvider company="c-direct" person="p-owner" owner rtl={false}><Opener/></AppsSheetProvider>
   </LanguageProvider></div>);
   await screen.getByRole('button', { name: 'Open Klaviyo' }).click();
   await expect.element(screen.getByRole('heading', { name: 'Klaviyo' })).toBeVisible();
@@ -296,7 +318,7 @@ test('the sheet opened for an Agent picks that Agent on the app\'s page, not the
   const writer = '3a000000-0000-0000-0000-000000000012';
   engine(items.map(item => item.key !== 'airtable' ? item : { ...item, agents: [...item.agents, { id: writer, name: 'Writer', connection: 'f0000000-0000-0000-0000-000000000012', main: false, own: true, state: 'off' as const }] }));
   const screen = await render(<div className="gw"><LanguageProvider language="en">
-    <AppsSheetProvider company="c-for-agent" owner rtl={false}><OpenerFor agent={writer}/></AppsSheetProvider>
+    <AppsSheetProvider company="c-for-agent" person="p-owner" owner rtl={false}><OpenerFor agent={writer}/></AppsSheetProvider>
   </LanguageProvider></div>);
   await screen.getByRole('button', { name: 'Open Airtable' }).click();
   await expect.element(screen.getByRole('checkbox', { name: /Writer/ })).toHaveAttribute('aria-checked', 'true');
