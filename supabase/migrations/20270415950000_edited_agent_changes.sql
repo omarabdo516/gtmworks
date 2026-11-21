@@ -8,8 +8,8 @@
 --
 -- `approved_value` is set only by a claim: claim_agent_change(c, proposal, edited) checks the edit as a proposal's
 -- value is checked (agent_change_value_valid), and keeps it only when it differs from the proposed value, so an edit
--- that changes nothing approves as proposed. Each claim names its own value, so approving again after an unconfirmed
--- write writes what that approval says. A claim given back before anything reached the Engine drops the edit with it;
+-- that changes nothing approves as proposed. Approving again after an unconfirmed write finishes that write: the retry
+-- keeps the earlier claim's value, whatever it sends. A claim given back before anything reached the Engine drops the edit with it;
 -- one that may have reached the Engine keeps it, and so does a decline of such a claim, which says the earlier approval
 -- may already be in the Agent's settings.
 --
@@ -30,7 +30,9 @@ begin
  if asked.state in ('approved','declined','refused') then return jsonb_build_object('state',asked.state); end if;
  if asked.state='applying' and asked.claimed_at>now()-interval '5 minutes' then return jsonb_build_object('state','busy'); end if;
  if edited is not null and not public.agent_change_value_valid(asked.change,edited) then raise exception 'agentChangeEditInvalid' using errcode='22023'; end if;
- chosen:=case when edited is null or edited=asked.value then null else edited end;
+ -- Approving again after an unconfirmed write finishes that write: it keeps the value the earlier claim may have written,
+ -- whatever this claim sends, so a decline after it still names what may be in the Agent's settings.
+ chosen:=case when asked.state='applying' then asked.approved_value when edited is null or edited=asked.value then null else edited end;
  update public.agent_change_proposals set state='applying',claimed_by=auth.uid(),claimed_at=now(),claim_token=token,approved_value=chosen where id=asked.id;
  return jsonb_build_object('state','claimed','token',token,'retry',asked.state='applying','agent',asked.agent_id,'change',asked.change,
   'setting',asked.setting,'value',coalesce(chosen,asked.value),'edited',chosen is not null);

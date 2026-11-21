@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(19);
 -- #484: "Edit, then approve". The Owner claims a proposal with another value of the same change; the claim answers that
 -- value to write, the proposal keeps what the Agent proposed beside it, and the approval logs both. An edit that is not
 -- a valid value is refused, one equal to the proposal approves as proposed, a claim given back drops the edit, and a
@@ -56,16 +56,20 @@ reset role;
 select results_eq($$select state,approved_value from public.agent_change_proposals where id=current_setting('test.zone')::bigint$$,$$values ('waiting',null::jsonb)$$,
  'and the proposal waits again as the Agent proposed it');
 
--- Approving again after an unconfirmed write writes what that approval says; the previous app's claim approves as proposed.
+-- Approving again after an unconfirmed write finishes it: the retry keeps the earlier edit, whatever it sends, from the
+-- previous app's claim (which sends none) too.
 set local role authenticated;
 select set_config('test.claim4',public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.sub')::bigint,'false')::text,true);
 select lives_ok($$select public.release_agent_change(current_setting('test.c')::uuid,current_setting('test.sub')::bigint,(current_setting('test.claim4')::jsonb->>'token')::uuid,true)$$,'an unconfirmed write keeps the claim');
 select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.sub')::bigint)-'token',jsonb_build_object('state','claimed','retry',true,
- 'agent','ee000000-0000-0000-0000-000000000004','change','toolset','setting','delegation','value',true),'the previous app''s claim takes it over and writes the proposed value');
+ 'agent','ee000000-0000-0000-0000-000000000004','change','toolset','setting','delegation','value',false),'the previous app''s claim takes it over and writes the earlier edit again');
 
 -- A decline of an unconfirmed edited claim keeps the edit, as it may already be in the Agent's settings.
 select set_config('test.claim5',public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.late')::bigint,'"anthropic/claude-sonnet-5-5"')::text,true);
 select lives_ok($$select public.release_agent_change(current_setting('test.c')::uuid,current_setting('test.late')::bigint,(current_setting('test.claim5')::jsonb->>'token')::uuid,true)$$,'another unconfirmed write');
+select set_config('test.claim6',public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.late')::bigint,'"openai/gpt-5.5"')::text,true);
+select is(current_setting('test.claim6')::jsonb->>'value','anthropic/claude-sonnet-5-5','a retry with another edit still writes the earlier one');
+select lives_ok($$select public.release_agent_change(current_setting('test.c')::uuid,current_setting('test.late')::bigint,(current_setting('test.claim6')::jsonb->>'token')::uuid,true)$$,'and that retry is unconfirmed too');
 select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.late')::bigint,false,'Not now.'),'declined','is declined');
 reset role;
 select results_eq($$select maybe_applied,approved_value from public.agent_change_proposals where id=current_setting('test.late')::bigint$$,
