@@ -770,14 +770,15 @@ docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's fil
 # and no file there, no provider key variable is set for any process, and no sign-in or key file of the Engine's kind (no
 # auth.json, no .env, no Hermes home) is in the work user's home or the work folder, where a synced sign-in would land.
 # Each scan is read whole first and a scan that fails fails the check: under pipefail a `grep -q` that stops reading early
-# could fail the pipe on a match.
-sandbox_env=$(docker exec --user 0 "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
+# could fail the pipe on a match. They run as the work user, who owns every process and file there: the sandbox drops every
+# capability, so its root reads none of the work user's private folders.
+sandbox_env=$(docker exec --user pn "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
 if grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null; then
   fail 'no process of the sandbox holds a provider credential'
 fi
-sandbox_files=$(docker exec --user 0 "$sandbox" sh -c 'grep -rIl -e fake-model-key -e "$1" /home /work /tmp /run 2> /dev/null; true' sh "sk-or-v1-$od_marker") || fail "scan the sandbox's files"
+sandbox_files=$(docker exec --user pn "$sandbox" sh -c 'grep -rIl -e fake-model-key -e "$1" /home /work /tmp /run 2> /dev/null; true' sh "sk-or-v1-$od_marker") || fail "scan the sandbox's files"
 [[ -z $sandbox_files ]] || { printf '%s\n' "$sandbox_files" >&2; fail 'no file of the sandbox holds a provider credential'; }
-sandbox_keys=$(docker exec --user 0 "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
+sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
 [[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }
 # The Library shows the Company's work folder (#395): an Agent's file and picture in its own folder are listed, previewed
 # and downloaded with the same bytes through gtmworks; the Engine reads that folder and cannot write to it, as root or as
