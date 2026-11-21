@@ -1321,8 +1321,32 @@ db -c "begin; set local session_replication_role=replica;
 # The code word scripts/check-install-engines.mjs looks for (lib/engine-targets.mjs), told to the Company's Agent before the update.
 docker exec -i gtmworks-install-hermes-1 sh -ec 'printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"' sh "$profile" "backup-${company//-/}" \
   || fail "write the code word in the Company's profile"
+# An update to a release whose Engine does not start (#502): the previous release made no Engine template to put back,
+# so the update starts its one `hermes` Engine again, which it only stopped, on the network its app and worker reach it
+# by, with its data, its key in .env.install and no Engine folder; nothing of the new Engine or its sandbox stays.
+publish_broken_engine_release
+cp "$root/release-broken-engine/docker-compose.install.yml" "$root/release-broken-engine/install.sh" . || fail 'the release files whose Engine does not start in place'
+if GTMWORKS_ENGINE_WAIT=40 sh install.sh update > update.log 2>&1; then fail_update 'the update from the one-Engine release whose Engine does not start must fail'; fi
+grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update 'the update from the one-Engine release whose Engine does not start says the previous release keeps serving'
+# The release files of a failed update stay in the folder; the previous release's own go back by hand, as staged-update does.
+cp "$root/release-previous/docker-compose.install.yml" "$root/release-previous/install.sh" . || fail 'the previous release files back'
+[[ $(compose ps -q web) == "$web" ]] || fail_update 'the failed update leaves the previous release web container serving'
+probe 'after the update from the one-Engine release whose Engine does not start'
+[[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gtmworks-install-hermes-1) == healthy ]] || fail_update "the previous release's hermes Engine serves again"
+[[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' gtmworks-install-hermes-1) == gtmworks-install_hermes ]] || fail_update 'the hermes Engine keeps its volume'
+[[ $(sed -n 's/^HERMES_API_KEY=//p' .env.install) == "$key" ]] || fail_update 'the Engine key is back in .env.install'
+[[ ! -e .engines ]] || fail_update 'the failed update leaves no Engine folder'
+[[ -z $(docker ps -aq --filter 'name=^gtmworks-(engine|sandbox|exit)-first$') ]] || fail_update "the failed update leaves no Engine, sandbox or exit of the template"
+if docker volume inspect gtmworks-work-first > /dev/null 2>&1; then fail_update 'the failed update leaves no work folder'; fi
+if docker network inspect gtmworks-engine-first > /dev/null 2>&1; then fail_update "the failed update leaves no Engine network"; fi
+docker run --rm --network gtmworks-install_default curlimages/curl:8.12.1 -sf -H "Authorization: Bearer $key" http://hermes:9119/api/profiles \
+  | grep -qF "$profile" || fail_update "the hermes Engine answers on the previous release's network with its key and the Company profile"
+compose exec -T web node --input-type=module -e "const answer=await fetch('http://hermes:8642/health'); if(!answer.ok) process.exit(1);" < /dev/null \
+  || fail_update 'the previous release app reaches its hermes Engine'
+docker exec gtmworks-install-hermes-1 grep -qF "$marker" "/opt/data/profiles/$profile/memories/MEMORY.md" || fail_update "the hermes Engine keeps what the Agent was told"
 # The update to this release: it applies the migrations (including the Engine records), adopts the Engine the
 # previous release ran, and leaves the Company answering from its record.
+cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail 'release update'
 [[ $(first_engine_key) == "$key" ]] || fail 'the update adopted the Engine key'
 if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi
@@ -2138,15 +2162,7 @@ ENTRYPOINT ["sh","-c","echo this work sandbox does not start >&2; exit 1"]
 DOCKERFILE
 broken_sandbox=$(publish_sandbox 0.0.3-broken) || fail 'push the work sandbox image that does not start'
 node scripts/release-assets.mjs "$first" release-broken-sandbox "$broken_sandbox" || fail 'the release files whose work sandbox does not start'
-# A release whose Engine does not start: this release with an Engine image that holds no Hermes.
-docker image inspect alpine:3.21 > /dev/null 2>&1 || docker pull -q alpine:3.21 > /dev/null || fail 'pull the image the Engine that does not start is made of'
-docker tag alpine:3.21 gtmworks-engine-broken:0.0.4 || fail 'tag an Engine image that does not start'
-docker build -q -t localhost:5000/gtmworks:0.0.4-broken-engine - > /dev/null <<'DOCKERFILE' || fail 'build the release whose Engine does not start'
-FROM localhost:5000/gtmworks:0.0.0-ci
-RUN sed -i '0,/^\( *image:\).*/s//\1 gtmworks-engine-broken:0.0.4/' /app/install/scripts/engine-template.yml
-DOCKERFILE
-broken_engine=$(publish 0.0.4-broken-engine) || fail 'push the release whose Engine does not start'
-node scripts/release-assets.mjs "$broken_engine" release-broken-engine "$sandbox" || fail 'the release files whose Engine does not start'
+publish_broken_engine_release
 dir="$PWD/staged-release-install"
 mkdir "$dir" && cp release-before-staged/docker-compose.install.yml release-before-staged/install.sh "$dir/" || fail 'the release before the staged removal folder'
 sh "$dir/install.sh" || fail 'install the release before the staged removal'

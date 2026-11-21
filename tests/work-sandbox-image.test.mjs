@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { dockerfile, pinnedBase, workSandboxBase } from '../lib/work-sandbox-image.mjs';
+import { load } from 'js-yaml';
+import { chromiumFolders, dockerfile, pinnedBase, workSandboxBase } from '../lib/work-sandbox-image.mjs';
 import { installJob } from './install-job.mjs';
 
 // The work sandbox is built on the Engine's own sandbox image, the one the pinned Engine uses for its sandboxed terminal
@@ -72,4 +73,39 @@ test('every release file the install proof writes for this release names the wor
   assert.ok(calls.length >= 5, 'the proof writes release files');
   // The release that pins another work sandbox image (#399) names that one.
   for (const args of calls.filter(args => !args.startsWith('"$previous"') && !args.startsWith('"$before"') && !args.includes('"$unpulled"'))) assert.match(args, /"\$(other_|broken_)?sandbox"/, args);
+});
+
+// Playwright puts the base image's Chromium in a folder named for the platform: chrome-linux64 on amd64 and
+// chrome-linux-arm64 on arm64 (#572: the arm64 release build found no chrome-linux64 and stopped). The build file names
+// the folder for each platform it knows and refuses any other, so a platform the release builds and the build file does
+// not know fails here, before a release run does.
+test('the build file names the Chromium folder of every platform the release builds the sandbox for, and refuses others', () => {
+  const release = load(readFileSync('.github/workflows/release.yml', 'utf8'));
+  const sandbox = release.jobs.image.steps.find(step => step.id === 'sandbox');
+  const architectures = sandbox.with.platforms.split(',').map(platform => platform.trim().replace(/^linux\//, ''));
+  assert.deepEqual(architectures, ['amd64', 'arm64']);
+  const folders = chromiumFolders(readFileSync(dockerfile, 'utf8'));
+  for (const architecture of architectures) assert.ok(folders[architecture], `the build file names a Chromium folder for ${architecture}`);
+  assert.equal(folders.amd64, 'chrome-linux64');
+  assert.equal(folders.arm64, 'chrome-linux-arm64');
+});
+
+test('a build file whose browser step knows no folder for a platform, or takes any platform, is refused', () => {
+  assert.throws(() => chromiumFolders('RUN chrome=$(find /opt/playwright -path "*/chrome-linux64/chrome")\n'), /names the Chromium folder of each platform/);
+  assert.throws(() => chromiumFolders('RUN case "$arch" in amd64) folder=chrome-linux64 ;; esac\n'), /refuses a platform it does not know/);
+});
+
+// Pull requests build the work sandbox for amd64 alone, so CI also builds its browser stage for every platform the
+// release builds (#572): a platform whose Chromium is not where the step looks fails a pull request, not a release.
+test('CI builds the work sandbox\'s browser stage for every platform the release builds it for', () => {
+  const release = load(readFileSync('.github/workflows/release.yml', 'utf8')).jobs.image.steps.find(step => step.id === 'sandbox');
+  const steps = load(readFileSync('.github/workflows/ci.yml', 'utf8')).jobs.image.steps;
+  const browser = steps.find(step => step.uses?.startsWith('docker/build-push-action@') && step.with?.target === 'browser');
+  assert.ok(browser, 'the image job builds the browser stage');
+  assert.equal(browser.with.context, 'sandbox');
+  assert.equal(browser.with.platforms, release.with.platforms);
+  assert.match(readFileSync(dockerfile, 'utf8'), /^FROM \S+ AS browser$/m);
+  // The emulator is set up before the build that needs it.
+  const qemu = steps.findIndex(step => step.uses?.startsWith('docker/setup-qemu-action@'));
+  assert.ok(qemu >= 0 && qemu < steps.indexOf(browser), 'arm64 is emulated before the browser stage builds');
 });
