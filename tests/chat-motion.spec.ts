@@ -141,15 +141,16 @@ test('in the general channel a Viewer sees the working line breathe and the repl
   const reply=page.locator('.turn--agent').filter({hasText:'Reply to:'});
   await expect(reply).toBeVisible({timeout:30000});
   expect(await motionOf(reply)).toEqual(rises);
-  // Both pages have the reply and its rise; then each reads the channel again (two successful polls, drawn and a frame
-  // past) and the reply does not rise a second time.
+  // Both pages have the reply and its rise. The caller then writes a plain message (no Agent called, so no Run): both
+  // pages drawing it, and its rise, prove each has read the channel again and drawn it; the reply still rose once.
   await expect(caller.page.locator('.turn--agent').filter({hasText:'Reply to:'})).toBeVisible({timeout:30000});
   await expect.poll(()=>starts(page,'gw-rise','Reply to:')).toBe(1);
   await expect.poll(()=>starts(caller.page,'gw-rise','Reply to:')).toBe(1);
-  const read=(on:Page)=>on.waitForResponse(response=>response.url().includes('/api/channels?company=')&&response.request().method()==='GET'&&response.ok(),{timeout:15000});
+  const after=`Thanks, team ${Date.now()}`;
+  await box.fill(after); await box.press('Enter');
   for(const on of [page,caller.page]) {
-   await read(on); await read(on);
-   await on.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+   await expect(on.locator('.turns > li').filter({hasText:after})).toBeVisible({timeout:20000});
+   await expect.poll(()=>starts(on,'gw-rise',after)).toBe(1);
   }
   expect(await starts(page,'gw-rise','Reply to:')).toBe(1);
   expect(await starts(caller.page,'gw-rise','Reply to:')).toBe(1);
