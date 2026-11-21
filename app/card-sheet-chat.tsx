@@ -125,7 +125,7 @@ function SheetChannel({slug,channel,company,shown}:{slug:string,channel:ChannelR
     {messages.map(message=>message.author==='note'
      ? <li key={message.id} className="note note--icon" data-kind={message.kind}><ShellIcon name={message.kind==='card'?'board':'team'} className="note__icon"/><span>{message.kind==='card'?c('channelCardNote',t('boardColProgress')):c('channelInviteNote',firstName(message.actor),message.name,name)}</span></li>
      : message.author==='handoff'
-     ? <HandedRow key={message.id} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}} title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} failed={message.failed?c('channelHandedFailed'):null}/>
+     ? <HandedRow key={message.id} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}} title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} failed={message.stopped?c('channelHandedStopped'):message.failed?c('channelHandedFailed'):null} stopped={message.stopped===true}/>
      : message.author==='agent'
      ? <li key={message.id} className="turn turn--agent msg" data-author="agent"><div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}</div><div className="bubble bubble--agent" dir="auto">{message.body}</div></li>
      : <li key={message.id} className={`turn ${message.mine?'turn--user':'turn--peer'} msg`} data-author="person">

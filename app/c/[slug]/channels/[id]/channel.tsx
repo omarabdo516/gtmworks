@@ -187,7 +187,13 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    {workingNow&&<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>}
   </div></div>
   <div className="composer-area">
-   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name,role:member.role}]:[]),agents}} send={async(message,sendKey,files)=>{
+   {/* Stop (#478; design-reference: syncComposer): while a message the reader may stop has work open, an empty box turns
+       the send arrow into the stop square, which ends that message's Runs and every Handover started from it. */}
+   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name,role:member.role}]:[]),agents}} stop={record.stop?{label:c('channelStop',record.stop.agent),run:async()=>{
+    const failure=await postMessage({company:channel.company,channel:channel.id,intent:'stop',message:record.stop?.message},'/api/channels');
+    if(!failure) setSent(value=>value+1);
+    return failure;
+   }}:undefined} send={async(message,sendKey,files)=>{
     const fields={company:channel.company,channel:channel.id,message,sendKey};
     const failure=files.length?await postMessageWithFiles(fields,files,'/api/channels'):await postMessage(fields,'/api/channels');
     if(!failure) setSent(value=>value+1);
@@ -212,7 +218,7 @@ function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done,owne
  // (#428) says so under its row, as a Conversation does.
  if(message.author==='handoff') {
   const row=<HandedRow className={rise.trim()} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}}
-   title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} failed={message.failed?c('channelHandedFailed'):null}/>;
+   title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} failed={message.stopped?c('channelHandedStopped'):message.failed?c('channelHandedFailed'):null} stopped={message.stopped===true}/>;
   return message.noModel?<>{row}<li className="note" role="alert" data-outcome="no-model"><NoModelLine slug={slug} owner={owner}/></li></>:row;
  }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
@@ -333,10 +339,10 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
    {handoffs.length>0&&<section className="dp-sec" aria-labelledby="ch-h-h">
     <h3 className="dp-label" id="ch-h-h"><span>{c('channelHandoffs')} <span className="muted num">{count(handoffs.length)}</span></span></h3>
     <ul className="panel-card">
-     {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.failed?{'data-failed':''}:{})}>
+     {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.stopped?{'data-stopped':''}:handoff.failed?{'data-failed':''}:{})}>
       <span className="handed__faces"><CompanyAgentFace agent={{connection_id:handoff.from.face,name:handoff.from.name}} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:handoff.to.face,name:handoff.to.name}} size={20}/></span>
       <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandoverAsked',handoff.from.name,handoff.to.name)}</span>
-       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}{time(handoff.at)}</span></span>
+       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.stopped?<><span className="handed__failed is-stopped">{c('channelHandedStopped')}</span>{' · '}</>:handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}{time(handoff.at)}</span></span>
      </li>)}
     </ul>
    </section>}

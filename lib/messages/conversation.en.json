@@ -30,6 +30,7 @@
   "handoverAsked": "{0} asked {1}",
   "handoverTo": "to {0}",
   "handedFailed": "The job didn’t finish",
+  "handedStopped": "Stopped",
   "accessTitle": "Ask {0} for it?",
   "accessLine": "{0} ({1}) chooses which agents each person works with.",
   "accessLabel": "Ask {0} for it",

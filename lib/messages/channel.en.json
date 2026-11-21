@@ -54,6 +54,8 @@
   "channelHandoffs": "Handoffs",
   "channelHandoverAsked": "{0} asked {1}",
   "channelHandedFailed": "The job didn’t finish",
+  "channelHandedStopped": "Stopped",
+  "channelStop": "Stop {0}",
   "channelSenderTo": "to {0}",
   "channelOnTheBoard": "On the board:",
   "channelOnTheBoardSection": "On the board",
