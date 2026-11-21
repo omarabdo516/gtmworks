@@ -2248,6 +2248,12 @@ for attempt in $(seq 1 240); do
   [[ $attempt == 240 ]] && fail 'two Companies get a main Agent each on their own Engine'
   sleep 1
 done
+# What each Company's main Agent was told before the updates, in its own Engine's profile: the code word
+# scripts/check-install-engines.mjs looks for after them.
+while read -r company profile address; do
+  container=${address#*://}; container=${container%%:*}
+  tell_engine "$container" "$profile" "backup-${company//-/}" < /dev/null || fail "write a memory in the Engine of $company"
+done < engines.txt
 # What each Company has before the updates: its Engine's image, its sandbox key's public half, and a file in its work folder.
 rollback_marker="rollback-work-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 : > companies-before
@@ -2297,11 +2303,11 @@ for failing in sandbox engine; do
     [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$rollback_marker-$slug.txt") == "$rollback_marker-$slug" ]] || fail_update "the work folder of $name keeps what it held after the update whose $failing does not start"
   done < companies-before
 done
-# Each Company's main Agent runs a command in its own sandbox after both failed updates; the job reads each sandbox for the
-# file, and no other Company's sandbox has it.
+# Each Company's main Agent runs a command in its own sandbox after both failed updates and still remembers what its own
+# Engine was told; the job reads each sandbox for the file, and no other Company's sandbox has it.
 agent_marker="sandbox-rollback-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 compose exec -T web node --input-type=module - sandbox "$agent_marker" < "$root/scripts/check-install-engines.mjs" > sandbox-rollback.log 2>&1 \
-  || { cat sandbox-rollback.log; fail "each Company's Agent runs a command in its own sandbox after the failed updates"; }
+  || { cat sandbox-rollback.log; fail "each Company's Agent runs a command in its own sandbox after the failed updates and still remembers"; }
 cat sandbox-rollback.log
 while read -r company profile address; do
   slug=${address#http://gtmworks-engine-}; slug=${slug%%:*}; file="$agent_marker-${company//-/}"
