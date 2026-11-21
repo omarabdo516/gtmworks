@@ -67,6 +67,9 @@ work_sandbox_image() {
       echo "Using the prebuilt work sandbox image (GTMWORKS_IMAGE_PREBUILT=true): $work_sandbox_tag"
     else
       echo "Building the work sandbox image: $work_sandbox_tag"
+      # The image the sandboxes run now keeps a name of its own while the build replaces the tag, so an update whose
+      # sandboxes do not start puts it back (restore_previous_engine, ADR 0023).
+      docker tag "$work_sandbox_tag" "$work_sandbox_tag-previous" 2> /dev/null || true
       docker build --tag "$work_sandbox_tag" sandbox || return 1
     fi
     printf '%s\n' "$work_sandbox_tag" > .install-lock/work-sandbox-image
@@ -394,6 +397,12 @@ keep_previous_engine() {
 restore_previous_engine() {
   [ -f .install-lock/previous-engine/engine-template.yml ] || return 1
   cp .install-lock/previous-engine/engine-* scripts/ || return 1
+  # The sandboxes start again from the image the previous run recorded, never the one this run made: a release names it
+  # by digest, and a source build kept it under the -previous name before rebuilding the tag.
+  rm -f .install-lock/work-sandbox-image
+  if [ "$(cat .work-sandbox-image 2> /dev/null)" = "$work_sandbox_tag" ] && docker image inspect "$work_sandbox_tag-previous" > /dev/null 2>&1; then
+    docker tag "$work_sandbox_tag-previous" "$work_sandbox_tag" || return 1
+  fi
   restored=0
   for name in $(engine_names); do
     engine "$name" up -d --remove-orphans --wait --wait-timeout 300 || restored=1
@@ -756,7 +765,7 @@ volumes() {
 #
 # A migration whose name ends in _cutover is the second step of a change the release it replaces could not run against
 # (ADR 0023): `apply_migrations` leaves it out, and `apply_migrations cutover` applies it alone, once this release's app
-# and worker answer. Every other migration keeps the database usable by the previous release, so a run that fails before
+# answers and its worker runs. Every other migration keeps the database usable by the previous release, so a run that fails before
 # the cutover leaves that release serving on a schema it was built for.
 apply_migrations() {
   stage=${1:-}
@@ -901,6 +910,9 @@ fi
 if [ "$operation" = backup ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   refuse_previous_release_engine || exit 1
+  # The Engines start again after the copy with their sandboxes, from the image a run of this installer recorded: an
+  # install with Engine folders that this installer has not updated yet has none, and is refused before anything stops.
+  [ ! -f "$(engine_folder first)/.env" ] || [ -n "$(work_sandbox_ref)" ] || { echo 'This install has not been updated to this release yet: run sh scripts/install.sh update first. Nothing was stopped or archived.' >&2; exit 1; }
   destination=${2:-backups}
   mkdir -p "$destination"
   # The stack starts again after the copy, every Engine included, and an install the previous release made has its
@@ -1214,8 +1226,11 @@ ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e E
 # fail naming the address and its last answer when 200 never comes.
 compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','$engine_address/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
 # The cutover (ADR 0023): the migrations the release this one replaced could not run against apply now that this release's
-# app and worker answer. Until here a failed run left that release serving on the database it was built for; one that
-# fails now leaves this release serving, and the install command applies them again.
+# app answers its health check and its worker runs in place of the previous one (the `up --wait` above fails unless it
+# does). What the cutover removes only the previous release calls; this release's worker records through the first
+# step's functions, which stay, so it needs no readiness of its own first. Until here a failed run left that release
+# serving on the database it was built for; one that fails now leaves this release serving, and the install command
+# applies them again.
 apply_migrations cutover || { echo 'This release serves, but its cutover migrations did not apply: run the install command again.' >&2; exit 1; }
 # The gtmworks command (#437): a folder the one line made keeps get.sh as gtmworks.sh, and the release now running leaves
 # the one its image carries. A command from before #437 never replaced itself, but its update runs this, so the update

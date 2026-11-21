@@ -1107,8 +1107,7 @@ previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6
 git cat-file -e "$previous_release^{commit}" 2> /dev/null || git fetch --no-tags origin "$previous_release" || fail 'the previous release commit'
 # The update and previous-archive areas each make this install in the same places: one that ran before this one in
 # the same checkout (./ci.sh install, all of them) leaves its worktree and folder, which go first.
-# An install an earlier area left running there is taken down first, from its own folder, with its volumes.
-if [ -f "$root/release-install/.env.install" ]; then (cd "$root/release-install" && remove_install) || fail 'remove the earlier previous-release install'; fi
+# An install an earlier area left running there was taken down by the area's reset_install, from its own folder.
 git worktree remove --force "$RUNNER_TEMP/previous-release" > /dev/null 2>&1 || true
 docker run --rm -v "$RUNNER_TEMP:/temp" -v "$root:/root-folder" alpine:3.21 rm -rf /temp/previous-release /root-folder/release-install /root-folder/release-previous
 git worktree prune

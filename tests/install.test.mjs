@@ -1610,6 +1610,7 @@ test('a backup that cannot read the Engine records stops before it stops anythin
  const secrets=`KEYS=kept\nHERMES_API_KEY=${'k'.repeat(64)}\n`;
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
  writeFileSync(join(directory,'.engines/first/.env'),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`,{mode:0o600});
+ writeFileSync(join(directory,'.work-sandbox-image'),'gtmworks-work-sandbox:local\n');
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
@@ -1627,6 +1628,27 @@ esac
  assert.doesNotMatch(run,/ stop|stop |tar -czf|up -d/);
  assert.deepEqual(readdirSync(join(directory,'backups')),[]);
  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
+ assert.equal(existsSync(join(directory,'.install-lock')),false);
+});
+
+// An install with Engine folders this installer has not updated yet records no work sandbox image, so its Engines could
+// not start again after the copy: the backup is refused before anything stops.
+test('a backup of an install that has not been updated to this release stops before it stops anything', t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-backup-no-image-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ for(const folder of ['scripts','bin','.engines/first']) mkdirSync(join(directory,folder),{recursive:true});
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ writeFileSync(join(directory,'.env.install'),'KEYS=kept\n',{mode:0o600});
+ writeFileSync(join(directory,'.engines/first/.env'),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`,{mode:0o600});
+ writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
+printf '%s\\n' "$*" >> "$COMMANDS"
+`,{mode:0o755});
+ const commands=join(directory,'commands');
+ const result=spawnSync('sh',['scripts/install.sh','backup'],{cwd:directory,
+  env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands},encoding:'utf8'});
+ assert.equal(result.status,1,result.stdout);
+ assert.match(result.stderr,/This install has not been updated to this release yet: run sh scripts\/install\.sh update first\. Nothing was stopped or archived\./);
+ assert.doesNotMatch(existsSync(commands)?readFileSync(commands,'utf8'):'',/ stop|stop |tar -czf|up -d/);
  assert.equal(existsSync(join(directory,'.install-lock')),false);
 });
 

@@ -52,6 +52,13 @@ test('the installer applies the cutover only once this release answers, and puts
  const late=install.indexOf('\napply_migrations cutover ||');
  assert.ok(early>0&&early<engines&&engines<app&&app<health&&health<late,'migrations, Engines, app, health, cutover');
  assert.match(install.slice(engines,app),/restore_previous_engine/);
+ // The previous sandboxes start again from the image the previous run recorded: this run's is dropped, and a source
+ // build's previous image, kept under its own name before the tag was rebuilt, gets the tag back.
+ const restore=install.slice(install.indexOf('restore_previous_engine() {'),install.indexOf('\n}\n',install.indexOf('restore_previous_engine() {')));
+ assert.match(restore,/rm -f \.install-lock\/work-sandbox-image/);
+ assert.match(restore,/docker tag "\$work_sandbox_tag-previous" "\$work_sandbox_tag"/);
+ const build=install.slice(install.indexOf('work_sandbox_image() {'));
+ assert.ok(build.indexOf('docker tag "$work_sandbox_tag" "$work_sandbox_tag-previous"')<build.indexOf('docker build --tag "$work_sandbox_tag" sandbox'),'the running image keeps a name before the build replaces its tag');
  // The previous release's Engine files are kept before an update replaces anything, in both kinds of update.
  assert.equal(install.match(/\n {2}keep_previous_engine \|\| exit 1\n/g)?.length,2);
  // A restore applies the cutover too, once the restored install answers.

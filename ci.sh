@@ -229,11 +229,11 @@ case "${1:-check}" in
     awk '/^FROM/ && $2 ~ /[:@]/ {print $2}' Dockerfile
     grep -o -h -E '(alpine:[0-9.]+|node:[0-9][0-9a-z.-]*|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
   # The work sandbox image every Company's sandbox runs (#392, #393): CI builds it in the run's image job and loads that
-  # build; here it is built from sandbox/Dockerfile on this host when missing, so the lane runs the same image.
+  # build; here it is built on this host from the committed checkout's sandbox/Dockerfile on every run (Docker reuses the
+  # layers that did not change), so the lane runs HEAD's image, never an earlier commit's tag or uncommitted files.
   # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's.
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
-  DOCKER_HOST=$host_docker docker image inspect "$sandbox_tag" > /dev/null 2>&1 \
-    || ( cd "$here" && DOCKER_HOST=$host_docker docker build -q -t "$sandbox_tag" sandbox > /dev/null )
+  DOCKER_HOST=$host_docker docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
   images="$images $sandbox_tag"
   for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
   DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null

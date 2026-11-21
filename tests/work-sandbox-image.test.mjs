@@ -26,6 +26,12 @@ test('a base pinned by tag and a digest that is not sha256 is refused', () => {
   assert.throws(() => pinnedBase('FROM nousresearch/hermes-sandbox:desktop@sha256:short\n'), /pinned by tag and digest/);
 });
 
+test('a FROM with flags counts, so a second unpinned base behind --platform is refused', () => {
+  const pin = `nousresearch/hermes-sandbox:desktop@sha256:${'a'.repeat(64)}`;
+  assert.equal(pinnedBase(`FROM --platform=linux/amd64 ${pin} AS base\nFROM base\n`), pin);
+  assert.throws(() => pinnedBase(`FROM ${pin}\nFROM --platform=linux/amd64 alpine:latest\n`), /names one base image; this one names 2/);
+});
+
 test('the pin is written once, and a later stage builds on the stage before it', () => {
   const text = readFileSync(dockerfile, 'utf8');
   const digest = workSandboxBase().split('@')[1];

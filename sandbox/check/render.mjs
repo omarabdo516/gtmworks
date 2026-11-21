@@ -88,9 +88,15 @@ try {
   });
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-  await send('Runtime.evaluate', { expression: 'document.fonts.ready.then(() => true)', awaitPromise: true });
+  // A script that throws reports it in exceptionDetails, not as a protocol error, so each evaluation checks it.
+  const evaluate = async (params) => {
+    const result = await send('Runtime.evaluate', params);
+    if (result.exceptionDetails) throw new Error(`The page failed: ${result.exceptionDetails.exception?.description ?? result.exceptionDetails.text}`);
+    return result;
+  };
+  await evaluate({ expression: 'document.fonts.ready.then(() => typeof frame === "function" || Promise.reject(new Error("the page defines no frame()")))', awaitPromise: true });
   for (let frame = 0; frame < frames; frame++) {
-    await send('Runtime.evaluate', { expression: `frame(${frame})` });
+    await evaluate({ expression: `frame(${frame})` });
     const shot = await send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(folder, `frame-${String(frame).padStart(3, '0')}.png`), Buffer.from(shot.data, 'base64'));
   }
