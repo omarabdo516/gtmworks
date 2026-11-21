@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { userEvent } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
@@ -17,6 +17,22 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 const link = (id: number) => document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"] a`)!;
 const landing = (id: number) => document.querySelector(`#board-cols .kcard[data-card-id="${id}"]`)!.classList.contains('is-landing');
+// Each time the board starts a Card's landing, counted from the class it gains, so a test waits for a landing to have
+// started rather than guessing when it will (#426: a keyboard move lands one animation frame after its toast).
+const landings = (id: number) => {
+ let count = 0;
+ const watch = new MutationObserver(changes => {
+  for (const change of changes) {
+   const el = change.target as HTMLElement;
+   if (el.matches(`.kcard[data-card-id="${id}"]`) && el.classList.contains('is-landing') && !change.oldValue?.split(' ').includes('is-landing')) count += 1;
+  }
+ });
+ watch.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+ onTestFinished(() => watch.disconnect());
+ return () => count;
+};
+// Two animation frames: a landing the board asked for in the frame before (as a keyboard move's is) has started by then.
+const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const options = () => vi.mocked(toast).mock.calls.at(-1)![1] as { icon?: string, action?: { label: string, run: () => void } } | undefined;
 const undone = (props: ReturnType<typeof workProps>) => Object.fromEntries(vi.mocked(props.undoMove).mock.calls.at(-1)![0]);
 // A Card in Ideas, drawn where the database put it.
@@ -60,16 +76,21 @@ test('with reduced motion the Card comes back at once, still focused and with no
 test('a Card that moved on stays where it is, and the toast says so with no landing', async () => {
  const props = workProps({ cards: [card({ id: 1, title: 'Launch post', stage_id: 1, board_order: 1 })], undoMove: vi.fn(async () => ({ state: 'gone' as const })) });
  const screen = await showWork(props);
+ const landed = landings(1);
  link(1).focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
  await expect.poll(() => toast).toHaveBeenCalledWith('Moved to “Planned”', { action: { label: 'Undo', run: expect.any(Function) } });
  const run = options()!.action!.run;
- // The move's own landing ends before "Undo" is pressed.
+ // The move's own landing starts and ends before "Undo" is pressed: it starts a frame after the toast, so the test waits
+ // for it to start before it waits for it to end.
+ await expect.poll(landed).toBe(1);
  await expect.poll(() => landing(1), { timeout: 1500 }).toBe(false);
  run();
  await expect.poll(() => toast).toHaveBeenLastCalledWith('The card moved on, so it stayed where it is', { icon: 'x' });
  await screen.rerender(workView(props));
- await new Promise(resolve => setTimeout(resolve, 80));
+ await frames();
+ // No second landing: the Card stayed where it is.
+ expect(landed()).toBe(1);
  expect(landing(1)).toBe(false);
 });
 
