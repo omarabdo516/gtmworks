@@ -13,7 +13,7 @@ export const AppsContext=createContext<Apps|null>(null);
 export const useAppsSheet=()=>useContext(AppsContext)?.open??null;
 export const useAppsCompany=()=>useContext(AppsContext)?.company??null;
 // Whose copy of a Company's apps a part of the page reads: the signed-in person the Shell drew, in the reader's language.
-// Every page with a Company draws the sheet's provider around it; a part drawn alone has no person and its own copy.
+// Every page with a Company draws the sheet's provider around it; a part drawn alone (a component test) is no one.
 export function useAppsReader(company:string):Reader {
  const person=useContext(AppsContext)?.person??''; const {language}=useI18n();
  return {company,person,language};

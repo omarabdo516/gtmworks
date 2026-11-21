@@ -143,6 +143,24 @@ test('when the signed-in person changes, the apps held for the one before are no
  await expect.element(appsButton()).toHaveTextContent('Connect apps2 connected');
 });
 
+test('an answer for the person before, landing after the next one signed in, is dropped, not kept', async () => {
+ const answers: ((apps: AppItem[]) => void)[] = [];
+ vi.stubGlobal('fetch', () => new Promise<Response>(resolve => answers.push(apps => resolve(new Response(JSON.stringify({ apps }), { status: 200 })))));
+ const screen = await render(shell(true, 'c-late', 'en', 'p-owner'));
+ await expect.poll(() => answers.length).toBe(1);
+ await screen.rerender(shell(false, 'c-late', 'en', 'p-member'));
+ await expect.poll(() => answers.length).toBe(2);
+ answers[0](items);
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(appsButton().textContent).toBe('Connect apps');
+ answers[1]([]);
+ await expect.element(appsButton()).toHaveTextContent('Connect apps0 connected');
+ // Nothing of the Owner's was held: their return reads again.
+ await screen.rerender(shell(true, 'c-late', 'en', 'p-owner'));
+ await expect.poll(() => answers.length).toBe(3);
+ expect(appsButton().textContent).toBe('Connect apps');
+});
+
 test('while the apps are being read the sheet draws its head with the search field and no list', async () => {
  engine('hang');
  const screen = await render(shell());

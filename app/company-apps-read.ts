@@ -14,12 +14,16 @@ export type Reader={company:string,person:string,language:string};
 const held=new Map<string,Held>();
 let readingFor:string|undefined;
 const listeners=new Set<()=>void>();
-const keyOf=({company,person,language}:Reader)=>`${person}:${company}:${language}`;
+// One person's reads of one Company share a prefix: a change to an app makes every language's read of it stale.
+const companyOf=({company,person}:Pick<Reader,'company'|'person'>)=>`${person}:${company}:`;
+const keyOf=(reader:Reader)=>`${companyOf(reader)}${reader.language}`;
 // A read this recent is shown as it is when a page is drawn; opening the sheet or changing an app reads again anyway.
 const freshFor=60_000;
 
+// A part drawn without the sheet's provider (only a component test does) reads as no one: it holds its own copy and
+// never counts as someone signing in, so it drops nobody's.
 function signedIn(person:string) {
- if(readingFor===person) return;
+ if(!person||readingFor===person) return;
  readingFor=person;
  if(held.size) { held.clear(); listeners.forEach(listener=>listener()); }
 }
@@ -28,17 +32,18 @@ export async function readApps(reader:Reader) {
  signedIn(reader.person);
  const apps=await fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}`,{cache:'no-store'})
   .then(response=>response.ok?response.json():null).then(body=>Array.isArray(body?.apps)?body.apps as AppItem[]:null).catch(()=>null);
- if(readingFor!==reader.person) return;
+ if(reader.person&&readingFor!==reader.person) return;
  const key=keyOf(reader);
  if(!apps&&held.get(key)?.apps) return;
  held.set(key,{apps,at:Date.now()});
  listeners.forEach(listener=>listener());
 }
 
-// An app was connected or disconnected: every language's read of this Company is stale, and this one is read now.
+// An app was connected or disconnected: every language's read of this Company for this person is stale (no one else's
+// copy is held), and this one is read now.
 export function appsChanged(reader:Reader) {
- const company=`${reader.person}:${reader.company}:`;
- for(const [key,entry] of held) if(key.startsWith(company)) entry.at=0;
+ const prefix=companyOf(reader);
+ for(const [key,entry] of held) if(key.startsWith(prefix)) entry.at=0;
  return readApps(reader);
 }
 
@@ -46,6 +51,7 @@ const subscribe=(listener:()=>void)=>{ listeners.add(listener); return ()=>{ lis
 // The apps as last read, without asking for a read: for a part of the page whose sheet or menu reads them itself.
 export const useHeldApps=(reader:Reader):AppItem[]|null|undefined=>useSyncExternalStore(subscribe,()=>held.get(keyOf(reader))?.apps,()=>undefined);
 export function useCompanyApps(reader:Reader):AppItem[]|null|undefined {
+ // The reader is taken apart so the effect follows its three values, not a new object on every draw.
  const key=keyOf(reader); const {company,person,language}=reader;
  const apps=useHeldApps(reader);
  useEffect(()=>{ const last=held.get(key); if(!last||Date.now()-last.at>freshFor) void readApps({company,person,language}); },[key,company,person,language]);
