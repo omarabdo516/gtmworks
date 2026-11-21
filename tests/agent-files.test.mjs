@@ -266,6 +266,35 @@ test('the generated images folder is the Library\'s second root, listed, downloa
  } finally { await fake.close(); }
 });
 
+test('a long text in the generated images folder is previewed from its first 512 KB, asked for as a range, with its whole size', async () => {
+ const {fake,at}=await engine();
+ try {
+  const long='a'.repeat(600*1024);
+  fake.settings.images.set(profile,[{name:'caption.txt',size:long.length,mtime}]);
+  fake.settings.fileBytes.set(`${images}/caption.txt`,{body:long,type:'text/plain'});
+  const read=await readAgentFile(at,{root:'images',name:'caption.txt'});
+  assert.equal(read.state,'found');
+  if(read.state!=='found') return;
+  assert.equal(read.byteSize,long.length);
+  assert.equal(read.truncated,true);
+  assert.equal(read.text?.length,512*1024);
+  assert.ok(fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/files/download')&&request.range===`bytes=0-${512*1024-1}`),'only the first 512 KB is asked for');
+ } finally { await fake.close(); }
+});
+
+test('a file in the generated images folder reads as binary by the Engine\'s rule: a NUL, or more than 12% control bytes', async () => {
+ const {fake,at}=await engine();
+ try {
+  const noisy=new Uint8Array(100).fill(97); for(let at=0;at<13;at++) noisy[at*7]=1;
+  const plain=new Uint8Array(100).fill(97); for(let at=0;at<12;at++) plain[at*7]=1;
+  fake.settings.images.set(profile,[{name:'noisy.txt',size:100,mtime},{name:'plain.txt',size:100,mtime}]);
+  fake.settings.fileBytes.set(`${images}/noisy.txt`,{body:noisy,type:'text/plain'});
+  fake.settings.fileBytes.set(`${images}/plain.txt`,{body:plain,type:'text/plain'});
+  assert.equal((await readAgentFile(at,{root:'images',name:'noisy.txt'})).text,null);
+  assert.equal(typeof (await readAgentFile(at,{root:'images',name:'plain.txt'})).text,'string');
+ } finally { await fake.close(); }
+});
+
 test('a profile with no generated image has an empty generated images folder, not a missing one', async () => {
  const {fake,at}=await engine();
  try {
