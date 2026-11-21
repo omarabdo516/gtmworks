@@ -134,3 +134,9 @@ test('a part of the day said beside a named day sets the hour, and is cut from t
  assert.deepEqual([evening?.form&&cronOf(evening.form),evening?.prompt],['0 19 * * 1','Send me a report']);
  assert.equal(read('Send me a report every Monday morning at 6')?.cron,'0 6 * * 1');
 });
+
+test('an hourly sentence that names a time of day asks, since an hourly schedule here runs at every hour', () => {
+ assert.equal(read('Check spend every hour from 9am to 5pm')?.cron,null);
+ assert.equal(read('راجع الصرف كل ساعة من 9 الصبح لحد 5 العصر')?.cron,null);
+ assert.equal(read('Check spend every hour')?.cron,'0 * * * *');
+});
