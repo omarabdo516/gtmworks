@@ -59,17 +59,19 @@ for (const [path, components] of [
 }
 
 // Screens tested as components (#81): a screen, a component, the library they import, or a component test runs them,
-// and so do the compared widths and languages, the reference and the stylesheet build the motion test reads (#127).
+// and so does the stylesheet build the motion test reads (#127).
 for (const path of [
   'app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
-  'design-reference/index.html', 'postcss.config.mjs', 'tests/offline.mjs',
+  'postcss.config.mjs', 'tests/offline.mjs',
 ]) {
   test(`${path} runs the component tests`, () => assert.equal(areas(path).components, 'true'));
 }
-// The motion table and its reader feed the motion component test, and no browser spec (#127).
-for (const path of ['tests/motion-table.mjs', 'tests/motion-css.mjs']) {
-  test(`${path} runs the component tests and no other long suite`, () => assert.deepEqual(areas(path), { ...none, components: 'true' }));
-}
+// The motion table feeds the motion component test and the shell's button sweep in tests/frame.spec.ts (#127, #271).
+test('tests/motion-table.mjs runs the component tests and the browser suite, and neither the database nor the install', () => {
+  assert.deepEqual(areas('tests/motion-table.mjs'), { ...none, components: 'true', integration: 'true' });
+});
+// The frozen design reference is read only by the comparison tool (#271): a change to it runs no CI suite.
+test('design-reference/index.html runs no long suite', () => assert.deepEqual(areas('design-reference/index.html'), none));
 for (const path of ['worker/index.mjs', 'supabase/seed.sql', 'tests/frame.spec.ts', 'tests/unit.test.mjs', 'server.js']) {
   test(`${path} does not run the component tests`, () => assert.equal(areas(path).components, 'false'));
 }
