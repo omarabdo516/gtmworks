@@ -54,7 +54,12 @@ export const answerAgentChange=withActionLog('answerAgentChange',async function 
  const back=String(form.get('back')||''); const uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
  const place=/^[a-z0-9-]{1,100}$/.test(slug)&&new RegExp(`^/c/${slug}/(?:conversations/${uuid}|chat(?:/${uuid})?)$`).test(back);
  const path=place?back:`/c/${slug}/approvals`;
- const {state}=!await actionAllowed(db,'answerAgentChange',company)?{state:'notAllowed'}:await answerChange(db,{company,proposal:Number(form.get('proposal')),approve:form.get('intent')==='approve',reason:String(form.get('reason')||'')});
+ // «Edit, then approve» (#484) sends the Owner's value as JSON: the database checks it as it checks a proposed value.
+ const sent=form.get('edited'); const approve=form.get('intent')==='approve';
+ // An edit that is too long, does not read, or reads as nothing is refused, never approved as proposed.
+ const edited=!approve||typeof sent!=='string'?undefined:sent.length>100000?null:(()=>{ try { const value=JSON.parse(sent) as unknown; return value===null?null:{value}; } catch { return null; } })();
+ const {state}=!await actionAllowed(db,'answerAgentChange',company)?{state:'notAllowed'}:edited===null?{state:'editInvalid'}
+  :await answerChange(db,{company,proposal:Number(form.get('proposal')),approve,reason:String(form.get('reason')||''),...(edited?{edited:edited.value}:{})});
  // An approved model or setting changes what the Agent's settings page and the chat read: the whole frame is refreshed.
  revalidatePath(`/c/${slug}`,'layout');
  if(state!=='approved'&&state!=='declined') logActionFailure('answerAgentChange',{message:state},{form});

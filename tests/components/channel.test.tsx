@@ -16,7 +16,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 const at = '2026-06-10T09:05:00Z';
 const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, files: [], mention: null };
-const called = (state: 'open' | 'answered' | 'unanswered'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, files: [], mention: { agent: 'Lead', face: 'c-1', state, permissions: [], questions: [] } });
+const called = (state: 'open' | 'answered' | 'unanswered' | 'noModel'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, files: [], mention: { agent: 'Lead', face: 'c-1', state, permissions: [], questions: [] } });
 const reply: ChannelMessage = { id: 3, author: 'agent', name: 'Lead', face: 'c-1', body: 'Two things are due.', at };
 const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): ChannelRecord => ({
  channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
@@ -61,6 +61,41 @@ test('while the called Agent replies the page says so and asks again, and a repl
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const failed = await channel(record([called('unanswered')]));
  await expect.element(failed.getByRole('alert')).toHaveTextContent('Lead couldn’t reply to this message.');
+});
+
+// #428: a channel Run that failed because the Company has no model at all says so, in the words a Conversation uses
+// (#422), instead of that the Agent could not reply: the Owner gets the way to Subscription and models, a Member is told
+// to ask the Owner.
+const noModelWords = {
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Subscription and models', ask: 'Ask the company’s Owner to connect one in Settings.', failed: 'couldn’t reply' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من الاشتراك والموديلات', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.', failed: 'مقدرش يرد' },
+} as const;
+for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a channel Run that failed for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'}`, async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const said = noModelWords[language];
+ const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([called('noModel')], { noModel: { owner } })}/></LanguageProvider>);
+ const line = screen.getByRole('alert');
+ await expect.element(line).toBeVisible();
+ expect(line.element().textContent).toContain(said.line);
+ expect(line.element().getAttribute('data-outcome')).toBe('no-model');
+ expect(line.element().textContent).not.toContain(said.failed);
+ if (owner) {
+  await expect.element(line.getByRole('link', { name: said.connect })).toHaveAttribute('href', '/c/rs-learning/settings?section=models');
+  expect(line.element().textContent).not.toContain(said.ask);
+ } else {
+  expect(line.element().textContent).toContain(said.ask);
+  await expect.element(line.getByRole('link')).not.toBeInTheDocument();
+ }
+});
+
+test('two Agents a message called that both had no model say it once, and another that could not reply keeps its own line', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const mention = (agent: string, state: 'noModel' | 'unanswered') => ({ agent, face: agent, state, permissions: [], questions: [] });
+ const three: ChannelMessage = { id: 6, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Ads @SEO @Lead the scripts', at, files: [],
+  mention: mention('Ads', 'noModel'), mentions: [mention('Ads', 'noModel'), mention('SEO', 'noModel'), mention('Lead', 'unanswered')] };
+ const screen = await channel(record([three], { noModel: { owner: false } }));
+ const lines = screen.getByRole('alert').elements().map(line => line.textContent);
+ expect(lines).toEqual(['Lead couldn’t reply to this message.', 'This company has no AI subscription or model key connected yet, so its agents can’t reply. Ask the company’s Owner to connect one in Settings.']);
 });
 
 test('a message is posted to the channel with its own send key', async () => {

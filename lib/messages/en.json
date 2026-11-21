@@ -1487,6 +1487,7 @@
   "routineEvery6": "Saturday",
   "routineWeekday6": "Saturday",
   "routineNotLogged": "Done, but it couldn’t be written in the log. Tell the Owner.",
+  "waitingChangeEditInvalid": "That value can’t be approved for this change. Nothing changed: check it and approve again.",
   "routineEveryMonth": "1st of every month · {0}",
   "routineMonthly": "Every month",
   "agentRoutines": "Routines",

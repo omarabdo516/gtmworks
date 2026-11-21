@@ -6,7 +6,9 @@ import { handoverUnfinished, replyCardColumns, replyCardOf, stepsOfReplies, type
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type MemberRole='owner'|'manager'|'contributor'|'viewer';
-type MentionState='open'|'answered'|'unanswered';
+// `noModel`: its Run failed because the Company has no model connected at all (#428), which the channel says as a
+// Conversation does (#422), instead of that the Agent could not reply.
+type MentionState='open'|'answered'|'unanswered'|'noModel';
 type ChannelPermission=Extract<ReplyCard,{kind:'permission'}>;
 // One Agent a message called (#152): its Run's state, what that Run asked to be allowed (#165), drawn as the Agent's
 // turn under the message, and the questions that Run asked (#149), drawn in that same turn; `face` is the Agent's, for
@@ -23,7 +25,8 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // pick up (#149) is `handDone`: nothing draws a bubble of it, and the card shows the press instead.
 // A handover in the channel (#150) is a quiet row between turns, with its own id: the two Agents and their faces, the
 // other Agent's answer marked `to` the Agent that handed it over, and then that Agent's own reply. A handover that did
-// not finish (#375) marks its row `failed`.
+// not finish (#375) marks its row `failed`, and one that ended with no reply because the Company has no model connected
+// (#428) also says so under its row (`noModel`).
 // A message may carry images (#156), drawn as chips under it for every Member.
 type ChannelFile={id:number,name:string};
 type ChannelFace={name:string,face:string};
@@ -32,7 +35,7 @@ export type ChannelMessage=
  | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[]}
  | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
  | {id:number,author:'note',kind:'card',at:string}
- | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true};
+ | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true,noModel?:true};
 // One handover of a channel, as its details draw it: both faces, the Agent handed the work, and the job, newest first,
 // and that it did not finish when so (#375).
 export type ChannelHandoff={id:number,from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true};
@@ -67,6 +70,9 @@ export type ChannelRecord={
  may:PermissionChoice[],
  // The channel's Card on the board (#151), when it has one the reader may see; absent otherwise.
  board?:ChannelBoard,
+ // A Run or a handover shown failed because the Company has no model connected (#428): the Owner gets the link to
+ // Subscription and models, a Member is told to ask the Owner. Absent otherwise.
+ noModel?:{owner:boolean},
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string};
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
@@ -79,13 +85,13 @@ type StoredSession={message_id:number,agent_id:string,profile:string,session:str
 // One handover of the channel (#150) as channel_handovers answers it: both Agents and their faces, the job, what the
 // target reported, Lead's reply and when each came. Only what the chat draws; never the context or the Engine's runs.
 type StoredHandover={id:number,message:number,from_agent:string,from_name:string,from_connection:string,to_agent:string,to_name:string,
- to_connection:string,goal:string,summary:string|null,reply:string|null,state:string,target_outcome:string|null,created_at:string,answered_at:string|null,closed_at:string|null};
+ to_connection:string,goal:string,summary:string|null,reply:string|null,state:string,target_outcome:string|null,created_at:string,answered_at:string|null,closed_at:string|null,no_model?:boolean};
 // A channel's replies read their Run's steps from the Agent's Hermes session when the channel opens (#346), never kept.
 // `profile` is the one the Run was pinned to; the callback reads the session there.
 type ReadSession=(agent:string,session:string,profile:string)=>Promise<{turns:SessionTurn[],usage:SessionUsage|null}|null>;
 const shownMessages=200;
 
-const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome==='completed'?'answered':'unanswered';
+const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome==='completed'?'answered':outcome==='no_model'?'noModel':'unanswered';
 const nameOf=(row:{kind:string,name:string|null}):ChannelName=>row.kind==='team'&&row.name?{kind:'team',name:row.name}:{kind:'general'};
 export const channelTitle=(t:(key:string)=>string,channel:ChannelName)=>channel.kind==='team'?channel.name:t('shellGeneralChannel');
 
@@ -208,13 +214,16 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const shownIds=new Set(ordered.map(message=>message.id));
  const handoverMessages=((handed||[]) as StoredHandover[]).filter(row=>shownIds.has(row.message)).flatMap((row):ChannelMessage[]=>[
   {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
-   ...(handoverUnfinished(row)?{failed:true as const}:{})},
+   ...(handoverUnfinished(row)?{failed:true as const}:{}),...(row.no_model?{noModel:true as const}:{})},
   ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
   ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,body:row.reply,at:row.closed_at}]:[]),
  ]);
  // The lines in the order they were written: a note is drawn where it happened, after a message written at the same
  // moment (the sort is stable, and the messages come first), and a handover's row after the reply that made it.
  const messages=[...written.flat(),...handoverMessages].sort((a,b)=>a.at<b.at?-1:a.at>b.at?1:0);
+ // Only a channel that shows a no-model failure asks whether the reader owns the Company, for its line's link (#428).
+ const noModel=messages.some(message=>message.author==='handoff'?message.noModel===true:message.author==='person'&&(message.mentions??[]).some(mention=>mention.state==='noModel'));
+ const {data:owner}=noModel?await db.rpc('is_company_owner',{c:company}):{data:false};
  if(read&&newest!==undefined) await db.rpc('read_channel',{ch:channel,through:newest});
  return {
   channel:{id:found.id,company:found.company_id,...name},
@@ -234,6 +243,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   handover:((handed||[]) as StoredHandover[]).some(row=>row.state!=='done'&&row.state!=='failed'),
   may:(may||[]) as PermissionChoice[],
   ...(board?{board:board as ChannelBoard}:{}),
+  ...(noModel?{noModel:{owner:owner===true}}:{}),
  };
 }
 

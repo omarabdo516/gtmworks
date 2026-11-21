@@ -6,6 +6,12 @@
   "ar": { "title": "صباح الخير بقى ممكن يتفتح", "body": "في صفحة الوكيل الرئيسي، المالك والمديرين يقدروا يفتحوا ملخص الصبح كل يوم ويختاروا ميعاده؛ مش بيبعت حاجة لو مفيش جديد، وبيتنقل مع الوكيل الرئيسي." }
  },
  {
+  "issue": 428,
+  "date": "2026-11-21",
+  "en": { "title": "Channels say when no model is connected", "body": "When an agent called in a channel, or a job Lead hands to another agent, can’t answer because the company has no AI subscription or model key yet, the channel or chat now says so, with the link to Subscription and models for the Owner, instead of only saying the reply failed." },
+  "ar": { "title": "القنوات بتقولك لو مفيش موديل متوصّل", "body": "لما وكيل ناديته في قناة، أو شغلانة Lead سلّمها لوكيل تاني، ميقدرش يرد عشان الشركة لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل، القناة أو المحادثة بقت بتقول كده، ومعاها لينك الاشتراك والموديلات للمالك، بدل ما تقول بس إن الرد فشل." }
+ },
+ {
   "issue": 479,
   "date": "2026-11-21",
   "en": { "title": "A failed update leaves no half-made sandbox", "body": "When an update stops because a Company’s work sandbox does not start, the previous release keeps serving and every sandbox, work folder and network the update made for it is removed while what was there before stays, so running it again starts clean." },
@@ -22,6 +28,12 @@
   "date": "2026-11-21",
   "en": { "title": "Routines in an agent's details", "body": "An agent's details now list its routines with when each runs next; the Owner and Managers add one by writing one sentence, such as “leads summary every day at 8 in the morning”, and a sentence with no time asks for one first." },
   "ar": { "title": "الروتينات في تفاصيل الوكيل", "body": "تفاصيل الوكيل بقت بتعرض روتيناته وإمتى كل واحد هيشتغل المرة الجاية؛ والمالك والمديرين يضيفوا روتين بجملة واحدة، زي «ملخص الليدز كل يوم 8 الصبح»، ولو الجملة مفيهاش ميعاد بيتسألوا عنه الأول." }
+ },
+ {
+  "issue": 484,
+  "date": "2026-11-21",
+  "en": { "title": "Edit a proposed change before you approve it", "body": "A change an agent proposes to its settings now shows what the agent has now beside what it would have, and you can edit the model, instructions or setting before you approve it; in Waiting on you it is a card that opens the whole proposal." },
+  "ar": { "title": "عدّل التغيير المقترح قبل ما توافق عليه", "body": "التغيير اللي الوكيل بيقترحه في إعداداته بقى بيوريك الوكيل عنده إيه دلوقتي جنب اللي هيبقى عنده، وتقدر تعدّل الموديل أو التعليمات أو الإعداد قبل ما توافق؛ وفي «مستنيك» بقى بطاقة بتفتح الاقتراح كله." }
  },
  {
   "issue": 446,
