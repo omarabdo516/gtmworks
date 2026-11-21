@@ -435,10 +435,10 @@ const voice = { company: 'co-1', agent: 'ag-1' };
 // waits until the test lets it go, as a read on a loaded machine can still be going when "Writing" shows: a test that
 // answers the Engine before it was asked then fails every time instead of now and then (#528).
 const heldRead = () => {
- const read = Blob.prototype.arrayBuffer; let release: () => void = () => {};
- const held = new Promise<void>(resolve => { release = resolve; });
+ const read = Blob.prototype.arrayBuffer; let unblock: () => void = () => {};
+ const held = new Promise<void>(resolve => { unblock = resolve; });
  vi.spyOn(Blob.prototype, 'arrayBuffer').mockImplementation(async function (this: Blob) { await held; return read.call(this); });
- return { release: () => act(async () => { release(); }) };
+ return { release: () => act(async () => { unblock(); }) };
 };
 const voiced = (props: Parameters<typeof box>[0], language: Language = 'en') => render(<LanguageProvider language={language}><MessageBox placeholder="Write" voice={voice} {...props} /></LanguageProvider>);
 const pointer = (element: Element, type: string) => act(async () => { element.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1 })); });
@@ -553,6 +553,7 @@ test('a recording is sent for the Agent it started on, and an answer that arrive
  await expect.poll(() => engine.calls.length).toBe(1);
  expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1' });
  await act(async () => { switchTarget(); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Writing what you said…');
  await act(async () => { engine.finish(Response.json({ text: 'words for the other agent' })); });
  // Nothing went in once the answer was read: "Writing" ends only after it (#528).
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write');
@@ -576,6 +577,7 @@ test('an answer that arrives after the Agent changed and changed back inserts no
  // A → B → A: the box is back on A, but A's first recording was already replaced.
  await act(async () => { switchTarget('ag-2'); });
  await act(async () => { switchTarget('ag-1'); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Writing what you said…');
  await act(async () => { engine.finish(Response.json({ text: 'words from before the switch' })); });
  // Nothing went in once the answer was read: "Writing" ends only after it (#528).
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write');
