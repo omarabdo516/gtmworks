@@ -54,11 +54,17 @@ const freePort=()=>new Promise((resolve,reject)=>{
 });
 const readPort=file=>{ try { const port=Number(readFileSync(file,'utf8').trim()); return Number.isInteger(port)&&port>0&&port<65536?port:null; } catch { return null; } };
 
-// One start at a time for an Agent: a second caller waits for the first's lock file to go.
+// One start at a time for an Agent: a second caller waits for the first's lock file to go. A lock is broken only when
+// the process that took it is gone (a start killed part way), never while its holder still waits for its daemon.
+const alive=pid=>{ try { process.kill(pid,0); return true; } catch(failure) { return /** @type {any} */(failure)?.code==='EPERM'; } };
 async function locked(file,work) {
- for(let waited=0;;waited++) {
-  try { closeSync(openSync(file,'wx')); break; }
-  catch { if(waited>=120) rmSync(file,{force:true}); else await sleep(500); }
+ for(;;) {
+  try { writeFileSync(file,`${process.pid}\n`,{flag:'wx'}); break; }
+  catch {
+   const holder=Number.parseInt((()=>{ try { return readFileSync(file,'utf8'); } catch { return ''; } })(),10);
+   if(Number.isInteger(holder)&&holder>0&&!alive(holder)) rmSync(file,{force:true});
+   else await sleep(500);
+  }
  }
  try { return await work(); } finally { rmSync(file,{force:true}); }
 }

@@ -774,6 +774,11 @@ fi
 if docker exec --user 0 "$sandbox" grep -rIl --exclude-dir=proc fake-model-key /home /work /tmp /run 2> /dev/null | grep -q .; then
   fail 'no file of the sandbox holds a provider credential'
 fi
+# Nor a sign-in or key file of the Engine's kind: no auth.json, no .env and no Hermes home in the work user's home or the
+# work folder (a synced sign-in would land there).
+if docker exec --user 0 "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print 2> /dev/null | grep -q .; then
+  fail 'no sign-in or key file of the Engine is in the sandbox'
+fi
 # The Library shows the Company's work folder (#395): an Agent's file and picture in its own folder are listed, previewed
 # and downloaded with the same bytes through gtmworks; the Engine reads that folder and cannot write to it, as root or as
 # its own user, and nothing it tried reaches the sandbox.

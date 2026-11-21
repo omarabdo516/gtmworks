@@ -109,7 +109,7 @@ test('the Run goes to the design profile with its key over the newest socket tha
  try {
   const route=routeOf(agent,home);
   assert.deepEqual(route?.sockets,[stale,older],'newest first');
-  const text=await runOnEngine(route,{input:'A poster',cwd,session:'s',signal:new AbortController().signal});
+  const text=await runOnEngine(route,{input:'A poster',cwd,signal:new AbortController().signal});
   assert.equal(text,'Made index.html.');
   assert.equal(existsSync(stale),false,'the stale socket is removed');
   assert.ok(seen.every(call=>call.authorization===`Bearer ${key}`));

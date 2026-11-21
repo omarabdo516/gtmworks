@@ -31,7 +31,7 @@ export const routeFile=(agent,home=homedir())=>`${home}/.gtmworks/open-design/${
 export function routeOf(agent,home=homedir()) {
  try {
   const route=JSON.parse(readFileSync(routeFile(agent,home),'utf8'));
-  if(!profileName.test(route?.profile)||typeof route?.key!=='string'||route.key.length<32) return null;
+  if(!profileName.test(route?.profile)||typeof route?.key!=='string'||!/^[A-Za-z0-9_-]{32,200}$/.test(route.key)) return null;
   const prefix=`engine-${agent}-`;
   const sockets=readdirSync(`${home}/.gtmworks`).filter(name=>name.startsWith(prefix)&&name.endsWith('.sock')).sort().reverse().map(name=>`${home}/.gtmworks/${name}`);
   return {sockets,profile:route.profile,key:route.key};
@@ -91,16 +91,19 @@ const terminal=['completed','failed','cancelled','interrupted'];
 // One prompt as one Run on the design profile: started, then read until it ends. A permission the Run asks for is given
 // once, as Open Design's own ACP client gives every one (agent-protocol/acp/session.ts replyPermission): nobody watches
 // this Run, and the Member who asked for the design asked for its work.
-/** @param {{sockets:string[],profile:string,key:string}} route @param {{input:string,cwd:string,session:string,signal:AbortSignal}} turn */
-export async function runOnEngine(route,{input,cwd,session,signal}) {
+/** @param {{sockets:string[],profile:string,key:string}} route @param {{input:string,cwd:string,signal:AbortSignal}} turn */
+export async function runOnEngine(route,{input,cwd,signal}) {
  const started=await call(route,'POST','/v1/runs',{input,instructions:instructionsFor(cwd)}).catch(()=>null);
  const run=started?.json?.run_id;
  if(!started||![200,202].includes(started.status)||typeof run!=='string') throw new Error(`The Engine did not start the design (${started?started.status:'no answer'}).`);
- void session;
  const at=`/v1/runs/${encodeURIComponent(run)}`;
- for(;;) {
+ // A read that gets no answer is tried again for a minute; once no forwarded socket is left, or the Engine stays silent,
+ // the Run is given up in words, never polled for ever.
+ for(let missed=0;;) {
   if(signal.aborted) { await call(route,'POST',`${at}/stop`).catch(()=>null); throw new Error('cancelled'); }
-  const read=await call(route,'GET',at).catch(()=>null);
+  const read=await call(route,'GET',at).catch(failure=>{ if(!route.sockets.length) throw failure; return null; });
+  missed=read?0:missed+1;
+  if(missed>=60) throw new Error("Open Design lost the Company's Engine while it drew the design.");
   const record=read?.json;
   if(read?.status===404) throw new Error('The Engine no longer knows this design Run.');
   if(record?.status==='waiting_for_approval'&&typeof record.approval?.request_id==='string')
@@ -129,7 +132,7 @@ export function serveAcp({input,output,run=runOnEngine,route=routeOf}) {
   const abort=new AbortController();
   session.abort=abort;
   try {
-   const text=await run(engine,{input:promptText(params?.prompt),cwd:session.cwd,session:params.sessionId,signal:abort.signal});
+   const text=await run(engine,{input:promptText(params?.prompt),cwd:session.cwd,signal:abort.signal});
    if(text) send({method:'session/update',params:{sessionId:params.sessionId,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text}}}});
    send({id,result:{stopReason:'end_turn'}});
   } catch(failure) {

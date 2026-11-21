@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { openDesignKey, designProfileOf, openDesignServer, openDesignKeyOf, newDesignKey, designProfileConfig, engineSocket } from '../lib/open-design.mjs';
+import { openDesignApp, designProfileOf, openDesignServer, openDesignKeyOf, newDesignKey, designProfileConfig, engineSocket } from '../lib/open-design.mjs';
 import { sandboxRoute } from '../lib/sandbox-command.mjs';
 import { agentPaths } from '../sandbox/open-design/daemon.mjs';
 import { noAgentGets } from '../lib/agent-toolsets.mjs';
@@ -16,7 +16,7 @@ test('the Agent\'s design profile is a profile of its own, named for the Agent',
  assert.equal(designProfileOf(profile),`od-${profile}`);
  assert.equal(designProfileOf('co-0123456789abcdef0123456789abcdef'),'od-co-0123456789abcdef0123456789abcdef');
  for(const wrong of ['', 'od-x', 'ag-../x', 'AG-1', null, 'cs-0123456789abcdef0123456789abcdef']) assert.equal(designProfileOf(wrong),null,String(wrong));
- assert.equal(openDesignKey,'open-design');
+ assert.equal(openDesignApp,'open-design');
 });
 
 test('the Engine gets ssh into the sandbox on the terminal backend\'s route, with the Run API forwarded to one socket of the Agent\'s', () => {
