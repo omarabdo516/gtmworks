@@ -84,12 +84,45 @@ test('pressing a face, or a button holding one, makes it hop, and the same Agent
  await expect.poll(() => document.querySelector('section .face')?.classList.contains('is-happy'), { timeout: 1000 }).toBe(false);
 });
 
-test('a face drawn after 450ms does not hop', async () => {
+test('a press that opens no page: a face drawn after 450ms does not hop', async () => {
  const screen = await render(<div className="gw"><FaceMotion/><button type="button"><CompanyAgentFace agent={agent('a')} size={32}/></button></div>);
  document.querySelector('button')!.click();
  await new Promise(resolve => setTimeout(resolve, 500));
  await screen.rerender(<div className="gw"><FaceMotion/><section><CompanyAgentFace agent={agent('a')} size={64}/></section></div>);
  await new Promise(resolve => setTimeout(resolve, 50));
+ expect(document.querySelector('section .face')!.classList.contains('is-happy')).toBe(false);
+});
+
+// A link the press follows, as next/link does: the app draws the page it opens, however long that takes.
+const follow = (event: React.MouseEvent<HTMLAnchorElement>) => { event.preventDefault(); history.pushState(null, '', event.currentTarget.href); };
+const here = location.href;
+afterEach(() => history.replaceState(null, '', here));
+
+test('a pressed link carries its hop to the page it opens however long that page takes, then for 450ms from its first face', async () => {
+ const screen = await render(<div className="gw"><FaceMotion/><a href="/next-page" onClick={follow}><CompanyAgentFace agent={agent('a')} size={32}/>Open</a></div>);
+ document.querySelector('a')!.click();
+ expect(document.querySelector('a .face')!.classList.contains('is-happy')).toBe(true);
+ // A busy machine: the opened page is drawn well after 450ms.
+ await new Promise(resolve => setTimeout(resolve, 900));
+ await screen.rerender(<div className="gw"><FaceMotion key="next page"/><section><CompanyAgentFace agent={agent('a')} size={64}/></section></div>);
+ await expect.poll(() => document.querySelector('section .face')?.classList.contains('is-happy')).toBe(true);
+ // A copy drawn on that page within 450ms of its first face hops once too; one drawn later does not.
+ await screen.rerender(<div className="gw"><FaceMotion key="next page"/><section><CompanyAgentFace agent={agent('a')} size={64}/></section><aside><CompanyAgentFace agent={agent('a')} size={32}/></aside></div>);
+ await expect.poll(() => document.querySelector('aside .face')?.classList.contains('is-happy')).toBe(true);
+ await new Promise(resolve => setTimeout(resolve, 500));
+ await screen.rerender(<div className="gw"><FaceMotion key="next page"/><section><CompanyAgentFace agent={agent('a')} size={64}/></section><aside><CompanyAgentFace agent={agent('a')} size={32}/></aside><footer><CompanyAgentFace agent={agent('a')} size={32}/></footer></div>);
+ await new Promise(resolve => setTimeout(resolve, 50));
+ expect(document.querySelector('footer .face')!.classList.contains('is-happy')).toBe(false);
+});
+
+test('a pressed link whose page is not drawn within 10s carries no hop', async () => {
+ vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+ const screen = await render(<div className="gw"><FaceMotion/><a href="/next-page" onClick={follow}><CompanyAgentFace agent={agent('a')} size={32}/>Open</a></div>);
+ document.querySelector('a')!.click();
+ await vi.advanceTimersByTimeAsync(10000);
+ await screen.rerender(<div className="gw"><FaceMotion key="next page"/><section><CompanyAgentFace agent={agent('a')} size={64}/></section></div>);
+ await new Promise(resolve => queueMicrotask(() => resolve(null)));
+ await vi.advanceTimersByTimeAsync(50);
  expect(document.querySelector('section .face')!.classList.contains('is-happy')).toBe(false);
 });
 

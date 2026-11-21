@@ -4,13 +4,25 @@ import { useEffect } from 'react';
 // The life of every Agent face of 24px or more (CompanyAgentFace's .face--look), mounted once by app/frame
 // (design-reference/app.js: lookFrame, lookReset, the blink interval, hopFace and its click handler). It draws nothing.
 // Its features turn toward the pointer, one face that is not working blinks now and then, and a pressed face hops,
-// as does the same Agent's face drawn again within 450ms (the page the press opened). Never with reduced motion.
-const blinkEvery=1300, blinkFor=140, hopFor=520, hopCarries=450;
+// as does the same Agent's face drawn again on the page the press opened. Never with reduced motion.
+// The reference carries the hop 450ms from the press, because its pages are drawn at once; here a page the press opens
+// takes as long as the server and the machine take, so the 450ms count from that page's first face of the Agent, and
+// a press waits up to 10s for its page (#529).
+const blinkEvery=1300, blinkFor=140, hopFor=520, hopCarries=450, hopWaits=10000;
 const faces=()=>Array.from(document.querySelectorAll<SVGSVGElement>('.face--look'));
 const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 // The press outlives the frame it was made in: a page with a frame of its own mounts this part again, and that page's
-// faces still hop. The faces that already hopped are kept with it, so none hops twice for one press.
-let hop:{face:string,until:number,hopped:WeakSet<Element>}|null=null;
+// faces still hop. The faces that already hopped are kept with it, so none hops twice for one press. `from` is the
+// address the press was made on while the page it opens is not drawn yet, and null once it is or when it opens none.
+let hop:{face:string,from:string|null,until:number,hopped:WeakSet<Element>}|null=null;
+const address=()=>location.pathname+location.search;
+// The address a press opens in this tab, or null: a link elsewhere in this app, pressed plainly.
+const opens=(host:Element|null|undefined,event:MouseEvent)=>{
+ if(!(host instanceof HTMLAnchorElement)||!host.href||(host.target&&host.target!=='_self')||host.hasAttribute('download')) return null;
+ if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey) return null;
+ const url=new URL(host.href,location.href);
+ return url.origin===location.origin&&url.pathname+url.search!==address()?url.pathname+url.search:null;
+};
 
 export function FaceMotion() {
  useEffect(()=>{
@@ -47,24 +59,31 @@ export function FaceMotion() {
    face.classList.remove('is-happy'); void face.getBoundingClientRect(); face.classList.add('is-happy');
    window.setTimeout(()=>face.classList.remove('is-happy'),hopFor);
   };
-  // The same Agent's face drawn after the press (a new page, the panel drawn again) hops once, while the press is fresh.
+  // The same Agent's face drawn after the press (the page it opened, the panel drawn again) hops once, while the press
+  // is fresh: within 450ms of the press, or of the opened page's first such face.
   const again=()=>{
    if(!hop) return;
    if(hop.until<=Date.now()) { hop=null; drawn.disconnect(); return; }
-   for(const face of document.querySelectorAll(`.face--look[data-face="${hop.face}"]`)) if(!hop.hopped.has(face)&&face.getBoundingClientRect().width) jump(face);
+   if(hop.from!==null&&hop.from===address()) return;
+   const fresh=Array.from(document.querySelectorAll(`.face--look[data-face="${hop.face}"]`)).filter(face=>!hop!.hopped.has(face)&&face.getBoundingClientRect().width);
+   if(!fresh.length) return;
+   if(hop.from!==null) { hop.from=null; hop.until=Date.now()+hopCarries; endAt(); }
+   for(const face of fresh) jump(face);
   };
   const drawn=new MutationObserver(again);
+  const endAt=()=>{ window.clearTimeout(ends); if(hop) ends=window.setTimeout(()=>{ hop=null; drawn.disconnect(); },Math.max(0,hop.until-Date.now())); };
   const watch=()=>{
    if(!hop) return;
    drawn.disconnect(); drawn.observe(document.body,{childList:true,subtree:true});
-   window.clearTimeout(ends); ends=window.setTimeout(()=>{ hop=null; drawn.disconnect(); },Math.max(0,hop.until-Date.now()));
+   endAt();
   };
   const press=(event:MouseEvent)=>{
    const target=event.target instanceof Element?event.target:null;
    const host=target?.closest('button, a[href], [data-action]');
    const face=target?.closest('.face--look[data-face]')??host?.querySelector('.face--look[data-face]');
    if(!face) return;
-   hop={face:face.getAttribute('data-face')!,until:Date.now()+hopCarries,hopped:new WeakSet()};
+   const page=opens(host,event);
+   hop={face:face.getAttribute('data-face')!,from:page?address():null,until:Date.now()+(page?hopWaits:hopCarries),hopped:new WeakSet()};
    jump(face);
    watch();
   };
