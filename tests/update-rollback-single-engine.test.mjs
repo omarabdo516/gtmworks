@@ -20,7 +20,7 @@ const fn = name => {
 };
 const helpers = ['engine_project', 'engine_folder', 'sandbox_container', 'exit_container', 'exit_network', 'work_volume', 'work_network',
   'host_key_volume', 'engine_names', 'engine_network_of', 'healthy_within', 'work_sandbox_ref', 'engine_key', 'adopt_engine_key', 'drop_install_env_key', 'write_engine_env',
-  'keep_previous_engine', 'keep_sandbox_parts', 'remove_new_sandbox_parts', 'stop_old_engine', 'remove_old_engine', 'restore_old_engine',
+  'keep_previous_engine', 'keep_sandbox_parts', 'previous_engine_files_back', 'remove_new_sandbox_parts', 'stop_old_engine', 'remove_old_engine', 'restore_old_engine',
   'restore_previous_engine', 'first_engine_up'].map(fn).join('');
 
 // The stand-in. Containers are lines `<id> <name> <state>` in state/containers; the old `hermes` container is the one whose
@@ -117,6 +117,8 @@ test('an old container Docker will not remove fails nothing once the new Engine 
 test('an update whose first Engine does not start brings the old hermes Engine back, with its key, and no Engine folder', t => {
   const install = singleEngineInstall(t);
   assert.equal(install.run('keep_previous_engine').status, 0);
+  // The update copied this release's Engine template in; that release shipped none (#554).
+  writeFileSync(join(install.dir, 'scripts/engine-template.yml'), 'services: {}\n');
   const up = install.run('first_engine_up', { ENGINE_FAILS: '1' });
   assert.notEqual(up.status, 0);
   // While the new Engine was tried the old container was only stopped, and its data volume is the new Engine's.
@@ -135,6 +137,7 @@ test('an update whose first Engine does not start brings the old hermes Engine b
   assert.equal(readFileSync(join(install.dir, '.env.install'), 'utf8'), `POSTGRES_PASSWORD=p\nSETUP_CODE=s\nHERMES_API_KEY=${key}\n`);
   assert.ok(!existsSync(join(install.dir, '.engines/first')));
   assert.ok(!existsSync(join(install.dir, '.install-lock/old-engine')));
+  assert.ok(!existsSync(join(install.dir, 'scripts/engine-template.yml')), "no Engine file of this release stays on that release's disk");
 });
 
 test('the old Engine does not start while a new one still runs on its data volume', t => {

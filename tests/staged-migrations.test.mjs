@@ -55,11 +55,13 @@ test('the installer applies the cutover only once this release answers, and puts
  // The previous sandboxes start again from the image the previous run recorded: this run's is dropped, and a source
  // build's previous image, kept under its own name before the tag was rebuilt, gets the tag back.
  const restore=install.slice(install.indexOf('restore_previous_engine() {'),install.indexOf('\n}\n',install.indexOf('restore_previous_engine() {')));
- assert.match(restore,/rm -f \.install-lock\/work-sandbox-image/);
+ const filesBack=install.slice(install.indexOf('previous_engine_files_back() {'),install.indexOf('\n}\n',install.indexOf('previous_engine_files_back() {')));
+ assert.ok(restore.indexOf('previous_engine_files_back || return 1')>=0&&restore.indexOf('previous_engine_files_back || return 1')<restore.indexOf('engine "$name" up -d'),'the files and the image go back before the Engines start');
+ assert.match(filesBack,/rm -f \.install-lock\/work-sandbox-image/);
  // Each restored sandbox gets its own Engine's key, read again per Engine, never the one another Company's start left.
  assert.match(restore,/for name in \$\(engine_names\); do[\s\S]*sandbox_key=\n[\s\S]*sandbox_keys "\$name"[\s\S]*engine "\$name" up -d --remove-orphans/);
  assert.match(restore,/engine "\$name" up -d --remove-orphans[\s\S]*sandbox_reachable "\$name"/,'and each restored sandbox is reached over SSH by its own Engine');
- assert.match(restore,/docker tag "\$work_sandbox_tag-previous" "\$work_sandbox_tag"/);
+ assert.match(filesBack,/docker tag "\$work_sandbox_tag-previous" "\$work_sandbox_tag"/);
  const build=install.slice(install.indexOf('work_sandbox_image() {'));
  assert.ok(build.indexOf('docker tag "$work_sandbox_tag" "$work_sandbox_tag-previous"')<build.indexOf('docker build --tag "$work_sandbox_tag" sandbox'),'the running image keeps a name before the build replaces its tag');
  // The previous release's Engine files are kept before an update replaces anything, in both kinds of update.
