@@ -376,10 +376,14 @@ test('the card reads the Agent\'s current value from its own profile, and an Own
   assert.ok(model.edit.options.length>0&&model.edit.options.every(option=>typeof option.provider==='string'&&typeof option.providerName==='string'&&typeof option.model==='string'),'the Engine\'s model list for that profile');
   const soul=await readChangeContext(reader(rows),{...options,proposal:2});
   assert.deepEqual({state:soul.state,now:soul.now,edit:soul.edit},{state:'found',now:'You write long ads.',edit:{kind:'instructions',limit:soul.edit.limit}});
-  assert.ok(soul.edit.limit>0&&soul.edit.limit<=20000);
+  // The team's rules section stays in the file, so the field takes what is left of the limit beside it.
+  assert.equal(soul.edit.limit,20000-section.length);
   // An Engine that takes longer instructions still edits them only within what the database takes for a proposal.
   fake.settings.profiles.get(own(ads)).config.context_file_max_chars=30000;
   assert.equal((await readChangeContext(reader(rows),{...options,proposal:2})).edit?.limit,20000);
+  // An approval whose write was never confirmed is finished, not edited again: no field, and the value it is writing.
+  const retry=await readChangeContext(reader([{...rows[0],id:6,state:'applying',approved_value:'openai/gpt-5'}]),{...options,proposal:6});
+  assert.deepEqual({state:retry.state,edit:retry.edit,approved:retry.approved},{state:'found',edit:null,approved:'openai/gpt-5'});
   assert.deepEqual(await readChangeContext(reader(rows),{...options,proposal:3}),{state:'found',now:false,edit:{kind:'switch'}});
   const limit=await readChangeContext(reader(rows),{...options,proposal:4});
   assert.equal(limit.state,'found');

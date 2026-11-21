@@ -332,3 +332,13 @@ test('a listed setting that is a switch, text, or the sub-agents\' model from th
  await expect.poll(() => answered.mock.calls.length).toBe(3);
  expect(sentEdit(2)).toEqual({ intent: 'approve', proposal: '1', edited: true });
 });
+
+test('an approval whose write was never confirmed shows the value it is writing, and is approved again without an edit', async () => {
+ reads.mockImplementation(async () => new Response(JSON.stringify({ state: 'found', now: 'openai/gpt-5.5', edit: null, approved: 'anthropic/claude-opus-5-5' }), { status: 200 }));
+ const screen = await render(<LanguageProvider language="en"><OwnerChangeCard slug="rs-learning" company="co-1" item={item(7)}/></LanguageProvider>);
+ onTestFinished(() => screen.unmount());
+ const proposal = screen.getByRole('group', { name: 'Proposed change: Analyst' });
+ await expect.element(proposal.getByText('Now', { exact: true })).toBeVisible();
+ expect([...proposal.element().querySelectorAll('.kv__row')].map(row => row.textContent)).toEqual(['ChangeNew model: claude-opus-5-5anthropic', 'Nowgpt-5.5', 'After the OKclaude-opus-5-5', 'Proposedgemini-7', 'WhyFaster on big numbers.']);
+ expect([...proposal.element().querySelectorAll('button')].map(button => button.textContent)).toEqual(['Decline', 'Approve']);
+});

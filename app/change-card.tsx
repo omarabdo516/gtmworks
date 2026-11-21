@@ -23,7 +23,8 @@ export type ChangeField={kind:'model',options:ModelChoice[]}|{kind:'instructions
  |{kind:'setting',type:'string'|'number'|'boolean'|'select',choices:string[]|null,limits:{min?:number,max?:number,integer?:boolean}|null,default:unknown};
 // What the card read of the Agent when it was drawn: `now` its value, `edit` the Owner's field. `loading` until it is in;
 // null when there is nothing to read (an answered proposal, an Engine away).
-export type ChangeRead={now:unknown,edit:ChangeField|null}|'loading'|null;
+// `approved`: an approval whose Engine write was never confirmed, being finished with the value it was writing.
+export type ChangeRead={now:unknown,edit:ChangeField|null,approved?:unknown}|'loading'|null;
 
 // The read and whether the Owner is editing, for the answer drawn inside the card.
 const Shared=createContext<{read:ChangeRead,editing:boolean,setEditing:(editing:boolean)=>void}>({read:null,editing:false,setEditing:()=>{}});
@@ -38,7 +39,7 @@ function useChangeRead(company:string|undefined,change:ChangeProposalView,unread
   let live=true;
   fetch(`/api/agent-change?company=${encodeURIComponent(company)}&proposal=${change.id}`,{cache:'no-store'})
    .then(response=>response.ok?response.json():null).catch(()=>null)
-   .then((body:{state?:string,now?:unknown,edit?:ChangeField|null}|null)=>{ if(live) setGot({key,read:body?.state==='found'?{now:body.now??null,edit:body.edit??null}:null}); });
+   .then((body:{state?:string,now?:unknown,edit?:ChangeField|null,approved?:unknown}|null)=>{ if(live) setGot({key,read:body?.state==='found'?{now:body.now??null,edit:body.edit??null,...(body.approved!==undefined?{approved:body.approved}:{})}:null}); });
   return ()=>{ live=false; };
  },[key,company,change.id]);
  return !key?null:got?.key===key?got.read:'loading';
@@ -60,7 +61,9 @@ export function ChangeCard({change,company,owner=false,unread=false,answer}:{cha
  const self=change.by.id===change.agent.id;
  // An approval the Owner edited names the value approved, with the one the Agent proposed beside it.
  const edited=change.state!=='waiting'&&change.state!=='refused'&&change.approved!==undefined;
- const after=edited?change.approved:change.value;
+ // A waiting approval being finished shows the value it is writing, as an edited approval does.
+ const finishing=change.state==='waiting'&&read&&read!=='loading'&&read.approved!==undefined?read.approved:undefined;
+ const after=edited?change.approved:finishing!==undefined?finishing:change.value;
  // A proposal read in part names what would change and nothing of its value.
  const what=words.what({...change,value:after},unread);
  const owners=new Intl.ListFormat(localeFor(language),{type:'disjunction'}).format(change.state==='waiting'?change.owners:[]);
@@ -92,7 +95,7 @@ export function ChangeCard({change,company,owner=false,unread=false,answer}:{cha
     <div className="kv__row"><dt>{c('changeRow')}</dt><dd>{what}{model&&<span className="pp-sub"><bdi>{model.providerName(choices)}</bdi></span>}</dd></div>
     {now!==undefined&&<div className="kv__row" data-row="now"><dt>{c('changeNow')}</dt><dd dir="auto" className={text}>{shown(now)}</dd></div>}
     {!unread&&<div className="kv__row" data-row="after"><dt>{c('changeAfter')}</dt><dd dir="auto" className={text}>{shown(after)}</dd></div>}
-    {edited&&change.change!=='instructions'&&<div className="kv__row" data-row="proposed"><dt>{c('changeProposed')}</dt><dd dir="auto">{shown(change.value)}</dd></div>}
+    {(edited||finishing!==undefined)&&change.change!=='instructions'&&<div className="kv__row" data-row="proposed"><dt>{c('changeProposed')}</dt><dd dir="auto">{shown(change.value)}</dd></div>}
     {!unread&&<div className="kv__row"><dt>{c('changeWhy')}</dt><dd dir="auto">{change.reason}</dd></div>}
    </dl>}
    {outcome}
