@@ -231,15 +231,24 @@ test('a blocked sign-in window starts no sign-in, stays on the page and says how
   await expect.element(screen.getByRole('button', { name: 'Connect', exact: true })).not.toHaveAttribute('aria-disabled', 'true');
 });
 
-// #424: every connectable app shows its logo from Simple Icons, a file of this install, or its letters where Simple Icons
-// has none.
-test('every app card shows its logo or its letters', async () => {
+// #424, #577: in the All tab every connectable app's tile shows its company's logo, a file of this install that loads;
+// only the Owner's own server, which names no company, and an app whose mark is still to be taken keep a letter: the
+// first of its name.
+test('every app card in the All tab shows its company\'s logo', async () => {
   await render(<AppsList place={settings} owner items={items} text={text}/>);
   const tile = (key: string) => document.getElementById(`app-t-${key}`)?.closest('.app-card')?.querySelector('.tool-tile');
-  for (const app of apps) expect(tile(app.key), app.key).toBeTruthy();
+  // DeepWiki's official mark is still to be taken (#580): it keeps its letter until then.
+  for (const app of apps.filter(app => app.source !== 'own' && app.key !== 'deepwiki')) {
+    const image = tile(app.key)?.querySelector<HTMLImageElement>('img.tool-logo');
+    expect(image?.getAttribute('src'), app.key).toMatch(/^\/logos\/(simple|lobe|brand)\/[a-z0-9-]+\.(svg|png)$/);
+    expect(tile(app.key)?.textContent, `${app.key} shows no letters`).toBe('');
+  }
+  await expect.poll(() => [...document.querySelectorAll<HTMLImageElement>('.app-card img.tool-logo')].filter(image => !image.complete || image.naturalWidth === 0).map(image => image.src)).toEqual([]);
   expect(tile('notion')?.querySelector('img.tool-logo')?.getAttribute('src')).toBe('/logos/simple/notion.svg');
-  expect(tile('mixpanel')?.querySelector('img.tool-logo')?.getAttribute('src')).toBe('/logos/simple/mixpanel.svg');
-  expect(tile('klaviyo')?.textContent).toBe('Kl');
+  expect(tile('apollo')?.querySelector('img.tool-logo')?.getAttribute('src')).toBe('/logos/brand/apollo.svg');
+  expect(tile('own')?.querySelector('img')).toBeNull();
+  expect(tile('own')?.textContent).toBe('Y');
+  expect(tile('deepwiki')?.textContent).toBe('D');
 });
 
 // #458: the card that adds the Owner's own server: Test shows the tools the server lists, and Add turns a no-sign-in

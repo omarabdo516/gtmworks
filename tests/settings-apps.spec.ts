@@ -237,3 +237,30 @@ test('a page is drawn with no read of the Engine, and the sidebar\'s count comes
  await expect(page.locator('#btn-apps .sb-apps__n')).toHaveText(/^\d+ connected$/);
  expect(catalogueReads()).toBeGreaterThan(before);
 });
+
+// #577: in the Connect apps sheet's All tab every app shows its company's logo, a file of this install that loads, and
+// none is fetched from outside; it stays clear on the white tile in the light and the dark theme, both attached to the run.
+// Only the Owner's own server and DeepWiki, whose mark is still to be taken (#580), keep their first letter.
+test('every app in Connect apps shows its company\'s logo from the install, in both themes',async({page},testInfo)=>{
+ const origin=new URL(testInfo.project.use.baseURL!).origin;
+ const outside:string[]=[];
+ page.on('request',request=>{ if(request.resourceType()==='image'&&new URL(request.url()).origin!==origin) outside.push(request.url()); });
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ const sheet=sheetOf(page);
+ for(const theme of ['light','dark'] as const) {
+  await page.emulateMedia({colorScheme:theme});
+  if(!await sheet.isVisible()) await page.locator('#btn-apps').click();
+  await expect(sheet.locator('.app-card').first()).toBeVisible();
+  const tiles=await sheet.locator('.app-card').evaluateAll(cards=>cards.map(card=>({name:card.querySelector('.app__name')!.textContent,logo:card.querySelector('.tool-tile img.tool-logo')?.getAttribute('src')??null,letter:card.querySelector('.tool-tile')!.textContent})));
+  // The Engine's catalogue here is the fake's, beside every ready-made server and the own-tool card.
+  expect(tiles.length).toBeGreaterThan(30);
+  expect(tiles.filter(tile=>!tile.logo&&tile.name!=='DeepWiki'),'only the own-tool card keeps a letter').toEqual([{name:'Your own tool (MCP)',logo:null,letter:'Y'}]);
+  await sheet.locator('.app-card img.tool-logo').last().scrollIntoViewIfNeeded();
+  await expect.poll(()=>sheet.locator('.app-card img.tool-logo').evaluateAll(images=>images.filter(image=>!(image as HTMLImageElement).complete||(image as HTMLImageElement).naturalWidth===0).map(image=>image.getAttribute('src')))).toEqual([]);
+  // In the dark theme the tile behind a logo stays white, so a black mark never sinks into the dark page.
+  if(theme==='dark') expect(await sheet.locator('.app-card .tool-tile:has(.tool-logo)').evaluateAll(tiles=>[...new Set(tiles.map(tile=>getComputedStyle(tile).backgroundColor))])).toEqual(['rgb(255, 255, 255)']);
+  await sheet.locator('.app-card').first().scrollIntoViewIfNeeded();
+  await testInfo.attach(`connect-apps-${theme}`,{body:await page.screenshot(),contentType:'image/png'});
+ }
+ expect(outside).toEqual([]);
+});
