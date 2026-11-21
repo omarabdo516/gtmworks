@@ -8,7 +8,7 @@ setup of the account's own. Only the local stack's credentials are used: no prod
 
 `.claude/settings.json` runs `scripts/cloud-session-setup.sh` at every session start. Outside a cloud session
 (`CLAUDE_CODE_REMOTE` is not `true`) it does nothing. In one it starts `dockerd` in the background when no Docker daemon
-answers, and runs `npm ci` when `package-lock.json` changed since the last install (or `node_modules` is missing). It
+answers (first removing any pid file left from before the VM restarted, below), and runs `npm ci` when `package-lock.json` changed since the last install (or `node_modules` is missing). It
 prints one line when it is done.
 
 ## 1. Bring it up: `npm run cloud:up`
@@ -86,6 +86,12 @@ the session proxy at `127.0.0.1` would be the container's own loopback.
 ## When it does not start
 
 - `the Docker daemon did not answer within 90 seconds`: read `$TMPDIR/gtmworks-dockerd.log`.
+- A stale pid file (#522): a restored VM keeps `/var/run/docker/containerd/containerd.pid` and `/var/run/docker.pid`
+  from before it stopped, and their pid can belong to another process by now, so dockerd logs `containerd is still
+  running`, then `failed to start containerd: timeout` (or `process with PID … is still running` for `docker.pid`).
+  Every start (the hook's and `cloud:up`'s) removes a pid file whose pid is not a running `containerd` or `dockerd`, and
+  containerd's sockets beside it, and prints `Removing the stale …`; a pid file of a daemon that really runs stays. By
+  hand: `rm /var/run/docker/containerd/containerd.pid /var/run/docker.pid`, then `cloud:up` again.
 - `port 3000 is taken by a process cloud:up did not start`: an app you started by hand (`npm run dev`) is still
   running; stop it and run `cloud:up` again.
 - The stack fails to start: the last lines of `$TMPDIR/gtmworks-local-db.log` are printed; `npx supabase stop

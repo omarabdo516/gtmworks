@@ -5,12 +5,14 @@
 # local Supabase stack can start later, and installs the dependencies when the lockfile changed since the last install.
 # `npm run cloud:up` (scripts/cloud-up.sh) runs the same steps by name on any machine:
 #   deps     install the dependencies when package-lock.json changed or node_modules is missing
-#   docker   start dockerd if no daemon answers, and wait until one does
+#   docker   start dockerd if no daemon answers, and wait until one does; a pid file left from before the machine
+#            restarted is removed first (#522)
 #   browser  install the Chromium this checkout's Playwright pins when it is not on the machine yet
 set -euo pipefail
 cd "$(dirname "$0")/.."
 stamp=node_modules/.gtmworks-lock-hash
 log_dir=${TMPDIR:-/tmp}
+docker_run=${GTMWORKS_DOCKER_RUN_DIR:-/var/run}
 
 deps() {
  local hash
@@ -22,6 +24,23 @@ deps() {
  echo "$hash" > "$stamp"
 }
 
+# A restored VM keeps the pid files of the daemons that ran before it stopped, and by now their pid can be another
+# process (the session's worker): dockerd, and the containerd it manages, take any live pid as theirs still running and
+# never start (#522). Removes each pid file whose pid is not a running containerd or dockerd, with containerd's sockets.
+clear_stale_pid_files() {
+ local file pid name
+ for file in "$docker_run/docker/containerd/containerd.pid" "$docker_run/docker.pid"; do
+  [[ -f $file ]] || continue
+  pid=$(tr -dc 0-9 < "$file")
+  name=$( [[ -n $pid ]] && ps -o comm= -p "$pid" 2> /dev/null || true)
+  [[ $name == containerd || $name == dockerd ]] && continue
+  echo "Removing the stale $file (pid ${pid:-none} is ${name:-not running})"
+  "$@" rm -f "$file"
+  [[ $file == */containerd.pid ]] && "$@" rm -f "${file%/*}"/containerd.sock* "${file%/*}/containerd-debug.sock"
+ done
+ return 0
+}
+
 # Starts dockerd detached when no daemon answers and none is running. With `wait`, waits up to 90 seconds for it.
 docker_up() {
  docker info > /dev/null 2>&1 && return 0
@@ -29,6 +48,7 @@ docker_up() {
   command -v dockerd > /dev/null 2>&1 || { echo 'no Docker daemon answers and dockerd is not installed' >&2; return 1; }
   local sudo=()
   if [[ $(id -u) != 0 ]] && command -v sudo > /dev/null 2>&1; then sudo=(sudo -n); fi
+  clear_stale_pid_files "${sudo[@]}"
   setsid nohup "${sudo[@]}" dockerd > "$log_dir/gtmworks-dockerd.log" 2>&1 < /dev/null &
  fi
  [[ ${1:-} == wait ]] || return 0
