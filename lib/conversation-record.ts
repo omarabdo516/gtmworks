@@ -42,18 +42,22 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type Face={id:string,connection_id:string,name:string};
  type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,maybe_applied?:boolean,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
  type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,available:boolean,created_at:string};
- const [{ends,messages,queued,requestRows,madeRows,changeRows},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
+ const [{ends,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
    +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)),'
+   // Each handover's state in the same snapshot as the messages: a follow-up that closes writes its reply and marks the
+   // handover done in one transaction, so the chat keeps asking until both are read together (`handover`).
+   +'agent_handovers(id,state),'
    // A change the chat's Agent proposed (#19), read by the Conversation's person while they see both Agents (RLS).
    +'agent_change_proposals(id,run_id,change,setting,value,reason,state,answered_at,answer,maybe_applied,created_at,answerer:people!answered_by(name),agent:hermes_agents!agent_id(id,connection_id,name),by:hermes_agents!proposed_by(id,connection_id,name))')
    .eq('id',conversation).order('id',{referencedTable:'conversation_messages'}).order('queued_at',{referencedTable:'conversation_queued_turns'})
    .order('id',{referencedTable:'lead_agent_requests'}).order('created_at',{referencedTable:'lead_made_agents'})
    .order('id',{referencedTable:'agent_change_proposals'}).maybeSingle()
-   .then(({data})=>{ const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_change_proposals:ChangeRow[]}|null;
-    return {ends:read?.conversation_run_ends||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],changeRows:read?.agent_change_proposals||[]}; }),
-  // The handovers of this chat (#317, #475), both Agents named, oldest first.
+   .then(({data})=>{ const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:{id:number,state:string}[],agent_change_proposals:ChangeRow[]}|null;
+    return {ends:read?.conversation_run_ends||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],changeRows:read?.agent_change_proposals||[],moving:(read?.agent_handovers||[]).some(row=>row.state!=='done'&&row.state!=='failed')}; }),
+  // The handovers of this chat (#317, #475), both Agents named, oldest first, to draw them; whether one is still moving
+  // is read with the messages above.
   db.rpc('conversation_handovers',{conversation}).then(({data})=>(data||[]) as HandedRow[]),
   db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as StoredNote[]),
   db.from('reply_cards').select(replyCardColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as ReplyCardRow[]),
@@ -147,7 +151,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
    .map(message=>message.agent_id&&faces.has(message.agent_id)?{...message,face:faces.get(message.agent_id)}:message),
   usage:(await read)?.usage??null,
   pending:waiting(messages,ends,commandRuns).length>0||queuedWaiting(queued),
-  ...(handedRows.some(row=>row.state!=='done'&&row.state!=='failed')?{handover:true as const}:{}),
+  ...(moving?{handover:true as const}:{}),
   ...(lead?{lead:true as const}:{}),
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),
   ...(permit?{permit:permit as PermissionChoice[]}:{}),

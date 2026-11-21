@@ -35,10 +35,10 @@ type TiedCard = { id: number, column: string, made?: string, wait?: { person: st
 // A handover as conversation_handovers answers it (#475): both Agents named, the job, how far it got and its answer.
 type StoredHandover = { id: number, run: string, from_name: string, from_connection: string, to_agent: string, to_name: string, to_connection: string, goal: string, answer: string | null,
  state: string, target_outcome: string | null, answers_person: boolean, created_at: string, answered_at: string | null };
-function database(card: TiedCard | null, messages: typeof stored = stored, agent_handovers: StoredHandover[] = []) {
+function database(card: TiedCard | null, messages: typeof stored = stored, agent_handovers: StoredHandover[] = [], snapshot: { id: number, state: string }[] = agent_handovers) {
  // The messages and how their runs ended are read through the Conversation, in one statement (lib/conversation-record.ts).
  const { conversation_run_ends, conversation_messages, ...rest } = messages;
- const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [] }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
+ const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [], agent_handovers: snapshot }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
  const table = (name: string) => {
   const found = rows[name] ?? [];
   const query: Record<string, unknown> = { then: (resolve: (value: unknown) => unknown) => resolve({ data: found, error: null }), maybeSingle: async () => ({ data: found[0] ?? null, error: null }) };
@@ -120,6 +120,14 @@ test('the record marks a handover that did not finish, whichever leg ended it, a
  const moving = await handedRecord(handedTo('target', null));
  expect(handedCard(moving)).not.toHaveProperty('failed');
  expect(moving.handover).toBe(true);
+});
+
+// #475: the handovers are drawn from conversation_handovers, a read of its own, but whether one is still moving comes from
+// the same snapshot as the messages. A follow-up that closed between the two reads (done there, its reply not yet read
+// with the messages) keeps the chat asking, so the asking Agent's reply is never left out until a reload.
+test('a handover read as done after the messages were read still keeps the chat asking for its reply', async () => {
+ const record = await conversationRecord(database(null, leadStored, [handedTo('done', 'completed')], [{ id: 1, state: 'follow_up' }]), 'p-3', 'co-1', { id: 'cv-9', agent_id: 'a-lead', agent_name: 'Lead', hermes_agents: { connection_id: 'c-0', is_default: true } });
+ expect(record.handover).toBe(true);
 });
 
 test('a handover that did not finish says so under Lead\'s reply, read through the record the page reads', async () => {
