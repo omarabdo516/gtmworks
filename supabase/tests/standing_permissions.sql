@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(27);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -103,19 +103,28 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002'
 select throws_ok($$select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002',' ','mcp:meta-ads/create_campaign')$$,'22023','permissionInvalid','a revoke names its permission');
 select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','Meta Ads · create_campaign','mcp:meta-ads/create_campaign');
 reset role;
-select is((select jsonb_build_array(actor_id,actor_kind,subject,agent_id,action,details) from public.company_log where action='agent_permission_revoked'),
+select is((select jsonb_build_array(actor_id,actor_kind,subject,agent_id,action,details) from public.company_log where action='agent_permission_revoked' and agent_id in ('e5000000-0000-0000-0000-000000000002','e5000000-0000-0000-0000-000000000003')),
  jsonb_build_array('20000000-0000-0000-0000-000000000002','person','agent','e5000000-0000-0000-0000-000000000002','agent_permission_revoked',
   jsonb_build_object('agent_name','Ads','permission',jsonb_build_object('text','Meta Ads · create_campaign','entry','mcp:meta-ads/create_campaign'))),
  'a revoke is one log row: who, the Agent and the permission');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
-select is((select count(*)::int from public.company_log where action='agent_permission_revoked'),1,'everyone who sees the Agent reads it');
+select is((select count(*)::int from public.company_log where action='agent_permission_revoked' and agent_id in ('e5000000-0000-0000-0000-000000000002','e5000000-0000-0000-0000-000000000003')),1,'everyone who sees the Agent reads it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000003','WordPress · publish_post','mcp:wordpress/publish_post');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is((select count(*)::int from public.company_log where action='agent_permission_revoked'),1,'and a Member who does not see the Agent reads none of its revokes');
+select is((select count(*)::int from public.company_log where action='agent_permission_revoked' and agent_id in ('e5000000-0000-0000-0000-000000000002','e5000000-0000-0000-0000-000000000003')),1,'and a Member who does not see the Agent reads none of its revokes');
 select results_eq($$select entry from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('recursive delete')$$,
  'a revoked grant no longer names the person behind its entry, and the other entry keeps its own');
+reset role;
+-- What may be in flight: Ads's two always answers, taken just now (not revoked: the revoke row above is for the other);
+-- the Meta Ads one was revoked above, so only recursive delete is in flight; a Contributor reads none.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select results_eq($$select * from public.agent_permission_inflight('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('recursive delete')$$,
+ 'a revoke writes back the always answers being taken now, never one already revoked');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select * from public.agent_permission_inflight('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','only someone who may revoke reads it');
 reset role;
 select ok(not has_function_privilege('anon','public.agent_permission_grants(uuid,uuid)','execute')
  and not has_function_privilege('anon','public.check_permission_revoke(uuid,uuid)','execute')

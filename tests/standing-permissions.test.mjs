@@ -17,12 +17,13 @@ const rows=[
  {agent:seo,name:'SEO',connection:'f1000000-0000-0000-0000-000000000021',profile:seoProfile,main:false,own:true},
  {agent:lead,name:'Writer',connection:'f1000000-0000-0000-0000-000000000031',profile:shared,main:false,own:false},
 ];
-function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=false}={}) {
+function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=false,inflight=[]}={}) {
  const logged=[],asked=[];
  const db={rpc:async(name,args)=>{
   asked.push(name);
   if(name==='company_app_agents') return {data:agents,error:null};
   if(name==='agent_permission_grants') return grantsFail?{data:null,error:{message:'down'}}:{data:grants.filter(grant=>grant.agent===args.agent).map(grant=>({entry:grant.entry,allowed_by:grant.allowed_by,allowed_at:grant.allowed_at})),error:null};
+  if(name==='agent_permission_inflight') return {data:inflight,error:null};
   if(name==='check_permission_revoke') return {data:null,error:refuse?{message:refuse}:null};
   if(name==='log_permission_revoked') { logged.push(args); return {data:null,error:logFail?{message:'refused',code:'22023'}:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
@@ -70,7 +71,7 @@ test('a revoke is asked of the database first, removes that one entry from that 
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   assert.deepEqual(fake.settings.profiles.get(seoProfile).config.command_allowlist,['mcp:notion/create_page'],'another Agent keeps its own');
   assert.deepEqual(logged,[{c:company,agent:ads,permission:'Notion · create_page',entry:'mcp:notion/create_page'}]);
-  assert.deepEqual(asked,['company_app_agents','check_permission_revoke','log_permission_revoked']);
+  assert.deepEqual(asked,['company_app_agents','check_permission_revoke','agent_permission_inflight','log_permission_revoked']);
   assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'gone'});
   assert.equal(logged.length,1,'an entry already gone is not logged again');
  } finally { await fake.close(); }
@@ -105,4 +106,20 @@ test('a revoke the Engine took is done even when its log row is refused, and say
   assert.equal(logged.length,1);
   assert.deepEqual(errors.map(line=>JSON.parse(line).event),['standing_permission_log_failed']);
  } finally { console.error=error; await fake.close(); }
+});
+
+test('what an Always allow may be adding right now is written back with the list, and two revokes at once never restore each other\'s entry',async()=>{
+ const fake=await fakeHermes();
+ try {
+  profileOn(fake,adsProfile,['recursive delete','mcp:notion/create_page']);
+  // A grant the Engine has not saved yet: the revoke writes it with the list.
+  const {db}=session({inflight:['mcp:canva/create_design']});
+  assert.equal((await revokeAgentPermission(db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['mcp:notion/create_page','mcp:canva/create_design']);
+  // Two revokes of the same profile at once: each one's entry stays gone.
+  const both=session();
+  const results=await Promise.all([revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})]);
+  assert.deepEqual(results.map(result=>result.state),['revoked','revoked']);
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
+ } finally { await fake.close(); }
 });

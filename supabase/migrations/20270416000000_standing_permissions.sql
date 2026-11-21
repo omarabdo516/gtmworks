@@ -141,6 +141,32 @@ end $$;
 revoke all on function public.check_permission_revoke(uuid,uuid) from public,anon,service_role;
 grant execute on function public.check_permission_revoke(uuid,uuid) to authenticated;
 
+-- The entries an Always allow may be adding to the Agent's profile right now: an always answer of a Conversation or a
+-- channel of this Agent that is being delivered (sending), or that the Engine took in the last five minutes, unless it
+-- was revoked since. The Engine's config route has no versioned write and shares no lock with its own save of an always
+-- answer (tools/approval.py save_permanent_allowlist), so a revoke writes these back with the list it keeps: a grant
+-- that lands while it writes is never dropped. Only someone who may revoke reads it.
+create function public.agent_permission_inflight(c uuid, agent uuid) returns setof text
+language plpgsql stable security definer set search_path='' as $$
+begin
+ perform public.check_permission_revoke(c,agent);
+ return query select distinct g.entry from (
+  select a entry,coalesce(r.decided_at,now()) at from public.reply_cards r join public.conversations v on v.id=r.conversation_id and v.company_id=r.company_id
+   cross join unnest(r.allows) a
+   where r.company_id=c and v.agent_id=agent and r.kind='permission' and r.content->>'choice'='always'
+    and (r.state='sending' or r.state='decided' and r.decided_at>now()-interval '5 minutes')
+  union all
+  select a,coalesce(q.decided_at,now()) from public.channel_permissions q join public.channel_runs u on u.message_id=q.message_id and u.run_id=q.run_id
+   cross join unnest(q.allows) a
+   where q.company_id=c and u.agent_id=agent and q.content->>'choice'='always'
+    and (q.state='sending' or q.state='decided' and q.decided_at>now()-interval '5 minutes')
+ ) g
+ where not exists(select 1 from public.company_log l where l.company_id=c and l.agent_id=agent and l.action='agent_permission_revoked'
+   and l.details->'permission'->>'entry'=g.entry and l.created_at>=g.at);
+end $$;
+revoke all on function public.agent_permission_inflight(uuid,uuid) from public,anon,service_role;
+grant execute on function public.agent_permission_inflight(uuid,uuid) to authenticated;
+
 -- A revoke the Engine confirmed, as one row on the Agent (design-reference: the click case revoke): who, the Agent, the
 -- permission as its row names it (`text`) and the entry as the Engine kept it (`entry`, so an older grant of it no longer
 -- names anyone), from "Standing" to "Will ask again". It is read by everyone who sees the Agent, as the row it removes was.

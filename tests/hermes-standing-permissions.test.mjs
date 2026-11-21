@@ -116,3 +116,16 @@ test('a grant that lands between the reads is read again, and one that the write
   finally { globalThis.fetch=engineFetch; }
  } finally { await fake.close(); }
 });
+
+test('a grant that lands just before the write is kept when the caller names it, as Codex\'s case on #499',async()=>{
+ const fake=await fakeHermes();
+ try {
+  profileOn(fake,{command_allowlist:['recursive delete']});
+  const engineFetch=globalThis.fetch;
+  globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') fake.settings.profiles.get(ads).config.command_allowlist=['recursive delete','mcp:notion/create_page']; return engineFetch(url,init); };
+  try {
+   assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete',keep:['mcp:notion/create_page']}),{state:'revoked'});
+   assert.deepEqual(fake.settings.profiles.get(ads).config.command_allowlist,['mcp:notion/create_page'],'the grant that landed is written back');
+  } finally { globalThis.fetch=engineFetch; }
+ } finally { await fake.close(); }
+});
