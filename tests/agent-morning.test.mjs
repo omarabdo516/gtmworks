@@ -691,3 +691,15 @@ test('a stale move\'s cleanup never pauses the job of the Agent that is main aga
   assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['scheduled'],'the main Agent\'s job is left as its holder set it');
  } finally { await fake.close(); leases.clear(); }
 });
+
+test('a move takes the copy that is on from the main Agent before, not an old paused one beside it', async () => {
+ const fake=await engine();
+ try {
+  // Lead holds an old paused 7:00 copy first, then the message that is on at 9:00.
+  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nOld`,schedule:'0 7 * * *',timezone:'Africa/Cairo',paused:true});
+  await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nNow`,schedule:'0 9 * * *',timezone:'Africa/Cairo'});
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake)})).state,'moved');
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>[job.schedule.expr,job.state]),[['0 9 * * *','scheduled']]);
+  assert.equal(jobs(fake,leadProfile).length,0);
+ } finally { await fake.close(); }
+});
