@@ -16,7 +16,8 @@ address to the check and another to the connection (DNS rebinding) changes nothi
 It keeps nothing, holds no key and logs one line per request: the verdict, the host and the port, never a path or a body.
 It runs from the work sandbox image the install already has, so an install carries no second image for it.
 
-  python3 exit.py                 serve on the work network (EXIT_LISTEN names the address, default the alias `exit`)
+  python3 exit.py                 serve on the work network (its address beside the sandbox, or EXIT_LISTEN)
+  python3 exit.py --health        exit 0 when the exit answers there
   python3 exit.py --verdict ADDR  print `allowed` or `refused <reason>` for each address, as the exit decides it
 """
 import asyncio
@@ -330,17 +331,34 @@ async def serve_client(reader, writer):
 
 
 def listen_address():
-    """The exit's own address on the sandbox's network: the alias the template gives it there. The exit never listens on
-    the network that routes out, so nothing but the sandbox and its Engine can use it."""
-    name = os.environ.get('EXIT_LISTEN', 'exit')
-    deadline = time.monotonic() + 60
+    """The exit's own address on the sandbox's network. Its alias there is no help from inside: Compose also gives every
+    service its own name on each network it joins, so a lookup can answer the address on the network that routes out.
+    The address is the one the kernel would send from to reach the sandbox (EXIT_PEER, the sandbox's alias, which is on
+    the work network only); a datagram socket is pointed at it and nothing is sent. The exit never listens on the network
+    that routes out, so nothing but the sandbox and its Engine can use it. EXIT_LISTEN names the address outright."""
+    if os.environ.get('EXIT_LISTEN'):
+        return os.environ['EXIT_LISTEN']
+    peer = os.environ.get('EXIT_PEER', 'sandbox')
+    deadline = time.monotonic() + 120
     while True:
         try:
-            return socket.getaddrinfo(name, PORT, type=socket.SOCK_STREAM)[0][4][0]
+            address = socket.getaddrinfo(peer, 9, socket.AF_INET, socket.SOCK_DGRAM)[0][4][0]
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                probe.connect((address, 9))
+                return probe.getsockname()[0]
         except OSError:
             if time.monotonic() > deadline:
-                raise SystemExit(f'exit: cannot resolve its own address {name}')
+                raise SystemExit(f'exit: cannot find its address beside {peer}')
             time.sleep(1)
+
+
+def healthy():
+    """The health check: the exit answers on its work-network address."""
+    try:
+        socket.create_connection((listen_address(), PORT), 3).close()
+        return 0
+    except OSError:
+        return 1
 
 
 async def main():
@@ -352,6 +370,8 @@ async def main():
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--health':
+        sys.exit(healthy())
     if len(sys.argv) > 1 and sys.argv[1] == '--verdict':
         for item in sys.argv[2:]:
             reason = verdict(item)

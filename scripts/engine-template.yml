@@ -102,6 +102,9 @@ services:
     restart: unless-stopped
     container_name: ${EXIT_NAME:-gtmworks-exit}
     entrypoint: [python3, /usr/local/lib/gtmworks/exit.py]
+    # It listens on its address beside the sandbox, so the sandbox is made first.
+    depends_on:
+      - sandbox
     # The image's ordinary user, no capability and no new privilege, and small limits: the exit holds nothing and keeps
     # nothing, and no key and no volume reach it.
     cap_drop:
@@ -117,7 +120,7 @@ services:
           - exit
       outbound:
     healthcheck:
-      test: [CMD, python3, -c, "import socket; socket.create_connection(('exit',3128),3).close()"]
+      test: [CMD, python3, /usr/local/lib/gtmworks/exit.py, --health]
       interval: 5s
       timeout: 10s
       start_period: 30s
