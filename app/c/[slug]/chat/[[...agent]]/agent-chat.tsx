@@ -15,6 +15,7 @@ import Link from '@/lib/link';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ReadyRole } from '@/lib/ready-roles';
 import type { AgentDetailsView } from '@/app/agent-details-server';
+import { sentIntoNewChat } from '@/lib/arrivals';
 
 const ReadyMade=lazy(()=>import('@/app/ready-made'));
 
@@ -84,6 +85,8 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     if(failure) { setSending(false); return failure; }
     // The page moves to the Conversation just started; until it has, the box stays busy, so neither a suggestion nor a
     // second Enter can start another one.
+    // There the message rises in, as one sent in an open Conversation does (#132).
+    sentIntoNewChat(conversation);
     router.push(`/c/${slug}/conversations/${conversation}`);
     return new Promise<never>(()=>{});
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{current.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>

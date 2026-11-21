@@ -29,7 +29,7 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 import { useReportRun } from '@/lib/live-runs';
-import { useArrivals, type Arrival } from '@/lib/arrivals';
+import { useArrivals, useSentIntoNewChat, type Arrival } from '@/lib/arrivals';
 
 export type ThreadConversation=ConversationRecord['conversation'];
 type Text=(key:string,...values:unknown[])=>string;
@@ -197,9 +197,9 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
  const [drawnCards]=useState(()=>new Set(replyCardIds(messages)));
  // So does a message, a line or the card of an Agent Lead made (design-reference: msg-in, agentCardHTML's card-in):
- // what the Conversation held when it opened stays still.
+ // what the Conversation held when it opened stays still, unless it was opened by the first message just sent into it.
  const drawn=arrivals(messages);
- const {rises}=useArrivals([...drawn,...madeArrivals(messages)]);
+ const {rises}=useArrivals([...drawn,...madeArrivals(messages)],{fresh:useSentIntoNewChat(conversation.id)});
  const rise=(index:number)=>rises(drawn[index])?' msg-in':'';
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the

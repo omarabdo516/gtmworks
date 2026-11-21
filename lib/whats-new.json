@@ -1,5 +1,11 @@
 [
  {
+  "issue": 132,
+  "date": "2026-11-21",
+  "en": { "title": "The chat moves as it was designed", "body": "A message that arrives while the chat is open rises gently into place, the working line breathes while the Agent works, and the send arrow takes off when you send." },
+  "ar": { "title": "الشات بيتحرك زي ما اتصمّم", "body": "الرسالة اللي بتوصل والشات مفتوح بتطلع مكانها بهدوء، وسطر «شغال» بيتنفّس طول ما الوكيل شغال، وسهم الإرسال بيطير لما تبعت." }
+ },
+ {
   "issue": 19,
   "date": "2026-11-21",
   "en": { "title": "Agents propose changes to their settings", "body": "An Agent, or Lead for another Agent, can propose a new model, new core instructions, sub-agents or one of its settings, with the reason. It waits in the Owner’s Waiting on you, and nothing changes until the Owner approves it." },
