@@ -53,6 +53,8 @@ const languages = inject('languages'), widths = inject('widths');
 // The part in its row's markup, styled by app/globals.css (with the reduced-motion rule), the tokens and keyframes in
 // app/tokens.css, app/shell.css and its own file, in the order the app loads them. Each is the stylesheet Vite builds for the app
 // (globals.css with Tailwind), taken as text so the next part starts without this one's file.
+// A row may name a part's ::before or ::after: the element is found without it and the pseudo-element is read.
+const pseudoOf = (row: MotionRow) => row.built.match(/::(?:before|after)$/)?.[0] ?? null;
 async function mount(row: MotionRow): Promise<Element> {
  const files = [...new Set(['app/globals.css', 'app/tokens.css', 'app/shell.css', row.file])];
  const sheets: string[] = await Promise.all(files.map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default));
@@ -62,7 +64,7 @@ async function mount(row: MotionRow): Promise<Element> {
  document.body.append(host);
  const { lang, dir } = document.documentElement;
  onTestFinished(() => { host.remove(); Object.assign(document.documentElement, { lang, dir }); });
- const parts = host.querySelectorAll(row.built);
+ const parts = host.querySelectorAll(row.built.replace(/::(?:before|after)$/, ''));
  expect(parts, `${row.built} matches one element of ${row.html}`).toHaveLength(1);
  return parts[0];
 }
@@ -70,8 +72,8 @@ async function mount(row: MotionRow): Promise<Element> {
 // As app/layout.tsx sets them.
 const speak = (language: string) => Object.assign(document.documentElement, { lang: language, dir: language === 'ar' ? 'rtl' : 'ltr' });
 
-const styleOf = (part: Element): ComputedStyle => {
- const { transitionProperty, transitionDuration, transitionDelay, transitionTimingFunction, animationName, animationDuration, animationTimingFunction } = getComputedStyle(part);
+const styleOf = (part: Element, pseudo: string | null = null): ComputedStyle => {
+ const { transitionProperty, transitionDuration, transitionDelay, transitionTimingFunction, animationName, animationDuration, animationTimingFunction } = getComputedStyle(part, pseudo);
  return { transitionProperty, transitionDuration, transitionDelay, transitionTimingFunction, animationName, animationDuration, animationTimingFunction };
 };
 
@@ -92,7 +94,7 @@ for (const row of motionTable) test(`${row.built} (${row.file}) moves as the ref
   const reference = await commands.referenceComputed(row.ref, width);
   for (const language of languages) {
    speak(language);
-   expect.soft(await commands.computedMotion(styleOf(part)), `${language} at ${width}px`).toEqual(reference);
+   expect.soft(await commands.computedMotion(styleOf(part, pseudoOf(row))), `${language} at ${width}px`).toEqual(reference);
   }
  }
  await reducedMotion(true);

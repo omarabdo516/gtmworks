@@ -6,6 +6,12 @@
   "ar": { "title": "المهام المتكررة في الإعدادات", "body": "الإعدادات بقت بتعرض كل المهام المتكررة لكل وكيل، وإمتى هتشتغل المرة الجاية وآخر مرة اشتغلت عملت إيه؛ والمالك والمديرين يقدروا يوقفوا مهمة أو يرجّعوها، يشغّلوها دلوقتي، يغيّروا ميعادها، يضيفوا مهمة أو يمسحوها، وكل تغيير بيتسجّل في السجل." }
  },
  {
+  "issue": 129,
+  "date": "2026-11-21",
+  "en": { "title": "The account menu rises, the switches spring", "body": "The account menu now rises gently into place as it opens and is gone at once when it closes, a switch's knob springs across, and the message box's border and the account row fade as the approved design moves." },
+  "ar": { "title": "قايمة الحساب بتطلع بنعومة، والمفاتيح بتتنطّط", "body": "قايمة الحساب بقت بتطلع بهدوء لمكانها لما تفتحها وبتختفي على طول لما تقفلها، وزرار المفتاح بيتنطّط لمكانه، وحدود خانة الرسالة وصف الحساب بيتغيّروا بهدوء زي التصميم المعتمد." }
+ },
+ {
   "issue": 19,
   "date": "2026-11-21",
   "en": { "title": "Agents propose changes to their settings", "body": "An Agent, or Lead for another Agent, can propose a new model, new core instructions, sub-agents or one of its settings, with the reason. It waits in the Owner’s Waiting on you, and nothing changes until the Owner approves it." },
