@@ -62,7 +62,22 @@ test('a letter mark is the first letter of the name, uppercase', () => {
   assert.equal(markOf(' n8n'), 'N');
   assert.equal(markOf('كانفا'), 'ك');
   assert.equal(markOf(''), '·');
-  for (const app of apps) assert.equal(app.mark, markOf(app.name), app.key);
+  // Each catalogue app's letter, written out: the first letter of its name, uppercase.
+  const expected = {
+    airtable:'A', algolia:'A', alltrails:'A', amplitude:'A', asana:'A', atlassian:'A', attio:'A', 'aws-knowledge':'A',
+    betterstack:'B', buildkite:'B', calendly:'C', canva:'C', circleci:'C', clickup:'C', close:'C', cloudflare:'C',
+    cloudinary:'C', 'comfy-cloud':'C', context7:'C', craft:'C', datadog:'D', deepwiki:'D', dropbox:'D', figma:'F',
+    fireflies:'F', gamma:'G', gitlab:'G', globalping:'G', grafana:'G', 'hugging_face':'H', indeed:'I', intercom:'I',
+    kiwi:'K', klaviyo:'K', linear:'L', 'microsoft-learn':'M', miro:'M', mixpanel:'M', monday:'M', motherduck:'M',
+    'n8n-official':'N', neon:'N', netlify:'N', notion:'N', paypal:'P', plaid:'P', postman:'P', 'prisma-postgres':'P',
+    railway:'R', rentahuman:'R', robinhood:'R', semgrep:'S', sentry:'S', square:'S', strava:'S', stripe:'S',
+    supabase:'S', todoist:'T', trivago:'T', 'twelve-data':'T', 'twilio-docs':'T', 'unreal-engine':'U', vercel:'V',
+    webflow:'W', wolfram:'W', 'wordpress-com':'W', 'meta-ads':'M', 'tiktok-ads':'T', apollo:'A', semrush:'S',
+    ahrefs:'A', supermetrics:'S', similarweb:'S', brevo:'B', 'mailchimp-transactional':'M', zapier:'Z', make:'M',
+    buffer:'B', 'hootsuite-content':'H', 'hootsuite-inbox':'H', 'hootsuite-listening':'H', typeform:'T', clay:'C',
+    lusha:'L', x:'X', own:'Y'
+  };
+  assert.deepEqual(Object.fromEntries(apps.map(app => [app.key, app.mark])), expected);
   assert.equal(customApp('my-crm').mark, 'M');
   assert.equal(knownApp('Google Analytics')?.mark, 'G');
 });

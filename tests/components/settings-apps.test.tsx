@@ -5,8 +5,7 @@ import { userEvent } from 'vitest/browser';
 import { AppsList, AppDetail, type AppItem, type AppsPlace } from '@/app/settings-apps-client';
 import en from '@/lib/messages/apps.en.json';
 import ar from '@/lib/messages/apps.ar.json';
-import { apps, appByKey, mergedState, type AppAgent } from '@/lib/app-catalogue.mjs';
-import { markOf } from '@/lib/app-mark.mjs';
+import { apps, mergedState, type AppAgent } from '@/lib/app-catalogue.mjs';
 import { logoWaiting } from '@/components/logos';
 
 const replace = vi.fn<(href: string) => void>(), refresh = vi.fn();
@@ -249,7 +248,8 @@ test('every app card in the All tab shows its company\'s logo', async () => {
   expect(tile('apollo')?.querySelector('img.tool-logo')?.getAttribute('src')).toBe('/logos/brand/apollo.svg');
   expect(tile('own')?.querySelector('img')).toBeNull();
   expect(tile('own')?.textContent).toBe('Y');
-  for (const key of logoWaiting) expect(tile(key)?.textContent, key).toBe(markOf(appByKey(key)!.name));
+  expect([...logoWaiting], 'the apps still waiting for their logo').toEqual(['deepwiki']);
+  expect(tile('deepwiki')?.textContent).toBe('D');
 });
 
 // #458: the card that adds the Owner's own server: Test shows the tools the server lists, and Add turns a no-sign-in
