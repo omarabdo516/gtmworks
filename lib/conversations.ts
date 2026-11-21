@@ -79,10 +79,17 @@ export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>
 type ChangeFace={id:string,connection_id:string,name:string};
 export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
  &({state:'waiting',owners:string[]}|{state:'approved',answeredBy:string,at:string}|{state:'declined',answeredBy:string,at:string,answer:string|null,maybeApplied?:boolean}|{state:'refused'});
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
+// #167: the main Agent asks whether to request an Agent hidden from its person, naming who opens Agents for them
+// (`named`: their first name, whole name and Role). Its Agent is never part of the card. Offered, the card has its two
+// buttons; once pressed, it says what was sent and when (`at`), whatever answer came later.
+export type AgentAccessView={id:number,named:{first:string,name:string,role:string}}&({state:'offered'}|{state:'asked'|'dismissed',at:string});
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
-export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));
+// An Owner's or a Manager's answer to a request for a hidden Agent (#167): opened, naming the Agent the person now sees
+// (null when they no longer do), or no, naming nothing of it.
+export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}))
+ |({kind:'access',by:string,at:string}&({opened:true,agent:{id:string,connection_id:string,name:string}|null}|{opened:false}));
 // The tool calls the Engine made for the Run of an Agent's reply (#141), in the Engine's order, and the Run's length in
 // seconds, read from the Agent's session when the chat opens (#346). A call whose result never came is `started`.
 export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};

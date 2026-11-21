@@ -15,6 +15,7 @@ import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
 import { StepsList } from '@/app/run-steps';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ChangeCard } from '@/app/change-card';
+import { AccessCard, type PressAccess } from '@/app/access-card';
 // The Owner's answer posts through a server action: loaded only when a waiting proposal is drawn for an Owner, so the
 // chat's own bundle and its tests never load the server module.
 const ChangeAnswer=lazy(()=>import('@/app/c/[slug]/[[...section]]/agent-change-card').then(module=>({default:module.ChangeAnswer})));
@@ -35,6 +36,7 @@ type Text=(key:string,...values:unknown[])=>string;
 type BidiText=(key:string,...values:ReactNode[])=>ReactNode[];
 const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
 const replyCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='reply'?[card.card.id]:[])??[]);
+const accessCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='access'?[card.access.id]:[])??[]);
 const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);
 // The words and the recorded outcome for a model error a retry cannot fix (#457).
 const refusalLine={credit:'modelNoCredit',key:'modelKeyRefused',model:'modelMissing'};
@@ -153,6 +155,15 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    return {at:body.at,first:body.first===true};
   } catch { return {error:'conversationFailed'}; }
  };
+ // A press on the card asking for a hidden Agent (#167): kept once by the database for this person, who alone answers
+ // it; another tab's press answers what the card already says.
+ const pressAccess:PressAccess=async(request,ask)=>{
+  try {
+   const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'access',card:request,ask})});
+   const body=await response.json() as {state?:string,at?:string,error?:string};
+   return response.ok&&(body.state==='asked'||body.state==='dismissed')&&body.at?{state:body.state,at:body.at}:{error:body.error||'conversationFailed'};
+  } catch { return {error:'conversationFailed'}; }
+ };
  const permit:DecidePermission=async(card,choice)=>{
   try {
    const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'permit',card,choice})});
@@ -181,6 +192,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
   }};
  // A card an Agent shows while the chat is open rises in once (design-reference: card-in); those already there do not.
  const [drawnCards]=useState(()=>new Set(replyCardIds(messages)));
+ const [drawnAccess]=useState(()=>new Set(accessCardIds(messages)));
  const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
@@ -202,6 +214,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    {message.cards?.map(card=>card.kind==='made'?<Fragment key={card.agent.id}><MadeCard slug={slug} agent={card.agent}/>{card.agent.fresh&&<AgentMadeToast company={company} slug={slug} agent={card.agent}/>}</Fragment>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
     :card.kind==='change'?<ChangeCard key={`change${card.change.id}`} change={card.change} owner={record.changeOwner===true}
      answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
+    :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
     :card.kind==='handed'?<HandedRow key={`handed${message.id}`} from={{connection_id:conversation.face,name:conversation.agent_name}} to={card} cb={cb}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>)}</ol>
@@ -277,6 +290,10 @@ function SuggestedLine({to,cb}:{to:string[],cb:BidiText}) {
 // person's request for an Agent (#17; design-reference: approveRequest and refuseRequest's messages) is drawn as Lead's
 // message, as the reference posts it, though it is read from the request rather than written.
 function DecidedLine({decided,c,cb,lead}:{decided:Decision,c:Text,cb:BidiText,lead:ReactNode}) {
+ // An Owner's or a Manager's answer to this person's request for a hidden Agent (#167), drawn as Lead's message as #17's
+ // answer is: opened, it names the Agent they now see; a no names nothing of it.
+ if(decided.kind==='access') return <li className="turn turn--agent msg" data-author="agent" data-kind="decided" data-decision={decided.opened?'opened':'kept'}>
+  {lead}<div className="bubble bubble--agent" dir="auto">{decided.opened?(decided.agent?cb('accessAnsweredOpened',decided.by,decided.agent.name):cb('accessAnsweredOpenedGone',decided.by)):cb('accessAnsweredDeclined',decided.by)}</div></li>;
  if(decided.kind==='request') return <li className="turn turn--agent msg" data-author="agent" data-kind="decided" data-decision={decided.made?'made':'declined'}>
   {lead}<div className="bubble bubble--agent" dir="auto">{decided.made?cb('requestAnsweredMade',decided.by,decided.name):cb('requestAnsweredDeclined',decided.by,decided.name,decided.reason)}</div></li>;
  return decided.approved

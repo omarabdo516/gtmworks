@@ -1,5 +1,11 @@
 [
  {
+  "issue": 167,
+  "date": "2026-11-21",
+  "en": { "title": "Ask for an agent you don’t have yet", "body": "When you ask the main agent for work that belongs to an agent you don’t work with, it says so without naming it and offers to ask the Manager or Owner who chooses your agents. Once they open it for you, it shows in your sidebar and your chat says so." },
+  "ar": { "title": "اطلب وكيل لسه مش متاح ليك", "body": "لما تطلب من الوكيل الرئيسي شغل عند وكيل مش بتشتغل معاه، بيقولك ده من غير ما يسمّيه، ويعرض يبعت طلب للمدير أو المالك اللي بيختار وكلاءك. أول ما يفتحهولك بيظهر في القايمة الجانبية والمحادثة بتقولك." }
+ },
+ {
   "issue": 134,
   "date": "2026-11-21",
   "en": { "title": "Numbers count up, and a new Agent’s tile flashes", "body": "On Numbers each figure counts up to its value when the page opens or the period changes, and when Lead makes an Agent its new tile in the sidebar flashes once." },

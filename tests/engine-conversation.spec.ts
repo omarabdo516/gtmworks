@@ -199,7 +199,8 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',hermes,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+ // #167: the seeded Agents hidden from the Manager give Lead the card that asks for one.
+ expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change','ask_to_open_agent']);
  expect(await closeOpenRuns(service,{hermes,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
 });
@@ -227,7 +228,7 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
   expect(closed[0]+closed[1]).toBe(1);
  }
  // #317: a Manager or Contributor's request still offers hand_to_agent after request_agent.
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change'],['request_agent','hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']]);
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['request_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change','ask_to_open_agent'],['request_agent','hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change','ask_to_open_agent']]);
  expect(fake.agentReads).toEqual([]);
  expect(agents()).toBe(before);
  const listed=`('${conversations.join("','")}')`;

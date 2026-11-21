@@ -330,3 +330,21 @@ test('a channel Run\'s draft and review calls are shown to the database for its 
  ]);
  assert.deepEqual(fake.agentReads,[]);
 });
+
+// #167: the main Agent's call names a job, never an Agent; the database alone finds the Agent hidden from the person
+// that holds it and answers "ignored" for a job of an Agent they see or of another Company.
+test('ask_to_open_agent asks the database for the card by job alone, passes its answer on, and never asks the Engine',async()=>{
+ const {fake,rpcs,call}=harness({},{state:'shown',card:9});
+ for(const args of /** @type {unknown[]} */([null,{},{job:' '},{job:7},{job:'x'.repeat(201)},{job:'Ads\u0000'}])) assert.deepEqual(await call('ask_to_open_agent',args),{state:'ignored'},JSON.stringify(args)?.slice(0,60));
+ assert.deepEqual(rpcs,[],'arguments that do not read ask nothing');
+ assert.deepEqual(await call('ask_to_open_agent',{job:' Campaigns and ads '}),{state:'shown',card:9});
+ assert.deepEqual(rpcs,[['agent_ask_to_open',{conversation:'conversation-1',run:'run-1',call:'call-0',job:'Campaigns and ads'}]]);
+ for(const state of ['ignored','refused']) {
+  const bad=harness({},{state});
+  assert.deepEqual(await bad.call('ask_to_open_agent',{job:'Reports'}),{state},`the database's ${state} is the call's outcome: no card`);
+ }
+ assert.deepEqual([fake.agentReads,fake.appReads.count],[[],0]);
+ const spec=JSON.parse(toolSpecTexts().ask_to_open_agent);
+ assert.deepEqual(Object.keys(spec.parameters.properties),['job'],'the model gives a job, and no name of an Agent');
+ assert.match(spec.description,/never name or describe the agent/);
+});

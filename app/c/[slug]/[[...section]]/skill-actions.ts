@@ -61,3 +61,16 @@ export const answerAgentChange=withActionLog('answerAgentChange',async function 
  // A failure is said where every Owner's answers wait, which names it.
  redirect(state==='approved'||state==='declined'?path:`/c/${slug}/approvals?failed=change-${state}`);
 });
+
+// A Member's request for an Agent hidden from them (#167): an Owner, or a Manager who sees that Agent, opens it for them
+// (#15's switch) or says no, from their own item in "Waiting on you". answer_agent_access checks the Role and the Agent
+// again; a failure line names only the action and the database's code.
+export const answerAgentAccess=withActionLog('answerAgentAccess',async function answerAgentAccess(form:FormData) {
+ const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const path=`/c/${slug}/approvals`;
+ const {error}=!await actionAllowed(db,'answerAgentAccess',company)?{error:{code:'42501',message:'not permitted'}}
+  :await db.rpc('answer_agent_access',{c:company,request:Number(form.get('request')),open:form.get('intent')==='open'});
+ // An opening changes that Member's sidebar, which the Company's frame draws on every page.
+ revalidatePath(`/c/${slug}`,'layout');
+ if(error) logActionFailure('answerAgentAccess',{code:error.code,message:'answer_agent_access refused'});
+ redirect(error?`${path}?failed=access`:path);
+});

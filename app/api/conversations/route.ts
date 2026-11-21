@@ -141,6 +141,16 @@ async function later(db:Database,body:Record<string,unknown>) {
  return reply(data as {state:'postponed',first:boolean});
 }
 
+// A press on the card asking for an Agent hidden from its person (#167): "Ask" (ask true) or "No, never mind", never text.
+// Only the Conversation's person presses it, while they may write (press_agent_access); the first press is kept with its
+// time and any later one answers what the card already says. Nothing of the request is logged.
+async function access(db:Database,body:Record<string,unknown>) {
+ if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||typeof body.ask!=='boolean') return refuse('conversationFailed',400);
+ const {data,error}=await db.rpc('press_agent_access',{c:body.company,request:body.card,ask:body.ask});
+ if(error) return error.code==='22023'?refuse('conversationFailed',400):refuseFor(error.code);
+ return reply(data as {state:string,at:string,first:boolean});
+}
+
 // The "+" menu's Model (#158): the Owner picks, for their own Conversation, one of the models its Agent's Engine offers,
 // and every later Run of it is sent with it. The database refuses anyone else (set_conversation_model). The choice is a
 // provider and a model; null goes back to the Agent's own.
@@ -175,7 +185,7 @@ async function read(db:Database,person:string,company:string,conversation:string
 }
 
 // Each write's intent and its handler; any other intent is a message to send.
-const writes={stop,answer,done,permit,model:pickModel,later};
+const writes={stop,answer,done,permit,model:pickModel,later,access};
 
 async function respond(request:NextRequest) {
  try {
