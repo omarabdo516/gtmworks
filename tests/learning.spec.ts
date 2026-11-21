@@ -53,19 +53,36 @@ test.beforeAll(async({browser},testInfo)=>{
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
-// A mode is marked once its save is answered and the whole Settings page is read again, which asks the Company's Engine
-// for every section (#420). Wait for the server's exact value first, then check the radio with the default timeout
-// instead of holding the run for the re-read (#420).
 const learning=(email:string,page:import('@playwright/test').Page)=>signIn(page,email,'/c/rs-learning/settings?section=learning');
 const group=(page:import('@playwright/test').Page,name:string)=>page.getByRole('dialog',{name:'Settings'}).getByRole('radiogroup',{name});
 const ruleRow=(page:import('@playwright/test').Page,text:string)=>page.locator('.ln-row').filter({hasText:text});
-// The server writes both write approvals to a profile, memory first: wait for each exact value the test reads. The save,
-// and then the radio, which is marked only once the whole Settings page is read again, each ask the Company's Engine and
-// can take longer than the default 5 s on a loaded runner (#420).
+// The server writes both write approvals to a profile, memory first, and answers the save once both read back: wait for
+// each exact value the test reads (#420).
 const reread={timeout:15000};
 const wrote=async(name:string,value:boolean)=>{
  await expect.poll(()=>fake.settings.profiles.get(name)!.config.memory?.write_approval,reread).toBe(value);
  await expect.poll(()=>fake.settings.profiles.get(name)!.config.skills?.write_approval,reread).toBe(value);
+};
+// A mode's radio is marked only once its save is answered and the page has read the server again (router.refresh), so
+// each choice here follows those two answers in turn instead of a fixed wait (#447): the save's own answer, which must
+// be 200 (a refused or mismatched save fails here, naming the save, not as a radio that never turns), and then the
+// re-read the browser starts after it, read to its end. The radio is checked after both with the default timeout.
+const saving=async(page:import('@playwright/test').Page,click:()=>Promise<void>)=>{
+ let answered=false;
+ const save=page.waitForResponse(response=>{
+  const request=response.request();
+  return request.method()==='POST'&&new URL(response.url()).pathname==='/api/agent-settings'&&(answered=true);
+ },{timeout:30000});
+ const refreshed=page.waitForResponse(response=>{
+  const headers=response.request().headers();
+  return answered&&response.request().method()==='GET'&&headers.rsc==='1'&&!headers['next-router-prefetch']
+   &&new URL(response.url()).pathname==='/c/rs-learning/settings';
+ },{timeout:30000});
+ refreshed.catch(()=>{}); // a failed save fails the test before this wait is read
+ await click();
+ const answer=await save;
+ expect(answer.status(),`the save of ${answer.request().postData()} answered`).toBe(200);
+ await (await refreshed).finished();
 };
 const choice=(agent:string)=>JSON.parse(query(`select learning_mode_choice as choice from public.agent_profiles where agent_id='${agent}'`))[0].choice;
 
@@ -88,9 +105,9 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
   const radio=document.getElementById('ln-co-ask');
   return !!radio&&Object.getOwnPropertyNames(radio).some(name=>name.startsWith('__reactProps$'));
  });
- await group(page,'For the whole company').getByRole('radio',{name:/^Asks first/}).click();
+ await saving(page,()=>group(page,'For the whole company').getByRole('radio',{name:/^Asks first/}).click());
  for(const name of [profile,writerProfile,space]) await wrote(name,true);
- await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','true',reread);
+ await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','true');
  for(const name of [profile,writerProfile,space]) {
   const kept=fake.settings.profiles.get(name)!.config;
   expect(kept.memory?.write_approval).toBe(true);
@@ -98,9 +115,9 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  }
  // The Writer's own mode is its profile alone: the Company and the Lead keep asking first.
  const writerModes=group(page,'Writer');
- await writerModes.getByRole('radio',{name:'Learns on its own',exact:true}).click();
+ await saving(page,()=>writerModes.getByRole('radio',{name:'Learns on its own',exact:true}).click());
  await wrote(writerProfile,false);
- await expect(writerModes.getByRole('radio',{name:'Learns on its own',exact:true})).toHaveAttribute('aria-checked','true',reread);
+ await expect(writerModes.getByRole('radio',{name:'Learns on its own',exact:true})).toHaveAttribute('aria-checked','true');
  expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(false);
  expect(fake.settings.profiles.get(writerProfile)!.config.skills?.write_approval).toBe(false);
  expect(fake.settings.profiles.get(profile)!.config.memory?.write_approval).toBe(true);
@@ -110,12 +127,12 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  await expect.poll(()=>choice(writer),reread).toBe('auto');
  // The Writer pins "Asks first", then the Company turns by itself: the Writer's own choice stands. The group reads
  // mixed once the page has re-read the profiles, and only then do the Engine's profiles hold the Company's turn.
- await writerModes.getByRole('radio',{name:'Asks first',exact:true}).click();
+ await saving(page,()=>writerModes.getByRole('radio',{name:'Asks first',exact:true}).click());
  await wrote(writerProfile,true);
- await expect(writerModes.getByRole('radio',{name:'Asks first',exact:true})).toHaveAttribute('aria-checked','true',reread);
- await group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/}).click();
+ await expect(writerModes.getByRole('radio',{name:'Asks first',exact:true})).toHaveAttribute('aria-checked','true');
+ await saving(page,()=>group(page,'For the whole company').getByRole('radio',{name:/^Learns on its own/}).click());
  await wrote(profile,false); await wrote(space,false); await wrote(writerProfile,true);
- await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','false',reread);
+ await expect(group(page,'For the whole company').getByRole('radio',{name:/^Asks first/})).toHaveAttribute('aria-checked','false');
  await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Learns on its own');
  await expect(overlay.locator('.ln-ag').filter({hasText:'Writer'})).toContainText('Asks first');
  expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(true);
@@ -123,9 +140,9 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  expect(fake.settings.profiles.get(space)!.config.memory?.write_approval).toBe(false);
  // "Follow the company" gives the Writer back: the Company's mode is written to its profile and its choice forgotten.
  const following=group(page,'Writer');
- await following.getByRole('radio',{name:'Follow the company'}).click();
+ await saving(page,()=>following.getByRole('radio',{name:'Follow the company'}).click());
  await wrote(writerProfile,false);
- await expect(following.getByRole('radio',{name:'Follow the company'})).toHaveAttribute('aria-checked','true',reread);
+ await expect(following.getByRole('radio',{name:'Follow the company'})).toHaveAttribute('aria-checked','true');
  expect(fake.settings.profiles.get(writerProfile)!.config.memory?.write_approval).toBe(false);
  expect(fake.settings.profiles.get(writerProfile)!.config.skills?.write_approval).toBe(false);
  await expect.poll(()=>choice(writer),reread).toBe(null);
