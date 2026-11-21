@@ -13,6 +13,8 @@ import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
 import { StepsList } from '@/app/run-steps';
+import { showRoutines } from '@/app/details-routines';
+import { formOf, scheduleLabel } from '@/lib/routine-schedule.mjs';
 import { MadeCard, RequestCard } from '@/app/agent-card';
 import { ChangeCard } from '@/app/change-card';
 // The Owner's answer posts through a server action: loaded only when a waiting proposal is drawn for an Owner, so the
@@ -151,7 +153,8 @@ export function ChatPlaceholder() {
 // A request the Agent's Run waits on to allow an action (#163) is decided from its card with the choices this person may
 // send, and the record is asked for again at once; while it waits, the Agent is still working. A Viewer sees the wait
 // line.
-export function ConversationTurns({slug,company,record,writer,asked}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void}) {
+// `details`: the Agent's details are beside this chat, so a Routine the Agent made is a way into them (#205).
+export function ConversationTurns({slug,company,record,writer,asked,details=false}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,details?:boolean}) {
  const openSheet=useAppsSheet();
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
  const here=usePathname();
@@ -222,7 +225,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    {message.kind==='answer'&&message.failed&&<p className="note" role="status">{c('conversationAnswerNotDelivered')}</p>}
    {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
-  </li>:<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
+  </li>:<Fragment key={`${message.kind||'m'}${message.id}`}><li className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
    <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
@@ -234,7 +237,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
      answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
     :card.kind==='handed'?<HandedRow key={`handed${message.id}`} from={{connection_id:conversation.face,name:conversation.agent_name}} to={card} cb={cb}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
-  </li>)}</ol>
+  </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status"><span className="shimmer">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</span></p>}
   {failed&&(record.noModel
    // The Company has no model at all (#422): sending again cannot work, so the line says where one is connected.
@@ -269,6 +272,16 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
   {usage&&(record?.usage?<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}</p>
    :<p className="chat-usage" aria-hidden="true">{'\u00a0'}</p>)}
  </>;
+}
+
+// Under a reply in which the Agent made a Routine (#205; design-reference: routineFromChat's note): its name and when it
+// runs, and the way to it in the details beside the chat (design-reference: showRoutines).
+// The schedule is in words as the Routine's row has it (lib/routine-schedule.mjs), in the interface's language.
+function RoutineLine({routine,details,rise}:{routine:{name:string,schedule:string},details:boolean,rise:string}) {
+ const {t}=useI18n();
+ const schedule=scheduleLabel(t,{expr:formOf(routine.schedule)?routine.schedule:null,display:routine.schedule});
+ return <li className={`note note--icon${rise}`} data-kind="routine"><ShellIcon name="repeat" className="note__icon"/><span><bdi>{t('chatRoutineMade',routine.name,schedule)}</bdi></span>
+  {details&&<button type="button" className="link-btn note__link" onClick={showRoutines}>{t('chatRoutineSee')}</button>}</li>;
 }
 
 // The tool calls the Engine reported for the reply's Run (#141; design-reference: stepsHTML, toggle-steps) are drawn by

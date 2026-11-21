@@ -95,3 +95,22 @@ test('a session\'s token use is read from Hermes with its turns, and unknown whe
   assert.deepEqual(await engineFor(connection(fake)).session('session-5'),{state:'found',turns:[{at:1,seconds:0,steps:[]}],usage:null});
  } finally { await fake.close(); }
 });
+
+// #205: a Routine the Agent made in the turn, through the Engine's scheduling tool (v0.23.0 tools/cronjob_tools.py,
+// registered as cronjob_manage). Only a create whose result names the job made carries it; a list, a failed create and
+// a create still running carry none.
+test('a turn\'s create through the scheduling tool carries the Routine it made, its name and schedule as the Engine shows them',async()=>{
+ const fake=await fakeHermes();
+ try {
+  fake.settings.sessions.set('session-r',{profile,messages:[
+   user(1000,'Send me the leads summary every day at 9'),
+   asked(1001,[call('c1','cronjob_manage',{action:'list'}),call('c2','cronjob_manage',{action:'create',name:'Leads summary',schedule:'0 9 * * *',prompt:'Send the leads summary'})]),
+   result(1002,'c1','cronjob_manage',{success:true,count:0,jobs:[]}),
+   result(1003,'c2','cronjob_manage',{success:true,job_id:'a1b2c3d4e5f6',name:'Leads summary',schedule:'0 9 * * *',next_run_at:'2026-11-22T09:00:00+02:00'}),
+   asked(1004,[call('c3','cronjob_manage',{action:'create',name:'Broken',schedule:'whenever',prompt:'x'}),call('c4','cronjob_manage',{action:'create',name:'Later',schedule:'every 30m',prompt:'y'})]),
+   result(1005,'c3','cronjob_manage',{success:false,error:'Invalid schedule'}),
+   replied(1006,'Done.')]});
+  const read=await engineFor(connection(fake)).session('session-r');
+  assert.deepEqual(read.turns[0].steps.map(step=>step.routine??null),[null,{name:'Leads summary',schedule:'0 9 * * *'},null,null]);
+ } finally { await fake.close(); }
+});

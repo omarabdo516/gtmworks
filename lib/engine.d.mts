@@ -16,7 +16,8 @@ export type RunPermission={id:string,description:string,command:string,choices:P
 export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,noModel?:true,modelRefused?:'credit'|'key'|'model'};
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
 export type AnsweredPermission='answered'|'gone'|'unreachable';
-export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true};
+// `routine`: the Routine a create through the Engine's scheduling tool made (#205), its name and schedule as the Engine shows them.
+export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true,routine?:{name:string,schedule:string}};
 export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 export type SessionUsage={input:number,output:number};
 export type SessionRead={state:'found',turns:SessionTurn[],usage:SessionUsage|null}|{state:'missing'|'refused'|'unreachable',turns:null,usage:null};

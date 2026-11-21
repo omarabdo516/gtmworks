@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { cronOf, formOf, scheduleLabel, whenOf, type ScheduleForm } from '@/lib/routine-schedule.mjs';
+import type { ScheduleDraft } from '@/lib/routine-sentence.mjs';
 import type { AgentRoutines, RoutineAction } from '@/lib/agent-routines.mjs';
 import type { Routine } from '@/lib/engine.mjs';
 import { Head } from './settings-overlay-parts';
@@ -13,7 +14,7 @@ import { toast } from './toast';
 type T=ReturnType<typeof useI18n>['t'];
 // The zone the person's clock is in: a Routine made or rescheduled here runs at that wall time (the Engine reads a job's
 // time in the zone it names). It is read in the browser only, so the server's first draw names none.
-const browserZone=()=>{ try { return Intl.DateTimeFormat().resolvedOptions().timeZone||null; } catch { return null; } };
+export const browserZone=()=>{ try { return Intl.DateTimeFormat().resolvedOptions().timeZone||null; } catch { return null; } };
 
 // Recurring tasks (#31; design-reference/app.js: sovRoutinesHTML, routineRowHTML). Every Routine of every Agent the
 // reader sees, grouped by Agent, main Agent first, read from each Agent's own Engine profile. The Owner and the Managers
@@ -47,23 +48,27 @@ export function RoutinesSection({company,state,agents,canManage,now}:{company:st
 
 // One change sent: no error, or the message key of the one to show. A change done but not written in the Company log
 // answers `unlogged`, so the caller shows that warning last, over its own message (one toast shows at a time).
-async function send(company:string,agent:string,action:RoutineAction,fields:Record<string,unknown>={}):Promise<{error:string|null,unlogged:boolean}> {
+// A create answers the Routine the Engine made (`routine`), so the Agent's details can mark the new row.
+export async function send(company:string,agent:string,action:RoutineAction,fields:Record<string,unknown>={}):Promise<{error:string|null,unlogged:boolean,routine?:Routine|null}> {
  const response=await fetch('/api/agent-routines',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,action,...fields})}).catch(()=>null);
  if(!response) return {error:'routineFailed',unlogged:false};
- const body=await response.json().catch(()=>null) as {error?:string,logged?:boolean}|null;
- if(response.ok) return {error:null,unlogged:body?.logged===false};
+ const body=await response.json().catch(()=>null) as {error?:string,logged?:boolean,routine?:Routine|null}|null;
+ if(response.ok) return {error:null,unlogged:body?.logged===false,routine:body?.routine??null};
  return {error:body?.error==='routineBusy'?'routineBusy':'routineFailed',unlogged:false};
 }
-const warnUnlogged=(t:T,unlogged:boolean)=>{ if(unlogged) toast(t('routineNotLogged'),{icon:'shield'}); };
+export const warnUnlogged=(t:T,unlogged:boolean)=>{ if(unlogged) toast(t('routineNotLogged'),{icon:'shield'}); };
 
-function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,agent:string,routine:Routine,canManage:boolean,now:string}) {
+// One Routine's row (design-reference: routineRowHTML), in Settings and in the Agent's details (#205). After a change
+// Settings draws the page again; the details read the Agent's list again (`onChanged`). `idPrefix` keeps the row's ids
+// apart from the same Routine's row in Settings, which can be open over the details. `flash` marks a row just made.
+export function RoutineRow({t,company,agent,routine,canManage,now,onChanged,idPrefix='rt',flash=false}:{t:T,company:string,agent:string,routine:Routine,canManage:boolean,now:string,onChanged?:()=>void,idPrefix?:string,flash?:boolean}) {
  const {locale}=useI18n(); const router=useRouter();
  const [pending,startTransition]=useTransition();
  const [running,setRunning]=useState(false);
  const [failed,setFailed]=useState<string|null>(null);
  const [editing,setEditing]=useState(false);
  const title=routine.name||routine.prompt;
- const id=`rt-${routine.id}`;
+ const id=`${idPrefix}-${routine.id}`;
  const at=new Date(now);
  const act=(action:RoutineAction,fields:Record<string,unknown>={},done?:()=>void)=>startTransition(async()=>{
   setFailed(null);
@@ -73,11 +78,11 @@ function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,
   if(error) { setFailed(error); return; }
   done?.();
   warnUnlogged(t,unlogged);
-  router.refresh();
+  if(onChanged) onChanged(); else router.refresh();
  });
  const next=!routine.on?t('routinePausedNext'):routine.nextRunAt?t('routineNext',whenOf(t,locale,routine.nextRunAt,routine.timezone,at)):'';
  const last=routine.lastRunAt?t(routine.lastStatus==='failed'?'routineLastFailed':'routineLast',whenOf(t,locale,routine.lastRunAt,routine.timezone,at)):'';
- return <li className="panel-row rt-row" data-rt={routine.id}><span className="panel-row__icon"><SettingsIcon name="repeat"/></span>
+ return <li className={`panel-row rt-row${flash?' is-flash':''}`} data-rt={routine.id}><span className="panel-row__icon"><SettingsIcon name="repeat"/></span>
   <span className="panel-row__text"><span className="panel-row__t" id={id}><bdi>{title}</bdi></span>
    <span className="panel-row__d"><bdi>{scheduleLabel(t,routine.schedule)}</bdi>{last&&` ${last}`}</span>
    <span className="rt-meta"><span className={`rt-next${routine.on?'':' is-off'}`}>{next}</span>
@@ -85,7 +90,7 @@ function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,
      :canManage&&routine.on&&<button type="button" className="link-btn rt-run" disabled={pending} aria-label={t('routineRunLabel',title)} onClick={()=>act('run',{routine:routine.id},()=>toast(t('routineStarted',title)))}>{t('routineRunNow')}</button>}
     {canManage&&!editing&&<button type="button" className="link-btn rt-change" disabled={pending} aria-label={t('routineChangeLabel',title)} onClick={()=>setEditing(true)}>{t('routineChange')}</button>}</span>
    {failed&&<span className="set-err" role="alert">{t(failed)}</span>}
-   {editing&&<SchedulePicker t={t} idPrefix={`rt-e-${routine.id}`} initial={formOf(routine.schedule.expr)} busy={pending} submitLabel={t('routineSave')}
+   {editing&&<SchedulePicker t={t} idPrefix={`${idPrefix}-e-${routine.id}`} initial={formOf(routine.schedule.expr)} busy={pending} submitLabel={t('routineSave')}
     onCancel={()=>setEditing(false)} onSubmit={form=>act('change',{routine:routine.id,schedule:cronOf(form),timezone:routine.timezone},()=>{ setEditing(false); toast(t('routineSaved')); })}
     onDelete={()=>act('delete',{routine:routine.id},()=>toast(t('routineDeleted',title)))} deleteLabel={t('routineDeleteLabel',title)}/>}
   </span>
@@ -96,22 +101,23 @@ function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,
 
 // When a Routine runs: every day, every week on one day, or every hour. A new Routine runs on the person's own clock;
 // a changed one keeps the zone it runs in, so the time the form shows (read in that zone) is the time it keeps.
-function SchedulePicker({t,idPrefix,initial,busy,submitLabel,onSubmit,onCancel,onDelete,deleteLabel,children,check}:{t:T,idPrefix:string,initial:ScheduleForm|null,busy:boolean,submitLabel:string,onSubmit:(form:ScheduleForm)=>void,onCancel:()=>void,onDelete?:()=>void,deleteLabel?:string,children?:React.ReactNode,check?:()=>boolean}) {
+// A sentence read in the Agent's details that does not say fully when (#205) opens it filled with what it did say.
+export function SchedulePicker({t,idPrefix,initial,busy,submitLabel,onSubmit,onCancel,onDelete,deleteLabel,children,check,className=''}:{t:T,idPrefix:string,initial:ScheduleForm|ScheduleDraft|null,className?:string,busy:boolean,submitLabel:string,onSubmit:(form:ScheduleForm)=>void,onCancel:()=>void,onDelete?:()=>void,deleteLabel?:string,children?:React.ReactNode,check?:()=>boolean}) {
  const [kind,setKind]=useState<ScheduleForm['kind']>(initial?.kind??'daily');
- const [dow,setDow]=useState(initial?.kind==='weekly'?initial.dow:1);
- const [time,setTime]=useState(initial&&initial.kind!=='hourly'?`${String(initial.h).padStart(2,'0')}:${String(initial.m).padStart(2,'0')}`:'09:00');
+ const [dow,setDow]=useState(initial?.kind==='weekly'?initial.dow??1:1);
+ const [time,setTime]=useState(initial&&initial.kind!=='hourly'&&'h' in initial&&initial.h!==undefined?`${String(initial.h).padStart(2,'0')}:${String(initial.m??0).padStart(2,'0')}`:'09:00');
  const submit=(event:React.FormEvent)=>{
   event.preventDefault();
   if(check&&!check()) return;
   const [h,m]=time.split(':').map(Number);
   onSubmit(kind==='hourly'?{kind}:kind==='weekly'?{kind,dow,h,m}:{kind,h,m});
  };
- return <form className="panel-form rt-form" onSubmit={submit}>
+ return <form className={`panel-form rt-form${className?` ${className}`:''}`} onSubmit={submit}>
   {children}
   <div className="rt-when">
    <div className="rt-field"><label className="rt-field__l" htmlFor={`${idPrefix}-kind`}>{t('routineWhen')}</label>
     <select className="set-input" id={`${idPrefix}-kind`} value={kind} onChange={event=>setKind(event.target.value as ScheduleForm['kind'])}>
-     <option value="daily">{t('routineDaily')}</option><option value="weekly">{t('routineWeekly')}</option><option value="hourly">{t('routineHourly')}</option></select></div>
+     <option value="daily">{t('routineDaily')}</option><option value="weekly">{t('routineWeekly')}</option>{initial?.kind==='monthly'&&<option value="monthly">{t('routineMonthly')}</option>}<option value="hourly">{t('routineHourly')}</option></select></div>
    {kind==='weekly'&&<div className="rt-field"><label className="rt-field__l" htmlFor={`${idPrefix}-day`}>{t('routineDay')}</label>
     <select className="set-input" id={`${idPrefix}-day`} value={dow} onChange={event=>setDow(Number(event.target.value))}>
      {[0,1,2,3,4,5,6].map(day=><option key={day} value={day}>{t(`routineWeekday${day}`)}</option>)}</select></div>}

@@ -612,6 +612,66 @@
 .gw .details .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
 @media (hover: hover) { .gw .details .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
 .gw .details .btn:disabled { opacity: .55; }
+.gw :is(.sov, .modal.team-dlg, .details) .switch {
+  display: inline-flex; align-items: center; width: 32px; height: 20px; padding: 2px; flex: none; border-radius: var(--gw-r-full);
+  background: var(--gw-border-1); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw :is(.sov, .modal.team-dlg, .details) .switch::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF; box-shadow: #1C1C1C1F 0 1px 3px; transition: transform 320ms var(--gw-ease-spring), background-color var(--gw-dur) var(--gw-ease-out); }
+.gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"] { background: var(--gw-primary); }
+.gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
+[dir="ltr"] .gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"]::after { transform: translateX(12px); }
+:root[data-theme="dark"] .gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"]::after { background: #121212; }
+.gw :is(.sov, .modal.team-dlg, .details) .set-input {
+  display: block; width: 100%; height: 34px; min-height: 0; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
+  background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); outline: none; box-shadow: none;
+  transition: border-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw :is(.sov, .modal.team-dlg, .details) .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw :is(.sov, .modal.team-dlg, .details) .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw :is(.sov, .modal.team-dlg, .details) .set-input[readonly] { cursor: default; }
+   Routine's row with its schedule, next run and Run now beside its switch, and the form that adds one or changes when it
+   runs, set with the overlay's own inputs. */
+.gw :is(.sov, .details) .panel-row.rt-row { align-items: flex-start; padding-block: 10px; }
+.gw :is(.sov, .details) .rt-row .panel-row__icon { margin-top: 1px; }
+.gw :is(.sov, .details) .rt-row .switch { margin-top: 2px; }
+.gw :is(.sov, .details) .rt-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--s2); margin-top: 6px; }
+.gw :is(.sov, .details) .rt-next { flex: 1 1 auto; min-width: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-1); }
+.gw :is(.sov, .details) .rt-next.is-off { color: var(--gw-text-3); }
+.gw :is(.sov, .details) .rt-run { margin-inline-start: auto; font-size: var(--gw-fs-xs); font-weight: 600; color: var(--gw-text-1); }
+.gw :is(.sov, .details) .rt-change { font-size: var(--gw-fs-xs); margin-inline-end: -6px; }
+.gw :is(.sov, .details) .rt-running { margin-inline-start: auto; font-size: var(--gw-fs-xs); line-height: 22px; color: var(--gw-text-2); animation: gw-breathe 1.4s ease-in-out infinite; }
+.gw :is(.sov, .details) :is(.rt-row, .rt-new) .set-err { display: block; margin-top: 4px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw :is(.sov, .details) .rt-form { display: grid; gap: var(--s2); padding: var(--s2) 0 0; }
+.gw :is(.sov, .details) .rt-new .rt-form { padding: var(--s3); }
+.gw :is(.sov, .details) .rt-when { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.gw :is(.sov, .details) .rt-when .rt-field { flex: 1 1 120px; }
+.gw :is(.sov, .details) .rt-field { display: grid; gap: 4px; min-width: 0; }
+.gw :is(.sov, .details) .rt-field__l { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
+.gw :is(.sov, .details) .rt-form select.set-input { appearance: auto; padding-inline-end: 6px; }
+.gw :is(.sov, .details) .rt-form .panel-form__err { font-size: var(--gw-fs-xs); color: var(--gw-danger-text); }
+.gw :is(.sov, .details) .rt-delete { margin-inline-end: auto; }
+@media (prefers-reduced-motion: reduce) { .gw :is(.sov, .details) .rt-running { animation: none; } }
+.gw .details .rt-row.is-flash { animation: gw-ring-flash 1.4s var(--gw-ease-out); }
+.gw .details .rt-empty { display: grid; gap: var(--s2); padding: var(--s1) 0 var(--s2); }
+.gw .details .rt-empty .panel-empty { padding-bottom: 0; }
+.gw .details .rt-try {
+  display: grid; gap: 2px; margin: 0 var(--s2); padding: 10px var(--s3); border-radius: var(--gw-r-sm); text-align: start;
+  background: var(--gw-bg-tertiary); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
+}
+@media (hover: hover) { .gw .details .rt-try:hover { background: var(--gw-bg-secondary-hover); } }
+.gw .details .rt-try__l { font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .details .rt-try__t { font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); }
+.gw .details .rt-add { display: grid; gap: var(--s2); padding: var(--s2); }
+.gw .details .rt-add input {
+  width: 100%; height: 34px; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2); background: var(--gw-bg-pane);
+  color: var(--gw-text-1); font-size: var(--gw-fs-sm); outline: none;
+}
+.gw .details .rt-add input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw .details .rt-add input::placeholder { color: var(--gw-text-4); opacity: 1; }
+.gw .details .rt-add .panel-form__err { font-size: var(--gw-fs-xs); color: var(--gw-danger-text); }
+.gw .details .rt-add .panel-form__row .btn { flex: 1 1 0; }
+.gw .details .rt-ask { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); margin: 0; }
+@media (prefers-reduced-motion: reduce) { .gw .details .rt-row.is-flash { animation: none; } }
 /* The Agent's screen (design-reference: .scr, .scr__off, .scr-card, .scr-thumb), drawn in code from tokens so it follows
    the theme. Sizes inside are container units, as the reference's are; only the empty frame is built (#21). */
 .gw .details .scr {
