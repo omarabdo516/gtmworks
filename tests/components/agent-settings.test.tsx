@@ -161,10 +161,10 @@ for (const way of ['a section', 'All agents', 'the close button', 'Escape', 'the
  await expect.element(screen.getByRole('textbox', { name: 'What Lead does' })).toHaveValue('Something else.');
 });
 
-test('without a draft the close button leaves as it always did', async () => {
+test('without a draft the close button leaves as it always did, once the overlay\'s exit has run (#130)', async () => {
  const screen = await agentPage();
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
- expect(push).toHaveBeenCalledOnce();
+ await expect.poll(() => push.mock.calls.length).toBe(1);
 });
 
 test('the Skills heading counts the switches that are on, a learned skill is marked, and one Save sends every changed field', async () => {

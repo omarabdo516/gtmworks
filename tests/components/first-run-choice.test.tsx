@@ -9,8 +9,10 @@ import '@/app/first-run-choice.css';
 
 // #186: first run's second step, "Who’s on your team?", as the approved reference draws it (design-reference/app.js:
 // frHTML, frRow). The action is a prop, so the test needs no server.
+const push = vi.hoisted(() => vi.fn<(href: string) => void>());
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }) }));
 const finish = vi.fn<(state: FirstRunState, form: FormData) => Promise<FirstRunState>>();
-afterEach(() => { finish.mockReset(); finish.mockResolvedValue({}); });
+afterEach(() => { finish.mockReset(); finish.mockResolvedValue({}); push.mockReset(); });
 
 const show = (language: Language = 'en') => render(<LanguageProvider language={language}>
  <FirstRunChoice slug="acme-abcd1234" company="10000000-0000-0000-0000-000000000090" companyName="Acme" personName="Omar"
@@ -182,4 +184,28 @@ test('Back\'s chevron in Arabic points right, as the reference\'s chevronRight d
  await screen.getByRole('radio', { name: 'مع تيم' }).click();
  await screen.getByRole('button', { name: 'كمّل' }).click();
  expect(document.querySelector('#fr-back svg path')!.getAttribute('d')).toBe('M9 6l6 6-6 6');
+});
+
+// #130: once the answer is saved the question leaves with the dialog's exit (design-reference: closeDlg), then Lead's
+// Conversation opens; a save that fails keeps it with its error.
+test('a saved answer leaves with the exit, then opens the Conversation the server named', async () => {
+ finish.mockResolvedValue({ opened: '/c/acme-abcd1234/conversations/cv-1?first=alone' });
+ const screen = await show();
+ await screen.getByRole('radio', { name: 'Alone' }).click();
+ await screen.getByRole('button', { name: 'Open the workspace' }).click();
+ await expect.poll(() => document.querySelector('.fr')?.classList.contains('is-closing')).toBe(true);
+ expect(push).not.toHaveBeenCalled();
+ await expect.poll(() => push.mock.calls).toEqual([['/c/acme-abcd1234/conversations/cv-1?first=alone']]);
+ expect(document.querySelector<HTMLElement>('.fr-root')?.hidden).toBe(true);
+});
+
+test('a save that fails keeps the question with its error and never leaves', async () => {
+ finish.mockResolvedValue({ error: 'firstRunFailed' });
+ const screen = await show();
+ await screen.getByRole('radio', { name: 'Alone' }).click();
+ await screen.getByRole('button', { name: 'Open the workspace' }).click();
+ await expect.element(screen.getByRole('alert')).toBeVisible();
+ await new Promise(resolve => setTimeout(resolve, 250));
+ expect(document.querySelector('.fr.is-closing')).toBeNull();
+ expect(push).not.toHaveBeenCalled();
 });

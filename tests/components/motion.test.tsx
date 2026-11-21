@@ -5,7 +5,7 @@ import { cdp, commands, page } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 import { BoardPager } from '@/components/paperclip/KanbanBoard';
 import { LanguageProvider } from '@/lib/i18n-client';
-import { later, prefersReducedMotion } from '@/lib/motion';
+import { later, prefersReducedMotion, useLeave } from '@/lib/motion';
 import { motionTable, type MotionRow } from '../motion-table.mjs';
 import type { ComputedMotion, ComputedStyle } from '../motion-css.mjs';
 
@@ -46,6 +46,76 @@ test.each([['on', 120], ['off', 1000]] as const)('with reduced motion %s a wait 
  expect(done).not.toHaveBeenCalled();
  vi.advanceTimersByTime(1);
  expect(done).toHaveBeenCalledOnce();
+});
+
+// A part that leaves with the dialog's 190ms exit, then runs what closing leads to (#130): what the gallery, the settings
+// overlay and first run each do.
+function Leaving({ after }: { after: () => void }) {
+ const leaving = useLeave(190);
+ return <>
+  {!leaving.gone && <div data-testid="part" className={leaving.closing ? 'is-closing' : undefined}/>}
+  <button type="button" onClick={() => leaving.close(after)}>Close</button>
+  <button type="button" onClick={leaving.cancel}>Open</button>
+ </>;
+}
+const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+const leavingPart = async () => {
+ const after = vi.fn();
+ const screen = await render(<Leaving after={after}/>);
+ const press = (name: string) => (screen.getByRole('button', { name }).element() as HTMLButtonElement).click();
+ const part = () => document.querySelector('[data-testid="part"]');
+ return { after, press, part };
+};
+
+test('a part that leaves is marked closing and stays in the page while its 190ms leave runs, then is gone and what follows runs once', async () => {
+ const { after, press, part } = await leavingPart();
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ press('Close');
+ await frame();
+ expect(part()?.className).toBe('is-closing');
+ vi.advanceTimersByTime(150);
+ press('Close');
+ await frame();
+ expect(part()).not.toBeNull();
+ expect(after).not.toHaveBeenCalled();
+ vi.advanceTimersByTime(40);
+ await frame();
+ expect(part()).toBeNull();
+ expect(after).toHaveBeenCalledOnce();
+ vi.advanceTimersByTime(1000);
+ expect(after).toHaveBeenCalledOnce();
+});
+
+test('opening the part again while it leaves cancels the leave', async () => {
+ const { after, press, part } = await leavingPart();
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ press('Close');
+ vi.advanceTimersByTime(100);
+ press('Open');
+ await frame();
+ expect(part()?.className).toBe('');
+ vi.advanceTimersByTime(1000);
+ await frame();
+ expect(part()).not.toBeNull();
+ expect(after).not.toHaveBeenCalled();
+});
+
+test('with reduced motion a part that leaves is gone in the same tick, never marked closing, and what follows runs once', async () => {
+ await reducedMotion(true);
+ const { after, press, part } = await leavingPart();
+ const marked: string[] = [];
+ const watch = new MutationObserver(() => { const name = part()?.className; if (name) marked.push(name); });
+ watch.observe(document.body, { subtree: true, attributes: true, childList: true });
+ onTestFinished(() => watch.disconnect());
+ press('Close');
+ expect(after).toHaveBeenCalledOnce();
+ // React draws the update before the task ends.
+ await Promise.resolve();
+ expect(part()).toBeNull();
+ press('Close');
+ await frame();
+ expect(after).toHaveBeenCalledOnce();
+ expect(marked).toEqual([]);
 });
 
 const languages = inject('languages'), widths = inject('widths');

@@ -59,6 +59,8 @@ export const motionTable = [
   // The dialog (the ready-made gallery): its entrance, its leave and its search field.
   { ref: '.modal[open]', built: '.gw.modal', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="open"></div>' },
   { ref: '.modal.is-closing', built: '.gw.modal[data-state="closed"]', file: 'app/shell.css', html: '<div role="dialog" class="gw modal" data-state="closed"></div>' },
+  // The gallery keeps its scrim and waits for its leave before the page moves (#130).
+  { ref: '.modal.is-closing', built: '.gw.modal.is-closing', file: 'app/shell.css', html: '<div role="dialog" class="gw modal is-closing" data-state="open"></div>' },
   { ref: '.tpl-search input', built: '.gw .tpl-search input', file: 'app/shell.css', html: '<div class="gw"><label class="tpl-search"><input type="search"></label></div>' },
   // Fields: the reason an Owner gives for a no, the settings fields and the Activity log's filters.
   { ref: '.set-input', built: '.gw .ac-card .set-input', file: 'app/shell.css', html: '<div class="gw"><div class="ac-card"><textarea class="set-input set-textarea"></textarea></div></div>' },
@@ -147,15 +149,17 @@ export const motionTable = [
   // The toast rises in and leaves upward (#157).
   { ref: '.toast', built: '.gw .toast', file: 'app/toast.css', html: '<div class="gw toast-host" role="status"><div class="toast"></div></div>' },
   { ref: '.toast.is-leaving', built: '.gw .toast.is-leaving', file: 'app/toast.css', html: '<div class="gw toast-host" role="status"><div class="toast is-leaving"></div></div>' },
-  // The settings overlay fades in; a Member × Agent switch.
+  // The settings overlay fades in and leaves (#130); a Member × Agent switch.
   { ref: '.sov[open]', built: '.gw .sov', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"></div></div>' },
+  { ref: '.sov.is-closing', built: '.gw .sov.is-closing', file: 'app/settings.css', html: '<div class="gw"><div class="sov is-closing" role="dialog"></div></div>' },
   { ref: '.switch', built: '.gw .sov .switch', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"><button type="button" class="switch" role="switch" aria-checked="false"></button></div></div>' },
   // Its thumb travels on the spring and fades its colour, in the settings overlay and the Team dialog (#129). A row may
   // name a part's ::before or ::after; tests/components/motion.test.tsx reads that pseudo-element of the part.
   { ref: '.switch::after', built: '.gw .sov .switch::after', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"><button type="button" class="switch" role="switch" aria-checked="true"></button></div></div>' },
   { ref: '.switch::after', built: '.gw .modal.team-dlg .switch::after', file: 'app/settings.css', html: '<div class="gw"><dialog class="gw modal team-dlg" open><button type="button" class="switch" role="switch" aria-checked="false"></button></dialog></div>' },
-  // First run fades in, its column rises, its choices answer the pointer.
+  // First run fades in and leaves once answered (#130), its column rises, its choices answer the pointer.
   { ref: '.fr[open]', built: '.gw .fr', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr" role="dialog"></div></div>' },
+  { ref: '.fr.is-closing', built: '.gw .fr.is-closing', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr is-closing" role="dialog"></div></div>' },
   { ref: '.fr__col > *', built: '.gw .fr__col > *', file: 'app/first-run-choice.css', html: '<div class="gw"><form class="fr__col"><div class="fr__head"></div></form></div>' },
   { ref: '.cr-kind', built: '.gw .cr-kind', file: 'app/first-run-choice.css', html: '<div class="gw"><label class="cr-kind fr-choice"></label></div>' },
   // An Agent at work on its sidebar tile (#184): its eyes scan, three dots think; when the Run ends, a check pops and draws.
