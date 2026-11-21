@@ -239,7 +239,7 @@ case "${1:-check}" in
   # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
   images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local' | grep -v '\$'
     awk '/^FROM/ && $2 ~ /[:@]/ {print $2}' Dockerfile
-    grep -o -h -E '(alpine:[0-9.]+|node:[0-9][0-9a-z.-]*|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
+    grep -o -h -E '(alpine:[0-9.]+|node:[0-9][0-9a-z.-]*|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/ci-install-lib.sh scripts/install.sh scripts/get.sh; } | sort -u)
   # The work sandbox image every Company's sandbox runs (#392, #393): CI builds it in the run's image job and loads that
   # build; here it is built on this host from the committed checkout's sandbox/Dockerfile on every run (Docker reuses the
   # layers that did not change), so the lane runs HEAD's image, never an earlier commit's tag or uncommitted files.
@@ -253,7 +253,8 @@ case "${1:-check}" in
   # from the same releases list the area reads, pulled here and loaded in with the rest.
   if [[ -z ${1:-} || $1 == release-update ]]; then
     node --no-warnings scripts/latest-release.mjs "$work/latest-release" > /dev/null
-    images="$images $(grep -h -E '^[[:space:]]*image:' "$work/latest-release/docker-compose.install.yml" | awk '{print $2}' | grep -v '\$' | sort -u | tr '\n' ' ')"
+    images="$images $( { grep -h -E '^[[:space:]]*image:' "$work/latest-release/docker-compose.install.yml" | awk '{print $2}' | grep -v '\$'
+      sed -n 's/^sandbox_image=//p' "$work/latest-release/install.sh"; } | sort -u | tr '\n' ' ')"
   fi
   for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
   DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null

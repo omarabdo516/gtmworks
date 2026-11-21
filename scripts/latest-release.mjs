@@ -7,19 +7,22 @@
 // It exits non-zero when no stable release is published or its files cannot be read.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { latestStableRelease } from '../lib/updates.mjs';
 
 const files = ['docker-compose.install.yml', 'install.sh'];
 
 export async function downloadLatestRelease(dir, { fetch = globalThis.fetch, token = process.env.GH_TOKEN, source } = {}) {
  const headers = token ? { authorization: `Bearer ${token}` } : {};
- const release = await latestStableRelease({ source, fetch, headers });
+ // A list or a download that stalls fails within its minute, not at the end of the install job.
+ const signal = () => AbortSignal.timeout(60000);
+ const release = await latestStableRelease({ source, fetch, headers, signal: signal() });
  if (!release) throw new Error('no stable gtmworks release is published yet');
  const text = {};
  for (const name of files) {
   const url = release.assets?.find(asset => asset?.name === name)?.browser_download_url;
   if (typeof url !== 'string' || !url.startsWith('https://')) throw new Error(`${release.tag_name} publishes no ${name}`);
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: signal() });
   if (!response.ok) throw new Error(`${url} answered ${response.status}`);
   text[name] = await response.text();
  }
@@ -33,7 +36,7 @@ export async function downloadLatestRelease(dir, { fetch = globalThis.fetch, tok
  return release.tag_name;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
  const dir = process.argv[2];
  if (!dir) { console.error('usage: node scripts/latest-release.mjs <dir>'); process.exit(2); }
  try { console.log(await downloadLatestRelease(dir)); } catch (error) { console.error(`the latest release: ${error.message}`); process.exit(1); }

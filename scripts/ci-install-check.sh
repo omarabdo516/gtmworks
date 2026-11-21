@@ -1147,12 +1147,8 @@ done
 # What the Agent was told, and the sign-in the Company made, before the update: both live in the Engine's data,
 # which the update must carry over (#385, ADR 0018).
 marker="release-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-docker exec -i gtmworks-install-hermes-1 sh -ec \
-  'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1"' \
-  sh "$profile" "$marker" || fail "write a memory in the Company's profile"
-docker exec -i gtmworks-install-hermes-1 sh -ec \
-  'umask 077; printf "%s\n" "{\"accessToken\":\"install-check-token\",\"refreshToken\":\"install-check-refresh\",\"expiresAt\":4102444800000}" > /opt/data/.anthropic_oauth.json; chown hermes:hermes /opt/data/.anthropic_oauth.json' \
-  || fail 'sign the Company in on the Engine before the update'
+tell_engine gtmworks-install-hermes-1 "$profile" "$marker" || fail "write a memory in the Company's profile"
+sign_in_engine gtmworks-install-hermes-1 || fail 'sign the Company in on the Engine before the update'
 # The backup the previous release's own installer makes of its one-Company install, kept before the update (#378, C3): it
 # holds that release's own shape (one Engine at opt/data, its key in .env.install, no .engines/), so restoring it is a
 # real archive made before the Engines, not one repacked from this release's database.
@@ -1365,11 +1361,9 @@ sh "$dir/install.sh" || fail "install $stable from its two published files"
 cd "$dir"
 [[ $(cat .install-release) == "$(sed -n 's/^release_image=//p' install.sh)" ]] || fail "the install runs the image $stable pins"
 probe "on $stable"
-code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
-docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
-  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
-  node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" \
-  || fail "first run on $stable"
+docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY|SETUP_CODE)=' .env.install) \
+  -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail "first run on $stable"
 company=$(db -c "select id from public.companies where name='Proxy Company'") || fail "read the Company $stable made"
 [[ -n $company ]] || fail "first run made the Company on $stable"
 people=$(db -c "select person_id||' '||role from public.members where company_id='$company' order by 1") || fail "read the Company's people on $stable"
@@ -1384,12 +1378,8 @@ for attempt in $(seq 1 180); do
 done
 # What the Agent was told, and the sign-in the Company made, before the update: both live in the Engine's data.
 marker="stable-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-docker exec -i "$engine_before" sh -ec \
-  'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1"' \
-  sh "$profile" "$marker" || fail "write a memory in the Company's profile on $stable"
-docker exec -i "$engine_before" sh -ec \
-  'umask 077; printf "%s\n" "{\"accessToken\":\"install-check-token\",\"refreshToken\":\"install-check-refresh\",\"expiresAt\":4102444800000}" > /opt/data/.anthropic_oauth.json; chown hermes:hermes /opt/data/.anthropic_oauth.json' \
-  || fail "sign the Company in on its Engine on $stable"
+tell_engine "$engine_before" "$profile" "$marker" || fail "write a memory in the Company's profile on $stable"
+sign_in_engine "$engine_before" || fail "sign the Company in on its Engine on $stable"
 # The update to this release, as a stable install takes it: this release's two files in place of the old ones, then update.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail "the update from $stable to this release"
