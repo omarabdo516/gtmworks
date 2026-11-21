@@ -140,3 +140,9 @@ test('an hourly sentence that names a time of day asks, since an hourly schedule
  assert.equal(read('راجع الصرف كل ساعة من 9 الصبح لحد 5 العصر')?.cron,null);
  assert.equal(read('Check spend every hour')?.cron,'0 * * * *');
 });
+
+test('an explicit "every …" wins over a frequency word that describes the task', () => {
+ const monthly=readRoutineSentence('Send me the daily ad spend every month at 9am');
+ assert.deepEqual([monthly?.form&&cronOf(monthly.form),monthly?.prompt],['0 9 1 * *','Send me the daily ad spend']);
+ assert.equal(read('Send me the report daily at 9am')?.cron,'0 9 * * *','a bare "daily" still schedules when it is the only one');
+});
