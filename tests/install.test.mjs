@@ -91,7 +91,11 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
   env,encoding:'utf8'});
  assert.equal(result.status,3,result.stderr);
  assert.match(result.stderr,/division by zero/);
- assert.doesNotMatch(readFileSync(commands,'utf8'),/\bstop\b|\bup\b|\bbuild\b/);
+ assert.doesNotMatch(readFileSync(commands,'utf8'),/\bstop\b|\bup\b|\bbuild web\b/);
+ // The work sandbox image is made before the migrations (#397): an update whose image cannot be made stops with the
+ // schema as it was, and nothing that serves is touched by making it.
+ const ran=readFileSync(commands,'utf8');
+ assert.ok(ran.indexOf('build --tag gtmworks-work-sandbox:local sandbox')>=0&&ran.indexOf('build --tag gtmworks-work-sandbox:local sandbox')<ran.indexOf('--single-transaction'),ran);
  // A run that failed records no work sandbox image (#393): the file appears only when the install is whole.
  assert.equal(existsSync(join(directory,'.work-sandbox-image')),false);
  assert.match(readFileSync(commands,'utf8'),/ON_ERROR_STOP=1 --single-transaction/);

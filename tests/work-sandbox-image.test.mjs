@@ -58,11 +58,12 @@ test('the README states the image size on disk and that every Company\'s sandbox
 
 // Every release file the install proof writes for this release pins the work sandbox image (#392): a call that names
 // none makes release files the installer refuses. Only the releases before it, each built from its own older script, name
-// none: the previous release before the Engines and the release before the work sandbox (#397).
+// none: the previous release before the Engines and the release before the work sandbox (#397); and one release names an
+// image that cannot be pulled on purpose, the update that must stop before its migrations (#397).
 test('every release file the install proof writes for this release names the work sandbox image', () => {
   const run = installJob().steps.map(step => step.run || '').join('\n');
   const calls = [...run.matchAll(/node scripts\/release-assets\.mjs ([^|]*)\)? \|\|/g)].map(([, args]) => args);
   assert.ok(calls.length >= 5, 'the proof writes release files');
   // The release that pins another work sandbox image (#399) names that one.
-  for (const args of calls.filter(args => !args.startsWith('"$previous"') && !args.startsWith('"$before"'))) assert.match(args, /"\$(other_)?sandbox"/, args);
+  for (const args of calls.filter(args => !args.startsWith('"$previous"') && !args.startsWith('"$before"') && !args.includes('"$unpulled"'))) assert.match(args, /"\$(other_)?sandbox"/, args);
 });

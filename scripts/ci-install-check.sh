@@ -558,6 +558,24 @@ grep -F "Company \"Linked Company\": Engine http://gtmworks-engine-linked-compan
 # Stopping the second Company's Engine leaves the first Company answering, then the second Engine starts again.
 docker stop "$second_container" > /dev/null || fail 'stop the second Engine'
 engine_node "$engine_key" - < scripts/check-install-conversation.mjs || fail 'the first Company still answers while the second Engine is stopped'
+# A Company whose work sandbox is not running (#398): one read of its Engine's own ssh workspace names the state; a
+# message that needs a command gets its reply with the failed sandbox step under it; a message that needs no tool is
+# answered as usual. Started again, the next command runs in it with no restart of the install. The job reads the marker
+# from the sandbox's disk, so a tool's own answer cannot fake it. This area, not agents, takes the check: agents is near
+# its time budget (docs/agents/checks.md).
+sandbox_marker="sandbox-down-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+docker stop gtmworks-sandbox-first > /dev/null || fail 'stop the first Company sandbox'
+engine_node "$engine_key" - sandbox-down "$sandbox_marker" < scripts/check-install-sandbox-down.mjs | tee sandbox-down-proof.log \
+  || fail 'a Company whose work sandbox is not running says so, and its Conversation still answers'
+grep -q '"sandbox":"notRunning"' sandbox-down-proof.log || fail 'the Company reads its work sandbox as not running'
+grep -q '"plain":"answered"' sandbox-down-proof.log || fail 'a message that needs no tool is answered while the work sandbox is not running'
+docker start gtmworks-sandbox-first > /dev/null || fail 'start the first Company sandbox'
+engine_healthy gtmworks-sandbox-first 60 || fail 'the first Company sandbox is healthy again'
+engine_node "$engine_key" - sandbox-up "$sandbox_marker" < scripts/check-install-sandbox-down.mjs | tee sandbox-up-proof.log \
+  || fail 'the next command runs once the work sandbox is running again, with no restart'
+grep -q '"sandbox":"running"' sandbox-up-proof.log || fail 'the Company reads its work sandbox as running again'
+[[ $(docker exec gtmworks-sandbox-first cat "/work/$sandbox_marker-sandbox-up.txt") == "$sandbox_marker-sandbox-up" ]] \
+  || fail 'the next command runs in the work sandbox once it is running again'
 docker start "$second_container" > /dev/null || fail 'start the second Engine'
 engine_healthy "$second_container" 120 || fail 'the second Engine is healthy again'
 # `gtmworks company limits` (#396) changes one Company's limits: its sandbox alone is made again with them, its Engine
@@ -1182,6 +1200,9 @@ db -c "begin; set local session_replication_role=replica;
    end loop; end \$\$;
   delete from public.companies where id='00000000-0000-4000-8000-000000000239'; commit;" || fail 'remove the probe Company'
 [[ $(db -c 'select count(*) from public.companies') == 1 ]] || fail 'the previous release install has its one Company again'
+# The code word scripts/check-install-engines.mjs looks for (lib/engine-targets.mjs), told to the Company's Agent before the update.
+docker exec -i gtmworks-install-hermes-1 sh -ec 'printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"' sh "$profile" "backup-${company//-/}" \
+  || fail "write the code word in the Company's profile"
 # The update to this release: it applies the migrations (including the Engine records), adopts the Engine the
 # previous release ran, and leaves the Company answering from its record.
 sh install.sh update || fail 'release update'
@@ -1232,6 +1253,10 @@ grep -Eq 'https://(claude\.ai|console\.anthropic\.com)' "$RUNNER_TEMP/sign-in.lo
 # Engine the update adopted.
 ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
   || fail "the Agent remembers what it was told and the Company's sign-in still serves"
+# The Agent made before the update runs a command in its Company's new sandbox and still remembers (#397).
+compose exec -T web node --input-type=module - sandbox "$marker" < "$root/scripts/check-install-engines.mjs" \
+  && [[ $(docker exec gtmworks-sandbox-first cat "/work/$marker-${company//-/}.txt") == "$marker-${company//-/}" ]] \
+  || fail "the Agent made before the update runs a command in its Company's sandbox and still remembers"
 # The next release's migration is applied through the running database's bind mount.
 cp "$root/release-next/docker-compose.install.yml" "$root/release-next/install.sh" . || fail 'next release files in place'
 sh install.sh update || fail 'next release update'
@@ -1366,6 +1391,14 @@ while read -r company profile address; do
   docker exec "$container" sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$profile" "backup-${company//-/}" \
     || fail "write a memory in the Engine of $company before the update"
 done < engines.txt
+# A file each Company's main Agent made before the update, in its profile's old Library root on its Engine's own disk
+# (`workspace`, the Library of the release before the work sandbox): the update copies it once into the Agent's own
+# folder of its Company's work folder (#397).
+while read -r company profile address; do
+  container=${address#*://}; container=${container%%:*}
+  docker exec "$container" sh -ec 'mkdir -p "/opt/data/profiles/$1/workspace"; printf "%s\n" "$2" > "/opt/data/profiles/$1/workspace/$2.md"; chown -R hermes:hermes "/opt/data/profiles/$1/workspace"' sh "$profile" "before-sandbox-${company//-/}" \
+    || fail "write a file in the old Library of $company before the update"
+done < engines.txt
 # The first Company's Owner changes its level through that release's own function, so the log has a level change.
 level_company=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the first Company'
 owner=$(db -c "select person_id from public.members where company_id='$level_company' and role='owner'") || fail "read the first Company's Owner"
@@ -1399,6 +1432,19 @@ done < engines-before
 half=$(sandbox_parts)
 [[ -z $half ]] || fail_update "the failed update leaves no half-made sandbox: $half"
 [[ ! -e .work-sandbox-image ]] || fail_update 'the failed update records no work sandbox image'
+# An update whose work sandbox image cannot be pulled (#397): the image is pulled before the migrations, so the update
+# exits non-zero with no migration applied and the release it runs keeps serving.
+applied=$(db -c 'select count(*) from gtmworks_install.schema_migrations') || fail 'read the applied migrations'
+unpulled="localhost:5000/gtmworks-sandbox@sha256:$(printf '%064d' 0)"
+( cd "$root" && node scripts/release-assets.mjs "$first" release-no-sandbox "$unpulled" ) || fail 'the release files whose sandbox image cannot be pulled'
+cp "$root/release-no-sandbox/docker-compose.install.yml" "$root/release-no-sandbox/install.sh" . || fail 'the release files whose sandbox image cannot be pulled in place'
+if sh install.sh update > update.log 2>&1; then fail_update 'the update whose sandbox image cannot be pulled must fail'; fi
+grep -Fq "Pulling the work sandbox image: $unpulled" update.log || fail_update 'the update tries to pull the sandbox image'
+if grep -Fq 'Applying migration:' update.log; then fail_update 'the update whose sandbox image cannot be pulled applies no migration'; fi
+[[ $(db -c 'select count(*) from gtmworks_install.schema_migrations') == "$applied" && $(level_column) == 1 ]] || fail_update 'the update whose sandbox image cannot be pulled leaves the schema as it was'
+[[ $(compose ps -q web) == "$web" ]] || fail_update 'the update whose sandbox image cannot be pulled leaves the release before the work sandbox serving'
+probe 'after the update whose sandbox image cannot be pulled'
+[[ -z $(sandbox_parts) && ! -e .work-sandbox-image ]] || fail_update 'the update whose sandbox image cannot be pulled begins no sandbox'
 # The update to this release: each Company gets its own sandbox, exit and work folder, and its Engine, recreated on its own
 # volume, is pinned to that sandbox.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
@@ -1411,7 +1457,8 @@ while read -r name id; do
   [[ -n $engine ]] || fail "the updated install runs the Engine $name"
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$(engine_value ".engines/$slug" VOLUME)" ]] || fail "the Engine $name keeps its own volume"
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/hermes/config.yaml"}}{{.RW}}{{end}}{{end}}' "$engine") == false ]] \
-    && docker exec "$engine" grep -qx '  backend: ssh' /etc/hermes/config.yaml || fail "the Engine $name is pinned to its sandbox"
+    && docker exec "$engine" grep -qx '  backend: ssh' /etc/hermes/config.yaml && docker exec "$engine" grep -qx '  ssh_sync_files: false' /etc/hermes/config.yaml \
+    || fail "the Engine $name is pinned to its sandbox, with no file sync"
   [[ $(docker inspect -f '{{range $n, $_ := .NetworkSettings.Networks}}{{println $n}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$(engine_value ".engines/$slug" NETWORK)" "gtmworks-work-$slug" | sort) ]] \
     || fail "the Engine $name joins its own network and its work network only"
   for part in sandbox exit; do
@@ -1443,6 +1490,23 @@ while read -r company address; do
     if docker exec "gtmworks-sandbox-$other" test -e "/work/$file.txt"; then fail "the file of $company's Agent is in no other Company's sandbox"; fi
   done < sandboxes-before
 done < companies.txt
+# The file each main Agent made before the update is in its own folder of its Company's work folder, listed in its
+# Library, while the original stays on the Engine and no other Company's work folder has it.
+# `compose exec` reads its stdin, so each one inside this loop reads /dev/null: it would take the rest of engines.txt
+# and end the loop after the first Company.
+while read -r company profile address; do
+  container=${address#*://}; container=${container%%:*}; slug=${container#gtmworks-engine-}; file="before-sandbox-${company//-/}"
+  [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$profile/$file.md") == "$file" ]] || fail "the update copies the old Library file of $company into its Agent's folder"
+  [[ $(docker exec "$container" cat "/opt/data/profiles/$profile/workspace/$file.md") == "$file" ]] || fail "the update leaves the old Library file of $company on its Engine"
+  compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const {listAgentFiles}=await import('/app/lib/hermes.mjs'); const read=await listAgentFiles({...await engineOf('$company'),profile:'$profile'}); console.log(read.state, (read.entries||[]).map(entry=>entry.name).join(' '));" < /dev/null \
+    | grep -qE "^found (.* )?$file\.md( |\$)" || fail "the Library of $company's Agent lists the file it made before the update"
+  while read -r other _; do
+    [[ $other == "$slug" ]] && continue
+    if docker exec "gtmworks-sandbox-$other" test -e "/work/$profile/$file.md"; then fail "the old Library file of $company is in no other Company's work folder"; fi
+  done < sandboxes-before
+  # Changed in the work folder after the update: running the install command again leaves it as it is.
+  docker exec -u pn "gtmworks-sandbox-$slug" sh -ec 'printf changed > "$1"' sh "/work/$profile/$file.md" || fail "change the copied file of $company"
+done < engines.txt
 # The Company's level is gone, and its past change is still in the log as it was and reads by the level's names.
 [[ $(level_column) == 0 ]] || fail 'the update removes the Company level'
 [[ $(level_log) == "$level_before" ]] || fail 'the past level change stays in the log as it was'
@@ -1457,6 +1521,10 @@ while read -r company address; do
   slug=$(printf '%s\n' "$address" | sed -n 's#^http://gtmworks-engine-\([a-z0-9-]*\):8642$#\1#p')
   [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$sandbox_marker-${company//-/}.txt") == "$sandbox_marker-${company//-/}" ]] || fail "the install command again keeps the work folder of $slug"
 done < companies.txt
+while read -r company profile address; do
+  slug=${address#http://gtmworks-engine-}; slug=${slug%%:*}
+  [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$profile/before-sandbox-${company//-/}.md") == changed ]] || fail "the install command again copies no old Library file over the changed one of $company"
+done < engines.txt
 }
 
 # engines-update: an install this release made, with two Companies after `company add`, updates to a release that pins
@@ -1871,11 +1939,12 @@ default_mib=$(( $(sandbox_memory_bytes) / 1048576 ))
 (( render_peak < default_mib )) || fail "the render's peak memory ($render_peak MiB) is within the default limit ($default_mib MiB)"
 [[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the render at the defaults had no process killed at the memory limit'
 echo "sizes: one short render at the default limits took $render_seconds s and peaked at $render_peak MiB of the $default_mib MiB limit"
-# A render that needs more memory than its Company's limit: the second Company's sandbox gets half the render's measured
-# peak. It is set on the running sandbox with `docker update`, the cgroup change a Company's own limit (`company limits`,
-# #396, which the companies area proves) makes, because only this way can swap be held at the same figure so the render
-# cannot spill into it.
-low_mib=$(( render_peak / 2 ))
+# A render that needs more memory than its Company's limit: the second Company's sandbox gets four fifths of the render's
+# measured peak, so Chromium renders part of the way before the limit stops it, and the first Company's sandbox is asked
+# throughout. It is set on the running sandbox with `docker update`, the cgroup change a Company's own limit (`company
+# limits`, #396, which the companies area proves) makes, because only this way can swap be held at the same figure so the
+# render cannot spill into it.
+low_mib=$(( render_peak * 4 / 5 ))
 (( low_mib >= 64 )) || low_mib=64
 (( render_peak > low_mib )) || fail "the render needs more memory ($render_peak MiB) than the low limit ($low_mib MiB)"
 docker update --memory "${low_mib}m" --memory-swap "${low_mib}m" "$second_sandbox" > /dev/null || fail 'give the second sandbox a low memory limit'

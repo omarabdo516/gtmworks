@@ -193,6 +193,9 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
+   {/* A tool the Engine could not run because the Company's work sandbox is down (#398): one plain line under the reply,
+       which the Conversation still gave. */}
+   {message.steps?.list.some(step=>step.sandbox)&&<p className="note" role="alert" data-outcome="sandbox">{t('workSandboxNotRunning')}</p>}
    {message.cards?.map(card=>card.kind==='made'?<Fragment key={card.agent.id}><MadeCard slug={slug} agent={card.agent}/>{card.agent.fresh&&<AgentMadeToast company={company} slug={slug} agent={card.agent}/>}</Fragment>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
     :card.kind==='handed'?<HandedRow key={`handed${message.id}`} from={{connection_id:conversation.face,name:conversation.agent_name}} to={card} cb={cb}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}

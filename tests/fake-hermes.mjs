@@ -138,8 +138,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   images:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
   fileBytes:/** @type {Map<string,{body:string|Uint8Array,type?:string}>} */(new Map()),
   filesUnreadable:/** @type {Set<string>} */(new Set()),
-  // The work sandbox is stopped (#395): the profile's ssh workspace cannot be reached, so `/api/fs/*` answers 503 while
-  // the Engine's own read-only mount still lists the work folder.
+  // The work sandbox is stopped (#395, #398): the profile's ssh workspace cannot be reached, so `/api/fs/*` answers 503
+  // while the Engine's own read-only mount still lists the work folder.
   sandboxDown:false,
   // Files the Engine refuses to read (403) by the path asked, as its guard refuses a sensitive file or one that resolves
   // outside the root it reads under (hermes_cli/web_routers/files.py).
@@ -351,6 +351,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    };
    // The sandbox's /work is the Engine's /opt/data/work; a path the sandbox does not hold is null.
    const inSandbox=path=>path.startsWith('/work/')&&!path.split('/').includes('..')?`/opt/data${path}`:null;
+   // The Engine's one read that names its ssh workspace (#398): `/api/fs/list?path=` lists a folder the sandbox holds;
+   // the 503 above answers while the sandbox is stopped (hermes_cli/web_routers/files.py 1012 through _fs_backend).
+   if(url.pathname==='/api/fs/list'&&request.method==='GET') return send(response,200,{entries:[]});
    const attachment=(name,type,body)=>{
     response.writeHead(200,{'Content-Type':type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(name)}`,'Content-Length':body.length});
     return response.end(request.method==='HEAD'?undefined:body);
