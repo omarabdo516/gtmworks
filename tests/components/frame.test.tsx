@@ -15,7 +15,7 @@ vi.mock('next/navigation', () => ({ usePathname: () => route.pathname }));
 const stay = (event: { preventDefault: () => void }) => event.preventDefault();
 const frame = (segment = '') => <LanguageProvider language="en"><Frame key={segment} title="Home" sidebar={<nav aria-label="Navigation">
  <a href="#chats" onClick={stay}>Chats</a><a href="#board" onClick={stay}>Marketing board</a><button type="button">Account menu</button>
-</nav>}><a href="#card" onClick={stay}>A card on the page</a></Frame></LanguageProvider>;
+</nav>}><main className="page"><a href="#card" onClick={stay}>A card on the page</a></main></Frame></LanguageProvider>;
 const show = async (width: number) => { route.pathname = '/c/rs-learning/home'; await page.viewport(width, 900); return render(frame()); };
 
 const sidebar = () => document.querySelector<HTMLElement>('.sidebar')!;
@@ -96,11 +96,11 @@ const watchStarts = (name: (event: AnimationEvent) => string) => {
 };
 
 // Every page fades in once when it opens, as the reference's view does (#135, design-reference setView): a new pathname
-// replays the page region's fadeIn, whether its route keeps the frame or draws a new one (`segment`); a redraw of the same
+// replays the fadeIn of the page drawn in the page region, whether its route keeps the frame or draws a new one (`segment`); a redraw of the same
 // page (a poll, a save, the details panel) and a frame mounting again on the same page do not, and the sidebar and the
 // menu button never fade. Each test starts on a page of its own, since the frame remembers the page it last showed.
 const settle = async () => { await Promise.all(document.getAnimations().map(animation => animation.finished)); };
-test('a new page fades the page region in once; a redraw, a frame drawn again on the same page and the sidebar do not', async () => {
+test('a new page fades in once; a redraw, a frame drawn again on the same page and the sidebar do not', async () => {
  const screen = await show(1440);
  const starts = watchStarts(event => `${(event.target as Element).className.split(' ')[0]} ${event.animationName}`);
  await settle();
@@ -109,8 +109,8 @@ test('a new page fades the page region in once; a redraw, a frame drawn again on
   route.pathname = path;
   await screen.rerender(frame(segment));
   await expect.poll(() => starts.length, { message: path }).toBe(1);
-  expect(starts.pop()).toBe('app-content gw-fade-in');
-  const style = getComputedStyle(content());
+  expect(starts.pop()).toBe('page gw-fade-in');
+  const style = getComputedStyle(content().querySelector('.page')!);
   expect([style.animationDuration, style.animationTimingFunction]).toEqual(['0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);
   await settle();
   for (let redraw = 0; redraw < 3; redraw++) await screen.rerender(frame(segment));

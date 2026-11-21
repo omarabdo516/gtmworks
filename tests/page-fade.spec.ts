@@ -5,7 +5,7 @@ import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
 // A page fades in when it opens, as the reference's view does (#135, design-reference setView and .view-enter): the
-// page region (.app-content), or on a chat page the chat beside the details panel, plays fadeIn once per page opened
+// page drawn in the page region (.app-content), or on a chat page the chat beside the details panel, plays fadeIn once per page opened
 // from the sidebar; a Conversation's polling plays nothing; the sidebar and the details panel never fade; and the row or
 // tile that becomes current fades to its fill over the shared 150ms.
 // Supabase CLI targets the local test database by default; never pass --remote.
@@ -20,7 +20,7 @@ async function watch(page: Page) {
   state.fades = []; state.lowest = { sidebar: 1, details: 1 };
   document.addEventListener('animationstart', event => {
    const target = event.target as Element;
-   const part = target.matches('.app-content, .app-content .convo > :not(.details, .dp-scrim)') ? 'page'
+   const part = target.matches('.app-content > :not(.convo-page), .app-content > .convo-page .convo > :not(.details, .dp-scrim)') ? 'page'
     : target.closest('.details, .dp-scrim') ? 'details' : target.closest('.sidebar') ? 'sidebar' : 'other';
    if (part !== 'other') state.fades!.push(`${part} ${event.animationName}`);
   }, true);
@@ -37,9 +37,9 @@ async function watch(page: Page) {
 const pageFades = (page: Page) => page.evaluate(() => (window as typeof window & { fades: string[] }).fades.filter(fade => fade.startsWith('page ')));
 const stillFades = (page: Page) => page.evaluate(() => (window as typeof window & { fades: string[] }).fades.filter(fade => /^(sidebar|details) gw-fade-in$/.test(fade)));
 const lowest = (page: Page) => page.evaluate(() => (window as typeof window & { lowest: Record<string, number> }).lowest);
-// The part that fades: the chat on a chat page, the whole page region elsewhere.
+// The part that fades: the chat on a chat page, the page drawn in the page region elsewhere.
 const region = (page: Page) => page.evaluate(() => {
- const element = document.querySelector('.app-content .convo > .chat') ?? document.querySelector('.app-content')!;
+ const element = document.querySelector('.app-content > .convo-page .convo > .chat') ?? document.querySelector('.app-content > *')!;
  const style = getComputedStyle(element); return [style.animationName, style.animationDuration, style.animationTimingFunction];
 });
 // The shared five-property 150ms transition of everything a person can press (#128).
