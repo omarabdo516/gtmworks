@@ -74,3 +74,8 @@ test('a number in the task is no time, and a named day, a date of the month or a
  assert.deepEqual(read('ابعتلي التقرير كل يوم 25 الصبح')?.cron,null);
  assert.deepEqual(read('ابعتلي ملخص كل يوم فيه 3 إعلانات'),{name:'ملخص فيه 3 إعلانات',cron:null},'an Arabic task number is no time either');
 });
+
+test('a mention of an Agent is left out of the task, an email address in it is kept', () => {
+ assert.equal(readRoutineSentence('Send the report every day at 9am to omar@example.com')?.prompt,'Send the report to omar@example.com');
+ assert.equal(readRoutineSentence('@Ads send the report every day at 9am')?.prompt,'send the report');
+});
