@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { cdp } from 'vitest/browser';
+import { cdp, userEvent } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { FaceMotion } from '@/components/face-motion';
@@ -102,4 +102,13 @@ test('with reduced motion no face looks, blinks or hops', async () => {
  document.querySelector('button')!.click();
  expect(identity).toContain(transform('Agent big'));
  expect(document.querySelectorAll('.is-blink, .is-happy')).toHaveLength(0);
+});
+
+test('a face under 24px never scans or lifts, even when its Agent works or its tile is hovered', async () => {
+ await render(<div className="gw"><a className="agent-tile" href="#"><CompanyAgentFace agent={agent('small')} size={20} thinking/></a></div>);
+ const face = document.querySelector('[aria-label="Agent small"]')!;
+ expect(face.classList.contains('is-thinking')).toBe(false);
+ expect(getComputedStyle(features('Agent small')).animationName).toBe('none');
+ await userEvent.hover(face);
+ expect(getComputedStyle(face).transform).toBe('none');
 });

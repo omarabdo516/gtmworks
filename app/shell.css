@@ -159,10 +159,10 @@
 .gw .face.is-happy { animation: gw-face-hop 460ms var(--gw-ease-spring); }
 .gw .face.is-happy .face__eye { transform: scaleY(0.45); transition-duration: 120ms; }
 @keyframes gw-face-hop { 0% { transform: none; } 35% { transform: translateY(-4px) scale(1.07); } 100% { transform: none; } }
-.gw .agent-tile .face, .gw .head-pill .face { transition: transform var(--gw-dur) var(--gw-ease-out); }
+.gw .agent-tile .face--look, .gw .head-pill .face--look { transition: transform var(--gw-dur) var(--gw-ease-out); }
 @media (hover: hover) {
-  .gw .agent-tile:hover .face { transform: translateY(-2px); }
-  .gw .head-pill:hover .face { transform: translateY(-1px); }
+  .gw .agent-tile:hover .face--look { transform: translateY(-2px); }
+  .gw .head-pill:hover .face--look { transform: translateY(-1px); }
 }
 .gw .face.is-thinking .face__f { animation: gw-face-scan 2.4s ease-in-out infinite; }
 @keyframes gw-face-scan { 0%, 100% { transform: translate(-1.4px, 0); } 45%, 55% { transform: translate(1.4px, -0.4px); } }
@@ -191,7 +191,7 @@
 @keyframes gw-ck-pop { from { transform: scale(.4); opacity: 0; } }
 @keyframes gw-draw-check { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .gw .face .face__f, .gw .face .face__eye, .gw .agent-tile .face, .gw .head-pill .face { transform: none !important; }
+  .gw .face .face__f, .gw .face .face__eye, .gw .agent-tile .face--look, .gw .head-pill .face--look { transform: none !important; }
   .gw .face.is-happy, .gw .face.is-thinking .face__f, .gw .face-wrap .think i, .gw .face-wrap.is-thinking > .dot::after { animation: none !important; }
 }
 .gw .agent-tile__plus {

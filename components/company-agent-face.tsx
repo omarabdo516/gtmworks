@@ -25,7 +25,7 @@ export function CompanyAgentFace({agent,size,thinking=false}:{agent:Pick<Company
  const spread=[3.6,4,4.4][gap]+(face.shape===2?1.25:0);
  const eyes=[16-spread,16+spread];
  const key=faceKey(agent.connection_id);
- return <svg className={`agent-face face${size>=24?' face--look':''}${thinking?' is-thinking':''}`} data-face={size>=24?key:undefined} role="img" aria-label={agent.name} viewBox="0 0 32 32" style={{width:size,height:size,color:ink}}>
+ return <svg className={`agent-face face${size>=24?' face--look':''}${thinking&&size>=24?' is-thinking':''}`} data-face={size>=24?key:undefined} role="img" aria-label={agent.name} viewBox="0 0 32 32" style={{width:size,height:size,color:ink}}>
   <g fill={fill}><circle cx="16" cy="16" r="16"/></g>
   <g className="face__f" fill="currentColor" stroke="currentColor">
    {accessories[face.accessory]}
