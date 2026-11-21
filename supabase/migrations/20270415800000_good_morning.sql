@@ -123,3 +123,35 @@ begin
 end $$;
 revoke all on function public.record_good_morning(uuid,uuid,text,date,timestamptz,text,jsonb) from public,anon,authenticated;
 grant execute on function public.record_good_morning(uuid,uuid,text,date,timestamptz,text,jsonb) to service_role;
+
+-- A Member's first reply in a morning Conversation starts a new Engine session, which never held the greeting: the run
+-- of the daily job wrote it in its own cron session. So that first Run carries the Conversation's messages so far (the
+-- greeting) as its history, as a Conversation from before an Agent's profile move does (20270213000000), pinned so a
+-- retry sends the same. Every other Run is as before.
+create or replace function public.pin_run_history(conversation uuid, message_key uuid) returns jsonb
+language plpgsql security definer set search_path='' as $function$
+declare held public.conversation_run_reservations; kept public.conversation_run_notes; moved_at timestamptz; record jsonb; morning boolean;
+begin
+ select * into held from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key for update;
+ select * into kept from public.conversation_run_notes n where n.conversation_id=conversation and n.send_key=message_key for update;
+ if kept.conversation_id is null then return null; end if;
+ if kept.history is null and held.conversation_id is not null and held.start_attempts=0 and held.start_unknown_at is null then
+  select v.good_morning is not null and v.hermes_session_id is null into morning from public.conversations v where v.id=conversation;
+  if held.profile=public.agent_engine_profile(held.agent_id) then
+   select max(l.created_at) into moved_at from public.company_log l where l.agent_id=held.agent_id and l.company_id=held.company_id
+    and l.source='hermes_agent_audit' and l.action=public.log_agent_action('MOVE_AGENT_PROFILE');
+  end if;
+  if coalesce(morning,false) or (moved_at is not null and exists(select 1 from public.conversation_messages m where m.conversation_id=conversation and m.created_at<moved_at)) then
+   select jsonb_agg(x.entry order by x.id) into record from (
+    select m.id,e.entry,sum(octet_length(e.entry::text)) over (order by m.id desc) as total
+    from public.conversation_messages m,
+     lateral (select jsonb_build_object('role',case m.author when 'agent' then 'assistant' else 'user' end,'content',m.body) as entry) e
+    where m.conversation_id=conversation and m.send_key is distinct from message_key) x
+   where x.total<=6000000;
+   if record is not null then
+    update public.conversation_run_notes n set history=record where n.conversation_id=conversation and n.send_key=message_key returning * into kept;
+   end if;
+  end if;
+ end if;
+ return kept.history;
+end $function$;

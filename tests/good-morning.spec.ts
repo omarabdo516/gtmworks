@@ -94,6 +94,12 @@ test('a run of the job opens one Conversation for each Member with anything in t
  await expect(page.locator('.msg[data-author=agent] .bubble')).toHaveText('Good morning, team.');
  await expect(page.locator('.ckcard .card__title')).toHaveText(/^Good morning · \w{3}, \w{3} \d{1,2}$/);
  await expect(page.locator('.sidebar')).toContainText(/Good morning · /);
+ // A reply starts the Agent's own session for this Conversation, which never held the greeting: the Run carries it.
+ await page.getByLabel('Message',{exact:true}).fill('Explain the first point');
+ await page.getByLabel('Message',{exact:true}).press('Enter');
+ await expect(page.locator('.msg[data-author=agent]').last()).toContainText('Reply to: Explain the first point',{timeout:30000});
+ const reply=fake.settings.runs.findLast(each=>JSON.stringify(each.input).includes('Explain the first point'));
+ expect(reply?.history).toEqual([{role:'assistant',content:'Good morning, team.'}]);
 });
 
 test('Ran overnight lists only results of Agents the reader sees, and a row opens their chat with that Agent',async({page})=>{

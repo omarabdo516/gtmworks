@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(14);
 -- #182, #183: Good morning is changed by an active Owner or Manager of its Company, for the main Agent, and each change is one row of the log; each run of its job is recorded once, and opens a new
 -- Conversation with the main Agent for each Member with anything in a part of their card, never one for a Member with
 -- nothing. RS Learning: 1 Owner, 2 Manager, 3 Contributor, 4 Viewer, 5 Contributor. Written without the guards, as
@@ -45,5 +45,24 @@ select is((select count(*)::int from public.good_morning_results),0,'the Manager
 reset role;
 select ok(not has_function_privilege('authenticated','public.record_good_morning(uuid,uuid,text,date,timestamptz,text,jsonb)','execute'),'no Member writes a morning');
 select ok(not has_function_privilege('anon','public.good_morning_work()','execute'),'no signed-out caller reads the worker''s list');
+
+-- A Member's first reply in a morning Conversation carries the greeting as the Run's history, since the Run starts a new
+-- Engine session that never held it; a retry carries the same, and a plain Conversation carries none.
+set local session_replication_role=replica;
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile,created_at)
+ select c.id,'b1830000-0000-0000-0000-000000000001',c.company_id,a.connection_id,c.person_id,a.id,'Explain the second point',a.profile,now()
+ from public.conversations c join public.hermes_agents a on a.id=c.agent_id where c.good_morning is not null and c.person_id='20000000-0000-0000-0000-000000000003';
+insert into public.conversation_run_notes(conversation_id,send_key,company_id)
+ select c.id,'b1830000-0000-0000-0000-000000000001',c.company_id from public.conversations c where c.good_morning is not null and c.person_id='20000000-0000-0000-0000-000000000003';
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile,created_at)
+ select 'c1000000-0000-0000-0000-000000000181','b1830000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',a.connection_id,'20000000-0000-0000-0000-000000000005',a.id,'Hello',a.profile,now()
+ from public.hermes_agents a where a.id='e1000000-0000-0000-0000-000000000181';
+insert into public.conversation_run_notes(conversation_id,send_key,company_id) values ('c1000000-0000-0000-0000-000000000181','b1830000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001');
+set local session_replication_role=origin;
+select is(public.pin_run_history((select id from public.conversations where good_morning is not null and person_id='20000000-0000-0000-0000-000000000003'),'b1830000-0000-0000-0000-000000000001'),
+ '[{"role":"assistant","content":"Good morning, team."}]'::jsonb,'the first reply in a morning Conversation carries its greeting');
+select is(public.pin_run_history((select id from public.conversations where good_morning is not null and person_id='20000000-0000-0000-0000-000000000003'),'b1830000-0000-0000-0000-000000000001'),
+ '[{"role":"assistant","content":"Good morning, team."}]'::jsonb,'and a retry the same');
+select is(public.pin_run_history('c1000000-0000-0000-0000-000000000181','b1830000-0000-0000-0000-000000000002'),null,'a Conversation the morning did not open carries none');
 select * from finish();
 rollback;
