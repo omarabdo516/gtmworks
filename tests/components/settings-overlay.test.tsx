@@ -64,11 +64,12 @@ test('while the chosen language is being saved the other choice waits, so the ch
 });
 
 // An Agent's page as the server draws its focus targets: the Settings tab and "All agents".
-const agentPage = () => render(<LanguageProvider language="en"><OverlayFrame slug="rs-learning" initialFocus="sov-tab-settings">
- <CloseButton slug="rs-learning"/>
+const agentFrame = (key = 0) => <LanguageProvider key={key} language="en"><OverlayFrame slug="rs-learning" initialFocus="sov-tab-settings">
+ <CloseButton/>
  <BackLink className="link-btn sov-back" id="sov-back" slug="rs-learning" agent="ag-2">All agents</BackLink>
  <div role="tablist"><button type="button" role="tab" id="sov-tab-settings" aria-selected="true">Settings</button></div>
-</OverlayFrame></LanguageProvider>);
+</OverlayFrame></LanguageProvider>;
+const agentPage = () => render(agentFrame());
 
 test('an Agent\'s page opens with the focus on its Settings tab', async () => {
  const screen = await agentPage();
@@ -88,27 +89,44 @@ test('a row of the Agents list opens that Agent\'s page with the focus on its Se
 });
 
 test('closing goes back to where the gear was pressed and leaves the gear its focus there, by the button and by Escape', async () => {
- sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
+ const screen = await agentPage();
+ for (const [index, close] of [() => screen.getByRole('button', { name: 'Close settings and go back' }).click(), () => userEvent.keyboard('{Escape}')].entries()) {
+  // Each close is of an overlay opened afresh, as the gear opens it.
+  push.mockReset();
+  sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
+  await screen.rerender(agentFrame(index + 1));
+  await close();
+  await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/conversations/cv-1']]);
+  expect(sessionStorage.getItem('gw-return-focus')).toBe('dp-settings');
+  expect(sessionStorage.getItem('gw-settings-from')).toBeNull();
+  sessionStorage.removeItem('gw-return-focus');
+ }
+});
+
+// #130: the overlay leaves with the dialog's exit (design-reference: sovClose) and returns only once it has run.
+test('closing keeps the overlay in the page with its exit running, then takes it out and goes back, once', async () => {
  const screen = await agentPage();
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
- expect(push).toHaveBeenLastCalledWith('/c/rs-learning/conversations/cv-1');
- expect(sessionStorage.getItem('gw-return-focus')).toBe('dp-settings');
- expect(sessionStorage.getItem('gw-settings-from')).toBeNull();
- sessionStorage.removeItem('gw-return-focus');
- sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
+ const overlay = document.querySelector<HTMLElement>('.sov')!;
+ expect(overlay).toHaveClass('is-closing');
+ expect(getComputedStyle(overlay).animationName).toBe('gw-modal-out');
+ expect(push).not.toHaveBeenCalled();
  await userEvent.keyboard('{Escape}');
- expect(push).toHaveBeenCalledTimes(2);
- expect(push).toHaveBeenLastCalledWith('/c/rs-learning/conversations/cv-1');
- expect(sessionStorage.getItem('gw-return-focus')).toBe('dp-settings');
+ await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat']]);
+ expect(document.querySelector<HTMLElement>('.sov-root')?.hidden).toBe(true);
+ await new Promise(resolve => setTimeout(resolve, 250));
+ expect(push).toHaveBeenCalledOnce();
 });
 
 test('the place it was opened from is used once: the next close with none stored goes to the chat and focuses nothing', async () => {
  sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
  const screen = await agentPage();
- const close = screen.getByRole('button', { name: 'Close settings and go back' });
- await close.click();
+ await screen.getByRole('button', { name: 'Close settings and go back' }).click();
+ await expect.poll(() => push.mock.calls.length).toBe(1);
  sessionStorage.removeItem('gw-return-focus');
- await close.click();
+ await screen.rerender(agentFrame(1));
+ await screen.getByRole('button', { name: 'Close settings and go back' }).click();
+ await expect.poll(() => push.mock.calls.length).toBe(2);
  expect(push).toHaveBeenLastCalledWith('/c/rs-learning/chat');
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
@@ -117,7 +135,7 @@ for (const [from, why] of [['/c/aleem/conversations/cv-9', 'another Company'], [
  sessionStorage.setItem('gw-settings-from', JSON.stringify({ from, focus: 'dp-settings' }));
  const screen = await agentPage();
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
- expect(push).toHaveBeenLastCalledWith('/c/rs-learning/chat');
+ await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat']]);
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
 
@@ -125,7 +143,7 @@ test('an address stored before the focus was kept still closes to it, with no fo
  sessionStorage.setItem('gw-settings-from', '/c/rs-learning/chat/ag-2');
  const screen = await agentPage();
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
- expect(push).toHaveBeenLastCalledWith('/c/rs-learning/chat/ag-2');
+ await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat/ag-2']]);
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
 

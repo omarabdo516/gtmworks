@@ -1,5 +1,4 @@
 'use server';
-import { redirect } from 'next/navigation';
 import { withActionLog, logActionFailure } from '@/lib/diagnostics.mjs';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
@@ -16,7 +15,8 @@ const refusals=new Set(['inviteEmailEmpty','inviteEmailMalformed','inviteEmailTa
 // with a team sends each row its invitation, the same one the Team table sends (#185: invite_member checks the Owner,
 // the email and whether it is taken, and the invitation email goes out before the row is written), then opens the
 // Owner's one Conversation with the main Agent. A refusal keeps the step open with its row's error and no answer
-// saved; an invitation already sent by an earlier press is not sent again.
+// saved; an invitation already sent by an earlier press is not sent again. A saved answer names the Conversation to open:
+// the question leaves first and then goes there (#130).
 export const chooseWorkMode=withActionLog('chooseWorkMode',async function chooseWorkMode(_state:FirstRunState,form:FormData):Promise<FirstRunState> {
  const company=form.get('company'), slug=form.get('slug'), choice=form.get('choice');
  if(typeof company!=='string'||typeof slug!=='string'||!/^[a-z0-9-]+$/.test(slug)) return {error:'firstRunFailed'};
@@ -31,7 +31,7 @@ export const chooseWorkMode=withActionLog('chooseWorkMode',async function choose
   const mode=choice==='alone'?'alone':'team';
   const saved=await save(mode);
   if('error' in saved) return saved;
-  redirect(`${saved.target}?first=${mode}${mode==='team'?'&invites=0':''}`);
+  return {opened:`${saved.target}?first=${mode}${mode==='team'?'&invites=0':''}`};
  }
  if(choice!=='open') return {error:'firstRunFailed'};
  let rows:Row[], sent:string[];
@@ -74,5 +74,5 @@ export const chooseWorkMode=withActionLog('chooseWorkMode',async function choose
  if(firstError!==undefined) return {rowErrors,firstError,sent:[...already]};
  const saved=await save('team');
  if('error' in saved) return {...saved,sent:[...already]};
- redirect(`${saved.target}?first=team&invites=${already.size}`);
+ return {opened:`${saved.target}?first=team&invites=${already.size}`,sent:[...already]};
 });
