@@ -1,5 +1,11 @@
 [
  {
+  "issue": 446,
+  "date": "2026-11-21",
+  "en": { "title": "The app keeps fewer keys", "body": "The app and the background worker now get only the settings they use, so neither holds the database password or the key that signs sign-ins, and a break-in into the app cannot use them." },
+  "ar": { "title": "التطبيق بقى شايل مفاتيح أقل", "body": "التطبيق والشغّال اللي في الخلفية بقوا بياخدوا الإعدادات اللي بيستخدموها بس، فمحدش فيهم معاه باسورد قاعدة البيانات ولا المفتاح اللي بيوقّع تسجيل الدخول، ولو حد اخترق التطبيق مش هيقدر يستخدمهم." }
+ },
+ {
   "issue": 178,
   "date": "2026-11-21",
   "en": { "title": "Settings show a waiting proposal", "body": "While an Agent’s proposed change waits for the Owner, its page in Settings says who proposed what with a link to the proposal, its row in the Agents list says Proposal waiting, and Agents carries the number waiting." },
