@@ -84,3 +84,10 @@ test('a number before the "every" is part of the task, never a time', () => {
  assert.deepEqual(read('Send me the top 3 ads every day'),{name:'Top 3 ads',cron:null});
  assert.deepEqual(read('ابعتلي أحسن 3 إعلانات كل يوم'),{name:'أحسن 3 إعلانات',cron:null});
 });
+
+test('a date of the month said without "the", or more than one time of day, asks rather than becoming part of a schedule', () => {
+ assert.deepEqual(read('Send me the report every month on 15th at 9am')?.cron,null);
+ assert.deepEqual(read('Send me the report every month on the 1st at 9am')?.cron,'0 9 1 * *','the first is the schedule made here');
+ assert.deepEqual(read('Send a report every day at 9am and 5pm')?.cron,null,'two times are no one schedule');
+ assert.deepEqual(read('ابعتلي تقرير كل يوم 9 الصبح و5 العصر')?.cron,null);
+});
