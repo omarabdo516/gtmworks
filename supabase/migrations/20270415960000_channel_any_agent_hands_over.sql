@@ -68,6 +68,8 @@ end $$;
 -- would start, its sender must still be a member of the channel who may write there, talking to an Agent of it (the
 -- rule that kept the call, channel_can_hand_over), and the target no longer needs to be an Agent of the channel. The job
 -- names the Agent that asked, not "Lead", since any Agent of the channel may ask.
+-- It also reads the asking Agent within the handover's own Company: the earlier filter compared r.company_id with itself,
+-- which was always true.
 do $$
 declare def text; was text; changes text[][] := array[
  ['or (r.conversation_id is null and not public.channel_agent(chan, person, target.id)) then',
