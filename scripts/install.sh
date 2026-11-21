@@ -302,10 +302,12 @@ stop_old_engine() {
   printf '%s\n' $old > .install-lock/old-engine || return 1
   docker stop $old > /dev/null || return 1
 }
-# The old container goes once the first Company's Engine answers in its place.
+# The old container goes once the first Company's Engine answers in its place. A removal Docker refuses fails nothing: the
+# new Engine serves, and the next run finds the stopped container by its labels and removes it then.
 remove_old_engine() {
   [ -f .install-lock/old-engine ] || return 0
-  docker rm -f $(cat .install-lock/old-engine) > /dev/null || return 1
+  docker rm -f $(cat .install-lock/old-engine) > /dev/null \
+    || echo "The previous release's Engine container is stopped but could not be removed; the next install run removes it." >&2
   rm -f .install-lock/old-engine
 }
 # The app and the worker reach every Engine by its container name. Compose recreates them on an update, which drops the
@@ -351,9 +353,14 @@ engine_start() {
   sandbox_keys "$1" || return 1
   engine "$1" up -d --wait --wait-timeout "$wait" || return 1
   container=$(engine_project "$1")
-  while [ "$(docker inspect -f '{{.State.Health.Status}}' "$container" 2> /dev/null)" != healthy ]; do
-    wait=$((wait-1))
-    [ "$wait" -gt 0 ] || { echo "The Engine $container did not become healthy." >&2; return 1; }
+  healthy_within "$container" "$wait" || { echo "The Engine $container did not become healthy." >&2; return 1; }
+}
+# Zero once the container reports healthy, within the seconds given.
+healthy_within() {
+  seconds=$2
+  while [ "$(docker inspect -f '{{.State.Health.Status}}' "$1" 2> /dev/null)" != healthy ]; do
+    seconds=$((seconds-1))
+    [ "$seconds" -gt 0 ] || return 1
     sleep 1
   done
 }
@@ -471,38 +478,38 @@ remove_new_sandbox_parts() {
 # for the sandbox goes as remove_new_sandbox_parts removes it. The old container then starts on the networks Docker kept,
 # answering as `hermes` to the app and the worker that were never replaced, and the install is that release's own shape
 # again: the key back in .env.install and no Engine folder. Non-zero, with the old container left stopped, when the new
-# Engine is still there to write its volume, or when the old one does not become healthy.
+# Engine is still there to write its volume, or when the old one does not start or become healthy.
 restore_old_engine() {
-  old=$(cat .install-lock/old-engine)
+  old_engine=$(cat .install-lock/old-engine)
   rm -f .install-lock/work-sandbox-image
   engine first down --remove-orphans > /dev/null 2>&1 || true
   docker rm -f "$(engine_project first)" "$(sandbox_container first)" "$(exit_container first)" > /dev/null 2>&1 || true
   [ -z "$(docker ps -aq --filter "name=^$(engine_project first)\$" 2> /dev/null)" ] \
     || { echo "The Engine $(engine_project first) could not be removed, so the previous release's Engine stays stopped." >&2; return 1; }
+  first_network=$(engine_network_of first)
   for service in web worker; do
     id=$(compose ps -q "$service" 2> /dev/null || true)
-    [ -z "$id" ] || docker network disconnect -f "$(engine_project first)" "$id" > /dev/null 2>&1 || true
+    [ -z "$id" ] || docker network disconnect -f "$first_network" "$id" > /dev/null 2>&1 || true
   done
-  docker network rm "$(engine_project first)" > /dev/null 2>&1 || true
+  docker network rm "$first_network" > /dev/null 2>&1 || true
   remove_new_sandbox_parts
-  docker start $old > /dev/null || return 1
-  wait=${GTMWORKS_ENGINE_WAIT:-300}
-  for id in $old; do
-    while [ "$(docker inspect -f '{{.State.Health.Status}}' "$id" 2> /dev/null)" != healthy ]; do
-      wait=$((wait-1))
-      [ "$wait" -gt 0 ] || { echo "The previous release's Engine did not become healthy again." >&2; return 1; }
-      sleep 1
-    done
-  done
-  key=$(engine_key first)
-  if [ -n "$key" ] && ! grep -q '^HERMES_API_KEY=' .env.install; then
-    { cat .env.install && printf 'HERMES_API_KEY=%s\n' "$key"; } > .install-lock/env.tmp || return 1
+  # The previous release's own shape before its Engine starts, so a start that fails leaves that shape too: its installer
+  # reads the Engine key from .env.install, as its app and worker, never replaced, already hold it in their environment;
+  # no container of this release reads that file's key (#378, C7 still holds for every Engine folder).
+  old_key=$(engine_key first)
+  if [ -n "$old_key" ] && ! grep -q '^HERMES_API_KEY=' .env.install; then
+    { cat .env.install && printf 'HERMES_API_KEY=%s\n' "$old_key"; } > .install-lock/env.tmp || return 1
     chmod 600 .install-lock/env.tmp || return 1
     mv .install-lock/env.tmp .env.install || return 1
   fi
   rm -rf "$(engine_folder first)"
   rmdir .engines 2> /dev/null || true
   rm -f .install-lock/old-engine
+  docker start $old_engine > /dev/null || return 1
+  # The previous release's own wait: its Engine's health check allows a two-minute start and five minutes in all.
+  for id in $old_engine; do
+    healthy_within "$id" 300 || { echo "The previous release's Engine did not become healthy again." >&2; return 1; }
+  done
 }
 # An update whose Engines or work sandboxes did not all start (ADR 0023): the previous release's own Engine files go back,
 # and every Engine starts again from them, without the containers this release's template added beside it (each

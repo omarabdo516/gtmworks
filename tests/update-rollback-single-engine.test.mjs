@@ -19,7 +19,7 @@ const fn = name => {
   return install.slice(start + 1, install.indexOf('\n}\n', start) + 3);
 };
 const helpers = ['engine_project', 'engine_folder', 'sandbox_container', 'exit_container', 'exit_network', 'work_volume', 'work_network',
-  'host_key_volume', 'engine_names', 'work_sandbox_ref', 'engine_key', 'adopt_engine_key', 'drop_install_env_key', 'write_engine_env',
+  'host_key_volume', 'engine_names', 'engine_network_of', 'healthy_within', 'work_sandbox_ref', 'engine_key', 'adopt_engine_key', 'drop_install_env_key', 'write_engine_env',
   'keep_previous_engine', 'keep_sandbox_parts', 'remove_new_sandbox_parts', 'stop_old_engine', 'remove_old_engine', 'restore_old_engine',
   'restore_previous_engine', 'first_engine_up'].map(fn).join('');
 
@@ -92,6 +92,15 @@ test('the old hermes Engine is stopped, never removed, until the first Company\'
   assert.ok(stop >= 0 && start > stop && remove > start, log.join('\n'));
   assert.deepEqual(install.containers(), ['web-1 gtmworks-install-web-1 running', 'new-1 gtmworks-engine-first running']);
   assert.ok(!existsSync(join(install.dir, '.install-lock/old-engine')));
+});
+
+test('an old container Docker will not remove fails nothing once the new Engine serves', t => {
+  const install = singleEngineInstall(t);
+  assert.equal(install.run('keep_previous_engine').status, 0);
+  const up = install.run('first_engine_up', { RM_FAILS: '1' });
+  assert.equal(up.status, 0, up.stderr);
+  assert.match(up.stderr, /could not be removed; the next install run removes it/);
+  assert.ok(install.containers().includes('new-1 gtmworks-engine-first running'));
 });
 
 test('an update whose first Engine does not start brings the old hermes Engine back, with its key, and no Engine folder', t => {
