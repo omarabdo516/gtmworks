@@ -35,6 +35,12 @@ function handover(overrides = {}) {
     if(row.state==='returning') { row.return_attempts+=1; return ok([{state:'returning',attempt:row.return_attempts,company:'10000000-0000-0000-0000-000000000001',profile:row.asker_profile,session:conversation,input:input(),instructions:row.asker_profile===leadProfile?'Lead the team.':null}]); }
     return ok([]);
    }
+   // #514: only the attempt that began is handed back, and only while its leg named no Run.
+   if(name==='release_handover_start') {
+    const attempts=args.leg==='waiting'?'target_attempts':'return_attempts';
+    if(args.leg!==row.state||row[attempts]!==args.attempt) return ok(false);
+    row[attempts]-=1; return ok(true);
+   }
    if(name==='answer_handover') {
     if(args.run===null) return ok(false);
     if(row.state==='waiting') { row.target_run=args.run; row.state='target'; return ok(true); }
@@ -207,3 +213,23 @@ test('hand_to_agent reads the Agent, the job and the context, asks the database,
   ['lead_hand_to_agent',{conversation,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:`${'x'.repeat(1999)}…`}]]);
  assert.deepEqual(fake.runs,[],'the Target runs later, never during Lead\'s Run');
 });
+
+// #514: a leg's start that never reached its Engine (nothing could connect: the Engine is not running), or that found no
+// Engine to send it to, is no attempt. The driver hands it back (release_handover_start), so the leg stays due as never
+// started until its own time limit, and its next start is a first attempt, which a refusal answers as failed. The
+// database half is supabase/tests/unreached_queued_starts.sql.
+for(const [what,engineOf] of /** @type {const} */([['a stopped Engine','notReached'],['no Engine to send it to','none']])) {
+ test(`${what} leaves a handover's leg due, and its next start is a first attempt`,async()=>{
+  const {row,service,calls}=handover();
+  const asked=/** @type {any[]} */([]);
+  const engineFor=()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); return null; }});
+  await driveHandovers(service,engineOf==='none'?{hermes:null,engineFor:/** @type {any} */(engineFor)}
+   :{hermes,engineFor:/** @type {any} */(()=>({start:async(/** @type {any} */ args)=>{ asked.push(args); return {state:'notReached'}; }}))});
+  assert.deepEqual(calls.filter(([name])=>name==='release_handover_start').map(([,args])=>args),[{h:row.id,attempt:1,leg:'waiting'}],'its attempt is handed back');
+  assert.equal(calls.filter(([name])=>name==='answer_handover').length,0,'and the leg is not answered as refused');
+  assert.deepEqual([row.state,row.target_attempts],['waiting',0],'so it stays due, as never started');
+  await driveHandovers(service,{hermes,engineFor:/** @type {any} */(engineFor)});
+  assert.deepEqual(asked.map(start=>start.retry),engineOf==='none'?[false]:[false,false],'the next start is a first attempt');
+  assert.deepEqual(calls.filter(([name])=>name==='answer_handover').map(([,args])=>args),[{h:row.id,attempt:1,leg:'waiting',run:null}],'so the Engine\'s refusal is answered for the first attempt, which fails the leg');
+ });
+}
