@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(69);
+select plan(76);
 -- #150. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The "scripts" team
 -- channel holds the Owner (1), the Manager (2), the Contributor (3) and the Viewer (4), and only Lead and Ads: Writer is
 -- the Company's third Agent, outside it. Member 5 is in the Company but not in the channel; Karim belongs to Aleem only.
@@ -250,5 +250,33 @@ select is((select count(*)::int from public.begin_handover((select id from publi
 update public.agent_handovers set session_held_until=now()-interval '1 second' where call_id='call-october';
 select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-november'))),1,
  'and starts once the lost start''s window has ended');
+-- #428: a channel Run and a handover's legs that failed for want of any model provider end as no_model, and the channel's
+-- record says so for a handover that ended with no reply from Lead, never for one Lead still answered.
+select is(public.close_channel_run(current_setting('test.ads')::bigint,'run-ads','no_model',null,null,null),true,'a channel Run with no model closes');
+select is((select outcome from public.channel_runs where run_id='run-ads'),'no_model','as no_model, which the channel reads');
+insert into public.agent_handovers(company_id,channel_message_id,run_id,call_id,from_agent,to_agent,goal,state,target_run) values
+ ('10000000-0000-0000-0000-000000000001',current_setting('test.writer')::bigint,'run-writer','call-no-model','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000012','Plan the June reels','target','run-target-no-model'),
+ ('10000000-0000-0000-0000-000000000001',current_setting('test.writer')::bigint,'run-writer','call-answered','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000012','Plan the July reels','target','run-target-answered');
+select is(public.close_handover_target((select id from public.agent_handovers where call_id='call-no-model'),'run-target-no-model','no_model',null)
+ and public.close_handover_target((select id from public.agent_handovers where call_id='call-answered'),'run-target-answered','no_model',null),true,
+ 'a target with no model ends its leg');
+update public.agent_handovers set state='follow_up', follow_up_run='run-return-'||call_id where call_id in ('call-no-model','call-answered');
+select is(public.close_handover_follow_up((select id from public.agent_handovers where call_id='call-no-model'),'run-return-call-no-model','no_model',null)
+ and public.close_handover_follow_up((select id from public.agent_handovers where call_id='call-answered'),'run-return-call-answered','completed','Ads could not plan July.'),true,
+ 'and so does Lead''s follow-up, as no_model or with its reply');
+select is((select string_agg(call_id||':'||target_outcome||':'||follow_up_outcome,',' order by call_id) from public.agent_handovers where call_id in ('call-no-model','call-answered')),
+ 'call-answered:no_model:completed,call-no-model:no_model:no_model','each leg keeps how it ended');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select string_agg(goal||':'||no_model::text,',' order by goal) from public.channel_handovers('c1500000-0000-0000-0000-000000000001') where goal in ('Plan the June reels','Plan the July reels')),
+ 'Plan the July reels:false,Plan the June reels:true','the channel says no model is connected only where Lead''s reply did not come');
+reset role;
+-- A follow-up that ended for another cause after a target with no model says that cause, not that no model is connected.
+update public.agent_handovers set follow_up_outcome='stopped', reply=null where call_id='call-answered';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select no_model from public.channel_handovers('c1500000-0000-0000-0000-000000000001') where goal='Plan the July reels'),false,
+ 'a handover whose follow-up was stopped is not read as no model');
+reset role;
 select * from finish();
 rollback;
