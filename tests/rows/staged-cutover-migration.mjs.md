@@ -1,0 +1,1 @@
+| `staged-cutover-migration.mjs` | replays the levels cutover's guard (ADR 0023, #389): a cutover applies when its first step was recorded in an earlier transaction, or by no installer, and stops the transaction that applied its first step, as an installer from before the stages would (tests/db.sh) | — | — | helper, new |

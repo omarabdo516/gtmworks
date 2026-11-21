@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig } from '../lib/hermes.mjs';
 import { engineSettings, engineOwnsSetting, settingsSchemaProblems, readSettings, writeSetting, readAgentSettings, changeCompanySetting } from '../lib/engine-settings.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // The one list of Engine settings gtmworks reads and writes (#125, ADR 0016), pinned to the Engine release in the install
@@ -166,6 +166,24 @@ test('a write checks type, choices and limits first, sends only its own keys, an
   assert.equal(requestsOf(fake,'PUT').length,before,'an unlisted, owned or install key never reaches the Engine');
   fake.settings.staleConfig=true;
   assert.deepEqual(await writeSetting(connectionAt,{setting:'delegation.max_spawn_depth',value:2}),{state:'mismatch',old:1});
+ } finally { await fake.close(); }
+});
+
+test('no Settings write reaches the terminal or the approvals: they are the work sandbox\'s, refused before the Engine is asked', async () => {
+ const fake=await fakeHermes();
+ try {
+  setup(fake);
+  profileOn(fake,agentProfile(writer));
+  const before=requestsOf(fake,'PUT').length;
+  // #393: where a command runs and whether an Agent's code needs a person are gtmworks's own, pinned by the module and the
+  // Engine's managed scope. A Settings write naming one is refused before the Engine is asked.
+  for(const setting of ['terminal.backend','terminal.cwd','terminal.ssh_host','approvals.unattended_mode']) {
+   assert.equal(engineOwnsSetting(setting),true,setting);
+   assert.deepEqual(await writeSetting(connection(fake,agentProfile(writer)),{setting,value:'local'}),{state:'owned'},setting);
+   const {db}=database();
+   assert.deepEqual(await changeCompanySetting(db,{company,setting,value:'local',hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)}),{state:'notAllowed'},setting);
+  }
+  assert.equal(requestsOf(fake,'PUT').length,before,'nothing reached the Engine');
  } finally { await fake.close(); }
 });
 

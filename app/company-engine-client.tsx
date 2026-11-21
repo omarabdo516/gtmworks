@@ -1,44 +1,13 @@
 'use client';
-import { useEffect, useRef, useState, useTransition, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { SettingsIcon } from './settings-icons';
 import { AppTile } from '@/components/app-tile';
 import type { CompanySignIns, SubscriptionState } from '@/lib/company-sign-in.mjs';
 
-// Arrow keys move between the choices of one radio group (WAI-ARIA radio pattern); the choice is made with Enter or Space.
-function arrows(event:KeyboardEvent<HTMLElement>) {
- if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) return;
- const items=[...event.currentTarget.querySelectorAll<HTMLElement>('[role=radio]')];
- const at=items.indexOf(document.activeElement as HTMLElement); if(at<0) return;
- event.preventDefault();
- const forward=event.key==='ArrowDown'||(event.key==='ArrowLeft')===(document.documentElement.dir==='rtl');
- items[(at+(forward?1:-1)+items.length)%items.length].focus();
-}
-
-const levels=[1,2,3] as const;
-// The Company's Agent level (ADR 0014). The Owner chooses it; the server checks the Owner again (/api/agent-level,
-// set_agent_level) and the worker then changes the tools of the Company's profile in the agent engine.
-export function AgentLevel({company,level,owner}:{company:string,level:number,owner:boolean}) {
- const {t}=useI18n(); const router=useRouter();
- const [pending,startTransition]=useTransition(); const [error,setError]=useState('');
- const choose=(next:number)=>startTransition(async()=>{
-  try {
-   const response=await fetch('/api/agent-level',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,level:next})});
-   if(!response.ok) { setError(((await response.json()) as {error?:string}).error||'agentLevelInvalid'); return; }
-   setError(''); router.refresh();
-  } catch { setError('agentLevelInvalid'); }
- });
- const row=(item:number)=>{ const on=item===level; const text=<span className="panel-row__text"><span className="panel-row__t">{t(`agentLevel${item}`)}</span><span className="panel-row__d">{t(`agentLevel${item}D`)}</span></span>;
-  return owner?<button key={item} type="button" className="panel-row" role="radio" id={`ag-level-${item}`} aria-checked={on} tabIndex={on?0:-1} disabled={pending} onClick={()=>{ if(!on) choose(item); }}>{text}{on&&<span className="panel-row__meta"><SettingsIcon name="check"/></span>}</button>
-   :<div key={item} className="panel-row" id={`ag-level-${item}`} aria-current={on?'true':undefined}>{text}{on&&<span className="panel-row__meta"><SettingsIcon name="check"/></span>}</div>; };
- return <section className="dp-sec" aria-labelledby="co-h-level"><h4 className="dp-label" id="co-h-level"><span>{t('agentLevelTitle')}</span></h4>
-  {owner?<div className="panel-card" role="radiogroup" aria-labelledby="co-h-level" onKeyDown={arrows}>{levels.map(row)}</div>:<div className="panel-card">{levels.map(row)}</div>}
-  <p className="set-hint">{t('agentLevelHint')}{!owner&&<> {t('agentLevelOwnerOnly')}</>}</p>
-  {error&&<p className="set-err" role="alert">{t(error)}</p>}
- </section>;
-}
-
+// The Company's connected AI subscriptions (#3; #384, ADR 0018; reference: sovModelsHTML, SUBS). A sign-in lives on the
+// root profile of the Company's own Engine, which lends it to every Agent of the Company. This page only shows its
 type Provider='openai-codex'|'anthropic';
 // Each subscription shows its product's mark, the reference's ChatGPT and Claude (#424).
 const subscriptionLogo:Record<Provider,string>={'openai-codex':'openai',anthropic:'claude'};

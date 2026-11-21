@@ -20,7 +20,7 @@ import './shell.css';
 // Library root (#353), and the work folder by none.
 export type PreviewFile={name:string,folder:string,size:number|null,time:string|null,root?:'work'|'images'};
 type Body={kind:'image'|'text'|'table'|'none',type:string,byteSize:number,truncated:boolean,text:string|null};
-type Read={state:'loading'}|{state:'failed'}|{state:'found',body:Body};
+type Read={state:'loading'}|{state:'failed',stopped?:boolean}|{state:'found',body:Body};
 
 // modalOut in shell.css, as the reference's closeDlg waits.
 const leaveMs=190;
@@ -35,8 +35,8 @@ export function AgentFilePreview({company,slug,agent,agentName,file,onClosed}:{c
   let live=true;
   const query=new URLSearchParams({company,agent,name:file.name,...(file.root==='images'?{root:'images'}:{}),...(file.folder?{folder:file.folder}:{})});
   void fetch(`/api/agent-files/preview?${query}`,{cache:'no-store'})
-   .then(response=>response.ok?response.json():null)
-   .then(body=>{ if(live) setRead(typeof body?.kind==='string'?{state:'found',body:body as Body}:{state:'failed'}); })
+   .then(response=>response.json().catch(()=>null))
+   .then(body=>{ if(live) setRead(typeof body?.kind==='string'?{state:'found',body:body as Body}:{state:'failed',stopped:body?.error==='workSandboxNotRunning'}); })
    .catch(()=>{ if(live) setRead({state:'failed'}); });
   return ()=>{ live=false; };
  },[company,agent,file.name,file.folder,file.root]);
@@ -57,7 +57,7 @@ export function AgentFilePreview({company,slug,agent,agentName,file,onClosed}:{c
 
  const body=read.state==='found'?read.body:null;
  let content=null;
- if(read.state==='failed') content=<p className="pv-note">{t('agentFilePreviewUnreadable')}</p>;
+ if(read.state==='failed') content=<p className="pv-note">{t(read.stopped?'workSandboxNotRunning':'agentFilePreviewUnreadable')}</p>;
  else if(body?.kind==='image') content=<figure className="pv-fig"><img className="pv-img" src={download} alt={file.name}/></figure>;
  else if(body?.kind==='table'&&body.text!==null) {
   const rows=csvRows(body.text);

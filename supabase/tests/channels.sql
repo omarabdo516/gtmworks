@@ -182,7 +182,7 @@ insert into public.hermes_agents(company_id,name,speciality,is_default,profile) 
  where not exists(select 1 from public.hermes_agents a where a.company_id=c.id) and exists(select 1 from public.members m where m.company_id=c.id and m.role='owner' and m.removed_at is null);
 set local role service_role;
 select cmp_ok((select count(*)::int from public.hermes_agents where profile='default'),'>=',1,'Aleem gets Lead on the shared profile');
-select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy())$$,'and its own profile is made');
+select lives_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003')$$,'and its own profile is made');
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
 set local role authenticated;

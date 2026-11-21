@@ -21,7 +21,10 @@ const person='9a000000-0000-0000-0000-000000000001';
 const profile=`ag-${agent.replaceAll('-','')}`;
 const otherProfile=`ag-${otherAgent.replaceAll('-','')}`;
 const home=`/opt/data/profiles/${profile}`;
-const work=`${home}/workspace`;
+// The Agent's own folder in the Company's work folder (#395): listed on the Engine's read-only mount, its text read in
+// the work sandbox, where the folder is /work/<profile>.
+const work=`/opt/data/work/${profile}`;
+const sandbox=`/work/${profile}`;
 // The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
 const images=`${home}/cache/generated/images`;
 const mtime=1763500000;
@@ -88,7 +91,7 @@ test('a file\'s first part is read through the Engine, with its type, its whole 
   const text='# Brief\n\nSell more.\n';
   await withFile(fake,'brief.md',text,'text/markdown');
   assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'found',name:'brief.md',type:'text/markdown',byteSize:Buffer.byteLength(text),truncated:false,text});
-  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/read-text?path=${encodeURIComponent(`${work}/brief.md`)}&profile=${profile}`));
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/read-text?path=${encodeURIComponent(`${sandbox}/brief.md`)}&profile=${profile}`));
   // A folder inside the work folder is read by its relative name.
   fake.settings.files.set(`${work}/reports`,[{name:'q3.csv',size:9,mtime}]);
   fake.settings.fileBytes.set(`${work}/reports/q3.csv`,{body:'a,b\n1,2\n',type:'text/csv'});
@@ -119,9 +122,9 @@ test('a file the Engine read from a path other than the one asked for is missing
   const text='# Brief\n\nSell more.\n';
   await withFile(fake,'brief.md',text,'text/markdown');
   // The link was swapped between the folder's listing and the read: the Engine says which file it actually read.
-  fake.settings.resolved.set(`${work}/brief.md`,'/etc/passwd');
+  fake.settings.resolved.set(`${sandbox}/brief.md`,'/etc/passwd');
   assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'missing'});
-  fake.settings.resolved.delete(`${work}/brief.md`);
+  fake.settings.resolved.delete(`${sandbox}/brief.md`);
   assert.equal((await readAgentFile(at,{name:'brief.md'})).state,'found');
  } finally { await fake.close(); }
 });
@@ -175,6 +178,13 @@ test('the preview service reads one Agent\'s file for the Company that sees it, 
   const reads=texts(fake).length;
   assert.deepEqual((await agentFilePreview(database().db,{company,agent,root:'images',hermes:at,name:'promo.png'})).preview,{name:'promo.png',kind:'image',type:'image/png',byteSize:8,truncated:false,text:null});
   assert.equal(texts(fake).length,reads,'a picture is answered from the listing');
+  // Text in the generated images folder is read on the Engine's own disk, where only the Engine writes, cut to the same
+  // first part, and never asked of the sandbox.
+  fake.settings.images.set(profile,[{name:'promo.png',size:8,mtime},{name:'prompt.txt',size:5,mtime}]);
+  fake.settings.fileBytes.set(`${images}/prompt.txt`,{body:'A cat',type:'text/plain'});
+  assert.deepEqual((await agentFilePreview(database().db,{company,agent,root:'images',hermes:at,name:'prompt.txt'})).preview,{name:'prompt.txt',kind:'text',type:'text/plain',byteSize:5,truncated:false,text:'A cat'});
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files/download?path=${encodeURIComponent(`${images}/prompt.txt`)}`));
+  assert.equal(texts(fake).length,reads,'the sandbox is never asked for a generated file');
   // A root that is neither work nor images is refused before the Engine is asked.
   assert.deepEqual(await agentFilePreview(database().db,{company,agent,root:'elsewhere',hermes:at,name:'promo.png'}),{state:'invalid',preview:null});
  } finally { await fake.close(); }
@@ -235,5 +245,15 @@ test('the read route answers an Owner and a Manager, and a Contributor, a Viewer
   // No answer carries an Engine address or a path on its disk.
   const answer=JSON.stringify(await (await ask(route(database().db),{company,agent,name:'brief.md'})).json());
   assert.ok(!answer.includes(fake.address)&&!answer.includes('/opt/'),'no address and no path');
+  // A stopped work sandbox is named as such, apart from an Engine whose folder cannot be read at all (#395).
+  await withFile(fake,'brief.md',text,'text/markdown');
+  fake.settings.sandboxDown=true;
+  const stopped=await ask(route(database().db),{company,agent,name:'brief.md'});
+  assert.equal(stopped.status,503);
+  assert.deepEqual(await stopped.json(),{error:'workSandboxNotRunning'});
+  fake.settings.filesUnreadable.add(work);
+  const unread=await ask(route(database().db),{company,agent,name:'brief.md'});
+  assert.equal(unread.status,503);
+  assert.deepEqual(await unread.json(),{error:'agentLibraryUnreadable'});
  } finally { await fake.close(); }
 });

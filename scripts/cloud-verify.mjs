@@ -112,8 +112,8 @@ async function journey(page) {
 
  // The worker's step on an install with the bundled Engine: the Company's own profile, and Lead on it. The fake Engine
  // answers every profile with its one key, so the step is the database function the worker calls.
- localStatement(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,tools_pending,skills_shared)
-  select id,public.company_engine_profile(id),agent_level,public.engine_tool_policy(),false,true from public.companies where id=${quote(company.id)}`,origin);
+ localStatement(`insert into public.company_profiles(company_id,profile,tools_confirmed,tools_pending,skills_shared)
+  select id,public.company_engine_profile(id),true,false,true from public.companies where id=${quote(company.id)}`,origin);
  expect(query(`select public.attach_company_profile(${quote(company.id)}) attached`)).toEqual([{attached:true}]);
 
  // 2. Signed out, the Owner signs in with that email and password and answers the first question.

@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
 // itself, so a fake's reply and tools read a person's words as they always did.
 const inputText=/** @param {import('../lib/engine.mjs').RunInput} input */ input=>typeof input==='string'?input:(input.at(-1)?.content.flatMap(part=>part.type==='text'?[part.text]:[]).join('')??'');
-/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,sessions:Map<string,import('../lib/engine.mjs').SessionTurn[]>,sessionUsage:Map<string,import('../lib/engine.mjs').SessionUsage>,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'},runs:FakeRun[],connections:object[],appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string,level:number}[],removed:string[],answers:{run:string,question:string,text:string}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
+/** @returns {{settings:{ending:'completed'|'failed',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,sessions:Map<string,import('../lib/engine.mjs').SessionTurn[]>,sessionUsage:Map<string,import('../lib/engine.mjs').SessionUsage>,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'},runs:FakeRun[],connections:object[],appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string}[],removed:string[],answers:{run:string,question:string,text:string}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
 export function fakeEngine() {
  const settings={ending:/** @type {'completed'|'failed'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12}),
   // How providing an Agent's own profile ends: with no subscription, a made profile has no model to answer with.
@@ -37,7 +37,7 @@ export function fakeEngine() {
  const runs=/** @type {FakeRun[]} */([]);
  const connections=/** @type {object[]} */([]);
  const agentReads=/** @type {string[]} */([]);
- const provided=/** @type {{name:string,instructions:string,level:number}[]} */([]);
+ const provided=/** @type {{name:string,instructions:string}[]} */([]);
  const removed=/** @type {string[]} */([]);
  const answers=/** @type {{run:string,question:string,text:string}[]} */([]);
  const permits=/** @type {{run:string,permission:string,choice:string}[]} */([]);
@@ -123,8 +123,8 @@ export function fakeEngine() {
    return agent?{state:'found',agent}:{state:'missing',agent:null};
   },
   // A profile under the reserved name is made, or the one there finished; a made one stays until it is removed.
-  async provideAgent({name,instructions,level}) {
-   provided.push({name,instructions,level});
+  async provideAgent({name,instructions}) {
+   provided.push({name,instructions});
    if(['provided','noModel','forbidden'].includes(settings.agentProfile)) agents.set(name,{name,instructions,model:null,ready:true});
    return {state:settings.agentProfile};
   },

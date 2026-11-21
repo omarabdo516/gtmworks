@@ -47,10 +47,53 @@ first, and moving to another release is an update, backup first.
 
 Requirements: Docker Engine with Docker Compose v2.20+ (`docker compose`), POSIX
 `sh`, `curl`, `flock` (from util-linux, present on nearly every Linux install),
-internet access to pull images, 2 CPU cores, **8 GB RAM** and **20 GB
-free disk**, plus room for your data. No host Node.js, Git, Supabase CLI, cloud
-project or external account is required. These are initial sizing
-recommendations, not measured capacity guarantees.
+internet access to pull images, **20 GB free disk** plus room for your data, and
+the CPU and RAM of one of the two server sizes below. No host Node.js, Git,
+Supabase CLI, cloud project or external account is required.
+
+**Server size.** Two sizes, from the install job's measurement (`install-sizes`,
+run 44848354569, which prints these numbers on every run):
+
+- **Without video: 2 CPU cores and 4 GB RAM.** Idle, the install's own services
+  (web app, worker, Postgres, sign-in, REST, Storage, gateway and mail inbox) use
+  493 MiB, the first Company's idle Engine 466 MiB and its idle work sandbox 1 MiB: about
+  1 GB for one Company, which leaves room for the system, an Engine at work and a
+  few more Companies.
+- **With video: 4 CPU cores and 8 GB RAM.** One short render (60 frames of
+  1280x720 drawn by Chromium and joined by ffmpeg into a two-second video) took
+  13.7 s and peaked at 337 MiB in its sandbox. A sandbox may use up to its limit,
+  **1 GB of RAM and 2 CPUs** by default, so each Company rendering at the same time
+  needs up to 1 GB and 2 cores more than the size without video.
+- **Each added Company** costs its Engine, 466 MiB idle with its main Agent (the
+  same `install-sizes` run; an Engine holding twenty more Agent profiles is measured
+  apart, see below), its sandbox, 1 MiB idle and up to its 1 GB limit while it
+  works, and its internet exit, a small proxy held to 256 MiB.
+
+The limits are the install's defaults, set in one place (the sandbox service of
+`scripts/engine-template.yml`), and the install job runs the render at them on every
+run. A Company can have its own: `gtmworks company add --memory 2g --cpus 1.5` gives
+the new Company's sandbox those, and `gtmworks company limits "Second Company"
+--memory 3g` (or `--cpus 3`, or both) changes an existing Company's, the first one's
+included. Memory is a whole number of megabytes or gigabytes (`512m`, `2g`) and CPUs a
+number above 0 (`1`, `1.5`); a limit not named keeps its value. `company limits`
+starts only that Company's sandbox again, with its work folder kept, while its Engine
+and every other Company keep running; if the sandbox does not start with the new
+limits (more CPUs than the server has, say), it starts again with the earlier ones and
+the command says so. A Company's limits are kept with its own files beside its
+Engine's key, so an update, a backup and restore and a repeat install give its sandbox
+the same limits; a Company given none follows the install's default. A render that needs more memory than its Company's limit is stopped at the
+limit, and every other Company's sandbox keeps answering: one Company's video cannot
+starve the others.
+
+**The sandbox shares the server's kernel.** A work sandbox is a container, not a
+virtual machine: every Company's sandbox, the Engines and the install run on the
+one Linux kernel of the server. What holds a sandbox in is Docker: an ordinary user,
+no capabilities, no new privileges, a network of its own and its memory, CPU and
+process limits. So a flaw in the Linux kernel or in Docker that lets a process leave
+its container would let a command an Agent runs (and so a Member, or a web page that
+steers the Agent) reach the server and every Company on it. Keep the server's kernel
+and Docker updated, run nothing else of value on it, and give a client whose work
+must not share a kernel with another's a server of its own.
 
 On a fresh install, the installer's last line is a one-time **setup link**:
 `<APP_ORIGIN>/first-run#code=<code>` (http://localhost:3000 unless you set
@@ -85,6 +128,14 @@ The app and the worker join the Engine's network; the Engine joins nothing else,
 so it cannot reach the database, the sign-in service, REST, Storage or another
 Engine. No container of the install mounts the server's Docker socket.
 
+**The work sandbox image (ADR 0020).** Every Company's work sandbox runs it: one image,
+built on the Engine's own sandbox image with ffmpeg, Chromium, Node, Python and the
+Arabic fonts added and an ordinary user to work as. A release pins it by tag and digest
+and the install pulls it, so a release install builds nothing; a source checkout builds
+it from `sandbox/Dockerfile`. It takes about **3.26 GB** on disk (the install job prints
+the measured size on every run). A Company's work folder is a volume, not a copy of the
+image, so the image is fetched once for the whole install.
+
 **One Engine per Company (ADR 0018).** Every Company runs on its own Engine, so one
 Company's Agents, memory, Skills, Conversations and model sign-in stay in its own
 container and are not reachable from another Company's Engine. The installer makes
@@ -110,25 +161,35 @@ healthy, registers it and then makes the Company with that Person as its Owner, 
 holds the name behind the link; the worker then gives the Company its main Agent on
 its own Engine. If the Engine does not become healthy the command says so in one line,
 removes what it made (its container, volume, network and folder, and its record), and
-leaves no Company, so running it again is safe. `gtmworks company list` shows every
-Company with the state of its Engine, and `gtmworks status` reports every Engine.
-Each Engine adds roughly the memory one Engine takes, and the install job prints the memory one idle Engine uses on every run. The measured figures below are 775 MiB before its Agents' profiles and 825 MiB with twenty of them, so size the server for that much per Company.
+leaves no Company, so running it again is safe. The Company's work sandbox and exit
+are made with its Engine, with the memory and CPU limit `--memory` and `--cpus` name
+(the install's default with none), and the Engine must reach the sandbox before the
+command says anything; a sandbox that does not start or cannot be reached is removed
+the same way, with its work folder and its keys. `gtmworks company list` shows every
+Company with the state of its Engine and of its work sandbox, and `gtmworks status`
+reports every Engine and every sandbox.
+Each Engine adds roughly the memory one Engine takes. The install job prints the memory one idle Engine uses on every run
+(`install-sizes`): 466 MiB with its main Agent, as Server size states. An Engine that holds many Agent profiles takes more: the `install-measure`
+job's Engine held 825 MiB with twenty of them (below), so size the server for that much per Company with many Agents.
 
 **Agent profiles and isolation (ADR 0014).** Inside its Engine a Company keeps the
 shape gtmworks has: the worker gives the Company its own profile (`co-<company
 id>`), with its own memory, skills and sessions, and attaches the Company's agents
 to it; each other agent gets its own `ag-` profile once it moves there, and a
-Company's shared space is `cs-<company id>`. A Company's agents get marketing tools
-only: terminal, file, code-execution, browser and desktop tools are turned off in
-that Company's Engine at every Agent level, so a member cannot ask an agent to read
-another Company's data. An install was proven with four Agents across two
+Company's shared space is `cs-<company id>`. Every Agent gets one fixed set of
+tools (ADR 0018): web, vision, image generation, skills, a task list, memory,
+session search, the question tool and scheduled work. The work sandbox's terminal,
+files and code, and the Agent's tools as a whole, are set out in Settings, Company.
+`browser`, `computer_use` and the desktop and project tools stay off for every
+Agent, so a member cannot ask an agent to read another Company's data. An install
+was proven with four Agents across two
 Companies, and twenty more Agent profiles for capacity: each of the 20 took 0.66 to
 1.04 seconds to be ready, the Engine held 775 MiB before and 825 MiB after making
 them, and one profile takes 5136 KiB of disk with the Engine's bundled Skills and
 1727 KiB without. Those twenty-profile figures come from the `install-measure` job's log, which runs on a push to
-`main` and on a manual run only, never on a pull request (#408), and prints them in its line `capacity: …`. The Owner
-chooses the Agent level in Settings, Company (read and
-draft, act on approval, or scheduled work); new Companies start at read and draft.
+`main` and on a manual run only, never on a pull request (#408), and prints them in its line `capacity: …`. Settings,
+Company says in one line what every Agent can use and that anything published or spent still waits for a person's
+Approval.
 Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory with the other agents of the same Company only: every profile lives in that Company's own Engine, and no other Company's Engine, Agents or people can read it.
 
 The Owner connects a subscription in Settings, Subscription and models: ChatGPT
@@ -199,6 +260,8 @@ restore <archive>` there.
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
 gtmworks company add --name "Third Company"     # prints a first-Owner link instead
+gtmworks company add --name "Video Company" --owner person@example.com --memory 2g --cpus 1.5
+gtmworks company limits "Second Company" --memory 3g --cpus 3   # its work sandbox's limits
 gtmworks company link "Third Company"          # a fresh link for a Company still waiting
 gtmworks company list
 ```
@@ -208,9 +271,11 @@ healthy, and makes the Company with that existing Person as its Owner; with no
 `--owner` it prints a first-Owner link instead and makes the Company when that link is
 sent. `company link` prints a fresh link for a Company still waiting and ends the
 earlier one. A failed Engine leaves nothing behind and the same command can be run
-again. `company list` shows every Company with the state of its Engine, including one
-still waiting for its Owner. `gtmworks status` reports every Engine beside the
-services. See **One Engine per Company** under Install for what each Engine holds and
+again. `company limits` changes a Company's work sandbox memory and CPUs and starts
+only that sandbox again (see **Server size** under Install). `company list` shows
+every Company with the state of its Engine, including one still waiting for its
+Owner, and each Company's work sandbox and its state. `gtmworks status` reports every
+Engine and every sandbox beside the services. See **One Engine per Company** under Install for what each Engine holds and
 how much memory it adds.
 
 ## Update
@@ -266,6 +331,32 @@ release, no migration is applied, no container is changed, and the release you
 run keeps serving. Running the install command again on an updated install keeps
 the Engine it adopted.
 
+An install made before the work sandbox gets one for each Company it has, one
+or many, from the update: the Company's sandbox, its exit and its work folder,
+made beside its Engine as `company add` makes them. Each Engine is recreated on
+its own data volume and pinned to its Company's sandbox, so every Agent's
+terminal, files and code run there, and the worker brings every Agent, those
+made before the update included, to the one fixed set of tools. Agents, their
+memory, Skills, history and the Company's sign-in are kept, and so are the files
+each Agent made: the update copies the files of the Agent's old Library folder
+(`workspace` in its profile, on the Engine's disk) once into the Agent's own
+folder of its Company's work folder, never over a file already there and never
+into another Agent's or another Company's folder, and leaves the originals on the
+Engine as they were. The Company's Agent
+level is gone, and its past level changes still read in the Company's log. The
+sandbox image is pulled before any migration, so an update whose image cannot be
+pulled, like one whose migration fails, leaves the release you ran serving with no
+migration applied and no sandbox begun. A sandbox that fails after the migrations
+ran (one that does not start, say) leaves the install on the new release, as any
+failure after the migrations does: `gtmworks install` finishes the update. Running
+the install command again on an updated install keeps every sandbox and its work
+folder, and copies no old file again.
+
+When a release pins another work sandbox image, the update pulls it and makes every
+Company's sandbox and exit again from it. Each Company's work folder is a volume of
+its own, so the files in it are kept; what lives only on a sandbox's own disk (its
+home folder and the tool caches there) starts empty.
+
 It refuses a release older than the data: when the database has applied a
 migration the chosen release does not carry, a later release migrated it, and
 the update stops with a plain message before changing anything. Going back past
@@ -303,10 +394,15 @@ never replaced itself, still ends with the new one.
 gtmworks backup                              # dated archive in backups/
 ```
 
-Backup briefly stops the stack — every Company's Engine included — for a consistent
-copy of the database and its configuration (which holds each Company's Engine record),
-the Storage files, each Company's Engine data volume, each Engine's key file
-(`.engines/`) and `.env.install`, then starts every Engine and the stack again. Each
+Backup briefly stops the stack — every Company's Engine included, and its work sandbox — for
+a consistent copy of the database and its configuration (which holds each Company's
+Engine record), the Storage files, each Company's Engine data volume, each Company's
+work folder (the files its Agents made in its work sandbox), each Engine's key file
+(`.engines/`) and `.env.install`, then starts every Engine, sandbox and the stack again.
+It leaves out the tool caches an Agent's commands leave in a work folder (folders named
+`.cache`, `node_modules` or `__pycache__`), which a command makes again, the links an
+Agent made in a work folder (a symbolic link, and the second name of a file with two,
+whose file is kept), and whatever lives only on a sandbox's own disk. Each
 Engine's data holds that Company's Agents, their profiles, rules, memory, skills and
 history, so a restore brings every Company back as it was. An
 optional directory after `backup` changes the destination.
@@ -328,9 +424,12 @@ and restarts the stack, every Company's Engine included: each Company comes back
 its own Engine, in that Engine's own container with its own network, volume and key,
 so its Engine record still finds it. This is a full-install backup, not a company
 export, and it includes every Company's Engine data, so every Agent comes back with
-its knowledge, rules, skills and memory. Before it changes anything, restore refuses
-an archive it cannot fully restore, such as one naming an Engine without that
-Engine's data or its key. An archive made before each Company had its own Engine
+its knowledge, rules, skills and memory, and every Company's work folder comes back
+into its own sandbox, without the tool caches the backup left out. Before it changes
+anything, restore refuses an archive it cannot fully restore, such as one naming an
+Engine without that Engine's data or its key, or one holding the work folder of some
+Companies and not the others. An archive made before work folders were included
+still restores: each Company gets an empty work folder and a working sandbox. An archive made before each Company had its own Engine
 still restores: it holds one Engine and comes back as one Company on its own Engine.
 An archive made before that data was included still restores: the
 command says in one line that the Agents' Hermes data was not in it, and the worker

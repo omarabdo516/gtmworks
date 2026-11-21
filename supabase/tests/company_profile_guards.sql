@@ -1,10 +1,10 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(15);
 -- Omar owns R&S Consultations (2) and Aleem (3); 5 is a Contributor of Aleem. R&S runs on its own profile.
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002');
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000002';
 set local role service_role;
@@ -34,7 +34,7 @@ insert into public.hermes_agents(company_id,name,speciality,is_default,profile) 
  where not exists(select 1 from public.hermes_agents a where a.company_id=c.id) and exists(select 1 from public.members m where m.company_id=c.id and m.role='owner' and m.removed_at is null);
 set local role service_role;
 select cmp_ok((select count(*)::int from public.hermes_agents where profile='default'),'>=',1,'Aleem is on the shared profile');
-select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003');
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
 insert into ids select connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000003';
@@ -71,17 +71,20 @@ set local role service_role;
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),1,'once it ended, the company moves');
 reset role;
 
--- 3. No new run while the profile's tools differ from the level the Owner chose.
+-- 3. No new run until the worker confirmed the fixed tools again.
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+set local role service_role;
+select public.begin_company_tools('10000000-0000-0000-0000-000000000003');
+reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select is(public.set_agent_level('10000000-0000-0000-0000-000000000003',3),3,'the Owner raises the level');
-select throws_ok($$select public.reserve_conversation_run('c2000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000004','Hello')$$,'55000','agentLevelPending',
- 'no run starts until the worker applied the new tools');
+select throws_ok($$select public.reserve_conversation_run('c2000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000003',(select agent from aleem),'c3000000-0000-0000-0000-000000000004','Hello')$$,'55000','agentToolsPending',
+ 'no run starts until the worker applied the fixed tools');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',3,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);

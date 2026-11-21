@@ -10,12 +10,13 @@
 # (the image carries it, #437) in the folder as gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
 #   gtmworks status | update | backup | restore <archive> | install | sign-in claude
 #   gtmworks update-button on|off | gtmworks auto-update on|off | gtmworks updater (one run of the updater, #443)
-#   gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list
+#   gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>]
+#   gtmworks company limits <Company> [--memory <size>] [--cpus <number>] | gtmworks company link <Company> | gtmworks company list
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
 # stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
 # its two files are written by scripts/release-assets.mjs from inside that image (Dockerfile, /app/release-source), for
-# the digest just pulled.
+# the digest just pulled and the work sandbox image pushed by the same run.
 #
 # Tests only: GTMWORKS_RELEASES replaces GitHub Releases with a base URL (file:// in CI) that holds releases.json (a list
 # of {"tag_name": "vX.Y.Z"}) and <tag>/<file> for each release; GTMWORKS_GET replaces the address of main's get.sh.
@@ -47,9 +48,10 @@ Usage:
   gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes] [--no-backup]]
   gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
-  gtmworks company add --name <Company> [--owner <email>]
+  gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>]
+  gtmworks company limits <Company> [--memory <size>] [--cpus <number>]  (its work sandbox's memory and CPUs)
   gtmworks company link <Company>  (a fresh first-Owner link for a Company still waiting)
-  gtmworks company list     (each Company and the state of its Engine)
+  gtmworks company list     (each Company, the state of its Engine and of its work sandbox)
   gtmworks update-button on|off  (the Update now button Owners see; on by default)
   gtmworks auto-update on|off    (install each newer version of this channel by itself; off by default)
   gtmworks updater          (one run of the updater; its timer runs it every minute)
@@ -297,6 +299,8 @@ download_release() {
       | sed -n "s#^$image@\(sha256:[a-f0-9]\{64\}\)\$#\1#p" | head -n 1)
     [ -n "$digest" ] || fail "Could not read the digest of $image:main."
     ref=$image:main@$digest
+    # The main image names the work sandbox image built from its own commit (#392, ADR 0020), by tag and digest, so its
+    # install script pins that one and never a sandbox another main build pushed under the same tag.
     docker run --rm --user "$(id -u):$(id -g)" -v "$2:/out" -w /app/release-source "$ref" \
       node scripts/release-assets.mjs "$ref" /out \
       || fail "The main build $ref cannot write its install files (it predates the main channel). Install a release instead."
@@ -739,8 +743,9 @@ ROW
   if [ -z "$unhealthy" ]; then
     compose exec -T web node --input-type=module -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in']) { const response=await fetch(url); console.log(url+' '+response.status); if(response.status!==200) process.exitCode=1; }" < /dev/null \
       || unhealthy=' the app'
-    # Every Engine of the install, each Company's own: a stopped or unhealthy one is named, and status fails (#382).
-    run_installer engines || unhealthy="$unhealthy an Engine"
+    # Every Engine of the install with its Company's work sandbox (#382, #393): a stopped or unhealthy one is named, and
+    # status fails.
+    run_installer engines || unhealthy="$unhealthy an Engine or a work sandbox"
   fi
   [ -z "$unhealthy" ] || fail "Not healthy:$unhealthy. Repair with: gtmworks install"
   say "All $total services are healthy."

@@ -4,8 +4,10 @@ set -eu
 # Read the function before an update replaces this script on disk.
 main() {
 # A release's install script names its image by digest (scripts/release-assets.mjs) and sits beside its compose file;
-# in a source checkout this stays empty and the image is built from the checkout.
+# in a source checkout this stays empty and the image is built from the checkout. The work sandbox image every Company's
+# sandbox runs (#392, ADR 0020) is named the same way: a release's pinned one, or one this checkout builds.
 release_image=
+sandbox_image=
 if [ -n "$release_image" ]; then cd "$(dirname "$0")"; else cd "$(dirname "$0")/.."; fi
 umask 077
 # One install at a time, held on a file descriptor of .install.lock: the kernel releases it when this process ends,
@@ -16,6 +18,12 @@ command -v flock > /dev/null 2>&1 || {
   echo 'The installer needs flock to run one install at a time. It comes with util-linux, which nearly every Linux install has; install it, then run this again.' >&2
   exit 1
 }
+# A source update hands its run to the installer it downloaded (below): that installer inherits the lock on descriptor 9
+# and this run's scratch folder, which holds the previous release's Engine files.
+if [ "${GTMWORKS_UPDATE_DOWNLOADED:-}" = 1 ] && flock -n 9 2> /dev/null; then
+  mkdir -p .install-lock
+else
+GTMWORKS_UPDATE_DOWNLOADED=
 exec 9>.install.lock
 flock -n 9 || { echo 'Another install is running: wait for it to finish, then run this again.' >&2; exit 1; }
 # shortcut: an installer from before #67 locks with the folder and its owner file, not flock; while one still runs it keeps
@@ -24,6 +32,7 @@ old_pid=; if [ -f .install-lock/owner ]; then read -r _ old_pid _ < .install-loc
 case "$old_pid" in ''|*[!0-9]*) ;; *) if kill -0 "$old_pid" 2> /dev/null; then echo 'Another install is running (or remove stale .install-lock).' >&2; exit 1; fi;; esac
 rm -rf .install-lock
 mkdir .install-lock
+fi
 resume=no
 worker_stopped=no
 cleanup() {
@@ -42,6 +51,38 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 node_image=node:22.14.0-alpine3.21
 compose() { docker compose --env-file .env.install -f docker-compose.install.yml "$@"; }
+# The image every Company's work sandbox runs (#392, ADR 0020): a release names it by tag and digest and the install
+# pulls it; a source checkout builds it from its one build file. Its reference is written under .install-lock while the
+# run is in flight and only moved to .work-sandbox-image when the run succeeds (#393), so a run that failed records no
+# image it did not finish with. Every sandbox of an install reads that one file.
+work_sandbox_tag=gtmworks-work-sandbox:local
+work_sandbox_image() {
+  if [ -n "$sandbox_image" ]; then
+    echo "Pulling the work sandbox image: $sandbox_image"
+    docker pull "$sandbox_image" || return 1
+    printf '%s\n' "$sandbox_image" > .install-lock/work-sandbox-image
+  else
+    # Tests only (#401): CI's install areas load the run's one sandbox image under this tag, as they load the app image.
+    if [ "${GTMWORKS_IMAGE_PREBUILT:-}" = true ] && docker image inspect "$work_sandbox_tag" > /dev/null 2>&1; then
+      echo "Using the prebuilt work sandbox image (GTMWORKS_IMAGE_PREBUILT=true): $work_sandbox_tag"
+    else
+      echo "Building the work sandbox image: $work_sandbox_tag"
+      # The image the sandboxes run now keeps a name of its own while the build replaces the tag, so an update whose
+      # sandboxes do not start puts it back (restore_previous_engine, ADR 0023).
+      if docker image inspect "$work_sandbox_tag" > /dev/null 2>&1; then
+        docker tag "$work_sandbox_tag" "$work_sandbox_tag-previous" || return 1
+      else
+        # No image yet: no earlier one stands in for it on a rollback.
+        docker image rm "$work_sandbox_tag-previous" > /dev/null 2>&1 || true
+      fi
+      docker build --tag "$work_sandbox_tag" sandbox || return 1
+    fi
+    printf '%s\n' "$work_sandbox_tag" > .install-lock/work-sandbox-image
+  fi
+}
+# The image a sandbox may start from now: the one this run made, or the one an earlier successful run recorded. It never
+# builds or pulls anything: the exit handler starts Engines after a run that failed, and must not start a build there.
+work_sandbox_ref() { cat .install-lock/work-sandbox-image 2> /dev/null || cat .work-sandbox-image 2> /dev/null; }
 # A Company's Engine (ADR 0018) is made from the template shipped with the release, as its own Compose project: the pinned
 # official Hermes image, its own data volume, its own key and its own network. The app and the worker join that network;
 # the Engine joins nothing else. The installer makes the first Company's Engine; `gtmworks company add` (#382, #383) makes
@@ -54,6 +95,119 @@ engine_management=http://gtmworks-engine-first:9119
 engine_volume=gtmworks-install_hermes
 engine_project() { printf 'gtmworks-engine-%s' "$1"; }
 engine_folder() { printf '.engines/%s' "$1"; }
+# The work sandbox each Engine works through (#393, ADR 0018): its container, the Company's work folder volume, its own
+# network and the small volume its host key is kept in. Every name comes from the Engine's folder, as its Engine's names
+# do, so a restore needs no other record; none begins with `gtmworks-engine`, so the Engine counts stay what they were.
+sandbox_container() { printf 'gtmworks-sandbox-%s' "$1"; }
+# The sandbox's exit (#394): its container and the one network of the Company's that routes out.
+exit_container() { printf 'gtmworks-exit-%s' "$1"; }
+exit_network() { printf 'gtmworks-exit-%s' "$1"; }
+work_volume() { printf 'gtmworks-work-%s' "$1"; }
+work_network() { printf 'gtmworks-work-%s' "$1"; }
+host_key_volume() { printf 'gtmworks-sandbox-hostkey-%s' "$1"; }
+# What one sandbox gets by default (the RAM and CPU the install gives a Company's sandbox, and the process limit and shared
+# memory Chromium needs) is set in one place, the sandbox service of scripts/engine-template.yml, from the install job's
+# measurement (#400); nothing here repeats a default. A Company's own memory and CPU limit (#396), given to `company add`
+# or `company limits`, is kept in its Engine's folder beside its key, as SANDBOX_MEMORY and SANDBOX_CPUS, and only that
+# file gives them to Compose: a value left in the shell never reaches a sandbox, so an update, a restore and a recreate
+# give every sandbox the limits its Company was given, and a Company given none the template's default.
+sandbox_limit() { sed -n "s/^SANDBOX_$2=//p" "$(engine_folder "$1")/.env" 2> /dev/null; }
+# A limit is refused before anything changes when it is not one Docker reads as a size or a number of CPUs; what Docker
+# itself refuses (more CPUs than the server has) fails the sandbox's start, which takes the change back.
+check_limits() {
+  [ -z "$1" ] || printf '%s\n' "$1" | grep -Eqx '[1-9][0-9]*[mg]' \
+    || { echo "The memory limit is a whole number of megabytes or gigabytes, such as 512m or 2g, not $1." >&2; return 1; }
+  [ -z "$2" ] || { printf '%s\n' "$2" | grep -Eqx '[0-9]+(\.[0-9]{1,2})?' && awk -v cpus="$2" 'BEGIN { exit !(cpus > 0) }'; } \
+    || { echo "The CPU limit is a number of CPUs above 0, such as 1 or 1.5, not $2." >&2; return 1; }
+}
+# One Company's limits written into its Engine's file, owner-only, under a temporary name then moved into place; an
+# empty value leaves that limit to the template's default.
+write_limits() {
+  file="$(engine_folder "$1")/.env"
+  {
+    grep -Ev '^SANDBOX_(MEMORY|CPUS)=' "$file" || true
+    [ -z "$2" ] || printf 'SANDBOX_MEMORY=%s\n' "$2"
+    [ -z "$3" ] || printf 'SANDBOX_CPUS=%s\n' "$3"
+  } > "$file.tmp" || return 1
+  chmod 600 "$file.tmp" || return 1
+  mv "$file.tmp" "$file" || return 1
+}
+# The Engine reaches its sandbox as every Agent's command does (#396): over ssh, as the Engine's own user, with its own
+# key and the host key its known_hosts pins. A few tries, as Docker's name for the sandbox can take a moment to answer.
+sandbox_reachable() {
+  for attempt in 1 2 3; do
+    docker exec -u hermes "$(engine_project "$1")" ssh -i /opt/data/ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/opt/data/.ssh/known_hosts -o LogLevel=ERROR -o ConnectTimeout=10 -p 2222 pn@sandbox true > /dev/null 2>&1 \
+      && return 0
+    sleep 2
+  done
+  return 1
+}
+# The private key an Engine dials its sandbox with, and the sandbox's own host key, both made in the one sandbox image
+# (it has ssh-keygen; the Engine has none) and written into the Engine's data volume and the host-key volume. The Engine's
+# known_hosts is written to the host key's public half at the address its ssh client uses, so a recreated sandbox keeps
+# the host key its Engine trusts. The deviation from a pinned known_hosts: Hermes's ssh client is hard-coded
+# StrictHostKeyChecking=accept-new (tools/environments/ssh.py), so gtmworks cannot demand a known host; it pre-seeds the
+# Engine's file instead, and accept-new still refuses a host whose key changed. The public key is printed for the Compose
+# environment and never written to a file of the install.
+sandbox_keys() {
+  slug=$1
+  folder=$(engine_folder "$slug")
+  volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$folder/.env")
+  test -n "$volume" || { echo "The Engine $slug names no data volume: run sh scripts/install.sh." >&2; return 1; }
+  # An Engine the exit handler starts after a run that failed before the image was recorded (a failed update, a backup)
+  # starts only from an image an earlier run recorded: this never builds or pulls one from the exit handler (#393).
+  image=$(work_sandbox_ref)
+  test -n "$image" || { echo "The work sandbox image is not recorded: run sh scripts/install.sh." >&2; return 1; }
+  docker volume create "$volume" > /dev/null || return 1
+  docker volume create "$(host_key_volume "$slug")" > /dev/null || return 1
+  docker volume create "$(work_volume "$slug")" > /dev/null || return 1
+  keys=$(docker run --rm --user 0 --entrypoint sh -v "$volume:/data" -v "$(host_key_volume "$slug"):/keys" \
+    -v "$(work_volume "$slug"):/work" "$image" -ec '
+      set -e
+      # An Engine with no sandbox key yet is one made before the work sandbox (#397): the files each of its Agents made in
+      # the old Library root of its profile (`workspace`, on the disk of the Engine) are copied once into the own folder
+      # of that Agent in the work folder of the Company, before the key is made, so a run that fails here copies again. A
+      # file already there is never replaced, a link is copied as a link and never followed, every copy is readable by
+      # the Library of the Engine, the originals stay as they are, and nothing goes into the folder of another Agent.
+      if [ ! -s /data/ssh/id_ed25519 ]; then
+        for old in /data/profiles/*/workspace; do
+          [ -d "$old" ] && [ ! -L "$old" ] || continue
+          profile=${old#/data/profiles/}; profile=${profile%/workspace}
+          [ ! -L "/data/profiles/$profile" ] || continue
+          install -d -m 755 -o 1000 -g 1000 "/work/$profile"
+          tar -C "$old" --owner=1000 --group=1000 --numeric-owner --mode=u+rwX,go+rX -cf - . | tar -C "/work/$profile" --skip-old-files -xf -
+        done
+      fi
+      install -d -m 700 -o 10000 -g 10000 /data/ssh
+      if [ ! -s /data/ssh/id_ed25519 ]; then
+        ssh-keygen -q -t ed25519 -N "" -C "gtmworks-work-sandbox" -f /data/ssh/id_ed25519
+      else
+        ssh-keygen -y -f /data/ssh/id_ed25519 > /data/ssh/id_ed25519.pub
+      fi
+      chown 10000:10000 /data/ssh/id_ed25519 /data/ssh/id_ed25519.pub
+      chmod 600 /data/ssh/id_ed25519
+      chmod 644 /data/ssh/id_ed25519.pub
+      if [ ! -s /keys/ssh_host_ed25519_key ]; then
+        ssh-keygen -q -t ed25519 -N "" -C "gtmworks-work-sandbox-host" -f /keys/ssh_host_ed25519_key
+      else
+        ssh-keygen -y -f /keys/ssh_host_ed25519_key > /keys/ssh_host_ed25519_key.pub
+      fi
+      chown 1000:1000 /keys/ssh_host_ed25519_key /keys/ssh_host_ed25519_key.pub
+      chmod 600 /keys/ssh_host_ed25519_key
+      chmod 644 /keys/ssh_host_ed25519_key.pub
+      install -d -m 700 -o 10000 -g 10000 /data/.ssh
+      { grep -v "^\[sandbox\]:2222 " /data/.ssh/known_hosts 2> /dev/null || true; printf "[sandbox]:2222 %s\n" "$(cat /keys/ssh_host_ed25519_key.pub)"; } > /data/.ssh/known_hosts
+      chown 10000:10000 /data/.ssh/known_hosts
+      chmod 600 /data/.ssh/known_hosts
+      printf "client %s\n" "$(cat /data/ssh/id_ed25519.pub)"
+      printf "host %s\n" "$(cat /keys/ssh_host_ed25519_key.pub)"
+    ') || return 1
+  sandbox_key=$(printf '%s\n' "$keys" | sed -n 's/^client //p')
+  sandbox_host_key=$(printf '%s\n' "$keys" | sed -n 's/^host //p')
+  test -n "$sandbox_key" && test -n "$sandbox_host_key" \
+    || { echo "The work sandbox keys of the Engine $slug could not be made." >&2; return 1; }
+}
 # Every Engine the install has, one folder each under .engines: the first Engine and every Company's own. A backup, a
 # restore and a stop cover each of them (#386); a folder with no .env is not an Engine.
 engine_names() {
@@ -63,9 +217,22 @@ engine_names() {
     printf '%s\n' "${name%/}"
   done
 }
+# The sandbox's names and image reach Compose in its environment only, never in .env.install or the Engine's own
+# file: the names are derived from the folder above, so a restore needs no second record, and the public key that
+# belongs to this Engine's private key is passed here.
 engine() {
   slug=$1
   shift
+  SANDBOX_IMAGE=${SANDBOX_IMAGE:-$(work_sandbox_ref || printf '%s' "$work_sandbox_tag")} \
+  SANDBOX_NAME=$(sandbox_container "$slug") \
+  SANDBOX_AUTHORIZED_KEY=${sandbox_key:-} \
+  SANDBOX_MEMORY=$(sandbox_limit "$slug" MEMORY) \
+  SANDBOX_CPUS=$(sandbox_limit "$slug" CPUS) \
+  SANDBOX_HOST_KEY_VOLUME=$(host_key_volume "$slug") \
+  WORK_VOLUME=$(work_volume "$slug") \
+  WORK_NETWORK=$(work_network "$slug") \
+  EXIT_NAME=$(exit_container "$slug") \
+  EXIT_NETWORK=$(exit_network "$slug") \
   docker compose --project-name "$(engine_project "$slug")" --env-file "$(engine_folder "$slug")/.env" -f "$engine_template" "$@"
 }
 # An Engine's key lives in its own file, never in .env.install, the file the app and the worker read their environment
@@ -103,11 +270,14 @@ write_engine_env() {
   slug=$1 key=$2 volume=$3 network=$4
   folder=$(engine_folder "$slug")
   mkdir -p "$folder" || return 1
+  # The Company's own sandbox limits (#396) stay when the file is written again, as each run writes the first Engine's.
+  kept=$(grep -E '^SANDBOX_(MEMORY|CPUS)=' "$folder/.env" 2> /dev/null || true)
   {
     printf 'ENGINE_NAME=%s\n' "$(engine_project "$slug")" &&
     printf 'ENGINE_KEY=%s\n' "$key" &&
     printf 'ENGINE_VOLUME=%s\n' "$volume" &&
-    printf 'ENGINE_NETWORK=%s\n' "$network"
+    printf 'ENGINE_NETWORK=%s\n' "$network" &&
+    { [ -z "$kept" ] || printf '%s\n' "$kept"; }
   } > "$folder/.env.tmp" || return 1
   chmod 600 "$folder/.env.tmp" || return 1
   mv "$folder/.env.tmp" "$folder/.env" || return 1
@@ -157,6 +327,9 @@ join_engine_networks() {
 # releases end it at the timeout with success while the Engine is still starting.
 engine_start() {
   wait=${GTMWORKS_ENGINE_WAIT:-300}
+  # The Engine's own key pair and its sandbox's host key are made or read before anything starts, so the sandbox it
+  # starts with accepts exactly this Engine and its known_hosts already trusts the host key it will meet.
+  sandbox_keys "$1" || return 1
   engine "$1" up -d --wait --wait-timeout "$wait" || return 1
   container=$(engine_project "$1")
   while [ "$(docker inspect -f '{{.State.Health.Status}}' "$container" 2> /dev/null)" != healthy ]; do
@@ -170,8 +343,9 @@ engine_start() {
 engine_destroy() {
   slug=$1 volume=$2 network=$3
   engine "$slug" down -v --remove-orphans > /dev/null 2>&1 || true
-  docker rm -f "$(engine_project "$slug")" > /dev/null 2>&1 || true
-  docker volume rm "$volume" > /dev/null 2>&1 || true
+  docker rm -f "$(engine_project "$slug")" "$(sandbox_container "$slug")" "$(exit_container "$slug")" > /dev/null 2>&1 || true
+  docker volume rm "$volume" "$(work_volume "$slug")" "$(host_key_volume "$slug")" > /dev/null 2>&1 || true
+  docker network rm "$(work_network "$slug")" "$(exit_network "$slug")" > /dev/null 2>&1 || true
   # The app and the worker may have joined this Engine's network before a later step failed: detach them first, or the
   # network would be left behind and the same command run again would meet it.
   for service in web worker; do
@@ -211,12 +385,48 @@ engines_up() {
   done
   [ "$failed" -eq 0 ]
 }
+# The previous release's own Engine files, kept when an update starts and before anything replaces them (ADR 0023): an
+# update whose Engines or work sandboxes do not all start puts them back. Nothing is kept for an install that has none.
+keep_previous_engine() {
+  mkdir -p .install-lock/previous-engine
+  for file in scripts/engine-*; do
+    [ -f "$file" ] || continue
+    cp "$file" .install-lock/previous-engine/ || return 1
+  done
+}
+# An update whose Engines or work sandboxes did not all start (ADR 0023): the previous release's own Engine files go back,
+# and every Engine starts again from them, without the containers this release's template added beside it (each
+# Company's sandbox and exit). The previous release's app and worker were never replaced and keep serving, on a schema it
+# was built for, since the cutover had not run; their networks to each Engine are the Engines' own and stay. Non-zero when
+# there were no files to put back or an Engine did not start from them.
+restore_previous_engine() {
+  [ -f .install-lock/previous-engine/engine-template.yml ] || return 1
+  cp .install-lock/previous-engine/engine-* scripts/ || return 1
+  # The sandboxes start again from the image the previous run recorded, never the one this run made: a release names it
+  # by digest, and a source build kept it under the -previous name before rebuilding the tag.
+  rm -f .install-lock/work-sandbox-image
+  if [ "$(cat .work-sandbox-image 2> /dev/null)" = "$work_sandbox_tag" ] && docker image inspect "$work_sandbox_tag-previous" > /dev/null 2>&1; then
+    docker tag "$work_sandbox_tag-previous" "$work_sandbox_tag" || return 1
+  fi
+  restored=0
+  for name in $(engine_names); do
+    # Each sandbox gets its own Engine's key again, as engine_start gives it: the key last read belongs to another Company.
+    # A previous release from before the sandbox recorded no image and starts none, so it reads no key.
+    sandbox_key=
+    if [ -n "$(work_sandbox_ref)" ]; then sandbox_keys "$name" || { restored=1; continue; }; fi
+    engine "$name" up -d --remove-orphans --wait --wait-timeout 300 || { restored=1; continue; }
+    # A restored sandbox counts only once its own Engine reaches it over SSH: its health check sees the port, not the key.
+    if [ -n "$sandbox_key" ]; then sandbox_reachable "$name" > /dev/null 2>&1 || restored=1; fi
+  done
+  return "$restored"
+}
 # Every Engine stopped before its data volume is copied: a live Engine writes under its volume while the archive reads
 # it, and a restore replaces what is in it (#386). An install the previous release made has no .engines/first until its
 # key is adopted; its one Engine is the first one.
 engine_stop() {
   for name in $(engine_names); do
-    docker stop "$(engine_project "$name")" > /dev/null 2>&1 || true
+    # Its sandbox too (#399): it writes the Company's work folder, which a backup copies and a restore replaces.
+    docker stop "$(engine_project "$name")" "$(sandbox_container "$name")" > /dev/null 2>&1 || true
   done
   [ -f "$(engine_folder first)/.env" ] || docker stop "$(engine_project first)" > /dev/null 2>&1 || true
 }
@@ -225,15 +435,16 @@ engine_stop() {
 engines_stopped() {
   running=
   for name in $(engine_names); do
-    container=$(engine_project "$name")
-    # A container Docker does not list is stopped; one it lists but cannot report on is not known to be stopped.
-    listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null) || { running="$running $container"; continue; }
-    [ -n "$listed" ] || continue
-    state=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null) || state=unknown
-    [ "$state" = false ] || running="$running $container"
+    for container in "$(engine_project "$name")" "$(sandbox_container "$name")"; do
+      # A container Docker does not list is stopped; one it lists but cannot report on is not known to be stopped.
+      listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null) || { running="$running $container"; continue; }
+      [ -n "$listed" ] || continue
+      state=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null) || state=unknown
+      [ "$state" = false ] || running="$running $container"
+    done
   done
   [ -z "$running" ] || {
-    echo "This Engine did not stop:$running. Nothing was archived, and what was stopped starts again." >&2
+    echo "This Engine or work sandbox did not stop:$running. Nothing was archived, and what was stopped starts again." >&2
     return 1
   }
 }
@@ -269,6 +480,16 @@ sign_in() {
   done
   [ "$provider" = claude ] || { echo 'gtmworks sign-in signs in claude.' >&2; return 1; }
   test -n "$company_name" || { echo 'gtmworks sign-in claude needs --company <id-or-name>.' >&2; return 1; }
+  company_engine "$company_name" || return 1
+  echo "Signing $name in to Claude on its Engine: $host. One account serves one Company."
+  if [ -t 0 ]; then tty=-t; else tty=; fi
+  docker exec -i $tty -u hermes "$host" hermes auth add anthropic --type oauth --no-browser
+}
+# The one Company a person names by id or exact name, and its Engine's container (`host`) and name (`name`), from the
+# install's database. The Engine's address names its container (scripts/engine-template.yml); an address whose whole
+# value is not an Engine of this install is refused.
+company_engine() {
+  company_name=$1
   test -f .env.install || { echo 'Install first.' >&2; return 1; }
   rows=$(printf '%s\n' "select e.address,c.name from public.companies c join public.company_engines e on e.id=c.engine_id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
     | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v company="$company_name") \
@@ -280,13 +501,10 @@ sign_in() {
   printf '%s\n' "$address" | grep -Eq '^http://gtmworks-engine-[a-z0-9-]+:8642$' \
     || { echo "The Engine record of $name names no Engine of this install. Nothing was changed." >&2; return 1; }
   host=${address#*://} host=${host%%:*}
-  echo "Signing $name in to Claude on its Engine: $host. One account serves one Company."
-  if [ -t 0 ]; then tty=-t; else tty=; fi
-  docker exec -i $tty -u hermes "$host" hermes auth add anthropic --type oauth --no-browser
 }
 
 company_usage() {
-  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list' >&2
+  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] | gtmworks company limits <Company> [--memory <size>] [--cpus <number>] | gtmworks company link <Company> | gtmworks company list' >&2
   exit 1
 }
 # `gtmworks company add` (#382, #383, ADR 0018, 0019): one new Company, its Engine made from the template with its own
@@ -294,16 +512,19 @@ company_usage() {
 # held behind a first-Owner link whose secret is printed once, after `#`. The Engine is made and waited on before either;
 # a failure removes everything this command made, in one plain line, so the same command can be run again.
 company_add() {
-  company_name= owner_email= has_owner=no
+  company_name= owner_email= has_owner=no memory= cpus=
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) [ $# -ge 2 ] || company_usage; company_name=$2; shift;;
       --owner) [ $# -ge 2 ] || company_usage; owner_email=$2; has_owner=yes; shift;;
+      --memory) [ $# -ge 2 ] || company_usage; memory=$2; shift;;
+      --cpus) [ $# -ge 2 ] || company_usage; cpus=$2; shift;;
       *) company_usage;;
     esac
     shift
   done
   test -n "$company_name" || company_usage
+  check_limits "$memory" "$cpus" || return 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   # A versioned restore replaces the install over several installer runs and holds .install-restore while it does
   # (#378, C5): a Company made between its safety backup and the replacement would be lost without being in that backup,
@@ -346,14 +567,25 @@ company_add() {
     add_slug=
   }
   trap 'rollback_add; exit 1' HUP INT TERM
-  write_engine_env "$slug" "$key" "$volume" "$network" || {
+  { write_engine_env "$slug" "$key" "$volume" "$network" && write_limits "$slug" "$memory" "$cpus"; } || {
     rollback_add
     echo "Company \"$company_name\" was not made: its Engine's folder could not be written. Nothing was left behind."
     return 1
   }
-  if ! engine_start "$slug" >&2 || ! join_engine_network "$network"; then
+  if ! engine_start "$slug" >&2; then
     rollback_add
-    echo "Company \"$company_name\" was not made: its Engine did not become healthy. Nothing was left behind; run the same command again."
+    echo "Company \"$company_name\" was not made: its Engine or its work sandbox did not start. Nothing was left behind; run the same command again."
+    return 1
+  fi
+  # The sandbox is part of what this command makes (#396): its Engine reaches it before anything is announced.
+  if ! sandbox_reachable "$slug"; then
+    rollback_add
+    echo "Company \"$company_name\" was not made: its work sandbox could not be reached from its Engine. Nothing was left behind; run the same command again."
+    return 1
+  fi
+  if ! join_engine_network "$network"; then
+    rollback_add
+    echo "Company \"$company_name\" was not made: the app could not join its Engine's network. Nothing was left behind; run the same command again."
     return 1
   fi
   # One add for both paths: the Owner is the only difference, and a failure removes what this command made (#378, C11): a
@@ -401,11 +633,93 @@ company_link() {
   fi
   compose exec -T web node scripts/company-add.mjs link --name "$company_name"
 }
+# `gtmworks company limits <Company> [--memory <size>] [--cpus <number>]` (#396): an existing Company's sandbox limits,
+# kept in its Engine's file. Only that Company's sandbox is made again with them (its Engine, its exit, its work folder
+# and every other Company stay as they run), and its Engine reaches it before the command says so. A sandbox that does
+# not start with the new limits is started again with its earlier ones, which its file keeps.
+company_limits() {
+  company_name=${1:-} memory= cpus=
+  [ $# -gt 0 ] && shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --memory) [ $# -ge 2 ] || company_usage; memory=$2; shift;;
+      --cpus) [ $# -ge 2 ] || company_usage; cpus=$2; shift;;
+      *) company_usage;;
+    esac
+    shift
+  done
+  test -n "$company_name" && { [ -n "$memory" ] || [ -n "$cpus" ]; } || company_usage
+  check_limits "$memory" "$cpus" || return 1
+  if [ -f .install-restore ] && ! flock -n .install-restore true > /dev/null 2>&1; then
+    echo 'A restore is running: wait for it to finish, then run this again.' >&2
+    return 1
+  fi
+  company_engine "$company_name" || return 1
+  slug=${host#gtmworks-engine-}
+  test -f "$(engine_folder "$slug")/.env" || { echo "The Engine of $name has no folder on this install. Nothing was changed." >&2; return 1; }
+  old_memory=$(sandbox_limit "$slug" MEMORY) old_cpus=$(sandbox_limit "$slug" CPUS)
+  write_limits "$slug" "${memory:-$old_memory}" "${cpus:-$old_cpus}" || return 1
+  if ! sandbox_restart "$slug" >&2; then
+    write_limits "$slug" "$old_memory" "$old_cpus" || return 1
+    # The earlier limits are said to run only when the sandbox started with them again and its Engine reaches it; a start
+    # Docker made that the Engine cannot reach is no working sandbox either.
+    if sandbox_restart "$slug" >&2; then
+      echo "The limits of Company \"$name\" were not changed: its work sandbox did not start with them. It runs with its earlier limits."
+    else
+      echo "The limits of Company \"$name\" were not changed, and its work sandbox did not come back with its earlier limits either: it is stopped or its Engine cannot reach it. Run this command again, or the install command." >&2
+    fi
+    return 1
+  fi
+  docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$(sandbox_container "$slug")" \
+    | awk -v name="$name" '{ printf "Company \"%s\": its work sandbox now has %d MiB of memory and %g CPUs.\n", name, $1/1048576, $2/1000000000 }'
+}
+# One Company's sandbox made again from its Engine's file, alone: the keys are read first so it keeps accepting its
+# Engine's key, and the Engine reaches it before this returns.
+sandbox_restart() {
+  sandbox_keys "$1" || return 1
+  engine "$1" up -d --no-deps --wait --wait-timeout "${GTMWORKS_ENGINE_WAIT:-300}" sandbox || return 1
+  sandbox_reachable "$1"
+}
+# Each Company's work sandbox and its state, from the host's Docker, which the web container does not hold, after the
+# lines of the given report (scripts/company-list.mjs), whose Engine line names the sandbox's Company. Non-zero when one
+# is not running.
+sandbox_report() {
+  printf '%s\n' "$1"
+  found=0
+  for name in $(engine_names); do
+    container=$(sandbox_container "$name")
+    line=$(printf '%s\n' "$1" | grep -F "Engine http://$(engine_project "$name"):8642" | head -n 1)
+    company=$(printf '%s\n' "$line" | sed -n 's/.*Company "\([^"]*\)".*/\1/p')
+    if ! listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null); then
+      state=unknown
+    elif [ -z "$listed" ]; then
+      state='not created'
+    else
+      running=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null || echo unknown)
+      health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container" 2> /dev/null || echo unknown)
+      if [ "$running" != true ]; then state=stopped
+      elif [ "$health" = healthy ]; then state=running
+      else state="running, not healthy ($health)"; fi
+    fi
+    [ "$state" = running ] || found=1
+    if [ -n "$company" ]; then
+      echo "Sandbox $container: $state (Company \"$company\")"
+    else
+      echo "Sandbox $container: $state"
+    fi
+  done
+  return "$found"
+}
 company() {
   case "${1:-}" in
     add) shift; company_add "$@";;
+    limits) shift; company_limits "$@";;
     link) shift; company_link "$@";;
-    list) compose exec -T web node scripts/company-list.mjs companies;;
+    list)
+      report_status=0
+      report=$(compose exec -T web node scripts/company-list.mjs companies) || report_status=$?
+      sandbox_report "$report" || true
+      return "$report_status";;
     *) company_usage;;
   esac
 }
@@ -448,15 +762,24 @@ volumes() {
     test -n "$volume" || { echo "The Engine $name names no data volume: run sh scripts/install.sh." >&2; return 1; }
     if [ "$mode" = rw ]; then docker volume create "$volume" > /dev/null || return 1; fi
     set -- -v "$volume:/engines/$name:$mode" "$@"
+    # Each Company's work folder (#399), under its Engine folder's name, beside its Engine's data.
+    if [ "$mode" = rw ]; then docker volume create "$(work_volume "$name")" > /dev/null || return 1; fi
+    set -- -v "$(work_volume "$name"):/work/$name:$mode" "$@"
   done
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
-    --tmpfs /engines "$@"
+    --tmpfs /engines --tmpfs /work "$@"
 }
 # The migrations this release carries, applied in one transaction and recorded in gtmworks_install.schema_migrations: an
 # install and an update run it before the app starts, and a restore runs it on the database it just put back, so an
 # archive from an earlier release never serves on a schema this release cannot read (#378, C3). It is the same block an
 # update applies to a previous release's database, so that path already proves it.
+#
+# A migration whose name ends in _cutover is the second step of a change the release it replaces could not run against
+# (ADR 0023): `apply_migrations` leaves it out, and `apply_migrations cutover` applies it alone, once this release's app
+# answers and its worker runs. Every other migration keeps the database usable by the previous release, so a run that fails before
+# the cutover leaves that release serving on a schema it was built for.
 apply_migrations() {
+  stage=${1:-}
   {
     printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
       'revoke all on schema gtmworks_install from public, anon, authenticated, service_role;' \
@@ -465,6 +788,10 @@ apply_migrations() {
       '\if :bootstrap' '\ir /bootstrap-grants.sql' '\endif'
     for file in supabase/migrations/*.sql; do
       case "$file" in *.verify.sql) continue;; esac
+      case "$file" in
+        *_cutover.sql) [ "$stage" = cutover ] || continue;;
+        *) [ "$stage" != cutover ] || continue;;
+      esac
       migration=${file##*/}
       printf '%s\n' "select exists(select 1 from gtmworks_install.schema_migrations where name='$migration') as applied \gset" \
         '\if :applied' '\else' "\echo Applying migration: $migration" "\ir /migrations/$migration" \
@@ -492,7 +819,7 @@ check_backup() {
   if grep -Eq '^(l|h)| -> | link to ' .install-lock/listing; then echo 'Unsafe backup path.' >&2; return 1; fi
   while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..) echo 'Unsafe backup path.' >&2; return 1;; esac
-    case "$entry" in .env.install|engines.list|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) echo 'Unrecognised backup.' >&2; return 1;; esac
+    case "$entry" in .env.install|engines.list|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*|work|work/*) ;; *) echo 'Unrecognised backup.' >&2; return 1;; esac
   done < .install-lock/entries
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
     grep -Fx "$entry" .install-lock/entries >/dev/null || { echo 'Incomplete backup.' >&2; return 1; }
@@ -544,17 +871,31 @@ check_backup() {
     test -z "$(printf '%s\n' "$engine_key_folders" | grep -vx first | grep .)" \
       || { echo 'The backup does not hold an Engine for every Company.' >&2; return 1; }
   fi
+  # Every Company's work folder (#399): an archive made by this release holds one under work/ for each Engine it holds,
+  # named as that Engine's folder, and no other; an archive made before it holds none, and its Companies get empty work
+  # folders. One that holds work folders for some Engines and not others, or one without its Engine, or work folders in
+  # the one-Engine layout, cannot be fully restored.
+  work_folders=no
+  if grep -Eq '^work/' .install-lock/entries; then
+    work_folders=yes
+    test "$engines_layout" = yes || { echo 'Unrecognised backup.' >&2; return 1; }
+    work_names=$(sed -n 's#^work/\([^/][^/]*\)/.*#\1#p' .install-lock/entries | sort -u)
+    test "$work_names" = "$engine_data" || { echo "The backup does not hold a work folder for every Company's Engine." >&2; return 1; }
+  fi
   # An archive is not trusted with an Engine folder's name or its whole file (#378, X2): each Engine folder is named like
-  # an Engine, and only its ENGINE_KEY is taken (64 hex characters), which this installer writes from below with this
-  # release's own ENGINE_NAME/ENGINE_VOLUME/ENGINE_NETWORK. A file that could point the install network or the database's
-  # volume at something else is never used.
+  # an Engine, and only its ENGINE_KEY is taken (64 hex characters), and its Company's sandbox limits (#396) when they
+  # are a size and a number of CPUs, which this installer writes from below with this release's own
+  # ENGINE_NAME/ENGINE_VOLUME/ENGINE_NETWORK. A file that could point the install network or the database's volume at
+  # something else is never used.
   for name in $engine_key_folders; do
     printf '%s\n' "$name" | grep -Eq '^[a-z0-9-]+$' \
       || { echo "The backup names an Engine folder that is not usable: $name" >&2; return 1; }
-    key=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
-      tar -xOzf /backup/backup.tgz ".engines/$name/.env" | sed -n 's/^ENGINE_KEY=//p') || return 1
-    printf '%s\n' "$key" | grep -Eq '^[a-f0-9]{64}$' \
+    engine_file=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
+      tar -xOzf /backup/backup.tgz ".engines/$name/.env") || return 1
+    printf '%s\n' "$engine_file" | sed -n 's/^ENGINE_KEY=//p' | grep -Eqx '[a-f0-9]{64}' \
       || { echo "The backup's Engine $name has no usable key." >&2; return 1; }
+    check_limits "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_MEMORY=//p')" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_CPUS=//p')" \
+      || { echo "The backup's Engine $name names sandbox limits that are not usable." >&2; return 1; }
   done
   return 0
 }
@@ -567,6 +908,10 @@ if [ -n "$release_image" ]; then
   # A compose file from another release would migrate one version and start another.
   grep -qF "image: $release_image" docker-compose.install.yml || {
     echo "docker-compose.install.yml is not from the release of $release_image: download both files of one release." >&2; exit 1; }
+  # The work sandbox image is part of the release too: one written without it would leave every Company's sandbox
+  # with an image the release did not pin (#392).
+  test -n "$sandbox_image" || {
+    echo "This release names no work sandbox image: download both files of one release." >&2; exit 1; }
   # Backup and restore restart the stack without migrating, so they run only with the files of the release it runs.
   case "$operation" in backup|restore)
     test "$(cat .install-release 2>/dev/null)" = "$release_image" || {
@@ -576,6 +921,9 @@ fi
 if [ "$operation" = backup ]; then
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   refuse_previous_release_engine || exit 1
+  # The Engines start again after the copy with their sandboxes, from the image a run of this installer recorded: an
+  # install with Engine folders that this installer has not updated yet has none, and is refused before anything stops.
+  [ ! -f "$(engine_folder first)/.env" ] || [ -n "$(work_sandbox_ref)" ] || { echo 'This install has not been updated to this release yet: run sh scripts/install.sh update first. Nothing was stopped or archived.' >&2; exit 1; }
   destination=${2:-backups}
   mkdir -p "$destination"
   # The stack starts again after the copy, every Engine included, and an install the previous release made has its
@@ -599,10 +947,25 @@ if [ "$operation" = backup ]; then
   # Engine's key lives in .engines/ (#385), so a restore brings back an Engine that answers to the same key. An install
   # that has not run this installer yet has no .engines/; its key is in .env.install. engines.list names the Engines the
   # Companies name, so a restore can refuse an archive that would leave one of them out (#378, C4).
+  # Every Company's work folder goes in too, under work/ by its Engine folder's name (#399), without the tool caches an
+  # Agent's commands leave in it (`.cache`, `node_modules`, `__pycache__`): each one found under work/ is excluded by its
+  # own path, so a file of the same name anywhere else in the archive (an upload in Storage) is kept. Caches outside the
+  # work folder live on the sandbox's own disk, which nothing keeps. A restore refuses an archive with a link member, so
+  # the links an Agent makes in a work folder stay out too: each symbolic link, and every name of a file with several
+  # but its first, which keeps the file itself. A name inside a cache counts for none, so a file linked from a cache keeps
+  # its name outside it.
   mkdir -p .engines
   volumes ro -v "$PWD/.env.install:/.env.install:ro" -v "$PWD/.engines:/.engines:ro" \
-    -v "$PWD/.install-lock/engines.list:/engines.list:ro" alpine:3.21 tar -czf - \
-    -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines .env.install .engines engines.list > .install-lock/backup.tgz
+    -v "$PWD/.install-lock/engines.list:/engines.list:ro" alpine:3.21 sh -ec '
+      cd /
+      {
+        find work -mindepth 1 -type d \( -name .cache -o -name node_modules -o -name __pycache__ \) -prune -print
+        find work -mindepth 1 -type d \( -name .cache -o -name node_modules -o -name __pycache__ \) -prune -o -type l -print
+        find work -mindepth 1 -type d \( -name .cache -o -name node_modules -o -name __pycache__ \) -prune -o -type f -links +1 -exec stat -c "%i %n" {} + \
+          | sort -n | awk "seen[\$1]++ { sub(/^[0-9]+ /, \"\"); print }"
+      } > /tmp/caches
+      tar -czf - -X /tmp/caches -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines work .env.install .engines engines.list
+    ' > .install-lock/backup.tgz
   archive="$destination/gtmworks-$(date -u +%Y%m%dT%H%M%SZ)-$$.tgz"
   mv .install-lock/backup.tgz "$archive"
   echo "Backup: $archive"
@@ -635,31 +998,39 @@ elif [ "$operation" = restore ]; then
    # container, volume and network (#378, X2). Reading as the container's root also works under rootless Docker, where
    # the invoking user's own files are root's inside a container.
    for name in $engine_key_folders; do
-     key=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
-       tar -xOzf /backup/backup.tgz ".engines/$name/.env" | sed -n 's/^ENGINE_KEY=//p') || exit 1
+     engine_file=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
+       tar -xOzf /backup/backup.tgz ".engines/$name/.env") || exit 1
+     key=$(printf '%s\n' "$engine_file" | sed -n 's/^ENGINE_KEY=//p')
      if [ "$name" = first ]; then
        write_engine_env first "$key" "$engine_volume" "$(engine_project first)"
      else
        write_engine_env "$name" "$key" "$(engine_project "$name")" "$(engine_project "$name")"
      fi
+     # The Company's sandbox limits, checked with the archive above, come back with its key.
+     write_limits "$name" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_MEMORY=//p')" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_CPUS=//p')" || exit 1
    done
   fi
   if [ "$engines_layout" = yes ]; then
     # One folder per Engine (#386): each Engine's volume is mounted under its folder's name, emptied, and the archive's
     # data for it goes back where its record's address finds it.
+    # Each Company's work folder is emptied too, and gets the archive's when it holds one (#399).
     volumes rw -v "$PWD/.install-lock:/backup:ro" alpine:3.21 sh -ec '
       find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-      for folder in /engines/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
+      for folder in /engines/*/ /work/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
       # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
-      tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines
-    '
+      if [ "$1" = yes ]; then
+        tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines work
+      else
+        tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines
+      fi
+    ' sh "$work_folders"
   else
     # An archive from before this release: the first Engine is the install's one Engine, and its data is at opt/data.
     first_volume=$engine_volume
     if [ -f "$(engine_folder first)/.env" ]; then first_volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$(engine_folder first)/.env"); fi
     volumes rw -v "$first_volume:/opt/data" -v "$PWD/.install-lock:/backup:ro" alpine:3.21 sh -ec '
       find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-      for folder in /engines/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
+      for folder in /engines/*/ /work/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
       if [ "$1" = yes ]; then
         find /opt/data -mindepth 1 -maxdepth 1 -exec rm -rf {} +
         # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
@@ -681,6 +1052,9 @@ elif [ "$operation" = restore ]; then
   # first and the containers never start with it in their environment.
   adopt_engine_key || return 1
   compose up -d --force-recreate --wait --wait-timeout 300
+  # Every Engine starts with its Company's sandbox (#393), so the image the restored install's sandboxes run is recorded
+  # first, as an install records it: a release pins it, a checkout builds it once.
+  work_sandbox_image || return 1
   engines_up
   # The database now has this release's schema and every Company names one Engine, or names none (an archive made by an
   # earlier release): the record is settled in one transaction, as an update does (#378).
@@ -700,6 +1074,10 @@ elif [ "$operation" = restore ]; then
   if [ "$hermes_data" = no ]; then
     echo "The Agents' Hermes data was not in this backup: their knowledge, rules, skills and memory were not restored."
   fi
+  # The image the restored install's sandboxes start from is recorded only now that the restore is whole (#393).
+  mv .install-lock/work-sandbox-image .work-sandbox-image || { echo 'The restored install could not record its work sandbox image.' >&2; return 1; }
+  # The cutover (ADR 0023), once this release's app answers on the restored database and its worker runs.
+  apply_migrations cutover || { echo 'The restore finished, but its cutover migrations did not apply: run the install command again.' >&2; return 1; }
   return
 elif [ "$operation" = check-restore ]; then
   # get.sh runs this with the target release's own installer before it changes anything (#378, T4): the same check a
@@ -709,10 +1087,17 @@ elif [ "$operation" = check-restore ]; then
   echo 'The backup can be restored.'
   return
 elif [ "$operation" = update ] && [ -n "$release_image" ]; then
+  keep_previous_engine || exit 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   test -z "${2:-}" || { echo 'A release install updates to the next release: put its docker-compose.install.yml and install.sh here, then run sh install.sh update.' >&2; exit 1; }
   refuse_several_companies || return 1
+elif [ "$operation" = update ] && [ "$GTMWORKS_UPDATE_DOWNLOADED" = 1 ]; then
+  # The installer the update downloaded, which finishes it with its own steps: its migrations in their stages (ADR 0023),
+  # its work sandbox image and keys, its Engines.
+  # The run that downloaded it kept the previous release's Engine files in the scratch folder this one inherited.
+  :
 elif [ "$operation" = update ]; then
+  keep_previous_engine || exit 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   refuse_several_companies || return 1
   ref=${2:-main}
@@ -728,6 +1113,10 @@ elif [ "$operation" = update ]; then
     echo "Extracting update source..."
     tar -xzf /install/.install-lock/source.tgz -C /install --strip-components=1
   ' sh "$ref"
+  # The release this update downloaded finishes it with its own installer (#389): this one's steps are the previous
+  # release's, which know neither the new release's migration stages nor its sandboxes. The lock, held on descriptor 9,
+  # and the scratch folder with the previous Engine files pass to it; this run's exit cleanup does not run.
+  GTMWORKS_UPDATE_DOWNLOADED=1 exec sh scripts/install.sh update "$ref"
 elif [ "$operation" = sign-in ]; then
   shift
   sign_in "$@"
@@ -737,11 +1126,16 @@ elif [ "$operation" = company ]; then
   company "$@"
   return
 elif [ "$operation" = engines ]; then
-  # Every Engine's state, as `gtmworks status` reports it (scripts/get.sh). Non-zero when one does not answer.
-  compose exec -T web node scripts/company-list.mjs engines
-  return
+  # Every Engine's state, as `gtmworks status` reports it (scripts/get.sh), and every Company's work sandbox beside it:
+  # the sandbox state comes from the host's Docker, which the web container does not hold. Non-zero when an Engine or a
+  # sandbox does not answer, so `gtmworks status` names it.
+  report_status=0
+  report=$(compose exec -T web node scripts/company-list.mjs engines) || report_status=$?
+  status=$report_status
+  sandbox_report "$report" || status=1
+  return "$status"
 elif [ "$operation" != install ]; then
-  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] | company link <Company> | company list | engines]' >&2; exit 1
+  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] | company limits <Company> [--memory <size>] [--cpus <number>] | company link <Company> | company list | engines]' >&2; exit 1
 fi
 # A plain install run on an install the previous release made (its `hermes` container, no Engine folder) moves it to this
 # release as an update does, so it is refused the same way when that install holds several Companies on its one Engine,
@@ -771,11 +1165,15 @@ docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" nod
 echo 'Checking gateway configuration...'
 compose run --rm --no-deps gateway nginx -t
 if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
+# The image every Company's work sandbox runs (#392, ADR 0020): pulled from the release's pin or built from this
+# checkout, and recorded before anything can make a Company's sandbox. It comes before the migrations (#397), so an
+# update whose image cannot be pulled stops with the schema as it was and the release it runs still serving.
+work_sandbox_image || exit 1
 apply_migrations
 if [ -z "$release_image" ]; then
   # Tests only (#406): CI's install jobs load the one image the `image` job built, under this compose file's own tag,
-  # and set this so no job builds the app image again. GTMWORKS_IMAGE_PREBUILT is read here and nowhere else; a source
-  # install anywhere else builds its image here, as it always has.
+  # and set this so no job builds the app image again. GTMWORKS_IMAGE_PREBUILT is read here and in work_sandbox_image
+  # only; a source install anywhere else builds its images, as it always has.
   if [ "${GTMWORKS_IMAGE_PREBUILT:-}" != true ]; then
     compose build web
   else
@@ -803,8 +1201,18 @@ if [ -z "$release_image" ]; then
   fi
 fi
 # Every Engine is made from the template before the app and the worker start, recreated when the release pins a new
-# image, and left running otherwise.
-engines_up
+# image, and left running otherwise. An update whose Engines or sandboxes do not all start puts the previous release's
+# Engines back and stops before its app or worker is replaced (ADR 0023).
+if ! engines_up; then
+  if [ "$operation" = update ]; then
+    if restore_previous_engine; then
+      echo 'An Engine or a work sandbox did not start, so this update stopped: the previous release keeps serving, with its own Engines again. Nothing of this release serves.' >&2
+    else
+      echo 'An Engine or a work sandbox did not start, and the previous release could not get its own Engines back: run the install command again.' >&2
+    fi
+  fi
+  exit 1
+fi
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
   # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
   compose up -d --no-deps --wait --wait-timeout 300 auth web worker
@@ -828,6 +1236,13 @@ ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e E
 # configuration), and the app's health answers 503 meanwhile: the probes try again once a second, 60 tries in all, and
 # fail naming the address and its last answer when 200 never comes.
 compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','$engine_address/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
+# The cutover (ADR 0023): the migrations the release this one replaced could not run against apply now that this release's
+# app answers its health check and its worker runs in place of the previous one (the `up --wait` above fails unless it
+# does). What the cutover removes only the previous release calls; this release's worker records through the first
+# step's functions, which stay, so it needs no readiness of its own first. Until here a failed run left that release
+# serving on the database it was built for; one that fails now leaves this release serving, and the install command
+# applies them again.
+apply_migrations cutover || { echo 'This release serves, but its cutover migrations did not apply: run the install command again.' >&2; exit 1; }
 # The gtmworks command (#437): a folder the one line made keeps get.sh as gtmworks.sh, and the release now running leaves
 # the one its image carries. A command from before #437 never replaced itself, but its update runs this, so the update
 # brings the new command too. The new file is moved over the old one, never written into it: the old one may be the
@@ -843,6 +1258,9 @@ if [ -n "$release_image" ] && [ -f gtmworks.sh ]; then
   fi
 fi
 if [ -n "$release_image" ]; then printf '%s\n' "$release_image" > .install-release; fi
+# The work sandbox image this run made is recorded only now, with the install whole (#393, as before #393): a run that
+# failed leaves the image an earlier run recorded, and the exit handler starts no build.
+mv .install-lock/work-sandbox-image .work-sandbox-image
 # Whether first run is still open, asked through the app's service role; it answers open or closed and nothing else.
 setup=$(compose exec -T web node -e "const key=process.env.SUPABASE_SERVICE_ROLE_KEY; const response=await fetch('http://gateway:8080/rest/v1/rpc/setup_is_open',{method:'POST',headers:{apikey:key,authorization:'Bearer '+key}}); if(!response.ok) throw new Error('setup_is_open returned '+response.status); console.log(await response.json()===true?'open':'closed');" --input-type=module)
 echo 'Mail: http://localhost:8025'

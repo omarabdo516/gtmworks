@@ -11,7 +11,7 @@ const Empty=({text}:{text:string})=><div className="panel-card"><p className="pa
 // shows the reference's empty line. It imports no server code, so a component test draws the tabs as the server does.
 export function detailsTabs({t,slug,agent,activity,tools,tasks,files,fileCount,library,memory,log,logCount}:{t:I18n['t'],slug:string,agent:string,activity?:ReactNode,tools?:ReactNode,tasks?:ReactNode,files?:ReactNode,fileCount:number,library?:ReactNode,memory?:ReactNode,log?:ReactNode,logCount:number}):Record<DetailsTab,ReactNode> {
  // design-reference: screenSecHTML. The pinned Engine shows no Agent's screen, and gtmworks keeps the browser and
- // computer tools off (lib/agent-levels.mjs), so the screen is always the reference's asleep frame: not a button.
+ // computer tools off (lib/agent-toolsets.mjs), so the screen is always the reference's asleep frame: not a button.
  const screen=<section className="dp-sec" aria-labelledby="scr-h"><h3 className="dp-label"><span id="scr-h">{t('agentScreen')}</span></h3>
   <div className="scr-card"><div className="scr-thumb is-static"><div className="scr is-off">
    <span className="scr__bar" aria-hidden="true"><span className="scr__dots"><i/><i/><i/></span><span className="scr__url" dir="ltr"/></span>
