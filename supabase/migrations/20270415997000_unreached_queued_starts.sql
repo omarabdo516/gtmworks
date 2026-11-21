@@ -63,20 +63,25 @@ end $$;
 
 -- A handover leg handed back stays due as never started: its next start is a first attempt, so a refusal of it ends the
 -- leg as failed, and a waiting leg's ten minutes (or the answer's and the follow-up's day) still end it. The leg is
--- named, so an attempt of another leg is never handed back; the 30 seconds between starts stay.
+-- named, so an attempt of another leg is never handed back; the 30 seconds between starts stay. A leg Stop marked while
+-- this start was on its way (#478, stop_requested_at) waited only for the start's answer: none reached an Engine, so it
+-- ends as stopped now, with no Run to stop, instead of starting again after Stop.
 create function public.release_handover_start(h bigint, attempt integer, leg text) returns boolean
 language plpgsql security definer set search_path='' as $$
 declare r public.agent_handovers;
 begin
  select * into r from public.agent_handovers where id=h for update;
  if r.id is null or leg is null or r.state is distinct from leg or attempt is null or attempt < 1 then return false; end if;
- if r.state='waiting' and r.target_run is null and r.target_attempts=attempt then
-  update public.agent_handovers set target_attempts=target_attempts-1 where id=h; return true; end if;
- if r.state='handing' and r.answer_run is null and r.answer_attempts=attempt then
-  update public.agent_handovers set answer_attempts=answer_attempts-1 where id=h; return true; end if;
- if r.state='returning' and r.follow_up_run is null and r.return_attempts=attempt then
-  update public.agent_handovers set return_attempts=return_attempts-1 where id=h; return true; end if;
- return false;
+ if not ((r.state='waiting' and r.target_run is null and r.target_attempts=attempt)
+  or (r.state='handing' and r.answer_run is null and r.answer_attempts=attempt)
+  or (r.state='returning' and r.follow_up_run is null and r.return_attempts=attempt)) then return false; end if;
+ if r.stop_requested_at is not null then perform public.end_handovers_stopped(array[h]); return true; end if;
+ update public.agent_handovers set
+  target_attempts=target_attempts-case when r.state='waiting' then 1 else 0 end,
+  answer_attempts=answer_attempts-case when r.state='handing' then 1 else 0 end,
+  return_attempts=return_attempts-case when r.state='returning' then 1 else 0 end
+ where id=h;
+ return true;
 end $$;
 revoke all on function public.release_handover_start(bigint,integer,text) from public,anon,authenticated;
 grant execute on function public.release_handover_start(bigint,integer,text) to service_role;

@@ -54,6 +54,8 @@
   "channelHandoffs": "التسليمات",
   "channelHandoverAsked": "{0} طلب من {1}",
   "channelHandedFailed": "الشغل ماخلصش",
+  "channelHandedStopped": "اتوقّف",
+  "channelStop": "وقّف {0}",
   "channelSenderTo": "لـ {0}",
   "channelOnTheBoard": "على اللوحة:",
   "channelOnTheBoardSection": "على اللوحة",

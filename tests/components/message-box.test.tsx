@@ -431,6 +431,15 @@ const dictate = (reply: DictationReply = {}) => {
  return { calls, finish: (value: Response) => finish(value), fetchMock };
 };
 const voice = { company: 'co-1', agent: 'ag-1' };
+// The browser reads a recording into a data URL in its own time, outside the fake clock (blob.arrayBuffer). A held read
+// waits until the test lets it go, as a read on a loaded machine can still be going when "Writing" shows: a test that
+// answers the Engine before it was asked then fails every time instead of now and then (#528).
+const heldRead = () => {
+ const read = Blob.prototype.arrayBuffer; let unblock: () => void = () => {};
+ const held = new Promise<void>(resolve => { unblock = resolve; });
+ vi.spyOn(Blob.prototype, 'arrayBuffer').mockImplementation(async function (this: Blob) { await held; return read.call(this); });
+ return { release: () => act(async () => { unblock(); }) };
+};
 const voiced = (props: Parameters<typeof box>[0], language: Language = 'en') => render(<LanguageProvider language={language}><MessageBox placeholder="Write" voice={voice} {...props} /></LanguageProvider>);
 const pointer = (element: Element, type: string) => act(async () => { element.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1 })); });
 const flush = () => act(async () => { await vi.advanceTimersByTimeAsync(0); });
@@ -530,7 +539,7 @@ test('a permission that resolves after its session was cancelled starts no recor
 });
 
 test('a recording is sent for the Agent it started on, and an answer that arrives after the Agent changed inserts nothing', async () => {
- vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true });
+ vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true }); const reading = heldRead();
  let switchTarget: () => void = () => {};
  function Switcher() {
   const [target, setTarget] = useState(voice);
@@ -539,15 +548,20 @@ test('a recording is sent for the Agent it started on, and an answer that arrive
  }
  const screen = await render(<Switcher/>);
  await hold(boxOf(screen));
+ expect(engine.calls, 'the Engine is asked only once the browser has read the recording').toHaveLength(0);
+ await reading.release();
  await expect.poll(() => engine.calls.length).toBe(1);
  expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1' });
  await act(async () => { switchTarget(); });
- await act(async () => { engine.finish(Response.json({ text: 'words for the other agent' })); await Promise.resolve(); await Promise.resolve(); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Writing what you said…');
+ await act(async () => { engine.finish(Response.json({ text: 'words for the other agent' })); });
+ // Nothing went in once the answer was read: "Writing" ends only after it (#528).
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
 });
 
 test('an answer that arrives after the Agent changed and changed back inserts nothing', async () => {
- vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true });
+ vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true }); const reading = heldRead();
  let switchTarget: (agent: string) => void = () => {};
  function Switcher() {
   const [target, setTarget] = useState(voice);
@@ -556,12 +570,17 @@ test('an answer that arrives after the Agent changed and changed back inserts no
  }
  const screen = await render(<Switcher/>);
  await hold(boxOf(screen));
+ expect(engine.calls, 'the Engine is asked only once the browser has read the recording').toHaveLength(0);
+ await reading.release();
  await expect.poll(() => engine.calls.length).toBe(1);
  expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1' });
  // A → B → A: the box is back on A, but A's first recording was already replaced.
  await act(async () => { switchTarget('ag-2'); });
  await act(async () => { switchTarget('ag-1'); });
- await act(async () => { engine.finish(Response.json({ text: 'words from before the switch' })); await Promise.resolve(); await Promise.resolve(); });
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Writing what you said…');
+ await act(async () => { engine.finish(Response.json({ text: 'words from before the switch' })); });
+ // Nothing went in once the answer was read: "Writing" ends only after it (#528).
+ await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Write');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
 });
 
@@ -662,15 +681,17 @@ test('the waveform stands still with reduced motion', async () => {
 });
 
 test('a finished recording writes "Writing what you said…" then puts the words in at the caret, with a space before them, and focuses the field', async () => {
- vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true });
+ vi.useFakeTimers(); mic(); const engine = dictate({ deferred: true }); const reading = heldRead();
  const screen = await voiced({ send: async () => null });
  const message = screen.getByRole('textbox', { name: 'Message' });
  await userEvent.type(message, 'Plan the launch'); field(screen).setSelectionRange(4, 4);
  await hold(boxOf(screen));
  await expect.element(message).toHaveAttribute('placeholder', 'Writing what you said…');
- // "Writing" shows before the browser has read the recording; the Engine is answered only once it was asked (#414).
+ expect(engine.calls, 'the Engine is asked only once the browser has read the recording').toHaveLength(0);
+ await reading.release();
+ // "Writing" shows before the browser has read the recording; the Engine is answered only once it was asked (#414, #528).
  await expect.poll(() => engine.calls.length).toBe(1);
- await act(async () => { engine.finish(Response.json({ text: 'hello world' })); await Promise.resolve(); await Promise.resolve(); });
+ await act(async () => { engine.finish(Response.json({ text: 'hello world' })); });
  await expect.element(message).toHaveValue('Plan hello world the launch');
  await expect.element(message).toHaveFocus();
  expect(field(screen).selectionStart).toBe(16);

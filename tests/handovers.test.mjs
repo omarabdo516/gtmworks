@@ -26,7 +26,10 @@ function handover(overrides = {}) {
  };
  const service={
   rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
-   if(name==='handovers_due') return ok(row.state==='done'||row.state==='failed'||row.id<=args.after?[]:[{id:row.id,state:row.state,
+   // No Run Stop ended a handover on is left to stop (#478).
+   if(name==='stopped_runs_open') return {data:[],error:null};
+   if(name==='handover_runs_stopping') return {data:[],error:null};
+  if(name==='handovers_due') return ok(row.state==='done'||row.state==='failed'||row.id<=args.after?[]:[{id:row.id,state:row.state,
     conversation:row.conversation,run:row.state==='target'?row.target_run:row.state==='follow_up'?row.follow_up_run:null,
     profile:row.state==='waiting'||row.state==='target'?targetProfile:row.asker_profile,
     attempt:row.state==='returning'?row.return_attempts:row.target_attempts}]);
@@ -183,6 +186,8 @@ test('a leg claimed by begin_handover names the start\'s key and its own answer,
  const fake=fakeEngine(); const calls=/** @type {[string,any][]} */([]);
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
   calls.push([name,args]);
+  if(name==='stopped_runs_open') return {data:[],error:null};
+  if(name==='handover_runs_stopping') return {data:[],error:null};
   if(name==='handovers_due') return {data:[{id:7,state:'waiting',conversation,run:null,profile:leadProfile,attempt:0}],error:null};
   if(name==='begin_handover') return {data:[{state:'returning',attempt:1,company:'10000000-0000-0000-0000-000000000001',profile:leadProfile,session:conversation,
    input:'The job Ads was given did not finish.',instructions:'Lead the team.'}],error:null};

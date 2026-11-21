@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(39);
+select plan(43);
 -- #514: a queued Conversation turn's start, or a handover leg's, that never reached an Engine is handed back
 -- (release_queued_start, release_handover_start): the turn or leg stays due as never started, its next start is a first
 -- attempt, so a refusal of it fails the turn or the leg, and its own time limit still ends it. Only the attempt that
@@ -124,6 +124,23 @@ set local role service_role;
 select ok((select public.answer_handover(-5143,attempt,'run-514-target','waiting') from public.begin_handover(-5143)),'a third job starts its Run');
 select is(public.release_handover_start(-5143,1,'waiting'),false,'and its attempt is not handed back');
 reset role;
+
+-- #478: a leg Stop marked while its start was on its way ends as stopped once that start is handed back, instead of
+-- starting again after Stop: nothing reached an Engine, so there is no Run to stop.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c5140000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a5140000-0000-0000-0000-000000000011','Lead');
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c5140000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000001','Omar','Plan the April intake',gen_random_uuid(),'run-514-stop');
+insert into public.agent_handovers(id,company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal) overriding system value values
+ (-5144,'10000000-0000-0000-0000-000000000001','c5140000-0000-0000-0000-000000000002','run-514-stop','call-4','a5140000-0000-0000-0000-000000000011','a5140000-0000-0000-0000-000000000012','Stopped on its way');
+set local role service_role;
+select is((select attempt from public.begin_handover(-5144)),1,'a fourth job''s start is on its way');
+reset role;
+select is((select count(*)::int from public.stop_open_handovers('c5140000-0000-0000-0000-000000000002',null) where run is null),1,'when Stop marks it to end once its start answers');
+set local role service_role;
+select ok(public.release_handover_start(-5144,1,'waiting'),'the start never reached an Engine and is handed back');
+reset role;
+select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where id=-5144),'done:stopped:1','so the leg ends as stopped, and starts no more');
 
 select * from finish();
 rollback;

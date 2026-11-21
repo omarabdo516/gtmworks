@@ -6,6 +6,12 @@
   "ar": { "title": "الرسايل المستنية والشغل المتسلّم بيستنوا المحرك الواقف", "body": "لما محرك الوكلاء مايكونش شغال، الرسالة اللي كانت مستنية دورها، أو الشغلانة اللي وكيل سلّمها لوكيل تاني، دلوقتي بتستنى المحرك يرجع بدل ما تفشل على طول: الرسالة المستنية لحد عشر دقايق." }
  },
  {
+  "issue": 478,
+  "date": "2026-11-21",
+  "en": { "title": "Stop ends the whole chain", "body": "Stop in a chat, or on a channel message an agent is working on, now also stops every job the agents handed each other from it, each shown as stopped, and nothing more starts after it." },
+  "ar": { "title": "وقّف بيوقّف السلسلة كلها", "body": "زرار وقّف في المحادثة، أو على رسالة في القناة وكيل شغال عليها، بقى يوقّف كمان كل شغل الوكلا سلّموه لبعض منها، وكل خطوة بتبان إنها اتوقّفت، ومفيش حاجة تانية بتبدأ بعدها." }
+ },
+ {
   "issue": 502,
   "date": "2026-11-21",
   "en": { "title": "An update that cannot start keeps your old engine", "body": "When an update from an older install cannot start the new agent engine, your install now goes back to the engine it had, with all your agents' memory, so your company keeps working until you run the update again." },
