@@ -9,15 +9,16 @@ import { settingLabelKey } from '@/lib/engine-setting-labels.mjs';
 import type { ChangeProposalView } from '@/lib/conversations';
 
 type Named = Pick<ChangeProposalView, 'change' | 'setting' | 'value'>;
-type Choice = { provider: string, providerName: string, model: string };
+// A model as the Agent's profile's Engine lists it (lib/engine-settings.mjs readModels).
+export type ModelChoice = { provider: string, providerName: string, model: string };
 
 // A model travels as "provider/model" (lib/engine-settings.mjs). The card names it by the model the Engine lists and its
 // provider by the name the Engine gives it, where the Engine lists that model; otherwise by the parts of its id.
 export function modelParts(value: unknown) {
  const text = String(value ?? ''); const slash = text.indexOf('/');
  const provider = slash > 0 ? text.slice(0, slash) : ''; const model = slash > 0 ? text.slice(slash + 1) : text;
- const listed = (choices: Choice[]) => choices.find(choice => choice.provider === provider && choice.model === model);
- return { provider, model, providerName: (choices: Choice[]) => listed(choices)?.providerName || provider };
+ const listed = (choices: ModelChoice[]) => choices.find(choice => choice.provider === provider && choice.model === model);
+ return { provider, model, providerName: (choices: ModelChoice[]) => listed(choices)?.providerName || provider };
 }
 
 export function useChangeWords() {

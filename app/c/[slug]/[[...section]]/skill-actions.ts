@@ -56,7 +56,8 @@ export const answerAgentChange=withActionLog('answerAgentChange',async function 
  const path=place?back:`/c/${slug}/approvals`;
  // «Edit, then approve» (#484) sends the Owner's value as JSON: the database checks it as it checks a proposed value.
  const sent=form.get('edited'); const approve=form.get('intent')==='approve';
- const edited=approve&&typeof sent==='string'&&sent.length<=40000?(()=>{ try { return {value:JSON.parse(sent) as unknown}; } catch { return null; } })():undefined;
+ // An edit that is too long, does not read, or reads as nothing is refused, never approved as proposed.
+ const edited=!approve||typeof sent!=='string'?undefined:sent.length>100000?null:(()=>{ try { const value=JSON.parse(sent) as unknown; return value===null?null:{value}; } catch { return null; } })();
  const {state}=!await actionAllowed(db,'answerAgentChange',company)?{state:'notAllowed'}:edited===null?{state:'editInvalid'}
   :await answerChange(db,{company,proposal:Number(form.get('proposal')),approve,reason:String(form.get('reason')||''),...(edited?{edited:edited.value}:{})});
  // An approved model or setting changes what the Agent's settings page and the chat read: the whole frame is refreshed.

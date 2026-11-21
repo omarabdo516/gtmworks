@@ -1110,3 +1110,4 @@
 .gw.modal.chg-dialog { width: min(600px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 48px); overflow-y: auto; padding: 0; }
 .gw.modal.chg-dialog .chg-card { box-shadow: none; background: transparent; }
 @media (max-width: 599px) { .gw.modal.chg-dialog { width: calc(100vw - 32px); height: fit-content; border-radius: var(--gw-r-lg); } }
+.gw .chg-card .btn[aria-disabled="true"] { color: var(--gw-text-4); }

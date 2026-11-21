@@ -2,8 +2,8 @@
 import { useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useCardText } from '@/app/agent-card';
-import { ChangeCard, useChangeShared, type ChangeField, type ModelChoice } from '@/app/change-card';
-import { useChangeWords, modelParts } from '@/app/change-words';
+import { ChangeCard, useChangeShared, type ChangeField } from '@/app/change-card';
+import { useChangeWords, modelParts, type ModelChoice } from '@/app/change-words';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { Dialog, DialogContent, DialogTitle } from '@/components/paperclip/ui/dialog';
@@ -109,8 +109,9 @@ export function ChangeAnswer({slug,company,change,alone=false,back}:{slug:string
  const editable=read==='loading'||!!field;
  return <form action={answerAgentChange} className="card__actions">{fields}<Held>{sending=><>
   <button ref={no} type="button" className="btn btn--secondary" disabled={sending} onClick={()=>setDeclining(true)}>{c('changeDecline')}</button>
-  {editable&&<button ref={edit} type="button" className="btn btn--secondary" disabled={sending||!field} aria-busy={read==='loading'||undefined} title={read==='loading'?c('changeEditLoading'):undefined}
-   onClick={()=>{ setDraft(change.value); setEditing(true); }}>{c('changeEdit')}</button>}
+  {editable&&<button ref={edit} type="button" className="btn btn--secondary" disabled={sending} aria-disabled={!field||undefined} aria-busy={!field||undefined}
+   aria-describedby={field?undefined:`chg-edit-wait-${change.id}`} onClick={()=>{ if(!field) return; setDraft(change.value); setEditing(true); }}>{c('changeEdit')}</button>}
+  {editable&&!field&&<span className="sr-only" id={`chg-edit-wait-${change.id}`}>{c('changeEditLoading')}</span>}
   <button className="btn btn--primary" name="intent" value="approve" disabled={sending} aria-busy={sending||undefined}>{c('changeApprove')}</button>
  </>}</Held></form>;
 }

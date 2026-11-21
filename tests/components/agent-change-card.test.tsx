@@ -166,7 +166,7 @@ test('the Owner edits the model among the ones the Engine lists, by click or arr
  onTestFinished(() => screen.unmount());
  const proposal = screen.getByRole('group', { name: 'Proposed change: Analyst' });
  const edit = proposal.getByRole('button', { name: 'Edit, then approve' });
- await expect.element(edit).toBeEnabled();
+ await expect.element(edit).not.toHaveAttribute('aria-disabled');
  await edit.click();
  const editing = screen.getByRole('group', { name: 'Edit the proposal for Analyst' });
  const group = editing.getByRole('radiogroup', { name: 'Model' });
@@ -200,7 +200,8 @@ test('the instructions, the sub-agents switch and each listed setting are edited
  const screen = await render(<LanguageProvider language="en">{[size, zone, sub, soul].map(entry => <OwnerChangeCard key={entry.id} slug="rs-learning" company="co-1"
   item={{ ...entry, title: `Agent ${entry.id}`, change: { ...entry.change, agent: { ...analyst, name: `Agent ${entry.id}` } } }}/>)}</LanguageProvider>);
  onTestFinished(() => screen.unmount());
- const open = async (id: number) => { await screen.getByRole('group', { name: `Proposed change: Agent ${id}` }).getByRole('button', { name: 'Edit, then approve' }).click(); return screen.getByRole('group', { name: `Edit the proposal for Agent ${id}` }); };
+ const open = async (id: number) => { const edit = screen.getByRole('group', { name: `Proposed change: Agent ${id}` }).getByRole('button', { name: 'Edit, then approve' });
+  await expect.element(edit).not.toHaveAttribute('aria-disabled'); await edit.click(); return screen.getByRole('group', { name: `Edit the proposal for Agent ${id}` }); };
 
  const limit = await open(3);
  const number = limit.getByRole('spinbutton', { name: 'Memory size' });

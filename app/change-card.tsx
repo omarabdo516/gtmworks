@@ -13,12 +13,11 @@ import { AppTile } from '@/components/app-tile';
 import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import { useChangeWords, modelParts } from '@/app/change-words';
+import { useChangeWords, modelParts, type ModelChoice } from '@/app/change-words';
 import { madeDay, useZone } from '@/app/agent-made';
 import { dayOf } from '@/lib/activity-log.mjs';
 import type { ChangeProposalView } from '@/lib/conversations';
 
-export type ModelChoice={provider:string,providerName:string,model:string};
 // The field an Owner edits a proposal in, as lib/agent-changes.mjs reads it from the Agent's Engine profile.
 export type ChangeField={kind:'model',options:ModelChoice[]}|{kind:'instructions',limit:number}|{kind:'switch'}
  |{kind:'setting',type:'string'|'number'|'boolean'|'select',choices:string[]|null,limits:{min?:number,max?:number,integer?:boolean}|null,default:unknown};
