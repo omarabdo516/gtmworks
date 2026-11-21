@@ -464,3 +464,14 @@ test('a move the new main Agent cannot take keeps the source, paused, and answer
   assert.equal(jobs(third,leadProfile).length,0);
  } finally { await third.close(); }
 });
+
+test('a create whose answer is lost is found again for an interval schedule as for a time', async () => {
+ const fake=await engine();
+ try {
+  fake.settings.loseCronCreates=1;
+  const made=await createRoutine(at(fake,adsProfile),{name:morningName,prompt:`${morningMarker}\nSummary`,schedule:'every 720m'});
+  assert.equal(made.state,'done','the job the Engine made is recognized');
+  assert.equal(made.routine.schedule.minutes,720);
+  assert.equal(jobs(fake,adsProfile).length,1);
+ } finally { await fake.close(); }
+});
