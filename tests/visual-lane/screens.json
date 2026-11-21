@@ -13,5 +13,5 @@
   "approvals": { "path": "/c/rs-learning/approvals", "ready": ".approvals" },
   "change-proposal": { "path": "/c/rs-learning/conversations/69200000-0000-0000-0000-000000000003", "state": "change-proposal", "ready": ".chg-card" },
   "routines": { "path": "/c/rs-learning/settings?section=routines", "state": "routines", "ready": ".rt-row" },
-  "access-card": { "path": "/c/rs-learning/conversations/69400000-0000-0000-0000-000000000003", "state": "access-card", "as": "reviewer@example.com", "ready": ".reply-card--access" }
+  "settings-proposal": { "path": "/c/rs-learning/settings?agent=69200000-0000-0000-0000-000000000002", "state": "change-proposal", "ready": ".sov-pend" }
 }

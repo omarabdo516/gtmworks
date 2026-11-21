@@ -44,9 +44,6 @@ const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
 const change = (n: number) => `69200000-0000-0000-0000-00000000000${n}`;
-const access = (n: number) => `69400000-0000-0000-0000-00000000000${n}`;
-const reviewer = '20000000-0000-0000-0000-000000000003';
-const manager = '20000000-0000-0000-0000-000000000002';
 const routine = (n: number) => `69300000-0000-0000-0000-00000000000${n}`;
 const ownProfile = (agent: string) => `ag-${agent.replaceAll('-', '')}`;
 const companyProfile = `co-${rsLearning.replaceAll('-', '')}`;
@@ -133,24 +130,6 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
       delete from public.conversations where id='${change(3)}';
       delete from public.hermes_agents where id in ('${change(1)}','${change(2)}');`,
   },
-  // The first Contributor's chat with Lead, whose card asks whether to request the Agent hidden from them (#167).
-  'access-card': {
-    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
-       ('${access(1)}','${rsLearning}','${access(5)}','Lead','General',true,'visual-access-lead'),
-       ('${access(2)}','${rsLearning}','${access(6)}','Quill','Articles',false,'visual-access-quill');
-      insert into public.member_agent_access(company_id,person_id,agent_id) values ('${rsLearning}','${manager}','${access(2)}');
-      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${access(3)}','${rsLearning}','${reviewer}','${access(1)}','Lead','2026-06-10T12:00:00Z');
-      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
-       ('${rsLearning}','${access(3)}','person','${reviewer}',null,'مراجع','اكتبلي مقال عن كورس المحاسبة','${access(4)}','visual-access','2026-06-10T12:00:00Z'),
-       ('${rsLearning}','${access(3)}','agent',null,'${access(1)}','Lead','الشغلانة دي عند وكيل تاني في الشركة، والوكيل ده مش متاح ليك. تحب أبعت لـمدير (مدير) طلب إنه يتفتح ليك؟',null,'visual-access','2026-06-10T12:00:20Z');
-      insert into public.agent_access_requests(company_id,conversation_id,run_id,call_id,agent_id,asked_by,named_to,created_at) values
-       ('${rsLearning}','${access(3)}','visual-access','call-0','${access(2)}','${reviewer}','${manager}','2026-06-10T12:00:20Z');`,
-    unset: `delete from public.agent_access_requests where conversation_id='${access(3)}';
-      delete from public.conversation_messages where conversation_id='${access(3)}';
-      delete from public.conversations where id='${access(3)}';
-      delete from public.member_agent_access where agent_id='${access(2)}';
-      delete from public.hermes_agents where id in ('${access(1)}','${access(2)}');`,
-  },
 };
 for (const screen of screens) if (screen.state && !screenStates[screen.state]) throw new Error(`${screen.name}: no state "${screen.state}"`);
 
@@ -186,12 +165,11 @@ for (const screen of screens) {
         freshSeed(test.info().file, true);
         fixPublishingDates(baseURL);
         asAdmin(`update public.people set language='ar' where id='${omar}'`);
-        if (screen.as) asAdmin(`update public.people set language='ar' where id=(select id from auth.users where email='${screen.as}')`);
       }
       context = await laneContext(browser);
       page = await context.newPage();
       if (screen.anonymous) return;
-      await signIn(page, screen.as ?? 'omar@example.com', '/c/rs-learning/home');
+      await signIn(page, 'omar@example.com', '/c/rs-learning/home');
       // The sidebar lists recently opened Cards and the board orders Ideas by last change: opening Card 1 first gives
       // every screen the same list.
       await page.goto('/c/rs-learning/work/board/1');

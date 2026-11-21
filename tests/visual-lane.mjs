@@ -8,16 +8,15 @@ const cap = 15;
 export const widths = [1440, 390];
 export const themes = /** @type {const} */ (['light', 'dark']);
 
-// A screen is the view of the seeded Owner unless it is `anonymous`, or names another seeded person by email (`as`).
+// A screen is the view of the seeded Owner unless it is `anonymous`.
 const fields = {
   path: value => typeof value === 'string', // the address it opens
   ready: value => typeof value === 'string', // the element that shows the page has loaded
   state: value => typeof value === 'string', // a set-up the seed does not hold
   anonymous: value => value === true, // shown to a visitor who has not signed in
-  as: value => typeof value === 'string' && /^[a-z]+@example\.com$/.test(value), // a seeded person other than the Owner (#167)
 };
 
-/** @typedef {{ name: string, path: string, ready?: string, state?: string, anonymous?: true, as?: string }} LaneScreen */
+/** @typedef {{ name: string, path: string, ready?: string, state?: string, anonymous?: true }} LaneScreen */
 
 /** @returns {LaneScreen[]} */
 export function parseLaneScreens(text) {
