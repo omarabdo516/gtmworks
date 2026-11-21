@@ -225,9 +225,15 @@ case "${1:-check}" in
   docker info > /dev/null
   # Pulls inside this machine stall here (the nested network behind rootless Docker), so every image the job runs comes
   # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
-  images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local'
+  images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local' | grep -v '\$'
     awk '/^FROM/ && $2 ~ /[:@]/ {print $2}' Dockerfile
     grep -o -h -E '(alpine:[0-9.]+|node:[0-9a-z.-]+|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
+  # The work sandbox image every Company's sandbox runs (#392, #393): CI builds it in the run's image job and loads that
+  # build; here it is built from sandbox/Dockerfile on this host when missing, so the lane runs the same image.
+  sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml)
+  DOCKER_HOST=$host_docker docker image inspect "$sandbox_tag" > /dev/null 2>&1 \
+    || ( cd "$here" && DOCKER_HOST=$host_docker docker build -q -t "$sandbox_tag" sandbox > /dev/null )
+  images="$images $sandbox_tag"
   for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
   DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null
   # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it

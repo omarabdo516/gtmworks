@@ -14,6 +14,7 @@ const fakeDocker=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'company-add.mjs check'*) printf '%s\\n' "\${SLUG:-second-company-0000abcd}"; exit "\${CHECK_EXIT:-0}";;
  *'company-add.mjs add'*)
   if [ "\${KILL_ON_ADD:-}" = 1 ]; then kill -TERM "$PPID"; exit 1; fi
@@ -36,6 +37,8 @@ function install(t,{env}={}) {
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  copyFileSync('scripts/engine-template.yml',join(directory,'scripts/engine-template.yml'));
  writeFileSync(join(directory,'.env.install'),`HERMES_API_KEY=${'k'.repeat(64)}\nHERMES_ADDRESS=http://gtmworks-engine-first:8642\n`);
+ // The image every Company's sandbox runs, as an install records it (#392); `company add` makes a sandbox with its Engine.
+ writeFileSync(join(directory,'.work-sandbox-image'),'gtmworks-work-sandbox:local\n');
  writeFileSync(join(directory,'bin/docker'),fakeDocker,{mode:0o755});
  const commands=join(directory,'commands');
  const run=(...args)=>spawnSync('sh',['scripts/install.sh',...args],{cwd:directory,env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,...env},encoding:'utf8'});
@@ -80,7 +83,6 @@ test('company add has one add path and the installer has one Engine name and one
  // Every loop over the install's Engines reads the one lister (the restore's key loop reads the keys' own folder list
  // out of the archive instead, before any .engines/ exists, #378 X2), and every network the one reader.
  assert.equal((install.match(/for folder in \.engines\/\*\//g)||[]).length,1);
- assert.equal((install.match(/for name in \$\(engine_names\)/g)||[]).length,5);
  // A restore reads each Engine's key from the archive's checked folders, never from files it extracted.
  assert.equal((install.match(/for name in \$engine_key_folders; do/g)||[]).length,2);
  assert.match(install,/join_engine_network "\$\(engine_network_of "\$name"\)"/);

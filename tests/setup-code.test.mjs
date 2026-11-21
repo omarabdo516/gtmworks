@@ -105,6 +105,7 @@ printf '%s\\n' "$*" >> "$COMMANDS"
 all="$*"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *install-env.mjs*)
   file=; previous=
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done

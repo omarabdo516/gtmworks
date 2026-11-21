@@ -55,10 +55,18 @@ export function releaseEngineTemplate(text) {
  return text;
 }
 
+// The Engine template mounts three files of its own, so a release that ships the template without them would leave
+// every Engine unable to start: all are beside it wherever it is copied (Dockerfile, /app/install/scripts and
+// /app/release-source).
+const engineBeside = ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-listener-address.sh', 'scripts/engine-ssh-sync-files.sh'];
+
 export function writeReleaseAssets(app, directory, sandbox) {
  const compose = releaseCompose(readFileSync('docker-compose.install.yml', 'utf8'), app);
  const installer = releaseInstaller(readFileSync('scripts/install.sh', 'utf8'), app, sandbox);
  releaseEngineTemplate(readFileSync('scripts/engine-template.yml', 'utf8'));
+ for (const file of engineBeside) {
+  if (!readFileSync(file, 'utf8').trim()) throw new Error(`A release ships ${file} beside scripts/engine-template.yml, and it must not be empty.`);
+ }
  mkdirSync(directory, { recursive: true });
  writeFileSync(join(directory, 'docker-compose.install.yml'), compose);
  writeFileSync(join(directory, 'install.sh'), installer);

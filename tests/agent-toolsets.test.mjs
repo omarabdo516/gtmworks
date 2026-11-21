@@ -1,30 +1,51 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { everyAgentGets, sandboxTools, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, childToolsets, forbiddenOf, companyProfile, isAgentProfile } from '../lib/agent-toolsets.mjs';
+import { everyAgentGets, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, profileSettingsDiffer, childToolsets, forbiddenOf, companyProfile, isAgentProfile, workFolder } from '../lib/agent-toolsets.mjs';
 
 // The toolsets the pinned release names (toolsets.py, TOOLSETS keys of v0.23.0), so a misspelt name fails here instead of
 // being ignored by Hermes.
 const pinnedToolsets=['web','search','x_search','vision','video','image_gen','video_gen','computer_use','terminal','skills','browser','cronjob','file','tts','todo','memory','context_engine',
  'session_search','connections','project','bot_room','desktop_ui','onboarding','catalog','clarify','code_execution','delegation','kanban','debugging','safe','coding'];
 
-test('every Agent gets one fixed set: what a level 3 Agent had, the sandbox\'s tools held back until it exists', () => {
- // ADR 0018: web, vision, image generation, skills, the task list, memory, session search, the question tool and
- // scheduled work, read as one literal list so a change is seen here.
- assert.deepEqual([...everyAgentGets],['web','vision','image_gen','skills','todo','memory','session_search','clarify','cronjob']);
- assert.deepEqual([...sandboxTools],['terminal','file','code_execution']);
- for(const name of [...everyAgentGets,...sandboxTools,...noAgentGets]) assert.ok(pinnedToolsets.includes(name),name);
- const config=toolConfig();
+test('every Agent gets the terminal, files and code in the work sandbox beside the fixed set', () => {
+ // ADR 0018: web, vision, image generation, skills, the task list, memory, session search, the question tool,
+ // scheduled work, and the work sandbox's terminal, files and code execution (#393), read as one literal list so a
+ // change is seen here.
+ assert.deepEqual([...everyAgentGets],['web','vision','image_gen','skills','todo','memory','session_search','clarify','cronjob',
+  'terminal','file','code_execution']);
+ for(const name of [...everyAgentGets,...noAgentGets]) assert.ok(pinnedToolsets.includes(name),name);
+ const config=toolConfig({profile:'ag-a0000000000000000000000000000001'});
  assert.deepEqual(config.platform_toolsets.api_server,[...everyAgentGets]);
- // In this ticket the sandbox does not exist, so its tools stay off; #393 offers them by adding sandboxTools to the fixed set.
- for(const name of sandboxTools) assert.ok(config.agent.disabled_toolsets.includes(name),`${name} is held back`);
+ for(const name of ['terminal','file','code_execution']) assert.ok(!config.agent.disabled_toolsets.includes(name),`${name} is offered`);
  assert.deepEqual(fixedToolsets(),[...everyAgentGets]);
+ // Every Agent's commands start in its own folder in the Company's work folder, and its code runs with no person to
+ // approve each call.
+ assert.equal(workFolder,'/work');
+ assert.deepEqual(config.terminal,{cwd:'/work/ag-a0000000000000000000000000000001'});
+ assert.deepEqual(config.approvals,{unattended_mode:'approve'});
+});
+
+test('a profile starts in its own folder in the work folder and needs no approval for code, or it is written again', () => {
+ const own='ag-a0000000000000000000000000000001';
+ const other='co-10000000000000000000000000000002';
+ // Two profiles, two start folders: each Agent's commands start in the folder named for its own profile (#393).
+ assert.deepEqual(toolConfig({profile:own}).terminal,{cwd:`/work/${own}`});
+ assert.deepEqual(toolConfig({profile:other}).terminal,{cwd:`/work/${other}`});
+ assert.notEqual(toolConfig({profile:own}).terminal.cwd,toolConfig({profile:other}).terminal.cwd);
+ assert.equal(profileSettingsDiffer(toolConfig({profile:own}),own),false);
+ assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${own}`},approvals:{unattended_mode:'approve'}},own),false);
+ assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${other}`},approvals:{unattended_mode:'approve'}},own),true,'another profile\'s folder');
+ assert.equal(profileSettingsDiffer({terminal:{cwd:'/work'},approvals:{unattended_mode:'approve'}},own),true,'the work folder itself');
+ assert.equal(profileSettingsDiffer({terminal:{cwd:'.'},approvals:{unattended_mode:'approve'}},own),true,'the Engine\'s own disk');
+ assert.equal(profileSettingsDiffer({terminal:{cwd:`/work/${own}`}},own),true,'a profile that would ask a person to approve each call');
+ assert.equal(profileSettingsDiffer({approvals:{unattended_mode:'deny'},terminal:{cwd:`/work/${own}`}},own),true);
 });
 
 test('no Agent gets a switch for browser, computer_use, speech, video, project, desktop, catalog, onboarding, kanban or connections', () => {
  assert.deepEqual([...noAgentGets],['browser','computer_use','tts','video','video_gen','project','desktop_ui','catalog','onboarding','kanban','connections']);
- for(const subagents of [false,true]) for(const sandbox of [false,true]) {
-  const config=toolConfig({subagents,sandbox});
+ for(const subagents of [false,true]) {
+  const config=toolConfig({subagents});
   for(const name of noAgentGets) {
    assert.ok(!config.platform_toolsets.api_server.includes(name),`${name} is never offered`);
    assert.ok(config.agent.disabled_toolsets.includes(name),`${name} is always disabled`);
@@ -44,7 +65,10 @@ test('sub-agents stay the Owner\'s switch per Agent, and a child never gains wha
  const child=childToolsets(on);
  assert.ok(!child.toolsets.includes('delegation')&&!child.toolsets.includes('kanban'));
  assert.ok(child.disabled.includes('delegation'));
- for(const name of [...noAgentGets,...sandboxTools]) assert.ok(child.disabled.includes(name),`a child keeps ${name} off`);
+ for(const name of noAgentGets) assert.ok(child.disabled.includes(name),`a child keeps ${name} off`);
+ // A child works in the same pinned sandbox as its parent: delegation keeps the terminal, files and code, and gives the
+ // child no reach its parent did not have (the same ssh backend, address and key, which the managed scope pins).
+ for(const name of ['terminal','file','code_execution']) assert.ok(child.toolsets.includes(name),`a child keeps ${name}`);
  assert.ok(childToolsets(off).disabled.includes('delegation'));
 });
 
@@ -56,7 +80,8 @@ test('a read-back is the fixed set only when it is exactly it, with no forbidden
  assert.equal(toolsDiffer([...fixedToolsets(),'x_search']),true,'a tool the module places nowhere is not it');
  assert.equal(toolsDiffer(fixedToolsets({subagents:true}),{subagents:false}),true,'the sub-agent variant is its own set');
  assert.equal(toolsDiffer(fixedToolsets({subagents:true}),{subagents:true}),false);
- assert.equal(toolsDiffer(fixedToolsets({sandbox:true}),{sandbox:true}),false);
+ // The terminal, files and code are part of the fixed set now, so their absence is a difference like any other.
+ for(const name of ['terminal','file','code_execution']) assert.equal(toolsDiffer(fixedToolsets().filter(toolset=>toolset!==name)),true,`a missing ${name} is not the fixed set`);
 });
 
 test('a Company\'s own App is beside the fixed set, and a toolset the Engine adds later is not', () => {
@@ -73,11 +98,15 @@ test('a Company\'s own App is beside the fixed set, and a toolset the Engine add
  assert.equal(toolsDiffer([...fixedToolsets(),'mcp-browser'],{apps:['browser']}),true);
 });
 
-test('the sandbox tools join the fixed set in one place when the sandbox exists', () => {
- const sandboxed=toolConfig({sandbox:true});
- assert.deepEqual(sandboxed.platform_toolsets.api_server,[...everyAgentGets,...sandboxTools]);
- for(const name of sandboxTools) assert.ok(!sandboxed.agent.disabled_toolsets.includes(name),`${name} is offered`);
- assert.equal(toolsDiffer([...everyAgentGets,...sandboxTools],{sandbox:true}),false);
+test('the sandbox tools are one place only: no caller can ask for a fixed set without them', () => {
+ // #392 held terminal, files and code back until a sandbox existed; #393 gives every Company one, so the module offers
+ // them always, in every profile's config.
+ for(const profile of ['co-10000000000000000000000000000002','ag-a0000000000000000000000000000001']) {
+  const config=toolConfig({profile});
+  assert.equal(Object.hasOwn(config,'sandbox'),false);
+  for(const name of ['terminal','file','code_execution']) assert.ok(config.platform_toolsets.api_server.includes(name),`${profile} offers ${name}`);
+ }
+ for(const name of ['terminal','file','code_execution']) assert.ok(toolsDiffer([...everyAgentGets,...noAgentGets].filter(toolset=>toolset!==name)),`${name} missing`);
 });
 
 test('a profile name is the Company\'s and an Agent\'s, and nothing else is one', () => {

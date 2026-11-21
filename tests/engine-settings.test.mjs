@@ -169,6 +169,24 @@ test('a write checks type, choices and limits first, sends only its own keys, an
  } finally { await fake.close(); }
 });
 
+test('no Settings write reaches the terminal or the approvals: they are the work sandbox\'s, refused before the Engine is asked', async () => {
+ const fake=await fakeHermes();
+ try {
+  setup(fake);
+  profileOn(fake,agentProfile(writer));
+  const before=requestsOf(fake,'PUT').length;
+  // #393: where a command runs and whether an Agent's code needs a person are gtmworks's own, pinned by the module and the
+  // Engine's managed scope. A Settings write naming one is refused before the Engine is asked.
+  for(const setting of ['terminal.backend','terminal.cwd','terminal.ssh_host','approvals.unattended_mode']) {
+   assert.equal(engineOwnsSetting(setting),true,setting);
+   assert.deepEqual(await writeSetting(connection(fake,agentProfile(writer)),{setting,value:'local'}),{state:'owned'},setting);
+   const {db}=database();
+   assert.deepEqual(await changeCompanySetting(db,{company,setting,value:'local',hermes:{address:fake.address,key:fake.settings.key},driver:driver(fake)}),{state:'notAllowed'},setting);
+  }
+  assert.equal(requestsOf(fake,'PUT').length,before,'nothing reached the Engine');
+ } finally { await fake.close(); }
+});
+
 test('a Company-wide write reaches every Agent profile and the shared space, names each Agent, and touches no other Company', async () => {
  const fake=await fakeHermes();
  try {

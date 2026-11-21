@@ -2,7 +2,9 @@
 # There is no password, no empty password, no interactive challenge, no root login and no user but the work user.
 Port 2222
 
-HostKey /home/pn/.ssh/ssh_host_ed25519_key
+# The host key lives in a folder of its own: an install mounts the Company's host-key volume read-only here, so a
+# recreated sandbox keeps the key its Engine's known_hosts is pinned to. A container started without one makes its own.
+HostKey /home/pn/.ssh-host/ssh_host_ed25519_key
 PidFile /home/pn/.ssh/sshd.pid
 
 PubkeyAuthentication yes

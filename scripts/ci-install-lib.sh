@@ -53,6 +53,15 @@ engine_healthy() {
   done
   return 1
 }
+# Every TCP port one Engine listens on, read from inside its own container: /proc/net/tcp and tcp6 list a listening socket
+# as state 0A, with its port in hex after the last colon of the address (#393). The work-network check probes every one of
+# them on the Engine's work-network address, so a listener that moves to the wildcard address is caught on any port.
+engine_listen_ports() {
+  docker exec "$1" sh -ec 'cat /proc/net/tcp /proc/net/tcp6 2> /dev/null || cat /proc/net/tcp 2> /dev/null || true' | while read -r _ address _ state _; do
+    [ "${state:-}" = 0A ] || continue
+    printf '%d\n' "$((16#${address##*:}))"
+  done | sort -un | paste -sd, -
+}
 # The second Company on an Engine of its own, made by the command a person runs (#382): the caller names its failure and
 # where the output goes; an area running a release's own installer names that script instead.
 second_company() { sh "${1:-scripts/install.sh}" company add --name 'Second Company' --owner proxy-owner@example.com; }
@@ -71,13 +80,14 @@ remove_engine() {
     name=$(engine_value "$folder" NAME)
     volume=$(engine_value "$folder" VOLUME)
     network=$(engine_value "$folder" NETWORK)
-    docker rm -f "$name" > /dev/null 2>&1 || true
-    docker volume rm "$volume" > /dev/null 2>&1 || true
-    docker network rm "$network" > /dev/null 2>&1 || true
+    slug=${name#gtmworks-engine-}
+    docker rm -f "$name" "gtmworks-sandbox-$slug" > /dev/null 2>&1 || true
+    docker volume rm "$volume" "gtmworks-work-$slug" "gtmworks-sandbox-hostkey-$slug" > /dev/null 2>&1 || true
+    docker network rm "$network" "gtmworks-work-$slug" > /dev/null 2>&1 || true
   done
-  docker rm -f gtmworks-engine-first > /dev/null 2>&1 || true
-  docker volume rm gtmworks-install_hermes > /dev/null 2>&1 || true
-  docker network rm gtmworks-engine-first > /dev/null 2>&1 || true
+  docker rm -f gtmworks-engine-first gtmworks-sandbox-first > /dev/null 2>&1 || true
+  docker volume rm gtmworks-install_hermes gtmworks-work-first gtmworks-sandbox-hostkey-first > /dev/null 2>&1 || true
+  docker network rm gtmworks-engine-first gtmworks-work-first > /dev/null 2>&1 || true
   docker rm -f gtmworks-install-hermes-1 > /dev/null 2>&1 || true
   rm -rf .engines
 }
@@ -150,6 +160,12 @@ owned_by_others() {
   find "$1" ! -user "$(id -u)"
 }
 web_image() { docker inspect -f '{{.Image}}' "$(compose ps -q web)"; }
+# The public half of the key an Engine dials its Company's sandbox with (#393): read from the Engine's own data volume in a
+# throwaway container of the sandbox image, as root because the key belongs to the Engine's user (uid 10000).
+sandbox_public_of() { docker run --rm --user 0 --entrypoint sh -v "$1:/data:ro" "$(cat .work-sandbox-image)" -ec 'ssh-keygen -y -f /data/ssh/id_ed25519'; }
+# One Engine's own work network, derived from its container name, and its sandbox name.
+work_network_of() { printf '%s' "$1" | sed 's/^gtmworks-engine-/gtmworks-work-/'; }
+sandbox_of() { printf '%s' "$1" | sed 's/^gtmworks-engine-/gtmworks-sandbox-/'; }
 probe() {
   for path in /api/health /sign-in; do
     status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path") || fail "$path request ($1)"

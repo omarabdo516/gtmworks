@@ -1,0 +1,26 @@
+#!/bin/sh
+# The work sandbox's login shell (§7 of docs/engine-probes/work-sandbox-ssh.md, #393): every ssh session the Engine opens
+# starts here, so this is where an Agent's own start folder is made.
+#
+# The Engine's `ssh` backend opens each command with `builtin cd -- <folder> || exit 126`
+# (tools/environments/base_session_env.py) and refuses the whole command when the folder does not exist. A profile's
+# start folder is its own folder in the Company's work folder; it is made here from the path the command names, before
+# bash runs, so it exists before the Engine's first command and again after a sandbox restart. Only a plain folder
+# directly under the work folder is made: nothing here can reach outside it.
+for arg do
+  case $arg in
+    *'builtin cd -- '*) ;;
+    *) continue ;;
+  esac
+  folder=$(printf '%s\n' "$arg" | sed -n 's/.*builtin cd -- \([^ ]*\).*/\1/p' | head -n 1)
+  case $folder in
+    /work/*) ;;
+    *) continue ;;
+  esac
+  name=${folder#/work/}
+  case $name in
+    ''|*/*|*..*) continue ;;
+  esac
+  mkdir -p -- "$folder" 2> /dev/null || true
+done
+exec /bin/bash "$@"

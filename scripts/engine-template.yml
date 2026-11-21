@@ -2,6 +2,10 @@
 # and its own network. scripts/install.sh writes .engines/first/.env and runs this file as its own Compose project, and
 # `gtmworks company add` (#382) writes another engine folder and runs the same file, so every Engine is made the same
 # way. The image is the one place the Engine release is pinned; tests/bundled-hermes.test.mjs and the driver check it.
+#
+# The Company's work sandbox (#393) is in the same project: the second container every Agent's terminal, files and code
+# run in, on a network of its own with the Engine beside it. Its names come from the Engine's folder (scripts/install.sh),
+# never from this file or the install's environment, so a restore brings them back without a second record.
 services:
   engine:
     # The one place the Engine release is pinned, by tag and digest; every Engine of an install runs it, and nothing
@@ -12,26 +16,96 @@ services:
     # The key is required: an Engine with no key must refuse to start rather than serve an API with none.
     command: [sh, -ec, 'test -n "$${API_SERVER_KEY}" || { echo "The Engine has no key: run scripts/install.sh" >&2; exit 1; }; exec hermes gateway run']
     # No ports and no env file: the Run API and the management listener are on this Engine's own network only, and only
-    # this Engine's own key reaches it. No gtmworks secret is passed to an Engine.
+    # this Engine's own key reaches it. No gtmworks secret is passed to an Engine. The file tools write only under the
+    # work folder, which is the sandbox's (#390), so an Agent's file never lands on the Engine's own disk.
     environment:
-      API_SERVER_HOST: 0.0.0.0
       API_SERVER_PORT: 8642
       API_SERVER_KEY: ${ENGINE_KEY:?Run scripts/install.sh}
       HERMES_DASHBOARD: "1"
       HERMES_DASHBOARD_SESSION_TOKEN: ${ENGINE_KEY:?Run scripts/install.sh}
+      # The dashboard refuses a Host header that is not the address it bound to (DNS-rebinding guard), and the app and
+      # the worker reach it by this Engine's container name: the name is declared here as its public host, so the
+      # listener still binds the install network's address alone and the name answers there.
+      HERMES_DASHBOARD_PUBLIC_URL: http://${ENGINE_NAME:?Run scripts/install.sh}:9119
+      HERMES_WRITE_SAFE_ROOT: /work
+      # A cont-init hook that fails stops the container (s6-overlay's default carries on): an Engine never serves without
+      # the file-sync patch or its listener address (#393).
+      S6_BEHAVIOUR_IF_STAGE2_FAILS: 2
     volumes:
       - data:/opt/data
+      # The backend the Engine's terminal, file and code tools use, pinned so no profile and no Settings write can move
+      # them back onto the Engine's own disk (ADR 0018).
+      - ./engine-managed.yml:/etc/hermes/config.yaml:ro
+      # The ssh backend's file sync, off (#393): a hook before s6 starts any service patches the Engine's own copy to take
+      # the terminal.ssh_sync_files key the managed configuration sets, and fails the start if the pinned text moved.
+      - ./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro
+      # The one way the listeners learn the address the install network gave this Engine: a hook that runs before s6
+      # starts any service writes it into the container's environment, so the gateway and the dashboard bind there and
+      # never to the wildcard address the sandbox's network could reach (#390).
+      - ./engine-listener-address.py:/etc/hermes/listener-address.py:ro
+      - ./engine-listener-address.sh:/etc/cont-init.d/05-engine-listener-address:ro
     networks:
-      - engine
+      engine:
+      work:
     healthcheck:
-      test: [CMD, /opt/hermes/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/health', timeout=5)"]
+      test: [CMD, /opt/hermes/.venv/bin/python, /etc/hermes/listener-address.py, --health]
       interval: 5s
       timeout: 10s
       start_period: 120s
       retries: 60
+
+  sandbox:
+    # A source install builds this image (scripts/install.sh work_sandbox_image) and a release pins it by digest; every
+    # Company's sandbox of the install runs the same one.
+    image: ${SANDBOX_IMAGE:-gtmworks-work-sandbox:local}
+    restart: unless-stopped
+    container_name: ${SANDBOX_NAME:-gtmworks-sandbox}
+    # The image's own ordinary user (pn, uid 1000), no capabilities and no new privileges: the container runs as that
+    # user from its first process, and its sshd only ever becomes the user it already is.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # A process limit and shared memory large enough for Chromium (the base image's own browser, which the screen and a
+    # rendered page run); the RAM and CPU a sandbox gets are the install's defaults, set in one place (scripts/install.sh).
+    pids_limit: ${SANDBOX_PIDS:-2048}
+    shm_size: ${SANDBOX_SHM:-1gb}
+    mem_limit: ${SANDBOX_MEMORY:-2g}
+    cpus: ${SANDBOX_CPUS:-2.0}
+    environment:
+      # The public key that arrived when the container started; no private key is here, and a sandbox that gets none
+      # accepts nobody.
+      SSH_AUTHORIZED_KEY: ${SANDBOX_AUTHORIZED_KEY:-}
+    volumes:
+      # The Company's work folder: one named volume, read and written by the sandbox only.
+      - work:/work
+      # The host key is made once with the Engine's key pair and kept here, mounted read-only at the path sshd reads it
+      # from, so a recreated container keeps the key its Engine's known_hosts is pinned to.
+      - host-key:/home/pn/.ssh-host:ro
+    networks:
+      work:
+        aliases:
+          - sandbox
+    healthcheck:
+      test: [CMD, python3, -c, "import socket; socket.create_connection(('127.0.0.1',2222),3).close()"]
+      interval: 5s
+      timeout: 10s
+      start_period: 30s
+      retries: 30
+
 volumes:
   data:
     name: ${ENGINE_VOLUME:?Run scripts/install.sh}
+  work:
+    name: ${WORK_VOLUME:-gtmworks-work-first}
+  host-key:
+    name: ${SANDBOX_HOST_KEY_VOLUME:-gtmworks-sandbox-hostkey-first}
+
 networks:
   engine:
     name: ${ENGINE_NETWORK:?Run scripts/install.sh}
+  work:
+    name: ${WORK_NETWORK:-gtmworks-work-first}
+    # No route out of the install: the sandbox reaches its Engine on this network and nothing else (#394 adds the one
+    # exit service that changes this, on the same network).
+    internal: true

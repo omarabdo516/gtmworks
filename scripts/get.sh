@@ -749,8 +749,9 @@ ROW
   if [ -z "$unhealthy" ]; then
     compose exec -T web node --input-type=module -e "for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in']) { const response=await fetch(url); console.log(url+' '+response.status); if(response.status!==200) process.exitCode=1; }" < /dev/null \
       || unhealthy=' the app'
-    # Every Engine of the install, each Company's own: a stopped or unhealthy one is named, and status fails (#382).
-    run_installer engines || unhealthy="$unhealthy an Engine"
+    # Every Engine of the install with its Company's work sandbox (#382, #393): a stopped or unhealthy one is named, and
+    # status fails.
+    run_installer engines || unhealthy="$unhealthy an Engine or a work sandbox"
   fi
   [ -z "$unhealthy" ] || fail "Not healthy:$unhealthy. Repair with: gtmworks install"
   say "All $total services are healthy."

@@ -14,7 +14,7 @@ async function companyEngine() {
  const fake=await fakeHermes();
  const name=companyProfile(company);
  const install={address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'};
- await provideProfile(install,{name,soul:'',config:toolConfig(),forbidden:toolConfig().agent.disabled_toolsets});
+ await provideProfile(install,{name,soul:'',config:toolConfig({profile:name}),forbidden:toolConfig().agent.disabled_toolsets});
  return {fake,target:{...install,profile:name},servers:()=>fake.settings.profiles.get(name).config.mcp_servers||{}};
 }
 const states=async target=>Object.fromEntries((await readApps(target)).apps.map(app=>[app.key,app.state]));
