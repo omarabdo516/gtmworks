@@ -11,8 +11,10 @@ const install = readFileSync('scripts/install.sh', 'utf8');
 function archivedPaths() {
   const start = install.indexOf('tar -czf');
   assert.notEqual(start, -1, 'scripts/install.sh has the backup tar command');
-  const end = install.indexOf('> .install-lock/backup.tgz', start);
-  assert.notEqual(end, -1, 'the backup tar writes .install-lock/backup.tgz');
+  assert.notEqual(install.indexOf('> .install-lock/backup.tgz', start), -1, 'the backup tar writes .install-lock/backup.tgz');
+  // The command runs in a shell inside the helper container since #399 (it finds the work folders' caches first), so
+  // it ends at its own line's end.
+  const end = install.indexOf('\n', start);
   // A continued command is one command: drop the backslashes that break it across lines.
   const args = install.slice(start, end).replace(/\\\s*\n/g, ' ').split(/\s+/).filter(Boolean);
   const root = args.indexOf('-C');

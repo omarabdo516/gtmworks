@@ -3,15 +3,15 @@ create extension if not exists pgtap with schema extensions;
 select plan(9);
 -- #345. RS Learning's Lead runs on the Company's profile, Ads on its own, Writer's own profile is not made yet; Aleem's
 -- Lead on Aleem's profile. The worker writes each listed profile's SOUL.md section from this list.
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values
- ('e8000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy());
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values
+ ('e8000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',true);
 insert into public.agent_profiles(agent_id,company_id) values ('e8000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001');
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('e8000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001'),
  ('e8000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000002','Ads','Ads',false,'ag-e8000000000000000000000000000012'),
  ('e8000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000003','Writer','SEO',false,'ag-e8000000000000000000000000000013');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy());
+insert into public.company_profiles(company_id,profile,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true);
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('e8100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','e8000000-0000-0000-0000-000000000012','Ads');
 -- Ads's rules: one the Owner told, one approved, one waiting, one refused, one removed; Lead's: one the Owner told.

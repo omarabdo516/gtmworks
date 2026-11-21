@@ -14,8 +14,8 @@ select json_build_object(
  'guarded_both_tables',exists(select 1 from pg_trigger where tgrelid='public.hermes_agents'::regclass and tgname='agent_profile_agent' and tgenabled='O'),
  'every_run_entry_checks',(select bool_and(position('agent_profile_refusal' in pg_get_functiondef(f::regprocedure))>0) from unnest(array[
   'public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)','public.claim_conversation_turn(uuid)','public.begin_channel_start(bigint)','public.begin_note_start(bigint)']) f),
- 'ready_needs_level_policy_confirmation',(select bool_and(position(t in pg_get_functiondef('public.agent_profile_refusal(text,uuid,uuid)'::regprocedure))>0)
-  from unnest(array['agent_level','engine_tool_policy','tools_pending']) t),
+ 'ready_needs_confirmation',(select bool_and(position(t in pg_get_functiondef('public.agent_profile_refusal(text,uuid,uuid)'::regprocedure))>0)
+  from unnest(array['tools_confirmed','tools_pending','agentToolsPending']) t),
  'company_work_leaves_agent_profiles',(select bool_and(position('^ag-[0-9a-f]{32}$' in pg_get_functiondef(f::regprocedure))>0) from unnest(array[
   'public.company_profile_work()','public.move_company_profile(uuid)']) f),
  'forget_covers_agent_profiles',position('agent_profiles' in pg_get_functiondef('public.forget_company_profile(text)'::regprocedure))>0,
@@ -23,8 +23,8 @@ select json_build_object(
   and position('agent_profiles' in pg_get_functiondef('public.lead_create_agent'::regproc))>0
   and position('lead_agent_id' in pg_get_functiondef('public.lead_create_agent'::regproc))>0,
  'worker_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
-  from unnest(array['public.lead_create_agent(uuid,text,text,text,text,text[],text,text,integer,integer,boolean)','public.lead_agent_profile(uuid,text,text,text)',
-   'public.agent_profile_work()','public.begin_agent_tools(uuid)','public.record_agent_profile(uuid,text,integer,integer,boolean)']) f),
+  from unnest(array['public.lead_create_agent(uuid,text,text,text,text,text[],text,text,boolean,boolean)','public.lead_agent_profile(uuid,text,text,text)',
+   'public.agent_profile_work()','public.begin_agent_tools(uuid)','public.record_agent_profile(uuid,text,boolean)']) f),
  'helpers_private',(select bool_and(not has_function_privilege(r,f,'execute')) from unnest(array['anon','authenticated','service_role']) r,
   unnest(array['public.lead_agent_id(uuid,text,text)','public.agent_engine_profile(uuid)','public.agent_profile_refusal(text,uuid,uuid)',
    'public.guard_agent_profile_agent()']) f)

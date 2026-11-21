@@ -71,7 +71,7 @@ test('a fresh install walks from the setup link to sign-in, Lead, the board, Age
  const [{id:company,profile}]=localQuery(`select id,public.company_engine_profile(id) profile from public.companies`,baseURL);
  // The worker's step: the Company's own profile in the Engine, and Lead on it.
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
- localStatement(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,tools_pending,skills_shared) select id,public.company_engine_profile(id),agent_level,public.engine_tool_policy(),false,true from public.companies`,baseURL);
+ localStatement(`insert into public.company_profiles(company_id,profile,tools_confirmed,tools_pending,skills_shared) select id,public.company_engine_profile(id),true,false,true from public.companies`,baseURL);
  expect(localQuery(`select public.attach_company_profile('${company}') attached`,baseURL)).toEqual([{attached:true}]);
 
  // 2. Signed out, the Owner signs in with that email and password, answers alone, and lands in one Conversation with Lead.

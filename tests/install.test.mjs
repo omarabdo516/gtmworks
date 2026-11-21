@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, statSync, existsSync, symlinkSync, linkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
@@ -22,8 +22,11 @@ test('CI prints the captured update log on every failed-update assertion', t => 
  // failed-update block itself.
  const lines=step.run.split('\n');
  const definitions=lines.filter(line=>/^fail\(\) \{|^fail_update\(\) \{/.test(line));
+ // The block removes the failing migration with the lib's own function, which this fixture states the same way.
+ definitions.push('remove_failing_migration() { rm -f supabase/migrations/99999999999999_failure.sql; }');
  const start=lines.findIndex(line=>line.startsWith('if sh scripts/install.sh update'));
- const end=lines.findIndex(line=>line.startsWith('trap - EXIT'));
+ // The block is the rollback area's end (#389): it closes at that function's own brace.
+ const end=lines.findIndex((line,index)=>index>start&&line==='}');
  assert.ok(start>=0&&start<end,'the proof has the failed-update block');
  const script=`${definitions.join('\n')}
 fail_prefix='install check failed: '
@@ -45,8 +48,12 @@ ${lines.slice(start,end).join('\n')}`;
  ]) {
   // This fixture tests CI's log forwarding; it does not run the installer or simulate psql.
   writeFileSync(fixture,`update diagnostic marker\n${failure.MISSING_LABEL ? '' : 'Applying migration: 99999999999999_failure.sql\n'}`);
+  // The failing migration the area put in the checkout, which leaves it on every path, an update that passed included.
+  mkdirSync(join(directory,'supabase/migrations'),{recursive:true});
+  writeFileSync(join(directory,'supabase/migrations/99999999999999_failure.sql'),'select 1/0;');
   const failed=spawnSync('bash',['-e','-o','pipefail','-c',script],{cwd:directory,env:{...env,...failure},encoding:'utf8'});
   assert.equal(failed.status,1,failed.stderr);
+  assert.equal(existsSync(join(directory,'supabase/migrations/99999999999999_failure.sql')),false,`the fixture stays after: ${reason}`);
   assert.ok(failed.stderr.includes(readFileSync(fixture,'utf8')));
   assert.ok(failed.stderr.includes(`install check failed: ${reason}`));
  }
@@ -55,7 +62,7 @@ ${lines.slice(start,end).join('\n')}`;
  assert.equal(passed.stderr,'');
 });
 
-test('update preserves the serving containers on migration failure and safely replaces its own source', t => {
+test('update preserves the serving containers on migration failure and hands the run to the installer it downloaded', t => {
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-update-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
@@ -68,6 +75,7 @@ test('update preserves the serving containers on migration failure and safely re
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *alpine:3.21*) while [ "$1" != alpine:3.21 ]; do shift; done; shift; "$@";;
  *validate*) exit "\${VALIDATION_EXIT:-0}";;
  *'count(*) from public.companies'*) echo 1;;
@@ -89,7 +97,13 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
   env,encoding:'utf8'});
  assert.equal(result.status,3,result.stderr);
  assert.match(result.stderr,/division by zero/);
- assert.doesNotMatch(readFileSync(commands,'utf8'),/\bstop\b|\bup\b|\bbuild\b/);
+ assert.doesNotMatch(readFileSync(commands,'utf8'),/\bstop\b|\bup\b|\bbuild web\b/);
+ // The work sandbox image is made before the migrations (#397): an update whose image cannot be made stops with the
+ // schema as it was, and nothing that serves is touched by making it.
+ const ran=readFileSync(commands,'utf8');
+ assert.ok(ran.indexOf('build --tag gtmworks-work-sandbox:local sandbox')>=0&&ran.indexOf('build --tag gtmworks-work-sandbox:local sandbox')<ran.indexOf('--single-transaction'),ran);
+ // A run that failed records no work sandbox image (#393): the file appears only when the install is whole.
+ assert.equal(existsSync(join(directory,'.work-sandbox-image')),false);
  assert.match(readFileSync(commands,'utf8'),/ON_ERROR_STOP=1 --single-transaction/);
  // The stub reports only the SQL error; the installer must generate its own migration label.
  assert.match(readFileSync(env.MIGRATION_SQL,'utf8'),/\\else\n\\echo Applying migration: 999_failure.sql\n\\ir \/migrations\/999_failure.sql/);
@@ -97,10 +111,15 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
  assert.doesNotMatch(readFileSync(env.DOWNLOAD_ARGS,'utf8'),/Authorization/);
  assert.equal(existsSync(join(directory,'.install-lock')),false);
  const replacement=join(directory,'replacement.sh');
- writeFileSync(replacement,`${readFileSync('scripts/install.sh','utf8')}\n${'# padding\n'.repeat(2000)}exit 42\n`);
+ // The downloaded installer says it runs and finishes the update (#389): the previous release's steps know neither the
+ // new release's migration stages nor its sandboxes.
+ writeFileSync(replacement,readFileSync('scripts/install.sh','utf8').replace('set -eu\n','set -eu\necho "downloaded installer: ${GTMWORKS_UPDATE_DOWNLOADED:-}"\n'));
  const success=spawnSync('sh',['scripts/install.sh','update','main'],{cwd:directory,
   env:{...env,FAIL_MIGRATION:'0',UPDATE_SOURCE:replacement,GH_TOKEN:'test-github-token'},encoding:'utf8'});
  assert.equal(success.status,0,success.stderr);
+ assert.match(success.stdout,/^downloaded installer: 1$/m);
+ assert.equal(success.stdout.match(/Downloading update source/g).length,1,'the downloaded installer downloads nothing again');
+ assert.equal(existsSync(join(directory,'.install-lock')),false,'the scratch folder goes when the downloaded installer ends');
  assert.match(readFileSync(env.DOWNLOAD_ARGS,'utf8'),/--header\nAuthorization: Bearer test-github-token\nhttps:\/\/api.github.com\/repos\/omarabdo516\/gtmworks\/tarball\/main/);
  assert.match(readFileSync(commands,'utf8'),/run --rm -e GH_TOKEN -v/);
  assert.doesNotMatch(success.stdout+success.stderr+readFileSync(commands,'utf8'),/test-github-token/);
@@ -109,6 +128,10 @@ if [ -n "\${UPDATE_SOURCE:-}" ]; then cp "$UPDATE_SOURCE" scripts/install.sh; fi
  const moved=readFileSync(join(directory,'.env.install'),'utf8');
  assert.equal(moved,'existing secrets\n');
  assert.match(readFileSync(join(directory,'.engines/first/.env'),'utf8'),/^ENGINE_KEY=k{64}$/m);
+ // The work sandbox image every Company's sandbox runs (#392): a source checkout builds it from sandbox/Dockerfile and
+ // records the reference the installer's later runs and every Company's sandbox read.
+ assert.match(readFileSync(commands,'utf8'),/^build --tag gtmworks-work-sandbox:local sandbox$/m);
+ assert.equal(readFileSync(join(directory,'.work-sandbox-image'),'utf8'),'gtmworks-work-sandbox:local\n');
  for(const [failure,status,lastStage] of [
   [{DOWNLOAD_EXIT:'8'},8,/Downloading update source/],
   [{EXTRACTION_EXIT:'9'},9,/Extracting update source/],
@@ -142,6 +165,7 @@ test('update checks the new gateway config before migrating and recreates the ga
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *alpine:3.21*) exit 0;;
  *'nginx -t'*) exit "\${GATEWAY_CONFIG_EXIT:-0}";;
  *'count(*) from public.companies'*) echo 1;;
@@ -197,6 +221,7 @@ test('an update of an install with more than one Company is refused before it ch
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'count(*) from public.companies'*) echo "$COMPANIES";;
  *'label=com.docker.compose.service=hermes'*) echo "\${OLD_HERMES:-}";;
  *'exec -T db psql'*) cat > "$MIGRATION_SQL";;
@@ -216,7 +241,8 @@ esac
   if(mode==='release') {
    // A release install runs from its own folder, whose install.sh names its image by digest.
    const image=`ghcr.io/omarabdo516/gtmworks:1.2.3@sha256:${'a'.repeat(64)}`;
-   writeFileSync(join(directory,'install.sh'),installer.replace('release_image=','release_image='+image));
+   const sandboxImage=`ghcr.io/omarabdo516/gtmworks-sandbox:1.2.3@sha256:${'b'.repeat(64)}`;
+   writeFileSync(join(directory,'install.sh'),installer.replace('release_image=','release_image='+image).replace('sandbox_image=','sandbox_image='+sandboxImage));
    writeFileSync(join(directory,'docker-compose.install.yml'),`name: gtmworks-install\nservices:\n  db:\n    image: ${image}\n`);
    command=['install.sh','update'];
   } else {
@@ -335,7 +361,7 @@ test('the install job updates a real previous-release install with one Company, 
   "[[ $(first_engine_key) == \"$key\" ]] || fail 'the update adopted the Engine key'",
   "if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi",
   "== gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'",
-  "== gtmworks-engine-first ]] || fail \"the Engine joins its own network only\"",
+  "== $'gtmworks-engine-first\\ngtmworks-work-first' ]] || fail \"the Engine joins its install network and its work network only (got: $engine_networks)\"",
   'node /check/check-install-engine-network.mjs',
   "fail 'the container the previous release ran the Engine in is retired'",
   "|| fail \"the updated install's Company answers from its Engine record with the adopted key\"",
@@ -477,9 +503,9 @@ test('the backup area makes the install, the Companies and the archives it needs
  assert.ok(at('install_source backup-install.log || fail')<at('complete_setup ||'));
  // The source install's own archive is made after first run and before the second Company has an Engine of its own.
  assert.ok(at('complete_setup ||')<at("sh scripts/install.sh backup || fail 'backup'"));
- assert.ok(at("sh scripts/install.sh backup || fail 'backup'")<at('second_company ||'));
+ assert.ok(at("sh scripts/install.sh backup || fail 'backup'")<at('second_company scripts/install.sh --memory'));
  // The source install's own archive is restored into a fresh install, then the every-Engine one is made and restored.
- assert.ok(at('second_company ||')<at("sh scripts/install.sh backup || fail 'backup of every Engine'"));
+ assert.ok(at('second_company scripts/install.sh --memory')<at("sh scripts/install.sh backup || fail 'backup of every Engine'"));
  assert.ok(at("fail 'backup'")<at('first_archive=$(find backups'));
  assert.ok(at('sh scripts/install.sh restore "$first_archive"')<at("fail 'backup of every Engine'"));
  assert.ok(at("fail 'backup of every Engine'")<at('sh scripts/install.sh restore "$every_engine"'));
@@ -498,15 +524,20 @@ test('the install job updates two Companies to a release pinning another Engine 
  const build=lines.findIndex(line=>line.includes('build the release that pins another Engine image'));
  for(const [index,name] of [[tagged,'the other Engine image tag'],[build,'the release that pins it']]) assert.ok(index>=0,`the job makes ${name}`);
  assert.ok(tagged<build&&build<update,run);
- assert.ok(run.includes("RUN sed -i 's#^\\( *image:\\).*#\\1 gtmworks-engine-check:0.0.2#' /app/install/scripts/engine-template.yml"),run);
+ assert.ok(run.includes("RUN sed -i '0,/^\\( *image:\\).*/s//\\1 gtmworks-engine-check:0.0.2/' /app/install/scripts/engine-template.yml"),run);
  assert.ok(run.includes("node scripts/release-assets.mjs \"$fourth\" release-engines"),run);
  // Every Engine was recreated with the new image, on its own volume and network, and a Run on each answers.
  for(const text of [
   "[[ -n $engine && $(docker inspect -f '{{.Id}}' \"$engine\") != \"$before\" ]] || fail \"the update recreated the Engine $name\"",
   "== gtmworks-engine-check:0.0.2 ]] || fail \"the Engine $name runs the image the release pins\"",
   "|| fail \"the Engine $name keeps its own volume through the update\"",
-  "|| fail \"the Engine $name joins its own network only after the update\"",
-  "check-install-engines.mjs\" || fail 'a Run on each Company answers after the update'",
+  "|| fail \"the Engine $name joins its own network and its work network only after the update\"",
+  "fail 'a Run on each Company answers after the update, and its Agent runs a command in its sandbox'",
+  // The release also pins another work sandbox image (#399): every sandbox is made again from it and keeps its work folder.
+  "node scripts/release-assets.mjs \"$fourth\" release-engines \"$other_sandbox\"",
+  "|| fail \"the update made the sandbox of $slug again\"",
+  "|| fail \"the sandbox of $slug runs the work sandbox image the release pins\"",
+  "|| fail \"the update keeps the work folder of $slug\"",
  ]) assert.ok(run.includes(text),text);
  // The code word was written into each Company's own Engine before the update, and each container's id and image were
  // read before it, so a recreation is proven rather than assumed.
@@ -534,7 +565,8 @@ test('the install job leaves the successful update to issue 52 and keeps the fai
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  assert.doesNotMatch(run,/update-gateway\.log|old_gateway|sed -i '\/X-Real-IP\/d'/);
  assert.equal([...run.matchAll(/sh scripts\/install\.sh update /g)].length,1,'only the failed update runs');
- for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then fail_update 'update must fail'; fi",
+ for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then remove_failing_migration; fail_update 'update must fail'; fi",
+  "fi\nremove_failing_migration\n",
   "grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log","[[ $(compose ps -q web) == \"$old_web\" ]] || fail_update 'old web container still serving'",
   "to_regclass('public.update_should_rollback') is null","fail_update 'old version healthy after failed update'"]) assert.ok(run.includes(text),text);
 });
@@ -590,7 +622,7 @@ test('failed backup resumes the install and leaves no archive or secrets behind'
  writeFileSync(join(directory,'.env.install'),'private-key');
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
-case "$*" in *'.State.Health.Status'*) echo healthy;; *'tar -czf'*) echo 'partial-private-archive'; exit 9;; esac
+case "$*" in *'.State.Health.Status'*) echo healthy;; *'tar -czf'*) echo 'partial-private-archive'; exit 9;; *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';; esac
 `,{mode:0o755});
  const commands=join(directory,'commands');
  const result=spawnSync('sh',['scripts/install.sh','backup'],{cwd:directory,
@@ -621,12 +653,16 @@ test('backup and restore round-trip every Engine\'s volume and key; failed extra
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-roundtrip-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','.engines/first','.engines/second-company',
-  ...paths.map(path=>`volumes/${path}`),`volumes/${firstVolume}/agents`,`volumes/${secondVolume}/profiles/co-second/memories`]) {
+  ...paths.map(path=>`volumes/${path}`),`volumes/${firstVolume}/agents`,`volumes/${secondVolume}/profiles/co-second/memories`,
+  'volumes/gtmworks-work-first/co-first/.cache','volumes/gtmworks-work-second-company/ag-second/site/node_modules/pkg']) {
   mkdirSync(join(directory,folder),{recursive:true});
  }
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
+ // The image every Company's sandbox runs, as an install of this release records it (#392): the Engines restart with
+ // their sandboxes after a backup.
+ writeFileSync(join(directory,'.work-sandbox-image'),'gtmworks-work-sandbox:local\n');
  // Each Engine's key lives in its own file, and travels in the archive (#385).
  const engineEnv=(name,volume,network,key)=>
   `ENGINE_NAME=${name}\nENGINE_KEY=${key}\nENGINE_VOLUME=${volume}\nENGINE_NETWORK=${network}\n`;
@@ -637,6 +673,17 @@ test('backup and restore round-trip every Engine\'s volume and key; failed extra
  for(const path of paths) writeFileSync(join(directory,'volumes',path,'saved'),'original',{mode:0o640});
  writeFileSync(join(directory,'volumes',firstVolume,'agents','SOUL.md'),'the team says this',{mode:0o600});
  writeFileSync(join(directory,'volumes',secondVolume,'profiles','co-second','memories','MEMORY.md'),'the second team says this',{mode:0o600});
+ // Each Company's work folder (#399), with a file its Agent made and the tool caches its commands left.
+ writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),'the first brief',{mode:0o644});
+ // The links an Agent can make in it: a restore refuses a link member, so the backup leaves them out and keeps the file.
+ symlinkSync('brief.md',join(directory,'volumes/gtmworks-work-first/co-first/latest.md'));
+ linkSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),join(directory,'volumes/gtmworks-work-first/co-first/brief-again.md'));
+ writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/.cache/big.bin'),'cache');
+ // A file a tool also linked into its cache keeps its own name: the cache's name sorts first and is left out with the cache.
+ writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/report.md'),'the report',{mode:0o644});
+ linkSync(join(directory,'volumes/gtmworks-work-first/co-first/report.md'),join(directory,'volumes/gtmworks-work-first/co-first/.cache/report.md'));
+ writeFileSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site/index.html'),'the second site',{mode:0o644});
+ writeFileSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site/node_modules/pkg/index.js'),'module');
  writeFileSync(join(directory,'bin/docker'),`#!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { appendFileSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -644,14 +691,16 @@ import { spawnSync } from 'node:child_process';
 const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
 appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
 if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.exit(0); }
-// Each named volume mounted at /engines/<folder> is the folder of that name in ./volumes (Docker would mount it there);
-// the volume's own folder is a link to it, so a mount is a real directory to tar.
+if(args.some(arg=>String(arg).includes('/data/ssh/id_ed25519'))) { console.log('client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost'); process.exit(0); }
+// Each named volume mounted at /engines/<folder> or /work/<folder> is the folder of that name in ./volumes (Docker would
+// mount it there); the volume's own folder is a link to it, so a mount is a real directory to tar.
 mkdirSync(root+'/engines',{recursive:true});
+mkdirSync(root+'/work',{recursive:true});
 for(let index=0;index<args.length;index++) {
  if(args[index]!=='-v') continue;
  const [source,target]=args[index+1].split(':');
- if(!target||!target.startsWith('/engines/')) continue;
- const name=target.slice('/engines/'.length),from=root+'/'+source,to=root+'/engines/'+name;
+ if(!target||!/^\\/(engines|work)\\//.test(target)) continue;
+ const from=root+'/'+source,to=root+target;
  if(existsSync(from)&&lstatSync(from).isSymbolicLink()) continue;
  rmSync(to,{recursive:true,force:true});
  if(existsSync(from)) renameSync(from,to); else mkdirSync(to,{recursive:true});
@@ -676,9 +725,12 @@ if(args[0]==='compose') {
   assert.equal(args[args.indexOf('--volumes-from')+1],'db-stopped');
   assert.ok(args.includes('storage-stopped'),'the files volume is archived too');
  }
- if(command[0]==='tar' && command[1]==='-czf') {
+ const backingUp=command[0]==='sh'&&String(command[2]).includes('tar -czf');
+ if(backingUp) {
   // BusyBox has one global -C, unlike GNU tar's positional -C options.
-  assert.equal(command.filter(arg=>arg==='-C').length,1);
+  assert.equal(command[2].match(/ -C /g).length,1);
+  assert.ok(args.includes('gtmworks-work-first:/work/first:ro'),'the first work folder is archived');
+  assert.ok(args.includes('gtmworks-work-second-company:/work/second-company:ro'),'the second work folder is archived');
   assert.ok(args.includes(cwd+'/.env.install:/.env.install:ro'));
   assert.ok(args.includes(cwd+'/.engines:/.engines:ro'),'the Engine keys are archived too');
   assert.ok(args.includes(cwd+'/.install-lock/engines.list:/engines.list:ro'),'the Engines the Companies name are archived too');
@@ -693,7 +745,7 @@ if(args[0]==='compose') {
   const child=spawnSync(command[0],[...command.slice(1,command.indexOf('-C')).map(arg=>arg.replaceAll('/backup/',cwd+'/.install-lock/')),'-C',cwd,'.engines'],{stdio:'inherit'});
   process.exit(child.status ?? 1);
  }
- if(command[0]==='sh') {
+ if(command[0]==='sh' && !backingUp) {
   assert.ok(command[2].includes('--numeric-owner'));
   assert.ok(command[2].includes('-xzpf'));
   if(process.env.FAIL_EXTRACTION==='1') process.exit(9);
@@ -704,7 +756,9 @@ if(args[0]==='compose') {
   .replaceAll('/etc/postgresql-custom',root+'/etc/postgresql-custom')
   .replaceAll('/opt/data',root+'/opt/data')
   .replaceAll('/engines',root+'/engines')
-  .replaceAll('-C / ','-C '+root+' '));
+  .replaceAll('/work',root+'/work')
+  .replaceAll('-C / ','-C '+root+' ')
+  .replaceAll('cd /\\n','cd '+root+'\\n'));
  const child=spawnSync(mapped[0],mapped.slice(1),{stdio:'inherit'});
  process.exit(child.status ?? 1);
 }
@@ -717,9 +771,10 @@ if(args[0]==='compose') {
  assert.equal(statSync(join(directory,archive)).mode & 0o777,0o600);
  // Every Engine was stopped before its volume was copied.
  const commands=readFileSync(join(directory,'commands'),'utf8');
- const copied=commands.indexOf('"-czf"');
- for(const name of ['gtmworks-engine-first','gtmworks-engine-second-company']) {
-  const stopped=commands.indexOf(JSON.stringify(['stop',name]));
+ const copied=commands.indexOf('tar -czf');
+ // Every Engine and its work sandbox (#399).
+ for(const name of ['first','second-company']) {
+  const stopped=commands.indexOf(JSON.stringify(['stop',`gtmworks-engine-${name}`,`gtmworks-sandbox-${name}`]));
   assert.ok(stopped>=0&&stopped<copied,`${name} is stopped before the copy: ${commands}`);
  }
  // Both Engine volumes are in the archive, each under its own folder, their files under their own names and modes.
@@ -731,6 +786,12 @@ if(args[0]==='compose') {
   assert.ok(entries.includes(entry),entry);
  }
  assert.ok(entries.includes('var/lib/storage/'));
+ // Every Company's work folder is in the archive under its Engine folder's name, without its tool caches (#399).
+ assert.ok(entries.includes('work/second-company/ag-second/site/index.html'));
+ assert.ok(!entries.some(entry=>/\/(\.cache|node_modules)\//.test(entry)),'the archive holds no tool cache');
+ assert.ok(!entries.includes('work/first/co-first/latest.md'),'the archive holds no symbolic link of a work folder');
+ assert.equal(entries.filter(entry=>/^work\/first\/co-first\/brief(-again)?\.md$/.test(entry)).length,1,'a file with two names is archived once, by one of them');
+ assert.ok(entries.includes('work/first/co-first/report.md'),'a file also linked into a cache keeps its name outside it');
  assert.ok(!entries.some(entry=>entry==='opt/data/'||entry.startsWith('opt/data/')),'the new layout holds no opt/data');
  // The archive names the Engines its Companies name, so a restore knows every one it must hold (#378, C4).
  assert.ok(entries.includes('engines.list'),'the archive holds the Engines manifest');
@@ -765,6 +826,13 @@ if(args[0]==='compose') {
  assert.equal(readFileSync(join(directory,'volumes',secondVolume,'profiles','co-second','memories','MEMORY.md'),'utf8'),'the second team says this');
  assert.equal(readFileSync(join(directory,'.engines/first/.env'),'utf8'),firstEnv);
  assert.equal(readFileSync(join(directory,'.engines/second-company/.env'),'utf8'),secondEnv);
+ // Each Company's work folder is emptied and put back as the archive kept it, its caches left out (#399).
+ const restored=readdirSync(join(directory,'volumes/gtmworks-work-first/co-first'));
+ assert.ok(restored.includes('report.md'),restored.join());
+ const brief=restored.filter(name=>name!=='report.md');
+ assert.equal(brief.length,1,brief.join());
+ assert.equal(readFileSync(join(directory,'volumes/gtmworks-work-first/co-first',brief[0]),'utf8'),'the first brief');
+ assert.deepEqual(readdirSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site')),['index.html']);
  assert.doesNotMatch(restore.stdout,/Hermes data was not in this backup/);
  assert.match(readFileSync(join(directory,'commands'),'utf8'),/--force-recreate/);
  // Every Engine starts from its own folder again, and the app and the worker join each Engine's network.
@@ -794,6 +862,7 @@ test('restore refuses an archive it cannot fully restore before it changes anyth
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'tar -tzf'*) printf '%s\\n' "$ARCHIVE_ENTRIES";;
  *'tar -tvzf'*) printf '%s\\n' "\${ARCHIVE_LISTING:-drwxr-xr-x root/root 0 var/lib/storage/}";;
  *'tar -xOzf'*'.engines/'*) printf 'ENGINE_KEY=%s\\n' "\${ARCHIVE_ENGINE_KEY:-${'a'.repeat(64)}}";;
@@ -905,6 +974,7 @@ import { spawnSync } from 'node:child_process';
 const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
 appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
 if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.exit(0); }
+if(args.some(arg=>String(arg).includes('/data/ssh/id_ed25519'))) { console.log('client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost'); process.exit(0); }
 if(args[0]==='compose') {
  if(args.includes('ps')) console.log(args.at(-1)+'-id');
  if(args.includes('psql')) console.log(args.some(arg=>arg.includes('select e.address'))?'http://gtmworks-engine-first:8642':'t');
@@ -965,6 +1035,7 @@ test('an archive made before Hermes data was included restores, says what it lac
  const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
  appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
 if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.exit(0); }
+if(args.some(arg=>String(arg).includes('/data/ssh/id_ed25519'))) { console.log('client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost'); process.exit(0); }
  if(args[0]==='compose') {
   if(args.includes('stop')) writeFileSync(cwd+'/stopped','yes');
   if(args.includes('up')) { writeFileSync(cwd+'/stopped','no'); if(args.includes('--force-recreate')) writeFileSync(cwd+'/env-at-up',readFileSync(cwd+'/.env.install')); }
@@ -1023,6 +1094,7 @@ test('restore refuses an occupied install before replacing any volume or key', t
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'tar -tzf'*) printf '%s\\n' var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install;;
  *'exec -T db psql'*) echo f;;
 esac
@@ -1043,20 +1115,23 @@ test('installer preserves secrets, tightens permissions and streams ordered tran
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
- for(const name of ['002_second.sql','001_first.sql','001_first.verify.sql']) writeFileSync(join(directory,'supabase/migrations',name),'select 1;');
+ // 003 is the second step of a change the previous release could not run against (ADR 0023): it is a cutover.
+ for(const name of ['002_second.sql','001_first.sql','001_first.verify.sql','003_third_cutover.sql']) writeFileSync(join(directory,'supabase/migrations',name),'select 1;');
  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o644});
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *validate*) exit "\${VALIDATION_EXIT:-0}";;
  *engine-key*) printf '%s\n' "$ENGINE_KEY";;
- *'exec -T db psql'*) printf '%s\n' "$*" > "$INSTALL_SQL.args"; cat > "$INSTALL_SQL";;
+ *'exec -T db psql'*) printf '%s\n' "$*" > "$INSTALL_SQL.args"; n=$(ls "$INSTALL_SQL".* 2> /dev/null | grep -c '\.[0-9]*$' || true); cat > "$INSTALL_SQL.$n"; cp "$INSTALL_SQL.$n" "$INSTALL_SQL";;
 esac
 `,{mode:0o755});
  const engineKey='a1'.repeat(32);
  const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,INSTALL_SQL:join(directory,'migration.sql'),ENGINE_KEY:engineKey};
  for(const attempt of [1,2]) {
+  for(const file of readdirSync(directory).filter(name=>/^migration\.sql\.\d+$/.test(name))) rmSync(join(directory,file));
   const result=spawnSync('sh',['scripts/install.sh'],{cwd:directory,env,encoding:'utf8'});
   assert.equal(result.status,0,`${attempt}: ${result.stderr}`);
   assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
@@ -1064,7 +1139,13 @@ esac
   // The install's own secrets stay in .env.install; the Engine's key is in the Engine's own file, and stays.
   assert.match(readFileSync(join(directory,'.engines/first/.env'),'utf8'),new RegExp(`^ENGINE_KEY=${engineKey}$`,'m'));
   assert.equal(statSync(join(directory,'.engines/first/.env')).mode & 0o777,0o600);
-  const sql=readFileSync(env.INSTALL_SQL,'utf8');
+  // Two transactions: every migration but the cutover before the app starts, then the cutover alone once it answers.
+  const runs=readdirSync(directory).filter(name=>/^migration\.sql\.\d+$/.test(name)).sort().map(name=>readFileSync(join(directory,name),'utf8'));
+  assert.equal(runs.length,2,`${attempt}: one transaction before the app and one after`);
+  const [sql,cutover]=runs;
+  assert.doesNotMatch(sql,/003_third_cutover/,'the cutover is not applied before the app answers');
+  assert.match(cutover,/\\echo Applying migration: 003_third_cutover\.sql\n\\ir \/migrations\/003_third_cutover\.sql/);
+  assert.doesNotMatch(cutover,/00[12]_/,'the cutover transaction applies the cutover alone');
   assert.match(readFileSync(`${env.INSTALL_SQL}.args`,'utf8'),/ON_ERROR_STOP=1 --single-transaction/);
   assert.match(sql,/pg_advisory_xact_lock/);
   assert.match(sql,/\\gset\n\\if :applied\n\\else\n\\echo Applying migration: 001_first.sql\n\\ir \/migrations\/001_first.sql/);
@@ -1095,6 +1176,7 @@ test('a source install that skips building the app image says so in one line', t
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
   *validate*) exit 0;;
   *engine-key*) printf '%s\\n' "$ENGINE_KEY";;
   *'exec -T db psql'*) cat > /dev/null;;
@@ -1229,6 +1311,7 @@ const probeShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *install-env.mjs*)
   file=; previous=; all="$*"
   for argument do [ "$previous" = --env-file ] && file=$argument; previous=$argument; done
@@ -1354,6 +1437,7 @@ test('the Engine key file is written atomically, and the install keeps its key w
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'count(*) from public.companies'*) echo 1;;
  *alpine:3.21*) exit 0;;
  *'exec -T db psql'*) cat > /dev/null;;
@@ -1397,6 +1481,7 @@ test('every Engine is started even when one fails, and the run fails naming the 
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'engine-template.yml up -d --wait'*)
   case "$*" in *"$FAIL_ENGINE"*) exit 1;; esac;;
  *' ps -q web'*) echo web-id;;
@@ -1437,11 +1522,13 @@ test('a backup stops before an Engine that did not stop and writes no archive', 
  for(const folder of ['scripts','bin','.engines/first']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  writeFileSync(join(directory,'.env.install'),'KEYS=kept\n',{mode:0o600});
+ writeFileSync(join(directory,'.work-sandbox-image'),'gtmworks-work-sandbox:local\n');
  writeFileSync(join(directory,'.engines/first/.env'),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`,{mode:0o600});
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'ps -aq --filter name=^gtmworks-engine-'*) [ -z "\${PS_FAILS:-}" ] || exit 1; echo engine-id;;
  *'inspect -f {{.State.Running}}'*) [ -z "\${INSPECT_FAILS:-}" ] || exit 1; echo true;;
  *' ps -q web'*) echo web-id;;
@@ -1459,13 +1546,13 @@ esac
  for(const failure of [{INSPECT_FAILS:'1'},{PS_FAILS:'1'}]) {
   const unknown=backup(failure);
   assert.notEqual(unknown.status,0,unknown.stdout);
-  assert.match(unknown.stderr,/This Engine did not stop: gtmworks-engine-first\./,Object.keys(failure)[0]);
+  assert.match(unknown.stderr,/This Engine or work sandbox did not stop: gtmworks-engine-first\./,Object.keys(failure)[0]);
   assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');
   writeFileSync(commands,'');
  }
  const result=backup({});
  assert.notEqual(result.status,0,result.stdout);
- assert.match(result.stderr,/This Engine did not stop: gtmworks-engine-first\. Nothing was archived, and what was stopped starts again\./);
+ assert.match(result.stderr,/This Engine or work sandbox did not stop: gtmworks-engine-first\. Nothing was archived, and what was stopped starts again\./);
  assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');
  assert.deepEqual(readdirSync(join(directory,'backups')),[]);
  // What was stopped starts again: the exit handler brings the stack and the Engine back.
@@ -1523,6 +1610,7 @@ test('a backup that cannot read the Engine records stops before it stops anythin
  const secrets=`KEYS=kept\nHERMES_API_KEY=${'k'.repeat(64)}\n`;
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
  writeFileSync(join(directory,'.engines/first/.env'),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`,{mode:0o600});
+ writeFileSync(join(directory,'.work-sandbox-image'),'gtmworks-work-sandbox:local\n');
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
@@ -1540,6 +1628,27 @@ esac
  assert.doesNotMatch(run,/ stop|stop |tar -czf|up -d/);
  assert.deepEqual(readdirSync(join(directory,'backups')),[]);
  assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
+ assert.equal(existsSync(join(directory,'.install-lock')),false);
+});
+
+// An install with Engine folders this installer has not updated yet records no work sandbox image, so its Engines could
+// not start again after the copy: the backup is refused before anything stops.
+test('a backup of an install that has not been updated to this release stops before it stops anything', t => {
+ const directory=mkdtempSync(join(tmpdir(),'gtmworks-backup-no-image-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ for(const folder of ['scripts','bin','.engines/first']) mkdirSync(join(directory,folder),{recursive:true});
+ copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ writeFileSync(join(directory,'.env.install'),'KEYS=kept\n',{mode:0o600});
+ writeFileSync(join(directory,'.engines/first/.env'),`ENGINE_NAME=gtmworks-engine-first\nENGINE_KEY=${'a1'.repeat(32)}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`,{mode:0o600});
+ writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
+printf '%s\\n' "$*" >> "$COMMANDS"
+`,{mode:0o755});
+ const commands=join(directory,'commands');
+ const result=spawnSync('sh',['scripts/install.sh','backup'],{cwd:directory,
+  env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands},encoding:'utf8'});
+ assert.equal(result.status,1,result.stdout);
+ assert.match(result.stderr,/This install has not been updated to this release yet: run sh scripts\/install\.sh update first\. Nothing was stopped or archived\./);
+ assert.doesNotMatch(existsSync(commands)?readFileSync(commands,'utf8'):'',/ stop|stop |tar -czf|up -d/);
  assert.equal(existsSync(join(directory,'.install-lock')),false);
 });
 
@@ -1567,6 +1676,7 @@ case "$*" in
  *'select e.address from public.company_engines'*) printf '%s\\n' \${RESTORED_ENGINES:-http://gtmworks-engine-first:8642};;
  *'exec -T db psql'*) cat > /dev/null; echo t;;
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *' ps -q web'*) echo web-id;;
  *' ps -q worker'*) echo worker-id;;
  *'network inspect '*) exit 1;;

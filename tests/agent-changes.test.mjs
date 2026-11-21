@@ -6,7 +6,7 @@ import { readProfileModels, writeProfileModel, readModels, readConfig, readSaved
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { answerChange } from '../lib/agent-changes.mjs';
 import { engineSettings } from '../lib/engine-settings.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -49,7 +49,7 @@ test('a proposed change is kept by the database with its reason, and the Engine 
  assert.deepEqual(engineCalls,[],'nothing of the Engine is touched while the proposal waits');
 });
 
-test('an unlisted setting and a toolset above the Agent level reach the database, which keeps them as refused, and the Engine is not called',async()=>{
+test('an unlisted setting and a toolset other than the Owner\'s sub-agents switch reach the database, which keeps them as refused, and the Engine is not called',async()=>{
  const {rpcs,engineCalls,call}=proposer({state:'refused',proposal:8});
  assert.deepEqual(await call({change:'setting',setting:'terminal.backend',value:'local',reason:'I need a shell.'}),{state:'refused',proposal:8});
  assert.deepEqual(await call({change:'toolset',setting:'terminal',value:'on',reason:'I need a shell.'}),{state:'refused',proposal:8});

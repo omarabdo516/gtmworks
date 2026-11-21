@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readAgent, writeAgentAbout } from '../lib/hermes.mjs';
 import { readAgentAbout, changeAgentAbout } from '../lib/agent-about.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #161: the Agent page's About is its own Engine profile's description. The database says which profile is the Agent's

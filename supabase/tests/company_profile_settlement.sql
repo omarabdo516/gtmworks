@@ -1,46 +1,34 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(22);
 -- R&S Consultations (2) runs on its own profile; Aleem (3) is on the shared profile with a Contributor (5).
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002');
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000002';
 set local role service_role;
 select public.attach_company_profile('10000000-0000-0000-0000-000000000002');
 
--- 1. The tool policy is versioned: a profile applied under an older policy is applied again, and runs wait for it.
-reset role;
-update public.company_profiles set tools_policy=public.engine_tool_policy()-1 where company_id='10000000-0000-0000-0000-000000000002';
-set local role service_role;
-select ok((select tools_level=agent_level and tools_policy<>public.engine_tool_policy() from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000002'),
- 'a profile applied under an older policy is work again, even at the same level');
-select throws_ok($$select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy()-1)$$,'22023','companyProfileInvalid','only the current policy is recorded');
+-- 2. Changing tools is marked first: until the read-back matches and is recorded, no run starts.
 reset role;
 create temporary table rs as select id as agent from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000002';
 grant select on rs to authenticated;
-set local role authenticated;
-select set_config('request.jwt.claims','{"role":"authenticated"}',true);
-select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select throws_ok($$select public.reserve_conversation_run('c4000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002',(select agent from rs),'c5000000-0000-0000-0000-000000000002','Hi')$$,'55000','agentLevelPending','no run starts on a profile under an older policy');
-
--- 2. Changing tools is marked first: until the read-back matches and is recorded, no run starts, whatever the levels say.
-reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002');
 select lives_ok($$select public.begin_company_tools('10000000-0000-0000-0000-000000000002')$$,'the worker marks the tools as changing before it writes them');
 select ok((select tools_pending from public.company_profile_work() where company_id='10000000-0000-0000-0000-000000000002'),'a profile whose change was not confirmed stays work');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
-select throws_ok($$select public.reserve_conversation_run('c4000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002',(select agent from rs),'c5000000-0000-0000-0000-000000000002','Hi')$$,'55000','agentLevelPending',
- 'a change written but not recorded (1 to 3, then back to 1) starts nothing although the levels agree');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select throws_ok($$select public.reserve_conversation_run('c4000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002',(select agent from rs),'c5000000-0000-0000-0000-000000000002','Hi')$$,'55000','agentToolsPending',
+ 'a change written but not recorded starts nothing, though the tools read back would agree');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
@@ -55,12 +43,12 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select throws_ok($$select public.reserve_conversation_run('c4000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002',(select agent from rs),'c5000000-0000-0000-0000-000000000002','Hi')$$,'55000','agentLevelPending',
+select throws_ok($$select public.reserve_conversation_run('c4000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002',(select agent from rs),'c5000000-0000-0000-0000-000000000002','Hi')$$,'55000','agentToolsPending',
  'a retry of an existing reservation is refused while the tools are pending');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002');
 
 -- 4. An active reservation holds the move; after ten minutes the worker abandons it, without Hermes.
 -- The previous version's provider put each Company with no Agent on the shared `default` profile (#342 dropped it).
@@ -69,7 +57,7 @@ insert into public.hermes_agents(company_id,name,speciality,is_default,profile) 
  where not exists(select 1 from public.hermes_agents a where a.company_id=c.id) and exists(select 1 from public.members m where m.company_id=c.id and m.role='owner' and m.removed_at is null);
 set local role service_role;
 select cmp_ok((select count(*)::int from public.hermes_agents where profile='default'),'>=',1,'Aleem is on the shared profile');
-select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000003','co-10000000000000000000000000000003');
 reset role;
 update public.company_profiles set skills_shared=true where company_id='10000000-0000-0000-0000-000000000003';
 create temporary table aleem as select id as agent,connection_id from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000003';

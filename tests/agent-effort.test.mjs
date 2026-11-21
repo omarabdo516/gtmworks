@@ -5,7 +5,7 @@ import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writ
 import { engineSettings, readSettings, writeSetting, readCompanyModels } from '../lib/engine-settings.mjs';
 import { changeAgentEffort } from '../lib/agent-effort.mjs';
 import { effortDefault, effortHintKey, effortLabelKey, effortLevels, knownEffort } from '../lib/engine-effort.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #179: an Agent's thinking level is the key `agent.reasoning_effort` of its own Engine profile, written through #125's

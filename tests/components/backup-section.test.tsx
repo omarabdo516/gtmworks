@@ -58,7 +58,9 @@ test('the section says what a backup holds, what it leaves out, and the four com
   for (const text of [
     'Included', 'Not included',
     'The database', 'File storage', "The install's keys", '.env.install', "Every Company's Engine",
+    "Every Company's work folder",
     "The model provider's account and keys outside the install", "The connected apps' own data", 'The Docker images',
+    'The tool caches in a work folder',
     'Take a backup', 'gtmworks backup',
     'Restore a backup', 'gtmworks restore <archive>',
     'A restore goes into an empty install only.',

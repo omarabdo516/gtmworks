@@ -16,7 +16,7 @@ export type RunPermission={id:string,description:string,command:string,choices:P
 export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,noModel?:true,modelRefused?:'credit'|'key'|'model'};
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
 export type AnsweredPermission='answered'|'gone'|'unreachable';
-export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed'};
+export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true};
 export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 export type SessionUsage={input:number,output:number};
 export type SessionRead={state:'found',turns:SessionTurn[],usage:SessionUsage|null}|{state:'missing'|'refused'|'unreachable',turns:null,usage:null};
@@ -24,7 +24,6 @@ export type Agent={name:string,instructions:string,model:string|null,ready:boole
 export type AgentRequest={name:string,instructions:string,model?:string|null};
 export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'|'unreachable'|'failed',agent:null};
 export type FoundAgent={state:'found',agent:Agent}|{state:'missing'|'refused'|'unreachable',agent:null};
-export type AgentLevel=1|2|3;
 // A model a Run may be started on (#158): the Engine's provider and model names.
 export type ModelChoice={provider:string,model:string};
 export type AgentModels={state:'found'|'refused'|'unreachable',current:ModelChoice|null,models:(ModelChoice&{providerName:string})[]};
@@ -63,7 +62,7 @@ export type Engine={
  session(session:string):Promise<SessionRead>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
- provideAgent(agent:{name:string,instructions:string,level:AgentLevel}):Promise<ProvidedAgent>,
+ provideAgent(agent:{name:string,instructions:string,subagents?:boolean}):Promise<ProvidedAgent>,
  removeAgent(name:string):Promise<RemovedAgent>,
  readKeys?(space:string):Promise<ProviderKeys>,
  models?():Promise<AgentModels>,
