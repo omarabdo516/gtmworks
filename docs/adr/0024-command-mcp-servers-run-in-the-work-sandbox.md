@@ -26,5 +26,6 @@ Read in the pinned Engine (Hermes v0.23.0):
 
 - Every Member who talks to an Agent with a command server on reaches what that command reaches inside the sandbox, which is what the Agent's own terminal already reaches there (ADR 0018). The command needs no further limit until Omar names a problem (ADR 0020).
 - The Engine's malware check of a package fetched by `npx` or `uvx` keys off the command it spawns, which is `ssh`, so it does not see a package such a command fetches inside the sandbox. The sandbox reaches the internet through its exit only and holds no key.
+- A Run reaches a command server's tools as it reaches every MCP server's, through the pinned Engine's tool search: `tool_search` lists them by name (`mcp__<server>__<tool>`) and `tool_call` invokes them (`model_tools.py`). Measured on v0.23.0 for #459; gtmworks changes nothing there.
 - An Owner places the program a command server runs in the work folder or uses one the sandbox image carries; nothing is installed for it.
 - The install job proves it: a small stdio server placed in the work folder is added through the driver, Test lists its tool, an Agent calls it from a Conversation, and while the call holds the server is a process of the sandbox and the Engine holds only the ssh client (`scripts/ci-install-check.sh`, agents area).

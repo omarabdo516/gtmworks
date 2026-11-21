@@ -545,11 +545,19 @@ assert.deepEqual(await testServer(target,key),{state:'connected',tools:['prove']
 const card=(await readApps(target)).apps?.find(app=>app.key===key);
 assert.deepEqual([card?.source,card?.auth,card?.command,card?.args,card?.state],['custom','command',command.command,command.args,'connected']);
 const textOf=messages=>messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+// The pinned Engine offers an MCP server's tools to a Run through its tool search: `tool_search` lists each deferred tool
+// by name (mcp__<server>__<tool>) and `tool_call` invokes it (model_tools.py, get_tool_definitions). A tool the Run lists
+// directly is called directly.
 let offered=null;
 const plan=(messages,body)=>{
  if(!textOf(messages).includes(`SANDBOX-MCP ${marker}`)||messages.some(message=>message.role==='tool')) return null;
- offered=(body?.tools||[]).map(tool=>tool?.function?.name).find(name=>typeof name==='string'&&name.endsWith('__prove'))??null;
- return offered?{id:'call_sandbox_mcp',type:'function',function:{name:offered,arguments:JSON.stringify({marker})}}:null;
+ const tools=(body?.tools||[]).map(tool=>tool?.function).filter(Boolean);
+ const direct=tools.find(tool=>typeof tool.name==='string'&&tool.name.endsWith('__prove'))?.name;
+ const deferred=tools.find(tool=>tool.name==='tool_search')?.description?.match(/mcp__\w+__prove/)?.[0];
+ offered=direct??deferred??null;
+ if(direct) return {id:'call_sandbox_mcp',type:'function',function:{name:direct,arguments:JSON.stringify({marker})}};
+ return deferred&&tools.some(tool=>tool.name==='tool_call')
+  ?{id:'call_sandbox_mcp',type:'function',function:{name:'tool_call',arguments:JSON.stringify({calls:[{name:deferred,arguments:{marker}}]})}}:null;
 };
 const asked=[]; const results=[];
 const started=await fakeModel(asked,results,plan);
@@ -566,7 +574,9 @@ model=started.model; const {reply}=started;
  assert.ok(answer.body.includes(reply),answer.body);
  assert.ok(offered,'the Run offers the server\'s tool');
  assert.equal(results.length,1,JSON.stringify(results));
- const [host,cwd]=String(results[0]).match(/\S+ \/work\/\S+/)?.[0].split(' ')??[];
+ // The answer comes back as the Engine wraps a tool's result ({"result": "<host> <folder> <pid>"} inside its
+ // untrusted-result block): only the host name and the /work path are read out of it.
+ const [,host,cwd]=String(results[0]).match(/([a-z0-9][a-z0-9.-]*) (\/work\/[a-z0-9_-]+) \d+/)??[];
  assert.equal(cwd,`/work/${first.profile}`,'the server starts in the Agent\'s own folder of the Company\'s work folder');
  assert.equal((await disconnectApp(target,key)).state,'disconnected','Remove takes the server out of the profile');
  writeProof({step:'sandbox-mcp',marker,sandbox_host:host,profile:first.profile,cwd});
