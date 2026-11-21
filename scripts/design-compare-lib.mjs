@@ -1,7 +1,8 @@
 // Pure helpers for scripts/design-compare.mjs (#285): argument checks, the screen table, output names and a
 // static server over design-reference/ that never answers outside it.
 import { createServer } from 'node:http';
-import { createReadStream, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, resolve, sep } from 'node:path';
 
 // A named screen says how to reach it in the reference and which built page it is compared with (null: none yet).
@@ -188,6 +189,12 @@ export const screens = {
   // Conversation and Approvals.
   'change-proposed': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }] }, builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000010' },
   'change-waiting': { reference: { steps: [...board, { waitFor: '.kcard[data-card="c-chg-analyst"]' }, { scrollTo: '.kcard[data-card="c-chg-analyst"]' }] }, builtPath: '/c/rs-learning/approvals' },
+  // #484. The same proposal opened from its board card in Waiting on you (the reference opens it in the chat), with its
+  // "Now" row, and its "Edit, then approve" form with the models. Built: Approvals, the board card, then Edit.
+  'change-opened': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }] }, builtPath: '/c/rs-learning/approvals',
+   builtSteps: [{ click: '.chg-kcard .kcard__title' }, { waitFor: '[role="dialog"] [data-row="now"]' }] },
+  'change-edit': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }, { click: '[data-action="chg-edit"]' }, { waitFor: '[data-action="chg-model"]' }] }, builtPath: '/c/rs-learning/approvals',
+   builtSteps: [{ click: '.chg-kcard .kcard__title' }, { waitFor: '[role="dialog"] [data-row="now"]' }, { click: '[role="dialog"] .card__actions button:nth-of-type(2)' }, { waitFor: '.chg-models' }] },
   // #167. Lead's card asking whether to request an Agent hidden from the first Contributor (SEO & Content, as the
   // reference hides it from Youssef): offered, then after "Ask", then after "No, never mind". Built: the fixture's three
   // Conversations of the first Contributor with Lead, captured with --sign-in reviewer@example.com.
@@ -336,4 +343,33 @@ export function startStaticServer(root) {
   });
 }
 
-export const referenceRoot = join(import.meta.dirname, '..', 'design-reference');
+// GTMWORKS_DESIGN_REFERENCE points the tool at another copy of the reference: a test gives it a broken one (#271).
+export const referenceRoot = process.env.GTMWORKS_DESIGN_REFERENCE || join(import.meta.dirname, '..', 'design-reference');
+
+/**
+ * What differs between a reference folder and its SHA256SUMS: a listed file changed or missing, a file the list does not
+ * name, a malformed line. Empty when the folder is the approved copy. The comparison tool is the one reader of the frozen
+ * reference, so it checks the folder before it draws a screen from it (#285, #271). @param {string} root @returns {string[]}
+ */
+export function referenceProblems(root) {
+  const sums = join(root, 'SHA256SUMS');
+  if (!existsSync(sums)) return [`${sums} is missing`];
+  const problems = [];
+  const listed = new Set();
+  for (const line of readFileSync(sums, 'utf8').split('\n').filter(Boolean)) {
+    const match = line.match(/^([0-9a-f]{64}) [ *](.+)$/);
+    if (!match) { problems.push(`SHA256SUMS line is not "<sha256>  <path>": ${line}`); continue; }
+    const path = match[2].replace(/^\.\//, '');
+    listed.add(path);
+    const file = join(root, path);
+    if (!existsSync(file)) problems.push(`listed file is missing: ${path}`);
+    else if (createHash('sha256').update(readFileSync(file)).digest('hex') !== match[1]) problems.push(`changed: ${path}`);
+  }
+  if (!listed.has('index.html')) problems.push('SHA256SUMS does not list index.html');
+  const files = (directory, prefix = '') => readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    return entry.isDirectory() ? files(join(directory, entry.name), path) : [path];
+  });
+  for (const path of files(root)) if (path !== 'SHA256SUMS' && !listed.has(path)) problems.push(`not in SHA256SUMS: ${path}`);
+  return problems;
+}

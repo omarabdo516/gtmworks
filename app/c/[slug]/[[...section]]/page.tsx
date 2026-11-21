@@ -64,7 +64,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const waitingFailures:Record<string,string>={rule:'waitingRuleFailed',access:'waitingAccessFailed','request-engineNotReady':'waitingRequestNotReady','request-engineUnreachable':'waitingRequestUnreachable',
   'request-notMade':'waitingRequestNotMade','request-answered':'waitingRequestAnswered','request-notFound':'waitingRequestAnswered','request-reasonMissing':'waitingRequestReasonMissing',
   'change-notApplied':'waitingChangeNotApplied','change-answered':'waitingChangeAnswered','change-notFound':'waitingChangeAnswered','change-reasonLong':'waitingChangeReasonLong',
-  'change-cannotApply':'waitingChangeCannotApply','change-applying':'waitingChangeApplying','change-busy':'waitingChangeBusy','change-writtenLate':'waitingChangeWrittenLate','change-reasonMissing':'waitingChangeReasonMissing'};
+  'change-cannotApply':'waitingChangeCannotApply','change-applying':'waitingChangeApplying','change-busy':'waitingChangeBusy','change-writtenLate':'waitingChangeWrittenLate','change-reasonMissing':'waitingChangeReasonMissing','change-editInvalid':'waitingChangeEditInvalid'};
  const failed=query.failed||''; const waitingFailure=Object.hasOwn(waitingFailures,failed)?t(waitingFailures[failed]):failed.startsWith('request-')?t('waitingRequestFailed'):failed.startsWith('change-')?t('waitingChangeFailed'):message;
  const {steps,cards:myCards,visible:myVisibleCards,items:waitingItems,count:waitingCount,available:approvalsAvailable}=await approvalQueue(db,company.id,user.id,membership?.role || '');
  const isWork=section.startsWith('work/')||section==='settings/work';

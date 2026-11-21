@@ -5,7 +5,8 @@
 ## The reference is frozen
 
 - Nobody edits it. Its source of truth is the frozen approval `d893-approved-2026-11-12`, kept outside this repository, and its `SHA256SUMS` ships with it. Everything in that folder is copied into the repo unchanged, dot-folders included.
-- `tests/design-reference.test.mjs` recomputes every checksum. It fails when a file changes, goes missing, or is added without a line in `SHA256SUMS`. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The comparison tool recomputes every checksum before it captures (`referenceProblems` in `scripts/design-compare-lib.mjs`). It stops when a file changes, goes missing, or is added without a line in `SHA256SUMS`, and the `Design compare` workflow runs it on every pull request that changes `design-reference/`. `GTMWORKS_DESIGN_REFERENCE` points the tool at another copy; its test gives it a broken one. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The tool is the reference's one reader. No CI suite compares the product with it (#271): matching it is a delivery check, done once per screen (below).
 - The product never serves it. Next serves only its routes, and the runtime image copies only the build output. `tests/design-reference.spec.ts` asks the production build for `/design-reference/...` and expects 404.
 
 ## Opening the reference by hand
@@ -98,6 +99,8 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `ask-agent` | Viewing as Youssef (team), his "Ask for an agent" tile: Lead's chat with the Member's hint (#17) | `/c/rs-learning/chat?new=agent` (with `--sign-in reviewer@example.com`) |
 | `request-sent` | Viewing as Youssef, his chat with Lead (`th-wa`) holding his request, not made yet (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
 | `request-waiting` | Omar's chat with Lead (`th-wa-req`): Youssef's request with No and Make it. The product decides it where it waits (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
+| `change-opened` | Omar's chat with Lead (`th-lead-model`): Lead's proposed model for Analyst. Built: its board card in Waiting on you, opened, with the "Now" row (#484) | `/c/rs-learning/approvals`, the board card opened (needs the fixture and an Engine that holds Analyst's profile) |
+| `change-edit` | The same card after "Edit, then approve": the model choices (#484) | `/c/rs-learning/approvals`, the board card opened, then Edit (the same) |
 | `request-made` | Omar presses Make it, then viewing as Youssef, his chat with the made request (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
 | `access-ask` | Viewing as Youssef, a new chat with Lead asking for an SEO article, the job of an agent hidden from him: Lead's sentence and the card "Ask Sara for it?" with its two buttons (#167) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000020` (needs the fixture; with `--sign-in reviewer@example.com`) |
 | `access-sent` | The same, after "Ask Sara": the card reads "Sent to Sara · time" (#167) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000021` (needs the fixture; with `--sign-in reviewer@example.com`) |
@@ -168,6 +171,21 @@ gh workflow run design-compare.yml --ref <branch> -f screen=connect-card -f fixt
 ```
 
 Add `-f lang=en`, `-f theme=light` and `-f width=390` for the other variants; both sides always use the same width, language and theme.
+
+## The delivery record
+
+A screen, or a part's motion, is matched with the reference once, in the pull request that delivers it. That pull request's body carries its delivery record, under a `## Delivery record` heading:
+
+```md
+## Delivery record
+
+- Screen: `NAME` (`scripts/design-compare-lib.mjs`), or the motion issue it ships.
+- Captures: the side-by-side image for each width, language and theme the issue names (at least 1440 and 390 wide, Arabic and English), made by `npm run design:compare` or the `Design compare` workflow.
+- Motion: what moves, its time and curve as the reference has it, and the test that holds the behaviour (reduced motion, a timer, a press).
+- Differences kept on purpose: each one with its reason, or "none".
+```
+
+The same pull request adds its row to [DELIVERY.md](DELIVERY.md), which lists every delivered screen with the pull request that holds its record. After delivery the screen's look is our own: the visual lane compares it with our last approved screenshots (`docs/agents/visual-comparison.md`), not with the reference.
 
 ## Demo-only parts of the reference (do not build)
 

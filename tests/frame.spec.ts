@@ -1,13 +1,13 @@
 import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync, readdirSync } from 'node:fs';
 import { signIn, openNavigation, chooseCompany, openMoreSection } from './sign-in';
 import { idle } from './navigation-measure';
 import { i18n } from '../lib/i18n.mjs';
 import { sections } from '../lib/navigation';
 import { appOrigin } from './lane.mjs';
 import { motionTable } from './motion-table.mjs';
-import { computedMotion, referenceComputed, type ComputedStyle } from './motion-css.mjs';
 
 const quote=(sql:string|number)=>`'${String(sql).replaceAll("'","''")}'`;
 
@@ -18,26 +18,34 @@ async function navLabels(page:import('@playwright/test').Page) {
  return page.locator('.sidebar .sb-nav .sb-item').allInnerTexts();
 }
 
-// Every button under the shell either moves as the reference's part its table row names (tests/motion-table.mjs) or
-// swaps at once; none takes app/globals.css's 160ms fade (#128). The board's own view tabs, which the reference does not
-// have, are the one exception.
-test('every button on the Conversation, the board and the settings overlay moves as its reference part or swaps at once',async({page})=>{
+// Every button under the shell either is a part that moves (its row in tests/motion-table.mjs, whose own motion
+// tests/components/motion.test.tsx checks) or swaps at once; none takes app/globals.css's 160ms fade (#128, #271). The
+// board's own view tabs are the one exception.
+// A time as milliseconds: `0.15s` and `150ms` both read 150.
+const milliseconds=(time:string)=>Math.round(parseFloat(time)*(time.trim().endsWith('ms')?1:1000));
+// Every time the product's stylesheets write outside app/globals.css (the motion tokens in app/tokens.css included).
+const productTimes=new Set(readdirSync('app').filter(file=>file.endsWith('.css')&&file!=='globals.css')
+ .flatMap(file=>[...readFileSync(`app/${file}`,'utf8').replace(/\/\*[\s\S]*?\*\//g,'').matchAll(/(?<![\w.#-])(\d*\.?\d+m?s)\b/g)].map(([,time])=>milliseconds(time))));
+test('every button on the Conversation, the board and the settings overlay is a listed moving part or swaps at once',async({page})=>{
  await page.setViewportSize({width:1440,height:900});
- const rows=[...new Map(motionTable.map(row=>[row.built,row.ref])).entries()];
+ const parts=[...new Set(motionTable.map(row=>row.built.replace(/::(?:before|after)$/,'')))];
  const sweep=async(where:string)=>{
   await idle(page);
-  const buttons=await page.locator('.gw').first().evaluate((_,rows)=>[...document.querySelectorAll('.gw :is(button, .button)')].filter(button=>!button.matches('.work-toolbar .tabs .button')).map(button=>{
-   const style=getComputedStyle(button);
-   return {
-    button:`${button.tagName.toLowerCase()}.${String(button.className).trim().replaceAll(/\s+/g,'.')}[${button.getAttribute('aria-label')??button.textContent?.trim().slice(0,24)}]`,
-    refs:[...new Set(rows.filter(([built])=>button.matches(built)).map(([,ref])=>ref))],
-    style:{transitionProperty:style.transitionProperty,transitionDuration:style.transitionDuration,transitionDelay:style.transitionDelay,transitionTimingFunction:style.transitionTimingFunction,animationName:style.animationName,animationDuration:style.animationDuration,animationTimingFunction:style.animationTimingFunction} satisfies ComputedStyle,
-   };
-  }),rows);
+  const buttons=await page.locator('.gw').first().evaluate((_,parts)=>[...document.querySelectorAll('.gw :is(button, .button)')].filter(button=>!button.matches('.work-toolbar .tabs .button')).map(button=>({
+   button:`${button.tagName.toLowerCase()}.${String(button.className).trim().replaceAll(/\s+/g,'.')}[${button.getAttribute('aria-label')??button.textContent?.trim().slice(0,24)}]`,
+   listed:parts.some(part=>button.matches(part)),
+   transitionDuration:getComputedStyle(button).transitionDuration,
+  })),parts);
   expect(buttons.length,`${where} has buttons`).toBeGreaterThan(0);
-  for(const {button,refs,style} of buttons) {
-   if(refs.length) for(const ref of refs) expect.soft(computedMotion(style),`${where}: ${button} moves as the reference's ${ref}`).toEqual(referenceComputed(ref,1440));
-   else expect.soft(style.transitionDuration,`${where}: ${button} has no row and swaps at once`).toMatch(/^0s(, 0s)*$/);
+  for(const {button,listed,transitionDuration} of buttons) {
+   if(!listed) expect.soft(transitionDuration,`${where}: ${button} has no row and swaps at once`).toMatch(/^0s(, 0s)*$/);
+   else {
+    // A listed part moves on the product's own times: each duration is one its stylesheets write (#271), and none is
+    // app/globals.css's 160ms fade winning over the part's rule (the motion tokens are 150ms, 200ms and 280ms).
+    const durations=transitionDuration.split(', ').map(milliseconds);
+    expect.soft(durations,`${where}: ${button} takes app/globals.css's 160ms fade`).not.toContain(160);
+    expect.soft(durations.filter(duration=>duration>0&&!productTimes.has(duration)),`${where}: ${button} moves on a time no stylesheet under app/ writes`).toEqual([]);
+   }
   }
  };
  // The seed attaches no Agent, so the Conversation would show no head pill, composer or details: RS Learning gets a Lead
