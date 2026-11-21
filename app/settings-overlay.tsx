@@ -67,7 +67,7 @@ const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_R
 // account menu, links and tests all reach the same screen. It covers the whole window like the reference's dialog,
 // so no page is drawn behind it; closing returns to the page it was opened from. Data is read with the signed-in
 // person's session (RLS); every change goes through an existing server action or route that checks the role again.
-export default async function SettingsOverlay({slug,company,userId,role,personName,workMode,query}:{slug:string,company:{id:string,name:string},userId:string,role:string,personName:string,workMode?:string|null,query:{section?:string,agent?:string,period?:string,message?:string,part?:string,app?:string,signin?:string,skill?:string,tab?:string}}) {
+export default async function SettingsOverlay({slug,company,userId,role,personName,workMode,query}:{slug:string,company:{id:string,name:string},userId:string,role:string,personName:string,workMode?:string|null,query:{section?:string,agent?:string,period?:string,message?:string,part?:string,app?:string,signin?:string,skill?:string,tab?:string,focus?:string}}) {
  const {t,language,locale,theme}=await getI18n(); const rtl=language==='ar';
  const db=await supabase();
  // ?agent=<id> alone opens that Agent's page.
@@ -161,7 +161,10 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}
     defaultEffort={<DefaultEffort/>}/>;
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={skillPage?'sov-skill-back':agent?agentTabFocus(tab):undefined}>{page}</OverlayChrome>;
+ // "Change the time" on the morning's card (#183; design-reference: checkin-settings) opens this page on Time, or on the
+ // switch while the message is off and Time cannot take the focus.
+ const morningFocus=query.focus==='time'&&morning?.state==='found'&&canManage?(morning.routine?.on?'set-ck-time':'set-ck-on'):undefined;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={skillPage?'sov-skill-back':agent?morningFocus??agentTabFocus(tab):undefined}>{page}</OverlayChrome>;
 }
 
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".

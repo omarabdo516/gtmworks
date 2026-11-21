@@ -1,5 +1,11 @@
 [
  {
+  "issue": 183,
+  "date": "2026-11-21",
+  "en": { "title": "Your morning message", "body": "Each morning the main agent opens a new chat with its greeting and a card of what is waiting on you and what ran overnight, read fresh each time you open it, and only when there is something for you." },
+  "ar": { "title": "رسالة الصبح بتاعتك", "body": "كل يوم الصبح الوكيل الرئيسي بيفتحلك محادثة جديدة فيها تحيته وبطاقة باللي مستنيك واللي اشتغل بالليل، بيتقري جديد كل ما تفتحه، وبس لو فيه حاجة ليك." }
+ },
+ {
   "issue": 476,
   "date": "2026-11-21",
   "en": { "title": "Agents ask the team in channels too", "body": "In a channel, any agent of it can now ask any agent of your company for a job, even one that isn’t in the channel: everyone in the channel sees who asked whom and the answer under that agent’s name." },

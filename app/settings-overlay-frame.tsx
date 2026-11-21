@@ -29,9 +29,23 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
  // Opening moves focus into the overlay: to the element the page names (an Agent's page: its Settings tab, as the
  // reference's openSov and sov-agent do, also when a row of the list opens it), else the dialog itself, so Tab starts at
  // its close button and section list. Focus already inside (a list row taking it back) stays.
+ // A field a lazy section draws a moment later (Good morning's Time, #183's "Change the time") is waited for, briefly,
+ // and focused once it is there.
  useEffect(()=>{
   const named=initialFocus&&document.getElementById(initialFocus);
-  if(named) named.focus({preventScroll:true}); else if(!box.current?.contains(document.activeElement)) box.current?.focus({preventScroll:true});
+  if(named) { named.focus({preventScroll:true}); return; }
+  if(!box.current?.contains(document.activeElement)) box.current?.focus({preventScroll:true});
+  if(!initialFocus||!box.current) return;
+  // A person who has moved into another field meanwhile keeps it: the wait ends, and the focus stays where they put it.
+  const frame=box.current;
+  const watch=new MutationObserver(()=>{
+   const active=document.activeElement;
+   if(active&&active!==frame&&active!==document.body&&frame.contains(active)) { watch.disconnect(); return; }
+   const late=document.getElementById(initialFocus); if(late) { watch.disconnect(); late.focus(); late.scrollIntoView({block:'center'}); }
+  });
+  watch.observe(box.current,{childList:true,subtree:true});
+  const stop=setTimeout(()=>watch.disconnect(),3000);
+  return ()=>{ watch.disconnect(); clearTimeout(stop); };
  },[initialFocus]);
  useEffect(()=>{
   const keys=(event:globalThis.KeyboardEvent)=>{

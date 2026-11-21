@@ -1,5 +1,6 @@
 import type { RoutineSchedule } from './engine.mjs';
 export const morningName: string;
+export function findMorning<T extends { prompt: string, on: boolean }>(routines: T[]): T | null;
 export type MorningRoutine = { id: string, on: boolean, time: string | null, schedule: RoutineSchedule, timezone: string | null };
 export type MorningRead = { state: 'found', routine: MorningRoutine | null, quietYesterday: boolean } | { state: 'invalid' | 'failed' | 'notMain' | 'notOwn' | 'noEngine' | 'refused' | 'unreachable' };
 export function readAgentMorning(db: unknown, request: { company: string, agent: string, hermes?: { address: string, key: string } | null, driver?: object, now?: Date }): Promise<MorningRead>;

@@ -9,6 +9,7 @@ import type { DetailsTab } from '@/lib/agent-details.mjs';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
 import { titleOf } from '@/lib/conversations';
+import { morningTitle } from '@/lib/good-morning-title.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
@@ -56,12 +57,12 @@ export default function ConversationView({slug,agent,details,tab,company,convers
 // The chat's floating title and its corner, as the loaded transcript keeps them (#297): they subscribe to the frame's
 // store, so the record arriving redraws these and never the page around the transcript.
 function ChatHead({panel,slug,agent,conversation,title,writer,board}:{panel:DetailsPanel,slug:string,agent:DetailsAgent|null,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board']}) {
- const {c}=useConversationText(); const {live:store}=useView();
+ const {c}=useConversationText(); const {live:store}=useView(); const {t,language}=useI18n();
  const live=useSyncExternalStore(store.subscribe,store.get,()=>undefined);
  const record=live?.record; const corner=record?record.board:board;
  // The pill shakes once when its Card starts waiting while the chat is open (design-reference: syncWaitMarks).
  const fresh=useNewlyWaiting(corner?.column==='waiting'?[corner.card]:[]);
- return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><LiveFace agentId={conversation.agent_id??undefined} agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
+ return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><LiveFace agentId={conversation.agent_id??undefined} agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?record.morningDay?morningTitle(t,language,record.morningDay):titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
 }
 
 // The composer, told the record when it is there and given the send made before it as the transcript asks for its reply
