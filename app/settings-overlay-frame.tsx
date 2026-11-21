@@ -36,7 +36,13 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
   if(named) { named.focus({preventScroll:true}); return; }
   if(!box.current?.contains(document.activeElement)) box.current?.focus({preventScroll:true});
   if(!initialFocus||!box.current) return;
-  const watch=new MutationObserver(()=>{ const late=document.getElementById(initialFocus); if(late) { watch.disconnect(); late.focus(); late.scrollIntoView({block:'center'}); } });
+  // A person who has moved into another field meanwhile keeps it: the wait ends, and the focus stays where they put it.
+  const frame=box.current;
+  const watch=new MutationObserver(()=>{
+   const active=document.activeElement;
+   if(active&&active!==frame&&active!==document.body&&frame.contains(active)) { watch.disconnect(); return; }
+   const late=document.getElementById(initialFocus); if(late) { watch.disconnect(); late.focus(); late.scrollIntoView({block:'center'}); }
+  });
   watch.observe(box.current,{childList:true,subtree:true});
   const stop=setTimeout(()=>watch.disconnect(),3000);
   return ()=>{ watch.disconnect(); clearTimeout(stop); };
