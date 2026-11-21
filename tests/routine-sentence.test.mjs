@@ -128,3 +128,9 @@ test('a stated time zone is kept with the schedule (UTC, GMT), and one it cannot
  assert.equal(readRoutineSentence('ابعتلي تقرير كل يوم 9 الصبح بتوقيت السعودية')?.form,null);
  assert.equal(readRoutineSentence('Send me a report every day at 9am')?.zone,null,'no zone said: the person\'s own');
 });
+
+test('a part of the day said beside a named day sets the hour, and is cut from the task', () => {
+ const evening=readRoutineSentence('Send me a report every Monday evening at 7');
+ assert.deepEqual([evening?.form&&cronOf(evening.form),evening?.prompt],['0 19 * * 1','Send me a report']);
+ assert.equal(read('Send me a report every Monday morning at 6')?.cron,'0 6 * * 1');
+});
