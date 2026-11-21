@@ -35,6 +35,15 @@ test('the same sentences in English read into the same schedules', () => {
  assert.deepEqual(read('Remind me to check the budget daily at noon'),{name:'Check the budget',cron:'0 12 * * *'});
 });
 
+test('twelve at night is midnight, not noon', () => {
+ assert.deepEqual(read('Send me a report every night at 12'),{name:'Report',cron:'0 0 * * *'});
+ assert.deepEqual(read('Send me a report every day at 12 at night'),{name:'Report',cron:'0 0 * * *'});
+ assert.deepEqual(read('Send me a report every night at 11'),{name:'Report',cron:'0 23 * * *'});
+ assert.deepEqual(read('Send me a report every day at 12pm'),{name:'Report',cron:'0 12 * * *'},'a said p.m. stays noon');
+ assert.deepEqual(read('ابعتلي تقرير كل يوم الساعة 12 بالليل'),{name:'تقرير',cron:'0 0 * * *'});
+ assert.deepEqual(read('ابعتلي تقرير كل يوم الساعة 11 بالليل'),{name:'تقرير',cron:'0 23 * * *'});
+});
+
 // Omar, 2026-11-18: each run is a paid Run, so a sentence that does not say when is asked a time; nothing defaults.
 test('a sentence that does not say fully when gives no schedule, only what it did say', () => {
  assert.deepEqual(readRoutineSentence('ملخص الليدز'),{name:'ملخص الليدز',prompt:'ملخص الليدز',form:null,draft:null,zone:null});
