@@ -16,7 +16,7 @@ Every job of the full check — `changes`, `fast`, `supabase-images`, `image`, `
 | `database` | 2.1 min | 4 min |
 | `integration` | 10.6 min, its slowest shard | 12 min |
 | `chat-open` | 5 min, an estimate until its first run | 8 min |
-| `install` | 10.7 min, its slowest area (update, run 44726291691) | 12 min |
+| `install` | 11.3 min, its slowest area (backup, run 44897434186; update 7.0 min once it keeps its fixed release image, #423) | 12 min |
 | `check` | 0.1 min | 3 min |
 
 CI deploys nothing. An install picks up a merge when its owner runs `sh scripts/install.sh update` (README), which applies new migrations before the new app version starts; a failed migration rolls back and the previous app keeps serving. A later version does not undo an applied migration; recovery needs a new forward migration. A forward migration cannot bring back deleted data; restore it from a backup.
