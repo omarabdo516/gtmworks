@@ -39,16 +39,23 @@ test.afterAll(()=>{ query(`update public.companies set work_mode='team' where id
 const suggestion=(page:import('@playwright/test').Page,rule:string)=>page.getByRole('group',{name:'A rule for Ads, told by مراجع'}).filter({hasText:rule});
 // A decision is saved by a server action whose answer redirects back to "Waiting on you" with the decision in the
 // address, and the toast is drawn only once that page is read again (#451), which on a loaded runner takes longer than
-// the default 5 s (#420). Wait for the action's own answer and the rule's saved decision, then give the toast the
+// the default 5 s (#420). Wait for the action's own answer and the rule's saved decision, and give the toast the
 // re-read's time. The answer's body is not awaited: Next stops reading it once the page is drawn, which the browser
-// reports as an aborted request.
+// reports as an aborted request. The toast is watched from the click on, beside the answer and the saved decision, not
+// after them: it shows for 2.8 s, and each read of the database is a CLI call that on a loaded runner takes seconds, so
+// a toast looked for only once the poll ends has come and gone (#561).
 const reread={timeout:15000};
-const decide=async(page:import('@playwright/test').Page,rule:string,button:string,saved:'approved'|'rejected')=>{
+const decide=async(page:import('@playwright/test').Page,rule:string,button:string,saved:'approved'|'rejected',said:string)=>{
  const answered=page.waitForResponse(response=>response.request().method()==='POST'&&!!response.request().headers()['next-action']);
  await suggestion(page,rule).getByRole('button',{name:button}).click();
- expect((await answered).headers()['x-action-redirect']).toMatch(new RegExp(`\\?decided=${saved==='approved'?'approve':'reject'}&item=\\d+`));
  const decision=()=>(JSON.parse(query(`select suggestion from public.agent_rules where agent_id='${ads}' and body='${rule}'`)) as {suggestion:string}[])[0]?.suggestion;
- await expect.poll(decision).toBe(saved);
+ await Promise.all([
+  expect(page.locator('.toast')).toHaveText(said,reread),
+  (async()=>{
+   expect((await answered).headers()['x-action-redirect']).toMatch(new RegExp(`\\?decided=${saved==='approved'?'approve':'reject'}&item=\\d+`));
+   await expect.poll(decision).toBe(saved);
+  })(),
+ ]);
 };
 
 test('in a team a direct Conversation says it is private; worked alone it does not',async({page})=>{
@@ -90,8 +97,7 @@ test('the Owner makes one team-wide from "Waiting on you"; the Contributor reads
  await page.goto('/c/rs-learning/settings?section=learning');
  await expect(page.locator('#sov-nav-learning')).toHaveAccessibleName(/^Learning\s*2 waiting for your OK$/);
  await page.goto('/c/rs-learning/approvals');
- await decide(page,saudi,'Make it team-wide','approved');
- await expect(page.locator('.toast')).toHaveText('The rule now applies team-wide for Ads',reread);
+ await decide(page,saudi,'Make it team-wide','approved','The rule now applies team-wide for Ads');
  await expect(suggestion(page,saudi)).toHaveCount(0);
  await expect(suggestion(page,emojis)).toBeVisible();
  await page.goto(`/c/rs-learning/settings?agent=${ads}`);
@@ -114,8 +120,7 @@ test('the Owner makes one team-wide from "Waiting on you"; the Contributor reads
 test('a Manager declines the other; the Contributor reads that the agent won’t follow it, and the log names it',async({page})=>{
  await signIn(page,'manager@example.com','/c/rs-learning/approvals');
  await expect(suggestion(page,saudi)).toHaveCount(0);
- await decide(page,emojis,'Decline','rejected');
- await expect(page.locator('.toast')).toHaveText('Ads won’t save it',reread);
+ await decide(page,emojis,'Decline','rejected','Ads won’t save it');
  await expect(suggestion(page,emojis)).toHaveCount(0);
  await page.goto('/c/rs-learning/settings?section=learning');
  await expect(page.locator('#sov-nav-learning .sov-count')).toHaveCount(0);

@@ -644,7 +644,7 @@ jobs:
 
   # The install proof is one job, one matrix entry per area, each on a fresh isolated Docker machine of its own (#406):
   # the first install and its repeat; Companies and their Engines; Agents on their Engines; backup and restore; the
-  # public address behind a proxy; the update between releases (`./ci.sh install update`); the previous release's own archive restored (`./ci.sh install previous-archive`, split from the update area by #389); an install the release before the work sandbox made, with two Companies, updated to this one (`./ci.sh install sandbox-update`, #397); the measured sizes and the default sandbox limits a render finishes within (`./ci.sh install sizes`, #400); a release that pins another Engine image (`./ci.sh install engines-update`); the one-line install; and Update now's updater (#443). A fault in one area cannot
+  # public address behind a proxy; the update between releases (`./ci.sh install update`); the previous release's own archive restored (`./ci.sh install previous-archive`, split from the update area by #389); the latest published release, read from the releases list, updated to this one (`./ci.sh install release-update`, #483); an install the release before the work sandbox made, with two Companies, updated to this one (`./ci.sh install sandbox-update`, #397); the measured sizes and the default sandbox limits a render finishes within (`./ci.sh install sizes`, #400); a release that pins another Engine image (`./ci.sh install engines-update`); the one-line install; and Update now's updater (#443). A fault in one area cannot
   # hide or cause another's: fail-fast is off, so one red area leaves the others running to their end, and the job's name
   # is the area that failed. An area adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing
   # else (#407–#409).
@@ -663,7 +663,7 @@ jobs:
       # Every area runs to its end, so one red area still shows the others' faults (#406).
       fail-fast: false
       matrix:
-        area: [first-install, companies, agents, backup, proxy, rollback, update, previous-archive, sandbox-update, staged-update, sizes, engines-update, one-line, updater]
+        area: [first-install, companies, agents, backup, proxy, rollback, update, previous-archive, release-update, sandbox-update, staged-update, sizes, engines-update, one-line, updater]
     # 11.3 min measured for its slowest area, backup, on run 44897434186, once update kept its fixed release image (7.0 min,
     # #423): 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12

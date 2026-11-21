@@ -107,7 +107,7 @@ remove_install() { compose down -v && remove_engine; }
 reset_install() {
   # The release areas install a previous release in a folder of its own: one an earlier area left in the same checkout
   # (./ci.sh install, all of them, on one Docker machine) is taken down from that folder, with its volumes, first.
-  for fixture in release-install sandbox-release-install staged-release-install; do
+  for fixture in release-install stable-release-install sandbox-release-install staged-release-install; do
     [ -f "$fixture/.env.install" ] || continue
     (cd "$fixture" && remove_install) || return 1
     rm -f "$fixture/.env.install" 2> /dev/null || docker run --rm -v "$PWD/$fixture:/fixture" alpine:3.21 rm -f /fixture/.env.install
@@ -126,6 +126,18 @@ complete_setup() {
   docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) --env-file <(grep -E '^SETUP_CODE=' .env.install) \
     -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
     node:22.14.0-alpine3.21 node --input-type=module - < scripts/check-install-proxy.mjs
+}
+# What an Agent was told, and the sign-in its Company made, written in an Engine's own data before an update (#385,
+# #483): the code word $3 in the memory of profile $2 on the Engine container $1, and a Claude sign-in on that Engine.
+# The release areas write them on the release they update and read them back after it (scripts/check-install-update.mjs).
+tell_engine() {
+  docker exec -i "$1" sh -ec \
+    'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1"' \
+    sh "$2" "$3"
+}
+sign_in_engine() {
+  docker exec -i "$1" sh -ec \
+    'umask 077; printf "%s\n" "{\"accessToken\":\"install-check-token\",\"refreshToken\":\"install-check-refresh\",\"expiresAt\":4102444800000}" > /opt/data/.anthropic_oauth.json; chown hermes:hermes /opt/data/.anthropic_oauth.json'
 }
 # A fake model provider served from the web container stands in for a subscription (#382, #408): companies and agents
 # both point the first Engine at it, so an Arabic message gets its reply with no sign-in.

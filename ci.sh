@@ -254,6 +254,17 @@ case "${1:-check}" in
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
   docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
   images="$images $sandbox_tag"
+  # The app image, as CI's image job builds it once and every area loads it (#403, GTMWORKS_IMAGE_PREBUILT): built here on
+  # this host from the committed checkout, under the tag the source install's compose file names, because a build inside
+  # the machine cannot pull its base images. The release areas make their test releases from it.
+  web_tag=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1)
+  docker build -q --build-arg NEXT_SKIP_CHECKS=true -t "$web_tag" "$work/src" > /dev/null
+  images="$images $web_tag"
+  export GTMWORKS_IMAGE_PREBUILT=true
+  # Behind an HTTPS proxy (a cloud session) Node reaches GitHub through it, as curl and git do.
+  [[ -z ${HTTPS_PROXY:-}${https_proxy:-} ]] || export NODE_USE_ENV_PROXY=1
+  # The release-update area installs the latest published release with that release's own install.sh, which pulls the
+  # images it pins itself (#483): this machine must reach their registries, as CI's does, or the area stops there.
   for image in $images; do docker image inspect "$image" > /dev/null 2>&1 || docker pull -q "$image" > /dev/null; done
   docker save $images | DOCKER_HOST=$machine docker load > /dev/null
   # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it
@@ -266,5 +277,5 @@ case "${1:-check}" in
   export INSTALL_LANE_FOREIGN_OWNER=1
   DOCKER_HOST=$machine bash scripts/ci-install-check.sh "$@"
   ;;
-  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

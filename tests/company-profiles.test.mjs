@@ -635,8 +635,11 @@ test('the install job proves profiles per company on the pinned release, after t
  const install=installJob().steps.map(step=>step.run||'').join('\n');
  const at=text=>{ const found=install.indexOf(text); assert.ok(found>=0,text); return found; };
  assert.ok(at('scripts/check-install-agent.mjs')<at('- prepare < scripts/check-install-profiles.mjs'));
- assert.ok(at('- prepare < scripts/check-install-profiles.mjs')<at('/opt/data/profiles/$1/memories/MEMORY.md'));
- assert.ok(at('/opt/data/profiles/$1/memories/MEMORY.md')<at('- verify "$marker" < scripts/check-install-profiles.mjs'));
+ // The memory the agents area writes after its prepare step (the release areas' own helper, tell_engine, is in the lib).
+ const prepare=at('- prepare < scripts/check-install-profiles.mjs');
+ const memory=install.indexOf('/opt/data/profiles/$1/memories/MEMORY.md',prepare);
+ assert.ok(memory>prepare,'the agents area writes a memory after its prepare step');
+ assert.ok(memory<at('- verify "$marker" < scripts/check-install-profiles.mjs'));
  // The work sandbox proof (#393) runs after the Agents it reads exist, and the job reads the host's Docker for where the
  // markers a tool wrote landed: the sandbox's work folder holds them, the Engine's disk does not.
  const sandbox=at('- sandbox "$sandbox_marker" < scripts/check-install-profiles.mjs');
