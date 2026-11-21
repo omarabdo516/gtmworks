@@ -19,10 +19,14 @@ const agentRows=(main=lead)=>[
  {agent:ads,name:'Meta Ads',connection:'f0000000-0000-0000-0000-000000000021',profile:adsProfile,main:main===ads,own:true},
 ];
 // The signed-in person's database as the lib uses it: the Agents they see, the Role check and the log.
+// The Company's lease, shared by every session of a test as the database shares it (take_morning_lease).
+const leases=new Map();
 function session({agents=agentRows(),refuse=null}={}) {
  const logged=[];
  const db={
   rpc:async(name,args)=>{
+   if(name==='take_morning_lease') { const held=leases.get(args.c); if(held&&held!==args.holder) return {data:false,error:null}; leases.set(args.c,args.holder); return {data:true,error:null}; }
+   if(name==='drop_morning_lease') { if(leases.get(args.c)===args.holder) leases.delete(args.c); return {data:null,error:null}; }
    if(name==='company_app_agents') return {data:agents,error:null};
    if(name==='check_agent_setting') return refuse?{data:null,error:{message:refuse}}:{data:null,error:null};
    if(name==='log_agent_morning') { if(refuse) return {data:null,error:{message:refuse}}; logged.push(args); return {data:null,error:null}; }
@@ -370,4 +374,39 @@ test('an extra copy that will not go is paused, a change the log cannot hold ans
   assert.deepEqual(jobs(third,adsProfile).map(job=>job.state),['paused'],'the switch-off is kept');
   assert.equal(jobs(third,leadProfile).length,0);
  } finally { await third.close(); }
+});
+
+test('saves and main-Agent changes run one at a time under the Company lease; a pause that fails too, and a log refused during a race, are answered failed', async () => {
+ const fake=await engine();
+ try {
+  // Two saves at once: the second waits for the first's lease, so there is one job and two log rows in order.
+  const {db,logged}=session();
+  const [one,two]=await Promise.all([
+   changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)}),
+   changeAgentMorning(db,{company,agent:lead,on:true,time:'10:00',zone:'Africa/Cairo',hermes:install(fake)}),
+  ]);
+  assert.deepEqual([one.state,two.state],['written','written']);
+  assert.equal(jobs(fake,leadProfile).length,1);
+  assert.deepEqual(logged.map(row=>[row.old_value,row.new_value]),[['off','9:00'],['9:00','10:00']]);
+  assert.equal(leases.size,0,'every lease is given back');
+  // An extra copy that can be neither deleted nor paused: the save answers failed, never written.
+  const [kept]=jobs(fake,leadProfile);
+  fake.settings.cron.get(leadProfile).push({...kept,id:'abcdefabcdef'});
+  const stuck={delete:async()=>({state:'refused'}),pause:async()=>({state:'unreachable'})};
+  assert.equal((await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'10:00',hermes:install(fake),driver:stuck})).state,'failed');
+ } finally { await fake.close(); leases.clear(); }
+ const second=await engine();
+ try {
+  // The main Agent changes before this save makes its job, and the log then refuses it (Lead is no longer main): the
+  // job is settled onto Ads all the same before the save answers.
+  let rows=agentRows(lead);
+  const base=session().db;
+  const db={rpc:async(name,args)=>name==='company_app_agents'?{data:rows,error:null}:name==='log_agent_morning'?{data:null,error:{message:'agentSettingInvalid'}}:base.rpc(name,args)};
+  const switching={read:async connection=>{ const listed=await readRoutines(connection); rows=agentRows(ads); return listed; }};
+  const said=console.error; console.error=()=>{};
+  try { assert.equal((await changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(second),driver:switching})).state,'notMain'); }
+  finally { console.error=said; }
+  assert.equal(jobs(second,leadProfile).filter(job=>job.prompt.startsWith(morningMarker)).length,0,'nothing left on the old main Agent');
+  assert.deepEqual(jobs(second,adsProfile).map(job=>job.state),['scheduled'],'the message is on the main Agent');
+ } finally { await second.close(); leases.clear(); }
 });
