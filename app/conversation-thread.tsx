@@ -35,7 +35,9 @@ import { useArrivals, useSentIntoNewChat, type Arrival } from '@/lib/arrivals';
 export type ThreadConversation=ConversationRecord['conversation'];
 type Text=(key:string,...values:unknown[])=>string;
 type BidiText=(key:string,...values:ReactNode[])=>ReactNode[];
-const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>card.kind==='request'&&card.request.state==='waiting'));
+// A request for an Agent waiting on the Owner (#17), or one sent to open an Agent hidden from its person (#167), keeps the
+// chat reading its record, less often, until the answer is in.
+const requestWaits=(messages:ConversationRecord['messages'])=>messages.some(message=>message.cards?.some(card=>(card.kind==='request'&&card.request.state==='waiting')||(card.kind==='access'&&card.access.state==='asked'&&card.access.waits)));
 const replyCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='reply'?[card.card.id]:[])??[]);
 const accessCardIds=(messages:ConversationRecord['messages'])=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='access'?[card.access.id]:[])??[]);
 // What each drawn message is known by for its rise (lib/arrivals), and the element it is drawn as (its key in the list).
@@ -59,7 +61,8 @@ const madeArrival=(message:ConversationRecord['messages'][number],agent:string):
 const ruleArrival=(message:ConversationRecord['messages'][number],rule:string):Arrival=>({key:`rule:${rule}`,element:`${message.kind||'m'}${message.id}/rule:${rule}`});
 const ruleArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.kind==='saved'?message.saved?.map(rule=>ruleArrival(message,rule.id))??[]:[]);
 const madeArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='made'?[madeArrival(message,card.agent.id)]:[])??[]);
-const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0),0);
+// An Agent made, or one opened for this person (#167), changes the sidebar: either is counted, so it is drawn again.
+const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0)+(message.decided?.kind==='access'&&message.decided.opened?1:0),0);
 // The words and the recorded outcome for a model error a retry cannot fix (#457).
 const refusalLine={credit:'modelNoCredit',key:'modelKeyRefused',model:'modelMissing'};
 const refusalOutcome={credit:'no-credit',key:'key-refused',model:'model-missing'};
@@ -126,7 +129,12 @@ export function useConversationRecord({company,initial}:{company:string,initial:
   return ()=>window.removeEventListener('focus',again);
  },[tied,company,id]);
  const asked=()=>{ setRecord(current=>({...current,pending:true})); setSent(value=>value+1); };
- return {record,asked};
+ // A press that changed nothing the Agent does (#167) reads the record once, which keeps it read while its answer waits.
+ const reread=async()=>{
+  try { const response=await fetch(`/api/conversations?company=${company}&conversation=${id}`,{cache:'no-store'}); if(response.ok) setRecord(await response.json() as ConversationRecord); }
+  catch { /* The next send or read brings it. */ }
+ };
+ return {record,asked,reread};
 }
 
 // The transcript while the Conversation is still loading (#172; design-reference: skeletonHTML): the person's message,
@@ -153,7 +161,7 @@ export function ChatPlaceholder() {
 // A request the Agent's Run waits on to allow an action (#163) is decided from its card with the choices this person may
 // send, and the record is asked for again at once; while it waits, the Agent is still working. A Viewer sees the wait
 // line.
-export function ConversationTurns({slug,company,record,writer,asked}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void}) {
+export function ConversationTurns({slug,company,record,writer,asked,reread}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>}) {
  const openSheet=useAppsSheet();
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
  const here=usePathname();
@@ -185,6 +193,7 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    const body=await response.json() as {state?:string,at?:string,error?:string};
    if(!response.ok) return {error:body.error||'conversationFailed'};
    // A press another tab made first may have been answered since: the card still says it was sent.
+   void reread?.();
    if(body.state==='available') return {state:'available'};
    if(body.at&&(body.state==='dismissed'||body.state==='asked'||body.state==='opened'||body.state==='declined')) return {state:body.state==='dismissed'?'dismissed':'asked',at:body.at};
    return {error:'conversationFailed'};

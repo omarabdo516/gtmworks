@@ -51,7 +51,7 @@ test('"No, never mind" sends nothing and says so, with its toast, in Arabic too'
 });
 
 test('a pressed card reads its outcome from the record; a failed press keeps the buttons and says so; someone who may not write sees the wait line', async () => {
- const asked = await draw({ id: 6, named: sara, state: 'asked', at: '2026-06-10T10:05:00Z' });
+ const asked = await draw({ id: 6, named: sara, state: 'asked', at: '2026-06-10T10:05:00Z', waits: true });
  const card = asked.getByRole('group', { name: 'Ask Sara for it' });
  await expect.element(card.getByText(/^Sent to Sara · /)).toBeVisible();
  expect(card.element().classList.contains('is-resolved')).toBe(true);

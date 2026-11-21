@@ -100,6 +100,10 @@ test('"Ask" waits in the Owner\'s and the Manager\'s "Waiting on you", naming wh
  await expect(forReach.getByRole('button')).toHaveText(['No','Open it for مراجع']);
  await expect(page.getByRole('group',{name:'مراجع asks to work with Quill'})).toBeVisible();
  await expect(page.locator('.mcard[data-kind="agent_access"]')).toHaveCount(2);
+ // The Contributor keeps the chat open: the answer reaches it, and Reach their sidebar, without a reload.
+ const watching=await browser.newContext(); const asker=await watching.newPage();
+ await signIn(asker,'reviewer@example.com',`/c/rs-learning/conversations/${adsTalk}`);
+ await expect(card(asker).locator('.card__outcome')).toHaveText(/^Sent to مدير · /);
  const context=await browser.newContext(); const other=await context.newPage();
  try {
   await signIn(other,'manager@example.com','/c/rs-learning/approvals');
@@ -108,7 +112,9 @@ test('"Ask" waits in the Owner\'s and the Manager\'s "Waiting on you", naming wh
   // The Manager opens it: the item leaves every list.
   await other.getByRole('group',{name:'مراجع asks to work with Reach'}).getByRole('button',{name:'Open it for مراجع'}).click();
   await expect(other.locator('.mcard[data-kind="agent_access"]')).toHaveCount(0);
- } finally { await context.close(); }
+  await expect(asker.locator('[data-kind="decided"][data-decision="opened"]')).toBeVisible({timeout:20000});
+  await expect(asker.locator('.sidebar .agent-tile:not(.agent-tile--new) .agent-tile__name')).toHaveText(['Lead','Reach'],{timeout:20000});
+ } finally { await context.close(); await watching.close(); }
  await page.reload();
  await expect(page.locator('.mcard[data-kind="agent_access"]')).toHaveCount(1);
  // The Owner says no to Quill.

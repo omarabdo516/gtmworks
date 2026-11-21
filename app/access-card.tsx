@@ -16,6 +16,7 @@ import type { AgentAccessView } from '@/lib/conversations';
 
 // How a press is kept: the state the card now reads and when it was pressed, or the failure to say.
 // `available`: the person sees the Agent by now, so nothing was sent.
+// A kept press also asks the chat to read its record again (`reread`), so an answer that comes later reaches it.
 export type PressAccess=(request:number,ask:boolean)=>Promise<{state:'asked'|'dismissed',at:string}|{state:'available'}|{error:string}>;
 
 // `c` and `cb` are the Conversation's own words (useConversationText), passed by the chat that draws the card.
@@ -25,7 +26,7 @@ export function AccessCard({card,fresh,press,c,cb}:{card:AgentAccessView,fresh:b
  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  const root=useRef<HTMLDivElement>(null); const held=useRef(false);
  // What a press here ended in, else the record's.
- const shown=pressed??('at' in card?{state:card.state,at:card.at,just:false}:card.state==='available'?{state:'available' as const,just:false}:null);
+ const shown=pressed??('at' in card?{state:card.state==='dismissed'?'dismissed' as const:'asked' as const,at:card.at,just:false}:card.state==='available'?{state:'available' as const,just:false}:null);
  const first=card.named.first||card.named.name; const role=card.named.role==='owner'?t('owner'):t('manager');
  // Today its time, another day its day, as the chat's other cards say when they were answered.
  const when=(at:string)=><time dateTime={at} data-utc={zone}>{dayOf(new Date().toISOString(),zone)===dayOf(at,zone)

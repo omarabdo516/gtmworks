@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(56);
+select plan(57);
 -- #167: a Member asks the main Agent for work that belongs to an Agent hidden from them. RS Learning: 1 Owner, 2 Manager,
 -- 3 and 5 Contributors, 4 Viewer. Reach (campaigns) is shown to the Manager; Quill (articles) to no one; Aleem has an
 -- Agent of its own for reports. Each person talks to Lead in fb…n, run ax-n; the Contributor also talks to Lead in fb…6.
@@ -112,6 +112,8 @@ select results_eq($$select state,named_first,named_role,opened is null and press
 select is((select count(*)::int from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_access'),0,'and nothing waits on them');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select count(*)::int from public.conversation_agent_access('fb000000-0000-0000-0000-000000000003')),0,'the Owner reads no card of another person''s Conversation');
+select is((select count(*)::int from public.agent_access_requests where state in ('offered','dismissed')),0,
+ 'nor a card its Member has not sent, or answered "No, never mind": it stays theirs');
 select results_eq($$select id,title,body,asked_by from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_access' order by id$$,
  $$values (current_setting('test.a')::bigint,'Reach','Campaigns and ads','مراجع'),(current_setting('test.q')::bigint,'Quill','Articles','مراجع')$$,
  'the Owner has one item per Agent asked for, the asked twice once, and none for the card answered "no"');

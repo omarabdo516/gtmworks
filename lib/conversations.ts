@@ -83,7 +83,8 @@ export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset
 // (`named`: their first name, whole name and Role). Its Agent is never part of the card. Offered, the card has its two
 // buttons; once pressed, it says what was sent and when (`at`), whatever answer came later. One its person sees the Agent
 // of by now, unanswered, says the Agent is open for them (`available`).
-export type AgentAccessView={id:number,named:{first:string,name:string,role:string}}&({state:'offered'|'available'}|{state:'asked'|'dismissed',at:string});
+// A sent request not answered yet `waits`, so the open chat keeps reading the record until its answer is in.
+export type AgentAccessView={id:number,named:{first:string,name:string,role:string}}&({state:'offered'|'available'}|{state:'dismissed',at:string}|{state:'asked',at:string,waits:boolean});
 export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};

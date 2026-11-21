@@ -82,10 +82,11 @@ $$;
 revoke all on function public.may_ask_to_open_agents(uuid,uuid,uuid) from public,anon,authenticated,service_role;
 
 alter table public.agent_access_requests enable row level security;
--- Only those who may open the Agent for its Member read the row (the Owners' and Managers' list); the Member reads their
--- own cards through conversation_agent_access, which leaves the Agent out until it is opened for them.
+-- Only those who may open the Agent for its Member read the row (the Owners' and Managers' list), and only once the
+-- Member sent it: a card not pressed, or answered "No, never mind", stays the Member's own. The Member reads their own
+-- cards through conversation_agent_access, which leaves the Agent out until it is opened for them.
 create policy agent_access_requests_read on public.agent_access_requests for select to authenticated
- using (public.can_open_agent_for(company_id,agent_id,asked_by));
+ using (state in ('asked','opened','declined') and public.can_open_agent_for(company_id,agent_id,asked_by));
 revoke all on public.agent_access_requests from anon,authenticated,service_role;
 grant select on public.agent_access_requests to authenticated;
 
@@ -182,7 +183,11 @@ begin
  if not public.conversation_can_write(c) then raise exception 'agentAccessNotAllowed' using errcode='42501'; end if;
  if asked.state<>'offered' then return jsonb_build_object('state',asked.state,'at',asked.pressed_at,'first',false); end if;
  if public.agent_visible_to(c,asked.asked_by,asked.agent_id) then return jsonb_build_object('state','available','first',false); end if;
- update public.agent_access_requests set state=case when ask then 'asked' else 'dismissed' end,pressed_at=now() where id=asked.id returning * into asked;
+ -- The person the card named when it was pressed is kept: whoever may open the Agent now, should the one it named when it
+ -- was made have lost that (conversation_agent_access names the same).
+ update public.agent_access_requests set state=case when ask then 'asked' else 'dismissed' end,pressed_at=now(),
+  named_to=case when public.may_open_agent_for(c,named_to,agent_id,asked_by) then named_to else coalesce(public.agent_access_named(c,asked_by,agent_id),named_to) end
+  where id=asked.id returning * into asked;
  return jsonb_build_object('state',asked.state,'at',asked.pressed_at,'first',true);
 end $$;
 revoke all on function public.press_agent_access(uuid,uuid,bigint,boolean) from public,anon,service_role;
@@ -198,14 +203,16 @@ language plpgsql security definer set search_path='' as $$
 declare asked public.agent_access_requests; wanted text:=case when open then 'opened' when not open then 'declined' end; asker text;
 begin
  if wanted is null then raise exception 'agentAccessAnswerMissing' using errcode='22023'; end if;
- select * into asked from public.agent_access_requests r where r.id=request and r.company_id=c for update;
+ -- Every request of that Member for that Agent is locked first, in one order, so two answers never wait on each other.
+ select * into asked from public.agent_access_requests r where r.id=request and r.company_id=c;
  if not found then raise exception 'agentAccessNotFound' using errcode='P0002'; end if;
+ perform 1 from public.agent_access_requests r where r.company_id=c and r.asked_by=asked.asked_by and r.agent_id=asked.agent_id order by r.id for update;
+ select * into asked from public.agent_access_requests r where r.id=request;
  if not public.can_open_agent_for(c,asked.agent_id,asked.asked_by) then raise exception 'agentAccessNotAllowed' using errcode='42501'; end if;
  if not exists(select 1 from public.members m where m.company_id=c and m.person_id=asked.asked_by and m.removed_at is null) then
   raise exception 'agentAccessNotFound' using errcode='P0002'; end if;
  if asked.state=wanted then return wanted; end if;
  if asked.state<>'asked' then raise exception 'agentAccessAnswered' using errcode='22023'; end if;
- perform 1 from public.agent_access_requests r where r.company_id=c and r.asked_by=asked.asked_by and r.agent_id=asked.agent_id and r.state='asked' for update;
  if open then perform public.set_agent_visible(c,asked.asked_by,asked.agent_id,true); end if;
  update public.agent_access_requests set state=wanted,answered_by=auth.uid(),answered_at=now()
   where company_id=c and asked_by=asked.asked_by and agent_id=asked.agent_id and state='asked';

@@ -87,7 +87,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const accessView=(row:AccessRow):AgentAccessView=>{
   const named={first:row.named_first,name:row.named_name,role:row.named_role};
   if(row.available&&(row.state==='offered'||row.state==='asked')) return {id:row.id,named,state:'available'};
-  return row.state==='offered'||!row.pressed_at?{id:row.id,named,state:'offered'}:{id:row.id,named,state:row.state==='dismissed'?'dismissed':'asked',at:row.pressed_at};
+  return row.state==='offered'||!row.pressed_at?{id:row.id,named,state:'offered'}:row.state==='dismissed'?{id:row.id,named,state:'dismissed',at:row.pressed_at}:{id:row.id,named,state:'asked',at:row.pressed_at,waits:row.state==='asked'};
  };
  // The Agent made for a request shows in the request's own card, so one card holds the request and its outcome.
  const madeFor=(row:RequestRow)=>madeRows.find(made=>made.run_id===row.run_id&&made.call_id===row.call_id);
