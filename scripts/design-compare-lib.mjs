@@ -9,7 +9,8 @@ import { extname, join, resolve, sep } from 'node:path';
 // The prototype has no URL routes: its sidebar switches views by `data-view` (chat, board, dashboard, log) and the
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor`, `waitGone`, `fill` ([selector, text]) or
 // `scrollTo` with a CSS selector, or one `press` with a key as Playwright names it (`{ press: 'ArrowDown' }`), pressed
-// where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
+// where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A `clickIf`
+// clicks its target only where it is drawn (the details pill a narrow window shows). A screen's `builtSteps` run the same way on the built page after it opens.
 // The built steps also take `goto` (a built page opened as a document, captured while it still streams) and `finish` (a
 // selector whose own animations are ended at once); `builtSettle: false` captures right after the steps, without waiting
 // for the network to go quiet.
@@ -165,8 +166,8 @@ export const screens = {
   // gives SEO its one standing permission, then SEO's details on Activity end with it, and its settings page shows it
   // after Tools. Built: an Agent whose own profile keeps an entry an Always allow put there (pass --built-path).
   'standing-activity': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { click: '[data-action="approve"][data-decision="always"]' },
-   { click: '#sb-agents [data-action="open-agent"][data-agent="seo"]' }, { waitFor: '#details [data-action="revoke"]' }, { scrollTo: '#details [data-action="revoke"]' }] }, builtPath: null,
-   builtSteps: [{ waitFor: '.details .sp' }, { scrollTo: '.details .sp' }] },
+   { click: '#sb-agents [data-action="open-agent"][data-agent="seo"]' }, { clickIf: '#btn-details[aria-expanded="false"]' }, { waitFor: '#details [data-action="revoke"]' }, { scrollTo: '#details [data-action="revoke"]' }] }, builtPath: null,
+   builtSteps: [{ clickIf: '#btn-details[aria-expanded="false"]' }, { waitFor: '.details .sp' }, { scrollTo: '.details .sp' }] },
   'standing-settings': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { click: '[data-action="approve"][data-decision="always"]' },
    ...settingsSection('agents'), { click: '#sov-ag-seo' }, { waitFor: '#sov [data-action="revoke"]' }, { scrollTo: '#sov [data-action="revoke"]' }] }, builtPath: null,
    builtSteps: [{ waitFor: '#sov-agent-panel .sp' }, { scrollTo: '#sov-agent-panel .sp' }] },

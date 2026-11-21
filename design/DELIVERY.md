@@ -72,6 +72,8 @@ The pull request is the one that added the screen to the tool, with its side-by-
 | `team-channel` | #118 |
 | `chat-loading` | #253 |
 | `numbers-loading` | #253 |
+| `standing-activity` | #499 |
+| `standing-settings` | #499 |
 
 ## Motion
 

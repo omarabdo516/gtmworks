@@ -101,7 +101,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
   tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,
    // The Agent's Routines (#205): read in the browser too; the Owner and Managers change them, as in Settings (#31).
    routines:<AgentRoutines key={agent} company={company} agent={agent} name={name} canManage={role==='owner'||role==='manager'} canWrite={writer}/>,
-   permissions:standing.permissions?.length?<StandingPermissions key={agent} company={company} agent={agent} permissions={standing.permissions} canRevoke={role==='owner'||role==='manager'} returnTo="dp-settings"/>:undefined,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
+   permissions:standing.permissions?.length?<StandingPermissions key={`standing-${agent}`} company={company} agent={agent} permissions={standing.permissions} canRevoke={role==='owner'||role==='manager'} returnTo="dp-settings"/>:undefined,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
    memory:memory.state==='found'?<AgentMemory key={agent} company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>:undefined,
    log,logCount:count??rows.length})};
 }
