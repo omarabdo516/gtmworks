@@ -1336,11 +1336,13 @@ while read -r company address; do
 done < companies.txt
 # The file each main Agent made before the update is in its own folder of its Company's work folder, listed in its
 # Library, while the original stays on the Engine and no other Company's work folder has it.
+# `compose exec` reads its stdin, so each one inside this loop reads /dev/null: it would take the rest of engines.txt
+# and end the loop after the first Company.
 while read -r company profile address; do
   container=${address#*://}; container=${container%%:*}; slug=${container#gtmworks-engine-}; file="before-sandbox-${company//-/}"
   [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$profile/$file.md") == "$file" ]] || fail "the update copies the old Library file of $company into its Agent's folder"
   [[ $(docker exec "$container" cat "/opt/data/profiles/$profile/workspace/$file.md") == "$file" ]] || fail "the update leaves the old Library file of $company on its Engine"
-  compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const {listAgentFiles}=await import('/app/lib/hermes.mjs'); const read=await listAgentFiles({...await engineOf('$company'),profile:'$profile'}); console.log(read.state, (read.entries||[]).map(entry=>entry.name).join(' '));" \
+  compose exec -T web node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const {listAgentFiles}=await import('/app/lib/hermes.mjs'); const read=await listAgentFiles({...await engineOf('$company'),profile:'$profile'}); console.log(read.state, (read.entries||[]).map(entry=>entry.name).join(' '));" < /dev/null \
     | grep -qE "^found (.* )?$file\.md( |\$)" || fail "the Library of $company's Agent lists the file it made before the update"
   while read -r other _; do
     [[ $other == "$slug" ]] && continue
