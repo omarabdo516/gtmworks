@@ -84,6 +84,9 @@ engine_folder() { printf '.engines/%s' "$1"; }
 # network and the small volume its host key is kept in. Every name comes from the Engine's folder, as its Engine's names
 # do, so a restore needs no other record; none begins with `gtmworks-engine`, so the Engine counts stay what they were.
 sandbox_container() { printf 'gtmworks-sandbox-%s' "$1"; }
+# The sandbox's exit (#394): its container and the one network of the Company's that routes out.
+exit_container() { printf 'gtmworks-exit-%s' "$1"; }
+exit_network() { printf 'gtmworks-exit-%s' "$1"; }
 work_volume() { printf 'gtmworks-work-%s' "$1"; }
 work_network() { printf 'gtmworks-work-%s' "$1"; }
 host_key_volume() { printf 'gtmworks-sandbox-hostkey-%s' "$1"; }
@@ -169,6 +172,8 @@ engine() {
   SANDBOX_SHM=${SANDBOX_SHM:-$sandbox_shm} \
   WORK_VOLUME=$(work_volume "$slug") \
   WORK_NETWORK=$(work_network "$slug") \
+  EXIT_NAME=$(exit_container "$slug") \
+  EXIT_NETWORK=$(exit_network "$slug") \
   docker compose --project-name "$(engine_project "$slug")" --env-file "$(engine_folder "$slug")/.env" -f "$engine_template" "$@"
 }
 # An Engine's key lives in its own file, never in .env.install, the file the app and the worker read their environment
@@ -276,9 +281,9 @@ engine_start() {
 engine_destroy() {
   slug=$1 volume=$2 network=$3
   engine "$slug" down -v --remove-orphans > /dev/null 2>&1 || true
-  docker rm -f "$(engine_project "$slug")" "$(sandbox_container "$slug")" > /dev/null 2>&1 || true
+  docker rm -f "$(engine_project "$slug")" "$(sandbox_container "$slug")" "$(exit_container "$slug")" > /dev/null 2>&1 || true
   docker volume rm "$volume" "$(work_volume "$slug")" "$(host_key_volume "$slug")" > /dev/null 2>&1 || true
-  docker network rm "$(work_network "$slug")" > /dev/null 2>&1 || true
+  docker network rm "$(work_network "$slug")" "$(exit_network "$slug")" > /dev/null 2>&1 || true
   # The app and the worker may have joined this Engine's network before a later step failed: detach them first, or the
   # network would be left behind and the same command run again would meet it.
   for service in web worker; do

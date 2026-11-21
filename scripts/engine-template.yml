@@ -97,6 +97,39 @@ services:
       start_period: 30s
       retries: 30
 
+  exit:
+    # The sandbox's one way out (#394): an HTTP proxy that lets HTTP and HTTPS reach public addresses and refuses the
+    # install's networks, private, shared, loopback, link-local and cloud metadata addresses, by the address a name
+    # resolves to (sandbox/exit.py). It runs from the work sandbox image, so an install loads, pins and updates no second
+    # image for it, and it is the one container on the work network with a network that routes out.
+    image: ${SANDBOX_IMAGE:-gtmworks-work-sandbox:local}
+    restart: unless-stopped
+    container_name: ${EXIT_NAME:-gtmworks-exit}
+    entrypoint: [python3, /usr/local/lib/gtmworks/exit.py]
+    # It listens on its address beside the sandbox, so the sandbox is made first.
+    depends_on:
+      - sandbox
+    # The image's ordinary user, no capability and no new privilege, and small limits: the exit holds nothing and keeps
+    # nothing, and no key and no volume reach it.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1.0
+    networks:
+      work:
+        aliases:
+          - exit
+      outbound:
+    healthcheck:
+      test: [CMD, python3, /usr/local/lib/gtmworks/exit.py, --health]
+      interval: 5s
+      timeout: 10s
+      start_period: 30s
+      retries: 30
+
 volumes:
   data:
     name: ${ENGINE_VOLUME:?Run scripts/install.sh}
@@ -110,6 +143,8 @@ networks:
     name: ${ENGINE_NETWORK:?Run scripts/install.sh}
   work:
     name: ${WORK_NETWORK:-gtmworks-work-first}
-    # No route out of the install: the sandbox reaches its Engine on this network and nothing else (#394 adds the one
-    # exit service that changes this, on the same network).
+    # No route out: the sandbox reaches its Engine and its exit on this network and nothing else (#394).
     internal: true
+  outbound:
+    # The exit's own network, the one that routes out; only the exit is on it, and it listens on the work network alone.
+    name: ${EXIT_NETWORK:-gtmworks-exit-first}

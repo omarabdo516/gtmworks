@@ -19,4 +19,7 @@ AuthorizedKeysFile .ssh/authorized_keys
 PrintMotd no
 PrintLastLog no
 AcceptEnv LANG LC_*
+# Every session the Engine opens reaches the internet through the Company's exit and nothing else (#394): the same values
+# as the image's environment (sandbox/Dockerfile), which sshd does not pass on by itself.
+SetEnv HTTP_PROXY=http://exit:3128 HTTPS_PROXY=http://exit:3128 http_proxy=http://exit:3128 https_proxy=http://exit:3128 NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 NODE_USE_ENV_PROXY=1
 Subsystem sftp internal-sftp

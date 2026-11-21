@@ -41,7 +41,11 @@ RUN set -eux; \
 COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/work-sandbox-entrypoint
 COPY work-shell /usr/local/bin/work-shell
-RUN chmod 0755 /usr/local/bin/work-sandbox-entrypoint /usr/local/bin/work-shell
+# The Company's exit (#394): the HTTP proxy the template runs from this same image as a container of its own, so an install
+# carries no second image for it and the exit is pinned with the release as the sandbox is. The sandbox never runs it.
+COPY exit.py /usr/local/lib/gtmworks/exit.py
+RUN chmod 0755 /usr/local/bin/work-sandbox-entrypoint /usr/local/bin/work-shell \
+ && chmod 0644 /usr/local/lib/gtmworks/exit.py
 # sshd starts every session through the user's login shell, which is where an Agent's own start folder is made before the
 # Engine's command runs (work-shell, #393).
 RUN set -eux; \
@@ -55,6 +59,16 @@ ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     HOME=/home/pn \
     SSH_AUTHORIZED_KEYS_FILE=/run/authorized_keys
+# The sandbox's one way out is its Company's exit, at the alias and port the Company's template gives it (#394): the
+# sandbox's own network routes nowhere, so a tool that ignores these reaches nothing. sshd sets the same for every session
+# the Engine opens (sshd_config); Node's own fetch reads them where its release can. Loopback stays direct.
+ENV HTTP_PROXY=http://exit:3128 \
+    HTTPS_PROXY=http://exit:3128 \
+    http_proxy=http://exit:3128 \
+    https_proxy=http://exit:3128 \
+    NO_PROXY=localhost,127.0.0.1,::1 \
+    no_proxy=localhost,127.0.0.1,::1 \
+    NODE_USE_ENV_PROXY=1
 WORKDIR /work
 USER pn
 EXPOSE 2222
