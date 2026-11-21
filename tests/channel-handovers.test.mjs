@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { driveChannelRuns } from '../lib/channel-runs.mjs';
-import { channelHandOverSpec, runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
+import { runToolCall } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // #150: Lead hands a job over inside a channel, on #317's record with a channel link. The database is a small stand-in
@@ -128,46 +128,4 @@ test('hand_to_agent in a channel asks channel_hand_to_agent for the message, and
   ['channel_hand_to_agent',{message,run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
   ['lead_hand_to_agent',{conversation:'c-1',run:'run-1',call:'call-1',agent_name:'Ads',goal:'Plan the Meta ads',context:null}],
  ]);
-});
-
-// #150's first item: a channel Run of the Agent that may delegate is told the channel's other Agents, and no Agent
-// outside it. The list is the tool's own enum, pinned with the Run, so a retry sends the same request.
-test('a channel Run of the main Agent is offered hand_to_agent naming the channel\'s other Agents alone, pinned with the Run',async()=>{
- const starts=[]; const specs=[];
- const pinned=JSON.stringify([JSON.parse(toolSpecTexts().show_draft),JSON.parse(JSON.stringify(channelHandOverSpec(['Ads','Writer'])))]);
- const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
-  if(name==='channel_runs_due') return {data:[{message,run:null,profile:null}],error:null};
-  if(name==='begin_channel_start') return {data:[{attempt:1,company:'10000000-0000-0000-0000-000000000001',profile:leadProfile,session:'s-1',input:'Omar: @Lead plan the launch',instructions:null}],error:null};
-  // Critic is the Company's third Agent and not in this channel: the database names only Ads and Writer.
-  if(name==='channel_handover_agents') return {data:['Ads','Writer'],error:null};
-  if(name==='pin_channel_run') { specs.push(args.specs); return {data:{tools:pinned},error:null}; }
-  if(name==='answer_channel_start') return {data:true,error:null};
-  return {data:null,error:{message:`unexpected ${name}`}};
- }};
- const engine={start:async(/** @type {any} */ request)=>{ starts.push(request); return 'run-pinned'; }};
- assert.deepEqual(await driveChannelRuns(/** @type {any} */(service),{hermes,engineFor:()=>/** @type {any} */(engine),channel}),{started:1,closed:0});
- assert.deepEqual(starts[0].tools.map((tool)=>tool.name),['show_draft','hand_to_agent']);
- const hand=starts[0].tools.find((tool)=>tool.name==='hand_to_agent');
- assert.deepEqual(hand.parameters.properties.agent.enum,['Ads','Writer'],'only the channel\'s other Agents are named');
- assert.match(hand.description,/Ads/);
- assert.match(hand.description,/Writer/);
- assert.doesNotMatch(hand.description,/Critic/,'an Agent outside the channel is never named');
- assert.equal(specs.length,1,'the list is pinned with the Run');
- assert.deepEqual(JSON.stringify(starts[0].tools),pinned);
-});
-
-test('a channel Run with no other Agent to hand to is offered no hand_to_agent',async()=>{
- const specs=[]; const starts=[];
- const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
-  if(name==='channel_runs_due') return {data:[{message,run:null,profile:null}],error:null};
-  if(name==='begin_channel_start') return {data:[{attempt:1,company:'10000000-0000-0000-0000-000000000001',profile:leadProfile,session:'s-1',input:'Omar: @Lead plan the launch',instructions:null}],error:null};
-  if(name==='channel_handover_agents') return {data:[],error:null};
-  if(name==='pin_channel_run') { specs.push(args.specs); return {data:{tools:JSON.stringify([JSON.parse(toolSpecTexts().show_draft)])},error:null}; }
-  if(name==='answer_channel_start') return {data:true,error:null};
-  return {data:null,error:{message:`unexpected ${name}`}};
- }};
- const engine={start:async(/** @type {any} */ request)=>{ starts.push(request); return 'run-alone'; }};
- await driveChannelRuns(/** @type {any} */(service),{hermes,engineFor:()=>/** @type {any} */(engine),channel});
- assert.equal('hand_to_agent' in specs[0],false,'nothing is asked of the database to pin a tool it would refuse');
- assert.deepEqual(starts[0].tools.map((tool)=>tool.name),['show_draft']);
 });

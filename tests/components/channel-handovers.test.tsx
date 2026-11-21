@@ -1,17 +1,20 @@
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import ChannelView from '@/app/c/[slug]/channels/[id]/channel';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import type { ChannelHandoff, ChannelMessage, ChannelRecord } from '@/lib/channels';
+import '@/app/tokens.css';
+import '@/app/shell.css';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: React.ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices: vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); });
 
-// #150: a channel's handovers, drawn from gtmworks's own record: the quiet row with both faces and the job, the other
-// Agent's answer marked "to Lead", and the details' "Handoffs" section with its count and the last four, newest first.
+// #150, #476: a channel's handovers, drawn from gtmworks's own record: the quiet row "{asking Agent} asked {asked Agent}"
+// with both faces and the job, the asked Agent's answer marked "to {asking Agent}", and the details' "Handoffs" section
+// with its count and the last four, newest first.
 const at = '2026-06-10T09:05:00Z';
 const timeOf = (value: string, language: 'en' | 'ar') => new Date(value).toLocaleTimeString(localeFor(language), { hour: '2-digit', minute: '2-digit' });
 const lead = { id: 'a-1', connection_id: 'c-1', name: 'Lead', speciality: 'General', main: true, only: false, state: 'idle' as const };
@@ -42,8 +45,8 @@ test('two handovers are drawn in the details newest first, each with both faces,
  expect(heading.element().textContent).toBe('Handoffs 2');
  const rows = Array.from(screen.container.querySelectorAll('#ch-h-h ~ .panel-card .panel-row'));
  expect(rows.map(row => row.textContent)).toEqual([
-  `Handed to AdsPlan the Meta ads for the March intake · ${timeOf('2026-06-10T09:08:00Z', 'en')}`,
-  `Handed to AdsWrite the launch email · ${timeOf('2026-06-10T09:04:00Z', 'en')}`,
+  `Lead asked AdsPlan the Meta ads for the March intake · ${timeOf('2026-06-10T09:08:00Z', 'en')}`,
+  `Lead asked AdsWrite the launch email · ${timeOf('2026-06-10T09:04:00Z', 'en')}`,
  ]);
  expect(rows.map(row => row.querySelectorAll('.agent-face').length)).toEqual([2, 2]);
  expect(rows[0].querySelector('.handed__faces .gw-icon path')?.getAttribute('d')).toBe('M5 12h14');
@@ -56,7 +59,7 @@ test('six handovers count six and the details draw the last four, newest first',
  const details = screen.getByRole('complementary', { name: 'Channel details' });
  expect(screen.container.querySelector('#ch-h-h')?.textContent).toBe('Handoffs 6');
  const rows = Array.from(screen.container.querySelectorAll('#ch-h-h ~ .panel-card .panel-row'));
- expect(rows.map(row => row.querySelector('.panel-row__t')?.textContent)).toEqual(['Handed to Ads', 'Handed to Ads', 'Handed to Ads', 'Handed to Ads']);
+ expect(rows.map(row => row.querySelector('.panel-row__t')?.textContent)).toEqual(['Lead asked Ads', 'Lead asked Ads', 'Lead asked Ads', 'Lead asked Ads']);
  expect(rows.map(row => row.querySelector('.panel-row__d')?.textContent?.split(' · ')[0])).toEqual(['Job 6', 'Job 5', 'Job 4', 'Job 3']);
 });
 
@@ -67,8 +70,8 @@ test('in Arabic the details read التسليمات with the same count and rows
  expect(screen.container.querySelector('#ch-h-h')?.textContent).toBe('التسليمات 2');
  const rows = Array.from(screen.container.querySelectorAll('#ch-h-h ~ .panel-card .panel-row'));
  expect(rows.map(row => row.textContent)).toEqual([
-  `سلّم الشغل لـ Adsخطة إعلانات مارس · ${timeOf('2026-06-10T09:08:00Z', 'ar')}`,
-  `سلّم الشغل لـ Adsإيميل الإطلاق · ${timeOf('2026-06-10T09:04:00Z', 'ar')}`,
+  `Lead طلب من Adsخطة إعلانات مارس · ${timeOf('2026-06-10T09:08:00Z', 'ar')}`,
+  `Lead طلب من Adsإيميل الإطلاق · ${timeOf('2026-06-10T09:04:00Z', 'ar')}`,
  ]);
  expect(rows[0].querySelector('.handed__faces .gw-icon path')?.getAttribute('d')).toBe('M19 12H5');
 });
@@ -87,7 +90,7 @@ test('the transcript draws the row, then the other Agent\'s answer marked "to Le
  const items = Array.from(turns.element().querySelectorAll(':scope > li')).filter(row => !row.classList.contains('divider'));
  expect(items.map(row => row.getAttribute('data-author') ?? (row.hasAttribute('data-handover') ? 'handoff' : row.tagName.toLowerCase()))).toEqual(['person', 'agent', 'handoff', 'agent', 'agent']);
  const row = items[2];
- expect(row.textContent).toBe('Handed to AdsPlan the Meta ads for the March intake');
+ expect(row.textContent).toBe('Lead asked AdsPlan the Meta ads for the March intake');
  expect(row.querySelectorAll('.agent-face').length).toBe(2);
  expect(row.querySelector('.gw-icon path')?.getAttribute('d')).toBe('M5 12h14');
  expect(items[3].querySelector('.sender')?.textContent).toContain('Ads');
@@ -105,7 +108,7 @@ test('in Arabic the row and the sender line read in the interface\'s own words',
  ];
  const screen = await view(record(messages), 'ar');
  const turns = screen.getByRole('list', { name: 'الرسايل في #Launch week' }).element();
- expect(turns.querySelector('[data-handover]')?.textContent).toBe('سلّم الشغل لـ Adsخطة إعلانات مارس');
+ expect(turns.querySelector('[data-handover]')?.textContent).toBe('Lead طلب من Adsخطة إعلانات مارس');
  expect(turns.querySelector('.sender__to')?.textContent).toBe('لـ Lead');
  expect(turns.querySelector('[data-handover] .gw-icon path')?.getAttribute('d')).toBe('M19 12H5');
 });
@@ -171,3 +174,45 @@ for (const language of ['en', 'ar'] as const) for (const owner of [true, false])
   expect(line.querySelector('a')).toBeNull();
  }
 });
+
+// #476: any Agent of the channel asks any Agent of the Company. In a channel whose one Agent is Writer, Writer asks Ads,
+// which is not in the channel: the row names both with their faces, Ads's answer reads under its own name and face with
+// "to Writer", then Writer's reply, and the details' Handoffs section lists it, in Arabic and English, light and dark
+// (design-reference: the handoff row, `.handoff`, `.sender__to` and the details' handoffs).
+const writer = { id: 'a-3', connection_id: 'c-3', name: 'Writer', speciality: 'Posts and articles', main: false, only: true, state: 'idle' as const };
+const asked: ChannelMessage[] = [
+ { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Writer write the launch post', at: '2026-06-10T09:05:00Z', files: [], mention: { agent: 'Writer', face: 'c-3', state: 'answered', permissions: [], questions: [] } },
+ { id: 2, author: 'agent', name: 'Writer', face: 'c-3', body: 'I asked Ads for last campaign\'s numbers.', at: '2026-06-10T09:05:30Z' },
+ { id: 'handover-9', author: 'handoff', from: { name: 'Writer', face: 'c-3' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Last campaign\'s leads and cost per lead', at: '2026-06-10T09:06:00Z' },
+ { id: 'handover-9-answer', author: 'agent', name: 'Ads', face: 'c-2', body: '412 leads at EGP 21 each.', at: '2026-06-10T09:08:00Z', to: 'Writer' },
+ { id: 'handover-9-reply', author: 'agent', name: 'Writer', face: 'c-3', body: 'The post leads with 412 leads in March.', at: '2026-06-10T09:09:00Z' },
+];
+const askedHandoff: ChannelHandoff = { id: 9, from: { name: 'Writer', face: 'c-3' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Last campaign\'s leads and cost per lead', at: '2026-06-10T09:06:00Z' };
+for (const [language, line, to] of [['en', 'Writer asked Ads', 'to Writer'], ['ar', 'Writer طلب من Ads', 'لـ Writer']] as const)
+ for (const theme of ['light', 'dark'] as const) test(`in ${language}, ${theme}, Writer asks Ads, an Agent outside the channel, whose answer reads under its own name and face to Writer`, async () => {
+  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+  document.documentElement.dataset.theme = theme;
+  onTestFinished(() => { delete document.documentElement.dataset.theme; });
+  const screen = await render(<div className="gw"><LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record(asked, [askedHandoff], { agents: [writer] })}/></LanguageProvider></div>);
+  const list = screen.container.querySelector('.turns')!;
+  const row = list.querySelector('[data-handover]')!;
+  expect(row.querySelector('.handed__t')?.textContent).toBe(line);
+  expect(row.querySelector('.handed__d')?.textContent).toBe('Last campaign\'s leads and cost per lead');
+  expect([...row.querySelectorAll('.agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['Writer', 'Ads']);
+  const turns = [...list.querySelectorAll('.turn--agent')];
+  expect(turns.map(turn => turn.querySelector('.sender bdi')?.textContent)).toEqual(['Writer', 'Ads', 'Writer']);
+  // Ads wears the face the row draws for it, though it is not one of the channel's Agents, and says whom it answered.
+  expect(turns[1].querySelector('.sender .agent-face')?.innerHTML).toBe(row.querySelectorAll('.agent-face')[1].innerHTML);
+  expect(turns[1].querySelector('.sender__to')?.textContent).toBe(to);
+  expect(turns[1].querySelector('.bubble')?.textContent).toBe('412 leads at EGP 21 each.');
+  expect(turns[2].querySelector('.sender__to')).toBeNull();
+  // The details list it under Handoffs with both faces and the same words.
+  const listed = screen.container.querySelector('#ch-h-h ~ .panel-card .panel-row')!;
+  expect(listed.querySelector('.panel-row__t')?.textContent).toBe(line);
+  expect(listed.querySelectorAll('.agent-face').length).toBe(2);
+  // The names read in the theme's first text colour, and the job and the "to" line in its quiet one.
+  const [first, quiet] = theme === 'dark' ? ['rgb(245, 245, 245)', 'rgba(245, 245, 245, 0.6)'] : ['rgb(28, 28, 28)', 'rgba(28, 28, 28, 0.64)'];
+  expect(getComputedStyle(row.querySelector('.handed__t bdi')!).color).toBe(first);
+  expect(getComputedStyle(row.querySelector('.handed__d')!).color).toBe(quiet);
+  expect(getComputedStyle(turns[1].querySelector('.sender__to')!).color).toBe(quiet);
+ });

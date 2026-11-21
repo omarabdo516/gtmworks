@@ -6,6 +6,12 @@
   "ar": { "title": "رسالة الصبح بتاعتك", "body": "كل يوم الصبح الوكيل الرئيسي بيفتحلك محادثة جديدة فيها تحيته وبطاقة باللي مستنيك واللي اشتغل بالليل، بيتقري جديد كل ما تفتحه، وبس لو فيه حاجة ليك." }
  },
  {
+  "issue": 476,
+  "date": "2026-11-21",
+  "en": { "title": "Agents ask the team in channels too", "body": "In a channel, any agent of it can now ask any agent of your company for a job, even one that isn’t in the channel: everyone in the channel sees who asked whom and the answer under that agent’s name." },
+  "ar": { "title": "الوكلاء بيطلبوا من الفريق في القنوات كمان", "body": "في القناة، أي وكيل فيها بقى يقدر يطلب شغل من أي وكيل في شركتك، حتى لو مش في القناة: كل اللي في القناة بيشوفوا مين طلب من مين، والرد باسم الوكيل ده." }
+ },
+ {
   "issue": 182,
   "date": "2026-11-21",
   "en": { "title": "Good morning can be switched on", "body": "On the main agent’s page, the Owner and Managers can switch on a morning summary every day and pick its time; it stays quiet when there is nothing new and moves with the main agent." },

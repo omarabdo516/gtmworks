@@ -206,12 +206,13 @@ function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done,owne
  if(message.author==='note') return <li className={`note note--icon${rise}`} data-kind={message.kind}>
   <ShellIcon name={message.kind==='card'?'board':'team'} className="note__icon"/><span>{message.kind==='card'?c('channelCardNote',t('boardColProgress')):c('channelInviteNote',firstName(message.actor),message.name,name)}</span>
  </li>;
- // A job the main Agent handed another Agent of the channel (#150; design-reference: the handoff row, `.handoff`): both
- // faces with the arrow between them, the Agent it went to, the job, and that it did not finish when so (#375). One that
- // ended with no reply because the Company has no model connected (#428) says so under its row, as a Conversation does.
+ // A job an Agent of the channel handed another Agent of the Company, in the channel or not (#150, #476; design-reference:
+ // the handoff row, `.handoff`): both faces with the arrow between them, "{asking Agent} asked {asked Agent}", the job,
+ // and that it did not finish when so (#375). One that ended with no reply because the Company has no model connected
+ // (#428) says so under its row, as a Conversation does.
  if(message.author==='handoff') {
   const row=<HandedRow className={rise.trim()} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}}
-   title={named(c,'channelHandedTo',message.to.name)} goal={message.goal} failed={message.failed?c('channelHandedFailed'):null}/>;
+   title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} failed={message.failed?c('channelHandedFailed'):null}/>;
   return message.noModel?<>{row}<li className="note" role="alert" data-outcome="no-model"><NoModelLine slug={slug} owner={owner}/></li></>:row;
  }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
@@ -334,7 +335,7 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
     <ul className="panel-card">
      {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.failed?{'data-failed':''}:{})}>
       <span className="handed__faces"><CompanyAgentFace agent={{connection_id:handoff.from.face,name:handoff.from.name}} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:handoff.to.face,name:handoff.to.name}} size={20}/></span>
-      <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandedTo',handoff.to.name)}</span>
+      <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandoverAsked',handoff.from.name,handoff.to.name)}</span>
        <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}{time(handoff.at)}</span></span>
      </li>)}
     </ul>
