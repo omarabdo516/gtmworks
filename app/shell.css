@@ -976,6 +976,9 @@
 .gw .handed__t bdi { color: var(--gw-text-1); font-weight: 600; }
 .gw .handed__d { color: var(--gw-text-3); overflow-wrap: anywhere; }
 .gw .handed__d::before { content: "·"; margin-inline-end: 6px; }
+/* A handover that did not finish (#375) says so after the job, in the danger text, as a channel's "couldn't reply" line does, and so does its line in the channel's Handoffs. */
+.gw .handed__failed { color: var(--gw-danger-text); font-weight: 600; }
+.gw .handed .handed__failed::before { content: "·"; margin-inline-end: 6px; color: var(--gw-text-3); font-weight: 400; }
 [dir="ltr"] .gw .handed__t { unicode-bidi: plaintext; }
 /* The Agent that handed a channel's work over, after the one answering it (#150; design-reference: .sender__to). */
 .gw .sender__to { color: var(--gw-text-3); }
