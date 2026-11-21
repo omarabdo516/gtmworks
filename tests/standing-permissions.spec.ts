@@ -144,7 +144,7 @@ test('Revoke removes the row in both places, says the Agent will ask again, writ
  await shot(page,'4-revoked-toast');
  await expect(page.locator('#dp-settings'),'the focus goes where the reference sends it').toBeFocused();
  expect(allowlist(ads)).toEqual([]);
- expect(revokes()).toEqual([{actor_id:omar,agent_id:ads,details:{agent_name:'Ads',permission:{text:'Meta Ads · create_campaign'}}}]);
+ expect(revokes()).toEqual([{actor_id:omar,agent_id:ads,details:{agent_name:'Ads',permission:{text:'Meta Ads · create_campaign',entry}}}]);
  await expect((await settings(page,ads)).getByText('Standing permissions')).toHaveCount(0);
  await expect((await details(page,ads,'Ads')).getByText('Standing permissions')).toHaveCount(0);
 

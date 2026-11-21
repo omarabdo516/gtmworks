@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(25);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -93,31 +93,33 @@ select lives_ok($$select public.check_permission_revoke('10000000-0000-0000-0000
 select throws_ok($$select public.check_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000003')$$,'42501','permissionNotAllowed','not on an Agent the Manager does not see');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.check_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','a Contributor may not');
-select throws_ok($$select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','Meta Ads · create_campaign')$$,'42501','permissionNotAllowed','nor log a revoke');
+select throws_ok($$select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','Meta Ads · create_campaign','mcp:meta-ads/create_campaign')$$,'42501','permissionNotAllowed','nor log a revoke');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.check_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','nor a Viewer');
 select set_config('request.jwt.claim.sub','e7000000-0000-0000-0000-000000000001',true);
 select throws_ok($$select public.check_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','nor a Manager of another Company');
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select throws_ok($$select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002',' ')$$,'22023','permissionInvalid','a revoke names its permission');
-select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','Meta Ads · create_campaign');
+select throws_ok($$select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002',' ','mcp:meta-ads/create_campaign')$$,'22023','permissionInvalid','a revoke names its permission');
+select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','Meta Ads · create_campaign','mcp:meta-ads/create_campaign');
 reset role;
 select is((select jsonb_build_array(actor_id,actor_kind,subject,agent_id,action,details) from public.company_log where action='agent_permission_revoked'),
  jsonb_build_array('20000000-0000-0000-0000-000000000002','person','agent','e5000000-0000-0000-0000-000000000002','agent_permission_revoked',
-  jsonb_build_object('agent_name','Ads','permission',jsonb_build_object('text','Meta Ads · create_campaign'))),
+  jsonb_build_object('agent_name','Ads','permission',jsonb_build_object('text','Meta Ads · create_campaign','entry','mcp:meta-ads/create_campaign'))),
  'a revoke is one log row: who, the Agent and the permission');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select is((select count(*)::int from public.company_log where action='agent_permission_revoked'),1,'everyone who sees the Agent reads it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000003','WordPress · publish_post');
+select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000003','WordPress · publish_post','mcp:wordpress/publish_post');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select count(*)::int from public.company_log where action='agent_permission_revoked'),1,'and a Member who does not see the Agent reads none of its revokes');
+select results_eq($$select entry from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('recursive delete')$$,
+ 'a revoked grant no longer names the person behind its entry, and the other entry keeps its own');
 reset role;
 select ok(not has_function_privilege('anon','public.agent_permission_grants(uuid,uuid)','execute')
  and not has_function_privilege('anon','public.check_permission_revoke(uuid,uuid)','execute')
- and not has_function_privilege('anon','public.log_permission_revoked(uuid,uuid,text)','execute'),'no signed-out caller reaches them');
+ and not has_function_privilege('anon','public.log_permission_revoked(uuid,uuid,text,text)','execute'),'no signed-out caller reaches them');
 select ok(not has_function_privilege('authenticated','public.permission_allows_of(jsonb,jsonb)','execute')
  and not has_function_privilege('authenticated','public.permission_allows_valid(text[])','execute'),'the helpers are no one''s to call');
 select * from finish();

@@ -102,10 +102,10 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // its standing instructions (#176) are the profile's SOUL.md outside the team's rules section, read for every Role.
  // The Agent's voice is its own profile's settings too (#162): the language it listens in, the voice of its provider and
  // the speed, read with the Engine's own defaults. Listen is the Engine speaking with them, asked for from the page.
- const [about,skills,how,voice]=agent&&tab==='settings'?await Promise.all([readAgentAbout(db,{company:company.id,agent:agent.id}),readAgentSkills(db,{company:company.id,agent:agent.id}),readAgentInstructions(db,{company:company.id,agent:agent.id}),readAgentVoice(db,{company:company.id,agent:agent.id})]):[null,null,null,null];
  // What the Agent may do without asking again (#166): its own Engine profile's standing permissions, with who allowed
  // each, for every Role that sees it. An Engine that cannot be read draws no section, as an empty list does.
- const permissions=agent&&tab==='settings'?await readAgentPermissions(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed',permissions:null})):null;
+ const [about,skills,how,voice,permissions]=agent&&tab==='settings'?await Promise.all([readAgentAbout(db,{company:company.id,agent:agent.id}),readAgentSkills(db,{company:company.id,agent:agent.id}),readAgentInstructions(db,{company:company.id,agent:agent.id}),readAgentVoice(db,{company:company.id,agent:agent.id}),
+  readAgentPermissions(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed',permissions:null}))]):[null,null,null,null,null];
  // The Agent's own model choices (#29), from the Engine for that Agent's profile, so its "Thinks with" rows can change it.
  const agentModel=agent&&tab==='settings'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,agent:agent.id,owner}); } catch { return {models:null}; } })():null;
  // The memory tab (#193) draws the same AgentMemory as the details panel from this Agent's own Engine profile (#350); an

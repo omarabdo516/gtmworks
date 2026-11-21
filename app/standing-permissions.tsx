@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
@@ -18,6 +18,10 @@ import type { StandingPermission } from '@/lib/standing-permissions.mjs';
 export function StandingPermissions({company,agent,permissions,canRevoke,returnTo}:{company:string,agent:string,permissions:StandingPermission[],canRevoke:boolean,returnTo?:string}) {
  const {t}=useI18n(); const router=useRouter();
  const [gone,setGone]=useState<string[]>([]); const [pending,setPending]=useState<string|null>(null); const [failed,setFailed]=useState<string|null>(null);
+ // A row hidden on revoke stays hidden only until the server's list is drawn again: an entry allowed again comes back.
+ const [drawn,setDrawn]=useState(permissions);
+ if(drawn!==permissions) { setDrawn(permissions); setGone([]); }
+ const own=useRef<HTMLElement>(null);
  const shown=permissions.filter(permission=>!gone.includes(permission.entry));
  if(!shown.length) return null;
  const revoke=async(permission:StandingPermission,button:HTMLButtonElement)=>{
@@ -26,14 +30,14 @@ export function StandingPermissions({company,agent,permissions,canRevoke,returnT
   const done=await fetch('/api/agent-permissions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,entry:permission.entry})}).then(response=>response.ok,()=>false);
   setPending(null);
   if(!done) { setFailed(permission.entry); return; }
-  const buttons=[...document.querySelectorAll<HTMLButtonElement>('.sp-revoke')]; const at=buttons.indexOf(button);
+  const buttons=[...own.current?.querySelectorAll<HTMLButtonElement>('.sp-revoke')??[]]; const at=buttons.indexOf(button);
   const next=returnTo?document.getElementById(returnTo):buttons[at+1]||buttons[at-1]||document.getElementById('sov-tab-settings');
   setGone(list=>[...list,permission.entry]);
   next?.focus();
   toast(t('agentPermissionRevoked'));
   router.refresh();
  };
- return <section className="dp-sec sp" aria-labelledby={`sp-h-${agent}`}><h3 className="dp-label" id={`sp-h-${agent}`}><span>{t('agentStandingPermissions')}</span></h3>
+ return <section ref={own} className="dp-sec sp" aria-labelledby={`sp-h-${agent}`}><h3 className="dp-label" id={`sp-h-${agent}`}><span>{t('agentStandingPermissions')}</span></h3>
   <ul className="panel-card">{shown.map(permission=><li key={permission.entry} className="panel-row sp-row">
    <span className="panel-row__icon"><ShellIcon name="shield"/></span>
    <span className="panel-row__text"><span className="panel-row__t"><PermissionName permission={permission}/></span>

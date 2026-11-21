@@ -9,9 +9,9 @@
 -- version (its driver sends no `allows`) keeps none, so its entry reads without who allowed it. The previous app calls
 -- both tracking functions as before and reads neither new function.
 
--- What an always answer keeps, on a request that offers always: at most eight entries, each as the Engine keys it.
+-- What an always answer keeps, on a request that offers always: at most 32 entries, each as the Engine keys it.
 create function public.permission_allows_valid(allows text[]) returns boolean language sql immutable set search_path='' as $$
- select allows is null or cardinality(allows) between 1 and 8 and array_ndims(allows)=1
+ select allows is null or cardinality(allows) between 1 and 32 and array_ndims(allows)=1
   and not exists(select 1 from unnest(allows) a where a is null or length(a) not between 1 and 1000 or btrim(a)<>a);
 $$;
 revoke all on function public.permission_allows_valid(text[]) from public,anon,authenticated,service_role;
@@ -22,7 +22,7 @@ alter table public.channel_permissions add column allows text[],
 
 -- The entries of `asking` an always answer keeps, when the request kept offers always; otherwise none.
 create function public.permission_allows_of(asking jsonb, kept jsonb) returns text[] language sql immutable set search_path='' as $$
- select case when kept->'choices' ? 'always' and jsonb_typeof(asking->'allows')='array' and jsonb_array_length(asking->'allows') between 1 and 8
+ select case when kept->'choices' ? 'always' and jsonb_typeof(asking->'allows')='array' and jsonb_array_length(asking->'allows') between 1 and 32
   and not exists(select 1 from jsonb_array_elements(asking->'allows') a where jsonb_typeof(a)<>'string')
   then (select array_agg(a order by n) from jsonb_array_elements_text(asking->'allows') with ordinality x(a,n)) end;
 $$;
@@ -107,9 +107,10 @@ revoke all on function public.track_channel_permission(bigint,text,jsonb,boolean
 grant execute on function public.track_channel_permission(bigint,text,jsonb,boolean,timestamptz,timestamptz,text) to service_role;
 
 -- Who allowed each entry the Agent's always answers keep, and when: the latest always answer the Engine took for it, in
--- a Conversation or a channel of this Agent, in this Company. A reader who does not see the Agent gets nothing, and an
--- Agent of another Company is not found. The entries the Engine still holds are the driver's to read; this only names
--- the person behind each one.
+-- a Conversation or a channel of this Agent, in this Company, made after the entry's last revoke on this Agent (a grant
+-- that was revoked never names the person behind an entry that came back another way). A reader who does not see the
+-- Agent gets nothing, and an Agent of another Company is not found. The entries the Engine still holds are the driver's
+-- to read; this only names the person behind each one.
 create function public.agent_permission_grants(c uuid, agent uuid) returns table(entry text, allowed_by text, allowed_at timestamptz)
 language sql stable security definer set search_path='' as $$
  select distinct on (g.entry) g.entry,p.name,g.at from (
@@ -121,7 +122,9 @@ language sql stable security definer set search_path='' as $$
    cross join unnest(q.allows) a
    where q.company_id=c and u.agent_id=agent and q.state='decided' and q.content->>'choice'='always'
  ) g join public.people p on p.id=g.who
- where public.is_member(c) and public.can_see_agent(c,agent) and exists(select 1 from public.hermes_agents h where h.id=agent and h.company_id=c)
+ where not exists(select 1 from public.company_log l where l.company_id=c and l.agent_id=agent and l.action='agent_permission_revoked'
+   and l.details->'permission'->>'entry'=g.entry and l.created_at>=g.at)
+  and public.is_member(c) and public.can_see_agent(c,agent) and exists(select 1 from public.hermes_agents h where h.id=agent and h.company_id=c)
  order by g.entry,g.at desc;
 $$;
 revoke all on function public.agent_permission_grants(uuid,uuid) from public,anon,service_role;
@@ -138,19 +141,19 @@ end $$;
 revoke all on function public.check_permission_revoke(uuid,uuid) from public,anon,service_role;
 grant execute on function public.check_permission_revoke(uuid,uuid) to authenticated;
 
--- A revoke the Engine confirmed, as one row on the Agent (design-reference: the click case revoke): who, the Agent and the
--- permission as its row names it, from "Standing" to "Will ask again". It is read by everyone who sees the Agent, as
--- the row it removes was.
-create function public.log_permission_revoked(c uuid, agent uuid, permission text) returns void
+-- A revoke the Engine confirmed, as one row on the Agent (design-reference: the click case revoke): who, the Agent, the
+-- permission as its row names it (`text`) and the entry as the Engine kept it (`entry`, so an older grant of it no longer
+-- names anyone), from "Standing" to "Will ask again". It is read by everyone who sees the Agent, as the row it removes was.
+create function public.log_permission_revoked(c uuid, agent uuid, permission text, entry text) returns void
 language plpgsql security definer set search_path='' as $$
 begin
  perform public.check_permission_revoke(c,agent);
  if permission is null or length(permission) not between 1 and 300 or btrim(permission,E' \t\r\n')=''
-  then raise exception 'permissionInvalid' using errcode='22023'; end if;
+  or entry is null or length(entry) not between 1 and 1000 then raise exception 'permissionInvalid' using errcode='22023'; end if;
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
   values(c,auth.uid(),public.log_actor_kind(c,auth.uid()),(select name from public.people where id=auth.uid()),'agent',agent,'agent_permission_revoked',
-   jsonb_build_object('agent_name',(select name from public.hermes_agents where id=agent),'permission',jsonb_build_object('text',permission)),
+   jsonb_build_object('agent_name',(select name from public.hermes_agents where id=agent),'permission',jsonb_build_object('text',permission,'entry',entry)),
    'hermes_agent_audit',nextval('public.agent_log_ids'),now());
 end $$;
-revoke all on function public.log_permission_revoked(uuid,uuid,text) from public,anon,service_role;
-grant execute on function public.log_permission_revoked(uuid,uuid,text) to authenticated;
+revoke all on function public.log_permission_revoked(uuid,uuid,text,text) from public,anon,service_role;
+grant execute on function public.log_permission_revoked(uuid,uuid,text,text) to authenticated;

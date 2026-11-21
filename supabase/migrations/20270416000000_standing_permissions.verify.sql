@@ -10,10 +10,10 @@ select json_build_object(
   and has_function_privilege('authenticated','public.agent_permission_grants(uuid,uuid)','execute')
   and not has_function_privilege('anon','public.agent_permission_grants(uuid,uuid)','execute'),
  'revoke_for_managers',position('can_manage_company' in pg_get_functiondef('public.check_permission_revoke(uuid,uuid)'::regprocedure))>0
-  and position('check_permission_revoke' in pg_get_functiondef('public.log_permission_revoked(uuid,uuid,text)'::regprocedure))>0
-  and has_function_privilege('authenticated','public.log_permission_revoked(uuid,uuid,text)','execute')
-  and not has_function_privilege('anon','public.log_permission_revoked(uuid,uuid,text)','execute')
-  and not has_function_privilege('service_role','public.log_permission_revoked(uuid,uuid,text)','execute'),
+  and position('check_permission_revoke' in pg_get_functiondef('public.log_permission_revoked(uuid,uuid,text,text)'::regprocedure))>0
+  and has_function_privilege('authenticated','public.log_permission_revoked(uuid,uuid,text,text)','execute')
+  and not has_function_privilege('anon','public.log_permission_revoked(uuid,uuid,text,text)','execute')
+  and not has_function_privilege('service_role','public.log_permission_revoked(uuid,uuid,text,text)','execute'),
  'helpers_private',(select bool_and(not has_function_privilege(r,'public.permission_allows_of(jsonb,jsonb)','execute')
    and not has_function_privilege(r,'public.permission_allows_valid(text[])','execute')) from unnest(array['anon','authenticated','service_role']) r)
 );

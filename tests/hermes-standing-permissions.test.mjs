@@ -97,3 +97,22 @@ test('a request says what always keeps, an always answer keeps it on the Run\'s 
   assert.deepEqual((await engine.read(command)).permission?.allows,[],'a request that offers no always keeps nothing');
  } finally { await fake.close(); }
 });
+
+test('a grant that lands between the reads is read again, and one that the write would drop is reported, never lost silently',async()=>{
+ const fake=await fakeHermes();
+ try {
+  profileOn(fake,{command_allowlist:['recursive delete']});
+  // An Always allow elsewhere adds an entry after the first read: the second read differs, so the list is read again
+  // and the write keeps it.
+  let reads=0; const engineFetch=globalThis.fetch;
+  globalThis.fetch=async(url,init)=>{ const answer=await engineFetch(url,init); if(String(url).includes('/api/config?')&&(!init?.method||init.method==='GET')&&++reads===1) fake.settings.profiles.get(ads).config.command_allowlist=['recursive delete','mcp:notion/create_page']; return answer; };
+  try { assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'revoked'}); }
+  finally { globalThis.fetch=engineFetch; }
+  assert.deepEqual(fake.settings.profiles.get(ads).config.command_allowlist,['mcp:notion/create_page'],'the grant that landed meanwhile is kept');
+  // An Engine whose write loses another entry is a failed revoke, not a quiet one.
+  profileOn(fake,{command_allowlist:['recursive delete','mcp:notion/create_page']});
+  globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { fake.settings.profiles.get(ads).config.command_allowlist=[]; return new Response(JSON.stringify({ok:true}),{status:200}); } return engineFetch(url,init); };
+  try { assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'failed'}); }
+  finally { globalThis.fetch=engineFetch; }
+ } finally { await fake.close(); }
+});

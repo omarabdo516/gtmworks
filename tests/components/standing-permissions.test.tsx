@@ -83,3 +83,15 @@ test('a revoke the server refuses keeps the row and says it could not be done', 
  expect(screen.container.querySelectorAll('.sp-row')).toHaveLength(2);
  expect(refresh).not.toHaveBeenCalled();
 });
+
+test('an entry revoked and then allowed again comes back once the server draws the list again', async () => {
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ revoked: true }), { status: 200 })));
+ const draw = (list: StandingPermission[]) => <LanguageProvider language="en"><StandingPermissions company="co-1" agent="ag-1" permissions={list} canRevoke/><ToastHost/></LanguageProvider>;
+ const screen = await render(draw(permissions));
+ await screen.getByRole('button', { name: 'Revoke: recursive delete' }).click();
+ await expect.poll(() => screen.container.querySelectorAll('.sp-row').length).toBe(1);
+ await screen.rerender(draw([permissions[0]]));
+ expect(screen.container.querySelectorAll('.sp-row')).toHaveLength(1);
+ await screen.rerender(draw([...permissions]));
+ await expect.poll(() => screen.container.querySelectorAll('.sp-row').length).toBe(2);
+});

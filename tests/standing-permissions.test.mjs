@@ -17,14 +17,14 @@ const rows=[
  {agent:seo,name:'SEO',connection:'f1000000-0000-0000-0000-000000000021',profile:seoProfile,main:false,own:true},
  {agent:lead,name:'Writer',connection:'f1000000-0000-0000-0000-000000000031',profile:shared,main:false,own:false},
 ];
-function session({agents=rows,refuse=null,grants=[]}={}) {
+function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=false}={}) {
  const logged=[],asked=[];
  const db={rpc:async(name,args)=>{
   asked.push(name);
   if(name==='company_app_agents') return {data:agents,error:null};
-  if(name==='agent_permission_grants') return {data:grants.filter(grant=>grant.agent===args.agent).map(grant=>({entry:grant.entry,allowed_by:grant.allowed_by,allowed_at:grant.allowed_at})),error:null};
+  if(name==='agent_permission_grants') return grantsFail?{data:null,error:{message:'down'}}:{data:grants.filter(grant=>grant.agent===args.agent).map(grant=>({entry:grant.entry,allowed_by:grant.allowed_by,allowed_at:grant.allowed_at})),error:null};
   if(name==='check_permission_revoke') return {data:null,error:refuse?{message:refuse}:null};
-  if(name==='log_permission_revoked') { logged.push(args); return {data:null,error:null}; }
+  if(name==='log_permission_revoked') { logged.push(args); return {data:null,error:logFail?{message:'refused',code:'22023'}:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  return {db,logged,asked};
@@ -38,6 +38,8 @@ test('an app\'s tool is named by the app and the tool, and anything else as the 
  assert.deepEqual(standingEntry('mcp:no-tool'),{entry:'mcp:no-tool',app:null,tool:null});
  assert.equal(standingLabel('mcp:notion/create_page'),'Notion · create_page');
  assert.equal(standingLabel('recursive delete'),'recursive delete');
+ const long=`${'a'.repeat(298)}😀😀😀`;
+ assert.equal(standingLabel(long),`${'a'.repeat(298)}😀…`,'a long label is cut at a character, never half of one');
 });
 
 test('the rows are the Agent\'s own entries with who allowed each, none for an Agent on a shared profile, and none for one the reader does not see',async()=>{
@@ -53,6 +55,7 @@ test('the rows are the Agent\'s own entries with who allowed each, none for an A
   assert.deepEqual(await readAgentPermissions(session({agents:[rows[1]]}).db,{company,agent:ads,hermes:install(fake)}),{state:'missing',permissions:null});
   assert.equal((await readAgentPermissions(db,{company,agent:ads,hermes:null})).state,'noEngine');
   assert.equal((await readAgentPermissions(db,{company,agent:'nope',hermes:install(fake)})).state,'invalid');
+  assert.deepEqual(await readAgentPermissions(session({grantsFail:true}).db,{company,agent:ads,hermes:install(fake)}),{state:'failed',permissions:null},'a record that cannot be read is never drawn as nobody');
   fake.settings.managementStatus=500;
   assert.equal((await readAgentPermissions(db,{company,agent:ads,hermes:install(fake)})).state,'unreachable');
  } finally { await fake.close(); }
@@ -63,10 +66,10 @@ test('a revoke is asked of the database first, removes that one entry from that 
  try {
   profileOn(fake,adsProfile,['mcp:notion/create_page','recursive delete']); profileOn(fake,seoProfile,['mcp:notion/create_page']);
   const {db,logged,asked}=session();
-  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'revoked'});
+  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'revoked',logged:true});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   assert.deepEqual(fake.settings.profiles.get(seoProfile).config.command_allowlist,['mcp:notion/create_page'],'another Agent keeps its own');
-  assert.deepEqual(logged,[{c:company,agent:ads,permission:'Notion · create_page'}]);
+  assert.deepEqual(logged,[{c:company,agent:ads,permission:'Notion · create_page',entry:'mcp:notion/create_page'}]);
   assert.deepEqual(asked,['company_app_agents','check_permission_revoke','log_permission_revoked']);
   assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'gone'});
   assert.equal(logged.length,1,'an entry already gone is not logged again');
@@ -90,4 +93,16 @@ test('a Role the database refuses, a hidden Agent or a malformed entry changes n
   assert.deepEqual(await revokeAgentPermission(odd.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'refused'});
   assert.equal(odd.logged.length,0);
  } finally { await fake.close(); }
+});
+
+test('a revoke the Engine took is done even when its log row is refused, and says so to the server\'s log',async()=>{
+ const fake=await fakeHermes(); const errors=[]; const error=console.error; console.error=line=>errors.push(line);
+ try {
+  profileOn(fake,adsProfile,['recursive delete']);
+  const {db,logged}=session({logFail:true});
+  assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'revoked',logged:false});
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
+  assert.equal(logged.length,1);
+  assert.deepEqual(errors.map(line=>JSON.parse(line).event),['standing_permission_log_failed']);
+ } finally { console.error=error; await fake.close(); }
 });
