@@ -293,3 +293,12 @@ test('release_image builds a fixed commit once, then loads what it saved', async
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// #423: `./ci.sh install` loads every image the proof runs from the host, found by name in the proof's files; the local
+// registry's image is named in the lib (start_registry), so the lib is one of the files it reads.
+test('./ci.sh install loads the images the lib names too', () => {
+  const lane = readFileSync(resolve('ci.sh'), 'utf8').split('\n').find(line => line.includes('registry:[0-9.]+'));
+  assert.ok(lane, 'the lane finds the images by name');
+  assert.match(lane, /scripts\/ci-install-check\.sh scripts\/ci-install-lib\.sh/);
+  assert.match(lib, /registry:2\.8\.3/, 'the registry image is named in the lib');
+});
