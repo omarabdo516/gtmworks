@@ -38,11 +38,16 @@ export function seedDraft(agent: string, values: Values) {
  const saved = { ...state.saved, ...values };
  const draft = { ...state.draft };
  let changed = false;
+ let added = false;
  for (const key of Object.keys(values)) {
+  // A key the draft never held (a section drawn later, such as Good morning's, #182) joins it as saved: no request in
+  // flight carried it, so a save's answer still belongs to the draft and is not dropped.
+  if (!Object.prototype.hasOwnProperty.call(state.saved, key) && !Object.prototype.hasOwnProperty.call(state.draft, key)) { draft[key] = values[key]; added = true; continue; }
   if (state.saved[key] === state.draft[key] && state.draft[key] !== values[key]) { draft[key] = values[key]; changed = true; }
   if (state.saved[key] !== values[key]) changed = true;
  }
- if (changed) { state = { agent, saved, draft }; generation += 1; emit(); }
+ if (changed) generation += 1;
+ if (changed || added) { state = { agent, saved, draft }; emit(); }
 }
 
 // The fields whose draft differs from what was saved, as the one object the save bar sends.

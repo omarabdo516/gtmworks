@@ -84,12 +84,14 @@ export function editMemoryNote(connection:import('./engine.mjs').EngineConnectio
 export function forgetMemoryNote(connection:import('./engine.mjs').EngineConnection,change:{note:string}):Promise<import('./engine.mjs').MemoryForget>;
 export function readRoutines(connection:import('./engine.mjs').EngineConnection):Promise<import('./engine.mjs').RoutineList>;
 export function isRoutineSchedule(schedule:unknown):boolean;
-export function createRoutine(connection:import('./engine.mjs').EngineConnection,routine:{name:string,prompt:string,schedule:string,timezone?:string|null}):Promise<import('./engine.mjs').RoutineChange>;
+export function createRoutine(connection:import('./engine.mjs').EngineConnection,routine:{name:string,prompt:string,schedule:string,timezone?:string|null,paused?:boolean}):Promise<import('./engine.mjs').RoutineChange>;
 export function changeRoutine(connection:import('./engine.mjs').EngineConnection,change:{id:string,schedule:string,timezone?:string|null}):Promise<import('./engine.mjs').RoutineChange>;
 export function pauseRoutine(connection:import('./engine.mjs').EngineConnection,routine:{id:string}):Promise<import('./engine.mjs').RoutineChange>;
 export function resumeRoutine(connection:import('./engine.mjs').EngineConnection,routine:{id:string}):Promise<import('./engine.mjs').RoutineChange>;
 export function triggerRoutine(connection:import('./engine.mjs').EngineConnection,routine:{id:string}):Promise<import('./engine.mjs').RoutineChange>;
 export function deleteRoutine(connection:import('./engine.mjs').EngineConnection,routine:{id:string}):Promise<{state:'deleted'|'missing'|'refused'|'unreachable'|'failed'|'busy'}>;
+export function readRoutineReplies(connection:import('./engine.mjs').EngineConnection,routine:{id:string,limit?:number}):Promise<{state:'found',runs:{at:string|null,reply:string|null}[]}|{state:'missing'|'refused'|'unreachable'|'failed',runs:null}>;
+export function isSilentReply(reply:unknown):boolean;
 export type ProviderKey={provider:string,label:string,set:boolean};
 export function readProviderKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',keys:ProviderKey[],lacking:string[],leftover:string[],unread:string[]}|{state:'refused'|'unreachable'|'failed',keys:null,lacking:null,leftover:null,unread:null}>;
 export function readHeldKeys(connection:import('./engine.mjs').EngineConnection,target:{space:string,profiles:string[]}):Promise<{state:'found',held:Record<string,string[]>,unread:string[]}|{state:'refused'|'unreachable'|'failed',held:null,unread:null}>;

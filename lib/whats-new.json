@@ -1,5 +1,11 @@
 [
  {
+  "issue": 182,
+  "date": "2026-11-21",
+  "en": { "title": "Good morning can be switched on", "body": "On the main agent’s page, the Owner and Managers can switch on a morning summary every day and pick its time; it stays quiet when there is nothing new and moves with the main agent." },
+  "ar": { "title": "صباح الخير بقى ممكن يتفتح", "body": "في صفحة الوكيل الرئيسي، المالك والمديرين يقدروا يفتحوا ملخص الصبح كل يوم ويختاروا ميعاده؛ مش بيبعت حاجة لو مفيش جديد، وبيتنقل مع الوكيل الرئيسي." }
+ },
+ {
   "issue": 475,
   "date": "2026-11-21",
   "en": { "title": "Every agent asks the team", "body": "Any agent you talk to, not only the main one, can now ask another agent of your company for a job it needs, even one you don’t work with: the chat shows who asked whom, the answer under that agent’s name, then your agent’s reply." },
