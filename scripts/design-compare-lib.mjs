@@ -111,6 +111,15 @@ export const screens = {
   // Recurring tasks (#31): every Agent's Routines. Built: the Routines are the Engine's, so they need an Engine that holds
   // some (the visual lane's `routines` state and its fake Engine).
   routines: { reference: { steps: settingsSection('routines') }, builtPath: '/c/rs-learning/settings?section=routines' },
+  // Good morning (#182): the main Agent's daily message, on its Settings page. Built: the switch and time are the Engine's,
+  // so they need an Engine that holds the main Agent's own profile (`npm run cloud:up`'s fake Engine with an Agent made
+  // there, passed with --built-path); the wait is for the switch, so a page that could only draw the read-only row fails.
+  'good-morning': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#set-checkin' }, { scrollTo: '#set-checkin' }] },
+   builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}`, builtSteps: [{ waitFor: '#set-ck-on' }, { scrollTo: '#set-checkin' }] },
+  // The morning message (#183): the reference's morning thread with Lead's greeting and the card under it. Built: the
+  // fixture's morning Conversation (its foot reads the Engine's job, so `npm run cloud:up`'s fake Engine draws it off).
+  morning: { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-morning"]' }, { waitFor: '.ckcard' }, { scrollTo: '.ckcard' }] },
+   builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000030', builtSteps: [{ waitFor: '.ckcard' }, { scrollTo: '.ckcard' }] },
   'home-alone': { reference: { steps: alone }, builtPath: '/c/rs-consultations/chat' },
   'settings-alone': { reference: { steps: [...alone, ...settings] }, builtPath: '/c/rs-consultations/settings' },
   // #13. "New agent" opens Lead's chat ready to type, with one hint line.

@@ -1,5 +1,17 @@
 [
  {
+  "issue": 183,
+  "date": "2026-11-21",
+  "en": { "title": "Your morning message", "body": "Each morning the main agent opens a new chat with its greeting and a card of what is waiting on you and what ran overnight, read fresh each time you open it, and only when there is something for you." },
+  "ar": { "title": "رسالة الصبح بتاعتك", "body": "كل يوم الصبح الوكيل الرئيسي بيفتحلك محادثة جديدة فيها تحيته وبطاقة باللي مستنيك واللي اشتغل بالليل، بيتقري جديد كل ما تفتحه، وبس لو فيه حاجة ليك." }
+ },
+ {
+  "issue": 182,
+  "date": "2026-11-21",
+  "en": { "title": "Good morning can be switched on", "body": "On the main agent’s page, the Owner and Managers can switch on a morning summary every day and pick its time; it stays quiet when there is nothing new and moves with the main agent." },
+  "ar": { "title": "صباح الخير بقى ممكن يتفتح", "body": "في صفحة الوكيل الرئيسي، المالك والمديرين يقدروا يفتحوا ملخص الصبح كل يوم ويختاروا ميعاده؛ مش بيبعت حاجة لو مفيش جديد، وبيتنقل مع الوكيل الرئيسي." }
+ },
+ {
   "issue": 167,
   "date": "2026-11-21",
   "en": { "title": "Ask for an agent you don’t have yet", "body": "When you ask the main agent for work that belongs to an agent you don’t work with, it says so without naming it and offers to ask the Manager or Owner who chooses your agents. Once they open it for you, it shows in your sidebar and your chat says so." },

@@ -105,6 +105,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // chat Run's input asks for: the Run makes it with the Engine's own cronjob tool, so only on a profile whose Runs are
   // offered that toolset, in that Run's own profile (tools/cronjob_tools.py).
   cron:/** @type {Map<string,any[]>} */(new Map()),cronOutcome:/** @type {'ok'|'error'} */('ok'),loseCronCreates:0,
+  // What a Routine's run now answers (#182): each run is a cron session of the job's profile, `cron_<id>_<time>`, holding
+  // the prompt and this reply, listed newest first by the job's runs route.
+  // A function of the job answers each job its own way (#183: the night's results beside the morning's greeting).
+  cronReply:/** @type {string|((job:any)=>string)} */('Here is what ran overnight.'),
   routineAsks:/** @type {(input:string)=>{name:string,prompt:string,schedule:string}|null} */(()=>null),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
@@ -163,7 +167,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // tool_name and timestamp; and (#347) the session's token use as its detail reports it (get_session_detail), with the
   // time it started in seconds, which the profile's usage analytics count from, and the model it ran on (#32), which
   // the analytics group into by_model.
-  sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,model?:string,started_at?:number}>} */(new Map()),
+  sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,model?:string,started_at?:number,ended_at?:number}>} */(new Map()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
@@ -433,7 +437,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const id=decodeURIComponent(sessionMessages[1]); const found=settings.sessions.get(id);
     if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
     const limit=Math.min(Number(url.searchParams.get('limit')??500),500); const offset=Number(url.searchParams.get('offset')??0);
-    const page=found.messages.slice(offset,offset+limit);
+    const page=url.searchParams.get('order')==='latest'?found.messages.slice(Math.max(0,found.messages.length-limit)):found.messages.slice(offset,offset+limit);
     return send(response,200,{session_id:id,profile:found.profile,messages:page,pagination:{limit,offset,order:url.searchParams.get('order')||'oldest',returned:page.length}});
    }
    // A profile's usage over the last `days` (#347): the sums of its sessions started since then, null with none, as
@@ -814,12 +818,19 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(settings.loseCronCreates>0) { settings.loseCronCreates--; request.socket.destroy(); return; }
     return send(response,200,annotated(job,named));
    }
-   const cronPath=url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)(?:\/(pause|resume|trigger))?$/);
+   const cronPath=url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)(?:\/(pause|resume|trigger|runs))?$/);
    if(cronPath) {
     const owner=cronOwner(decodeURIComponent(cronPath[1]),url.searchParams.get('profile'));
     if(!owner) return send(response,404,{detail:'Job not found'});
     const jobs=cronStore(owner); const job=jobs.find(found=>found.id===decodeURIComponent(cronPath[1]));
     if(!cronPath[2]&&request.method==='GET') return send(response,200,annotated(job,owner));
+    // The job's run history, newest first (_list_cron_job_runs_sync): one row per cron session.
+    if(cronPath[2]==='runs'&&request.method==='GET') {
+     const limit=Math.max(1,Math.min(Number(url.searchParams.get('limit')??20),100));
+     const runs=[...settings.sessions].filter(([id,found])=>found.profile===owner&&id.startsWith(`cron_${job.id}_`)).map(([id,found])=>({id,source:'cron',started_at:found.started_at??0,ended_at:found.ended_at??found.started_at??0,is_active:false,title:job.name,profile:owner}))
+      .sort((a,b)=>b.started_at-a.started_at).slice(0,limit);
+     return send(response,200,{runs,limit});
+    }
     if(!cronPath[2]&&request.method==='DELETE') { jobs.splice(jobs.indexOf(job),1); return send(response,200,{ok:true}); }
     if(!cronPath[2]&&request.method==='PUT') {
      const updates=body?.updates; if(!updates||typeof updates!=='object') return send(response,422,{detail:'updates'});
@@ -831,7 +842,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(request.method==='POST'&&cronPath[2]==='resume') { Object.assign(job,{enabled:true,state:'scheduled',paused_at:null,paused_reason:null,next_run_at:nextRun()}); return send(response,200,annotated(job,owner)); }
     // A paused job run now is resumed and claimed at once (_trigger_cron_job_sync's force).
     if(request.method==='POST'&&cronPath[2]==='trigger') {
-     Object.assign(job,{enabled:true,state:'scheduled',paused_at:null,last_run_at:new Date().toISOString(),last_status:settings.cronOutcome,last_error:settings.cronOutcome==='error'?'The model did not answer.':null,next_run_at:job.next_run_at||nextRun()});
+     const started=Date.now()/1000;
+     settings.sessions.set(`cron_${job.id}_${Math.round(started*1000)}`,{profile:owner,started_at:started,ended_at:started+0.01,messages:[{role:'user',content:job.prompt,timestamp:started},...(settings.cronOutcome==='ok'?[{role:'assistant',content:typeof settings.cronReply==='function'?settings.cronReply(job):settings.cronReply,timestamp:started+0.005}]:[])]});
+     Object.assign(job,{enabled:true,state:'scheduled',paused_at:null,last_run_at:new Date(started*1000).toISOString(),last_status:settings.cronOutcome,last_error:settings.cronOutcome==='error'?'The model did not answer.':null,next_run_at:job.next_run_at||nextRun()});
      return send(response,200,annotated(job,owner));
     }
    }

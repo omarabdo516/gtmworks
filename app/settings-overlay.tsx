@@ -32,7 +32,7 @@ import { LearningSection } from './settings-learning';
 import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
+import { CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -47,6 +47,7 @@ import type { MemoryNote } from '@/lib/engine.mjs';
 import { BackupSection } from './settings-backup';
 import { RoutinesSection } from './settings-routines';
 import { readCompanyRoutines } from '@/lib/agent-routines.mjs';
+import { readAgentMorning, type MorningRead } from '@/lib/agent-morning.mjs';
 import { ProposalNote, ProposalMark } from './settings-proposal';
 import { readWaitingChange, readWaitingAgents, countWaitingChanges, waitingChangeHref } from '@/lib/agent-change-waiting.mjs';
 import { ownerNames } from '@/lib/company-owners.mjs';
@@ -64,7 +65,7 @@ const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_R
 // account menu, links and tests all reach the same screen. It covers the whole window like the reference's dialog,
 // so no page is drawn behind it; closing returns to the page it was opened from. Data is read with the signed-in
 // person's session (RLS); every change goes through an existing server action or route that checks the role again.
-export default async function SettingsOverlay({slug,company,userId,role,personName,workMode,query}:{slug:string,company:{id:string,name:string},userId:string,role:string,personName:string,workMode?:string|null,query:{section?:string,agent?:string,period?:string,message?:string,part?:string,app?:string,signin?:string,skill?:string,tab?:string}}) {
+export default async function SettingsOverlay({slug,company,userId,role,personName,workMode,query}:{slug:string,company:{id:string,name:string},userId:string,role:string,personName:string,workMode?:string|null,query:{section?:string,agent?:string,period?:string,message?:string,part?:string,app?:string,signin?:string,skill?:string,tab?:string,focus?:string}}) {
  const {t,language,locale,theme}=await getI18n(); const rtl=language==='ar';
  const db=await supabase();
  // ?agent=<id> alone opens that Agent's page.
@@ -113,6 +114,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const [about,skills,how,voice]=agent&&tab==='settings'?await Promise.all([readAgentAbout(db,{company:company.id,agent:agent.id}),readAgentSkills(db,{company:company.id,agent:agent.id}),readAgentInstructions(db,{company:company.id,agent:agent.id}),readAgentVoice(db,{company:company.id,agent:agent.id})]):[null,null,null,null];
  // The Agent's own model choices (#29), from the Engine for that Agent's profile, so its "Thinks with" rows can change it.
  const agentModel=agent&&tab==='settings'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,agent:agent.id,owner}); } catch { return {models:null}; } })():null;
+ // Good morning (#182): the main Agent's daily message, read from the one job of its own Engine profile; gtmworks keeps
+ // no schedule of its own. An Engine that cannot be read leaves the row unread, never drawn off.
+ const morning=agent?.is_default&&tab==='settings'?await readAgentMorning(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed' as const})):null;
  // The memory tab (#193) draws the same AgentMemory as the details panel from this Agent's own Engine profile (#350); an
  // Agent the reader is not shown is not found above, so the page shows the Agents list instead. An Engine that cannot be
  // read leaves the tab unread rather than empty.
@@ -138,7 +142,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro} sandbox={workSandbox?.state==='notRunning'}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
@@ -152,7 +156,10 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}
     defaultEffort={<DefaultEffort/>}/>;
- return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={skillPage?'sov-skill-back':agent?agentTabFocus(tab):undefined}>{page}</OverlayChrome>;
+ // "Change the time" on the morning's card (#183; design-reference: checkin-settings) opens this page on Time, or on the
+ // switch while the message is off and Time cannot take the focus.
+ const morningFocus=query.focus==='time'&&morning?.state==='found'&&canManage?(morning.routine?.on?'set-ck-time':'set-ck-on'):undefined;
+ return <OverlayChrome t={t} slug={slug} companyName={company.name} role={role} readOnly={!canManage} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting} initialFocus={skillPage?'sov-skill-back':agent?morningFocus??agentTabFocus(tab):undefined}>{page}</OverlayChrome>;
 }
 
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
@@ -214,7 +221,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiti
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,morning,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],agentModel:{models:{agents:{model:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,morning:MorningRead|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
@@ -234,6 +241,9 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
  // as Medium. It is `own`: the keeper's model is choosable too (#425), and an Agent another one shares a profile with has
  // neither.
  const effortEditable=owner&&agentModel?.models?.agents[0]?.own===true&&agentModel.models.agents[0].effort!==null;
+ // Good morning (#182) is the Owner's and the Managers' on the main Agent's own profile, once the Engine was read.
+ const morningEditable=canManage&&morning?.state==='found';
+ const morningProps=morning?.state==='found'?{made:!!morning.routine,on:morning.routine?.on===true,time:morning.routine?.time??null,expr:morning.routine?.schedule.expr??null,display:morning.routine?.schedule.display??null,timezone:morning.routine?.timezone??null,quietYesterday:morning.quietYesterday}:null;
  const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
  const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
    {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
@@ -264,9 +274,8 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsRole')}</span><span className="panel-row__d ro-val" id="set-role-val">{agent.speciality?<bdi>{agent.speciality}</bdi>:'—'}</span></span></li>
      </ul></section>
     {mainSec}
-    {isMain&&<section className="dp-sec" aria-labelledby="set-h-ck"><Label id="set-h-ck">{t('settingsGoodMorning')}</Label><ul className="panel-card">
-     <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t" id="set-ck-t">{t('settingsCheckin')}</span><span className="panel-row__d">{t('settingsCheckinD')}</span></span>
-      <button type="button" className="switch" role="switch" aria-checked="false" aria-disabled="true" aria-labelledby="set-ck-t" title={t('soon')}/></li></ul></section>}
+    {/* Good morning (#182): the main Agent's daily message, its switch and time saved with the bar; one row for the rest. */}
+    {isMain&&<AgentMorning agent={agent.id} editable={morningEditable} morning={morningProps}/>}
     {/* About is the Agent's profile description (#161); the fields after it join its save bar later. */}
     <section className="dp-sec" aria-labelledby="set-h-about"><Label id="set-h-about">{t('settingsAbout')}</Label>
      {editable?<AgentAboutField agent={agent.id} name={agent.name} description={about?.description??''}/>
@@ -309,7 +318,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
    </>)}
   </div>
   {/* design-reference: sovAgentHTML's bar, after the tab panel: hidden until the draft differs from what was saved. */}
-  {(editable||skillsEditable||howEditable||voiceEditable||effortEditable)&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
+  {(editable||skillsEditable||howEditable||voiceEditable||effortEditable||morningEditable)&&<AgentSaveBar company={company} agent={agent.id} name={agent.name}/>}
  </>;
 }
 

@@ -24,7 +24,7 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // says whether this person is the Owner who connects it, and else who does (`connect`). A job Lead handed another Agent
 // (#317) is a quiet row under that reply; while its two Runs move, the record says so (`handover`), so the chat keeps
 // asking for the follow-up reply.
-export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>,session?:(agent:string,session:string)=>Promise<{turns:{at:number,seconds:number,steps:RunStep[]}[],usage:SessionUsage|null}|null>) {
+export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null,good_morning?:number|null,good_morning_day?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>,session?:(agent:string,session:string)=>Promise<{turns:{at:number,seconds:number,steps:RunStep[]}[],usage:SessionUsage|null}|null>) {
  const conversation=found.id;
  // The session is read beside the database, so the Engine adds no wait of its own to opening the chat.
  const read=session&&found.agent_id&&found.hermes_session_id?session(found.agent_id,found.hermes_session_id).catch(()=>null):Promise.resolve(null);
@@ -65,6 +65,9 @@ export async function conversationRecord(db:Database,person:string,company:strin
   // it is opened for them (conversation_agent_access: this person's own Conversation only).
   db.rpc('conversation_agent_access',{conversation}).then(({data})=>(data||[]) as AccessRow[]),
  ]);
+ // A Conversation the morning opened (#183) carries the morning's card under the main Agent's greeting, read now.
+ // Loaded only here: it reaches the Engine for the foot, which no screen that draws a record (a component test) imports.
+ const morning=found.good_morning&&found.good_morning_day?await (await import('./good-morning-card')).morningCard(db,company,person,found.good_morning,found.good_morning_day):null;
  const lead=(found.hermes_agents as {is_default?:boolean}|null)?.is_default===true;
  const asksForApps=replyRows.some(row=>row.kind==='connect');
  const states=apps&&found.agent_id&&replyRows.some(row=>row.kind==='connect'&&row.state==='open')?await apps(found.agent_id):null;
@@ -110,7 +113,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...handed,
   ...accessRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'access',access:accessView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...changeRows.flatMap(row=>row.agent&&row.by?[{run_id:row.run_id,at:row.created_at,card:{kind:'change',change:changeView({...row,agent:row.agent,by:row.by})}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
-  ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card)} satisfies PlacedCard]:[]; })];
+  ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card)} satisfies PlacedCard]:[]; }),
+  ...(morning&&found.good_morning?[{run_id:`good-morning:${found.good_morning}`,at:messages[0]?.created_at??'',card:{kind:'morning',morning}} satisfies PlacedCard]:[])];
  type SavedRow={id:string,run_id:string,agent_id:string|null,removed_at:string|null,said_at:string,body:string,suggestion:'pending'|'approved'|'rejected'|null,decided_at:string|null,decider:{name:string}|null};
  const sentTo=rows.some(row=>row.suggestion)?new Map((((await db.rpc('rule_suggestions_sent_to',{conversation})).data||[]) as {rule:string,sent_to:string[]}[]).map(row=>[row.rule,row.sent_to])):new Map<string,string[]>();
  const saved=rows.map(row=>({run_id:row.run_id,rule:{id:row.id,agent:row.agent_id,removed:row.removed_at!==null,said_at:row.said_at,...(row.suggestion?{sentTo:sentTo.get(row.id)||[]}:{})} satisfies SavedRule}));
@@ -137,6 +141,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   :undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
+  ...(found.good_morning_day?{morningDay:found.good_morning_day}:{}),
   messages:withBoardNote(withTeamWork(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),notes,queued,me?.name||'',files),firstReply)
    .map(message=>message.agent_id&&faces.has(message.agent_id)?{...message,face:faces.get(message.agent_id)}:message),
   usage:(await read)?.usage??null,
