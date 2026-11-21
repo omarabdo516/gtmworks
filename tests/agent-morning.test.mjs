@@ -676,3 +676,18 @@ test('a move whose lease runs out before it writes still pauses the old main Age
   assert.deepEqual(jobs(fake,adsProfile).map(job=>job.schedule.expr),['0 9 * * *']);
  } finally { await fake.close(); leases.clear(); }
 });
+
+test('a stale move\'s cleanup never pauses the job of the Agent that is main again', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // Lead → Ads: the move reads the profiles, its lease runs out, and meanwhile Lead is made main again (its job on).
+  let rows=agentRows(ads);
+  const base=session().db;
+  const db={rpc:async(name,args)=>name==='company_app_agents'?{data:rows,error:null}:base.rpc(name,args)};
+  const meanwhile={read:async connection=>{ const listed=await readRoutines(connection); leases.get(company).live=false; rows=agentRows(lead); return listed; }};
+  const answer=await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,agents:agentRows(lead),hermes:install(fake),driver:meanwhile,fence}));
+  assert.equal(answer.state,'busy');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['scheduled'],'the main Agent\'s job is left as its holder set it');
+ } finally { await fake.close(); leases.clear(); }
+});
