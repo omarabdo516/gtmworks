@@ -189,8 +189,8 @@ test('an id that is not a memory note\'s is refused before the Engine is asked a
  try {
   fake.settings.managementRequests.length=0;
   for(const note of ['weekly-ads-recap','memory:other:0:4d2c1b0a9f8e','mem-1','']) {
-   assert.deepEqual(await editMemoryNote(at(fake,adsProfile),{note,text:'New text.'}),{state:'failed'});
-   assert.deepEqual(await forgetMemoryNote(at(fake,adsProfile),{note}),{state:'failed'});
+   assert.deepEqual(await editMemoryNote(at(fake,adsProfile),{note,text:'New text.'}),{state:'failed',unsent:true});
+   assert.deepEqual(await forgetMemoryNote(at(fake,adsProfile),{note}),{state:'failed',unsent:true});
   }
   assert.equal(fake.settings.managementRequests.length,0,'not one request reaches the Engine, so no skill can be touched');
  } finally { await fake.close(); }
@@ -291,6 +291,23 @@ test('a reset, an edit and a forget whose log fails are still made, and each end
   const sent=JSON.stringify(late.changes.calls);
   for(const text of ['Only short subject lines.','Never mention prices before the offer.','Prefers short subject lines.']) assert.equal(sent.includes(text),false,'no log call carries a note');
  } finally { await fake.close(); }
+});
+
+test('an answer that does not say what the Engine did keeps the change held, and the pass logs it as unconfirmed', async () => {
+ const changes=heldChanges();
+ const db={rpc:async(name,args)=>changes.rpc(name,args)};
+ const hold=async()=>(await db.rpc('hold_agent_change',{c:company,agent:ads,act:'memory_edit'})).data;
+ // Sent, and no answer came back: the Engine may hold the edit.
+ assert.deepEqual(await madeAndLogged(db,await hold(),'edited',async()=>({state:'unreachable'})),{state:'unreachable'});
+ assert.deepEqual(await madeAndLogged(db,await hold(),'edited',async()=>({state:'failed'})),{state:'failed'});
+ await assert.rejects(madeAndLogged(db,await hold(),'edited',async()=>{ throw new Error('the answer could not be read'); }));
+ assert.equal(changes.held.size,3,'each stays held');
+ // Never sent: the Engine was asked nothing, so nothing is held and nothing is logged.
+ assert.deepEqual(await madeAndLogged(db,await hold(),'edited',async()=>({state:'unreachable',unsent:true})),{state:'unreachable'});
+ assert.deepEqual(await madeAndLogged(db,await hold(),'edited',async()=>({state:'stale'})),{state:'stale'});
+ assert.equal(changes.held.size,3);
+ assert.deepEqual(await logHeldAgentChanges(db),{logged:3});
+ assert.deepEqual(changes.logged.map(row=>row.unconfirmed),[true,true,true],'the pass never says one was made');
 });
 
 test('a change the Engine refused is dropped even when the database takes the drop only after the answer, so no pass logs it', async () => {

@@ -859,6 +859,7 @@
   "logActMemoryReset": "مسح ذاكرة {0}",
   "logActMemoryEdit": "عدّل ملاحظة في ذاكرة {0}",
   "logActMemoryForget": "نسي ملاحظة في ذاكرة {0}",
+  "logUnconfirmed": "مش متأكدين: رد الوكيل موصلش",
   "logRuleInEffect": "في المحادثة · شغالة من دلوقتي",
   "logActRuleSuggested": "اقترح قاعدة للفريق عند {0}",
   "logRuleWaiting": "مستنية موافقة",

@@ -5,13 +5,14 @@
 --
 -- Now the check holds the change: hold_agent_change checks it exactly as before (check_memory_reset, check_memory_edit,
 -- check_memory_forget, check_skill_write, as the signed-in person) and keeps one held record naming the person, the
--- Agent, the act and the skill's name, never a note's text. Once the Engine holds the change, finish_agent_change turns
--- that record into its one row of the Company log and removes it in one statement: it checks no Role again (the change
--- was allowed when it was held), and a second call finds no record and writes nothing, so a retry never makes two rows.
--- When the Engine refuses, drop_agent_change removes the record and nothing is logged. A record the app never came back
--- to (it stopped, or the database did not answer either call) is logged by the worker's pass (finish_held_agent_changes)
--- once it is ten minutes old, far past the Engine's longest answer: the Engine was asked, and the app drops every
--- refusal it hears.
+-- Agent, the act and the skill's name, never a note's text. When the Engine answers that it holds the change,
+-- finish_agent_change turns that record into its one row of the Company log and removes it in one statement: it checks
+-- no Role again (the change was allowed when it was held), and a second call finds no record and writes nothing, so a
+-- retry never makes two rows. When the Engine refuses, drop_agent_change removes the record and nothing is logged. The
+-- app keeps trying either for ten minutes. A record still held after fifteen has an outcome nobody confirmed (the app
+-- stopped, the Engine's answer never came, or the database did not answer for that long): the worker's pass
+-- (finish_held_agent_changes) writes its one row marked unconfirmed, so the log is never silent about a change the
+-- Engine may hold and never says one was made when nobody saw it made.
 --
 -- The previous app version keeps calling the check and log functions it knows (20270214000000, 20270225000000,
 -- 20270226000000); they are unchanged.
@@ -52,28 +53,29 @@ end $$;
 revoke all on function public.hold_agent_change(uuid,uuid,text,text,text,text) from public,anon,service_role;
 grant execute on function public.hold_agent_change(uuid,uuid,text,text,text,text) to authenticated;
 
--- One held record as its row of the Company log: who, the Agent, the act and a skill's name, nothing of a note. The row
--- is dated when the change was held, a moment before the Engine made it, so one the worker's pass logs late still reads
--- in its place in the log. The row is the one log_agent_event writes, with that time.
-create function public.log_held_change(held public.held_agent_changes) returns void
+-- One held record as its row of the Company log: who, the Agent, the act and a skill's name, nothing of a note, and
+-- whether the Engine's answer confirmed it. The row is dated when the change was held, a moment before the Engine was
+-- asked, so one logged late still reads in its place. The row is the one log_agent_event writes, with that time.
+create function public.log_held_change(held public.held_agent_changes, confirmed boolean) returns void
 language sql security definer set search_path='' as $$
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
   values(held.company_id,held.actor_id,public.log_actor_kind(held.company_id,held.actor_id),(select name from public.people where id=held.actor_id),
    'agent',held.agent_id,public.log_agent_action(held.act),
-   jsonb_strip_nulls(jsonb_build_object('agent_name',(select name from public.hermes_agents where id=held.agent_id),'skill',held.skill)),
+   jsonb_strip_nulls(jsonb_build_object('agent_name',(select name from public.hermes_agents where id=held.agent_id),'skill',held.skill,
+    'unconfirmed',case when not confirmed then true end)),
    'hermes_agent_audit',nextval('public.agent_log_ids'),held.held_at);
 $$;
-revoke all on function public.log_held_change(public.held_agent_changes) from public,anon,authenticated,service_role;
+revoke all on function public.log_held_change(public.held_agent_changes,boolean) from public,anon,authenticated,service_role;
 
--- The Engine holds the change the signed-in person held: its one row of the Company log, the record gone in the same
--- statement. Answers false for a record already logged (a retry, or the worker's pass), so a change is never logged twice.
+-- The Engine answered that it holds the change the signed-in person held: its one row of the Company log, the record
+-- gone in the same statement. Answers false for a record already logged (a retry, or the worker's pass), so a change is never logged twice.
 create function public.finish_agent_change(change uuid) returns boolean
 language plpgsql security definer set search_path='' as $$
 declare held public.held_agent_changes;
 begin
  delete from public.held_agent_changes h where h.id=change and h.actor_id=auth.uid() returning h.* into held;
  if held.id is null then return false; end if;
- perform public.log_held_change(held);
+ perform public.log_held_change(held,true);
  return true;
 end $$;
 revoke all on function public.finish_agent_change(uuid) from public,anon,service_role;
@@ -87,17 +89,18 @@ $$;
 revoke all on function public.drop_agent_change(uuid) from public,anon,service_role;
 grant execute on function public.drop_agent_change(uuid) to authenticated;
 
--- The worker's pass: every record held ten minutes or more is logged once and removed, each on its own, so one the log
--- refuses stays held with a warning and never stops the others. Answers how many were logged.
+-- The worker's pass: every record held fifteen minutes or more, past the app's own ten minutes of trying, is logged once
+-- as unconfirmed and removed, each on its own, so one the log refuses stays held with a warning and never stops the
+-- others. Answers how many were logged.
 create function public.finish_held_agent_changes() returns integer
 language plpgsql security definer set search_path='' as $$
 declare change uuid; held public.held_agent_changes; logged integer:=0;
 begin
- for change in select o.id from public.held_agent_changes o where o.held_at<=now()-interval '10 minutes' order by o.held_at limit 100 loop
+ for change in select o.id from public.held_agent_changes o where o.held_at<=now()-interval '15 minutes' order by o.held_at limit 100 loop
   begin
    delete from public.held_agent_changes h where h.id=change returning h.* into held;
    if held.id is not null then
-    perform public.log_held_change(held);
+    perform public.log_held_change(held,false);
     logged:=logged+1;
    end if;
   exception when others then

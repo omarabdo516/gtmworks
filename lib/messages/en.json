@@ -859,6 +859,7 @@
   "logActMemoryReset": "reset the memory of {0}",
   "logActMemoryEdit": "edited a note in the memory of {0}",
   "logActMemoryForget": "forgot a note in the memory of {0}",
+  "logUnconfirmed": "Not confirmed: the agent’s answer never arrived",
   "logRuleInEffect": "In the chat · in effect now",
   "logActRuleSuggested": "suggested a rule for the team for {0}",
   "logRuleWaiting": "Waiting for an OK",

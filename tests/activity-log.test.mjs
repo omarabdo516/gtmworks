@@ -340,3 +340,12 @@ test('with no row shown the log says nothing matches while the Company has rows,
   assert.equal(logEmptyNote({ companyRows: 0 }), 'empty');
   assert.equal(logEmptyNote({ companyRows: null }), 'empty');
 });
+
+// #370: a memory or skill change whose Engine answer never confirmed it is logged by the worker's pass, and its row says
+// so in both languages; a confirmed one says nothing more.
+test('a memory or skill change nobody confirmed says so, and a confirmed one does not', () => {
+ const unconfirmed = ['memory_reset', 'memory_edit', 'memory_forget', 'skill_written'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', skill: action === 'skill_written' ? 'weekly-recap' : undefined, unconfirmed: true } }));
+ for (const row of unconfirmed) assert.deepEqual(row.to, { key: 'logUnconfirmed' });
+ assert.equal(describeEntry({ subject: 'agent', action: 'memory_edit', agent_id: lead, details: { agent_name: 'Ads' } }).to, undefined);
+ assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logUnconfirmed')), ['Not confirmed: the agent’s answer never arrived', 'مش متأكدين: رد الوكيل موصلش']);
+});

@@ -179,6 +179,7 @@ test('a skill write and a switch whose log fails are still made, and each ends w
   assert.deepEqual(await logHeldAgentChanges(late.db),{logged:1});
   assert.deepEqual(await logHeldAgentChanges(late.db),{logged:0});
   assert.deepEqual(late.logged,[{c:company,agent:writer,skill:'weekly-recap',act:'disabled'}],'one row, never two');
+  assert.deepEqual(late.changes.logged.map(row=>row.unconfirmed),[true],'the pass says nobody confirmed it');
   // A switch the Engine refuses is dropped, so no pass ever logs it.
   const refused=sessions(fake);
   assert.deepEqual(await changeCompanySkillEnabled(refused.db,{company,agent:writer,name:'missing',enabled:false,driver,hermes}),{state:'failed',name:'missing'});

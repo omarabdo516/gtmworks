@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(26);
 -- #370: a memory or skill change the Engine holds always gets its one row of the Company log. The check holds it
 -- (hold_agent_change), the log writes its row once however often it is retried (finish_agent_change), a refusal drops it
 -- (drop_agent_change), and the worker's pass logs a record the app never came back to (finish_held_agent_changes). No row
@@ -68,8 +68,8 @@ select throws_ok($$select public.hold_agent_change('10000000-0000-0000-0000-0000
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.hold_agent_change('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-0000000000a1','skill_enabled','weekly-recap',null,null)$$,'42501','skillNotAllowed','a Contributor holds no skill change');
 
--- The worker's pass: the edit whose app never came back is logged once it is ten minutes old, dated when it was held,
--- and once only; a change still in flight is left to its app.
+-- The worker's pass: the edit nobody resolved is logged once it is fifteen minutes old, dated when it was held, marked
+-- unconfirmed, and once only; a change still in flight is left to its app.
 reset role;
 update public.held_agent_changes set held_at=timestamptz '2026-11-20 10:00+00';
 set local role authenticated;
@@ -79,6 +79,8 @@ reset role;
 select is(public.finish_held_agent_changes(),1,'the pass logs the edit left held, and not the change in flight');
 select is((select created_at from public.company_log where agent_id='e1000000-0000-0000-0000-0000000000a1' and action='memory_edit'),
  timestamptz '2026-11-20 10:00+00','the late row reads when the change was held, not when the pass ran');
+select is((select details from public.company_log where agent_id='e1000000-0000-0000-0000-0000000000a1' and action='memory_edit'),
+ jsonb_build_object('agent_name','Nour','unconfirmed',true),'and says nobody confirmed it, with nothing of the note');
 select is(public.finish_held_agent_changes(),0,'a second pass finds nothing old enough');
 select is(pg_temp.held(),1,'the change in flight is still held');
 
@@ -87,7 +89,7 @@ select ok(not exists(select 1 from pg_constraint where conrelid='public.held_age
 set local session_replication_role=replica;
 delete from public.hermes_agents where id='e1000000-0000-0000-0000-0000000000a1';
 set local session_replication_role=origin;
-update public.held_agent_changes set held_at=now()-interval '11 minutes';
+update public.held_agent_changes set held_at=now()-interval '16 minutes';
 select is(public.finish_held_agent_changes(),1,'the removed Agent''s held reset is logged');
 select is(pg_temp.rows_for('memory_reset'),2,'one more reset row, never two');
 select * from finish();
