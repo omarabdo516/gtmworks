@@ -30,7 +30,8 @@ export function AgentRoutines({company,agent,name,canManage,canWrite}:{company:s
  useEffect(()=>{
   let live=true;
   void fetch(`/api/agent-routines?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`,{cache:'no-store'})
-   .then(response=>response.ok?response.json():null).then(body=>Array.isArray(body?.routines)?body.routines as Routine[]:null).catch(()=>null)
+   // The body is read whatever the answer, so a refusal's request ends too and the page goes idle.
+   .then(async response=>{ const body=await response.json().catch(()=>null); return response.ok&&Array.isArray(body?.routines)?body.routines as Routine[]:null; }).catch(()=>null)
    .then(found=>{ if(live) { setRoutines(found); setNow(new Date().toISOString()); } });
   return ()=>{ live=false; };
  },[company,agent,reads]);
