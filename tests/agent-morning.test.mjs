@@ -25,7 +25,7 @@ function session({agents=agentRows(),level=3,refuse=null}={}) {
   rpc:async(name,args)=>{
    if(name==='company_app_agents') return {data:agents,error:null};
    if(name==='check_agent_setting') return refuse?{data:null,error:{message:refuse}}:{data:null,error:null};
-   if(name==='log_agent_setting') { if(refuse) return {data:null,error:{message:refuse}}; logged.push(args); return {data:null,error:null}; }
+   if(name==='log_agent_morning') { if(refuse) return {data:null,error:{message:refuse}}; logged.push(args); return {data:null,error:null}; }
    throw new Error(`unexpected rpc ${name}`);
   },
   from:table=>{ assert.equal(table,'companies'); const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{agent_level:level},error:null})}; return chain; },
@@ -64,7 +64,7 @@ test('switching on makes one job at the chosen time and zone; a new time changes
   assert.equal(writes(fake).length,count,'a save that changes nothing asks the Engine for nothing');
   assert.equal(jobs(fake,leadProfile).length,1,'never a second job');
   assert.equal(writes(fake).filter(request=>request.method==='POST'&&request.path.startsWith('/api/cron/jobs?')).length,1,'made once');
-  assert.deepEqual(logged.map(row=>[row.field,row.old_value,row.new_value]),[['morning','off','9:00'],['morning','9:00','10:30'],['morning','10:30','off'],['morning','off','10:30']]);
+  assert.deepEqual(logged.map(row=>[row.old_value,row.new_value]),[['off','9:00'],['9:00','10:30'],['10:30','off'],['off','10:30']]);
   assert.ok(logged.every(row=>row.c===company&&row.agent===lead));
   // A switch off before anything was made makes nothing.
   const fresh=await engine();
