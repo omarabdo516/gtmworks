@@ -1,12 +1,15 @@
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import { use, type ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
-import { page } from 'vitest/browser';
+import { cdp, page } from 'vitest/browser';
+// Gives cdp() Playwright's session type (its send), as the config's provider does at run time.
+import type {} from '@vitest/browser-playwright';
 import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { MessageBox } from '@/app/conversation-composer';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { latestEnd, shown, type AgentRequestView } from '@/lib/conversations';
+import '@/app/tokens.css';
 import '@/app/shell.css';
 // The loaded chat once its record is read, as the page streams it.
 const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
@@ -267,4 +270,98 @@ test('a sent message keeps its images as chips under its bubble, and a message o
  const quiet = alone.getByRole('list', { name: 'Messages' }).getByRole('listitem').filter({ hasText: 'alone.png' });
  await expect.element(quiet.getByRole('link', { name: 'alone.png' })).toBeVisible();
  expect(quiet.element().querySelector('.bubble--user')).toBeNull();
+});
+
+// #132 (design-reference: msgHTML's msg-in, cleared after one draw; agentCardHTML's card-in; .thinking .shimmer): what
+// arrives while the Conversation is open rises once, what it held when it opened stays still, and the working line's
+// words breathe.
+const motionOf = (element: Element) => { const style = getComputedStyle(element); return [style.animationName, style.animationDuration, style.animationTimingFunction]; };
+const turnOf = (text: string) => [...document.querySelectorAll('.turns > li')].find(turn => turn.textContent?.includes(text))!;
+const rises = ['gw-rise', '0.2s', 'cubic-bezier(0.2, 0, 0, 1)'];
+// Drawn inside the shell's root, as the app draws a Conversation, so its stylesheet applies.
+const inShell = (initial: ConversationRecord) => <div className="gw">{view(initial)}</div>;
+
+test('a turn that arrives while the Conversation is open rises once; the turns it opened with and the queued turn once started do not', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const queued = { id: 0, author: 'person' as const, author_name: 'Omar', body: 'And the budget?', created_at: at, kind: 'queued' as const };
+ const reply = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'Here is the plan.', created_at: at };
+ const started = { id: 3, author: 'person' as const, author_name: 'Omar', body: 'And the budget?', created_at: at };
+ const answers = [talk([sent, reply, queued], { pending: true }), talk([sent, reply, started], { pending: true }), talk([sent, reply, started], { pending: true }), talk([sent, reply, started], { pending: true })];
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? answers.at(-1))));
+ await render(inShell(talk([sent], { pending: true })));
+ expect(motionOf(turnOf('Draft the long launch plan'))[0]).toBe('none');
+ await vi.advanceTimersByTimeAsync(500);
+ await expect.poll(() => turnOf('Here is the plan.')).toBeTruthy();
+ expect(motionOf(turnOf('Here is the plan.'))).toEqual(rises);
+ expect(motionOf(turnOf('And the budget?'))).toEqual(rises);
+ expect(motionOf(turnOf('Draft the long launch plan'))[0]).toBe('none');
+ // An animation plays again only when its element is put in the page again or its class comes back. Three further
+ // reads (the queued turn starts, then the record comes back the same twice) keep the reply's element as it was, and
+ // the started turn, drawn as a new element, carries no rise.
+ const replyTurn = turnOf('Here is the plan.');
+ for (let read = 0; read < 3; read++) await vi.advanceTimersByTimeAsync(1500);
+ await expect.poll(() => turnOf('And the budget?').classList.contains('is-queued')).toBe(false);
+ expect(turnOf('Here is the plan.')).toBe(replyTurn);
+ expect(replyTurn.classList.contains('msg-in')).toBe(true);
+ expect(motionOf(turnOf('And the budget?'))[0]).toBe('none');
+ expect(motionOf(turnOf('Draft the long launch plan'))[0]).toBe('none');
+});
+
+test('a Conversation opened with its history moves nothing but the working line\'s words, which breathe, and are still with reduced motion', async () => {
+ vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+ const made = { id: 4, author: 'agent' as const, author_name: 'Mona', body: 'Made it.', created_at: at, cards: [{ kind: 'made' as const, agent: { id: 'ag-9', connection_id: 'c-9', name: 'Reach', job: 'Runs Meta ads', apps: [], fresh: false, created_at: at } }] };
+ await render(inShell(talk([sent, made], { pending: true, working: 'Omar' })));
+ await expect.element(page.getByRole('status')).toBeVisible();
+ const moving = [...document.querySelectorAll('.transcript *')].filter(element => getComputedStyle(element).animationName !== 'none');
+ expect(moving.map(element => element.className)).toEqual(['shimmer']);
+ const words = document.querySelector('.thinking .shimmer')!;
+ const style = getComputedStyle(words);
+ expect([style.animationName, style.animationDuration, style.animationTimingFunction, style.animationIterationCount]).toEqual(['gw-breathe', '1.4s', 'ease-in-out', 'infinite']);
+ expect(words.textContent).toContain('Omar');
+ expect(document.querySelector('.ac-card')!.className).toBe('ac-card');
+ await cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+ onTestFinished(async () => { await cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] }); });
+ expect([getComputedStyle(words).animationName, getComputedStyle(words).opacity]).toEqual(['none', '1']);
+});
+
+test('the card for an Agent Lead makes while the Conversation is open rises in over 280ms', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const made = { id: 4, author: 'agent' as const, author_name: 'Mona', body: 'Made it.', created_at: at, cards: [{ kind: 'made' as const, agent: { id: 'ag-9', connection_id: 'c-9', name: 'Reach', job: 'Runs Meta ads', apps: [], fresh: false, created_at: at } }] };
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(talk([sent, made]))));
+ await render(inShell(talk([sent], { pending: true })));
+ await vi.advanceTimersByTimeAsync(500);
+ await expect.poll(() => document.querySelector('.ac-card')).toBeTruthy();
+ expect(motionOf(document.querySelector('.ac-card')!)).toEqual(['gw-rise', '0.28s', 'cubic-bezier(0.2, 0, 0, 1)']);
+});
+
+test('the made card moved from its own turn into the Agent\'s reply does not rise again', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const agent = { id: 'ag-9', connection_id: 'c-9', name: 'Reach', job: 'Runs Meta ads', apps: [], fresh: false, created_at: at };
+ const alone = { id: 4, author: 'agent' as const, author_name: 'Mona', body: '', created_at: at, kind: 'made' as const, cards: [{ kind: 'made' as const, agent }] };
+ const reply = { id: 5, author: 'agent' as const, author_name: 'Mona', body: 'Made it.', created_at: at, cards: [{ kind: 'made' as const, agent }] };
+ const answers = [talk([sent, alone], { pending: true }), talk([sent, reply])];
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? talk([sent, reply]))));
+ await render(inShell(talk([sent], { pending: true })));
+ await vi.advanceTimersByTimeAsync(500);
+ await expect.poll(() => document.querySelector('.ac-card')?.className).toBe('ac-card card-in');
+ await vi.advanceTimersByTimeAsync(1500);
+ await expect.poll(() => turnOf('Made it.')).toBeTruthy();
+ expect(document.querySelector('.ac-card')!.className).toBe('ac-card');
+});
+
+test('a saved rule\'s line moved from under the person\'s message to under the reply does not rise again', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const rule = { id: 'r-1', agent: 'ag-1', removed: false, said_at: at };
+ const early = { id: 1, author: 'agent' as const, author_name: 'Mona', body: '', created_at: at, kind: 'saved' as const, saved: [rule] };
+ const reply = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'Noted.', created_at: at };
+ const late = { id: 2, author: 'agent' as const, author_name: 'Mona', body: '', created_at: at, kind: 'saved' as const, saved: [rule] };
+ const answers = [talk([sent, early], { pending: true }), talk([sent, reply, late])];
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? talk([sent, reply, late]))));
+ await render(inShell(talk([sent], { pending: true })));
+ const line = () => document.querySelector('[data-kind="saved"]');
+ await vi.advanceTimersByTimeAsync(500);
+ await expect.poll(() => line()?.classList.contains('msg-in')).toBe(true);
+ await vi.advanceTimersByTimeAsync(1500);
+ await expect.poll(() => turnOf('Noted.')).toBeTruthy();
+ expect(line()!.classList.contains('msg-in')).toBe(false);
 });
