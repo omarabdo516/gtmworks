@@ -95,16 +95,19 @@ test('a list that holds another profile\'s job, a schedule that is not a plain c
 
 // The signed-in person's session: company_app_agents lists the Agents they see, and check_routine_change answers their
 // Role (`refuse` names the refusal). Every log call is kept.
-function session({agents,refuse=null,logFails=false}={}) {
+// `lostAnswers` writes are kept by the database (by their change key, as log_routine_change does) but answer an error.
+function session({agents,refuse=null,logFails=false,lostAnswers=0}={}) {
  const logged=[],checked=[],tries=[];
  const db={rpc:async(name,args)=>{
   if(name==='company_app_agents') return {data:agents,error:null};
   if(name==='check_routine_change') { checked.push(args); return {data:null,error:refuse?{message:refuse}:null}; }
-  if(name==='log_routine_change') { tries.push(args); if(logFails&&tries.length<=logFails) return {data:null,error:{message:'connection reset'}}; logged.push(args); return {data:null,error:null}; }
+  if(name==='log_routine_change') { tries.push(args); if(lostAnswers&&tries.length<=lostAnswers) { if(!logged.some(row=>row.change===args.change)) logged.push(args); return {data:null,error:{message:'fetch failed'}}; } if(logged.some(row=>row.change===args.change)) return {data:null,error:null}; if(logFails&&tries.length<=logFails) return {data:null,error:{message:'connection reset'}}; logged.push(args); return {data:null,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  return {db,logged,checked,tries};
 }
+// A log row without its change key, which is new for every change.
+const plain=({change,...row})=>{ assert.match(change,/^[0-9a-f-]{36}$/); return row; };
 const rows=[
  {agent:ads,name:'Meta Ads',connection:'f0000000-0000-0000-0000-000000000011',profile:adsProfile,main:false,own:true},
  {agent:seo,name:'SEO',connection:'f0000000-0000-0000-0000-000000000021',profile:seoProfile,main:false,own:true},
@@ -117,11 +120,11 @@ test('Settings reads every Agent the reader sees with its Routines, and each cha
   const {db,logged,checked}=session({agents:rows});
   const made=await changeAgentRoutine(db,{company,agent:ads,action:'create',prompt:'Send me the cost per lead',schedule:'0 9 * * *',timezone:'Africa/Cairo',hermes});
   assert.equal(made.state,'done');
-  assert.deepEqual(logged,[{c:company,agent:ads,act:'routine_created',routine:'Send me the cost per lead',schedule:'0 9 * * *'}]);
+  assert.deepEqual(logged.map(plain),[{c:company,agent:ads,act:'routine_created',routine:'Send me the cost per lead',schedule:'0 9 * * *'}]);
   const id=made.routine.id;
   for(const [action,act,extra] of [['pause','routine_paused',{}],['resume','routine_resumed',{}],['change','routine_changed',{schedule:'15 7 * * 2'}],['run','routine_run',{}]]) {
    assert.equal((await changeAgentRoutine(db,{company,agent:ads,action,routine:id,hermes,...extra})).state,'done',action);
-   assert.deepEqual(logged.at(-1),{c:company,agent:ads,act,routine:'Send me the cost per lead',schedule:extra.schedule??null});
+   assert.deepEqual(plain(logged.at(-1)),{c:company,agent:ads,act,routine:'Send me the cost per lead',schedule:extra.schedule??null});
   }
   const read=await readCompanyRoutines(db,{company,hermes});
   assert.equal(read.state,'found');
@@ -131,7 +134,8 @@ test('Settings reads every Agent the reader sees with its Routines, and each cha
   assert.equal(logged.at(-1).act,'routine_deleted');
   assert.equal(logged.length,6,'one row for each change');
   // The database checked the very row it then logged, once for each change.
-  assert.deepEqual(checked,logged);
+  assert.deepEqual(checked,logged.map(plain));
+  assert.equal(new Set(logged.map(row=>row.change)).size,6,'each change has its own key');
  } finally { await fake.close(); }
 });
 
@@ -225,6 +229,11 @@ test('the database checks the whole log row before the Engine changes, and a log
   const blip=session({agents:rows,logFails:1});
   const again=await changeAgentRoutine(blip.db,{company,agent:ads,action:'create',prompt:'Again',schedule:'0 10 * * *',hermes});
   assert.deepEqual([again.state,again.logged,blip.tries.length,blip.logged.length],['done',true,2,1]);
+  // A write the database kept but whose answer was lost is tried again with the same key: still one row.
+  const lost=session({agents:rows,lostAnswers:1});
+  const kept=await changeAgentRoutine(lost.db,{company,agent:ads,action:'create',prompt:'Kept',schedule:'0 11 * * *',hermes});
+  assert.deepEqual([kept.state,kept.logged,lost.tries.length,lost.logged.length],['done',true,2,1]);
+  assert.equal(lost.tries[0].change,lost.tries[1].change,'the retry carries the same key');
   const outage=session({agents:rows,logFails:9});
   const errors=[]; const said=console.error; console.error=(...args)=>errors.push(args.join(' '));
   try {
@@ -233,7 +242,7 @@ test('the database checks the whole log row before the Engine changes, and a log
    assert.equal(made.logged,false);
    assert.equal(outage.tries.length,3,'tried three times');
   } finally { console.error=said; }
-  assert.equal(fake.settings.cron.get(adsProfile).length,2);
+  assert.equal(fake.settings.cron.get(adsProfile).length,3);
   assert.ok(errors.some(line=>line.includes('Routine change not logged')),'never silent');
  } finally { await fake.close(); }
 });
