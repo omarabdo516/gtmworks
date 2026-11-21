@@ -155,7 +155,7 @@ revoke all on function public.conversation_reply_card() from public,anon,authent
 create or replace function public.begin_handover(h bigint)
  returns table(state text, attempt integer, company uuid, profile text, session uuid, input text, instructions text)
  language plpgsql security definer set search_path='' as $$
-declare r public.agent_handovers; talk public.conversations; chan uuid; person uuid; target public.hermes_agents; lead public.hermes_agents; asking text; began timestamptz; job text; asker text;
+declare r public.agent_handovers; talk public.conversations; chan uuid; person uuid; target public.hermes_agents; asking_agent public.hermes_agents; asking text; began timestamptz; job text; asker text;
 begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select * into r from public.agent_handovers where id=h for update;
@@ -180,11 +180,11 @@ begin
  select * into target from public.hermes_agents where id=r.to_agent;
  if r.conversation_id is not null then
   select * into talk from public.conversations where id=r.conversation_id;
-  select * into lead from public.hermes_agents where id=talk.agent_id and talk.company_id=r.company_id;
+  select * into asking_agent from public.hermes_agents where id=talk.agent_id and talk.company_id=r.company_id;
   person := talk.person_id;
  else
   select m.channel_id, m.person_id into chan, person from public.channel_messages m where m.id=r.channel_message_id;
-  select * into lead from public.hermes_agents where id=r.from_agent and r.company_id=r.company_id;
+  select * into asking_agent from public.hermes_agents where id=r.from_agent and r.company_id=r.company_id;
  end if;
  select a.name into asker from public.hermes_agents a where a.id=r.from_agent and a.company_id=r.company_id;
  asker := coalesce(nullif(btrim(asker),''),'Lead');
@@ -264,11 +264,11 @@ begin
   r.return_started_at:=began; end if;
  if r.return_started_at < now()-interval '1 day' then
   update public.agent_handovers set state='failed', closed_at=now() where id=h; return; end if;
- if lead.id is null or lead.profile is null then
+ if asking_agent.id is null or asking_agent.profile is null then
   update public.agent_handovers set state='failed', closed_at=now() where id=h; return; end if;
- if lead.profile ~ '^co-[0-9a-f]{32}$'
-  and (lead.profile <> public.company_engine_profile(r.company_id) or not public.company_profile_ready(r.company_id)) then return; end if;
- if public.agent_profile_refusal(lead.profile,r.company_id,lead.id) is not null then return; end if;
+ if asking_agent.profile ~ '^co-[0-9a-f]{32}$'
+  and (asking_agent.profile <> public.company_engine_profile(r.company_id) or not public.company_profile_ready(r.company_id)) then return; end if;
+ if public.agent_profile_refusal(asking_agent.profile,r.company_id,asking_agent.id) is not null then return; end if;
  update public.agent_handovers set return_attempts=return_attempts+1, attempted_at=now() where id=h returning return_attempts into r.return_attempts;
  if r.target_outcome='completed' then
   asking := 'You handed this job to ' || target.name || case when r.conversation_id is null then ' in this channel' else ' in this conversation' end || ', and it has finished.'
@@ -286,9 +286,9 @@ begin
      then E'\n\nWrite your reply to the team now, in their language: say the job did not finish, and what you suggest. Write only the reply.'
      else E'\n\nWrite your reply to the person now, in their language: say the job did not finish, and what you suggest. Write only the reply.' end;
  end if;
- return query select 'returning'::text, r.return_attempts, r.company_id, lead.profile,
+ return query select 'returning'::text, r.return_attempts, r.company_id, asking_agent.profile,
   case when r.conversation_id is not null then r.conversation_id else md5(chan::text||':'||r.from_agent::text)::uuid end,
-  asking, lead.instructions;
+  asking, asking_agent.instructions;
 end $$;
 revoke all on function public.begin_handover(bigint) from public,anon,authenticated;
 grant execute on function public.begin_handover(bigint) to service_role;

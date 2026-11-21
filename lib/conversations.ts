@@ -170,19 +170,18 @@ export const withBoardNote=(record:ConversationMessage[],reply:number|undefined)
 // sender line (`kind` handed, `to`), where it came in: after the reply that handed the job over and before the asking
 // Agent's own reply, which was written after it. It is gtmworks's record, never a message of the Conversation.
 export type HandoverAnswer={id:number,from:string,name:string,face:string,body:string,at:string};
-export const withHandoverAnswers=(record:ConversationMessage[],answers:HandoverAnswer[]):ConversationMessage[]=>{
- const left=[...answers].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((answer):ConversationMessage=>({id:answer.id,author:'agent',author_name:answer.name,face:answer.face,body:answer.body,created_at:answer.at,kind:'handed',to:answer.from}));
- const merged:ConversationMessage[]=[];
- for(const message of record) { while(left.length&&left[0].created_at<message.created_at) merged.push(left.shift()!); merged.push(message); }
+export const withHandoverAnswers=(record:ConversationMessage[],answers:HandoverAnswer[]):ConversationMessage[]=>
+ mergedByTime(record,[...answers].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((answer):ConversationMessage=>({id:answer.id,author:'agent',author_name:answer.name,face:answer.face,body:answer.body,created_at:answer.at,kind:'handed',to:answer.from})),'after');
+// Lines no message stores, each put where it happened among the record's items: already in time order, and drawn before
+// an item of the same moment (`before`) or after it (`after`).
+const mergedByTime=(record:ConversationMessage[],lines:ConversationMessage[],ties:'before'|'after'):ConversationMessage[]=>{
+ const left=[...lines]; const merged:ConversationMessage[]=[];
+ for(const message of record) { while(left.length&&(ties==='before'?left[0].created_at<=message.created_at:left[0].created_at<message.created_at)) merged.push(left.shift()!); merged.push(message); }
  return [...merged,...left];
 };
 // Each decision goes before the first item shown after it.
-export const withDecisions=(record:ConversationMessage[],decisions:Decision[],agentName=''):ConversationMessage[]=>{
- const left=[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided}));
- const merged:ConversationMessage[]=[];
- for(const message of record) { while(left.length&&left[0].created_at<=message.created_at) merged.push(left.shift()!); merged.push(message); }
- return [...merged,...left];
-};
+export const withDecisions=(record:ConversationMessage[],decisions:Decision[],agentName=''):ConversationMessage[]=>
+ mergedByTime(record,[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided})),'before');
 // How each ended run ended (conversation_run_ends); its token use is Hermes's own (#347).
 // A run that failed for a cause a retry cannot fix is no_model (#422), no_credit, key_refused or model_missing (#457).
 export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'};
