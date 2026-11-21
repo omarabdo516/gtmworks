@@ -135,6 +135,23 @@ test('the install job\'s profile proof and its unit test run the install suite',
   }
 });
 
+// The work sandbox image (#392, ADR 0020): its one build file and the files it adds, the module that reads its pin, and
+// the check the install job runs against the built image. A change to any of them changes what the install gets.
+test('the work sandbox image, its build files and its check run the install suite', () => {
+  for (const path of [
+    'sandbox/Dockerfile', 'sandbox/entrypoint.sh', 'sandbox/sshd_config', 'sandbox/check/arabic.html', 'sandbox/check/arabic.mjs',
+    'lib/work-sandbox-image.mjs', 'scripts/check-work-sandbox.mjs',
+  ]) assert.equal(areas('README.md', path).install, 'true', path);
+});
+
+// The Company's sandbox template and the Engine's managed pin (#393): a change to either changes what an install starts,
+// so it runs the install suite.
+test('the work sandbox template and the Engine\'s managed pin run the install suite', () => {
+  for (const path of ['scripts/engine-managed.yml', 'scripts/engine-listener-address.py', 'scripts/engine-listener-address.sh', 'scripts/engine-ssh-sync-files.sh', 'scripts/engine-template.yml']) {
+    assert.equal(areas('README.md', path).install, 'true', path);
+  }
+});
+
 test('the CI definition itself and the dependencies run every suite', () => {
   for (const path of ['.github/workflows/ci.yml', 'ci.sh', 'scripts/ci-areas.mjs', 'scripts/ci-verdict.mjs', 'scripts/ci-runner.mjs', 'scripts/ci-fast.mjs', 'package.json', 'package-lock.json']) {
     assert.deepEqual(areas(path), all, path);

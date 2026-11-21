@@ -12,9 +12,9 @@ select plan(13);
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
  ('c1220000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','c1210000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001'),
  ('c1220000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','c1210000-0000-0000-0000-000000000002','Lead','General',true,'default');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true),
- ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true),
+ ('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',true,true);
 create temporary table made(agent uuid);
 grant all on made to service_role;
 
@@ -49,7 +49,7 @@ select is((select a.profile from public.hermes_agents a where a.id='c1220000-000
 set local role service_role;
 select results_eq($$select agent_id from public.agent_move_work() where company_id='10000000-0000-0000-0000-000000000001'$$,$$select agent from made$$,'the new worker lists the Agent it made');
 select ok(public.begin_agent_profile_move((select agent from made)),'begins its move');
-select public.record_agent_profile(agent,'ag-'||replace(agent::text,'-',''),1,public.engine_tool_policy()) from made;
+select public.record_agent_profile(agent,'ag-'||replace(agent::text,'-',''),false) from made;
 reset role;
 update public.agent_profiles set skills_shared=true where agent_id=(select agent from made);
 set local role service_role;

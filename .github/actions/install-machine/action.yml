@@ -30,3 +30,13 @@ runs:
         web_image=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1)
         docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar"
         docker --host tcp://127.0.0.1:2375 tag gtmworks:ci "$web_image"
+    # The work sandbox image the run built once (#392), loaded under the tag a source install's work sandbox names
+    # (scripts/install.sh work_sandbox_tag), so the install builds no sandbox image either.
+    - name: download the work sandbox image
+      uses: actions/download-artifact@v4
+      with:
+        name: gtmworks-sandbox-image
+        path: ${{ runner.temp }}
+    - name: load the work sandbox image
+      shell: bash
+      run: docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-sandbox-image.tar"

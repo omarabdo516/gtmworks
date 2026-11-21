@@ -29,11 +29,11 @@ test.beforeAll(async({},testInfo)=>{
   'delegation.reasoning_effort':{type:'select',options:['','minimal','low','medium','high','xhigh','max','ultra']},
  },category_order:[]};
  query(`do $$ begin
-  insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values ('${writer}','${company}',1,public.engine_tool_policy());
+  insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${writer}','${company}',true);
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ('e9100000-0000-0000-0000-000000000001','${company}','e9100000-0000-0000-0000-000000000011','Lead','General',true,'${co}'),
    ('${writer}','${company}','e9100000-0000-0000-0000-000000000012','Writer','Writing',false,'${writerProfile}');
-  insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('${company}','${co}',1,public.engine_tool_policy(),true);
+  insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) values ('${company}','${co}',true,true);
   insert into public.company_shared_spaces(company_id,folder) values ('${company}','/opt/data/profiles/${space}/skills');
   -- The Manager and the Contributor are shown the Writer, so they read its own model and switch (#15).
   insert into public.member_agent_access(company_id,person_id,agent_id) values

@@ -4,15 +4,15 @@ select plan(69);
 -- #150. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The "scripts" team
 -- channel holds the Owner (1), the Manager (2), the Contributor (3) and the Viewer (4), and only Lead and Ads: Writer is
 -- the Company's third Agent, outside it. Member 5 is in the Company but not in the channel; Karim belongs to Aleem only.
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy,skills_shared) values
- ('a1500000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy(),true),
- ('a1500000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy(),true);
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed,skills_shared) values
+ ('a1500000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',true,true),
+ ('a1500000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',true,true);
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile,instructions) values
  ('a1500000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000011','Lead','General',true,'co-10000000000000000000000000000001','Lead the team.'),
  ('a1500000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000012','Ads','Ads',false,'ag-a1500000000000000000000000000012','Run the Meta ads.'),
  ('a1500000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001','f1500000-0000-0000-0000-000000000013','Writer','SEO',false,'ag-a1500000000000000000000000000013','Write for search.');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true);
 insert into public.channels(id,company_id,kind,name,created_by,create_key) values
  ('c1500000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','team','scripts','20000000-0000-0000-0000-000000000003','e1500000-0000-0000-0000-000000000001');
 insert into public.channel_people(channel_id,company_id,person_id,added_by) values

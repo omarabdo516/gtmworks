@@ -55,13 +55,13 @@ const change=(person,fake,request)=>changeCompanyKey(person.db,person.service,{c
 const read=(person,fake)=>readCompanyKeys(person.db,person.service,{company,driver:pointedAt(fake),hermes:{address:fake.address,key:'test-only-key'}});
 const engineOn=(fake,profile)=>hermesEngine({address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'});
 
-// Lead's create_agent call on Lead's profile, with the database's answers for a Company whose level is 1, and `answers`
-// to other calls by name.
+// Lead's create_agent call on Lead's profile, with the database's answers for a Company, and `answers` to other calls by
+// name.
 async function leadMakes(fake,answers={}) {
  const calls=[];
  const db={rpc:async(name,args)=>{ calls.push([name,args]);
   if(Object.hasOwn(answers,name)) return {data:answers[name],error:null};
-  if(name==='lead_agent_profile') return {data:{profile:later,soul:'You write for RS Learning.',level:1},error:null};
+  if(name==='lead_agent_profile') return {data:{profile:later,soul:'You write for RS Learning.'},error:null};
   if(name==='lead_create_agent') return {data:{state:'created',agent:agentId(later)},error:null};
   return {data:null,error:{message:'unexpected'}}; }};
  const outcome=await runToolCall({db,engine:engineOn(fake,main),profile:main,conversation:'conversation-1',run:'run-1'},{id:'call-0',name:'create_agent',arguments:{template:'writer'}});
@@ -84,7 +84,7 @@ test('an Agent Lead makes after the key was set is made on a fresh profile of it
   const writes=fake.settings.managementRequests.filter(request=>request.method!=='GET').map(request=>request.path==='/api/profiles'?request.body.name:profileOf(request.path));
   assert.ok(writes.every(profile=>profile===later),`only the new profile is written: ${writes}`);
   assert.equal(calls.at(-1)[0],'lead_create_agent');
-  assert.deepEqual([calls.at(-1)[1].own_level,calls.at(-1)[1].own_answers],[1,false],'the database is asked to make it on its own profile, waiting for the key');
+  assert.deepEqual([calls.at(-1)[1].own_profile,calls.at(-1)[1].own_answers],[true,false],'the database is asked to make it on its own profile, waiting for the key');
   assert.deepEqual(runsOn(fake),[],'no Run starts, on Lead\'s profile or any other');
  } finally { await fake.close(); }
 });

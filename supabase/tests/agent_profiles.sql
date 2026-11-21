@@ -1,9 +1,9 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(65);
+select plan(66);
 -- RS Learning (1): Lead on the Company's own profile, an Owner's (Omar's) and a Manager's Conversation with Lead.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('a7000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true);
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('a7100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000002','Lead'),
  ('a7100000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a7000000-0000-0000-0000-000000000002','Lead');
@@ -17,32 +17,42 @@ grant select on made to authenticated,service_role;
 
 set local role service_role;
 select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-1','call-0','You write for {company}.'),
- jsonb_build_object('profile',(select profile from made where name='own'),'soul','You write for RS Learning.','level',1),
- 'the call names the profile of the Agent it would make, its soul fitted to the Company and the Company''s level');
+ jsonb_build_object('profile',(select profile from made where name='own'),'soul','You write for RS Learning.'),
+ 'the call names the profile of the Agent it would make and its soul fitted to the Company');
 select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000002','run-1','call-0','You write for {company}.'),null,'a Manager''s call names none, so the Engine is not asked');
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
-  template=>'writer',instructions=>'You write for {company}.',own_level=>1,own_policy=>public.engine_tool_policy()),jsonb_build_object('state','created','agent',(select agent from made where name='own')),
+  template=>'writer',instructions=>'You write for {company}.',own_profile=>true),jsonb_build_object('state','created','agent',(select agent from made where name='own')),
  'the Agent made on its own profile has the id derived from the Conversation, run and call');
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Other',job=>'Other.',apps=>'{}',
-  own_level=>1,own_policy=>public.engine_tool_policy()),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'the same call again answers the same Agent');
+  own_profile=>true),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'the same call again answers the same Agent');
 select is(public.lead_agent_profile('a7100000-0000-0000-0000-000000000001','run-1','call-0','You write for {company}.'),
  jsonb_build_object('state','created','agent',(select agent from made where name='own')),'and a repeated call answers the Agent it made, with no profile to make');
 reset role;
 select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),false,
- 'a racing closer that wrote the recorded tools leaves them confirmed');
+ 'a new Agent''s profile is confirmed when the Engine provided it with the fixed set and its read-back matched');
 set local role service_role;
 select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
-  own_level=>3,own_policy=>public.engine_tool_policy()),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'a closer that raced a level change answers the same Agent');
+  own_profile=>true),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'a closer that raced the one that made it answers the same Agent');
+reset role;
+select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),false,
+ 'and the closer that wrote the same fixed set leaves it confirmed');
+-- An Owner who turned sub-agents on before a later closer arrived left the profile pending: that closer wrote the set
+-- with them off, so it confirms nothing, and the worker writes the Owner's choice.
+update public.agent_profiles set subagents=true,tools_pending=true where agent_id=(select agent from made where name='own');
+set local role service_role;
+select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
+  own_profile=>true),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'a closer after the Owner''s switch answers the same Agent');
 reset role;
 select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),true,
- 'and the other level''s tools it wrote send the profile back to the worker, so no Run starts on it until its read-back is recorded');
-update public.agent_profiles set tools_pending=false,skills_shared=true where agent_id=(select agent from made where name='own');
+ 'and leaves the profile pending, since it wrote the set without the sub-agents the Owner turned on');
+update public.agent_profiles set subagents=false,tools_pending=false where agent_id=(select agent from made where name='own');
+update public.agent_profiles set skills_shared=true where agent_id=(select agent from made where name='own');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and not is_default),1,'one Agent is made');
 select ok(exists(select 1 from public.hermes_agents a join made m on m.agent=a.id and m.name='own'
   where a.profile=m.profile and a.instructions='You write for RS Learning.' and a.name='Writer'),
  'it runs on its own profile, and its instructions are the soul the profile was given');
-select results_eq($$select p.profile,p.company_id,p.tools_level::int,p.tools_policy,p.tools_pending from public.agent_profiles p$$,
- $$select profile,'10000000-0000-0000-0000-000000000001'::uuid,1,public.engine_tool_policy(),false from made where name='own'$$,'one owner record, with the level and policy its tools were read back under');
+select results_eq($$select p.profile,p.company_id,p.tools_confirmed,p.tools_pending from public.agent_profiles p$$,
+ $$select profile,'10000000-0000-0000-0000-000000000001'::uuid,true,false from made where name='own'$$,'one owner record, with its fixed tools confirmed');
 select is((select count(*)::int from public.hermes_agents where profile like 'ag-%'),1,'and one Agent on the profile');
 select lives_ok($$set constraints all immediate$$,'the record written before its Agent belongs to it');
 select results_eq($$select actor_id,action,details->>'agent_name',details->>'job' from public.company_log where agent_id=(select agent from made where name='own')$$,
@@ -51,8 +61,8 @@ select results_eq($$select actor_id,action,details->>'agent_name',details->>'job
 set local role service_role;
 select is(public.lead_create_agent('a7100000-0000-0000-0000-000000000001','run-1','call-1','SEO','Writes the blog.','{}')->>'agent',(select agent::text from made where name='lead'),
  'the previous app version''s call makes it on Lead''s profile, under the derived id');
-select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_level=>1)->>'state','invalid','a level without its policy makes nothing');
-select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_level=>4,own_policy=>public.engine_tool_policy())->>'state','invalid','nor a level that does not exist');
+select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_answers=>null)->>'state','invalid','a key decision that is neither true nor false makes nothing');
+select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-2',agent_name=>'SEO',job=>'Writes.',apps=>'{}',own_profile=>null)->>'state','invalid','nor an own-profile decision that does not exist');
 reset role;
 select ok(exists(select 1 from public.hermes_agents a join made m on m.agent=a.id and m.name='lead' where a.profile='co-10000000000000000000000000000001'),
  'the Agent on Lead''s profile runs on the Company''s profile');
@@ -99,42 +109,37 @@ reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select throws_ok($$select public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',(select agent from own),'a7300000-0000-0000-0000-000000000002','Hello')$$,
- '55000','agentLevelPending','none while its tools are being changed');
+ '55000','agentToolsPending','none while its tools are being changed');
 select throws_ok($$select public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',(select agent from own),'a7300000-0000-0000-0000-000000000001','Hello')$$,
- '55000','agentLevelPending','and a held reservation is checked again on retry');
+ '55000','agentToolsPending','and a held reservation is checked again on retry');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select public.record_agent_profile((select agent from own),(select profile from made where name='own'),1,public.engine_tool_policy());
+select public.record_agent_profile((select agent from own),(select profile from made where name='own'),false);
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select is(public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',(select agent from own),'a7300000-0000-0000-0000-000000000002','Hello'),
  (select connection from own),'once the read-back is recorded, Runs are reserved again');
 reset role;
-update public.agent_profiles set tools_policy=1;
+update public.agent_profiles set tools_pending=false;
+update public.agent_profiles set tools_confirmed=false;
 set local role authenticated;
 select throws_ok($$select public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',(select agent from own),'a7300000-0000-0000-0000-000000000003','Hello')$$,
- '55000','agentLevelPending','none while its tools were applied under another policy');
-reset role;
-update public.agent_profiles set tools_policy=public.engine_tool_policy();
-set local role authenticated;
-select is(public.set_agent_level('10000000-0000-0000-0000-000000000001',3),3,'the Owner raises the level');
-select throws_ok($$select public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',(select agent from own),'a7300000-0000-0000-0000-000000000003','Hello')$$,
- '55000','agentLevelPending','none while its tools are another level''s');
+ '55000','agentToolsPending','none while its fixed tools were never confirmed');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select results_eq($$select agent_id,profile,agent_level::int,tools_level::int,instructions from public.agent_profile_work()$$,
- $$select agent,profile,3,1,'You write for RS Learning.' from made where name='own'$$,'the worker is given the profile to bring to the new level');
+select results_eq($$select agent_id,profile,tools_confirmed,tools_pending,instructions from public.agent_profile_work()$$,
+ $$select agent,profile,false,false,'You write for RS Learning.' from made where name='own'$$,'the worker is given the profile to confirm');
 select public.begin_agent_tools((select agent from own));
-select public.record_agent_profile((select agent from own),(select profile from made where name='own'),3,public.engine_tool_policy());
+select public.record_agent_profile((select agent from own),(select profile from made where name='own'),false);
 select is((select count(*)::int from public.agent_profile_work()),0,'and nothing once its read-back is recorded');
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select is(public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',(select agent from own),'a7300000-0000-0000-0000-000000000003','Hello'),
- (select connection from own),'then Runs are reserved at the new level');
+ (select connection from own),'then Runs are reserved again');
 reset role;
 
 set local session_replication_role=replica;
@@ -175,31 +180,38 @@ reset role;
 select ok((select failed_at is not null from public.conversation_queued_turns where send_key='a7300000-0000-0000-0000-000000000021'),'the turn is failed, as on another Company''s profile');
 set local role service_role;
 select public.begin_agent_tools((select agent from own));
+-- A retry whose first start's answer was lost is still not sent to the profile: its tools are changing now.
+reset role;
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile,start_unknown_at)
+ values ('a7200000-0000-0000-0000-000000000002','a7300000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000001',(select connection from own),
+  '20000000-0000-0000-0000-000000000001',(select agent from own),'Hello',(select profile from made where name='own'),now());
+set local role service_role;
 select is((select count(*)::int from public.claim_conversation_turn('a7200000-0000-0000-0000-000000000002')),0,'the Agent''s own turn waits while its tools change');
+select is((select count(*)::int from public.claim_conversation_turn('a7200000-0000-0000-0000-000000000002')),0,'and a retry whose first start was lost waits too, never sent to a profile whose tools are changing');
 select is((select count(*)::int from public.begin_channel_start(-2)),0,'and so does its channel Run');
 select is((select count(*)::int from public.begin_note_start(-2)),0,'and its note Run');
 reset role;
 select ok((select failed_at is null from public.conversation_queued_turns where send_key='a7300000-0000-0000-0000-000000000022'),'its turn is not failed');
 set local role service_role;
-select public.record_agent_profile((select agent from own),(select profile from made where name='own'),3,public.engine_tool_policy());
+select public.record_agent_profile((select agent from own),(select profile from made where name='own'),false);
 select results_eq($$select connection from public.claim_conversation_turn('a7200000-0000-0000-0000-000000000002')$$,$$select connection from own$$,'then its turn starts on its own profile');
 select results_eq($$select profile from public.begin_channel_start(-2)$$,$$select profile from made where name='own'$$,'and its channel Run');
 select results_eq($$select profile from public.begin_note_start(-2)$$,$$select profile from made where name='own'$$,'and its note Run');
 
 select ok(public.forget_company_profile((select profile from made where name='own')),'tool health forgets the lost profile');
 reset role;
-select results_eq($$select tools_level,tools_policy,tools_pending from public.agent_profiles$$,$$values (null::smallint,null::integer,false)$$,'its record stays, with no tool state');
+select results_eq($$select tools_confirmed,tools_pending from public.agent_profiles$$,$$values (false,false)$$,'its record stays, with no confirmed tools');
 set local role authenticated;
 select set_config('request.jwt.claims','{"role":"authenticated"}',true);
 select throws_ok($$select public.reserve_conversation_run('a7200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',(select agent from own),'a7300000-0000-0000-0000-000000000004','Hello')$$,
- '55000','agentLevelPending','no Run starts on it until it is made again');
+ '55000','agentToolsPending','no Run starts on it until it is made again');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select results_eq($$select agent_id,tools_level from public.agent_profile_work()$$,$$select agent,null::smallint from own$$,'the worker is given it to make again');
-select throws_ok($$select public.record_agent_profile((select agent from own),'co-10000000000000000000000000000001',3,public.engine_tool_policy())$$,'22023','agentProfileInvalid','a record names the Agent''s own profile');
-select throws_ok($$select public.record_agent_profile((select agent from own),(select profile from made where name='own'),3,1)$$,'22023','agentProfileInvalid','and the policy of now');
-select public.record_agent_profile((select agent from made where name='lead'),(select profile from made where name='lead'),3,public.engine_tool_policy());
+select results_eq($$select agent_id,tools_confirmed from public.agent_profile_work()$$,$$select agent,false from own$$,'the worker is given it to make again');
+select throws_ok($$select public.record_agent_profile((select agent from own),'co-10000000000000000000000000000001',false)$$,'22023','agentProfileInvalid','a record names the Agent''s own profile');
+select throws_ok($$select public.record_agent_profile((select agent from own),(select profile from made where name='own'),true)$$,'40001','agentProfileChanged','a sub-agents choice the Owner changed meanwhile is not recorded');
+select public.record_agent_profile((select agent from made where name='lead'),(select profile from made where name='lead'),false);
 reset role;
 select is((select count(*)::int from public.agent_profiles),1,'the worker never writes an owner record');
 

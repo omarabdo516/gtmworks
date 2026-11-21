@@ -32,8 +32,8 @@ test.beforeAll(async({},testInfo)=>{
    ('${lead}','${company}','${randomUUID()}','Lead','General',true,'${profile}'),
    ('${reach}','${company}','${randomUUID()}','Reach','Campaigns and ads',false,'access-spec-reach'),
    ('${quill}','${company}','${randomUUID()}','Quill','Articles',false,'access-spec-quill');
-  insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
-   on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+  insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${manager}','${reach}');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
    ('${adsTalk}','${company}','${reviewer}','${lead}','Lead'),('${againTalk}','${company}','${reviewer}','${lead}','Lead'),('${articlesTalk}','${company}','${reviewer}','${lead}','Lead');

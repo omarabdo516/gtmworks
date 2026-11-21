@@ -30,12 +30,12 @@ test.beforeAll(async({browser},testInfo)=>{
   await signIn(page,'omar@example.com','/c/rs-learning/home');
   // The Writer's own profile record comes first: its Agent names `ag-` and the guard reads that record (deferred FK).
   query(`do $$ begin
-   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values ('${writer}','${company}',1,public.engine_tool_policy());
+   insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${writer}','${company}',true);
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
     ('${lead}','${company}','${randomUUID()}','Lead','Marketing lead',true,'${co}'),
     ('${writer}','${company}','${randomUUID()}','Writer','Writing',false,'${writerProfile}');
-   insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${co}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
-    on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${co}',true from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   end $$;`);
  } finally { await page.close(); }
 });

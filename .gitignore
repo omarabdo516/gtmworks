@@ -13,6 +13,7 @@ prod.env
 .install-lock/
 .install.lock
 .install-gateway
+.work-sandbox-image
 backups/
 
 # Impeccable: commit PRODUCT.md, DESIGN.md and .impeccable/config.json (plus surfaces/, design.json, live/config.json, critique/ignore.md when they exist); keep the per-developer file and runtime folders out

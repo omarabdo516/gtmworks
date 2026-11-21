@@ -113,7 +113,7 @@ select is(public.pin_lead_brief('e4340000-0000-0000-0000-000000000005','d4340000
 reset role;
 
 -- The soul check: a Company profile is listed until its read is recorded.
-insert into public.company_profiles(company_id,profile,tools_level) values ('10000000-0000-0000-0000-000000000434','co-10000000000000000000000000000434',1);
+insert into public.company_profiles(company_id,profile,tools_confirmed) values ('10000000-0000-0000-0000-000000000434','co-10000000000000000000000000000434',true);
 set local role service_role;
 select ok(exists(select 1 from public.lead_soul_work() where profile='co-10000000000000000000000000000434'),'a profile not yet checked is listed');
 select is(public.record_lead_soul('10000000-0000-0000-0000-000000000434','co-10000000000000000000000000000434'),true,'its check is recorded');

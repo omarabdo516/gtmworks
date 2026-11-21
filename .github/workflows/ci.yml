@@ -378,8 +378,10 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
-    # 3.7 min measured on run 44636876755: 6 min is 1.5 times it, rounded up (#410).
-    timeout-minutes: 6
+    # 3.4 min measured on run 44726291691 with a warm work-sandbox layer cache (#392), and 6.5 min on run 44735657345
+    # when that cache was cold and the whole sandbox image was exported to it (#393): 10 min is 1.5 times the slower one,
+    # rounded up (#410).
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -404,6 +406,26 @@ jobs:
           # It is one build's image, read by this run's shards and by nothing later.
           retention-days: 1
           # Docker's archive is compressed already.
+          compression-level: 0
+      # The work sandbox image every Company's sandbox runs (#392, ADR 0020), built in the same job with its own layer cache:
+      # every install area and the measurement load it, so no area builds it again. The browser suite does not use it.
+      - name: build the work sandbox image
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: sandbox
+          push: false
+          tags: gtmworks-work-sandbox:local
+          outputs: type=docker,dest=${{ runner.temp }}/gtmworks-sandbox-image.tar
+          cache-from: type=gha,scope=sandbox
+          cache-to: type=gha,mode=max,scope=sandbox
+      - name: upload the work sandbox image
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtmworks-sandbox-image
+          path: ${{ runner.temp }}/gtmworks-sandbox-image.tar
+          retention-days: 1
           compression-level: 0
 
   # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 6
@@ -622,7 +644,7 @@ jobs:
 
   # The install proof is one job, one matrix entry per area, each on a fresh isolated Docker machine of its own (#406):
   # the first install and its repeat; Companies and their Engines; Agents on their Engines; backup and restore; the
-  # public address behind a proxy; the update between releases; the one-line install; and Update now's updater (#443). A fault in one area cannot
+  # public address behind a proxy; the update between releases (`./ci.sh install update`); the previous release's own archive restored (`./ci.sh install previous-archive`, split from the update area by #389); an install the release before the work sandbox made, with two Companies, updated to this one (`./ci.sh install sandbox-update`, #397); the measured sizes and the default sandbox limits a render finishes within (`./ci.sh install sizes`, #400); a release that pins another Engine image (`./ci.sh install engines-update`); the one-line install; and Update now's updater (#443). A fault in one area cannot
   # hide or cause another's: fail-fast is off, so one red area leaves the others running to their end, and the job's name
   # is the area that failed. An area adds its name to `matrix.area` and a case to scripts/ci-install-check.sh, nothing
   # else (#407–#409).
@@ -641,16 +663,17 @@ jobs:
       # Every area runs to its end, so one red area still shows the others' faults (#406).
       fail-fast: false
       matrix:
-        area: [first-install, companies, agents, backup, proxy, update, one-line, updater]
-    # 9.5 min measured for its slowest area, backup, on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
+        area: [first-install, companies, agents, backup, proxy, rollback, update, previous-archive, sandbox-update, staged-update, sizes, engines-update, one-line, updater]
+    # 10.7 min measured for its slowest area, update, on run 44726291691 (#389): 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
         with:
-          # Only the update area builds and installs the last release before the Engines, a fixed commit (#378, C1).
-          fetch-depth: ${{ matrix.area == 'update' && '0' || '1' }}
+          # Only the update and previous-archive areas build and install the last release before the Engines, a fixed commit
+          # (#378, C1), and the sandbox-update area the last release before the work sandbox, another fixed commit (#397).
+          fetch-depth: ${{ (matrix.area == 'update' || matrix.area == 'previous-archive' || matrix.area == 'sandbox-update' || matrix.area == 'staged-update') && '0' || '1' }}
       # The isolated Docker machine and the image the run built once, as one action the measurement also uses (#403,
       # #411): the area of scripts/ci-install-check.sh the matrix names runs on it, and the last step removes it, also
       # after a failure, on a runner that is reused.
