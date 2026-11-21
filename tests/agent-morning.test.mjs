@@ -703,3 +703,40 @@ test('a move takes the copy that is on from the main Agent before, not an old pa
   assert.equal(jobs(fake,leadProfile).length,0);
  } finally { await fake.close(); }
 });
+
+test('a stale move whose lease another holder now has sends no cleanup: that holder settles', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // Lead → Ads reads the profiles; meanwhile its lease runs out and another request takes it to make Lead main again.
+  let rows=agentRows(ads);
+  const base=session().db;
+  const db={rpc:async(name,args)=>name==='company_app_agents'?{data:rows,error:null}:base.rpc(name,args)};
+  const takenOver={read:async connection=>{ const listed=await readRoutines(connection); leases.set(company,{holder:'other',live:true,profiles:[]}); rows=agentRows(lead); return listed; }};
+  const before=writes(fake).length;
+  const answer=await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,agents:agentRows(lead),hermes:install(fake),driver:takenOver,fence}));
+  assert.equal(answer.state,'busy');
+  assert.equal(writes(fake).length,before,'not one request: the stale move cannot reach what the other holder now settles');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['scheduled']);
+ } finally { await fake.close(); leases.clear(); }
+});
+
+test('a lost move cleans up only holding the lease again, so no change of the main Agent runs between its re-read and its pause', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const {db}=session({agents:agentRows(ads)});
+  const {pauseRoutine}=await import('../lib/hermes.mjs');
+  let secondTook=null;
+  const driver={
+   // The lease runs out while the move reads, with nobody taking it.
+   read:async connection=>{ const listed=await readRoutines(connection); leases.get(company).live=false; return listed; },
+   // While the safety pause is on its way, another request tries to take the lease to change the main Agent.
+   pause:async(connection,routine)=>{ secondTook=(await db.rpc('take_morning_lease',{c:company,holder:'second'})).data; return pauseRoutine(connection,routine); },
+  };
+  const answer=await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,agents:agentRows(lead),hermes:install(fake),driver,fence}));
+  assert.equal(answer.state,'busy');
+  assert.equal(secondTook,false,'the cleanup holds the lease, so the other request waits');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused']);
+ } finally { await fake.close(); leases.clear(); }
+});
