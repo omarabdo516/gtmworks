@@ -1,7 +1,6 @@
 import { test, expect, freshSeed } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import type { Browser } from '@playwright/test';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
 
@@ -11,17 +10,14 @@ const general='/c/rs-learning/channels/69000000-0000-0000-0000-000000000001';
 const contributor='20000000-0000-0000-0000-000000000003';
 const company='10000000-0000-0000-0000-000000000001';
 let fake:Awaited<ReturnType<typeof laneHermes>>;
-
-// Another seeded person signed in on a context of their own, as team-channels.spec.ts does.
-async function as(browser:Browser,email:string,path:string) {
- const context=await browser.newContext(); const page=await context.newPage();
- await signIn(page,email,path);
- return {page,close:()=>context.close()};
-}
+// #151's cases below share the main Agent they attach, the channel it answers in and the Card that channel puts on the board.
+let lead='', channel='', cardId='';
 
 test.describe.configure({mode:'serial'});
-test.beforeAll(async({},testInfo)=>{ freshSeed(testInfo.file); fake=await laneHermes(); });
-test.afterAll(async()=>{ await fake?.close(); });
+// A retry, or a repeat, of this serial file starts from the seed again: every case builds on the ones before it, and a
+// run that failed half way must leave nothing behind, such as #151's channel in the sidebar of the first case (#450).
+test.beforeAll(async({},testInfo)=>{ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0); fake=await laneHermes(); });
+test.afterAll(async()=>{ await fake?.close(); if(lead) query(`delete from public.hermes_agents where id='${lead}'`); });
 
 test('a Member opens the general channel, reads that an Agent replies only when called, and posts a message that starts no Run',async({page})=>{
  await signIn(page,'reviewer@example.com','/c/rs-learning/home');
@@ -165,32 +161,32 @@ test('a Member mentioned in a channel finds it under "Mentions of you", and pres
 // for the channel; the channel's details show "On the board" and its top corner the pill; a second call makes no second
 // Card; and the Card's sheet shows the channel under Chat to its members (a Viewer reads it, a writer writes) and the
 // lock to a Member outside it. The database rules per Role are in supabase/tests/channel_card.sql.
-test('a channel\'s first Agent call puts one Card on the board, and its sheet shows the channel to its members and the lock to a Member outside it',async({page,browser})=>{
+// Five cases in order, one per person's view, sharing the channel and its Card (#450): one case held three sign-ins, two
+// sheets and a dozen database calls and ran up to its whole 60 seconds on a busy CI runner.
+test('a channel\'s first Agent call puts one Card under In progress, which the channel\'s pill and details name and open on the board',async({page})=>{
  const key=randomUUID();
- // The seed starts no Agent: this channel's main one is attached here, as an Owner's attachment makes it (#147). A retry
- // of this file clears its own before adding another, since a Company keeps exactly one main Agent.
- query(`delete from public.hermes_agents where company_id='${company}' and is_default`);
- const lead=randomUUID();
- query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default) values ('${lead}','${company}','${randomUUID()}','Lead','Runs the launch.','fake-${lead.slice(0,8)}',true)`);
- query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${lead}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
- query(`do $$ declare ch uuid; msg bigint; agent uuid; begin
-  select id into agent from public.hermes_agents where company_id='${company}' and is_default order by id limit 1;
+ // The seed starts no Agent: this channel's main one is attached here, as an Owner's attachment makes it (#147).
+ lead=randomUUID();
+ query(`do $$ declare ch uuid; msg bigint; begin
+  insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,is_default) values ('${lead}','${company}','${randomUUID()}','Lead','Runs the launch.','fake-${lead.slice(0,8)}',true);
+  insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${lead}' from public.members where company_id='${company}' and removed_at is null and role<>'owner';
   insert into public.channels(company_id,kind,name,created_by,create_key) values('${company}','team','Board week','${contributor}','${key}') returning id into ch;
   insert into public.channel_people(channel_id,company_id,person_id)
    values(ch,'${company}','${contributor}'),(ch,'${company}','20000000-0000-0000-0000-000000000004');
   insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key)
    values('${company}',ch,'person','${contributor}','مراجع','@Lead plan the week','${randomUUID()}') returning id into msg;
   insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input)
-   values(msg,'${company}',ch,agent,(select name from public.hermes_agents where id=agent),gen_random_uuid(),'مراجع: @Lead plan the week');
+   values(msg,'${company}',ch,'${lead}','Lead',gen_random_uuid(),'مراجع: @Lead plan the week');
   perform public.close_channel_run(msg,null,'completed','Here is the plan.',null,null);
  end $$;`);
- const channel=String(rows(`select id from public.channels where create_key='${key}'`)[0].id);
- const card=rows(`select id,title from public.work_cards where channel_id='${channel}'`);
- expect(card).toHaveLength(1);
- expect(card[0].title).toBe('Board week');
- expect(rows(`select count(*)::int n from public.company_log where action='channel_card_added' and card_id=${card[0].id}`)[0].n).toBe(1);
- expect(rows(`select count(*)::int n from public.channel_notes where kind='card' and card_id=${card[0].id}`)[0].n).toBe(1);
- const cardId=String(card[0].id);
+ const made=rows(`select c.id channel,w.id card,w.title,
+   (select count(*)::int from public.work_cards x where x.channel_id=c.id) cards,
+   (select count(*)::int from public.company_log l where l.action='channel_card_added' and l.card_id=w.id) logged,
+   (select count(*)::int from public.channel_notes n where n.kind='card' and n.card_id=w.id) notes
+  from public.channels c left join public.work_cards w on w.channel_id=c.id where c.create_key='${key}'`);
+ expect(made).toHaveLength(1);
+ expect(made[0]).toMatchObject({title:'Board week',cards:1,logged:1,notes:1});
+ channel=String(made[0].channel); cardId=String(made[0].card);
 
  // The Member who called the Agent reads the pill and the section, and the Card on the board at its foot "Channel".
  await signIn(page,'reviewer@example.com',`/c/rs-learning/channels/${channel}`);
@@ -207,9 +203,10 @@ test('a channel\'s first Agent call puts one Card on the board, and its sheet sh
  await expect(page.locator(`.kcard[data-card-id="${cardId}"] a`).first()).toBeFocused();
  await expect(page.locator(`.kcard[data-card-id="${cardId}"]`)).toBeInViewport();
  await expect(page.locator(`.kcard[data-card-id="${cardId}"] .kcard__job`)).toContainText('Channel');
+});
 
- // The Card's sheet, as a Member of the channel: the channel under Chat, and a message written there saves.
- await page.goto(`/c/rs-learning/work/board?card=${cardId}`);
+test('the channel\'s Card\'s sheet shows the channel under Chat to its Member, and a message written there saves',async({page})=>{
+ await signIn(page,'reviewer@example.com',`/c/rs-learning/work/board?card=${cardId}`);
  const sheet=page.getByRole('dialog',{name:'Board week'});
  await expect(sheet.getByRole('tab',{name:'Chat'})).toHaveAttribute('aria-selected','true');
  await expect(sheet.locator('.sheet__meta')).toContainText('Channel #Board week');
@@ -218,40 +215,37 @@ test('a channel\'s first Agent call puts one Card on the board, and its sheet sh
  const box=sheet.getByRole('textbox',{name:'Write your message in the channel'});
  await box.fill('Morning, team'); await box.press('Enter');
  await expect.poll(()=>rows(`select count(*)::int n from public.channel_messages where channel_id='${channel}' and body='Morning, team'`)[0].n).toBe(1);
+});
 
- // A second call makes no second Card, and a second Agent that answers joins "Worked on it:".
- query(`do $$ declare msg bigint; agent uuid; begin
-  select id into agent from public.hermes_agents where company_id='${company}' and is_default order by id limit 1;
+test('a second Agent call in the channel makes no second Card',()=>{
+ query(`do $$ declare msg bigint; begin
   insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key)
    values('${company}','${channel}','person','${contributor}','مراجع','@Lead one more thing','${randomUUID()}') returning id into msg;
   insert into public.channel_runs(message_id,company_id,channel_id,agent_id,agent_name,session,input)
-   values(msg,'${company}','${channel}',agent,(select name from public.hermes_agents where id=agent),gen_random_uuid(),'مراجع: @Lead one more thing');
+   values(msg,'${company}','${channel}','${lead}','Lead',gen_random_uuid(),'مراجع: @Lead one more thing');
   perform public.close_channel_run(msg,null,'completed','And another line.',null,null);
  end $$;`);
  expect(rows(`select count(*)::int n from public.work_cards where channel_id='${channel}'`)[0].n).toBe(1);
+});
 
- // A Viewer in the channel reads the pill, the section and the channel in the sheet, and writes nothing.
- const viewer=await as(browser,'viewer@example.com',`/c/rs-learning/channels/${channel}`);
- try {
-  await expect(viewer.page.locator('.chat__corner .corner-pill')).toBeVisible();
-  await expect(viewer.page.locator('#details')).toContainText('On the board');
-  await viewer.page.goto(`/c/rs-learning/work/board?card=${cardId}`);
-  const seen=viewer.page.getByRole('dialog',{name:'Board week'});
-  await expect(seen.getByRole('tab',{name:'Chat'})).toHaveAttribute('aria-selected','true');
-  await expect(seen.getByText('Here is the plan.')).toBeVisible();
-  await expect(seen.getByRole('textbox',{name:'Write your message in the channel'})).toHaveCount(0);
- } finally { await viewer.close(); }
+test('a Viewer in the channel reads its Card\'s pill, section and sheet, and writes nothing',async({page})=>{
+ await signIn(page,'viewer@example.com',`/c/rs-learning/channels/${channel}`);
+ await expect(page.locator('.chat__corner .corner-pill')).toBeVisible();
+ await expect(page.locator('#details')).toContainText('On the board');
+ await page.goto(`/c/rs-learning/work/board?card=${cardId}`);
+ const seen=page.getByRole('dialog',{name:'Board week'});
+ await expect(seen.getByRole('tab',{name:'Chat'})).toHaveAttribute('aria-selected','true');
+ await expect(seen.getByText('Here is the plan.')).toBeVisible();
+ await expect(seen.getByRole('textbox',{name:'Write your message in the channel'})).toHaveCount(0);
+});
 
- // The Owner is not in the channel: the Card opens on its log, and its Chat tab is a lock with no message of the channel.
- const owner=await as(browser,'omar@example.com',`/c/rs-learning/work/board?card=${cardId}`);
- try {
-  const locked=owner.page.getByRole('dialog',{name:'Board week'});
-  await expect(locked.getByRole('tab',{name:/^Log/})).toHaveAttribute('aria-selected','true');
-  await locked.getByRole('tab',{name:'Chat'}).click();
-  await expect(locked.getByRole('heading',{name:'#Board week'})).toBeVisible();
-  await expect(locked.getByText('This card came from a channel. Its members read and write there; you can read the card’s log.')).toBeVisible();
-  await expect(locked.getByText('Here is the plan.')).toHaveCount(0);
-  await expect(locked.getByRole('textbox')).toHaveCount(0);
- } finally { await owner.close(); }
- query(`delete from public.hermes_agents where id='${lead}'`);
+test('the Owner outside the channel opens its Card on the Log, and its Chat tab is a lock with no message of the channel',async({page})=>{
+ await signIn(page,'omar@example.com',`/c/rs-learning/work/board?card=${cardId}`);
+ const locked=page.getByRole('dialog',{name:'Board week'});
+ await expect(locked.getByRole('tab',{name:/^Log/})).toHaveAttribute('aria-selected','true');
+ await locked.getByRole('tab',{name:'Chat'}).click();
+ await expect(locked.getByRole('heading',{name:'#Board week'})).toBeVisible();
+ await expect(locked.getByText('This card came from a channel. Its members read and write there; you can read the card’s log.')).toBeVisible();
+ await expect(locked.getByText('Here is the plan.')).toHaveCount(0);
+ await expect(locked.getByRole('textbox')).toHaveCount(0);
 });

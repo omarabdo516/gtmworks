@@ -6,6 +6,6 @@ export type AgentSkills={state:'found'|'missing'|'refused'|'unreachable'|'failed
 type Refusal='invalid'|'notOwn'|'shared'|'essential'|'notAllowed'|'secret'|'noEngine'|'refused'|'unreachable'|'failed';
 export function readCompanySkills(db:SupabaseClient,request:{company:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<SkillAgent[]|null>;
 export function readAgentSkills(db:SupabaseClient,request:{company:string,agent:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<AgentSkills|null>;
-export function changeCompanySkill(db:SupabaseClient,request:{company:string,agent:unknown,content:unknown,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{state:'written'|Refusal,name:string|null}>;
-export function changeCompanySkillEnabled(db:SupabaseClient,request:{company:string,agent:unknown,name:unknown,enabled:unknown,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{state:'changed'|Refusal,name:string|null}>;
+export function changeCompanySkill(db:SupabaseClient,request:{company:string,agent:unknown,content:unknown,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{state:'written'|Refusal,name:string|null,logPending?:true}>;
+export function changeCompanySkillEnabled(db:SupabaseClient,request:{company:string,agent:unknown,name:unknown,enabled:unknown,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{state:'changed'|Refusal,name:string|null,logPending?:true}>;
 export const skillProblems:Record<'invalid'|'shared'|'notOwn'|'notAllowed'|'secret',string>;
