@@ -97,6 +97,9 @@ export const screens = {
   // One Agent's page: Lead's settings inside the overlay. Built: the comparison fixture's main Agent, Lead (the seed
   // alone has no Agent with that id, so without the fixture the overlay shows the Agents list).
   agent: { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-lead' }, { waitFor: '#sov-tab-settings' }] }, builtPath: `/c/rs-learning/settings?agent=${fixture.mainAgent}` },
+  // #178. Settings, Agents, Analyst: the note under its tabs while Lead's proposed model for it waits for the Owner
+  // (the reference's chg-analyst). Built: the comparison fixture's Analyst, with the same proposal (#19).
+  'agent-proposal': { reference: { steps: [...settingsSection('agents'), { click: '#sov-ag-analyst' }, { waitFor: '.sov-pend' }] }, builtPath: '/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000004' },
   // #30. Settings, Apps: the reference draws its app catalogue there; built, the apps the Engine offers the Company.
   apps: { reference: { steps: [...settingsSection('apps'), { waitFor: '#sov-apps .app-card' }] }, builtPath: '/c/rs-learning/settings?section=apps' },
   account: { reference: { steps: settingsSection('account') }, builtPath: '/c/rs-learning/settings?section=account' },
