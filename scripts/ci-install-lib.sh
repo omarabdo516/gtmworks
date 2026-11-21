@@ -12,11 +12,17 @@ fail_update() { cat update.log >&2; fail "$1"; }
 # one set: the trap prints a fixed-field summary of the web and gateway logs (never log text) while the install still
 # exists, and keeps the status. The job's last step removes the Docker machine; the update area turns the summary off,
 # as the release and one-line steps never printed it.
+# The rollback area's failing migration leaves the checkout. An update unpacks its source as root, so the folder may be
+# root's by then and the file goes through a container.
+remove_failing_migration() {
+  rm -f supabase/migrations/99999999999999_failure.sql 2> /dev/null \
+    || docker run --rm -v "$PWD/supabase/migrations:/migrations" alpine:3.21 rm -f /migrations/99999999999999_failure.sql
+}
 area_setup() {
   fail_prefix='install check failed: '
   # The rollback area's failing migration stays in the checkout when that area stops on a failed check: no later area
   # in the same checkout (./ci.sh install, all of them) applies it.
-  rm -f supabase/migrations/99999999999999_failure.sql
+  remove_failing_migration
   trap 'status=$?; if [ "$status" -ne 0 ]; then bash scripts/install-diagnostics.sh || true; fi; exit "$status"' EXIT
 }
 # The install's own Compose project and its database (docker-compose.install.yml).

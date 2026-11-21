@@ -22,6 +22,8 @@ test('CI prints the captured update log on every failed-update assertion', t => 
  // failed-update block itself.
  const lines=step.run.split('\n');
  const definitions=lines.filter(line=>/^fail\(\) \{|^fail_update\(\) \{/.test(line));
+ // The block removes the failing migration with the lib's own function, which this fixture states the same way.
+ definitions.push('remove_failing_migration() { rm -f supabase/migrations/99999999999999_failure.sql; }');
  const start=lines.findIndex(line=>line.startsWith('if sh scripts/install.sh update'));
  // The block is the rollback area's end (#389): it closes at that function's own brace.
  const end=lines.findIndex((line,index)=>index>start&&line==='}');
@@ -563,8 +565,8 @@ test('the install job leaves the successful update to issue 52 and keeps the fai
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  assert.doesNotMatch(run,/update-gateway\.log|old_gateway|sed -i '\/X-Real-IP\/d'/);
  assert.equal([...run.matchAll(/sh scripts\/install\.sh update /g)].length,1,'only the failed update runs');
- for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then rm -f supabase/migrations/99999999999999_failure.sql; fail_update 'update must fail'; fi",
-  "fi\nrm -f supabase/migrations/99999999999999_failure.sql\n",
+ for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then remove_failing_migration; fail_update 'update must fail'; fi",
+  "fi\nremove_failing_migration\n",
   "grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log","[[ $(compose ps -q web) == \"$old_web\" ]] || fail_update 'old web container still serving'",
   "to_regclass('public.update_should_rollback') is null","fail_update 'old version healthy after failed update'"]) assert.ok(run.includes(text),text);
 });

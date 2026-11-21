@@ -1085,8 +1085,8 @@ old_web=$(compose ps -q web)
 cp scripts/install-failing-migration.sql supabase/migrations/99999999999999_failure.sql
 # The failing migration leaves the checkout as soon as the update tried it, failed or not, so no later area in it meets
 # the fixture.
-if sh scripts/install.sh update "$INSTALL_REF" > update.log 2>&1; then rm -f supabase/migrations/99999999999999_failure.sql; fail_update 'update must fail'; fi
-rm -f supabase/migrations/99999999999999_failure.sql
+if sh scripts/install.sh update "$INSTALL_REF" > update.log 2>&1; then remove_failing_migration; fail_update 'update must fail'; fi
+remove_failing_migration
 grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_update 'failed migration name'
 [[ $(compose ps -q web) == "$old_web" ]] || fail_update 'old web container still serving'
 [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail_update 'migration transaction rolled back'
@@ -1926,6 +1926,7 @@ DOCKERFILE
 broken_sandbox=$(publish_sandbox 0.0.3-broken) || fail 'push the work sandbox image that does not start'
 node scripts/release-assets.mjs "$first" release-broken-sandbox "$broken_sandbox" || fail 'the release files whose work sandbox does not start'
 # A release whose Engine does not start: this release with an Engine image that holds no Hermes.
+docker image inspect alpine:3.21 > /dev/null 2>&1 || docker pull -q alpine:3.21 > /dev/null || fail 'pull the image the Engine that does not start is made of'
 docker tag alpine:3.21 gtmworks-engine-broken:0.0.4 || fail 'tag an Engine image that does not start'
 docker build -q -t localhost:5000/gtmworks:0.0.4-broken-engine - > /dev/null <<'DOCKERFILE' || fail 'build the release whose Engine does not start'
 FROM localhost:5000/gtmworks:0.0.0-ci
