@@ -74,32 +74,56 @@ test('a carried Card leans with the pointer and settles back, scrolls the column
  expect(await columnOf(page,id)).toBe('ideas');
 });
 
+// Watches the carried Card from the page itself, so a slow runner cannot miss a flight of 230ms: from the next key press
+// or mouse release, two frames later it reads the copy's transition and whether the Card's place is dimmed, then times
+// how long the copy stays in the page. Started before the press; `flight` reads what it saw.
+const watchFlight=(page:Page,id:number)=>page.evaluate(id=>{
+ (window as unknown as {flight:Promise<unknown>}).flight=new Promise(done=>{
+  const start=()=>{ window.removeEventListener('keydown',start,true); window.removeEventListener('mouseup',start,true); const at=performance.now();
+   const frame=()=>new Promise(next=>requestAnimationFrame(next));
+   void frame().then(frame).then(()=>{
+    const copy=document.querySelector<HTMLElement>('.kcard--ghost'); const style=copy&&getComputedStyle(copy);
+    const seen={transition:style?{property:style.transitionProperty,duration:style.transitionDuration,easing:style.transitionTimingFunction}:null,dimmed:!!document.querySelector(`#board-cols .kcard[data-card-id="${id}"]`)?.classList.contains('is-drag-src')};
+    const gone=()=>{ if(document.querySelector('.kcard--ghost')) { requestAnimationFrame(gone); return; } done({...seen,ms:Math.round(performance.now()-at),dimmedAfter:!!document.querySelector(`#board-cols .kcard[data-card-id="${id}"]`)?.classList.contains('is-drag-src')}); };
+    gone();
+   });
+  };
+  window.addEventListener('keydown',start,true); window.addEventListener('mouseup',start,true);
+ });
+},id);
+const flight=(page:Page)=>page.evaluate(()=>(window as unknown as {flight:Promise<{transition:{property:string,duration:string,easing:string}|null,dimmed:boolean,ms:number,dimmedAfter:boolean}>}).flight);
+
 test('a Card cancelled with Escape or let go on its own place flies back over 220ms, dimmed in its place until it arrives, and moves nothing',async({page})=>{
  const id=cardIn('Fly back','أفكار');
  const logged=logRows(id);
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const flying={transition:{property:'transform',duration:'0.22s',easing:'cubic-bezier(0.2, 0, 0, 1)'},dimmed:true};
  const at=await pickUp(page,id);
  await page.mouse.move(at.x+200,at.y+40,{steps:6});
+ // Escape: still in the page, on its way back with the reference's transition, its place dimmed until it arrives.
+ await watchFlight(page,id);
  await page.keyboard.press('Escape');
- // Still in the page, on its way back with the reference's transition, its place still dimmed.
- const flying=await ghost(page).evaluate(el=>{ const style=getComputedStyle(el); return {property:style.transitionProperty,duration:style.transitionDuration,easing:style.transitionTimingFunction}; });
- expect(flying).toEqual({property:'transform',duration:'0.22s',easing:'cubic-bezier(0.2, 0, 0, 1)'});
- await expect(card(page,id)).toHaveClass(/is-drag-src/);
- await expect(ghost(page)).toHaveCount(0);
- await expect(card(page,id)).not.toHaveClass(/is-drag-src/);
+ const cancelled=await flight(page);
+ expect(cancelled).toMatchObject(flying);
+ expect(cancelled.ms).toBeGreaterThanOrEqual(200);
  await page.mouse.up();
+ await expect(card(page,id)).not.toHaveClass(/is-drag-src/);
  // Let go where it already stands: it flies back the same way.
  const again=await pickUp(page,id);
  await page.mouse.move(again.x+4,again.y+2,{steps:2});
+ await watchFlight(page,id);
  await page.mouse.up();
- await expect(ghost(page)).toHaveCount(1);
- await expect(ghost(page)).toHaveCount(0);
+ const dropped=await flight(page);
+ expect(dropped).toMatchObject(flying);
+ expect(dropped.ms).toBeGreaterThanOrEqual(200);
+ await expect(card(page,id)).not.toHaveClass(/is-drag-src/);
  // With reduced motion it is gone in the next frame.
  await page.emulateMedia({reducedMotion:'reduce'});
  const still=await pickUp(page,id);
  await page.mouse.move(still.x+200,still.y+40,{steps:6});
+ await watchFlight(page,id);
  await page.keyboard.press('Escape');
- expect(await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>done(document.querySelectorAll('.kcard--ghost').length))))).toBe(0);
+ expect(await flight(page)).toMatchObject({transition:null,dimmed:false});
  await page.mouse.up();
  await page.reload();
  expect(await columnOf(page,id)).toBe('ideas');
