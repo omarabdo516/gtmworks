@@ -55,7 +55,7 @@ export function land(el:HTMLElement|null,from:{left:number,top:number}|null=null
  window.setTimeout(()=>{ el.style.transition=''; el.classList.remove('is-landing'); },380);
 }
 
-export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,children}:{label:string,busy:boolean,cards:{id:number,title:string,column:string}[],columnName:(column:string)=>string,onMove:(card:number,column:string,before:number|null,from:{left:number,top:number}|null)=>Promise<boolean>|boolean,renderOverlay:(id:number)=>ReactNode,children:ReactNode}) {
+export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,children}:{label:string,busy:boolean,cards:{id:number,title:string,column:string}[],columnName:(column:string)=>string,onMove:(card:number,column:string,before:number|null,from:{left:number,top:number}|true)=>Promise<boolean>|boolean,renderOverlay:(id:number)=>ReactNode,children:ReactNode}) {
  const {t}=useI18n();
  const [activeId,setActiveId]=useState<number|null>(null);
  const [place,setPlace]=useState<DropPlace>(nowhere);
@@ -117,7 +117,7 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
     tilt=reduced||lastX===null?0:Math.max(-6,Math.min(6,tilt*0.6+(at.x-lastX)*0.45)); lastX=at.x;
     document.querySelector<HTMLElement>('.kcard--ghost')?.style.setProperty('--gw-tilt',`${tilt.toFixed(2)}deg`);
     const scroller=document.getElementById('board-cols');
-    if(scroller) { const box=scroller.getBoundingClientRect(); const by=at.x<box.left+edge?-12:at.x>box.right-edge?12:0; if(by) scroller.scrollLeft+=by; }
+    if(scroller) { const box=scroller.getBoundingClientRect(); const by=at.y<box.top||at.y>box.bottom?0:at.x<box.left+edge?-12:at.x>box.right-edge?12:0; if(by) scroller.scrollLeft+=by; }
    }
    frame=requestAnimationFrame(step);
   };
@@ -138,7 +138,9 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
  const putAway=()=>{ swallowUntil.current=performance.now()+60; carrying.current=null; dropped.current=nowhere; shown.current=nowhere; setActiveId(null); setPlace(nowhere); };
  // A Card let go over nothing, over its own place, or cancelled with Escape flies back to its place over 220ms and is
  // removed when it arrives; with reduced motion it is gone at once. A Card that moves is removed at once and lands.
- const returnHome=(id:number)=>{ if(prefersReducedMotion()) return; flyBack.current=id; setReturning(id); };
+ // dnd-kit skips the drop animation when it cannot measure the Card's place (a refresh drew it away), so the dimmed
+ // place is also cleared after the flight's own time.
+ const returnHome=(id:number)=>{ if(prefersReducedMotion()) return; flyBack.current=id; setReturning(id); window.setTimeout(()=>{ if(flyBack.current===id) flyBack.current=null; setReturning(current=>current===id?null:current); },300); };
  const dropAnimation=({active,dragOverlay}:{active:{rect:{left:number,top:number}},dragOverlay:{node:HTMLElement}})=>{
   const id=flyBack.current; flyBack.current=null;
   const ghost=dragOverlay.node.querySelector<HTMLElement>('.kcard--ghost');
@@ -148,7 +150,7 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   ghost.style.transform=`translate(${active.rect.left-from.left}px, ${active.rect.top-from.top}px)`;
   return new Promise<void>(done=>window.setTimeout(()=>{ setReturning(current=>current===id?null:current); done(); },230));
  };
- return <DndContext id="work-board" sensors={sensors} autoScroll={{canScroll}} onDragStart={({active})=>{ carrying.current=Number(active.id); setActiveId(Number(active.id)); }} onDragCancel={({active})=>{ returnHome(Number(active.id)); putAway(); }} onDragEnd={({active,over})=>{
+ return <DndContext id="work-board" sensors={sensors} autoScroll={{canScroll}} onDragStart={({active})=>{ flyBack.current=null; setReturning(null); carrying.current=Number(active.id); setActiveId(Number(active.id)); }} onDragCancel={({active})=>{ returnHome(Number(active.id)); putAway(); }} onDragEnd={({active,over})=>{
   const id=Number(active.id); const card=cards.find(item=>item.id===id); const was=active.rect.current.translated;
   // The place under the pointer now, not the one the last pointer move named: a column or the board may have scrolled
   // since, moving the Cards under a resting finger (design-reference: dragEnd's card under the pointer).
@@ -159,7 +161,7 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   if(!placeChanges(cards.filter(item=>item.column===at.column).map(item=>item.id),id,at.before)) { returnHome(id); return; }
   // The page lands the Card from where it was let go once the server took the place and the Card is drawn there: a
   // refused move stays where it is, with no motion to say it went.
-  void onMove(id,at.column,at.before,was?{left:was.left,top:was.top}:null);
+  void onMove(id,at.column,at.before,was?{left:was.left,top:was.top}:true);
  }} accessibility={{screenReaderInstructions:{draggable:t('boardDragHint')},announcements:{onDragStart:({active})=>t('dragStarted',cards.find(card=>card.id===Number(active.id))?.title),onDragOver:({over})=>over?t('dragOver',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragEnd:({over})=>over?t('dragEnded',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragCancel:()=>t('dragCancelled')}}}>
   <DropMark.Provider value={{place,carrying:activeId!==null,returning}}>
    <div className={`board board-cols${entering?' board--enter':''}`} id="board-cols" aria-label={label} aria-busy={busy}>{children}</div>

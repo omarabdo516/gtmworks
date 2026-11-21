@@ -55,7 +55,7 @@ const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boa
 export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
  const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
- const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
+ const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
  const base=`/c/${p.slug}/work`; const card=p.cards.find(c=>c.id===p.cardId); const shown=p.cards.filter(c=>!project||String(c.project_id)===project); const visible=shown.filter(c=>!month||!c.go_live||c.go_live.slice(0,7)===month); const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="company" value={p.company}/></>;
  if(card&&composing) setComposing(false);
  // A card made from a message is marked with its mode, in the colour of the agent it was sent to.
@@ -100,8 +100,11 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // lands in its old column with the reference's short motion (design-reference: undoMove's focus and land).
  useEffect(()=>{ const {id,column,landing,smooth,before}=focusCard.current; if(!id) return; const link=document.querySelector<HTMLElement>(`#board-cols [data-column="${column}"] .kcard[data-card-id="${id}"] a`); if(!link) return;
   // A place inside one column waits until the Card is drawn above the Card it was put before.
-  if(before!==undefined) { const order=[...document.querySelectorAll<HTMLElement>(`#board-cols [data-column="${column}"] .kcard[data-card-id]`)].map(el=>Number(el.dataset.cardId)); if((order[order.indexOf(id)+1]??null)!==before) return; }
-  link.focus({preventScroll:true}); link.scrollIntoView({block:'nearest',inline:'nearest',behavior:smooth&&!prefersReducedMotion()?'smooth':'auto'}); if(landing) land(link.closest('.kcard'),typeof landing==='object'?landing:null); focusCard.current={id:0,column:''}; });
+  // Another change to the column can leave it in another order: after two seconds the keyboard goes to the Card anyway,
+  // with no landing.
+  let lands=landing;
+  if(before!==undefined) { const order=[...document.querySelectorAll<HTMLElement>(`#board-cols [data-column="${column}"] .kcard[data-card-id]`)].map(el=>Number(el.dataset.cardId)); if((order[order.indexOf(id)+1]??null)!==before) { if(performance.now()-(focusCard.current.since??0)<2000) return; lands=false; } }
+  link.focus({preventScroll:true}); link.scrollIntoView({block:'nearest',inline:'nearest',behavior:smooth&&!prefersReducedMotion()?'smooth':'auto'}); if(lands) land(link.closest('.kcard'),typeof lands==='object'?lands:null); focusCard.current={id:0,column:''}; });
  // The Inbox opens the board on "Waiting on you".
  // While an Agent called in a note is still working, the Card reads itself again so its reply shows when it lands (#22).
  const agentWorking=!!p.notes?.runs.some(run=>!run.outcome);
@@ -131,7 +134,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  };
  // A move lands the Card once the server took its place and it is drawn there (#131): from where it was let go after a
  // drop, from 6px above after a key, with the board scrolling to it smoothly.
- const move=(id:number,to:string,before:number|null=null,letGo:{left:number,top:number}|null=null,byKeys=false):Promise<boolean>=>{
+ const move=(id:number,to:string,before:number|null=null,letGo:{left:number,top:number}|true|null=null,byKeys=false):Promise<boolean>=>{
   const c=p.cards.find(x=>x.id===id); if(!c||!p.canCreate) return Promise.resolve(false);
   const from=columnOfCard(c);
   // "Waiting on you" keeps its own order, newest first, and takes no place by hand (ADR 0013).
@@ -148,7 +151,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    if('error' in result) { setPlaceError(result.error); focusCard.current={id:0,column:''}; return false; }
    // A move to another column is told with "Undo" for six seconds; a place inside one column says nothing.
    if(to!==from) toast(t('boardMoved',columnName(to)),{action:{label:t('boardUndo'),run:()=>undo(id)}});
-   focusCard.current={id,column:to,landing:letGo??byKeys,smooth:byKeys,...(to===from?{before}:{})};
+   focusCard.current={id,column:to,landing:letGo??byKeys,smooth:byKeys,since:performance.now(),...(to===from?{before}:{})};
    return true;
   },()=>{ setPlaceError(t('couldNotSaveTheChangeCheckPermissionsAnd')); focusCard.current={id:0,column:''}; return false; }).finally(()=>setMoving(false));
  };

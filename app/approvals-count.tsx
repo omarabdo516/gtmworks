@@ -19,5 +19,5 @@ function Counted({count,...props}:Props&{count:Promise<number>}) {
 
 function Pill({slug,current,t,count}:Props&{count?:number}) {
  const [key,...values]=count===undefined?['approvals']:waitingLabel(count);
- return <CountPill href={`/c/${slug}/approvals`} current={current} label={t(key,...values)} count={count}/>;
+ return <CountPill key={slug} href={`/c/${slug}/approvals`} current={current} label={t(key,...values)} count={count}/>;
 }
