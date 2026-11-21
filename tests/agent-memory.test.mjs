@@ -8,7 +8,7 @@ import { editMemoryNote, forgetMemoryNote, readMemoryNotes, resetMemory } from '
 import { editAgentMemory, forgetAgentMemory, readAgentMemory, resetAgentMemory } from '../lib/agent-memory.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { heldChanges } from './held-changes.mjs';
-import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
+import { logHeldAgentChanges, madeAndLogged } from '../lib/agent-change-log.mjs';
 
 // An Agent's memory (#350) belongs to its own Hermes profile (ADR 0016, ADR 0017) and gtmworks keeps no copy: the
 // contract lists that profile's notes through the learning routes, which also hold skills, so no skill is ever listed
@@ -291,6 +291,18 @@ test('a reset, an edit and a forget whose log fails are still made, and each end
   const sent=JSON.stringify(late.changes.calls);
   for(const text of ['Only short subject lines.','Never mention prices before the offer.','Prefers short subject lines.']) assert.equal(sent.includes(text),false,'no log call carries a note');
  } finally { await fake.close(); }
+});
+
+test('a change the Engine refused is dropped even when the database takes the drop only after the answer, so no pass logs it', async () => {
+ const changes=heldChanges({failDrops:4});
+ const db={rpc:async(name,args)=>changes.rpc(name,args)};
+ const {data:held}=await db.rpc('hold_agent_change',{c:company,agent:ads,act:'memory_reset'});
+ assert.deepEqual(await madeAndLogged(db,held,'reset',async()=>({state:'refused'}),{waits:[1,1],laterWaits:[5,5]}),{state:'refused'},'the answer does not wait on the drop');
+ assert.equal(changes.held.size,1,'three drops the database did not take');
+ await new Promise(resolve=>setTimeout(resolve,50));
+ assert.equal(changes.held.size,0,'the drop is taken in the background');
+ assert.deepEqual(await logHeldAgentChanges(db),{logged:0});
+ assert.deepEqual(changes.logged,[]);
 });
 
 // #191/#350: the route's own answers, with its permission check and its store replaced and no server or database (as

@@ -19,7 +19,9 @@
 create table public.held_agent_changes (
  id uuid primary key default gen_random_uuid(),
  company_id uuid not null references public.companies(id),
- agent_id uuid not null references public.hermes_agents(id),
+ -- No reference to the Agent: an Agent removed while its change is held still gets that change's row, as the log keeps
+ -- rows of removed Agents, and the hold never stops the removal.
+ agent_id uuid not null,
  actor_id uuid not null,
  act text not null check (act in ('memory_reset','memory_edit','memory_forget','skill_written','skill_enabled','skill_disabled')),
  skill text check (skill ~ '^[a-z0-9][a-z0-9_-]{0,63}$'),
@@ -50,11 +52,16 @@ end $$;
 revoke all on function public.hold_agent_change(uuid,uuid,text,text,text,text) from public,anon,service_role;
 grant execute on function public.hold_agent_change(uuid,uuid,text,text,text,text) to authenticated;
 
--- One held record as its row of the Company log: who, the Agent, the act and a skill's name, nothing of a note.
+-- One held record as its row of the Company log: who, the Agent, the act and a skill's name, nothing of a note. The row
+-- is dated when the change was held, a moment before the Engine made it, so one the worker's pass logs late still reads
+-- in its place in the log. The row is the one log_agent_event writes, with that time.
 create function public.log_held_change(held public.held_agent_changes) returns void
 language sql security definer set search_path='' as $$
- select public.log_agent_event(held.company_id,held.actor_id,null,held.agent_id,held.act,
-  case when held.skill is null then '{}'::jsonb else jsonb_build_object('skill',held.skill) end);
+ insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
+  values(held.company_id,held.actor_id,public.log_actor_kind(held.company_id,held.actor_id),(select name from public.people where id=held.actor_id),
+   'agent',held.agent_id,public.log_agent_action(held.act),
+   jsonb_strip_nulls(jsonb_build_object('agent_name',(select name from public.hermes_agents where id=held.agent_id),'skill',held.skill)),
+   'hermes_agent_audit',nextval('public.agent_log_ids'),held.held_at);
 $$;
 revoke all on function public.log_held_change(public.held_agent_changes) from public,anon,authenticated,service_role;
 
@@ -80,17 +87,22 @@ $$;
 revoke all on function public.drop_agent_change(uuid) from public,anon,service_role;
 grant execute on function public.drop_agent_change(uuid) to authenticated;
 
--- The worker's pass: every record held ten minutes or more is logged once and removed. Answers how many were logged.
+-- The worker's pass: every record held ten minutes or more is logged once and removed, each on its own, so one the log
+-- refuses stays held with a warning and never stops the others. Answers how many were logged.
 create function public.finish_held_agent_changes() returns integer
 language plpgsql security definer set search_path='' as $$
-declare held public.held_agent_changes; logged integer:=0;
+declare change uuid; held public.held_agent_changes; logged integer:=0;
 begin
- for held in delete from public.held_agent_changes h
-  where h.id in (select o.id from public.held_agent_changes o where o.held_at<=now()-interval '10 minutes' order by o.held_at limit 100 for update skip locked)
-  returning h.*
- loop
-  perform public.log_held_change(held);
-  logged:=logged+1;
+ for change in select o.id from public.held_agent_changes o where o.held_at<=now()-interval '10 minutes' order by o.held_at limit 100 loop
+  begin
+   delete from public.held_agent_changes h where h.id=change returning h.* into held;
+   if held.id is not null then
+    perform public.log_held_change(held);
+    logged:=logged+1;
+   end if;
+  exception when others then
+   raise warning 'held agent change % not logged: %',change,sqlerrm;
+  end;
  end loop;
  return logged;
 end $$;
