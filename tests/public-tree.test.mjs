@@ -107,7 +107,8 @@ test('no link to a private place', () => {
 
 test('no build-host detail outside the design reference', () => {
  // The Hermes address tests document private-range and tailnet literals on purpose: they prove such addresses are refused or allowed.
- const fixtures = new Set(['lib/hermes.mjs', 'tests/hermes-address.test.mjs', 'tests/fake-hermes.mjs']);
+ // So do the sandbox exit's rules, its test and the install proof's probes, which prove the exit refuses shared addresses (#394).
+ const fixtures = new Set(['lib/hermes.mjs', 'tests/hermes-address.test.mjs', 'tests/fake-hermes.mjs', 'sandbox/exit.py', 'tests/sandbox-exit.test.mjs', 'scripts/ci-install-check.sh']);
  const keep = path => outsideReference(path) && !fixtures.has(path);
  for (const pattern of [
   new RegExp(piece('/home/', 'omar')),

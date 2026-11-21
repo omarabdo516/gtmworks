@@ -81,13 +81,13 @@ remove_engine() {
     volume=$(engine_value "$folder" VOLUME)
     network=$(engine_value "$folder" NETWORK)
     slug=${name#gtmworks-engine-}
-    docker rm -f "$name" "gtmworks-sandbox-$slug" > /dev/null 2>&1 || true
+    docker rm -f "$name" "gtmworks-sandbox-$slug" "gtmworks-exit-$slug" > /dev/null 2>&1 || true
     docker volume rm "$volume" "gtmworks-work-$slug" "gtmworks-sandbox-hostkey-$slug" > /dev/null 2>&1 || true
-    docker network rm "$network" "gtmworks-work-$slug" > /dev/null 2>&1 || true
+    docker network rm "$network" "gtmworks-work-$slug" "gtmworks-exit-$slug" > /dev/null 2>&1 || true
   done
-  docker rm -f gtmworks-engine-first gtmworks-sandbox-first > /dev/null 2>&1 || true
+  docker rm -f gtmworks-engine-first gtmworks-sandbox-first gtmworks-exit-first > /dev/null 2>&1 || true
   docker volume rm gtmworks-install_hermes gtmworks-work-first gtmworks-sandbox-hostkey-first > /dev/null 2>&1 || true
-  docker network rm gtmworks-engine-first gtmworks-work-first > /dev/null 2>&1 || true
+  docker network rm gtmworks-engine-first gtmworks-work-first gtmworks-exit-first > /dev/null 2>&1 || true
   docker rm -f gtmworks-install-hermes-1 > /dev/null 2>&1 || true
   rm -rf .engines
 }
@@ -172,4 +172,16 @@ probe() {
     echo "http://127.0.0.1:3000$path $status"
     [[ $status == 200 ]] || fail "$path returned HTTP $status $1 (expected 200)"
   done
+}
+# One Engine's Company's exit (#394), derived from the Engine's container name as its sandbox is.
+exit_of() { printf '%s' "$1" | sed 's/^gtmworks-engine-/gtmworks-exit-/'; }
+# Every address a container has, on every network it joins, comma-separated.
+addresses_of() { docker inspect -f '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$1" | grep . | paste -sd, -; }
+# The sandbox exit proof (scripts/check-install-sandbox-exit.mjs) run inside a Company's sandbox the way an Agent's
+# command runs there: over the Engine's own ssh login, with the Engine's key and the host key its known_hosts pins, so the
+# environment it sees is the one every session of that Engine gets. The one argument is the proof's base64 JSON.
+sandbox_exit_probe() {
+  docker exec -i -u hermes "$1" ssh -i /opt/data/ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile=/opt/data/.ssh/known_hosts -o LogLevel=ERROR -p 2222 pn@sandbox \
+    node --input-type=module - "$2" < scripts/check-install-sandbox-exit.mjs
 }

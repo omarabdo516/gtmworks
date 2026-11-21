@@ -110,7 +110,7 @@ for service in web worker; do
   fi
 done
 # The first Company's work sandbox (#393): the image the install recorded, running and healthy, on the Company's own work
-# network, which is internal (no way out until #394's exit service joins it), with its work volume mounted at /work.
+# network, which is internal (its one way out is the exit below, #394), with its work volume mounted at /work.
 sandbox_id=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$') || fail 'the first sandbox container'
 [[ -n $sandbox_id ]] || fail 'the first sandbox container'
 [[ $(docker inspect -f '{{.Config.Image}}' "$sandbox_id") == "$(cat .work-sandbox-image)" ]] || fail 'the sandbox runs the image the install recorded'
@@ -126,8 +126,8 @@ docker run --rm --network gtmworks-engine-first -e INSTALL_SERVICE_IPS="$(instal
   || fail "the Engine network reaches no install service, by name or address, and trusts no forged address"
 # From the Company's work network, where its Agents' code runs, the install is unreachable too, and the Engine answers on
 # its install-network address only: it binds its listeners there and nowhere else (#390, #393).
-[[ $(docker network inspect gtmworks-work-first -f '{{range .Containers}}{{println .Name}}{{end}}' | grep . | sort) == $'gtmworks-engine-first\ngtmworks-sandbox-first' ]] \
-  || fail 'the work network holds exactly its Engine and its sandbox'
+[[ $(docker network inspect gtmworks-work-first -f '{{range .Containers}}{{println .Name}}{{end}}' | grep . | sort) == $'gtmworks-engine-first\ngtmworks-exit-first\ngtmworks-sandbox-first' ]] \
+  || fail 'the work network holds exactly its Engine, its sandbox and its exit'
 work_engine_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-work-first").IPAddress}}' "$engine_id")
 work_web_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-engine-first").IPAddress}}' "$(compose ps -q web)")
 docker run --rm --network gtmworks-work-first -e INSTALL_SERVICE_IPS="$(install_service_ips),web=$work_web_ip" -e ENGINE_WORK_IP="$work_engine_ip" \
@@ -138,6 +138,97 @@ docker run --rm --network gtmworks-work-first -e INSTALL_SERVICE_IPS="$(install_
 if docker ps -aq | xargs -r docker inspect -f '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' | grep -q 'docker.sock'; then
   fail 'no container of the install mounts the Docker socket'
 fi
+# The sandbox's one way out (#394): the Company's exit, made from the same template with the sandbox and from the same
+# image, is the only container on the work network with a network that routes out. It runs as the image's ordinary user
+# with no capability, no new privilege, no volume and no port, on its work network and its own outbound network only,
+# and it listens on the work network alone.
+exit_id=$(docker ps -q --filter 'name=^gtmworks-exit-first$') || fail 'the first exit container'
+[[ -n $exit_id ]] || fail 'the first exit container runs'
+[[ $(docker inspect -f '{{.Config.Image}}' "$exit_id") == "$(cat .work-sandbox-image)" ]] || fail 'the exit runs the work sandbox image, as the sandbox does'
+[[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$exit_id") == healthy ]] || fail 'the exit is healthy'
+[[ $(docker exec "$exit_id" id -u) == 1000 ]] || fail 'the exit runs as an ordinary user, never root'
+[[ $(docker inspect -f '{{join .HostConfig.CapDrop ","}}' "$exit_id") == ALL ]] || fail 'the exit drops every capability'
+[[ $(docker inspect -f '{{join .HostConfig.SecurityOpt ","}}' "$exit_id") == *no-new-privileges* ]] || fail 'the exit has no new privileges'
+[[ $(docker inspect -f '{{len .Mounts}} {{len .NetworkSettings.Ports}}' "$exit_id") == '0 0' ]] || fail 'the exit mounts nothing and publishes no port'
+[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$exit_id" | grep . | sort) == $'gtmworks-exit-first\ngtmworks-work-first' ]] \
+  || fail 'the exit joins the work network and its own outbound network only'
+[[ $(docker network inspect gtmworks-exit-first -f '{{.Internal}}') == false ]] || fail "the exit's own network routes out"
+[[ $(docker network inspect gtmworks-exit-first -f '{{range .Containers}}{{println .Name}}{{end}}' | grep . | sort) == gtmworks-exit-first ]] || fail "the exit's network holds the exit alone"
+[[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$sandbox_id" | grep . | sort) == gtmworks-work-first ]] || fail 'the sandbox joins its work network only'
+exit_outbound_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-exit-first").IPAddress}}' "$exit_id")
+docker run --rm --network gtmworks-exit-first node:22.14.0-alpine3.21 node -e "const s=require('net').connect(3128,'$exit_outbound_ip');s.setTimeout(3000,()=>process.exit(0));s.on('connect',()=>process.exit(1));s.on('error',()=>process.exit(0));" \
+  || fail 'the exit listens on the work network alone, never on the network that routes out'
+# A stand-in public host outside the install's networks: an address reserved for documentation, added to the Docker
+# machine itself, so the exit reaches it as it reaches the internet, out of its own network and through the machine. It
+# answers HTTP and HTTPS (its certificate made here, in the sandbox image's openssl, and trusted by no one) with a token,
+# and counts what reaches its raw TCP and UDP ports.
+standin=203.0.113.80
+docker run --rm --network host --cap-add NET_ADMIN node:22.14.0-alpine3.21 sh -c "ip addr add $standin/32 dev lo 2> /dev/null || ip addr show dev lo | grep -qF ' $standin/'" \
+  || fail 'add the stand-in public address to the Docker machine'
+standin_tls=$(docker run --rm --entrypoint sh "$(cat .work-sandbox-image)" -ec 'cd /tmp; openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=standin.exit.test -keyout key.pem -out cert.pem > /dev/null 2>&1; cat key.pem cert.pem') \
+  || fail "make the stand-in host's certificate"
+standin_token="exit-standin-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+docker rm -f exit-standin > /dev/null 2>&1 || true
+docker run -d --name exit-standin --network host -e EXIT_HOST_ADDRESS="$standin" -e EXIT_HOST_TOKEN="$standin_token" \
+  -e EXIT_HOST_KEY="$(sed -n '/BEGIN PRIVATE KEY/,/END PRIVATE KEY/p' <<< "$standin_tls")" -e EXIT_HOST_CERT="$(sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' <<< "$standin_tls")" \
+  -v "$PWD/scripts:/check:ro" node:22.14.0-alpine3.21 node /check/check-install-exit-host.mjs > /dev/null || fail 'start the stand-in public host'
+for attempt in $(seq 1 30); do docker logs exit-standin 2>&1 | grep -q 'stand-in host listening' && break; sleep 1; done
+docker logs exit-standin 2>&1 | grep -q 'stand-in host listening' || { docker logs exit-standin >&2; fail 'the stand-in public host listens'; }
+# Names that resolve, where the exit resolves them, to each refused range and to the stand-in: a record in the exit's
+# own hosts file stands in for a DNS answer, so the exit is judged by the address a name gives it, never by the name.
+db_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(compose ps -q db)")
+engine_install_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-engine-first").IPAddress}}' "$engine_id")
+docker exec -i -u 0 "$exit_id" sh -c 'cat >> /etc/hosts' <<HOSTS || fail "add the probe names to the exit's resolver"
+10.20.30.40 private.exit.test
+172.16.5.6 private172.exit.test
+192.168.7.8 private192.exit.test
+fd00::1 ula.exit.test
+100.64.0.1 shared.exit.test
+169.254.1.1 link-local.exit.test
+fe80::1 link-local6.exit.test
+127.0.0.1 loopback.exit.test
+::1 loopback6.exit.test
+169.254.169.254 metadata.exit.test
+fd00:ec2::254 metadata6.exit.test
+100.100.100.200 metadata-shared.exit.test
+$db_ip db.exit.test
+$engine_install_ip engine.exit.test
+$exit_outbound_ip exit-own.exit.test
+$standin standin.exit.test
+HOSTS
+# What the sandbox must not reach directly, on any port that answers inside the install: every install service by name
+# and by each of its addresses, the app and the worker on every network they join, the Engine's listeners on both its
+# addresses, the exit's network-facing address and the stand-in host.
+probe_direct=()
+for pair in db:5432 auth:9999 rest:3000 storage:5000 gateway:8080 web:3000 web:8080 worker:80; do probe_direct+=("${pair%%:*} ${pair#*:}"); done
+for service in db auth rest storage gateway web worker; do
+  for address in $(addresses_of "$(compose ps -q "$service")" | tr , ' '); do
+    for port in 80 3000 5000 5432 8080 9999; do probe_direct+=("$address $port"); done
+  done
+done
+for port in $(engine_listen_ports "$engine_id" | tr , ' ') 22; do probe_direct+=("$engine_install_ip $port" "$work_engine_ip $port"); done
+probe_direct+=("gtmworks-engine-first 8642" "gtmworks-engine-first 9119" "$exit_outbound_ip 3128")
+direct_json=$(for item in "${probe_direct[@]}"; do printf '{"host":"%s","port":%s},' "${item% *}" "${item#* }"; done | sed 's/,$//')
+# What the exit refuses, by number and by a name that resolves to it: private (RFC 1918 and ULA), shared, link-local,
+# loopback (also as a decimal number and as an IPv4 address written in IPv6), the cloud metadata addresses, the install's
+# own services and Engine, the sandbox's own network and the exit's own.
+sandbox_work_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-work-first").IPAddress}}' "$sandbox_id")
+refused_json=$(for host in 10.20.30.40 172.16.5.6 192.168.7.8 fd00::1 100.64.0.1 169.254.1.1 fe80::1 127.0.0.1 ::1 0.0.0.0 2130706433 ::ffff:127.0.0.1 \
+  169.254.169.254 fd00:ec2::254 ::ffff:169.254.169.254 100.100.100.200 "$db_ip" "$engine_install_ip" "$work_engine_ip" "$sandbox_work_ip" "$exit_outbound_ip" \
+  localhost private.exit.test private172.exit.test private192.exit.test ula.exit.test shared.exit.test link-local.exit.test link-local6.exit.test loopback.exit.test \
+  loopback6.exit.test metadata.exit.test metadata6.exit.test metadata-shared.exit.test db.exit.test engine.exit.test exit-own.exit.test sandbox gtmworks-engine-first; do
+  printf '"%s",' "$host"; done | sed 's/,$//')
+# Through the exit, the install's own names reach nothing either: they do not resolve where the exit looks.
+unreached_json=$(for pair in db:5432 auth:9999 rest:3000 storage:5000 gateway:8080 web:3000 worker:3000 gtmworks-engine-first:8642 gtmworks-engine-first:9119; do
+  printf '{"host":"%s","port":%s},' "${pair%%:*}" "${pair#*:}"; done | sed 's/,$//')
+probe_config=$(printf '{"direct":[%s],"publicName":"example.com","refused":[%s],"unreached":[%s],"standin":{"address":"%s","hosts":["%s","standin.exit.test"],"token":"%s","rawPort":2525,"udpPort":5353}}' \
+  "$direct_json" "$refused_json" "$unreached_json" "$standin" "$standin" "$standin_token" | base64 -w0)
+sandbox_exit_probe "$engine_id" "$probe_config" | tee sandbox-exit.log || { docker logs --tail 80 "$exit_id" >&2; fail 'from the sandbox only HTTP and HTTPS to a public address leave, through the exit'; }
+[[ $(docker run --rm --network host curlimages/curl:8.12.1 -sS "http://$standin/count") == '{"raw":0,"udp":0}' ]] \
+  || fail 'no connection and no datagram from the sandbox reached the stand-in host but HTTP and HTTPS'
+docker logs "$exit_id" 2>&1 | grep -q "^exit: refused (cloud metadata) 169.254.169.254:443$" || fail "the exit's log names what it refused"
+if docker logs "$exit_id" 2>&1 | grep -qF "$standin_token"; then fail "the exit's log holds no page it carried"; fi
+docker rm -f exit-standin > /dev/null || true
 # The repeat install leaves the settings file as it was, so keep a copy to compare after it. The data a restore must
 # bring back is the backup area's (#409); an archive in the shape the release before this one made is made by that
 # release's own installer in the update area, not repacked from this install's database (#378, C3).
@@ -230,6 +321,8 @@ if docker ps -aq --filter 'name=^gtmworks-engine-' | while read -r id; do docker
 [[ -z $(docker ps -aq --filter 'name=^gtmworks-sandbox-second-company-') ]] || fail 'the failed add left a sandbox container'
 if docker volume ls -q | grep -Eq '^gtmworks-(work|sandbox-hostkey)-second-company-'; then fail 'the failed add left a sandbox volume'; fi
 if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-work-second-company-'; then fail 'the failed add left a work network'; fi
+[[ -z $(docker ps -aq --filter 'name=^gtmworks-exit-second-company-') ]] || fail 'the failed add left an exit container'
+if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-exit-second-company-'; then fail "the failed add left an exit's network"; fi
 [[ $(db -c "select count(*) from public.companies where name='Second Company'") == 0 ]] || fail 'the failed add left no Company'
 [[ $(db -c "select count(*) from public.company_engines where address like '%second-company%'") == 0 ]] || fail 'the failed add left no Engine record'
 # Running it again, on an Engine that becomes healthy, succeeds.
@@ -263,8 +356,9 @@ docker run --rm --network "$second_network" -e INSTALL_SERVICE_IPS="$(install_se
   node:22.14.0-alpine3.21 node /check/check-install-engine-network.mjs || fail 'the second Engine network reaches no install service'
 # The second Company's work network is its own: the first Company's Engine and its sandbox, and every install service,
 # are unreachable from it.
-[[ $(docker network inspect "$second_work_network" -f '{{range .Containers}}{{println .Name}}{{end}}' | grep . | sort) == $(printf '%s\n' "$second_container" "$second_sandbox" | sort) ]] \
-  || fail 'the second work network holds exactly its Engine and its sandbox'
+second_exit=$(exit_of "$second_container")
+[[ $(docker network inspect "$second_work_network" -f '{{range .Containers}}{{println .Name}}{{end}}' | grep . | sort) == $(printf '%s\n' "$second_container" "$second_sandbox" "$second_exit" | sort) ]] \
+  || fail 'the second work network holds exactly its Engine, its sandbox and its exit'
 second_work_ip=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$second_work_network\").IPAddress}}" "$second_container")
 second_web_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-install_default").IPAddress}}' "$(compose ps -q web)" 2> /dev/null || true)
 second_web_ip=${second_web_ip:-$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(compose ps -q web)")}
@@ -272,6 +366,19 @@ docker run --rm --network "$second_work_network" -e INSTALL_SERVICE_IPS="$(insta
   -e ENGINE_WORK_PORTS="$(engine_listen_ports "$second_container")" \
   -v "$PWD/scripts:/check:ro" node:22.14.0-alpine3.21 node /check/check-install-work-network.mjs \
   || fail 'the second work network reaches no install service, no other Engine and no listener of its own Engine'
+# From inside the second sandbox, as its Agents' commands run (#394): the first Company's sandbox, Engine and exit are
+# reached neither directly nor through the second Company's own exit, by name or by address.
+first_engine_ips=$(addresses_of gtmworks-engine-first)
+first_sandbox_ip=$(addresses_of gtmworks-sandbox-first)
+first_exit_ips=$(addresses_of gtmworks-exit-first)
+other_direct=$(for item in gtmworks-sandbox-first:2222 gtmworks-engine-first:8642 gtmworks-engine-first:9119 gtmworks-exit-first:3128 \
+  "$first_sandbox_ip:2222" $(for ip in ${first_engine_ips//,/ }; do printf '%s:8642 %s:9119 ' "$ip" "$ip"; done) $(for ip in ${first_exit_ips//,/ }; do printf '%s:3128 ' "$ip"; done); do
+  printf '{"host":"%s","port":%s},' "${item%:*}" "${item##*:}"; done | sed 's/,$//')
+other_refused=$(for host in "$first_sandbox_ip" ${first_engine_ips//,/ } ${first_exit_ips//,/ }; do printf '"%s",' "$host"; done | sed 's/,$//')
+other_unreached=$(for item in gtmworks-sandbox-first:2222 gtmworks-engine-first:8642 gtmworks-engine-first:9119 gtmworks-exit-first:3128; do
+  printf '{"host":"%s","port":%s},' "${item%:*}" "${item##*:}"; done | sed 's/,$//')
+sandbox_exit_probe "$second_container" "$(printf '{"direct":[%s],"refused":[%s],"unreached":[%s]}' "$other_direct" "$other_refused" "$other_unreached" | base64 -w0)" \
+  || fail "the second Company's sandbox reaches nothing of the first Company's, directly or through its exit"
 # One Engine's key is refused by the other Engine, in both directions.
 key_status() { compose exec -T -e CHECK_KEY="$1" -e CHECK_URL="$2" web node --input-type=module -e "const r=await fetch(process.env.CHECK_URL,{headers:{Authorization:'Bearer '+process.env.CHECK_KEY}}); console.log(r.status); if(![401,403].includes(r.status)) process.exitCode=1;"; }
 key_status "$engine_key" "http://$second_container:9119/api/profiles" || fail "the second Engine refuses the first Engine's key"
@@ -298,6 +405,18 @@ for folder in .engines/*/; do
   [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == 2000000000 ]] || fail "the sandbox of $slug has the install's default CPU"
   [[ $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$sandbox") == 0 ]] || fail "the sandbox of $slug publishes no host port"
   if docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$sandbox" | grep -q 'docker.sock'; then fail "the sandbox of $slug mounts no Docker socket"; fi
+  # Each Company's exit (#394), from the same template: the same image, healthy, an ordinary user with no capability,
+  # no new privilege, no mount and no port, on its Company's work network and its own outbound network only.
+  exit_id=$(docker ps -q --filter "name=^gtmworks-exit-$slug$") || fail "the exit of $slug"
+  [[ -n $exit_id ]] || fail "the exit of $slug runs"
+  [[ $(docker inspect -f '{{.Config.Image}}' "$exit_id") == "$sandbox_image" ]] || fail "the exit of $slug runs the work sandbox image"
+  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$exit_id") == healthy ]] || fail "the exit of $slug is healthy"
+  [[ $(docker exec "$exit_id" id -u) == 1000 ]] || fail "the exit of $slug runs as an ordinary user"
+  [[ $(docker inspect -f '{{join .HostConfig.CapDrop ","}}' "$exit_id") == ALL && $(docker inspect -f '{{join .HostConfig.SecurityOpt ","}}' "$exit_id") == *no-new-privileges* ]] \
+    || fail "the exit of $slug drops every capability and has no new privileges"
+  [[ $(docker inspect -f '{{len .Mounts}} {{len .NetworkSettings.Ports}}' "$exit_id") == '0 0' ]] || fail "the exit of $slug mounts nothing and publishes no port"
+  [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$exit_id" | grep . | sort) == $(printf '%s\n' "gtmworks-exit-$slug" "gtmworks-work-$slug" | sort) ]] \
+    || fail "the exit of $slug joins its work network and its own outbound network only"
 done
 # The sandbox takes its own Engine's key and no password (#393): the private half is only among that Engine's files, in
 # its data volume, and the sandbox holds no private key at all.
@@ -558,9 +677,18 @@ for folder in .engines/*/; do
   [[ -n $(docker ps -q --filter "name=^${name}$") ]] || fail "the Engine container $name"
   engines_scanned=$((engines_scanned+1))
   { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$name" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine $name holds none of gtmworks's keys and passwords"
-  # The sandbox runs the Agents' code, so it is scanned too, with its own Engine's key added: a sandbox never holds the
-  # Engine's API key either (#393).
-  { { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install; printf 'ENGINE_KEY=%s\n' "$(engine_value "$folder" KEY)"; } | docker exec -i -u pn "$(sandbox_of "$name")" python3 -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the sandbox of $name holds none of gtmworks's keys, and not its Engine's key"
+  # The sandbox runs the Agents' code, so it is scanned too, with its own Engine's keys added (#393, #394): its API key,
+  # a line of the private key it dials the sandbox with (the line that holds its secret half, past the header every
+  # OpenSSH key shares), and the model credential the Engine was given. Its exit is scanned the same way: nothing the
+  # sandbox can reach holds a key.
+  engine_ssh_line=$(docker exec -u 0 "$name" sed -n 5p /opt/data/ssh/id_ed25519) || fail "read the private key of $name"
+  [[ ${#engine_ssh_line} -ge 40 ]] || fail "a line of the private key of $name"
+  for scanned in "$(sandbox_of "$name")" "$(exit_of "$name")"; do
+    { { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install
+        printf 'ENGINE_KEY=%s\nENGINE_SSH_KEY=%s\nMODEL_KEY=fake-model-key\n' "$(engine_value "$folder" KEY)" "$engine_ssh_line"; } \
+      | docker exec -i -u pn "$scanned" python3 -c "$(cat scripts/check-hermes-keys.py)"; } \
+      || fail "$scanned holds none of gtmworks's keys, not its Engine's key, not its Engine's private key and no model credential"
+  done
 done
 [[ $engines_scanned -ge 2 ]] || fail 'the scan covers every Engine'
 }
