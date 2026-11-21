@@ -170,7 +170,7 @@ release_image() {
   [[ -n ${GTMWORKS_RELEASE_IMAGES:-} ]] && kept="$GTMWORKS_RELEASE_IMAGES/$commit.tar"
   # A kept archive that does not load (a cut-off save) is built again, as if none were kept.
   if ! { [[ -n $kept && -f $kept ]] && docker load -q -i "$kept" > /dev/null; }; then
-    docker build -q "$@" -t "gtmworks-release:$commit" "$source" > /dev/null || return 1
+    bash scripts/docker-build.sh -q "$@" -t "gtmworks-release:$commit" "$source" > /dev/null || return 1
     if [[ -n $kept ]]; then mkdir -p "$GTMWORKS_RELEASE_IMAGES" && docker save -o "$kept" "gtmworks-release:$commit" || return 1; fi
   fi
   docker tag "gtmworks-release:$commit" "$tag"
@@ -187,7 +187,7 @@ publish_releases() {
   # CI loads the run's one app and sandbox image (GTMWORKS_IMAGE_PREBUILT); on a fresh Docker machine an area that makes
   # its releases before it installs anything builds them from the checkout first, as a source install would.
   if [[ ${GTMWORKS_IMAGE_PREBUILT:-} != true ]]; then
-    docker image inspect "$(web_image_tag)" > /dev/null 2>&1 || docker build -q -t "$(web_image_tag)" . > /dev/null || fail 'build this release image'
+    docker image inspect "$(web_image_tag)" > /dev/null 2>&1 || bash scripts/docker-build.sh -q -t "$(web_image_tag)" . > /dev/null || fail 'build this release image'
     docker image inspect gtmworks-work-sandbox:local > /dev/null 2>&1 || docker build -q -t gtmworks-work-sandbox:local sandbox > /dev/null || fail 'build the work sandbox image'
   fi
   docker tag "$(web_image_tag)" localhost:5000/gtmworks:0.0.0-ci || fail 'tag the built image'

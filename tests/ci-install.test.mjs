@@ -278,7 +278,7 @@ test('release_image builds a fixed commit once, then loads what it saved', async
     chmodSync(`${dir}/docker`, 0o755);
     const run = (env, status = 0) => {
       const out = spawnSync('bash', ['-c', '. scripts/ci-install-lib.sh; release_image abc123 localhost:5000/gtmworks:0.0.0-main /src --build-arg X=1'], {
-        encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, DOCKER_LOG: `${dir}/log`, ...env },
+        encoding: 'utf8', env: { ...process.env, NODE_EXTRA_CA_CERTS: '', PATH: `${dir}:${process.env.PATH}`, DOCKER_LOG: `${dir}/log`, ...env },
       });
       assert.equal(out.status, status, out.stderr);
       const log = readFileSync(`${dir}/log`, 'utf8').trim().split('\n');

@@ -150,7 +150,7 @@ test('a hand card\'s turn draws no bubble of the person, keeps its run\'s cards 
 test('a command\'s handover row follows the person\'s message and the Agent handed the job answers in the same chat',()=>{
  const inChat=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'/campaign Launch the December ads',run_id:'command:k1',created_at:at(1)},
   {id:2,author:/** @type {const} */('agent'),author_name:'Reach',agent_id:'a-meta',body:'Three ad sets, 30 days, EGP 9,000.',run_id:'run-target',created_at:at(3)}];
- const cards=[{run_id:'command:k1',at:at(2),card:{kind:/** @type {const} */('handed'),name:'Reach',face:'c-meta',goal:'Launch the December ads'}}];
+ const cards=[{run_id:'command:k1',at:at(2),card:{kind:/** @type {const} */('handed'),from:{name:'Mona',face:'c-mona'},name:'Reach',face:'c-meta',goal:'Launch the December ads'}}];
  const drawn=shown(inChat,[],cards,'Lead');
  assert.deepEqual(order(drawn),[1,'made',2],'the row under the message that asked, then that Agent\'s answer');
  assert.deepEqual(drawn[1].cards,[cards[0].card]);

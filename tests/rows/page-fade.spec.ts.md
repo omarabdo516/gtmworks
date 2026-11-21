@@ -1,0 +1,5 @@
+| `page-fade.spec.ts` | Each page opened from the sidebar (the board, Numbers, the Activity log, an Agent's chat, Chats) and the first screen after sign-in fade the page region in once with the shared 200ms fadeIn (on a chat page, the chat beside the details panel); a new chat going on as its Conversation and that Conversation's polling fade nothing again; the sidebar and the details panel never fade, and the current row and Agent tile fade to their fill over 150ms (#135). | 15 s | components/frame.test.tsx (the replay rule) | new |
+
+## Cases
+
+| `page-fade.spec.ts` "each page opened from the sidebar fades in once, polling fades nothing, and the current row fades to its fill" | stays | A journey across routes on the real app: each route draws its own frame, so only the browser shows whether a page fades once as it opens, whether a new chat's first message (a move to its Conversation's address) and that Conversation's polling redraw it without fading, and whether the sidebar row and Agent tile that become current keep the shared 150ms transition. `components/frame.test.tsx` guards the replay rule inside one frame. |

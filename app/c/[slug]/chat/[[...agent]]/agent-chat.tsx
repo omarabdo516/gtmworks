@@ -13,6 +13,7 @@ import { OpenedMark } from '@/app/agent-made';
 import { FirstRunToast } from '@/app/first-run-toast';
 import Link from '@/lib/link';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
+import { continuePage } from '@/lib/page-fade';
 import type { ReadyRole } from '@/lib/ready-roles';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 import { sentIntoNewChat } from '@/lib/arrivals';
@@ -85,8 +86,10 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     if(failure) { setSending(false); return failure; }
     // The page moves to the Conversation just started; until it has, the box stays busy, so neither a suggestion nor a
     // second Enter can start another one.
-    // There the message rises in, as one sent in an open Conversation does (#132).
+    // There the message rises in, as one sent in an open Conversation does (#132), and the page goes on without fading
+    // in again (#135).
     sentIntoNewChat(conversation);
+    continuePage(`/c/${slug}/conversations/${conversation}`);
     router.push(`/c/${slug}/conversations/${conversation}`);
     return new Promise<never>(()=>{});
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{current.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>
