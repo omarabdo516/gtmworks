@@ -25,7 +25,8 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file);
+ // A retry or a repeat starts again from the seed: the Lead the first try inserted would refuse this one's (#526).
+ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.reply=(input:string)=>{
@@ -90,16 +91,21 @@ test('the Owner finds a ready-made role, adds it, and Lead makes the same Agent 
  await expect(roles(page)).toHaveText(['Meta ads manager','Ad critic']);
 
  // Escape leaves for Lead's chat, ready to type, once the gallery's exit has run (#130; design-reference: closeModal):
- // while it runs the dialog and its scrim stay at the old address.
+ // while it runs the dialog and its scrim stay at the old address. The exit is read when the dialog takes is-closing,
+ // from the animation that class gives it, and not from animationstart: that event waits for the next frame, and a
+ // frame later than the 190ms leave (a busy CI runner) removes the dialog before it is ever sent (#526).
  await page.evaluate(()=>{
-  const seen:(string|boolean)[][]=[]; Object.assign(window,{seen});
-  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.matches('.gw.modal')) seen.push([event.animationName,getComputedStyle(part).animationName,part.isConnected,!!document.querySelector('[data-slot="dialog-overlay"]'),location.search]); });
-  new MutationObserver(()=>{ if(!document.querySelector('.gw.modal')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.search]); }).observe(document.body,{subtree:true,childList:true});
+  const seen:(string|boolean|string[])[][]=[]; Object.assign(window,{seen});
+  new MutationObserver(()=>{
+   const part=document.querySelector('.gw.modal');
+   if(part?.matches('.is-closing')&&!seen.some(([what])=>what==='closing')) seen.push(['closing',part.getAnimations().map(run=>(run as CSSAnimation).animationName),part.isConnected,!!document.querySelector('[data-slot="dialog-overlay"]'),location.search]);
+   if(!part&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.search]);
+  }).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
  });
  await page.keyboard.press('Escape');
  await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
  await expect(page.getByRole('dialog')).toHaveCount(0);
- expect(await page.evaluate(()=>(window as unknown as {seen:unknown[]}).seen)).toEqual([['gw-modal-out','gw-modal-out',true,true,'?new=ready'],['gone','?new=ready']]);
+ expect(await page.evaluate(()=>(window as unknown as {seen:unknown[]}).seen)).toEqual([['closing',['gw-modal-out'],true,true,'?new=ready'],['gone','?new=ready']]);
  await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
 
  await link.click();
