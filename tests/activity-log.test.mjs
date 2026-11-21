@@ -341,11 +341,15 @@ test('with no row shown the log says nothing matches while the Company has rows,
   assert.equal(logEmptyNote({ companyRows: null }), 'empty');
 });
 
-// #370: a memory or skill change whose Engine answer never confirmed it is logged by the worker's pass, and its row says
-// so in both languages; a confirmed one says nothing more.
-test('a memory or skill change nobody confirmed says so, and a confirmed one does not', () => {
- const unconfirmed = ['memory_reset', 'memory_edit', 'memory_forget', 'skill_written'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', skill: action === 'skill_written' ? 'weekly-recap' : undefined, unconfirmed: true } }));
- for (const row of unconfirmed) assert.deepEqual(row.to, { key: 'logUnconfirmed' });
- assert.equal(describeEntry({ subject: 'agent', action: 'memory_edit', agent_id: lead, details: { agent_name: 'Ads' } }).to, undefined);
- assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logUnconfirmed')), ['Not confirmed: the agent’s answer never arrived', 'مش متأكدين: رد الوكيل موصلش']);
+// #370: a memory or skill change whose Engine answer never confirmed it is logged by the worker's pass, and its row reads
+// as asked for, not done, and says it is not confirmed, in both languages; a confirmed one reads as done.
+test('a memory or skill change nobody confirmed reads as asked for and not confirmed, and a confirmed one as done', () => {
+ const acts = { memory_reset: 'logActMemoryReset', memory_edit: 'logActMemoryEdit', memory_forget: 'logActMemoryForget', skill_written: 'logActSkillWritten', skill_enabled: 'logActSkillEnabled', skill_disabled: 'logActSkillDisabled' };
+ for (const [action, act] of Object.entries(acts)) {
+  const row = describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads', skill: action.startsWith('skill_') ? 'weekly-recap' : undefined, unconfirmed: true } });
+  assert.deepEqual([row.act, row.to], [[`${act}Asked`, { text: 'Ads' }], { key: 'logUnconfirmed' }]);
+  assert.deepEqual(describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads' } }).act, [act, { text: 'Ads' }]);
+ }
+ assert.deepEqual(['en', 'ar'].map(language => [i18n(language).t('logActMemoryEditAsked', 'Ads'), i18n(language).t('logUnconfirmed')]),
+  [['asked to edit a note in the memory of Ads', 'Not confirmed'], ['طلب يعدّل ملاحظة في ذاكرة Ads', 'مش متأكد إنه حصل']]);
 });

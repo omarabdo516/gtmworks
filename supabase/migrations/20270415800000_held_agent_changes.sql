@@ -23,6 +23,8 @@ create table public.held_agent_changes (
  -- No reference to the Agent: an Agent removed while its change is held still gets that change's row, as the log keeps
  -- rows of removed Agents, and the hold never stops the removal.
  agent_id uuid not null,
+ -- The Agent's name when the change was held, so the row still names an Agent removed before it is written.
+ agent_name text,
  actor_id uuid not null,
  act text not null check (act in ('memory_reset','memory_edit','memory_forget','skill_written','skill_enabled','skill_disabled')),
  skill text check (skill ~ '^[a-z0-9][a-z0-9_-]{0,63}$'),
@@ -46,8 +48,9 @@ begin
   perform public.check_skill_write(c,agent,body);
   if skill is null or skill !~ '^[a-z0-9][a-z0-9_-]{0,63}$' then raise exception 'skillInvalid' using errcode='22023'; end if;
  else raise exception 'changeInvalid' using errcode='22023'; end if;
- insert into public.held_agent_changes(company_id,agent_id,actor_id,act,skill)
-  values(c,agent,auth.uid(),act,case when act like 'skill_%' then skill end) returning id into held;
+ insert into public.held_agent_changes(company_id,agent_id,agent_name,actor_id,act,skill)
+  values(c,agent,(select a.name from public.hermes_agents a where a.id=agent),auth.uid(),act,case when act like 'skill_%' then skill end)
+  returning id into held;
  return held;
 end $$;
 revoke all on function public.hold_agent_change(uuid,uuid,text,text,text,text) from public,anon,service_role;
@@ -61,7 +64,7 @@ language sql security definer set search_path='' as $$
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,agent_id,action,details,source,source_id,created_at)
   values(held.company_id,held.actor_id,public.log_actor_kind(held.company_id,held.actor_id),(select name from public.people where id=held.actor_id),
    'agent',held.agent_id,public.log_agent_action(held.act),
-   jsonb_strip_nulls(jsonb_build_object('agent_name',(select name from public.hermes_agents where id=held.agent_id),'skill',held.skill,
+   jsonb_strip_nulls(jsonb_build_object('agent_name',coalesce((select name from public.hermes_agents where id=held.agent_id),held.agent_name),'skill',held.skill,
     'unconfirmed',case when not confirmed then true end)),
    'hermes_agent_audit',nextval('public.agent_log_ids'),held.held_at);
 $$;

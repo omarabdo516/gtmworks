@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(30);
 -- #370: a memory or skill change the Engine holds always gets its one row of the Company log. The check holds it
 -- (hold_agent_change), the log writes its row once however often it is retried (finish_agent_change), a refusal drops it
 -- (drop_agent_change), and the worker's pass logs a record the app never came back to (finish_held_agent_changes). No row
@@ -92,5 +92,14 @@ set local session_replication_role=origin;
 update public.held_agent_changes set held_at=now()-interval '16 minutes';
 select is(public.finish_held_agent_changes(),1,'the removed Agent''s held reset is logged');
 select is(pg_temp.rows_for('memory_reset'),2,'one more reset row, never two');
+select is((select details->>'agent_name' from public.company_log where agent_id='e1000000-0000-0000-0000-0000000000a1' and action='memory_reset' order by id desc limit 1),
+ 'Nour','and it names the Agent as it was when the change was held');
+-- A finish or a drop that comes after the pass finds nothing and writes nothing: the change keeps its one row.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select ok(not public.finish_agent_change((select id from changes where name='fresh')),'a finish after the pass writes nothing');
+select lives_ok($$select public.drop_agent_change((select id from changes where name='fresh'))$$,'nor does a drop');
+reset role;
+select is(pg_temp.rows_for('memory_reset'),2,'so the change still has exactly one row');
 select * from finish();
 rollback;
