@@ -1,0 +1,1 @@
+| `components/fake-clock.ts` | component helper: a fake clock for a dialog's 190 ms leave and a wait for what React draws next that leaves the clock still, so the exit-timing tests do not race a busy browser (new, #501) | — | components/ready-made.test.tsx, components/first-run-choice.test.tsx, components/settings-overlay.test.tsx | helper, new |
