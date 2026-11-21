@@ -53,6 +53,7 @@ const day = (offset: number, hour: number) => `${new Date(Date.now() + offset * 
 const routineJob = (id: string, name: string, expr: string, extra: object = {}) => ({ id, name, prompt: name, skills: [], skill: null, schedule: { kind: 'cron', expr, display: expr },
   schedule_display: expr, repeat: { times: null, completed: 0 }, enabled: true, state: 'scheduled', paused_at: null, created_at: '2026-06-01T08:00:00Z', next_run_at: day(1, Number(expr.split(' ')[1]) || 9),
   last_run_at: null, last_status: null, last_error: null, deliver: 'local', origin: null, ...extra });
+const standing = (n: number) => `69400000-0000-0000-0000-00000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string, engine?: (fake: Awaited<ReturnType<typeof laneHermes>>) => void }> = {
   // Recurring tasks (#31): Lead's morning brief and two of Meta Ads's Routines, one switched off, on their own profiles.
   routines: {
