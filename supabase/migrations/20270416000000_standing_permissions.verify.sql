@@ -16,6 +16,14 @@ select json_build_object(
   and not has_function_privilege('service_role','public.log_permission_revoked(uuid,uuid,text,text)','execute')
   and position('check_permission_revoke' in pg_get_functiondef('public.agent_permission_inflight(uuid,uuid)'::regprocedure))>0
   and not has_function_privilege('anon','public.agent_permission_inflight(uuid,uuid)','execute'),
+ 'revoke_holds_delivery',(select relrowsecurity from pg_class where oid='public.agent_permission_revokes'::regclass)
+  and not has_table_privilege('authenticated','public.agent_permission_revokes','select,insert,update,delete')
+  and not has_table_privilege('service_role','public.agent_permission_revokes','select,insert,update,delete')
+  and position('permission_revoke_held' in pg_get_functiondef('public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text)'::regprocedure))>0
+  and position('permission_revoke_held' in pg_get_functiondef('public.track_channel_permission(bigint,text,jsonb,boolean,timestamptz,timestamptz,text)'::regprocedure))>0
+  and has_function_privilege('authenticated','public.begin_permission_revoke(uuid,uuid)','execute')
+  and not has_function_privilege('anon','public.begin_permission_revoke(uuid,uuid)','execute')
+  and not has_function_privilege('authenticated','public.permission_revoke_held(uuid)','execute'),
  'helpers_private',(select bool_and(not has_function_privilege(r,'public.permission_allows_of(jsonb,jsonb)','execute')
    and not has_function_privilege(r,'public.permission_allows_valid(text[])','execute')) from unnest(array['anon','authenticated','service_role']) r)
 );

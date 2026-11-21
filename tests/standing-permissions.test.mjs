@@ -17,15 +17,18 @@ const rows=[
  {agent:seo,name:'SEO',connection:'f1000000-0000-0000-0000-000000000021',profile:seoProfile,main:false,own:true},
  {agent:lead,name:'Writer',connection:'f1000000-0000-0000-0000-000000000031',profile:shared,main:false,own:false},
 ];
-function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=false,inflight=[]}={}) {
- const logged=[],asked=[];
+function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=false,inflight=[],logDelay=0,hold=null}={}) {
+ const logged=[],asked=[]; const holder=hold??{held:false};
  const db={rpc:async(name,args)=>{
   asked.push(name);
   if(name==='company_app_agents') return {data:agents,error:null};
   if(name==='agent_permission_grants') return grantsFail?{data:null,error:{message:'down'}}:{data:grants.filter(grant=>grant.agent===args.agent).map(grant=>({entry:grant.entry,allowed_by:grant.allowed_by,allowed_at:grant.allowed_at})),error:null};
-  if(name==='agent_permission_inflight') return {data:inflight,error:null};
+  // As the database answers: what is in flight, less what a revoke has logged since.
+  if(name==='agent_permission_inflight') return {data:inflight.filter(entry=>!logged.some(row=>row.entry===entry&&!logFail)),error:null};
   if(name==='check_permission_revoke') return {data:null,error:refuse?{message:refuse}:null};
-  if(name==='log_permission_revoked') { logged.push(args); return {data:null,error:logFail?{message:'refused',code:'22023'}:null}; }
+  if(name==='begin_permission_revoke') { if(refuse) return {data:null,error:{message:refuse}}; if(holder.held) return {data:false,error:null}; holder.held=true; return {data:true,error:null}; }
+  if(name==='end_permission_revoke') { holder.held=false; return {data:null,error:null}; }
+  if(name==='log_permission_revoked') { if(logDelay) await new Promise(resolve=>setTimeout(resolve,logDelay)); logged.push(args); return {data:null,error:logFail?{message:'refused',code:'22023'}:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  return {db,logged,asked};
@@ -71,7 +74,7 @@ test('a revoke is asked of the database first, removes that one entry from that 
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   assert.deepEqual(fake.settings.profiles.get(seoProfile).config.command_allowlist,['mcp:notion/create_page'],'another Agent keeps its own');
   assert.deepEqual(logged,[{c:company,agent:ads,permission:'Notion · create_page',entry:'mcp:notion/create_page'}]);
-  assert.deepEqual(asked,['company_app_agents','check_permission_revoke','agent_permission_inflight','log_permission_revoked']);
+  assert.deepEqual(asked,['company_app_agents','check_permission_revoke','begin_permission_revoke','agent_permission_inflight','log_permission_revoked','end_permission_revoke']);
   assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'gone'});
   assert.equal(logged.length,1,'an entry already gone is not logged again');
  } finally { await fake.close(); }
@@ -121,5 +124,40 @@ test('what an Always allow may be adding right now is written back with the list
   const results=await Promise.all([revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})]);
   assert.deepEqual(results.map(result=>result.state),['revoked','revoked']);
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
+ } finally { await fake.close(); }
+});
+
+test('two grants taken just now and revoked together both stay revoked: the hold lasts until the log row is written (Codex on #499)',async()=>{
+ const fake=await fakeHermes();
+ try {
+  profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
+  const both=session({inflight:['mcp:notion/create_page','mcp:canva/create_design'],logDelay:300});
+  const results=await Promise.all([revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),revokeAgentPermission(both.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})]);
+  assert.deepEqual(results.map(result=>result.state),['revoked','revoked']);
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'the second revoke never writes the first one back');
+  // A refused log row: this server still leaves the entry out of what it writes back.
+  profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
+  const refused=session({inflight:['mcp:notion/create_page','mcp:canva/create_design'],logFail:true});
+  const error=console.error; console.error=()=>{};
+  try {
+   assert.equal((await revokeAgentPermission(refused.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)})).state,'revoked');
+   assert.equal((await revokeAgentPermission(refused.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})).state,'revoked');
+  } finally { console.error=error; }
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
+ } finally { await fake.close(); }
+});
+
+test('a revoke waits for another one\'s hold, and says busy when it never ends; the hold always ends',async()=>{
+ const fake=await fakeHermes();
+ try {
+  profileOn(fake,adsProfile,['recursive delete']);
+  const stuck=session({hold:{held:true}});
+  const started=Date.now();
+  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
+  assert.ok(Date.now()-started>=5000,'it waited for the hold');
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete'],'nothing was written');
+  const failing=session(); fake.settings.managementStatus=500;
+  assert.equal((await revokeAgentPermission(failing.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'unreachable');
+  assert.equal(failing.asked.at(-1),'end_permission_revoke','a failed revoke ends its hold');
  } finally { await fake.close(); }
 });

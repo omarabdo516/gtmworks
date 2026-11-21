@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(34);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -24,7 +24,8 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
  ('10000000-0000-0000-0000-000000000001','e6000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000002','Mona','Clean up',gen_random_uuid(),'s-run-2'),
  ('10000000-0000-0000-0000-000000000001','e6000000-0000-0000-0000-000000000003','person','20000000-0000-0000-0000-000000000001','Omar','Publish it',gen_random_uuid(),'s-run-3'),
  ('10000000-0000-0000-0000-000000000001','e6000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Omar','Again',gen_random_uuid(),'s-run-4'),
- ('10000000-0000-0000-0000-000000000001','e6000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Omar','Once more',gen_random_uuid(),'s-run-5');
+ ('10000000-0000-0000-0000-000000000001','e6000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Omar','Once more',gen_random_uuid(),'s-run-5'),
+ ('10000000-0000-0000-0000-000000000001','e6000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Omar','Held',gen_random_uuid(),'s-run-6');
 insert into auth.users(id,email) values ('e7000000-0000-0000-0000-000000000001','karim-standing@example.test');
 insert into public.people(id,name) values ('e7000000-0000-0000-0000-000000000001','Karim');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000003','e7000000-0000-0000-0000-000000000001','manager');
@@ -125,6 +126,37 @@ select results_eq($$select * from public.agent_permission_inflight('10000000-000
  'a revoke writes back the always answers being taken now, never one already revoked');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select * from public.agent_permission_inflight('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','only someone who may revoke reads it');
+reset role;
+-- A revoke holds the Agent: one holder at a time, and an Always allow of it is not handed to the Engine meanwhile.
+set local role service_role;
+select public.track_run_permission('e6000000-0000-0000-0000-000000000001','s-run-6','{"id":"b6","description":"Launch","command":"x","choices":["once","always","deny"],"allows":["mcp:canva/create_design"]}',false,now(),run_profile=>'ag-e5000000000000000000000000000002');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.decide_permission('10000000-0000-0000-0000-000000000001','e6000000-0000-0000-0000-000000000001',(select id from public.reply_cards where call_id='b6'),'always');
+select is(public.begin_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002'),true,'a revoke takes the Agent''s hold');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is(public.begin_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002'),false,'another revoke of it waits, whoever asks');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.begin_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','a Contributor takes no hold');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select results_eq($$select * from public.agent_permission_inflight('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002') order by 1$$,$$values ('mcp:canva/create_design'),('recursive delete')$$,
+ 'a claimed Always allow is in flight, so the revoke writes it back');
+reset role;
+set local role service_role;
+select is(public.track_run_permission('e6000000-0000-0000-0000-000000000001','s-run-6',null,false,now()),'[]'::jsonb,'while the hold lasts the Always allow is not handed to the Engine');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select public.end_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002');
+reset role;
+select is((select count(*)::int from public.agent_permission_revokes),1,'another person''s hold is not ended by them');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.end_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002');
+reset role;
+set local role service_role;
+select is(jsonb_array_length(public.track_run_permission('e6000000-0000-0000-0000-000000000001','s-run-6',null,false,now())),1,'once it ends, the next read hands it to the Engine');
 reset role;
 select ok(not has_function_privilege('anon','public.agent_permission_grants(uuid,uuid)','execute')
  and not has_function_privilege('anon','public.check_permission_revoke(uuid,uuid)','execute')

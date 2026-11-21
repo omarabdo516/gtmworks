@@ -14,7 +14,7 @@ function refused(state:string) {
  if(state==='missing') return reply({error:'agentPermissionNotFound'},404);
  if(state==='invalid') return reply({error:'agentPermissionInvalid'},400);
  if(state==='notAllowed') return reply({error:'agentPermissionNotAllowed'},403);
- return reply({error:'agentPermissionFailed'},state==='unreachable'||state==='noEngine'?503:502);
+ return reply({error:'agentPermissionFailed'},state==='unreachable'||state==='noEngine'||state==='busy'?503:502);
 }
 export async function POST(request:NextRequest) {
  try {

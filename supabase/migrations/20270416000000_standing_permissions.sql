@@ -28,7 +28,26 @@ create function public.permission_allows_of(asking jsonb, kept jsonb) returns te
 $$;
 revoke all on function public.permission_allows_of(jsonb,jsonb) from public,anon,authenticated,service_role;
 
--- 20270203000001's track_run_permission, keeping the request's `allows` (an invalid one is kept as none).
+-- A revoke holds its Agent for a moment (#166): the Engine's config route replaces the whole list and has no versioned write,
+-- so while one revoke reads and writes the list, no other revoke of that Agent runs and no Always allow of it is handed
+-- to the Engine (the tracking functions below keep it claimed, and the next read delivers it). A hold ends when its
+-- revoke ends, or after a minute when the server that took it went away. It is read and written by these functions only.
+create table public.agent_permission_revokes (
+ agent_id uuid primary key references public.hermes_agents(id) on delete cascade,
+ company_id uuid not null,
+ held_by uuid not null,
+ held_until timestamptz not null
+);
+alter table public.agent_permission_revokes enable row level security;
+revoke all on public.agent_permission_revokes from public,anon,authenticated,service_role;
+
+create function public.permission_revoke_held(agent uuid) returns boolean language sql stable security definer set search_path='' as $$
+ select exists(select 1 from public.agent_permission_revokes h where h.agent_id=agent and h.held_until>now());
+$$;
+revoke all on function public.permission_revoke_held(uuid) from public,anon,authenticated,service_role;
+
+-- 20270203000001's track_run_permission, keeping the request's `allows` (an invalid one is kept as none), and handing
+-- out no Always allow of an Agent a revoke holds.
 create or replace function public.track_run_permission(conversation uuid, run text, asking jsonb, ended boolean, read_started_at timestamptz, read_ended_at timestamptz default null, run_profile text default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare talk public.conversations; asked text:=asking->>'id'; own boolean; kept jsonb; named text; handed jsonb; keeps text[];
@@ -62,6 +81,7 @@ begin
   update public.reply_cards r set delivering_at=now()
    where r.conversation_id=conversation and r.run_id=run and r.kind='permission' and r.state='sending'
     and (r.delivering_at is null or r.delivering_at<now()-interval '15 seconds')
+    and not (r.content->>'choice'='always' and public.permission_revoke_held(talk.agent_id))
    returning r.id,r.call_id,r.content)
  select jsonb_agg(jsonb_build_object('card',g.id,'permission',g.call_id,'choice',g.content->'choice') order by g.id) into handed from given g;
  return coalesce(handed,'[]'::jsonb);
@@ -69,7 +89,7 @@ end $$;
 revoke all on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text) from public,anon,authenticated;
 grant execute on function public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text) to service_role;
 
--- 20270325000000's track_channel_permission, keeping the request's `allows` the same way.
+-- 20270325000000's track_channel_permission, keeping the request's `allows` and holding an Always allow the same way.
 create or replace function public.track_channel_permission(message bigint, run text, asking jsonb, ended boolean, read_started_at timestamptz, read_ended_at timestamptz default null, run_profile text default null) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare called public.channel_runs; asked text:=asking->>'id'; own boolean; kept jsonb; named text; handed jsonb; keeps text[];
@@ -99,6 +119,7 @@ begin
   update public.channel_permissions p set delivering_at=now()
    where p.message_id=message and p.run_id=run and p.state='sending'
     and (p.delivering_at is null or p.delivering_at<now()-interval '15 seconds')
+    and not (p.content->>'choice'='always' and public.permission_revoke_held(called.agent_id))
    returning p.id,p.request_id,p.content)
  select jsonb_agg(jsonb_build_object('card',g.id,'permission',g.request_id,'choice',g.content->'choice') order by g.id) into handed from given g;
  return coalesce(handed,'[]'::jsonb);
@@ -140,6 +161,28 @@ begin
 end $$;
 revoke all on function public.check_permission_revoke(uuid,uuid) from public,anon,service_role;
 grant execute on function public.check_permission_revoke(uuid,uuid) to authenticated;
+
+-- Takes the Agent's hold for a revoke by someone who may revoke: true when taken, false while another revoke holds it.
+create function public.begin_permission_revoke(c uuid, agent uuid) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare taken boolean;
+begin
+ perform public.check_permission_revoke(c,agent);
+ insert into public.agent_permission_revokes as h(agent_id,company_id,held_by,held_until) values(agent,c,auth.uid(),now()+interval '60 seconds')
+  on conflict (agent_id) do update set company_id=excluded.company_id,held_by=excluded.held_by,held_until=excluded.held_until where h.held_until<=now()
+  returning true into taken;
+ return coalesce(taken,false);
+end $$;
+revoke all on function public.begin_permission_revoke(uuid,uuid) from public,anon,service_role;
+grant execute on function public.begin_permission_revoke(uuid,uuid) to authenticated;
+
+-- Ends the caller's own hold on the Agent; any other hold is left as it is.
+create function public.end_permission_revoke(c uuid, agent uuid) returns void
+language sql security definer set search_path='' as $$
+ delete from public.agent_permission_revokes where agent_id=agent and company_id=c and held_by=auth.uid();
+$$;
+revoke all on function public.end_permission_revoke(uuid,uuid) from public,anon,service_role;
+grant execute on function public.end_permission_revoke(uuid,uuid) to authenticated;
 
 -- The entries an Always allow may be adding to the Agent's profile right now: an always answer of a Conversation or a
 -- channel of this Agent that is being delivered (sending), or that the Engine took in the last five minutes, unless it
