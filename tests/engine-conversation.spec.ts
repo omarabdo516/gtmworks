@@ -151,8 +151,9 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
- // #317: Lead may hand the job to another Agent, so its Runs are offered hand_to_agent after create_agent.
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change'],['create_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']]);
+ // #317, #475: hand_to_agent names the Company's other Agents, and this Company has none but Lead yet (made() is empty
+ // above), so Lead's Runs are offered none; the Manager's Run below, once Meta Ads is made, is offered it.
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change'],['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']]);
  expect(fake.agentReads).toContain(profile);
  const [agent]=made();
  expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
@@ -246,6 +247,8 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
 test('integration: an Agent saves the rule the Owner tells it, with its log row, and no later run carries it (it is in the Agent\'s SOUL.md, #345); a Contributor\'s rule is a suggestion',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ // Another Agent of the Company, so hand_to_agent is offered whatever earlier tests on this lane left (#475).
+ const peer=attachTarget('Peer','Helps the team.');
  const rule='من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها';
  const suggestion='From now on, no emojis';
  fake.settings.toolCalls=input=>input===rule?[{id:'call-0',name:'save_rule',arguments:{rule:` ${rule} `}}]:input===suggestion?[{id:'call-0',name:'suggest_team_rule',arguments:{rule:suggestion}}]:[];
@@ -257,7 +260,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
   const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
   expect(await send(rule)).toEqual({conversation});
-  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
   // No Run is told the Company knowledge (#344): every profile auto-loads it as the shared Skill company-knowledge.
   expect(fake.runs[0].instructions,'no instructions are sent: the fake engine keeps an absent field as null').toBeNull();
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
@@ -279,7 +282,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const tell=(message:string)=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
   const closeTheirs=()=>closeOpenRuns(service,{hermes,conversation:theirs,owner:contributor,engineFor:fake.engineFor});
   expect(await tell('Draft the teaser')).toEqual({conversation:theirs});
-  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
   expect(fake.runs[2].instructions??'').not.toContain(rule);
   expect(await closeTheirs()).toBe(1);
 
@@ -298,7 +301,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   expect(fake.runs[5].instructions??'').not.toContain(suggestion);
   expect(await close()).toBe(1);
   expect(rules()).toHaveLength(2);
- } finally { detach(); }
+ } finally { detach(); peer.detach(); }
 });
 
 // #136: an Agent shows a Contributor a draft as a card under its reply; the fake engine scripts its show_draft call. The
@@ -307,6 +310,8 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
 test('integration: an Agent shows a draft once under its reply, also when two closers race, shows none for a call that does not hold, still closes the run with its reply, and logs it for its person and the Managers',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ // Another Agent of the Company, so hand_to_agent is offered whatever earlier tests on this lane left (#475).
+ const peer=attachTarget('Peer','Helps the team.');
  const contributor='20000000-0000-0000-0000-000000000005';
  const plan={title:'خطة الحملة',line:'مسودة · Meta Ads',rows:[{label:'الهدف',value:'ليدز على واتساب'},{label:'الميزانية',value:'500 ج يومياً · 15,000 ج للشهر'}]};
  const {title,line,rows}=JSON.parse(toolSpecTexts().show_draft).parameters.properties;
@@ -330,7 +335,7 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   const close=()=>closeOpenRuns(service,{hermes,conversation,owner:contributor,engineFor:fake.engineFor});
   for(const [index,message] of Object.keys(calls).entries()) {
    expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    // A reader and the worker close the run at once: the card is kept once, before the reply is stored.
    const closed=await Promise.all([close(),close()]);
    expect(closed[0]+closed[1]).toBe(1);
@@ -355,7 +360,7 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   expect(await logged(person)).toEqual(rows);
   expect(await logged((await memberClient('manager@example.com')).person)).toEqual(rows);
   expect(await logged((await memberClient('reviewer@example.com')).person)).toEqual([]);
- } finally { detach(); }
+ } finally { detach(); peer.detach(); }
 });
 
 // #227: a reply that is only a card is a complete reply. The engine reports no words as failed; a Run that stored a card
@@ -409,6 +414,8 @@ test('integration: an Agent\'s reply that is only a draft closes done once, also
 test('integration: an Agent shows a review once under its reply, shows none for a call with no texts or no decision, still closes each run with its reply, changes no Card, Approval or Version, and logs the review with its counts',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ // Another Agent of the Company, so hand_to_agent is offered whatever earlier tests on this lane left (#475).
+ const peer=attachTarget('Peer','Helps the team.');
  const review={title:'مراجعة نصوص إعلانات ديسمبر',line:'3 نصوص · Meta Ads · قبل ما تطلع',items:[
   {text:'من خريج تجارة لمحاسب شغال في 3 شهور',fine:true,note:'الوعد واضح، ومعانا قصص طلبة تثبته.'},
   {text:'أضمن طريق لأول وظيفة محاسبة',fine:false,note:'«أضمن» وعد مقدرش نثبته. البديل: «أقصر طريق لأول شغلانة محاسبة».'},
@@ -426,7 +433,7 @@ test('integration: an Agent shows a review once under its reply, shows none for 
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it. The Card
@@ -443,7 +450,7 @@ test('integration: an Agent shows a review once under its reply, shows none for 
   expect((await person.from('reply_cards').select('kind,title').eq('conversation_id',conversation)).data).toEqual([{kind:'review',title:review.title}]);
   expect((await person.from('company_log').select('actor_id,actor_kind,action,details').eq('agent_id',agent).eq('action','agent_card_shown')).data)
    .toEqual([{actor_id:agent,actor_kind:'agent',action:'agent_card_shown',details:{card:{kind:'review',title:review.title,fine:2,edits:1},private:true,teller:omar}}]);
- } finally { detach(); }
+ } finally { detach(); peer.detach(); }
 });
 
 // #139: an Agent hands the Owner a step no Agent may do; the fake engine scripts its hand_over calls (the reference's th-team
@@ -451,6 +458,8 @@ test('integration: an Agent shows a review once under its reply, shows none for 
 test('integration: an Agent hands a step over once under its reply, shows none with no title or an address that is not https, still closes each run, and its person marks it done once, logged as theirs with nothing approved',async()=>{
  test.setTimeout(120000);
  const fake=fakeEngine(); const {agent,detach}=attachAgent();
+ // Another Agent of the Company, so hand_to_agent is offered whatever earlier tests on this lane left (#475).
+ const peer=attachTarget('Peer','Helps the team.');
  const hand={title:'انشر مقال «كورس محاسب شامل اونلاين»',line:'SEO سابه مسودة على WordPress، وانت اللي تدوس نشر.',app:'WordPress',
   rows:[{label:'الطول',value:'1,600 كلمة · 5 عناوين فرعية'},{label:'الروابط',value:'3 روابط لصفحة المحاسب الشامل'},{label:'المراجعة',value:'Critic: مقبول بعد تعديل واحد'}],
   url:'https://rslearning.example/wp-admin/post.php?post=812&action=edit',note:'هتابع ترتيبه في Search Console.'};
@@ -467,7 +476,7 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the hand's runs are measured after it. The Card
@@ -520,7 +529,7 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   // it again before its reservation goes.
   query(`delete from public.conversation_queued_turns where agent_id='${agent}'`);
   query(`delete from public.conversation_run_reservations where conversation_id in (select id from public.conversations where agent_id='${agent}')`);
-  detach();
+  detach(); peer.detach();
  }
 });
 
@@ -1170,7 +1179,13 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
   const kinds=()=>page.locator('.turns > li').evaluateAll(turns=>turns.map(turn=>turn.getAttribute('data-author')||turn.getAttribute('data-kind')));
   const line=page.locator('.turns > li[data-kind="boarded"]'), pill=page.locator('.chat__corner .corner-pill');
-  expect(await kinds()).toEqual(['person','agent','agent','boarded']);
+  // #475: the row names both Agents, Salma's answer follows under its own name "to Lead", then Lead's own reply.
+  expect(await kinds()).toEqual(['person','agent','agent','agent','boarded']);
+  await expect(page.locator('.turns [data-handover] .handed__t')).toHaveText('Lead asked Salma');
+  const answer=page.locator('.turns > li[data-kind="handed"]');
+  await expect(answer.locator('.sender bdi').first()).toHaveText('Salma');
+  await expect(answer.locator('.sender__to')).toHaveText('to Lead');
+  await expect(answer.locator('.bubble')).toHaveText('Three ad sets, 30 days, EGP 9,000.');
   await expect(line).toHaveText('This card was added to the board under “In progress”');
   await expect(pill).toHaveAccessibleName('On the board: In progress');
 
@@ -1203,5 +1218,61 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
  } finally {
   language('en'); for(const context of opened) await context.close();
   target.detach(); next.detach(); await fake.close();
+ }
+});
+
+// #475 (decision 0057): any Agent hands over, not only Lead, and to an Agent the person cannot see. A Contributor talks
+// to Salma; Salma's Run is offered hand_to_agent naming the Company's other Agents with their jobs, asks Tarek (hidden
+// from the Contributor), Tarek works on its own profile, and Salma replies. The Contributor's chat draws "Salma asked
+// Tarek", Tarek's answer under its own name "to Salma", then Salma's reply, though Tarek stays hidden from them.
+test('any Agent hands a job to another Agent of its Company, one hidden from the person included, and the chat draws both',async({page})=>{
+ test.setTimeout(240000);
+ const fake=await laneHermes();
+ const hermes={address:fake.address,key:fake.settings.key};
+ const salma=attachTarget('Salma','Writes the ad copy.');
+ const tarek=attachTarget('Tarek','Reads the campaign numbers.');
+ const reviewer='20000000-0000-0000-0000-000000000003';
+ query(`delete from public.member_agent_access where person_id='${reviewer}' and agent_id='${tarek.agent}'`);
+ const conversation=randomUUID();
+ const ask=`Ask Tarek.\n\n\`\`\`gtmworks-tool\n${JSON.stringify({name:'hand_to_agent',arguments:{agent:'Tarek',goal:'Last campaign\'s leads and cost per lead',context:'For the March copy.'}})}\n\`\`\``;
+ fake.settings.reply=input=>input.startsWith('Salma in the team is handing you a job')?'1,240 leads at EGP 7.30 each.'
+  :input.startsWith('You handed this job to Tarek')?'The copy leads with 1,240 leads at EGP 7.30 each.'
+  :ask;
+ const {service}=await clients();
+ const {person}=await memberClient('reviewer@example.com');
+ const drive=async()=>{ await closeOpenRuns(service,{hermes,conversation}); await driveHandovers(service,{hermes,conversation}); };
+ const handed=()=>JSON.parse(query(`select from_agent,to_agent,state,target_outcome from public.agent_handovers where conversation_id='${conversation}'`));
+ try {
+  expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent:salma.agent,message:'Write the March ad copy',hermes})).toEqual({conversation});
+  // The tool Salma's Run was sent, as the Engine reads it in the Run's instructions (lib/hermes.mjs), names the
+  // Company's other Agents, Tarek with its job among them, never Salma.
+  const sent=fake.settings.runs.find(run=>JSON.stringify(run.input).includes('Write the March ad copy'));
+  const offered=(sent?.instructions??'').split('\n- hand_to_agent: ')[1]??'';
+  const schema=offered.slice(offered.indexOf('Its arguments, as JSON Schema: ')+'Its arguments, as JSON Schema: '.length).split('\n')[0];
+  const enumOf=JSON.parse(schema).properties.agent.enum as string[];
+  expect(enumOf).toContain('Tarek');
+  expect(enumOf).not.toContain('Salma');
+  expect(sent?.instructions).toContain('- Tarek: Reads the campaign numbers.');
+  await expect.poll(async()=>{ await drive(); return handed()[0]?.state; },{timeout:60000}).toBe('done');
+  expect(handed()).toEqual([{from_agent:salma.agent,to_agent:tarek.agent,state:'done',target_outcome:'completed'}]);
+  // The tool's block is the Engine's, never the chat's: Salma's message keeps its words alone.
+  expect(agentRows(conversation)).toEqual([{body:'Ask Tarek.'},{body:'The copy leads with 1,240 leads at EGP 7.30 each.'}]);
+
+  await signIn(page,'reviewer@example.com',`/c/rs-learning/conversations/${conversation}`);
+  const kinds=()=>page.locator('.turns > li').evaluateAll(turns=>turns.map(turn=>turn.getAttribute('data-author')+(turn.getAttribute('data-kind')?`:${turn.getAttribute('data-kind')}`:'')));
+  // Salma's chat put its own Card on the board with its first reply (#144); the handover leaves that Card Salma's.
+  await expect.poll(kinds).toEqual(['person','agent','null:boarded','agent:handed','agent']);
+  expect(JSON.parse(query(`select agent_id from public.work_cards where conversation_id='${conversation}'`))).toEqual([{agent_id:salma.agent}]);
+  // The handover, kept before that first reply made the Card, is on the Card's log once.
+  expect(JSON.parse(query(`select l.actor_id,l.agent_id from public.company_log l join public.work_cards w on w.id=l.card_id where w.conversation_id='${conversation}' and l.action='agent_handed_to'`))).toEqual([{actor_id:salma.agent,agent_id:tarek.agent}]);
+  await expect(page.locator('.turns [data-handover] .handed__t')).toHaveText('Salma asked Tarek');
+  await expect(page.locator('.turns [data-handover] .handed__d')).toHaveText('Last campaign\'s leads and cost per lead');
+  const answer=page.locator('.turns > li[data-kind="handed"]');
+  await expect(answer.locator('.sender bdi').first()).toHaveText('Tarek');
+  await expect(answer.locator('.sender__to')).toHaveText('to Salma');
+  await expect(answer.locator('.bubble')).toHaveText('1,240 leads at EGP 7.30 each.');
+  await expect(page.locator('.turns > li').last().locator('.bubble')).toHaveText('The copy leads with 1,240 leads at EGP 7.30 each.');
+ } finally {
+  salma.detach(); tarek.detach(); await fake.close();
  }
 });

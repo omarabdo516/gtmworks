@@ -6,6 +6,12 @@
   "ar": { "title": "شوف والغي اللي الوكيل يقدر يعمله من غير ما يستأذن", "body": "إعدادات الوكيل وآخر تبويب النشاط بقوا بيعرضوا صلاحياته الدايمة، كل حاجة حد رد عليها بـ«اسمح دايماً»، ومين سمح بيها وإمتى؛ والمالك أو المدير يقدر يلغي أي واحدة، والوكيل هيستأذن تاني المرة الجاية." }
  },
  {
+  "issue": 475,
+  "date": "2026-11-21",
+  "en": { "title": "Every agent asks the team", "body": "Any agent you talk to, not only the main one, can now ask another agent of your company for a job it needs, even one you don’t work with: the chat shows who asked whom, the answer under that agent’s name, then your agent’s reply." },
+  "ar": { "title": "كل وكيل بيطلب من الفريق", "body": "أي وكيل بتكلمه، مش الرئيسي بس، بقى يقدر يطلب من وكيل تاني في شركتك شغل محتاجه، حتى لو وكيل مش بتشتغل معاه: المحادثة بتوريك مين طلب من مين، والرد باسم الوكيل ده، وبعدين رد وكيلك." }
+ },
+ {
   "issue": 205,
   "date": "2026-11-21",
   "en": { "title": "Routines in an agent's details", "body": "An agent's details now list its routines with when each runs next; the Owner and Managers add one by writing one sentence, such as “leads summary every day at 8 in the morning”, and a sentence with no time asks for one first." },

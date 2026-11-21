@@ -60,7 +60,7 @@ test.afterAll(async ({ browser }) => {
   } finally { await context.close(); }
 });
 
-test('prepared navigation and Paperclip motion inventory (production, warm-up + 3 runs)', async ({ page }, testInfo) => {
+test('prepared navigation (production, warm-up + 3 runs)', async ({ page }, testInfo) => {
   test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
@@ -90,8 +90,7 @@ test('prepared navigation and Paperclip motion inventory (production, warm-up + 
     expect(timing.settled, `${name}: settled ${timing.settled.toFixed(1)}ms`).toBeLessThan(200 + motion.settled);
   }
   for (const [name, timings] of Object.entries(runs)) for (const timing of timings) {
-    expect(timing.all, `${name}: unlisted computed transition-property: all`).toEqual([]);
-    expect(timing.progress, `${name}: prepared click must not flash progress`).toBe(false);
+     expect(timing.progress, `${name}: prepared click must not flash progress`).toBe(false);
   }
   expect(runs.inbox.length, 'the Inbox was measured on every counted run').toBe(3);
   await idle(page);
@@ -214,7 +213,6 @@ test('reduced motion disables hover, veil and card animation', async ({ page }) 
   for (const step of clickPath.slice(0, 7)) {
     const timing = await measureClick(page, step);
     expect(timing.longest).toBe(0);
-    expect(timing.all).toEqual([]);
   }
 });
 

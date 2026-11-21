@@ -16,6 +16,7 @@ function databases({pages}) {
    const conversation=given.conversation;
    return {data:[{company:'co',agent:'a',person:'p',send_key:`k-${conversation}`,message:`Message ${conversation}`,connection,profile:'writer',note:null,retry:false}],error:null};
   }
+  if(name==='conversation_handover_agents') return {data:[],error:null};
   if(name==='pin_run') return {data:{tools:null},error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
