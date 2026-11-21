@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
@@ -6,6 +6,8 @@ import ChannelView from '@/app/c/[slug]/channels/[id]/channel';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { ChannelMessage, ChannelRecord } from '@/lib/channels';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
+import '@/app/tokens.css';
+import '@/app/shell.css';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
@@ -413,4 +415,48 @@ test.each([['en', 'This card was added to the board under “In progress”'], [
  const note: ChannelMessage = { id: -9, author: 'note', kind: 'card', at };
  const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([note])}/></LanguageProvider>);
  await expect.element(screen.getByText(words)).toBeVisible();
+});
+
+// #132 (design-reference: msgHTML's msg-in, .thinking .shimmer): a Viewer of the general channel sees what arrives rise
+// once and the working line breathe; what the channel held when opened, its own first read included, stays still; a
+// Viewer has no send arrow, so no copy of it ever flies.
+test('a Viewer sees the working line breathe and the reply rise once when it arrives; the opened messages stay still', async () => {
+ const later: ChannelMessage = { id: 4, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Read before the page drew', at, files: [], mention: null };
+ const reads = [record([peer, later, called('open')], { writer: false })];
+ vi.stubGlobal('fetch', async () => new Response(JSON.stringify(reads.shift() ?? record([peer, later, called('answered'), reply], { writer: false }))));
+ const flew: string[] = [];
+ const watch = new MutationObserver(records => records.forEach(each => each.addedNodes.forEach(node => { if (node instanceof Element && node.matches('.send-fly, :has(.send-fly)')) flew.push(node.outerHTML); })));
+ watch.observe(document.body, { subtree: true, childList: true });
+ onTestFinished(() => watch.disconnect());
+ const screen = await render(<div className="gw"><LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-1" initial={record([peer, called('open')], { writer: false })}/></LanguageProvider></div>);
+ await expect.element(screen.getByText('Read before the page drew')).toBeVisible();
+ const words = screen.container.querySelector('.thinking .shimmer')!;
+ const style = getComputedStyle(words);
+ expect([style.animationName, style.animationDuration, style.animationTimingFunction, style.animationIterationCount]).toEqual(['gw-breathe', '1.4s', 'ease-in-out', 'infinite']);
+ expect(words.textContent).toBe('Lead is working on a reply…');
+ await expect.element(screen.getByText('Two things are due.'), { timeout: 5000 }).toBeVisible();
+ const turn = screen.container.querySelector('.turn--agent')!;
+ expect([getComputedStyle(turn).animationName, getComputedStyle(turn).animationDuration, getComputedStyle(turn).animationTimingFunction]).toEqual(['gw-rise', '0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);
+ // An animation plays again only when its element is put in the page again: further reads keep the reply's element,
+ // and what the channel opened with, its first read included, carries no rise.
+ await new Promise(resolve => setTimeout(resolve, 3500));
+ expect(screen.container.querySelector('.turn--agent')).toBe(turn);
+ const still = [...screen.container.querySelectorAll('.turns > li')].filter(item => item !== turn && getComputedStyle(item).animationName !== 'none');
+ expect(still.map(item => item.textContent), 'the reply rose, and nothing the channel opened with').toEqual([]);
+ expect(screen.container.querySelector('.composer__send')).toBeNull();
+ expect(flew).toEqual([]);
+});
+
+// #132: a called Agent's question that arrives while the channel is open: its card turn rises, though the Agent was
+// already called when the channel opened.
+test('a question the called Agent asks while the channel is open rises in its own turn', async () => {
+ const question = { id: 31, kind: 'question' as const, title: 'Which angle first?', question: 'Which angle first?', choices: ['Graduates', 'Parents'], multiple: false, state: 'open' as const, chips: false };
+ const asking: ChannelMessage = { id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, files: [], mention: { agent: 'Lead', face: 'c-1', state: 'open', permissions: [], questions: [question] } };
+ // The channel's own first read still has no question; the next one brings it.
+ const reads = [record([called('open')])];
+ vi.stubGlobal('fetch', async () => new Response(JSON.stringify(reads.shift() ?? record([asking]))));
+ const screen = await render(<div className="gw"><LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-1" initial={record([called('open')])}/></LanguageProvider></div>);
+ await expect.element(screen.getByText('Which angle first?').first(), { timeout: 5000 }).toBeVisible();
+ const turn = screen.getByText('Which angle first?').first().element().closest('.turns > li')!;
+ expect(turn.classList.contains('msg-in')).toBe(true);
 });
