@@ -15,6 +15,11 @@ select json_build_object(
    from unnest(array['public.stop_late_handover_run(bigint,text)','public.handover_runs_stopping(bigint)','public.handover_run_stopped(bigint,text)']) f)
   and not has_column_privilege('authenticated','public.agent_handovers','stopping_run','select'),
  'a_moving_chain_keeps_stop',position('agent_handovers' in pg_get_functiondef('public.conversation_working_for(uuid)'::regprocedure))>0,
+ 'a_stopped_run_hands_nothing_on',(select relrowsecurity from pg_class where oid='public.stopped_runs'::regclass)
+  and not has_table_privilege('authenticated','public.stopped_runs','select')
+  and position('stopped_runs' in pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure))>0
+  and position('stopped_runs' in pg_get_functiondef('public.channel_hand_to_agent(bigint,text,text,text,text,text)'::regprocedure))>0
+  and position('for no key update' in pg_get_functiondef('public.handover_hand_to_agent(bigint,text,text,text,text,text)'::regprocedure))>0,
  'rows_say_stopped',exists(select 1 from pg_proc p where p.oid='public.conversation_handovers(uuid)'::regprocedure and 'stopped'=any(p.proargnames))
   and exists(select 1 from pg_proc p where p.oid='public.channel_handovers(uuid)'::regprocedure and 'stopped'=any(p.proargnames))
 );

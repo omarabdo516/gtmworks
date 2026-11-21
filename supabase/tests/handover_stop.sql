@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(41);
+select plan(43);
 -- #478 (spec #474): Stop ends the whole Handover chain. RS Learning has Lead, Writer, Ads and Critic, each on its own
 -- profile. The Owner (1) talks to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the
 -- Viewer (4) work with Writer, and the Manager (2) made the channel but is not in it.
@@ -42,6 +42,10 @@ select is((select person from public.conversation_working_for('c4780000-0000-000
  'the chat keeps its Stop square while its chain moves');
 select throws_ok($$select * from public.conversation_stop_target('c4780000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001')$$,
  'P0002','conversationNothingToStop','the chat has no Run of its own open');
+-- The person writes again, and that Run of the chat's own completed with a call to hand on, not closed yet at the press.
+reset role;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c4780000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','Omar','Add a call to action',gen_random_uuid(),'run-writer-open');
 
 -- Another Member who sees the Writer may not stop it (a Manager or Owner may, as they may stop the chat's own Run); the
 -- Owner, the chat's person, presses Stop.
@@ -75,6 +79,10 @@ select is((select string_agg(id::text||':'||run||'@'||coalesce(profile,'-'),' | 
 select is(public.handover_run_stopped(current_setting('test.q')::bigint,'run-critic'),true,'its Engine says it ended');
 select is((select count(*)::int from public.handover_runs_stopping()),0,'and nothing is left to stop');
 delete from public.agent_handovers where call_id='call-open';
+select is(public.lead_hand_to_agent('c4780000-0000-0000-0000-000000000001','run-writer-open','call-1','Critic','Check the call to action',null),'{"state":"refused"}'::jsonb,
+ 'the chat''s own Run that was open at Stop hands nothing on when it closes');
+insert into public.conversation_messages(company_id,conversation_id,author,author_name,body,run_id) values
+ ('10000000-0000-0000-0000-000000000001','c4780000-0000-0000-0000-000000000001','agent','Writer','I asked Critic.','run-writer-open');
 select is(public.close_handover_target(current_setting('test.q')::bigint,'run-critic','stopped',null),false,'Critic''s Run ending later changes nothing');
 select is(public.handover_hand_to_agent(current_setting('test.q')::bigint,'run-critic','call-1','Lead','x',null),'{"state":"refused"}'::jsonb,'and its calls hand nothing on');
 
@@ -144,6 +152,8 @@ select is((select string_agg(coalesce(run,'-')||'@'||coalesce(profile,'-'),' | '
  'run-m1-ads@ag-a4780000000000000000000000000012 | run-m1-writer@ag-a4780000000000000000000000000013 | -@-',
  'Stop on message 1 names its Writer''s Run and Ads''s, and ends Critic''s start before it began');
 reset role;
+select is(public.channel_hand_to_agent(current_setting('test.m1')::bigint,'run-m1-writer','call-2','Critic','Check the post',null),'{"state":"refused"}'::jsonb,
+ 'message 1''s Writer Run, open at Stop, hands nothing on when it closes');
 select is((select string_agg(ordinal||':'||coalesce(outcome,'open'),' | ' order by ordinal) from public.channel_runs where message_id=current_setting('test.m1')::bigint),
  '1:open | 2:stopped','Critic, not started, never starts; Writer''s Run ends as stopped when next closed');
 select is((select state||':'||target_outcome from public.agent_handovers where channel_message_id=current_setting('test.m1')::bigint),'done:stopped','message 1''s handover ended as stopped');

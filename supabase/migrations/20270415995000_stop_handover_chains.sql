@@ -10,7 +10,12 @@
 -- the worker asks again on each pass while it still runs, so an Engine that could not be reached at the press still
 -- stops it (lib/handovers.mjs).
 --
--- Additive only, for the previous app version: one nullable column is added, every replaced function keeps its
+-- Stop and every new Handover take the same lock, on the place's row (the Conversation, or the channel message): a
+-- Handover kept while Stop waits is seen and ended by it, and one asked for after Stop finds its chain stopped. A Run
+-- of the place's own that was still open at the press (it may already have completed, not yet closed) is kept as
+-- stopped (`stopped_runs`), so the calls it made hand nothing on when it closes.
+--
+-- Additive only, for the previous app version: one nullable column and one table are added, every replaced function keeps its
 -- signature but conversation_handovers and channel_handovers, whose answers gain one last column and are read by column
 -- name; that version's Stop still stops the chat's own Run as before.
 
@@ -18,6 +23,20 @@
 -- the follow-up was stopped, else on the asked Agent's.
 alter table public.agent_handovers add column stopping_run text;
 create index agent_handovers_stopping on public.agent_handovers(id) where stopping_run is not null;
+
+-- A Run of a Conversation's or a channel message's own that Stop found still open: its hand_to_agent calls hand nothing
+-- on when it closes. Read and written by the database's own functions only.
+create table public.stopped_runs (
+ company_id uuid not null references public.companies(id) on delete cascade,
+ conversation_id uuid references public.conversations(id) on delete cascade,
+ channel_message_id bigint references public.channel_messages(id) on delete cascade,
+ run_id text not null,
+ stopped_at timestamptz not null default now(),
+ constraint stopped_runs_one_place check ((conversation_id is null)<>(channel_message_id is null)),
+ constraint stopped_runs_once unique nulls not distinct (conversation_id, channel_message_id, run_id)
+);
+alter table public.stopped_runs enable row level security;
+revoke all on public.stopped_runs from anon,authenticated,service_role;
 
 -- Every open Handover of a Conversation, or of one channel message, ends as stopped, in one statement: the leg it was on
 -- is the one stopped (the asked Agent's job, its wait for its children or its answer; or, once it answered, the asking
@@ -28,6 +47,22 @@ create function public.stop_open_handovers(conversation uuid, message bigint)
 returns table(handover bigint, run text, profile text)
 language plpgsql security definer set search_path='' as $$
 begin
+ -- The place's lock first: a Handover being kept there now is committed before the statement below reads the chain.
+ if stop_open_handovers.conversation is not null then
+  perform 1 from public.conversations c where c.id=stop_open_handovers.conversation for no key update;
+  insert into public.stopped_runs(company_id,conversation_id,run_id)
+   select c.company_id,c.id,m.run_id from public.conversation_messages m join public.conversations c on c.id=m.conversation_id
+   where m.conversation_id=stop_open_handovers.conversation and m.author='person'
+    and not exists(select 1 from public.conversation_messages r where r.conversation_id=m.conversation_id and r.author='agent' and r.run_id=m.run_id)
+    and not exists(select 1 from public.conversation_run_ends u where u.conversation_id=m.conversation_id and u.run_id=m.run_id)
+   on conflict do nothing;
+ else
+  perform 1 from public.channel_messages x where x.id=stop_open_handovers.message for no key update;
+  insert into public.stopped_runs(company_id,channel_message_id,run_id)
+   select r.company_id,r.message_id,r.run_id from public.channel_runs r
+   where r.message_id=stop_open_handovers.message and r.outcome is null and r.run_id is not null
+   on conflict do nothing;
+ end if;
  return query
  with open as (
   select h.id, h.state as was, h.parent_id, h.answers_person, h.company_id, h.conversation_id, h.run_id,
@@ -96,6 +131,40 @@ end $$;
 revoke all on function public.handover_run_stopped(bigint,text) from public,anon,authenticated;
 grant execute on function public.handover_run_stopped(bigint,text) to service_role;
 
+-- 20270415950000's lead_hand_to_agent, 20270415960000's channel_hand_to_agent and 20270415990000's
+-- handover_hand_to_agent: each takes its place's lock before it reads what it checks, as Stop does, and the first two
+-- refuse a call from a Run Stop found open there.
+do $$
+declare def text; was text;
+begin
+ def:=pg_get_functiondef('public.lead_hand_to_agent(uuid,text,text,text,text,text)'::regprocedure);
+ was:=' select * into talk from public.conversations where id=conversation;';
+ if position(was in def)=0 then raise exception 'lead_hand_to_agent changed: %',def; end if;
+ def:=replace(def,was,' select * into talk from public.conversations where id=conversation for no key update;');
+ was:=E' if coalesce(agent_name,'''') = '''' or coalesce(goal,'''') = '''' then';
+ if position(was in def)=0 then raise exception 'lead_hand_to_agent changed: %',def; end if;
+ execute replace(def,was,E' if exists(select 1 from public.stopped_runs s where s.conversation_id=conversation and s.run_id=run)\n'
+  || E'  then return jsonb_build_object(''state'',''refused''); end if;\n'||was);
+
+ def:=pg_get_functiondef('public.channel_hand_to_agent(bigint,text,text,text,text,text)'::regprocedure);
+ was:=' select * into m from public.channel_messages where id=message;';
+ if position(was in def)=0 then raise exception 'channel_hand_to_agent changed: %',def; end if;
+ def:=replace(def,was,' select * into m from public.channel_messages where id=message for no key update;');
+ was:=E' if coalesce(agent_name,'''')='''' or coalesce(goal,'''')='''' then';
+ if position(was in def)=0 then raise exception 'channel_hand_to_agent changed: %',def; end if;
+ execute replace(def,was,E' if exists(select 1 from public.stopped_runs s where s.channel_message_id=message and s.run_id=run)\n'
+  || E'  then return jsonb_build_object(''state'',''refused''); end if;\n'||was);
+
+ def:=pg_get_functiondef('public.handover_hand_to_agent(bigint,text,text,text,text,text)'::regprocedure);
+ was:=' select * into r from public.agent_handovers where id=h;';
+ if position(was in def)=0 then raise exception 'handover_hand_to_agent changed: %',def; end if;
+ execute replace(def,was,was
+  || E'\n if r.conversation_id is not null then perform 1 from public.conversations c where c.id=r.conversation_id for no key update;\n'
+  || E' elsif r.channel_message_id is not null then perform 1 from public.channel_messages x where x.id=r.channel_message_id for no key update; end if;\n'
+  || E' -- Read again under the lock: a chain Stop ended meanwhile is no longer open.\n'
+  || was);
+end $$;
+
 -- Stop in a Conversation (lib/conversation-runs.mjs, beside conversation_stop_target for the chat's own Run): its open
 -- Handovers end as stopped, on the rule that Run's Stop keeps: the Conversation's person, or a Manager or Owner of the
 -- Company. Nothing open answers no row.
@@ -106,7 +175,8 @@ begin
  select * into talk from public.conversations cv where cv.id=stop_conversation_handovers.conversation and cv.company_id=c;
  if auth.uid() is null or not public.is_member(c) or talk.id is null or not public.can_see_conversation_agent(c,talk.id) then
   raise exception 'conversationNotFound' using errcode='P0002'; end if;
- if not exists(select 1 from public.agent_handovers h where h.conversation_id=talk.id and h.state not in ('done','failed')) then return; end if;
+ if not exists(select 1 from public.agent_handovers h where h.conversation_id=talk.id and h.state not in ('done','failed'))
+  and not exists(select 1 from public.conversation_open_run(talk.id)) then return; end if;
  if talk.person_id is distinct from auth.uid() and not public.can_manage_company(c) then raise exception 'conversationStopNotAllowed' using errcode='42501'; end if;
  return query select s.run, s.profile from public.stop_open_handovers(talk.id,null) s;
 end $$;
