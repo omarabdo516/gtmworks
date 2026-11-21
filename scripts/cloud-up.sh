@@ -33,7 +33,7 @@ stop_own() {
   rm -f "$state/$name.pid"
  done
 }
-port_taken() { (exec 3<> "/dev/tcp/127.0.0.1/$1") 2> /dev/null; }
+taken() { (exec 3<> "/dev/tcp/$1") 2> /dev/null; }
 
 if [[ $mode == down ]]; then
  stop_own
@@ -45,8 +45,9 @@ fi
 bash scripts/cloud-session-setup.sh docker
 bash scripts/cloud-session-setup.sh deps
 stop_own
-for port in 3000 8642; do
- if port_taken "$port"; then echo "port $port is taken by a process cloud:up did not start; stop it, then run npm run cloud:up again" >&2; exit 1; fi
+# The app's port, and the fake Engine's where scripts/web.sh points lane 0's app (tests/lane.mjs hermesHostOf).
+for address in 127.0.0.1/3000 127.0.0.110/8642; do
+ if taken "$address"; then echo "${address/\//:} is taken by a process cloud:up did not start; stop it, then run npm run cloud:up again" >&2; exit 1; fi
 done
 
 echo 'Starting the local Supabase stack (scripts/local-db.sh)…'

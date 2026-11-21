@@ -29,8 +29,8 @@ const mode=flags.length?'sign-in':'journey';
 // The checks run against the stack's own address only: the app and its API are the local ones.
 assertLocalTarget(origin);
 mkdirSync(out,{recursive:true});
-// A journey's screenshots replace the last journey's.
-if(mode!=='sign-in') for(const file of readdirSync(out)) if(file.endsWith('.png')) rmSync(join(out,file));
+// A journey's screenshots (NN-step.png) replace the last journey's; nothing else in the folder is touched.
+if(mode!=='sign-in') for(const file of readdirSync(out)) if(/^\d{2}-[a-z-]+\.png$/.test(file)) rmSync(join(out,file));
 
 const quote=value=>`'${String(value).replaceAll("'","''")}'`;
 const query=sql=>localQuery(sql,origin);
