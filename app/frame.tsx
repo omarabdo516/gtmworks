@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
+import { FaceMotion } from '@/components/face-motion';
 
 const narrowQuery='(max-width: 767px)';
 const subscribe=(notify:()=>void)=>{const media=window.matchMedia(narrowQuery);media.addEventListener('change',notify);return ()=>media.removeEventListener('change',notify);};
@@ -57,6 +58,7 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
  return <div className={`gw app-layout bg-background${chat?' is-chat':''}`}>
   <aside ref={drawer} id="sidebar" className={`sidebar${open?' is-open':''}`} aria-label={t('mainMenu')} role={covered?'dialog':undefined} aria-modal={covered||undefined}>{sidebar}</aside>
   <div className="scrim" hidden={!open} onClick={()=>setOpen(false)}/>
+  <FaceMotion/>
   <div className="shell">
    <header className="topbar h-(--sz-60px) shrink-0 flex items-center gap-2 border-b border-border px-4 md:px-6">
     <button ref={menu} type="button" className="mobile-menu circle-btn md:hidden" aria-label={t('openMenu')} aria-controls="sidebar" aria-expanded={open} onClick={()=>setOpen(true)}><ShellIcon name="menu"/></button>
