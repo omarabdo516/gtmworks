@@ -71,7 +71,7 @@ test('a switch\'s thumb springs to the end side and fades its colour, in English
  });
  const thumbMoves='transform 0.32s cubic-bezier(0.34, 1.45, 0.64, 1), background-color 0.2s cubic-bezier(0.2, 0, 0, 1)';
  const trackMoves='background-color 0.15s cubic-bezier(0.2, 0, 0, 1)';
- for(const [language,end] of [['en',12],['ar',-12]] as const) {
+ try { for(const [language,end] of [['en',12],['ar',-12]] as const) {
   query(`update public.people set language='${language}' where id='${omar}';`);
   await signIn(page,'omar@example.com','/c/rs-learning/settings');
   await expect(page.locator('html')).toHaveAttribute('lang',language);
@@ -89,8 +89,10 @@ test('a switch\'s thumb springs to the end side and fades its colour, in English
   await expect(toggle).toHaveAttribute('aria-checked','false');
   await expect(toggle).toBeEnabled();
   await page.context().clearCookies();
+ } } finally {
+  // Whatever failed, the board test below starts with Omar in English and SEO shown to nobody.
+  query(`do $$ begin update public.people set language='en' where id='${omar}'; delete from public.member_agent_access where agent_id='${seo}'; end $$;`);
  }
- query(`update public.people set language='en' where id='${omar}';`);
 });
 
 // #190: the board's chips and Cards follow the same switches. Meta Ads is shown to the Contributor again, SEO to

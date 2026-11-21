@@ -352,15 +352,23 @@ test('the account menu rises as it opens and is gone at once when it closes, and
  const gone=()=>page.evaluate(()=>new Promise<boolean>(resolve=>requestAnimationFrame(()=>resolve(!document.getElementById('me-menu')))));
  const closes:[string,()=>Promise<unknown>][]=[
   ['Escape',()=>page.keyboard.press('Escape')],
-  ['a press outside it',()=>page.mouse.click(900,450)],
+  // The sidebar's "Agents" heading: a press on it opens nothing.
+  ['a press outside it',()=>page.locator('.sidebar .sb-label').filter({hasText:'Agents'}).first().click()],
   ['choosing an item',()=>menu.getByRole('menuitemradio',{name:/^English/}).click()],
  ];
+ // The rise's first frame, read as it starts: paused at its beginning, then let go.
+ await page.evaluate(()=>{ const seen=window as unknown as {firstFrame?:string[]}; document.addEventListener('animationstart',event=>{
+  const element=event.target as HTMLElement; if(element.id!=='me-menu') return;
+  const rise=element.getAnimations().find(animation=>(animation as CSSAnimation).animationName==='gw-rise'); if(!rise) { seen.firstFrame=['no gw-rise']; return; }
+  rise.pause(); rise.currentTime=0; const {opacity,transform}=getComputedStyle(element); seen.firstFrame=[opacity,transform]; rise.finish();
+ },true); });
  for(const [how,close] of closes) {
+  await page.evaluate(()=>{ delete (window as unknown as {firstFrame?:string[]}).firstFrame; });
   await button.click();
   await expect(menu).toBeVisible();
   expect(await menu.evaluate(element=>{ const style=getComputedStyle(element); return [style.animationName,style.animationDuration,style.animationTimingFunction]; }),'the menu as it opens').toEqual(['gw-rise','0.12s','cubic-bezier(0.2, 0, 0, 1)']);
   // The rise starts from opacity 0, 4px down.
-  expect(await menu.evaluate(element=>{ const [rise]=element.getAnimations(); rise.pause(); rise.currentTime=0; const {opacity,transform}=getComputedStyle(element); rise.finish(); return [opacity,transform]; })).toEqual(['0','matrix(1, 0, 0, 1, 0, 4)']);
+  await expect.poll(()=>page.evaluate(()=>(window as unknown as {firstFrame?:string[]}).firstFrame),'the rise starts from opacity 0, 4px down').toEqual(['0','matrix(1, 0, 0, 1, 0, 4)']);
   await close();
   expect(await gone(),`${how} removes the menu by the next frame`).toBe(true);
  }

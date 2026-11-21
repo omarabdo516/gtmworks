@@ -238,5 +238,8 @@ test('a menu drawn again for the page it was kept open for does not rise a secon
  await again.getByRole('button', { name: 'Account menu' }).click();
  await expect.element(again.getByRole('menu')).not.toBeInTheDocument();
  await again.getByRole('button', { name: 'Account menu' }).click();
+ await expect.element(again.getByRole('menu')).toBeVisible();
  expect(animationOf(document.getElementById('me-menu')).animationName).toBe('gw-rise');
+ await userEvent.keyboard('{Escape}');
+ await expect.element(again.getByRole('menu')).not.toBeInTheDocument();
 });
