@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(26);
+select plan(27);
 -- #367. RS Learning with Ads, shown to the Contributor (…03), and SEO, shown to nobody. A Card whose own Agent is SEO is
 -- out of the Contributor's reach by its id, as board_cards() already leaves it off their board: no read, no write, no
 -- move, no place, no undo, nothing written on it. The Owner reaches it, and the Contributor reaches the Ads Card.
@@ -52,6 +52,8 @@ select throws_ok($$select public.undo_work_card_move('10000000-0000-0000-0000-00
  'undo_work_card_move refuses the Contributor''s own move once the Card''s Agent is hidden from them');
 select throws_ok($$select public.edit_work_card('10000000-0000-0000-0000-000000000001',pg_temp.card('Reach SEO'),'{"title":"x"}'::jsonb)$$,'P0001','card not found or not permitted',
  'edit_work_card answers as for a Card that does not exist');
+select throws_ok($$select public.change_work_card('10000000-0000-0000-0000-000000000001',pg_temp.card('Reach SEO'),'actor','{"person":"20000000-0000-0000-0000-000000000003"}'::jsonb)$$,'P0001','card or item not found',
+ 'change_work_card answers as for a Card that does not exist');
 select throws_ok($$insert into public.work_comments(company_id,card_id,body) values('10000000-0000-0000-0000-000000000001',pg_temp.card('Reach SEO'),'hello')$$,'42501',null,
  'nothing is written on it');
 select lives_ok($$select public.move_work_card('10000000-0000-0000-0000-000000000001',pg_temp.card('Reach Ads'),pg_temp.stage_of('planned'))$$,'move_work_card moves the Card whose Agent they see');
