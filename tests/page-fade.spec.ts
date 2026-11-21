@@ -16,7 +16,7 @@ const company = '10000000-0000-0000-0000-000000000001';
 // panel show on any frame.
 async function watch(page: Page) {
  await page.addInitScript(() => {
-  const state = window as typeof window & { fades?: string[], lowest?: Record<string, number> };
+  const state = window as typeof window & { fades?: string[], rows?: string[], lowest?: Record<string, number> };
   state.fades = []; state.lowest = { sidebar: 1, details: 1 };
   document.addEventListener('animationstart', event => {
    const target = event.target as Element;
@@ -24,6 +24,16 @@ async function watch(page: Page) {
     : target.closest('.details, .dp-scrim') ? 'details' : target.closest('.sidebar') ? 'sidebar' : 'other';
    if (part !== 'other') state.fades!.push(`${part} ${event.animationName}`);
   }, true);
+  // The row or tile that is current changes its fill: by its transition, or by its arrival when its sidebar is drawn anew.
+  state.rows = [];
+  const filled = (event: Event) => {
+   const target = event.target as Element;
+   if (!target.matches?.('.sidebar :is(.sb-item, .agent-tile)[aria-current]')) return;
+   if (event instanceof TransitionEvent && event.propertyName !== 'background-color') return;
+   state.rows!.push(new URL((target as HTMLAnchorElement).href).pathname);
+  };
+  document.addEventListener('transitionrun', filled, true);
+  document.addEventListener('animationstart', filled, true);
   const sample = () => {
    for (const part of ['sidebar', 'details']) {
     const element = document.querySelector(`.${part}`);
@@ -71,6 +81,7 @@ test('each page opened from the sidebar fades in once, polling fades nothing, an
    await settle(page);
    const fades = await pageFades(page);
    expect(fades.length - opened, `${link}: one fade per page opened`).toBe(1);
+   expect(await page.evaluate(() => (window as typeof window & { rows: string[] }).rows), `${link}: the row that becomes current fades to its fill`).toContain(href);
    opened = fades.length;
   };
   await open('.nav a.sb-item[href$="/numbers"]', '.numbers-page');
