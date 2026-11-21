@@ -462,7 +462,7 @@ test('a move the new main Agent cannot take keeps the source, paused, and answer
   await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(second)});
   const retimed={create:async(connection,routine)=>{ const made=await createRoutine(connection,routine); Object.assign(jobs(second,leadProfile)[0],{schedule:{kind:'cron',expr:'0 7 * * *',display:'0 7 * * *'}}); return made; },change:async()=>({state:'unreachable'})};
   assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(second),driver:retimed})).state,'failed');
-  assert.deepEqual(jobs(second,adsProfile).map(job=>job.state),['paused']);
+  assert.equal(jobs(second,adsProfile).length,0,'the copy that could not follow is removed');
   assert.deepEqual(jobs(second,leadProfile).map(job=>[job.state,job.schedule.expr]),[['paused','0 7 * * *']],'the source keeps how it was set');
  } finally { await second.close(); }
  // Lead was removed and its settle failed; Lead is in no list now but the Company's profiles still name it, so the next
@@ -524,7 +524,7 @@ test('a move follows an interval set on the source while the copy is made, and f
   const blind={read:async connection=>connection.profile===leadProfile&&++reads>1?{state:'unreachable'}:readRoutines(connection)};
   assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(second),driver:blind})).state,'failed');
   assert.deepEqual(jobs(second,leadProfile).map(job=>[job.state,job.schedule.expr]),[['paused','0 9 * * *']],'kept, never deleted');
-  assert.deepEqual(jobs(second,adsProfile).map(job=>job.state),['paused']);
+  assert.equal(jobs(second,adsProfile).length,0);
  } finally { await second.close(); }
 });
 
@@ -608,26 +608,26 @@ test('a log write tried again after a lost answer sends the same change key, so 
  } finally { await fake.close(); leases.clear(); }
 });
 
-test('a resume of the new copy that does not answer but lands later is overruled by the pause sent after it', async () => {
+test('a resume of the new copy that does not answer but lands later is overruled by the delete sent after it', async () => {
  const fake=await engine();
  try {
   await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
   // The Engine takes the resume of Ads' copy but answers nothing in time; it finishes it before the next request to that
   // job, as it works through one job's requests in order.
-  const {resumeRoutine,pauseRoutine}=await import('../lib/hermes.mjs');
+  const {resumeRoutine,deleteRoutine}=await import('../lib/hermes.mjs');
   let late=null;
   const lateResume={
    resume:async(connection,routine)=>{ late=()=>resumeRoutine(connection,routine); return {state:'unreachable'}; },
-   pause:async(connection,routine)=>{ if(late&&connection.profile===adsProfile) { await late(); late=null; } return pauseRoutine(connection,routine); },
+   delete:async(connection,routine)=>{ if(late&&connection.profile===adsProfile) { await late(); late=null; } return deleteRoutine(connection,routine); },
   };
   assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:lateResume})).state,'failed');
   assert.equal(late,null,'the late resume landed');
-  assert.deepEqual(jobs(fake,adsProfile).map(job=>job.state),['paused'],'and the pause after it is the last word');
+  assert.equal(jobs(fake,adsProfile).length,0,'and the delete after it is the last word');
   assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused'],'the source sends from nowhere either');
  } finally { await fake.close(); }
 });
 
-test('a move whose lease runs out before its safety pause still sends that pause', async () => {
+test('a move whose lease runs out before its safety requests still sends them', async () => {
  const fake=await engine();
  try {
   await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
@@ -639,9 +639,23 @@ test('a move whose lease runs out before its safety pause still sends that pause
   const answer=await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,agents:agentRows(lead),hermes:install(fake),driver:lostThenLate,fence}));
   assert.equal(answer.state,'failed');
   assert.ok(late,'the resume was sent and did not answer');
-  const pauses=fake.settings.managementRequests.filter(request=>/\/pause\?/.test(String(request.path))&&new URL(String(request.path),'http://m').searchParams.get('profile')===adsProfile);
-  assert.ok(pauses.length>=1,'the safety pause was sent although the lease had run out');
-  assert.deepEqual(jobs(fake,adsProfile).map(job=>job.state),['paused']);
+  const removals=fake.settings.managementRequests.filter(request=>request.method==='DELETE'&&new URL(String(request.path),'http://m').searchParams.get('profile')===adsProfile);
+  assert.ok(removals.length>=1,'the copy it made is removed although the lease had run out');
+  assert.equal(jobs(fake,adsProfile).length,0);
   assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused'],'and the source is paused too');
  } finally { await fake.close(); leases.clear(); }
+});
+
+test('a move that cannot carry words changed on the source meanwhile keeps the source and answers failed', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const reworded={create:async(connection,routine)=>{ const made=await createRoutine(connection,routine); jobs(fake,leadProfile)[0].prompt=`${morningMarker}\nAlso list the ads that ran.`; return made; }};
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:reworded})).state,'failed');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>[job.state,job.prompt.endsWith('Also list the ads that ran.')]),[['paused',true]],'the source with the new words is kept, paused');
+  assert.equal(jobs(fake,adsProfile).length,0,'the copy with the old words is removed');
+  // The next settle brings the source over with its new words.
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,hermes:install(fake)})).state,'moved');
+  assert.ok(jobs(fake,adsProfile)[0].prompt.endsWith('Also list the ads that ran.'));
+ } finally { await fake.close(); }
 });
