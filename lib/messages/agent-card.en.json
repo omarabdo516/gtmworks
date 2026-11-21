@@ -56,7 +56,7 @@
   "changeApprovedModel": "{0} approved · {1}. {2} now thinks with {3}.",
   "changeDeclined": "{0} declined · {1}. Nothing changed.",
   "changeDeclinedReason": "{0} declined · {1}. Nothing changed. Reason: «{2}»",
-  "changeDeclinedMaybe": "{0} declined · {1}. An earlier approval may already be in the settings of {2}: check them.",
+  "changeDeclinedMaybe": "{0} declined · {1}. An earlier approval may already be in the settings of {2}, or may still reach them: check them again later.",
   "changeReason": "Reason: «{0}»",
   "changeRefused": "This isn’t a setting an agent can propose, so nothing changed and it waits on nobody.",
   "changeDecline": "Decline",

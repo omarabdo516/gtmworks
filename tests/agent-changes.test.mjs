@@ -235,6 +235,18 @@ test('a write that lands after the proposal was declined meanwhile says so to th
   const declinedMeanwhile=owner([model],{answer:{data:null,error:{code:'22023',message:'agentChangeAnswered'}}});
   assert.deepEqual(await answerChange(declinedMeanwhile.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'writtenLate'});
   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT').map(request=>request.path),[`/api/profiles/${own(ads)}/model`]);
+  // A write whose request timed out but which the Engine still completes afterwards: the approval reads it as unknown,
+  // ends its lease and keeps the proposal applying, so a decline then is recorded as maybe applied while the write lands.
+  profileOn(fake,own(ads));
+  const late=proposalsOf().model;
+  const pendingWrites=[];
+  const slow={...settingDriver(fake),writeModel:async(target,change)=>{ pendingWrites.push(()=>settingDriver(fake).writeModel(target,change)); return {state:'unreachable'}; }};
+  const timedOutLate=owner([late]);
+  assert.deepEqual(await answerChange(timedOutLate.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:slow}),{state:'notApplied',applied:'unreachable'});
+  assert.deepEqual([late.state,late.lease],['applying','over'],'the proposal is never sent back to waiting while the write may still land');
+  assert.equal(fake.settings.profiles.get(own(ads)).model,'openai/gpt-5.5','nothing had landed when the approval answered');
+  await Promise.all(pendingWrites.map(write=>write()));
+  assert.equal(fake.settings.profiles.get(own(ads)).model,'claude-sonnet-5-5','the write lands after its request timed out');
   // A write that timed out is uncertain: the lease ends, the proposal stays applying, and a decline then is maybe applied.
   fake.settings.managementStatus=504;
   const timedOut=owner([proposalsOf().model]);

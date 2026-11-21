@@ -158,12 +158,14 @@ grant execute on function public.agent_propose_change(uuid,text,text,text,text,t
 -- write. While a lease holds, every other claim, the same Owner's from another tab included, is answered busy; an expired
 -- one is taken over with a new token (`retry`: its write may have been lost, so the app never gives that claim back).
 -- Right before the Engine write the app renews the lease with its token (renew_agent_change); a claim lost meanwhile
--- writes nothing. Every Engine request the writers make has its own timeout of at most fifteen seconds, so a write that
--- starts inside a renewed lease ends inside it, and no decline can land while it runs. Once the change is read back,
--- answer_agent_change marks it approved, for that token alone. A claim whose write was refused before anything reached
--- the Engine is given back (release_agent_change, with its token); one whose outcome is unknown stays applying with its
--- lease ended, so the Owner approves it again at once, which writes nothing new. An Owner calling these functions directly can mark a proposal they
--- claimed approved without the write; it is their own record.
+-- writes nothing. Once the change is read back, answer_agent_change marks it approved, for that token alone. A claim
+-- whose write was refused before anything reached the Engine is given back (release_agent_change, with its token); one
+-- whose outcome is unknown stays applying with its lease ended, so the Owner approves it again at once, which writes
+-- nothing new. Hermes has no compare-and-set on a profile's settings, so two windows stay open that no lease can close:
+-- an approval that stalls more than five minutes after renewing, and a write whose request timed out but which Hermes
+-- still completes. A decline in either is a decline of an applying proposal, so it is always recorded as maybe applied
+-- and the card says the change may already be in the settings, or may still reach them. An Owner calling these functions
+-- directly can mark a proposal they claimed approved without the write; it is their own record.
 alter table public.agent_change_proposals add column claim_token uuid,
  add constraint agent_change_proposals_token check ((claim_token is null)=(claimed_at is null));
 
