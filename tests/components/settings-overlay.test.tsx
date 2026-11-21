@@ -115,7 +115,8 @@ test('closing keeps the overlay in the page with its exit running, then takes it
  expect(push).not.toHaveBeenCalled();
  await userEvent.keyboard('{Escape}');
  await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat']]);
- expect(document.querySelector<HTMLElement>('.sov-root')?.hidden).toBe(true);
+ // useLeave marks the overlay gone and navigates in one callback; React draws it gone on its next render.
+ await expect.poll(() => document.querySelector<HTMLElement>('.sov-root')?.hidden).toBe(true);
  await new Promise(resolve => setTimeout(resolve, 250));
  expect(push).toHaveBeenCalledOnce();
 });
