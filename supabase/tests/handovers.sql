@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(85);
+select plan(88);
 -- #317, #475. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor
 -- (…03) is shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads. Any Agent of a
 -- Company hands work to any other Agent of it, seen by the person or not (decision 0057).
@@ -204,6 +204,17 @@ select is(public.command_handover('c3170000-0000-0000-0000-000000000006','100000
 select is(public.command_handover('c3170000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000011',gen_random_uuid(),'/write three headlines','writer','three headlines'),
  true,'and one typed to the main Agent still hands its job over');
 reset role;
+-- #475: a handover kept while its person was a writer, and not yet started when they were removed, starts no Run: the
+-- leg ends as failed, as for any target that cannot run, and the Company's Agent does no work for someone who left.
+select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000006','run-ads','call-4','Lead','Plan the week',null),
+ '{"state":"created","agent":"Lead"}'::jsonb,'a Contributor''s chat with Ads keeps a handover to Lead');
+update public.members set role='viewer' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-ads' and call_id='call-4'))),0,
+ 'once they are no writer of the Company, the queued handover starts no Run');
+select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where run_id='run-ads' and call_id='call-4'),'returning:failed:0',
+ 'its leg ends as failed, never started');
+update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000003';
+
 -- #475: the writer must be a current Member. Once removed from the Company, their Run with any Agent lists no target,
 -- is offered no hand_to_agent, and a call it made is refused, so a Conversation they kept hands nothing over.
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values

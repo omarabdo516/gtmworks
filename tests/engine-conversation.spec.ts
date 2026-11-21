@@ -68,6 +68,11 @@ const untie=(conversation:string)=>query(`update public.work_cards set conversat
 // Six minutes of tests in one file held one worker of one shard (#404, #410): each test makes its own rows and runs on
 // its lane's own stack, so they spread over the shard's workers and the shards.
 test.describe.configure({mode:'parallel'});
+// #475: hand_to_agent is offered whenever the Company has another Agent that can run, and these tests run side by side,
+// each adding and removing Agents of the one seeded Company, so whether it is there in a test that does not make its own
+// targets depends on which others are running. Those tests compare the rest of the list; hand_to_agent's own tests set
+// up the Agents it names.
+const notHandover=(name:string)=>name!=='hand_to_agent';
 
 test('integration: a message on the fake engine gets its slow reply stored once, with its end',async()=>{
  test.setTimeout(120000);
@@ -151,9 +156,9 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
- // #317, #475: hand_to_agent names the Company's other Agents, and this Company has none yet, so Lead's Runs are offered
- // no hand_to_agent (the Manager's Run below, once Meta Ads is made, is).
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change'],['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']]);
+ // #317, #475: hand_to_agent names the Company's other Agents, which tests running beside this one may add, so the rest of
+ // the list is compared here; the Manager's Run below, once Meta Ads is made, is offered it.
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name).filter(notHandover))).toEqual([['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change'],['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']]);
  expect(fake.agentReads).toContain(profile);
  const [agent]=made();
  expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
@@ -258,7 +263,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
   const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
   expect(await send(rule)).toEqual({conversation});
-  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+  expect(fake.runs[0].tools.map(tool=>tool.name).filter(notHandover)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
   // No Run is told the Company knowledge (#344): every profile auto-loads it as the shared Skill company-knowledge.
   expect(fake.runs[0].instructions,'no instructions are sent: the fake engine keeps an absent field as null').toBeNull();
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
@@ -280,7 +285,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const tell=(message:string)=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
   const closeTheirs=()=>closeOpenRuns(service,{hermes,conversation:theirs,owner:contributor,engineFor:fake.engineFor});
   expect(await tell('Draft the teaser')).toEqual({conversation:theirs});
-  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+  expect(fake.runs[2].tools.map(tool=>tool.name).filter(notHandover)).toEqual(['suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
   expect(fake.runs[2].instructions??'').not.toContain(rule);
   expect(await closeTheirs()).toBe(1);
 
@@ -331,7 +336,7 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   const close=()=>closeOpenRuns(service,{hermes,conversation,owner:contributor,engineFor:fake.engineFor});
   for(const [index,message] of Object.keys(calls).entries()) {
    expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs[index].tools.map(tool=>tool.name).filter(notHandover)).toEqual(['suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    // A reader and the worker close the run at once: the card is kept once, before the reply is stored.
    const closed=await Promise.all([close(),close()]);
    expect(closed[0]+closed[1]).toBe(1);
@@ -427,7 +432,7 @@ test('integration: an Agent shows a review once under its reply, shows none for 
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name).filter(notHandover)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it. The Card
@@ -468,7 +473,7 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name).filter(notHandover)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the hand's runs are measured after it. The Card

@@ -191,7 +191,9 @@ begin
 
  if r.state='waiting' then
   -- Given up (a start that never came within ten minutes, or a lost one within a day), a target that cannot run at all,
-  -- or, for a job command or a channel, one no longer the person's to call (#354): no Run starts. A command's handover
+  -- a Conversation's person who is no longer a writer of the Company (removed, or now a Viewer: the same rule that kept
+  -- the call, may_hand_to_agent), or, for a job command or a channel, a target no longer the person's to call (#354): no
+  -- Run starts. A command's handover
   -- ends there, its target never answering, so the person's own Run ends as failed and the chat says the reply did not
   -- come; any other job goes on to the asking Agent's follow-up, which tells the person.
   -- Both windows count from when the start could go: when the job was made, or the last time another job held it.
@@ -199,6 +201,7 @@ begin
   if (r.target_attempts=0 and coalesce(r.start_waited_at,r.created_at) < now()-interval '10 minutes')
    or (r.target_attempts>0 and coalesce(r.start_waited_at,r.created_at) < now()-interval '1 day')
    or target.id is null or target.profile is null
+   or (r.conversation_id is not null and not public.may_hand_to_agent(r.company_id, r.from_agent, person))
    or (r.answers_person and not public.agent_visible_to(r.company_id, person, target.id))
    or (r.conversation_id is null and not public.channel_agent(chan, person, target.id)) then
    if r.answers_person then
