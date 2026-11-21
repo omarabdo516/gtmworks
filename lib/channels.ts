@@ -2,7 +2,7 @@ import type { supabase } from './supabase';
 import type { BoardColumn } from './board-columns.mjs';
 import { agentStatus, type AgentStatus } from './agent-details.mjs';
 import type { SessionUsage } from './engine.mjs';
-import { replyCardColumns, replyCardOf, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
+import { handoverUnfinished, replyCardColumns, replyCardOf, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type MemberRole='owner'|'manager'|'contributor'|'viewer';
@@ -22,7 +22,8 @@ export type ChannelMention={agent:string,face:string,state:MentionState,permissi
 // starts no Run. Its id is negative, so it is never a message's. The quiet message "Done it" writes to ask an Agent to
 // pick up (#149) is `handDone`: nothing draws a bubble of it, and the card shows the press instead.
 // A handover in the channel (#150) is a quiet row between turns, with its own id: the two Agents and their faces, the
-// other Agent's answer marked `to` the Agent that handed it over, and then that Agent's own reply.
+// other Agent's answer marked `to` the Agent that handed it over, and then that Agent's own reply. A handover that did
+// not finish (#375) marks its row `failed`.
 // A message may carry images (#156), drawn as chips under it for every Member.
 type ChannelFile={id:number,name:string};
 type ChannelFace={name:string,face:string};
@@ -31,9 +32,10 @@ export type ChannelMessage=
  | {id:number|string,author:'agent',name:string,face:string,body:string,at:string,to?:string,steps?:RunSteps,cards?:ReplyCard[]}
  | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
  | {id:number,author:'note',kind:'card',at:string}
- | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string};
-// One handover of a channel, as its details draw it: both faces, the Agent handed the work, and the job, newest first.
-export type ChannelHandoff={id:number,from:ChannelFace,to:ChannelFace,goal:string,at:string};
+ | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true};
+// One handover of a channel, as its details draw it: both faces, the Agent handed the work, and the job, newest first,
+// and that it did not finish when so (#375).
+export type ChannelHandoff={id:number,from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true};
 export type ChannelName={kind:'general'}|{kind:'team',name:string};
 export type ChannelSummary=ChannelName&{id:string,unread:number};
 // One row of a channel's members. An invited person who has not joined is a row too (#207): no person yet, their name made
@@ -77,7 +79,7 @@ type StoredSession={message_id:number,agent_id:string,profile:string,session:str
 // One handover of the channel (#150) as channel_handovers answers it: both Agents and their faces, the job, what the
 // target reported, Lead's reply and when each came. Only what the chat draws; never the context or the Engine's runs.
 type StoredHandover={id:number,message:number,from_agent:string,from_name:string,from_connection:string,to_agent:string,to_name:string,
- to_connection:string,goal:string,summary:string|null,reply:string|null,state:string,created_at:string,answered_at:string|null,closed_at:string|null};
+ to_connection:string,goal:string,summary:string|null,reply:string|null,state:string,target_outcome:string|null,created_at:string,answered_at:string|null,closed_at:string|null};
 // A channel's replies read their Run's steps from the Agent's Hermes session when the channel opens (#346), never kept.
 // `profile` is the one the Run was pinned to; the callback reads the session there.
 type ReadSession=(agent:string,session:string,profile:string)=>Promise<{turns:SessionTurn[],usage:SessionUsage|null}|null>;
@@ -205,7 +207,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // answer and Lead's reply appear as soon as each comes in.
  const shownIds=new Set(ordered.map(message=>message.id));
  const handoverMessages=((handed||[]) as StoredHandover[]).filter(row=>shownIds.has(row.message)).flatMap((row):ChannelMessage[]=>[
-  {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at},
+  {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
+   ...(handoverUnfinished(row)?{failed:true as const}:{})},
   ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
   ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,body:row.reply,at:row.closed_at}]:[]),
  ]);
@@ -225,7 +228,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   manage:!!manager&&name.kind==='team',
   managers,
   messages,
-  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at})),
+  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
+  ...(handoverUnfinished(row)?{failed:true as const}:{})})),
   open:((openRuns||[]) as {agent_id:string|null}[]).length>0,
   handover:((handed||[]) as StoredHandover[]).some(row=>row.state!=='done'&&row.state!=='failed'),
   may:(may||[]) as PermissionChoice[],
