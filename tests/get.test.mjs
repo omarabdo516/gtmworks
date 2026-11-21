@@ -125,7 +125,7 @@ case "$*" in
   case "$step" in
    read) if [ -n "\${READ_ROW:-}" ]; then printf '%s\n' "$READ_ROW"; else echo "$button|$auto|$state|$due"; fi;;
    button-on) button=t;; button-off) button=f;; auto-on) auto=t;; auto-off) auto=f;;
-   ignore|idle) state=idle;; updating) state=updating due=f;; checked) due=f;; updated|failed|current) state=$step due=f;;
+   ignore) state=idle;; updating) state=updating due=f;; checked) due=f;; updated|failed|current) state=$step due=f;;
   esac
   printf 'button=%s auto=%s state=%s due=%s\n' "$button" "$auto" "$state" "$due" > "$UPDATES_FILE";;
  *'exec -T db psql'*) [ ! -f "$DB_FILE" ] || cat "$DB_FILE";;

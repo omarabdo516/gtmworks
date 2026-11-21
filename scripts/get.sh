@@ -772,7 +772,6 @@ updates() {
     ignore) sql="update public.install_updates set state='idle', changed_at=now() where state='requested';";;
     updating) sql="update public.install_updates set state='updating', changed_at=now(), auto_checked_at=now();";;
     checked) sql="update public.install_updates set auto_checked_at=now();";;
-    idle) sql="update public.install_updates set state='idle', changed_at=now() where state in ('requested','updating');";;
     updated|failed|current) sql="update public.install_updates set state='$1', version=nullif(:'version',''), changed_at=now(), auto_checked_at=now();";;
     *) echo "gtmworks knows no updater step $1." >&2; return 2;;
   esac
