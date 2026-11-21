@@ -79,3 +79,8 @@ test('a mention of an Agent is left out of the task, an email address in it is k
  assert.equal(readRoutineSentence('Send the report every day at 9am to omar@example.com')?.prompt,'Send the report to omar@example.com');
  assert.equal(readRoutineSentence('@Ads send the report every day at 9am')?.prompt,'send the report');
 });
+
+test('a number before the "every" is part of the task, never a time', () => {
+ assert.deepEqual(read('Send me the top 3 ads every day'),{name:'Top 3 ads',cron:null});
+ assert.deepEqual(read('ابعتلي أحسن 3 إعلانات كل يوم'),{name:'أحسن 3 إعلانات',cron:null});
+});
