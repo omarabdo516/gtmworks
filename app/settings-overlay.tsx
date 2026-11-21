@@ -125,11 +125,14 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const learningWaiting=canManage?(await db.from('waiting_items').select('id',{count:'exact',head:true}).eq('company_id',company.id).eq('kind','rule_suggestion').is('resolved_at',null)).count||0:0;
  // The changes Agents proposed for their own settings that wait for the Owner (#19, #178): every one for an Owner, and for
  // anyone else only one made in their own Conversation while they see both Agents (the database's agent_change_proposals_read).
- // An Owner's number on "Agents" is drawn on every section; the rows and the note are read on the Agents section alone.
- const changes:WaitingChange[]=section==='agents'?await readWaitingChanges(db,company.id).catch(()=>[]):[];
- const agentsWaiting=owner?(section==='agents'?changes.length:await countWaitingChanges(db,company.id).catch(()=>0)):0;
+ // An Owner's number on "Agents" is drawn on every section; the rows (an Owner's) and the note (an Agent's page) are read on
+ // the Agents section alone. A read that fails leaves Settings as if nothing waited, and says so in the server's log; with
+ // the Owners' names unread the note waits for "the Owner".
+ const failed=<T,>(what:string,fallback:T)=>(failure:unknown):T=>{ console.error(`Settings: ${what} not read:`,company.id,(failure as {message?:string})?.message||'unknown error'); return fallback; };
+ const changes:WaitingChange[]=section==='agents'&&(owner||agent)?await readWaitingChanges(db,company.id).catch(failed<WaitingChange[]>('waiting proposals',[])):[];
+ const agentsWaiting=owner?(section==='agents'?changes.length:await countWaitingChanges(db,company.id).catch(failed('waiting proposals count',0))):0;
  const change=agent?waitingChangeFor(changes,agent.id):null;
- const owners=change&&!owner?await ownerNames(db,company.id).catch(()=>[]):[];
+ const owners=change&&!owner?await ownerNames(db,company.id).catch(failed<string[]>('Owners',[])):[];
  const pend=change&&<ProposalNote change={change} owner={owner} owners={owners} href={waitingChangeHref(slug,change,{person:userId,owner})}/>;
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
