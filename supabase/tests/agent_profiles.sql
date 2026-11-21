@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(64);
+select plan(66);
 -- RS Learning (1): Lead on the Company's own profile, an Owner's (Omar's) and a Manager's Conversation with Lead.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('a7000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','a7000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
 insert into public.company_profiles(company_id,profile,skills_shared,tools_confirmed) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true);
@@ -36,6 +36,16 @@ select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000
 reset role;
 select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),false,
  'and the closer that wrote the same fixed set leaves it confirmed');
+-- An Owner who turned sub-agents on before a later closer arrived left the profile pending: that closer wrote the set
+-- with them off, so it confirms nothing, and the worker writes the Owner's choice.
+update public.agent_profiles set subagents=true,tools_pending=true where agent_id=(select agent from made where name='own');
+set local role service_role;
+select is(public.lead_create_agent(conversation=>'a7100000-0000-0000-0000-000000000001',run=>'run-1',call=>'call-0',agent_name=>'Writer',job=>'Writes the blog.',apps=>'{WordPress}',
+  own_profile=>true),jsonb_build_object('state','created','agent',(select agent from made where name='own')),'a closer after the Owner''s switch answers the same Agent');
+reset role;
+select is((select tools_pending from public.agent_profiles where agent_id=(select agent from made where name='own')),true,
+ 'and leaves the profile pending, since it wrote the set without the sub-agents the Owner turned on');
+update public.agent_profiles set subagents=false,tools_pending=false where agent_id=(select agent from made where name='own');
 update public.agent_profiles set skills_shared=true where agent_id=(select agent from made where name='own');
 select is((select count(*)::int from public.hermes_agents where company_id='10000000-0000-0000-0000-000000000001' and not is_default),1,'one Agent is made');
 select ok(exists(select 1 from public.hermes_agents a join made m on m.agent=a.id and m.name='own'

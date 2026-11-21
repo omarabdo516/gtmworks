@@ -121,7 +121,9 @@ begin
   end if;
  else
   if found then
-   if own_profile then update public.agent_profiles p set tools_confirmed=true,tools_pending=false where p.agent_id=made; end if;
+   -- The closer wrote the set with sub-agents off (provideAgent), so it confirms only a record whose switch is still off:
+   -- an Owner who turned it on meanwhile left the profile pending, and the worker writes their choice.
+   if own_profile then update public.agent_profiles p set tools_confirmed=true,tools_pending=false where p.agent_id=made and not p.subagents; end if;
    return jsonb_build_object('state','created','agent',made);
   end if;
  end if;

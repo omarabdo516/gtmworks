@@ -325,7 +325,9 @@ begin
   -- A closer that raced the one that made the Agent wrote the same fixed set to the same profile and the Engine read it
   -- back (own_profile), so the record it left stays confirmed. One that did not provide it changes nothing: the worker
   -- makes the profile and records it.
-  if own_profile then update public.agent_profiles p set tools_confirmed=true,tools_pending=false where p.agent_id=made; end if;
+  -- The closer wrote the set with sub-agents off (provideAgent), so it confirms only a record whose switch is still off:
+  -- an Owner who turned it on meanwhile left the profile pending, and the worker writes their choice.
+  if own_profile then update public.agent_profiles p set tools_confirmed=true,tools_pending=false where p.agent_id=made and not p.subagents; end if;
   return jsonb_build_object('state','created','agent',made);
  end if;
  select * into talk from public.conversations where id=conversation;
