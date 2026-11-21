@@ -766,19 +766,19 @@ awk '$1 == "ssh" && /pn@sandbox/ && /open-design-mcp/ {found=1} END {exit !found
 wait "$od_check" || { cat open-design-proof.log >&2; fail 'an Agent makes a design with Open Design and returns its file'; }
 cat open-design-proof.log
 docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's file is in the Agent's own folder of the Company's work folder"
-# No provider credential in the sandbox: the Engine's model key is in no process environment and no file there, and no
-# provider key variable is set for any process.
-if docker exec --user 0 "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"' | grep -E -q "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN="; then
+# No provider credential in the sandbox: the Engine's model key and the Agent's provider key are in no process environment
+# and no file there, no provider key variable is set for any process, and no sign-in or key file of the Engine's kind (no
+# auth.json, no .env, no Hermes home) is in the work user's home or the work folder, where a synced sign-in would land.
+# Each scan is read whole first and a scan that fails fails the check: under pipefail a `grep -q` that stops reading early
+# could fail the pipe on a match.
+sandbox_env=$(docker exec --user 0 "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
+if grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null; then
   fail 'no process of the sandbox holds a provider credential'
 fi
-if docker exec --user 0 "$sandbox" grep -rIl --exclude-dir=proc -e fake-model-key -e "sk-or-v1-$od_marker" /home /work /tmp /run 2> /dev/null | grep -q .; then
-  fail 'no file of the sandbox holds a provider credential'
-fi
-# Nor a sign-in or key file of the Engine's kind: no auth.json, no .env and no Hermes home in the work user's home or the
-# work folder (a synced sign-in would land there).
-if docker exec --user 0 "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print 2> /dev/null | grep -q .; then
-  fail 'no sign-in or key file of the Engine is in the sandbox'
-fi
+sandbox_files=$(docker exec --user 0 "$sandbox" sh -c 'grep -rIl -e fake-model-key -e "$1" /home /work /tmp /run 2> /dev/null; true' sh "sk-or-v1-$od_marker") || fail "scan the sandbox's files"
+[[ -z $sandbox_files ]] || { printf '%s\n' "$sandbox_files" >&2; fail 'no file of the sandbox holds a provider credential'; }
+sandbox_keys=$(docker exec --user 0 "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
+[[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }
 # The Library shows the Company's work folder (#395): an Agent's file and picture in its own folder are listed, previewed
 # and downloaded with the same bytes through gtmworks; the Engine reads that folder and cannot write to it, as root or as
 # its own user, and nothing it tried reaches the sandbox.

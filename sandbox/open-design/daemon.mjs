@@ -8,7 +8,7 @@
 // design it makes is beside that Agent's other work and in the Library. It listens on loopback only, on a port of its
 // own kept beside the route. The route (the socket the Engine's ssh session forwards, the design profile and its key) is
 // in the work user's home, never in the work folder the Library shows.
-import { mkdirSync, readFileSync, writeFileSync, existsSync, openSync, closeSync, rmSync, renameSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, openSync, closeSync, rmSync, renameSync, linkSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
@@ -54,18 +54,27 @@ const freePort=()=>new Promise((resolve,reject)=>{
 });
 const readPort=file=>{ try { const port=Number(readFileSync(file,'utf8').trim()); return Number.isInteger(port)&&port>0&&port<65536?port:null; } catch { return null; } };
 
-// One start at a time for an Agent: a second caller waits for the first's lock file to go. A lock is broken only when
-// the process that took it is gone (a start killed part way), never while its holder still waits for its daemon.
+// One start at a time for an Agent: a second caller waits for the first's lock to go. The lock is a file holding its
+// holder's pid, written whole before it is linked into place, so a lock never exists without its pid. It is broken only
+// when that process is gone (a start killed part way), never while its holder still waits for its daemon; a lock that
+// still cannot be read (left by an older start) is broken once it is older than a start can take.
 const alive=pid=>{ try { process.kill(pid,0); return true; } catch(failure) { return /** @type {any} */(failure)?.code==='EPERM'; } };
-async function locked(file,work) {
- for(;;) {
-  try { writeFileSync(file,`${process.pid}\n`,{flag:'wx'}); break; }
-  catch {
-   const holder=Number.parseInt((()=>{ try { return readFileSync(file,'utf8'); } catch { return ''; } })(),10);
-   if(Number.isInteger(holder)&&holder>0&&!alive(holder)) rmSync(file,{force:true});
-   else await sleep(500);
+const startLimit=120_000;
+/** @param {string} file @param {()=>Promise<string>} work */
+export async function locked(file,work) {
+ const mine=`${file}.${process.pid}`;
+ writeFileSync(mine,`${process.pid}\n`);
+ try {
+  for(;;) {
+   try { linkSync(mine,file); break; }
+   catch {
+    const holder=Number.parseInt((()=>{ try { return readFileSync(file,'utf8'); } catch { return ''; } })(),10);
+    const age=(()=>{ try { return Date.now()-statSync(file).mtimeMs; } catch { return 0; } })();
+    if(Number.isInteger(holder)&&holder>0?!alive(holder):age>startLimit) rmSync(file,{force:true});
+    else await sleep(500);
+   }
   }
- }
+ } finally { rmSync(mine,{force:true}); }
  try { return await work(); } finally { rmSync(file,{force:true}); }
 }
 
@@ -92,11 +101,14 @@ export async function ensureDaemon({profile,key,cwd=process.cwd(),home=homedir()
   child.unref();
   closeSync(log);
   writeFileSync(paths.port,`${port}\n`);
-  for(let waited=0;waited<120;waited++) {
+  for(let waited=0;waited*500<startLimit;waited++) {
    if(await answers(port)) return `http://127.0.0.1:${port}`;
    if(child.exitCode!==null) break;
    await sleep(500);
   }
+  // A daemon that never answered is stopped before the lock goes, so the next start makes the only one.
+  if(child.exitCode===null&&child.pid) { try { process.kill(-child.pid,'SIGTERM'); } catch { child.kill('SIGTERM'); } }
+  rmSync(paths.port,{force:true});
   throw new Error(`Open Design's daemon did not start; its log is ${paths.log}.`);
  });
 }

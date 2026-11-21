@@ -139,3 +139,67 @@ test('the socket a session forwarded is moved to a name of its own, and nothing 
  assert.ok(statSync(kept).isFile());
  assert.deepEqual(readdirSync(home),[`engine-${agent}-001795289438020-27.sock`]);
 });
+
+// An Engine that answers with errors: each answer that is not a Run record counts against the outage, measured in time,
+// and a refused key ends the design at once.
+async function engineAnswering(answer) {
+ const home=mkdtempSync(join(tmpdir(),'od-err-'));
+ const socket=`${home}/engine.sock`;
+ const seen=[];
+ const engine=createServer((request,response)=>{
+  seen.push(`${request.method} ${request.url}`);
+  response.setHeader('Content-Type','application/json');
+  if(request.method==='POST'&&request.url.endsWith('/v1/runs')) { response.statusCode=202; return response.end(JSON.stringify({run_id:'run-9'})); }
+  const [status,body]=answer(request);
+  response.statusCode=status; response.end(JSON.stringify(body));
+ });
+ await new Promise(resolve=>engine.listen(socket,resolve));
+ return {route:{sockets:[socket],profile:`od-${agent}`,key:'k'.repeat(43)},seen,close:()=>engine.close()};
+}
+
+test('an Engine that keeps answering errors gives the design up after the outage, and a refused key at once', async () => {
+ const failing=await engineAnswering(()=>[503,{error:{message:'busy'}}]);
+ try {
+  const started=Date.now();
+  await assert.rejects(runOnEngine(failing.route,{input:'x',cwd,signal:new AbortController().signal,outage:300,pace:20}),/lost the Company's Engine/);
+  assert.ok(Date.now()-started<3000,'within the outage, not for ever');
+  assert.ok(failing.seen.filter(line=>line.startsWith('GET')).length>=3);
+ } finally { failing.close(); }
+ const refused=await engineAnswering(()=>[401,{error:{code:'gateway_auth_failed'}}]);
+ try {
+  await assert.rejects(runOnEngine(refused.route,{input:'x',cwd,signal:new AbortController().signal,outage:60000,pace:20}),/refused Open Design's key/);
+ } finally { refused.close(); }
+});
+
+test('closing the runtime\'s input stops the Run still going on the Engine', async () => {
+ const engine=await engineAnswering(()=>[200,{status:'running'}]);
+ try {
+  const input=new PassThrough(); const output=new PassThrough();
+  const served=serveAcp({input,output,route:()=>engine.route,run:(route,turn)=>runOnEngine(route,{...turn,pace:20})});
+  input.write(`${JSON.stringify({jsonrpc:'2.0',id:1,method:'session/new',params:{cwd}})}\n`);
+  await new Promise(resolve=>setTimeout(resolve,50));
+  const sessionId=JSON.parse(String(output.read()).split('\n')[0]).result.sessionId;
+  input.write(`${JSON.stringify({jsonrpc:'2.0',id:2,method:'session/prompt',params:{sessionId,prompt:[{type:'text',text:'x'}]}})}\n`);
+  await new Promise(resolve=>setTimeout(resolve,150));
+  input.end();
+  await served.drained();
+  assert.ok(engine.seen.includes('POST /p/od-ag-0123456789abcdef0123456789abcdef/v1/runs/run-9/stop'),engine.seen.join('\n'));
+ } finally { engine.close(); }
+});
+
+test('a start lock is never taken from a live holder, and one left by a holder that is gone is broken', async () => {
+ const { locked } = await import('../sandbox/open-design/daemon.mjs');
+ const home=mkdtempSync(join(tmpdir(),'od-lock-'));
+ const lock=`${home}/agent.lock`;
+ // A live holder (this process): the second caller waits until the first is done.
+ const order=[];
+ const first=locked(lock,async()=>{ order.push('first in'); await new Promise(resolve=>setTimeout(resolve,700)); order.push('first out'); return 'a'; });
+ await new Promise(resolve=>setTimeout(resolve,50));
+ const second=locked(lock,async()=>{ order.push('second'); return 'b'; });
+ assert.deepEqual(await Promise.all([first,second]),['a','b']);
+ assert.deepEqual(order,['first in','first out','second']);
+ // A holder that is gone: its lock is broken at once.
+ writeFileSync(lock,'999999999\n');
+ assert.equal(await locked(lock,async()=>'c'),'c');
+ assert.equal(existsSync(lock),false);
+});

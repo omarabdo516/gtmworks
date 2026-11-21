@@ -41,12 +41,12 @@ export function routeOf(agent,home=homedir()) {
 // One call to the design profile's Run API over a forwarded socket. A socket whose session ended refuses the connection;
 // it is removed and the next one is tried.
 const gone=new Set(['ECONNREFUSED','ENOENT']);
-/** @param {{sockets:string[],profile:string,key:string}} route @param {string} method @param {string} path @param {unknown} [body] */
-export async function call(route,method,path,body) {
+/** @param {{sockets:string[],profile:string,key:string}} route @param {string} method @param {string} path @param {unknown} [body] @param {number} [timeout] */
+export async function call(route,method,path,body,timeout=30000) {
  for(;;) {
   const [socket]=route.sockets;
   if(!socket) throw new Error("Open Design cannot reach the Company's Engine now: its connection to this Agent is closed.");
-  try { return await callOn(socket,route,method,path,body); }
+  try { return await callOn(socket,route,method,path,body,timeout); }
   catch(failure) {
    if(!gone.has(/** @type {any} */(failure)?.code)) throw failure;
    rmSync(socket,{force:true});
@@ -54,11 +54,11 @@ export async function call(route,method,path,body) {
   }
  }
 }
-/** @param {string} socket @param {{profile:string,key:string}} route @param {string} method @param {string} path @param {unknown} [body] */
-function callOn(socket,route,method,path,body) {
+/** @param {string} socket @param {{profile:string,key:string}} route @param {string} method @param {string} path @param {unknown} body @param {number} timeout */
+function callOn(socket,route,method,path,body,timeout) {
  return new Promise((resolve,reject)=>{
   const text=body===undefined?null:JSON.stringify(body);
-  const sent=request({socketPath:socket,method,path:`/p/${encodeURIComponent(route.profile)}${path}`,timeout:30000,
+  const sent=request({socketPath:socket,method,path:`/p/${encodeURIComponent(route.profile)}${path}`,timeout,
    headers:{Authorization:`Bearer ${route.key}`,Host:'engine',...(text?{'Content-Type':'application/json','Content-Length':Buffer.byteLength(text)}:{})}},response=>{
    let data='';
    response.setEncoding('utf8');
@@ -91,30 +91,39 @@ const terminal=['completed','failed','cancelled','interrupted'];
 // One prompt as one Run on the design profile: started, then read until it ends. A permission the Run asks for is given
 // once, as Open Design's own ACP client gives every one (agent-protocol/acp/session.ts replyPermission): nobody watches
 // this Run, and the Member who asked for the design asked for its work.
-/** @param {{sockets:string[],profile:string,key:string}} route @param {{input:string,cwd:string,signal:AbortSignal}} turn */
-export async function runOnEngine(route,{input,cwd,signal}) {
+// A read that brings no Run record (no answer, an Engine error, a body that is not a Run) counts against one minute of
+// outage, measured in time and reset only by a real record; once no forwarded socket is left, the minute runs out, or the
+// Engine refuses the key, the Run is given up in words, never polled for ever.
+/** @param {{sockets:string[],profile:string,key:string}} route @param {{input:string,cwd:string,signal:AbortSignal,outage?:number,pace?:number}} turn */
+export async function runOnEngine(route,{input,cwd,signal,outage=60000,pace=1000}) {
  const started=await call(route,'POST','/v1/runs',{input,instructions:instructionsFor(cwd)}).catch(()=>null);
  const run=started?.json?.run_id;
+ if(started&&[401,403].includes(started.status)) throw new Error(refused);
  if(!started||![200,202].includes(started.status)||typeof run!=='string') throw new Error(`The Engine did not start the design (${started?started.status:'no answer'}).`);
  const at=`/v1/runs/${encodeURIComponent(run)}`;
- // A read that gets no answer is tried again for a minute; once no forwarded socket is left, or the Engine stays silent,
- // the Run is given up in words, never polled for ever.
- for(let missed=0;;) {
-  if(signal.aborted) { await call(route,'POST',`${at}/stop`).catch(()=>null); throw new Error('cancelled'); }
-  const read=await call(route,'GET',at).catch(failure=>{ if(!route.sockets.length) throw failure; return null; });
-  missed=read?0:missed+1;
-  if(missed>=60) throw new Error("Open Design lost the Company's Engine while it drew the design.");
-  const record=read?.json;
+ const stop=async()=>{ await call(route,'POST',`${at}/stop`,undefined,5000).catch(()=>null); throw new Error('cancelled'); };
+ let seen=Date.now();
+ for(;;) {
+  if(signal.aborted) return stop();
+  const left=outage-(Date.now()-seen);
+  if(left<=0) throw new Error("Open Design lost the Company's Engine while it drew the design.");
+  const read=await call(route,'GET',at,undefined,Math.max(1000,Math.min(left,30000))).catch(failure=>{ if(!route.sockets.length) throw failure; return null; });
+  if(read&&[401,403].includes(read.status)) throw new Error(refused);
   if(read?.status===404) throw new Error('The Engine no longer knows this design Run.');
-  if(record?.status==='waiting_for_approval'&&typeof record.approval?.request_id==='string')
-   await call(route,'POST',`${at}/approval`,{choice:'once',request_id:record.approval.request_id}).catch(()=>null);
-  if(terminal.includes(record?.status)) {
-   if(record.status==='completed') return typeof record.output==='string'?record.output:'';
-   throw new Error(typeof record.error==='string'&&record.error?record.error:`The design Run ${record.status}.`);
+  const record=read?.status===200&&typeof read.json?.status==='string'?read.json:null;
+  if(record) {
+   seen=Date.now();
+   if(record.status==='waiting_for_approval'&&typeof record.approval?.request_id==='string')
+    await call(route,'POST',`${at}/approval`,{choice:'once',request_id:record.approval.request_id}).catch(()=>null);
+   if(terminal.includes(record.status)) {
+    if(record.status==='completed') return typeof record.output==='string'?record.output:'';
+    throw new Error(typeof record.error==='string'&&record.error?record.error:`The design Run ${record.status}.`);
+   }
   }
-  await sleep(1000);
+  await sleep(pace,undefined,{signal}).catch(()=>{});
  }
 }
+const refused="The Company's Engine refused Open Design's key: turn Open Design on again in the Agent's apps.";
 
 // The ACP agent: initialize, session/new, an optional model choice, then each prompt as one Run.
 /** @param {{input:NodeJS.ReadableStream,output:NodeJS.WritableStream,run?:typeof runOnEngine,route?:typeof routeOf}} io */
@@ -122,6 +131,8 @@ export function serveAcp({input,output,run=runOnEngine,route=routeOf}) {
  const send=message=>output.write(`${JSON.stringify({jsonrpc:'2.0',...message})}\n`);
  /** @type {Map<string,{cwd:string,abort:AbortController|null}>} */
  const sessions=new Map();
+ /** @type {Set<Promise<void>>} */
+ const pending=new Set();
  const models={availableModels:[{modelId:'default',name:"The Company's model"}],currentModelId:'default'};
  const prompt=async(id,params)=>{
   const session=sessions.get(params?.sessionId);
@@ -131,6 +142,8 @@ export function serveAcp({input,output,run=runOnEngine,route=routeOf}) {
   if(!engine) return send({id,error:{code:-32603,message:"Open Design is not connected to the Company's Engine: turn it on again in the Agent's apps."}});
   const abort=new AbortController();
   session.abort=abort;
+  let done=()=>{};
+  pending.add(new Promise(resolve=>{ done=resolve; }));
   try {
    const text=await run(engine,{input:promptText(params?.prompt),cwd:session.cwd,signal:abort.signal});
    if(text) send({method:'session/update',params:{sessionId:params.sessionId,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text}}}});
@@ -138,7 +151,7 @@ export function serveAcp({input,output,run=runOnEngine,route=routeOf}) {
   } catch(failure) {
    if(abort.signal.aborted) send({id,result:{stopReason:'cancelled'}});
    else send({id,error:{code:-32603,message:failure instanceof Error?failure.message:'The design Run failed.'}});
-  } finally { session.abort=null; }
+  } finally { session.abort=null; done(); }
  };
  const lines=createInterface({input});
  lines.on('line',line=>{
@@ -158,12 +171,15 @@ export function serveAcp({input,output,run=runOnEngine,route=routeOf}) {
   if(method==='session/prompt') return void prompt(id,params);
   send({id,error:{code:-32601,message:'Method not found'}});
  });
- return lines;
+ // Open Design cancels a run and then closes stdin: every Run still going is stopped on the Engine, for ten seconds at
+ // most, before the process ends.
+ lines.once('close',()=>{ for(const session of sessions.values()) session.abort?.abort(); });
+ return {lines,drained:()=>Promise.race([Promise.allSettled([...pending]),sleep(10000)])};
 }
 
 if(import.meta.url===`file://${process.argv[1]}`) {
  const [command]=process.argv.slice(2);
  if(command==='--version'||command==='-V') console.log(`Hermes Agent v${engineVersion} (the Company's Engine, through gtmworks)`);
- else if(command==='acp') serveAcp({input:process.stdin,output:process.stdout}).on('close',()=>process.exit(0));
+ else if(command==='acp') { const served=serveAcp({input:process.stdin,output:process.stdout}); served.lines.on('close',()=>{ void served.drained().then(()=>process.exit(0)); }); }
  else { console.error('usage: hermes acp | hermes --version'); process.exit(2); }
 }

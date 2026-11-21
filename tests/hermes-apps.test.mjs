@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { provideProfile, readApps, prepareApp, prepareServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer, writeProfileModel, setProviderKey, removeProviderKey } from '../lib/hermes.mjs';
+import { provideProfile, readApps, prepareApp, prepareServer, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp, testServer, writeProfileModel, setProviderKey, removeProviderKey, readUsage } from '../lib/hermes.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { apps } from '../lib/app-catalogue.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -346,5 +346,41 @@ test('the design profile gets its Agent\'s provider key and model, and later key
   await disconnectApp(target,'open-design');
   assert.equal((await writeProfileModel(target,{profile:target.profile,provider:'openrouter',model:'x/y'})).state,'saved');
   assert.equal(fake.settings.profiles.has(name),false);
+ } finally { await fake.close(); }
+});
+
+test('a design profile that refuses the Agent\'s new key or its removal leaves that Agent unfinished, never reported done', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  const name=designProfileOf(target.profile);
+  fake.settings.profiles.set(spaceOf,{soul:'',provider:'auto',model:'',key:null,config:{},credentials:{},env:{}});
+  fake.settings.envFail.add(name);
+  const set=await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic',value:'sk-ant-new-key-1234567890'});
+  assert.equal(set.profiles[target.profile],'failed','the Agent is unfinished while its design profile lacks the key');
+  fake.settings.envFail.delete(name);
+  assert.equal((await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic',value:'sk-ant-new-key-1234567890'})).profiles[target.profile],'written');
+  fake.settings.envFail.add(name);
+  const removed=await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'});
+  assert.equal(removed.profiles[target.profile],'failed','a key left in the design profile is not reported removed');
+  assert.equal(fake.settings.profiles.get(name).env.ANTHROPIC_API_KEY,'sk-ant-new-key-1234567890');
+  fake.settings.envFail.delete(name);
+  assert.equal((await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'})).profiles[target.profile],'removed','asked again, it is removed');
+  assert.equal(fake.settings.profiles.get(name).env.ANTHROPIC_API_KEY,undefined);
+ } finally { await fake.close(); }
+});
+
+test('an Agent\'s usage counts the Runs of its design profile, and an Agent with none is read as before', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  const before=await readUsage(target,30);
+  assert.equal(before.state,'found');
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  const name=designProfileOf(target.profile);
+  fake.settings.sessions.set('own-1',{profile:target.profile,model:'m',input_tokens:100,output_tokens:10,messages:[]});
+  fake.settings.sessions.set('design-1',{profile:name,model:'m',input_tokens:40,output_tokens:4,messages:[]});
+  const after=await readUsage(target,30);
+  assert.deepEqual([after.input,after.output,after.sessions],[140,14,2]);
+  assert.deepEqual(after.models,[{model:'m',input:140,output:14,sessions:2}]);
  } finally { await fake.close(); }
 });
