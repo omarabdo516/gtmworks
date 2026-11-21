@@ -16,7 +16,7 @@ insert into isolation_matrix(name) values
  ('held_agent_changes'),('hermes_agents'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
- ('note_runs'),('reply_cards'),('role_permissions'),
+ ('note_runs'),('reply_cards'),('role_permissions'),('stopped_runs'),
  ('waiting_items'),
  ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_moves'),('work_card_visits'),('work_cards'),
  ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_stages'),('work_versions');
@@ -26,6 +26,8 @@ insert into isolation_matrix(name) values
 update isolation_matrix m set fixed = v.fixed::jsonb from (values
  -- A handover sits in one place: a Conversation's or a channel message's (#150); this row names a Conversation.
  ('agent_handovers', $${"conversation_id": "gen_random_uuid()"}$$),
+ -- A Run Stop found open (#478) sits in one place too; this row names a Conversation.
+ ('stopped_runs', $${"conversation_id": "gen_random_uuid()", "run_id": "'isolation'"}$$),
  -- A proposal off the list is kept as refused (#19), which its checks allow with any value.
  ('agent_change_proposals', $${"change": "'model'", "state": "'refused'"}$$),
  -- Good morning's lease (#182) names who holds it and until when.
