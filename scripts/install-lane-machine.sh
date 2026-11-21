@@ -27,21 +27,30 @@ case "${1:-}" in
   work=$2
   # A signal can end the lane while `docker run` is still starting the machine (#416): wait for that command to finish,
   # so the machine it makes is there to be removed, then remove whatever carries this run's label.
+  # pgrep reads a pattern, so the work path's own characters are escaped.
+  starting=$(printf -- '--label %s' "$(label "$work")" | sed 's/[][\.*^$+?(){}|]/\\&/g')
   if command -v pgrep > /dev/null; then
-    for _ in $(seq 1 60); do pgrep -f -- "--label $(label "$work")" > /dev/null || break; sleep 0.5; done
+    for _ in $(seq 1 60); do pgrep -f -- "$starting" > /dev/null || break; sleep 0.5; done
   fi
   ids=$(docker ps -aq --filter "label=$(label "$work")" 2> /dev/null || true)
   [[ -z $ids ]] || docker rm -fv $ids > /dev/null 2>&1 || true
   git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true
   rm -rf "$work" 2> /dev/null || true
+  # On rootful Docker the proof's containers leave files of root's in the checkout, which this user cannot remove: a
+  # container of the machine's image, already on this host, removes them.
+  if [[ -e $work ]]; then
+    docker run --rm --entrypoint rm -v "$work:$work" docker:28.5.1-dind -rf "$work" > /dev/null 2>&1 || true
+    rm -rf "$work" 2> /dev/null || true
+  fi
   git -C "$here" worktree prune > /dev/null 2>&1 || true
   ;;
  guard)
   pid=$2 work=$3
-  # Out of the lane's session and process tree, so whatever kills the lane does not reach the guard.
-  watch="while kill -0 $pid 2> /dev/null; do sleep 1; done; exec bash $(printf %q "$0") remove $(printf %q "$work")"
+  # Out of the lane's session and process tree, so whatever kills the lane does not reach the guard. It also ends once
+  # the work folder is gone, which the trap's removal does last, so a lane PID taken by another process keeps no guard.
+  watch="while kill -0 $pid 2> /dev/null && [ -d $(printf %q "$work") ]; do sleep 1; done; exec bash $(printf %q "$0") remove $(printf %q "$work")"
   if command -v setsid > /dev/null; then setsid -f bash -c "$watch" < /dev/null > /dev/null 2>&1
-  else nohup bash -c "$watch" < /dev/null > /dev/null 2>&1 & disown
+  else perl -MPOSIX -e 'fork and exit; POSIX::setsid() or die "setsid: $!"; exec @ARGV' bash -c "$watch" < /dev/null > /dev/null 2>&1
   fi
   ;;
  *) echo 'usage: scripts/install-lane-machine.sh start WORK PORT | remove WORK | guard PID WORK' >&2; exit 2;;

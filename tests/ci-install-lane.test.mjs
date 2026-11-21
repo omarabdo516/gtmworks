@@ -36,13 +36,14 @@ exit 0
 // The proof the lane runs, standing in for scripts/ci-install-check.sh: it says which Docker it was given, then passes,
 // fails, or waits to be stopped.
 const proof = `#!/usr/bin/env bash
-printf %s "\${DOCKER_HOST:-}" > "$FAKE_DOCKER_STATE/proof-docker-host"
+printf %s "\${DOCKER_HOST:-}" > "$FAKE_DOCKER_STATE/proof-docker-host"; echo $$ > "$FAKE_DOCKER_STATE/proof-pid"
 case $LANE_PROOF in pass) exit 0;; fail) exit 1;; wait) touch "$FAKE_DOCKER_STATE/proving"; sleep 60;; esac
 `;
 
 let root, repo, bin;
 before(() => {
-  root = mkdtempSync(join(tmpdir(), 'install-lane-'));
+  // The folder's name holds characters a pattern reads as its own, as a repo path can (#416).
+  root = mkdtempSync(join(tmpdir(), 'install-lane-c++-'));
   repo = join(root, 'repo');
   bin = join(root, 'bin');
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe' });
@@ -113,13 +114,18 @@ test('after a failed proof the run fails and everything is gone', async t => {
   cleanedUp(run.state);
 });
 
-test('SIGTERM to the lane while the proof runs removes everything as it ends', async t => {
+const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+
+test('SIGTERM to the lane alone while the proof runs stops the proof and removes everything as it ends', async t => {
   const run = lane(t, { proof: 'wait' });
   await run.reached('proving');
   assert.equal(machines(run.state).length, 1, 'the machine is running');
   process.kill(run.child.pid, 'SIGTERM');
   assert.equal((await run.ended).signal, 'SIGTERM');
   cleanedUp(run.state);
+  const proof = Number(readFileSync(join(run.state, 'proof-pid'), 'utf8'));
+  for (let i = 0; i < 20 && alive(proof); i++) await sleep(50);
+  assert.equal(alive(proof), false, 'the proof is not left running against a machine that is gone');
 });
 
 test('Ctrl-C (SIGINT to the whole run) while the proof runs removes everything as it ends', async t => {
