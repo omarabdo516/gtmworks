@@ -4,7 +4,7 @@ import { driveHandovers } from '../lib/handovers.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // #477 on the fake engine: an asked Agent hands the job on, and gtmworks moves every Run of the chain itself. The
-// database is a small stand-in for the handover functions as 20270415980000 defines them (supabase/tests/handover_chains.sql
+// database is a small stand-in for the handover functions as 20270415990000 defines them (supabase/tests/handover_chains.sql
 // proves the real ones): a call in an asked Agent's Run is kept under the handover it serves, that leg waits until every
 // child ended, then the asked Agent answers in its own handover session, and only the top handover's follow-up replies in
 // the chat. Each Agent runs on a profile of its own, routed by profile as the install's Hermes is.

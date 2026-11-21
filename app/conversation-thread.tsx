@@ -1,4 +1,5 @@
 'use client';
+import { MorningCard } from './morning-card';
 // The strings only a Conversation shows live in conversation.en.json and conversation.ar.json, in the chunk of the
 // routes that draw one (its own page, and a Card's sheet on the board), not in the catalogue every company route loads
 // (page weight, #55).
@@ -269,6 +270,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
      answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
     :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
     :card.kind==='handed'?handed(card,`handed${message.id}:${card.name}:${card.goal}`,'p')
+    :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status"><span className="shimmer">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</span></p>}

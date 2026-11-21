@@ -93,7 +93,9 @@ export const handoverUnfinished=(row:{state:string,target_outcome:string|null}):
 // of by now, unanswered, says the Agent is open for them (`available`).
 // A sent request not answered yet `waits`, so the open chat keeps reading the record until its answer is in.
 export type AgentAccessView={id:number,named:{first:string,name:string,role:string}}&({state:'offered'|'available'}|{state:'dismissed',at:string}|{state:'asked',at:string,waits:boolean});
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',from:{name:string,face:string},name:string,face:string,goal:string,failed?:true};
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',from:{name:string,face:string},name:string,face:string,goal:string,failed?:true}
+ // The morning's card (#183) sits under the main Agent's greeting in a Conversation the morning opened.
+ |{kind:'morning',morning:import('./good-morning-card').MorningCard};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 // An Owner's or a Manager's answer to a request for a hidden Agent (#167): opened, naming the Agent the person now sees
@@ -124,7 +126,7 @@ type MessageFile={id:number,name:string};
 export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at';
-export const conversationColumns='id,agent_id,agent_name,hermes_session_id,hermes_agents(connection_id,is_default)';
+export const conversationColumns='id,agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored; the main Agent's question is drawn as the reference's chip card by its Agent's
 // name (lib/conversation-record.ts), and any other Agent's as the lettered card (#143).

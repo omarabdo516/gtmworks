@@ -102,3 +102,5 @@ export function removeProviderKey(connection:import('./engine.mjs').EngineConnec
 export type SpeechRead={provider:string|null,language:string|null,held:string[]};
 export function readSpeech(connection:import('./engine.mjs').EngineConnection,asked:{profiles:string[],envs:string[]}):Promise<{state:'found',profiles:Record<string,SpeechRead|null>}|{state:'unreachable'|'failed',profiles:null}>;
 export function writeSpeech(connection:import('./engine.mjs').EngineConnection,change:{profile:string,env:string|null,value?:string,config:object}):Promise<'written'|'invalid'|'refused'|'unreachable'|'failed'>;
+export function readRoutineRuns(connection:import('./engine.mjs').EngineConnection,routine:{id:string,limit?:number}):Promise<{state:'found',full:boolean,runs:{session:string,startedAt:string,endedAt:string}[]}|{state:'missing'|'refused'|'unreachable'|'failed',runs:null}>;
+export function readRunReply(connection:import('./engine.mjs').EngineConnection,session:string):Promise<{state:'found',reply:string|null}|{state:'missing'|'refused'|'unreachable',reply:null}>;
