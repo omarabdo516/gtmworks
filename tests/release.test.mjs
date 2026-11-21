@@ -248,8 +248,9 @@ test('a release install refuses a compose file from another release and an updat
  assert.match(update.stderr,/next release/);
  const updated=release.run('update');
  assert.equal(updated.status,0,updated.stderr);
- // The install's Companies are read from the running database before the update changes anything (#385).
- assert.match(release.commands(),/^compose .*exec -T db psql .*count\(\*\) from public\.companies;\n/);
+ // The install's Companies are read from the running database before the update changes anything (#385); before them
+ // only the work sandboxes' volumes and networks are listed, which changes nothing (#479).
+ assert.match(release.commands().replace(/^(volume ls -q|network ls --format \{\{\.Name\}\})\n/gm,''),/^compose .*exec -T db psql .*count\(\*\) from public\.companies;\n/);
  assert.match(release.commands(),/^pull /m);
  // A release pins every service by digest: update lets compose recreate whatever the new release changed (a database,
  // gateway or mail digest, not only the app), and the gateway reloads the configuration the extraction replaced.

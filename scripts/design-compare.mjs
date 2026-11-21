@@ -3,7 +3,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { chromium } from '@playwright/test';
-import { anonymousCaptureUrl, defaultSignIn, outputPaths, parseArgs, referenceRoot, screens, startStaticServer } from './design-compare-lib.mjs';
+import { anonymousCaptureUrl, defaultSignIn, outputPaths, parseArgs, referenceProblems, referenceRoot, screens, startStaticServer } from './design-compare-lib.mjs';
 
 const height = 900;
 
@@ -143,6 +143,12 @@ async function main() {
   } catch (error) {
     console.error(error.message);
     process.exit(error.exitCode ?? 1);
+  }
+  // The reference is the approved copy, byte for byte, or nothing is compared with it.
+  const problems = referenceProblems(referenceRoot);
+  if (problems.length) {
+    console.error(`design-reference/ is not the approved copy (design/COMPARE.md):\n${problems.join('\n')}`);
+    process.exit(1);
   }
   const paths = outputPaths(options);
   const browser = await chromium.launch();

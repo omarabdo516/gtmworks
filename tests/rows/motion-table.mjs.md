@@ -1,1 +1,1 @@
-| `motion-table.mjs` | data: the parts whose motion is the reference's, as reference rule against built rule, each with the markup the component test draws it in and, for a pressable part, its scale while held (#127, #128) | — | — | data, new |
+| `motion-table.mjs` | data: every part of the product that moves, by its selector and file, each with the markup the component test draws it in and, for a pressable part, its scale while held (#127, #128); no longer compared with the design reference (#271) | — | — | data, new; reference selectors removed (#271) |
