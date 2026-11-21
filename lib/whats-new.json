@@ -1,5 +1,11 @@
 [
  {
+  "issue": 398,
+  "date": "2026-11-21",
+  "en": { "title": "A work sandbox that is not running says so", "body": "When a Company's work sandbox is not running, Settings says so and a reply whose command could not run says so under it, and the Agent still answers." },
+  "ar": { "title": "صندوق الشغل لو مش شغال بيقولك", "body": "لما صندوق شغل الشركة ميكونش شغال، الإعدادات بتقول كده، والرد اللي أمره ماقدرش يشتغل بيقول كده تحته، والوكيل لسه بيرد." }
+ },
+ {
   "issue": 389,
   "date": "2026-11-20",
   "en": { "title": "Agents work in a work sandbox", "body": "Every Company's Agents get a terminal, files and code execution that run in the Company's own work sandbox, not on the Engine's machine. The Library shows the files each Agent made there, and every Agent of the Company can read and change them." },

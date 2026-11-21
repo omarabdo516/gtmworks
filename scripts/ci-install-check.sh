@@ -558,6 +558,24 @@ grep -F "Company \"Linked Company\": Engine http://gtmworks-engine-linked-compan
 # Stopping the second Company's Engine leaves the first Company answering, then the second Engine starts again.
 docker stop "$second_container" > /dev/null || fail 'stop the second Engine'
 engine_node "$engine_key" - < scripts/check-install-conversation.mjs || fail 'the first Company still answers while the second Engine is stopped'
+# A Company whose work sandbox is not running (#398): one read of its Engine's own ssh workspace names the state; a
+# message that needs a command gets its reply with the failed sandbox step under it; a message that needs no tool is
+# answered as usual. Started again, the next command runs in it with no restart of the install. The job reads the marker
+# from the sandbox's disk, so a tool's own answer cannot fake it. This area, not agents, takes the check: agents is near
+# its time budget (docs/agents/checks.md).
+sandbox_marker="sandbox-down-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+docker stop gtmworks-sandbox-first > /dev/null || fail 'stop the first Company sandbox'
+engine_node "$engine_key" - sandbox-down "$sandbox_marker" < scripts/check-install-sandbox-down.mjs | tee sandbox-down-proof.log \
+  || fail 'a Company whose work sandbox is not running says so, and its Conversation still answers'
+grep -q '"sandbox":"notRunning"' sandbox-down-proof.log || fail 'the Company reads its work sandbox as not running'
+grep -q '"plain":"answered"' sandbox-down-proof.log || fail 'a message that needs no tool is answered while the work sandbox is not running'
+docker start gtmworks-sandbox-first > /dev/null || fail 'start the first Company sandbox'
+engine_healthy gtmworks-sandbox-first 60 || fail 'the first Company sandbox is healthy again'
+engine_node "$engine_key" - sandbox-up "$sandbox_marker" < scripts/check-install-sandbox-down.mjs | tee sandbox-up-proof.log \
+  || fail 'the next command runs once the work sandbox is running again, with no restart'
+grep -q '"sandbox":"running"' sandbox-up-proof.log || fail 'the Company reads its work sandbox as running again'
+[[ $(docker exec gtmworks-sandbox-first cat "/work/$sandbox_marker-sandbox-up.txt") == "$sandbox_marker-sandbox-up" ]] \
+  || fail 'the next command runs in the work sandbox once it is running again'
 docker start "$second_container" > /dev/null || fail 'start the second Engine'
 engine_healthy "$second_container" 120 || fail 'the second Engine is healthy again'
 # `gtmworks company limits` (#396) changes one Company's limits: its sandbox alone is made again with them, its Engine
