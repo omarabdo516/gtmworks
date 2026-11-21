@@ -71,7 +71,9 @@ services:
     security_opt:
       - no-new-privileges:true
     # A process limit and shared memory large enough for Chromium (the base image's own browser, which the screen and a
-    # rendered page run); the RAM and CPU a sandbox gets are the install's defaults, set in one place (scripts/install.sh).
+    # rendered page run), and the RAM and CPU a sandbox gets. These defaults are the install's, set here and nowhere else
+    # (#400): the memory and CPU come from the install job's measurement (`install-sizes`), and a person's own value in
+    # the install command's environment replaces one.
     pids_limit: ${SANDBOX_PIDS:-2048}
     shm_size: ${SANDBOX_SHM:-1gb}
     mem_limit: ${SANDBOX_MEMORY:-2g}

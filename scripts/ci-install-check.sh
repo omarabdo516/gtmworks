@@ -4,7 +4,8 @@
 # Without an area the nine areas (spec #401's seven, `rollback` and `engines-update`, #389) run one after another, then the profile-size measurement; with one, only
 # that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat), `companies` (Companies
 # and their Engines), `agents` (Agents on their Engines), `backup` (backup and restore), `proxy` (the public address
-# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `engines-update` (a release that pins another Engine image), `one-line` (the one-line install) and `measure` (the
+# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `sizes` (the measured
+# sizes and the default sandbox limits a render finishes within, #400), `engines-update` (a release that pins another Engine image), `one-line` (the one-line install) and `measure` (the
 # profile-size measurement, on a push to main and a manual run only, never on a pull request, #408). Every area makes
 # the install, its first run, the Companies, the archives, the local registry and the release files it needs itself
 # (#406–#409), so no area needs another to have run. The helpers the areas share are in scripts/ci-install-lib.sh,
@@ -294,8 +295,8 @@ for folder in .engines/*/; do
   [[ $(docker inspect -f '{{join .HostConfig.SecurityOpt ","}}' "$sandbox") == *no-new-privileges* ]] || fail "the sandbox of $slug has no new privileges"
   [[ $(docker inspect -f '{{.HostConfig.PidsLimit}}' "$sandbox") == 2048 ]] || fail "the sandbox of $slug has its process limit"
   [[ $(docker inspect -f '{{.HostConfig.ShmSize}}' "$sandbox") == 1073741824 ]] || fail "the sandbox of $slug has shared memory for Chromium"
-  [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == 2147483648 ]] || fail "the sandbox of $slug has the install's default memory"
-  [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == 2000000000 ]] || fail "the sandbox of $slug has the install's default CPU"
+  [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == "$(sandbox_memory_bytes)" ]] || fail "the sandbox of $slug has the install's default memory"
+  [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == "$(sandbox_nano_cpus)" ]] || fail "the sandbox of $slug has the install's default CPU"
   [[ $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$sandbox") == 0 ]] || fail "the sandbox of $slug publishes no host port"
   if docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$sandbox" | grep -q 'docker.sock'; then fail "the sandbox of $slug mounts no Docker socket"; fi
 done
@@ -378,9 +379,6 @@ cat owner-link-proof
 sh scripts/install.sh company list | tee company-claimed.log || fail 'company list after the link is used'
 grep -F "Company \"Linked Company\": Engine http://gtmworks-engine-linked-company" company-claimed.log || fail 'the Company the link made is listed with its Engine'
 [[ -n $(docker ps -q --filter 'name=^gtmworks-sandbox-linked-company-') ]] || fail 'the Company the link made runs its own sandbox'
-# The memory one idle Engine and its Company's sandbox use, printed for the README.
-echo "one idle Engine uses $(docker stats --no-stream --format '{{.MemUsage}}' "$second_container")"
-echo "one idle sandbox uses $(docker stats --no-stream --format '{{.MemUsage}}' "$second_sandbox")"
 # Stopping the second Company's Engine leaves the first Company answering, then the second Engine starts again.
 docker stop "$second_container" > /dev/null || fail 'stop the second Engine'
 engine_node "$engine_key" - < scripts/check-install-conversation.mjs || fail 'the first Company still answers while the second Engine is stopped'
@@ -1351,6 +1349,99 @@ gtmworks updater || fail 'the updater right after a check'
 [[ $(cat .install-release) == "$later" ]] || fail 'the updater waits an hour between checks'
 }
 
+# sizes: the measured sizes (#400). The README's two server sizes and the install's default sandbox limits come from these
+# numbers, and a pull request runs them, so a change that makes a render outgrow the defaults fails here. On an install with
+# two Companies it prints the memory the idle install services, each idle Engine and each idle sandbox use; runs one short
+# render (Chromium frames joined by ffmpeg, sandbox/check/render.mjs) in the first Company's sandbox at the default
+# limits, which must finish within them, and prints its peak memory and time; then gives the second Company's sandbox a
+# memory limit below that render's peak and runs the same render there, which must be stopped at the limit while the
+# first Company's sandbox keeps answering its Engine's key.
+sizes() {
+cd "$root"
+area_setup
+reset_install
+install_source sizes-install.log || fail 'the sizes area install'
+complete_setup || fail 'emailed sign-in and invitation links on the local install'
+second_company || fail 'company add makes the second Company'
+engine_id=$(first_engine_id) || fail 'the Engine container'
+sandbox_image=$(cat .work-sandbox-image)
+second_folder=$(ls -d .engines/* | grep -v '/first$')
+second_container=$(engine_value "$second_folder" NAME)
+first_sandbox=gtmworks-sandbox-first
+second_sandbox=$(sandbox_of "$second_container")
+for sandbox in "$first_sandbox" "$second_sandbox"; do
+  engine_healthy "$sandbox" 60 || fail "the sandbox $sandbox is healthy"
+  # Both sandboxes run at the install's defaults, read from the one place they are set (scripts/engine-template.yml).
+  [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == "$(sandbox_memory_bytes)" ]] || fail "the sandbox $sandbox has the install's default memory"
+  [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == "$(sandbox_nano_cpus)" ]] || fail "the sandbox $sandbox has the install's default CPU"
+done
+echo "sizes: the default sandbox limits are memory $(sandbox_default mem_limit) and $(sandbox_default cpus) CPUs (scripts/engine-template.yml)"
+# Idle: the worker has given each Company its main Agent; a minute lets the Engines settle before they are read.
+sleep 60
+docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | tee idle-memory.log || fail 'read the idle memory of every container'
+# The MiB a set of containers uses, summed from `docker stats`' MemUsage (e.g. 123.4MiB / 2GiB), by container name.
+mib_of() {
+  awk -v pattern="$1" '$1 ~ pattern { value=$2; unit=$2; sub(/[A-Za-z]+$/, "", value); sub(/^[0-9.]+/, "", unit)
+    sum += unit == "GiB" ? value * 1024 : unit == "KiB" ? value / 1024 : unit == "B" ? value / 1048576 : value } END { printf "%d\n", sum }' idle-memory.log
+}
+services_idle=$(mib_of '^gtmworks-install-')
+first_engine_idle=$(mib_of '^gtmworks-engine-first$')
+second_engine_idle=$(mib_of "^$second_container\$")
+first_sandbox_idle=$(mib_of "^$first_sandbox\$")
+second_sandbox_idle=$(mib_of "^$second_sandbox\$")
+(( services_idle > 0 && first_engine_idle > 0 && second_engine_idle > 0 && first_sandbox_idle > 0 && second_sandbox_idle > 0 )) || fail 'every idle container reports its memory'
+echo "sizes: idle install services use $services_idle MiB; one idle Engine uses $first_engine_idle MiB (the second $second_engine_idle MiB); one idle sandbox uses $first_sandbox_idle MiB (the second $second_sandbox_idle MiB)"
+# The OOM kills a sandbox's own cgroup has counted (cgroup v2's memory.events, or v1's memory.oom_control).
+oom_kills() { docker exec "$1" sh -c 'cat /sys/fs/cgroup/memory.events 2> /dev/null || cat /sys/fs/cgroup/memory/memory.oom_control' | sed -n 's/^oom_kill //p'; }
+# One short render at the defaults finishes, below the default memory, with no process of the sandbox killed.
+docker exec -i "$first_sandbox" node --input-type=module - < sandbox/check/render.mjs | tee render-defaults.log \
+  || fail 'one short render finishes in a sandbox at the default limits'
+render_peak=$(sed -n 's/^render=.*"peakMiB":\([0-9]*\).*/\1/p' render-defaults.log)
+render_seconds=$(sed -n 's/^render=.*"seconds":\([0-9.]*\).*/\1/p' render-defaults.log)
+default_mib=$(( $(sandbox_memory_bytes) / 1048576 ))
+[[ -n $render_peak && -n $render_seconds ]] || fail 'the render prints its peak memory and time'
+(( render_peak < default_mib )) || fail "the render's peak memory ($render_peak MiB) is within the default limit ($default_mib MiB)"
+[[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the render at the defaults had no process killed at the memory limit'
+echo "sizes: one short render at the default limits took $render_seconds s and peaked at $render_peak MiB of the $default_mib MiB limit"
+# A render that needs more memory than its Company's limit: the second Company's sandbox gets half the render's measured
+# peak. `company add` takes no limit yet (#396 builds `--memory` and `company limits`), so the low limit is set on the
+# running sandbox with `docker update`, the cgroup change a Company's own limit makes; swap is held at the same figure so
+# the render cannot spill into it.
+low_mib=$(( render_peak / 2 ))
+(( low_mib >= 64 )) || low_mib=64
+(( render_peak > low_mib )) || fail "the render needs more memory ($render_peak MiB) than the low limit ($low_mib MiB)"
+docker update --memory "${low_mib}m" --memory-swap "${low_mib}m" "$second_sandbox" > /dev/null || fail 'give the second sandbox a low memory limit'
+[[ $(docker inspect -f '{{.HostConfig.Memory}}' "$second_sandbox") == $(( low_mib * 1048576 )) ]] || fail 'the second sandbox has the low memory limit'
+kills_before=$(oom_kills "$second_sandbox")
+since=$(date +%s)
+docker exec -i "$second_sandbox" node --input-type=module - < sandbox/check/render.mjs > render-over-limit.log 2>&1 &
+render_pid=$!
+# While it runs, the first Company's sandbox answers its own Engine's key over ssh on its work network, as its Engine
+# reaches it, and runs a command there.
+first_key=$(docker exec "$engine_id" cat /opt/data/ssh/id_ed25519) || fail "the first Engine's sandbox key"
+first_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "gtmworks-work-first").IPAddress}}' "$first_sandbox")
+first_answers() {
+  printf '%s\n' "$first_key" | docker run --rm -i -e SANDBOX_IP="$first_ip" --network gtmworks-work-first --entrypoint sh "$sandbox_image" -ec '
+    cat > /tmp/key; chmod 600 /tmp/key
+    ssh -i /tmp/key -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=10 -p 2222 pn@$SANDBOX_IP "ffmpeg -version | head -n 1"' > /dev/null
+}
+answers=0
+while :; do
+  first_answers || fail "the first Company's sandbox keeps answering while the second Company's render is at its limit"
+  answers=$(( answers + 1 ))
+  kill -0 "$render_pid" 2> /dev/null || break
+  sleep 1
+done
+if wait "$render_pid"; then cat render-over-limit.log; fail "a render that needs more memory than its Company's limit is stopped"; fi
+cat render-over-limit.log
+kills_after=$(oom_kills "$second_sandbox" 2> /dev/null || true)
+oom_events=$(docker events --since "$since" --until "$(date +%s)" --filter "container=$second_sandbox" --filter event=oom --format '{{.Status}}' | grep -c . || true)
+(( ${kills_after:-0} > ${kills_before:-0} || oom_events > 0 )) || fail "the render was stopped by its sandbox's memory limit (oom_kill ${kills_before:-?} to ${kills_after:-?}, $oom_events oom events)"
+first_answers || fail "the first Company's sandbox answers after the second Company's render was stopped"
+engine_healthy "$first_sandbox" 10 || fail "the first Company's sandbox is still healthy"
+echo "sizes: a render that needed $render_peak MiB was stopped at its Company's $low_mib MiB limit (oom_kill ${kills_before:-?} to ${kills_after:-?}, $oom_events oom events); the other Company's sandbox answered $answers times while it ran"
+}
+
 # measure: how much disk and memory twenty Agent profiles take (#126, #400, #408): ten more profiles in the first
 # Company with the Engine's bundled Skills and ten without. It is no check a pull request needs, and its numbers are for
 # the README: it runs on a push to main and on a manual run only (Omar, 2026-11-19). The area makes the install and the
@@ -1390,7 +1481,7 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (sizes); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
@@ -1399,9 +1490,10 @@ case "${1:-all}" in
  rollback) rollback;;
  update) update;;
  previous-archive) previous_archive;;
+ sizes) sizes;;
  engines-update) engines_update;;
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

@@ -114,6 +114,9 @@ test('every Company\'s work sandbox is the least container its Agents\' work nee
  assert.equal(sandbox.shm_size,'${SANDBOX_SHM:-1gb}','shared memory large enough for Chromium');
  assert.equal(sandbox.mem_limit,'${SANDBOX_MEMORY:-2g}');
  assert.equal(sandbox.cpus,'${SANDBOX_CPUS:-2.0}');
+ // The template is the one place those defaults are set (#400): the installer repeats none of them, so a person's own
+ // value in the install command's environment reaches Compose and nothing else can drift from the measured figures.
+ assert.doesNotMatch(readFileSync('scripts/install.sh','utf8'),/SANDBOX_(MEMORY|CPUS|PIDS|SHM)=|sandbox_(memory|cpus|pids|shm)=/);
  // The Company's work folder and the sandbox's own host key, and nothing else; the only key that reaches it is a public
  // one, passed when the container starts.
  assert.deepEqual(sandbox.volumes,['work:/work','host-key:/home/pn/.ssh-host:ro']);

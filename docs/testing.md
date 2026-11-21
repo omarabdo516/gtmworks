@@ -124,11 +124,11 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   (#406): `install-first-install` (the first install and its repeat), `install-companies` (Companies and their Engines,
   #407), `install-agents` (Agents on their Engines, #408), `install-backup` (backup and restore, #409),
   `install-proxy` (the public address behind a proxy), `install-rollback` (a failed update rolled back, #389),
-  `install-update` (the update between releases), `install-previous-archive` (the previous release's own archive restored, #389), `install-engines-update` (a release that pins another Engine
+  `install-update` (the update between releases), `install-previous-archive` (the previous release's own archive restored, #389), `install-sizes` (the measured sizes: idle memory, one short render at the default sandbox limits, and a render stopped at a low limit while the other Company's sandbox answers, #400), `install-engines-update` (a release that pins another Engine
   image, #389) and
   `install-one-line` (the one-line install). Each entry is one command of the repo, `bash scripts/ci-install-check.sh
   <area>`; here `./ci.sh install first-install`, `./ci.sh install companies`, `./ci.sh install agents`,
-  `./ci.sh install backup`, `./ci.sh install proxy`, `./ci.sh install rollback`, `./ci.sh install update`, `./ci.sh install previous-archive`, `./ci.sh install engines-update` and `./ci.sh install one-line` each run one
+  `./ci.sh install backup`, `./ci.sh install proxy`, `./ci.sh install rollback`, `./ci.sh install update`, `./ci.sh install previous-archive`, `./ci.sh install sizes`, `./ci.sh install engines-update` and `./ci.sh install one-line` each run one
   area, and `./ci.sh install` runs the whole proof (`docs/agents/checks.md`) — and holds no check of its own, so a red
   entry's name is the area that failed and fail-fast is off: one red area leaves the others running to their end. A new area is one more
   matrix entry and one more case of the script. Every area is independent: each makes the install, its first run, the
