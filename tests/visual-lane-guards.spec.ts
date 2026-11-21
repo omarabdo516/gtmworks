@@ -80,7 +80,7 @@ test('a request that leaves the machine is blocked and named', async ({ browser 
 test('a local-only face the machine lacks and a run of symbols alone are not named: the pinned image draws them alike', async ({ browser }) => {
   // "Latin Only" is no next/font fallback, so it is checked like any face: it names one the pinned image has.
   const page = await pageOf(browser, `<style>
-    @font-face { font-family: "Body Fallback"; src: local("No Such Face Anywhere"); }
+    @font-face { font-family: "Body Fallback"; src: local("No Such Face Anywhere"); ascent-override: 90%; descent-override: 22%; size-adjust: 107%; }
     @font-face { font-family: "Latin Only"; src: local("Liberation Sans"); unicode-range: U+0000-00FF; }
     p { font-family: "Body Fallback", sans-serif; } b { font-family: "Latin Only", sans-serif; }
   </style><p>نص</p><b>✕</b>`);
@@ -151,6 +151,25 @@ test('a local-only face is passed only when next/font made it as a fallback; any
   </style><p>نص</p>`);
   await page.evaluate(() => document.fonts.load('16px "Shop Face"', 'نص').catch(() => {}));
   await expect(expectDeterministic(page)).rejects.toThrow(/font "Shop Face"/);
+});
+
+// #359: the name alone is not next/font's mark. A local-only face named "... Fallback" is passed only when it also
+// carries the metric overrides next/font writes on every fallback face it makes (size-adjust, ascent-override).
+test('a local-only face named like a fallback is passed only with next/font\'s metric overrides', async ({ browser }) => {
+  const made = await pageOf(browser, `<style>
+    @font-face { font-family: "Made Fallback"; src: local("No Such Face Anywhere"); ascent-override: 90%; size-adjust: 107%; }
+    p { font-family: "Made Fallback", sans-serif; }
+  </style><p>نص</p>`);
+  await made.evaluate(() => document.fonts.load('16px "Made Fallback"', 'نص').catch(() => {}));
+  await expectDeterministic(made);
+  for (const [family, overrides] of [['Named Fallback', ''], ['Half Fallback', 'size-adjust: 107%;']]) {
+    const named = await pageOf(browser, `<style>
+      @font-face { font-family: "${family}"; src: local("No Such Face Anywhere"); ${overrides} }
+      p { font-family: "${family}", sans-serif; }
+    </style><p>نص</p>`);
+    await named.evaluate(name => document.fonts.load(`16px "${name}"`, 'نص').catch(() => {}), family);
+    await expect(expectDeterministic(named), family).rejects.toThrow(new RegExp(`font "${family}"`));
+  }
 });
 
 test('dark text is measured on the canvas the dark scheme draws when no element sets a background', async ({ browser }) => {
