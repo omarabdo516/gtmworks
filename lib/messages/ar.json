@@ -1331,6 +1331,7 @@
   "updateNowAsk": "gtmworks هيقف حوالي دقيقة وهو بيتحدّث، وبعدين هيرجع لوحده. كل اللي شغّالين عليه هيلاقوه واقف الدقيقة دي.",
   "updating": "بنحدّث gtmworks… هيقف حوالي دقيقة ويرجع لوحده.",
   "updatedTo": "اتحدّث لـ gtmworks {0}.",
+  "updateIsNewest": "إنت أصلاً على أحدث نسخة من gtmworks.",
   "updateFailed": "التحديث منجحش؛ إنت لسه على gtmworks {0}.",
   "updateFailedUnknown": "التحديث منجحش. اطلب من اللي مثبّت gtmworks يشغّل: gtmworks status",
   "updateReload": "حمّل الصفحة تاني",

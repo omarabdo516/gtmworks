@@ -27,6 +27,14 @@ Owners should take each new gtmworks version with one click, as T3 Code's "Updat
 - **A request that names the version.** Rejected: the web app would choose what the server runs.
 - **A small daemon listening on a port.** Rejected: one more service to secure and keep running, where a timer and the database already exist.
 
+## Update ready reads the published image, not the branch (#468)
+
+Update ready (#442) used to read `lib/whats-new.json` from the `main` **branch**, while the updater installs the published `:main` **image**. The image lags the branch by a whole CI and release run, and never catches up to a commit whose CI failed, so in that window the app offered what the updater could not install and **Update now** did nothing.
+
+- The offer now reads the commit the published `:main` index records in its `org.opencontainers.image.revision` annotation — the same value the release workflow compares before publishing (#448), so there is one source for "the newest main" and not a second one. The app fetches an anonymous pull token for the public package, then the index, over HTTPS: it still chooses no version and still reaches no Docker.
+- A merge with no published image yet offers nothing, and a main install is offered only the entries that image carries that its own build lacks.
+- When the updater finds nothing newer after an Owner's request, it records `current` with the version still running, and the Owner reads that they already run the newest gtmworks rather than the same offer coming back.
+
 ## Consequences
 
 - A click reaches the server within a minute, not at once.

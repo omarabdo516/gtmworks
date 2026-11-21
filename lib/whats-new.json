@@ -1,5 +1,11 @@
 [
  {
+  "issue": 468,
+  "date": "2026-11-21",
+  "en": { "title": "Update ready offers only what is published", "body": "On an install that follows main, Update ready now offers a version only when the published main image carries it, so Update now installs it instead of coming back unchanged; when there is nothing newer, it says you already run the newest gtmworks." },
+  "ar": { "title": "تحديث جاهز بيعرض اللي اتنشر بس", "body": "على تثبيت ماشي على main، تحديث جاهز بقى بيعرض نسخة بس لما تكون موجودة في صورة main المنشورة، فزر حدّث دلوقتي بيثبّتها بدل ما يرجع من غير حاجة؛ ولما مايكونش في أحدث، بيقولك إنك أصلاً على أحدث gtmworks." }
+ },
+ {
   "issue": 358,
   "date": "2026-11-20",
   "en": { "title": "A job command hands the work over", "body": "Typing /campaign, /report, /review or /article in Lead’s chat hands the job to the Agent made for that role, in the same chat, and the reply you read comes from that Agent." },
