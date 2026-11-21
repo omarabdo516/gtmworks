@@ -207,6 +207,12 @@ for (const language of ['en', 'ar'] as const) for (const reason of ['credit', 'k
  }
 });
 
+// #530: a job command's target whose model call was refused is the Agent the line names, not the chat's own.
+test('a job command\'s target out of credit is the Agent the line names', async () => {
+ const screen = await render(view(talk([asking], { failed: true, modelRefused: { reason: 'credit', owner: false, agent: 'Ads' } }), 'en'));
+ await expect.element(screen.getByRole('alert').filter({ hasText: 'Ads could not reply: the company’s model key has no credit left.' })).toBeVisible();
+});
+
 // #317, #475: a job Lead handed another Agent is a quiet row under Lead's reply, drawn from gtmworks's own record: both
 // faces, the arrow pointing the way the interface reads, "Lead asked Ads" and the job.
 for (const [language, line, arrow] of [['en', 'Lead asked Ads', 'M5 12h14'], ['ar', 'Lead طلب من Ads', 'M19 12H5']] as const) test(`in ${language} a job Lead handed another Agent reads under Lead's reply with both faces and the job`, async () => {

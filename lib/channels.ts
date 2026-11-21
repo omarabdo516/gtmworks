@@ -91,10 +91,10 @@ export type StoredHandover={id:number,message:number,from_agent:string,from_name
 // The lines each handover adds to the transcript (#150, #476): its row, the asked Agent's answer once it came, and the
 // asking Agent's reply once it came. A chain (#477) adds each of its steps the same way, a step handed on having no reply
 // of its own: its answer is the Agent's that asked it, whose own answer follows.
-const handoverModel=(row:StoredHandover)=>{ const cause=modelCauseOf(row.model_end); return cause?{cause,agent:row.model_agent??row.to_name}:null; };
+const handoverModel=(row:StoredHandover)=>{ const cause=modelCauseOf(row.model_end); return cause?{model:{cause,agent:row.model_agent??row.to_name}}:{}; };
 export const handoverLines=(rows:StoredHandover[]):ChannelMessage[]=>rows.flatMap((row):ChannelMessage[]=>[
  {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
-  ...(handoverUnfinished(row)?{failed:true as const}:{}),...(handoverModel(row)?{model:handoverModel(row)!}:{})},
+  ...(handoverUnfinished(row)?{failed:true as const}:{}),...handoverModel(row)},
  ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
  ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,body:row.reply,at:row.closed_at}]:[]),
 ]);

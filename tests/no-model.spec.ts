@@ -122,9 +122,10 @@ test('a channel Run the Engine fails for no credit records why, and says so in t
 });
 
 test('a Card note whose Run the Engine fails for want of a model, or for a refused key, says why under the note',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/4');
  for(const [failure,outcome,said] of [[noProvider,'no_model',line],[apiKeyRefusedError,'key_refused','Lead could not reply: the model provider refused the company’s key or sign-in.']] as const) {
   fake.settings.failure=failure;
-  await signIn(page,'omar@example.com','/c/rs-learning/work/board/4');
+  await page.goto('/c/rs-learning/work/board/4');
   const body=`@Lead plan the ${outcome} teaser`;
   await page.getByLabel('Comment',{exact:true}).fill(body);
   await page.getByRole('button',{name:'Send',exact:true}).click();
