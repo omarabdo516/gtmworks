@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { expect } from '@playwright/test';
-import { assertLocalTarget, localQuery, localStatement } from './first-run-db.mjs';
+import { assertLocalTarget, localQuery, localStatement, resetRetryPause } from './first-run-db.mjs';
 import { dbContainerOf, seedSnapshotOf } from '../tests/lane.mjs';
 
 const origin='http://127.0.0.1:3000';
@@ -62,10 +62,21 @@ async function signIn(page,email,password) {
  }
 }
 
-// The seeded data back as local-db.sh saved it, on this machine's own Docker (as resetFirstRun pins it) (tests/fresh-seed.ts does the same before each browser spec file).
+// The seeded data back as local-db.sh saved it, on this machine's own Docker (as resetFirstRun pins it).
 function putSeedBack() {
- execFileSync('docker',['--host','unix:///var/run/docker.sock','exec','-i','-e','PGOPTIONS=-c client_min_messages=warning',dbContainerOf(0),'psql','-X','-q','-U','supabase_admin','-d','postgres','-v','ON_ERROR_STOP=1'],
-  {input:readFileSync(seedSnapshotOf(0)),stdio:['pipe','ignore','inherit']});
+ // One transaction, as tests/fresh-seed.ts restores: the running app and worker never see half a seed, and a restore
+ // that meets them in a deadlock is rolled back whole and tried again (resetRetryPause); any other error fails at once.
+ for(let attempt=1;;attempt++) {
+  try {
+   execFileSync('docker',['--host','unix:///var/run/docker.sock','exec','-i','-e','PGOPTIONS=-c client_min_messages=warning',dbContainerOf(0),'psql','-X','-q','-U','supabase_admin','-d','postgres','-v','ON_ERROR_STOP=1','--single-transaction','--file=-'],
+    {input:readFileSync(seedSnapshotOf(0)),stdio:['pipe','ignore','pipe']});
+   return;
+  } catch(error) {
+   const pause=resetRetryPause(error?.stderr,attempt);
+   if(pause===null) throw new Error(`Putting the seed back failed: ${error?.stderr||error}`);
+   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,pause);
+  }
+ }
 }
 
 async function signInOnly(page) {
