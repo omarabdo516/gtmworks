@@ -13,7 +13,7 @@ type AgentRequest={apps:string[],asked_with:string};
 // A proposed change to an Agent's settings (#19, kind agent_change: title the Agent it would change, body what, asked_by
 // the Agent that proposed it) also carries the setting, the value after the change, the reason and both Agents' faces,
 // or null when those could not be read, so the Owner never approves a change seen in part.
-export type ChangeProposal={setting:string|null,value:unknown,reason:string,agent:{id:string,connection_id:string,name:string},by:{id:string,connection_id:string,name:string}};
+type ChangeProposal={setting:string|null,value:unknown,reason:string,agent:{id:string,connection_id:string,name:string},by:{id:string,connection_id:string,name:string}};
 // A permission request (#165, kind permission in a Conversation, channel_permission in a channel: title what it asks,
 // asked_by its Agent's name) also carries its Agent's face, and a channel's its channel, so it opens there. A channel's
 // question or handed step (#149, channel_question and channel_hand) does the same: one item per Member who may write, its

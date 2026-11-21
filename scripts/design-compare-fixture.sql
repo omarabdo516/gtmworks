@@ -246,4 +246,24 @@ values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-00000000
  '{"app":"amplitude","reason":"محتاجه عشان أضيف المبيعات للتقرير الأسبوعي قبل الخميس."}','open','2026-11-16T09:30:00Z')
 on conflict do nothing;
 
+-- Omar's Conversation with Lead in which Lead proposes a faster model for Analyst (#19; the reference's th-lead-model,
+-- worded as there): his message, Lead's reply and the proposal, waiting on his OK. The Engine is never written.
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
+values ('62000000-0000-0000-0000-000000000010','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','61000000-0000-0000-0000-000000000001','Lead','2026-11-16T11:26:00Z')
+on conflict (id) do nothing;
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at)
+select '10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000010',x.author,x.person_id,x.agent_id,x.author_name,x.body,x.send_key,'design-compare-fixture-change',x.at
+from (values
+ (1,'person','20000000-0000-0000-0000-000000000001'::uuid,null::uuid,'عمر','تقرير آخر 90 يوم لسه مخلصش؟ كنت محتاجه قبل اجتماع بكرة.','63000000-0000-0000-0000-000000000018'::uuid,'2026-11-16T11:26:00Z'::timestamptz),
+ (2,'agent',null,'61000000-0000-0000-0000-000000000001','Lead','Analyst لسه شغال عليه. التقرير ده بيقرا 90 يوم من Meta وGoogle وGA4 وشيت المبيعات، والمرة اللي فاتت اتأخر ساعة عن ميعاده.
+اقترحت نغيّر موديل Analyst لـ Gemini 2.5 Pro، أسرع في الأرقام الكبيرة. ده تغيير في إعدادات Analyst، فمش هيحصل غير بموافقة المالك.',null,'2026-11-16T11:30:00Z')
+) x(n,author,person_id,agent_id,author_name,body,send_key,at)
+where not exists(select 1 from public.conversation_messages where conversation_id='62000000-0000-0000-0000-000000000010')
+order by x.n;
+insert into public.agent_change_proposals(company_id,conversation_id,run_id,call_id,agent_id,proposed_by,asked_by,change,value,reason,created_at)
+values ('10000000-0000-0000-0000-000000000001','62000000-0000-0000-0000-000000000010','design-compare-fixture-change','call-0','61000000-0000-0000-0000-000000000004',
+ '61000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','model','"google/gemini-2.5-pro"',
+ 'تقرير الـ 90 يوم بيقرا أرقام كتير من 4 مصادر وبيتأخر عن ميعاده. Gemini 2.5 Pro أسرع في الأرقام الكبيرة، والتقرير الأسبوعي هيفضل بنفس الشكل.','2026-11-16T11:30:00Z')
+on conflict do nothing;
+
 commit;

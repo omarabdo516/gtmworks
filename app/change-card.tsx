@@ -21,7 +21,8 @@ export function ChangeCard({change,owner=false,unread=false,answer}:{change:Chan
  const when=(at:string)=><time dateTime={at} data-utc={zone}>{dayOf(new Date().toISOString(),zone)===dayOf(at,zone)
   ?new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone}):madeDay(at,language,zone)}</time>;
  const shown=(value:unknown)=>value===true?c('changeOn'):value===false?c('changeOff'):String(value??'');
- const what=change.change==='model'?cb('changeModel',String(change.value)):change.change==='instructions'?c('changeInstructions')
+ // A proposal read in part names what would change and nothing of its value.
+ const what=change.change==='model'?(unread?t('settingModel'):cb('changeModel',String(change.value))):change.change==='instructions'?c('changeInstructions')
   :change.change==='toolset'?(change.setting==='delegation'?c('changeSubagents'):<bdi>{change.setting}</bdi>):change.setting&&settingLabelKey(change.setting)!=='settingUnknown'?t(settingLabelKey(change.setting)):<bdi>{change.setting}</bdi>;
  const self=change.by.id===change.agent.id;
  const owners=new Intl.ListFormat(localeFor(language),{type:'disjunction'}).format(change.state==='waiting'?change.owners:[]);

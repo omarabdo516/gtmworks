@@ -1,5 +1,11 @@
 [
  {
+  "issue": 19,
+  "date": "2026-11-21",
+  "en": { "title": "Agents propose changes to their settings", "body": "An Agent, or Lead for another Agent, can propose a new model, new core instructions, sub-agents or one of its settings, with the reason. It waits in the Owner’s Waiting on you, and nothing changes until the Owner approves it." },
+  "ar": { "title": "الوكلاء بيقترحوا تغييرات في إعداداتهم", "body": "الوكيل، أو Lead لوكيل تاني، يقدر يقترح موديل جديد أو تعليمات أساسية جديدة أو وكلاء مساعدين أو إعداد من إعداداته، ومعاه السبب. الاقتراح بيستنى في «مستنيك» عند المالك، ومفيش حاجة بتتغيّر قبل ما يوافق." }
+ },
+ {
   "issue": 468,
   "date": "2026-11-21",
   "en": { "title": "Update ready offers only what is published", "body": "On an install that follows main, Update ready now offers a version only when the published main image carries it, so Update now installs it instead of coming back unchanged; when there is nothing newer, it says you already run the newest gtmworks." },
