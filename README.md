@@ -506,6 +506,7 @@ Next: the first real Company goes live on gtmworks, then keys for sandbox tools,
 - ⚪ Ready-made connections: Google Drive (one folder), GitHub, Odoo
 - ⚪ Event door: a webhook wakes the right Agent
 - ⚪ Routine check before the model wakes, and a cheaper model for routines
+- ⚪ A board like the Hermes Kanban board, with simpler Cards
 - ⚪ Publishing to Meta, Instagram and TikTok
 - ⚪ Presenter videos made from a Card
 - ⚪ Ad campaigns, Results and a monthly Diagnosis

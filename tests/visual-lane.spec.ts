@@ -133,7 +133,8 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
   },
   // Meta Ads's page in Settings: Lead's proposal of a faster model for it waiting on Omar's OK (#178), and after Tools the
   // one standing permission Omar gave it (#166), Always allow on the Meta Ads app's create_campaign, kept in Meta Ads's
-  // own profile in the Engine. One screen holds both: the lane keeps fifteen.
+  // own profile in the Engine. One screen holds both: the lane keeps fifteen. The June campaign's Run is over, so Meta Ads
+  // is idle: left open, the lane's worker ended it at its own pace and the page drew Meta Ads busy or idle by the race (#572).
   'settings-proposal': {
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
        ('${standing(1)}','${rsLearning}','${standing(5)}','Lead','General',true,'visual-standing-lead'),
@@ -149,6 +150,8 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
        ('${rsLearning}','${standing(3)}','visual-standing','visual-standing-1','permission','Launch the campaign',
         '{"description":"Launch the campaign","command":"create_campaign","choices":["once","always","deny"],"choice":"always"}','decided','${omar}','2026-06-15T11:01:00Z',
         '{mcp:meta-ads/create_campaign}','2026-06-15T11:00:30Z');
+      insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome,recorded_at) values
+       ('${rsLearning}','${standing(3)}','visual-standing','completed','2026-06-15T11:02:00Z');
       insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${standing(7)}','${rsLearning}','${omar}','${standing(1)}','Lead','2026-06-10T11:26:00Z');
       insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
        ('${rsLearning}','${standing(7)}','person','${omar}',null,'عمر','حملة يونيو بطيئة في التقارير.','${standing(8)}','visual-standing-change','2026-06-10T11:26:00Z');
@@ -157,6 +160,7 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
         'التقارير بتقرا أرقام كتير وبتتأخر عن ميعادها. Gemini 2.5 Pro أسرع في الأرقام الكبيرة.','2026-06-10T11:30:00Z');`,
     unset: `delete from public.agent_change_proposals where conversation_id='${standing(7)}';
       delete from public.reply_cards where conversation_id='${standing(3)}';
+      delete from public.conversation_run_ends where conversation_id='${standing(3)}';
       delete from public.conversation_messages where conversation_id in ('${standing(3)}','${standing(7)}');
       delete from public.conversations where id in ('${standing(3)}','${standing(7)}');
       delete from public.agent_profiles where agent_id='${standing(2)}';
