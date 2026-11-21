@@ -334,3 +334,48 @@ test('"Back" and Escape return to the question with the team chosen and nothing 
  expect(invitations(baseURL!)).toEqual([]);
  expect(invitedLog(baseURL!)).toEqual([]);
 });
+
+// #130: once the answer is saved the question leaves with the dialog's exit (design-reference: closeDlg, .fr.is-closing)
+// and only then does Lead's Conversation take the keyboard; a save that fails keeps the question with its error. Its parts
+// rise in the reference's order (.fr__col > *), and with reduced motion nothing rises and it leaves at once.
+const recordLeave=(page:Page)=>page.evaluate(()=>{
+ const seen:string[][]=[]; Object.assign(window,{seen});
+ document.addEventListener('animationstart',event=>{ if(event.animationName==='gw-modal-out') seen.push(['exit',(event.target as Element).className,location.pathname]); });
+ document.addEventListener('focusin',event=>{ if((event.target as Element).matches('textarea.composer__input')) seen.push(['composer',location.pathname]); });
+ new MutationObserver(()=>{ if(!document.querySelector('.fr-root:not([hidden])')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.pathname]); }).observe(document.body,{subtree:true,childList:true,attributes:true});
+});
+const recorded=(page:Page)=>page.evaluate(()=>(window as unknown as {seen:string[][]}).seen);
+for(const motion of ['no-preference','reduce'] as const) test(`the saved answer leaves the question ${motion==='reduce'?'at once':'with the exit'} before Lead's Conversation takes the keyboard, and a failed save stays (#130, reduced motion ${motion})`,async({page,baseURL})=>{
+ await page.emulateMedia({reducedMotion:motion});
+ const slug=await newOwner(page);
+ const dialog=page.getByRole('dialog',{name:question.en});
+ await expect(dialog).toBeVisible();
+ expect(workerAddsLead(baseURL!)).toEqual([{attached:true}]);
+ await page.reload();
+ await expect(dialog).toBeVisible();
+ const parts=await page.evaluate(()=>['.fr__head','.fr__choices','.fr__actions'].map(part=>{ const style=getComputedStyle(document.querySelector(part)!); return [style.animationName,style.animationDelay,style.animationDuration,style.animationTimingFunction,style.animationFillMode]; }));
+ expect(parts).toEqual(motion==='reduce'?[['none','0s','0s','ease','none'],['none','0.04s','0s','ease','none'],['none','0.08s','0s','ease','none']]
+  :[['gw-rise','0s','0.28s','cubic-bezier(0.2, 0, 0, 1)','both'],['gw-rise','0.04s','0.28s','cubic-bezier(0.2, 0, 0, 1)','both'],['gw-rise','0.08s','0.28s','cubic-bezier(0.2, 0, 0, 1)','both']]);
+
+ // The answer cannot be saved (it was given elsewhere meanwhile): the question stays with its error and does not leave.
+ localQuery(`update public.companies set work_mode='alone' where slug='${slug}' returning id`,baseURL);
+ await recordLeave(page);
+ await dialog.getByRole('radio',{name:'Alone'}).check();
+ await dialog.getByRole('button',{name:'Open the workspace'}).click();
+ await expect(dialog.getByRole('alert')).toHaveText('Your answer wasn’t saved. Try again.');
+ await page.waitForTimeout(400);
+ await expect(page.locator('.fr.is-closing')).toHaveCount(0);
+ expect(await recorded(page)).toEqual([]);
+ await expect(page).toHaveURL(new RegExp(`/c/${slug}/home$`));
+
+ localQuery(`update public.companies set work_mode=null where slug='${slug}' returning id`,baseURL);
+ await dialog.getByRole('button',{name:'Open the workspace'}).click();
+ await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}`));
+ await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ const home=`/c/${slug}/home`;
+ const seen=await recorded(page);
+ expect(seen.slice(0,2)).toEqual(motion==='reduce'?[['gone',home],['composer',expect.stringMatching(new RegExp(`^/c/${slug}/conversations/`))]]
+  :[['exit','fr is-closing',home],['gone',home]]);
+ if(motion!=='reduce') expect(seen[2]).toEqual(['composer',expect.stringMatching(new RegExp(`^/c/${slug}/conversations/`))]);
+});

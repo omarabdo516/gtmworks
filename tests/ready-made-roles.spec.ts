@@ -89,10 +89,17 @@ test('the Owner finds a ready-made role, adds it, and Lead makes the same Agent 
  await expect(chips.filter({hasText:'Ads'})).toHaveAttribute('aria-pressed','true');
  await expect(roles(page)).toHaveText(['Meta ads manager','Ad critic']);
 
- // Escape leaves for Lead's chat, ready to type.
+ // Escape leaves for Lead's chat, ready to type, once the gallery's exit has run (#130; design-reference: closeModal):
+ // while it runs the dialog and its scrim stay at the old address.
+ await page.evaluate(()=>{
+  const seen:(string|boolean)[][]=[]; Object.assign(window,{seen});
+  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.matches('.gw.modal')) seen.push([event.animationName,getComputedStyle(part).animationName,part.isConnected,!!document.querySelector('[data-slot="dialog-overlay"]'),location.search]); });
+  new MutationObserver(()=>{ if(!document.querySelector('.gw.modal')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.search]); }).observe(document.body,{subtree:true,childList:true});
+ });
  await page.keyboard.press('Escape');
  await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
  await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as unknown as {seen:unknown[]}).seen)).toEqual([['gw-modal-out','gw-modal-out',true,true,'?new=ready'],['gone','?new=ready']]);
  await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
 
  await link.click();
