@@ -163,6 +163,17 @@ test('the send arrow fades its colour and size over 150ms and gives to 94% while
  expect(await held(arrow.element())).toBe('matrix(0.94, 0, 0, 0.94, 0, 0)');
 });
 
+// #129: the composer's border darkens over 150ms on ease-out as its field takes the focus (design-reference: .composer).
+test('the composer fades its border over 150ms on ease-out, and darkens it while its field has the focus', async () => {
+ const screen = await gwBox({ send: vi.fn<Send>(async () => null) });
+ const composer = document.querySelector('.gw .composer')!;
+ expect(getComputedStyle(composer).transition).toBe('border-color 0.15s cubic-bezier(0.2, 0, 0, 1)');
+ const resting = getComputedStyle(composer).borderTopColor;
+ await screen.getByRole('textbox', { name: 'Message' }).click();
+ composer.getAnimations().forEach(animation => animation.finish());
+ expect(getComputedStyle(composer).borderTopColor).not.toBe(resting);
+});
+
 test('the stop square fades and gives to 94% while held, as the send arrow does', async () => {
  const screen = await gwBox({ send: async () => null, stop: { label: 'Stop', run: vi.fn(async () => null) } });
  const stop = screen.getByRole('button', { name: 'Stop' }).element();

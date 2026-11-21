@@ -126,7 +126,7 @@
   display: inline-flex; align-items: center; width: 32px; height: 20px; padding: 2px; flex: none; border-radius: var(--gw-r-full);
   background: var(--gw-border-1); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
 }
-.gw :is(.sov, .modal.team-dlg) .switch::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF; box-shadow: #1C1C1C1F 0 1px 3px; transition: transform 320ms var(--gw-ease-out); }
+.gw :is(.sov, .modal.team-dlg) .switch::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF; box-shadow: #1C1C1C1F 0 1px 3px; transition: transform 320ms var(--gw-ease-spring), background-color var(--gw-dur) var(--gw-ease-out); }
 .gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"] { background: var(--gw-primary); }
 .gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
 [dir="ltr"] .gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"]::after { transform: translateX(12px); }
@@ -381,7 +381,7 @@
   .gw :is(.sov, .modal.team-dlg) .switch::before { content: ""; position: absolute; inset: -12px -6px; }
   .gw .sov .sov-password :is(input, button[type="submit"]) { height: 44px; }
 }
-@media (prefers-reduced-motion: reduce) { .gw .sov { animation: none; } .gw .sov .switch::after, .gw .sov .chip { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .gw .sov { animation: none; } .gw :is(.sov, .modal.team-dlg) .switch::after, .gw .sov .chip { transition: none; } }
 .gw .sov .co-name-form { display: grid; gap: 6px; }
 .gw .sov .co-name-form p:empty { display: none; }
 

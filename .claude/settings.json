@@ -9,5 +9,18 @@
   },
   "enabledPlugins": {
     "mattpocock-skills@mattpocock": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/cloud-session-setup.sh\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
   }
 }
