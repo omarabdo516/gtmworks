@@ -236,6 +236,22 @@ test('a write that timed out before the Engine applied it keeps the record and t
  } finally { globalThis.fetch=engineFetch; await fake.close(); }
 });
 
+test('a write that timed out keeps the hold even when another writer took the entry out before the read-back (CodeRabbit on #499)',async()=>{
+ const fake=await fakeHermes(); const engineFetch=globalThis.fetch;
+ try {
+  profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
+  const shared={noted:new Map()}; const hold={held:false};
+  const first=session({shared,hold});
+  // The PUT times out while still pending; another writer removes the entry before the read-back.
+  globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { fake.settings.profiles.get(adsProfile).config.command_allowlist=['mcp:canva/create_design']; return Promise.reject(new Error('timeout')); } return engineFetch(url,init); };
+  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)})).state,'unreachable');
+  globalThis.fetch=engineFetch;
+  assert.equal(shared.noted.has('mcp:notion/create_page'),true,'the record stays');
+  assert.equal(first.asked.includes('end_permission_revoke'),false,'the hold is not ended early');
+  assert.equal(hold.extended,1,'it is kept a full minute, as the pending write may still land');
+ } finally { globalThis.fetch=engineFetch; await fake.close(); }
+});
+
 test('a revoke waits for an Always allow of the same entry still being delivered, and says busy rather than succeed while it is (Codex on #499)',async()=>{
  const fake=await fakeHermes();
  try {
