@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(63);
+select plan(64);
 -- #477 (decision 0057): an asked Agent hands on. RS Learning has Lead (the main one, on the Company's profile), Writer,
 -- Ads and Critic, each on its own profile; Aleem has an Ads of its own, which is never a target here. The Owner talks
 -- to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the Viewer (4) work with Writer
@@ -68,7 +68,8 @@ select set_config('test.q1',(select id::text from public.agent_handovers where p
 select set_config('test.q2',(select id::text from public.agent_handovers where parent_id=current_setting('test.p')::bigint and call_id='call-2'),true);
 
 -- Ads's leg does not close while a child is open.
-select is(public.close_handover_target(current_setting('test.p')::bigint,'run-ads','completed','I asked Critic and Writer.'),true,'Ads''s Run ended');
+select throws_ok($$select public.close_handover_target(1,'run-x','completed',null)$$,'22023',null,'a completed leg that kept no child still needs words');
+select is(public.close_handover_target(current_setting('test.p')::bigint,'run-ads','completed',null),true,'Ads''s Run ended, having written only its calls');
 select is((select state||':'||coalesce(target_outcome,'-')||':'||coalesce(summary,'-') from public.agent_handovers where id=current_setting('test.p')::bigint),'handing:-:-',
  'its leg waits for its children, with no answer yet');
 select is((select answer_started_at from public.agent_handovers where id=current_setting('test.p')::bigint),null,'and its answer''s day does not start while they work');

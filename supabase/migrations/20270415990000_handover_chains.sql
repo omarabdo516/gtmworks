@@ -396,12 +396,14 @@ revoke all on function public.answer_handover(bigint,integer,text,text) from pub
 grant execute on function public.answer_handover(bigint,integer,text,text) to service_role;
 
 -- 20270415650000's close_handover_target, and an asked Agent that handed jobs on (#477): a completed Run that kept a child
--- does not close its leg; the handover waits on its children (`handing`) and its answer comes from the answer Run.
+-- does not close its leg; the handover waits on its children (`handing`) and its answer comes from the answer Run. Such a
+-- Run may have written nothing but its calls (the Engine takes the call blocks out of the reply), so this comes before
+-- the rule that a completed leg has words.
 do $$
 declare def text; was text;
 begin
  def:=pg_get_functiondef('public.close_handover_target(bigint,text,text,text)'::regprocedure);
- was:=E' update public.agent_handovers set state=case when answers_person then ''done'' else ''returning'' end, target_outcome=run_outcome,';
+ was:=E' if run_outcome is null or run_outcome not in (''completed'',''failed'',''no_model'',''stopped'',''lost'') or (run_outcome=''completed'') <> (coalesce(btrim(words),'''') <> '''')';
  if position(was in def)=0 then raise exception 'close_handover_target changed: %',def; end if;
  execute replace(def,was,
   E' if run_outcome=''completed'' and exists(select 1 from public.agent_handovers c where c.parent_id=h and c.run_id=run) then\n'

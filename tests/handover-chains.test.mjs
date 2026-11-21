@@ -192,6 +192,20 @@ test('a child that is stopped or lost is a job that did not finish, as a failed 
  assert.match(answer,/Critic did not finish/); assert.match(answer,/Lead did not finish/);
 });
 
+test('an asked Agent whose reply is only its call still hands on: its Run completed, and the chain goes on',async()=>{
+ const {rows,replies,service}=record('conversation',{from:'Writer',to:'Ads',goal:'Last campaign\'s numbers'});
+ const {fakes,started,engineFor}=engines();
+ // The Engine takes the call block out of the reply, so the Run completes with no words of its own.
+ fakes.Ads.settings.toolCalls=input=>input.startsWith('Writer asks you')?handOn('Critic','Check the figures'):[];
+ fakes.Ads.settings.reply=input=>input.startsWith('Answers')?'February: 120 leads.':'';
+ fakes.Critic.settings.reply=()=>'The figures check out.';
+ fakes.Writer.settings.reply=()=>'The post leads with 120 leads.';
+ await drive(service,engineFor,rows);
+ assert.deepEqual(rows.map(row=>`${row.from}>${row.to}:${row.state}:${row.target_outcome}`),['Writer>Ads:done:completed','Ads>Critic:done:completed']);
+ assert.deepEqual(started.map(run=>run.key),['handover:1:target','handover:2:target','handover:1:answer','handover:1:return']);
+ assert.deepEqual(replies.map(reply=>reply.body),['The post leads with 120 leads.']);
+});
+
 test('a call from the asked Agent\'s Run is kept once, however many passes read it',async()=>{
  const {rows,pins,service}=record('conversation',{from:'Writer',to:'Ads',goal:'Last campaign\'s numbers'});
  const {fakes,engineFor}=engines();
