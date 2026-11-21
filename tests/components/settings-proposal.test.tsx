@@ -25,7 +25,7 @@ test('the Owner reads who proposed what, waiting for their OK, and opens the pro
  const screen = await inSettings(<ProposalNote change={model} owner owners={[]} href="/c/rs/conversations/talk-7#change-7"/>);
  const note = screen.getByRole('note');
  await expect.element(note).toBeVisible();
- expect(said(note)).toBe('Lead proposed New model: google/gemini-2.5-pro · waiting for your OK. Nothing changes here before that.');
+ expect(said(note)).toBe('Lead proposed New model: gemini-2.5-pro · waiting for your OK. Nothing changes here before that.');
  await expect.element(note.getByRole('link', { name: 'Open the proposal' })).toHaveAttribute('href', '/c/rs/conversations/talk-7#change-7');
  // The reference's wait colours: the note on its wait background, its text and link in the wait text colour.
  const style = getComputedStyle(note.element());
