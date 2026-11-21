@@ -6,6 +6,9 @@
 // has no Agent and is left alone, and one with a main Agent and no readable Engine fails the check (lib/engine-targets.mjs).
 // It prints Company names, states and profiles only, never a key or any other value of the install's environment
 // (lib/install-proof.mjs).
+// With `sandbox <marker>` (#397, after the update of an install the release before the work sandbox made), each Company's
+// main Agent, made before that update, also runs one command: it writes <marker>-<Company id without dashes> in the work
+// folder. The job reads each Company's sandbox for its own file and no other Company's, which a tool's answer cannot fake.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -16,6 +19,8 @@ const { companyProfile }=await import(`${process.cwd()}/lib/agent-toolsets.mjs`)
 const { engineTarget }=await import(`${process.cwd()}/lib/engine-targets.mjs`);
 const { writeProof }=await import(`${process.cwd()}/lib/install-proof.mjs`);
 
+const [mode,marker]=process.argv.slice(2);
+assert.ok(mode===undefined||(mode==='sandbox'&&/^[a-z0-9-]{8,64}$/.test(marker||'')),'usage: [sandbox <marker>]');
 const origin='http://gateway:8080';
 const options={auth:{persistSession:false,autoRefreshToken:false}};
 const service=createClient(origin,process.env.SUPABASE_SERVICE_ROLE_KEY,options);
@@ -43,18 +48,29 @@ assert.ok(distinct(target=>target.engine.key),'each Engine has its own key');
 assert.ok(distinct(target=>target.profile),'each Company has its own profile');
 
 // The fake model: one Arabic reply, streamed or not, and every request it was sent. It stands in for each Company's own
-// model access; what an Engine puts in the request is the memory it kept.
+// model access; what an Engine puts in the request is the memory it kept. In sandbox mode a message naming SANDBOX-RUN and
+// a file gets one terminal call that writes that file in the work folder, then the reply.
 const asked=[];
+const results=[];
 const reply='أهلاً، هذا رد من النموذج التجريبي.';
+const sandboxCall=messages=>{
+ const last=messages.at(-1);
+ const named=last?.role==='user'&&/SANDBOX-RUN ([a-z0-9-]+)/.exec(typeof last.content==='string'?last.content:JSON.stringify(last.content));
+ return named?{id:'call_sandbox_update',type:'function',function:{name:'terminal',arguments:JSON.stringify({command:`printf '%s' '${named[1]}' > /work/${named[1]}.txt; hostname`})}}:null;
+};
 const model=createServer((request,response)=>{
  let raw=''; request.on('data',chunk=>{ raw+=chunk; }); request.on('end',()=>{
   if(request.method!=='POST'||!request.url.endsWith('/chat/completions')) { response.writeHead(404); return response.end(); }
   const body=JSON.parse(raw||'{}');
   asked.push(raw);
+  if(body.messages?.at(-1)?.role==='tool') results.push(String(body.messages.at(-1).content));
+  const call=mode==='sandbox'?sandboxCall(body.messages||[]):null;
+  const finish=call?'tool_calls':'stop';
   const usage={prompt_tokens:20,completion_tokens:8,total_tokens:28};
-  if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message:{role:'assistant',content:reply},finish_reason:'stop'}],usage})); }
+  if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message:call?{role:'assistant',content:null,tool_calls:[call]}:{role:'assistant',content:reply},finish_reason:finish}],usage})); }
   response.writeHead(200,{'Content-Type':'text/event-stream'});
   const chunk=(choices,extra={})=>response.write(`data: ${JSON.stringify({id:'fake',object:'chat.completion.chunk',created:0,model:body.model,choices,...extra})}\n\n`);
+  if(call) { chunk([{index:0,delta:{role:'assistant',tool_calls:[{index:0,...call}]},finish_reason:null}]); chunk([{index:0,delta:{},finish_reason:finish}]); chunk([],{usage}); return response.end('data: [DONE]\n\n'); }
   chunk([{index:0,delta:{role:'assistant',content:reply},finish_reason:null}]);
   chunk([{index:0,delta:{},finish_reason:'stop'}]);
   chunk([],{usage});
@@ -81,8 +97,10 @@ try {
    body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
   assert.equal(pointed.status,200,`${target.name}'s profile points at the fake model`);
   const before=asked.length;
+  const ran=results.length;
+  const file=`${marker}-${target.company.replaceAll('-','')}`;
   const conversation=randomUUID();
-  const send={person:user.id,company:target.company,conversation,sendKey:randomUUID(),agent:target.agent,message:'مرحباً، اكتب عنواناً قصيراً.'};
+  const send={person:user.id,company:target.company,conversation,sendKey:randomUUID(),agent:target.agent,message:mode==='sandbox'?`SANDBOX-RUN ${file}: مرحباً، اكتب عنواناً قصيراً.`:'مرحباً، اكتب عنواناً قصيراً.'};
   // A profile the worker has not confirmed yet refuses the send as pending and stores nothing, so the same send is made
   // again until it is ready (#282).
   const sent=await until(`${target.name} ready for a run`,async()=>{ const result=await sendMessage(owner,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
@@ -95,6 +113,12 @@ try {
   for(const other of targets) {
    if(other===target) continue;
    assert.ok(!sentToModel.some(raw=>raw.includes(other.code)),`${target.name}'s run never sees ${other.name}'s code word`);
+  }
+  // The command ran and ended well; where its file landed is the job's to read from the host's Docker.
+  if(mode==='sandbox') {
+   const terminal=(()=>{ try { return JSON.parse(results[ran]); } catch { return null; } })();
+   assert.equal(terminal?.exit_code,0,`${target.name}'s Agent ran its command: ${results[ran]}`);
+   writeProof({step:'sandbox',company:target.company,profile:target.profile,file,sandbox_host:String(terminal.output||'').trim().split('\n').at(-1)});
   }
   writeProof({step:'run',company:target.company,profile:target.profile,state:'answered',memory:'remembered'});
  }
