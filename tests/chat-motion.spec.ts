@@ -23,7 +23,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  query(`update public.people set language='en' where id in ('${omar}','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000005')`);
@@ -76,14 +76,28 @@ test('in a Conversation the sent message, the reply and the card for the Agent L
  // While Lead works, the line's words breathe, and still say who it works for.
  await expect(page.locator('.thinking .shimmer')).toHaveText(/^Lead is working on a reply for .+…$/);
  expect(await motion(page,'.thinking .shimmer')).toEqual(breathes);
- // Lead makes an Agent during the Run, as lead_create_agent writes it; then the Run ends with its reply.
+ // Lead makes an Agent during the Run, as lead_create_agent writes it; then the Run ends with its reply. The made Agent is
+ // tied to this Conversation in the transaction that writes the reply (close_conversation_run), so the open chat, which
+ // keeps asking for the record, reads the card and the reply together: a read in between would draw the card in a turn of
+ // its own first, and a card moved into the reply stays still by design (#547).
  const [{run_id:run}]=rows(`select run_id from public.conversation_messages where conversation_id='${conversation}' and author='person'`) as {run_id:string}[];
  const ads=randomUUID();
  query(`do $$ begin
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,requested_by,created_at) values ('${ads}','${company}','${randomUUID()}','Meta Ads','Runs the Meta ads.','made-${ads.slice(0,8)}','${omar}',now());
-  insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values ('${conversation}','${run}','call-0','${company}','${ads}',now());
+  create or replace function public.chat_motion_made_with_reply() returns trigger language plpgsql set search_path='' as $f$ begin
+   insert into public.lead_made_agents(conversation_id,run_id,call_id,company_id,agent_id,created_at) values ('${conversation}','${run}','call-0','${company}','${ads}',now());
+   return null;
+  end $f$;
+  drop trigger if exists chat_motion_made_with_reply on public.conversation_messages;
+  create trigger chat_motion_made_with_reply after insert on public.conversation_messages for each row
+   when (new.conversation_id='${conversation}' and new.run_id='${run}' and new.author='agent') execute function public.chat_motion_made_with_reply();
  end $$;`);
- fake.settings.pendingReads=0;
+ try {
+  fake.settings.pendingReads=0;
+  await expect.poll(()=>rows(`select 1 from public.lead_made_agents where agent_id='${ads}'`).length,{timeout:20000}).toBe(1);
+ } finally {
+  query('do $$ begin drop trigger if exists chat_motion_made_with_reply on public.conversation_messages; drop function if exists public.chat_motion_made_with_reply(); end $$;');
+ }
  const reply=page.locator('.turn--agent').filter({hasText:`Reply to: ${text}`});
  await expect(reply).toBeVisible({timeout:20000});
  expect(await motionOf(reply)).toEqual(rises);
