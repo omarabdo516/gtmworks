@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(40);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -102,6 +102,8 @@ select throws_ok($$select public.check_permission_revoke('10000000-0000-0000-000
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002',' ','mcp:meta-ads/create_campaign')$$,'22023','permissionInvalid','a revoke names its permission');
+-- A revoke keeps its record before the Engine is written, then logs.
+select public.note_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','mcp:meta-ads/create_campaign');
 select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','Meta Ads · create_campaign','mcp:meta-ads/create_campaign');
 reset role;
 select is((select jsonb_build_array(actor_id,actor_kind,subject,agent_id,action,details) from public.company_log where action='agent_permission_revoked' and agent_id in ('e5000000-0000-0000-0000-000000000002','e5000000-0000-0000-0000-000000000003')),
@@ -112,11 +114,26 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select is((select count(*)::int from public.company_log where action='agent_permission_revoked' and agent_id in ('e5000000-0000-0000-0000-000000000002','e5000000-0000-0000-0000-000000000003')),1,'everyone who sees the Agent reads it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.note_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000003','mcp:wordpress/publish_post');
 select public.log_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000003','WordPress · publish_post','mcp:wordpress/publish_post');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select count(*)::int from public.company_log where action='agent_permission_revoked' and agent_id in ('e5000000-0000-0000-0000-000000000002','e5000000-0000-0000-0000-000000000003')),1,'and a Member who does not see the Agent reads none of its revokes');
 select results_eq($$select entry from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('recursive delete')$$,
  'a revoked grant no longer names the person behind its entry, and the other entry keeps its own');
+-- The record alone, with no log row, is what every server reads; a revoke the Engine did not take withdraws its own
+-- record and no other, and a Contributor keeps or withdraws none.
+select set_config('test.kept',public.note_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete')::text,true);
+select is((select count(*)::int from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')),0,
+ 'a revoke''s record, with no log row, already names no one behind the entry');
+select public.forget_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete','2000-01-01T00:00:00Z');
+select is((select count(*)::int from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')),0,'another revoke''s withdrawal leaves the record');
+select public.forget_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete',current_setting('test.kept')::timestamptz);
+select results_eq($$select entry from public.agent_permission_grants('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('recursive delete')$$,
+ 'its own withdrawal brings the grant''s person back');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.note_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','recursive delete')$$,'42501','permissionNotAllowed','a Contributor keeps no record');
+select throws_ok($$select public.forget_permission_revoked('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002','mcp:meta-ads/create_campaign',now())$$,'42501','permissionNotAllowed','nor withdraws one');
+select throws_ok($$select count(*) from public.agent_permission_revoked$$,'42501',null,'and no signed-in caller reads the records');
 reset role;
 -- What may be in flight: Ads's two always answers, taken just now (not revoked: the revoke row above is for the other);
 -- the Meta Ads one was revoked above, so only recursive delete is in flight; a Contributor reads none.

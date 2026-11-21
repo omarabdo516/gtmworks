@@ -41,6 +41,20 @@ create table public.agent_permission_revokes (
 alter table public.agent_permission_revokes enable row level security;
 revoke all on public.agent_permission_revokes from public,anon,authenticated,service_role;
 
+-- Each entry a revoke took out of an Agent's profile, and when (#166): shared by every server, and written before the
+-- Company log's row, with nothing a label could make it refuse. A grant older than its entry's last revoke here names
+-- no one (agent_permission_grants) and is never written back by a later revoke (agent_permission_inflight), whatever
+-- became of the log row. Read and written by these functions only.
+create table public.agent_permission_revoked (
+ agent_id uuid not null references public.hermes_agents(id) on delete cascade,
+ company_id uuid not null,
+ entry text not null check (length(entry) between 1 and 1000),
+ revoked_at timestamptz not null,
+ primary key (agent_id, entry)
+);
+alter table public.agent_permission_revoked enable row level security;
+revoke all on public.agent_permission_revoked from public,anon,authenticated,service_role;
+
 create function public.permission_revoke_held(agent uuid) returns boolean language sql stable security definer set search_path='' as $$
  select exists(select 1 from public.agent_permission_revokes h where h.agent_id=agent and h.held_until>now());
 $$;
@@ -143,8 +157,7 @@ language sql stable security definer set search_path='' as $$
    cross join unnest(q.allows) a
    where q.company_id=c and u.agent_id=agent and q.state='decided' and q.content->>'choice'='always'
  ) g join public.people p on p.id=g.who
- where not exists(select 1 from public.company_log l where l.company_id=c and l.agent_id=agent and l.action='agent_permission_revoked'
-   and l.details->'permission'->>'entry'=g.entry and l.created_at>=g.at)
+ where not exists(select 1 from public.agent_permission_revoked x where x.agent_id=agent and x.company_id=c and x.entry=g.entry and x.revoked_at>=g.at)
   and public.is_member(c) and public.can_see_agent(c,agent) and exists(select 1 from public.hermes_agents h where h.id=agent and h.company_id=c)
  order by g.entry,g.at desc;
 $$;
@@ -204,11 +217,36 @@ begin
    where q.company_id=c and u.agent_id=agent and q.content->>'choice'='always'
     and (q.state='sending' or q.state='decided' and q.decided_at>now()-interval '5 minutes')
  ) g
- where not exists(select 1 from public.company_log l where l.company_id=c and l.agent_id=agent and l.action='agent_permission_revoked'
-   and l.details->'permission'->>'entry'=g.entry and l.created_at>=g.at);
+ where not exists(select 1 from public.agent_permission_revoked x where x.agent_id=agent and x.company_id=c and x.entry=g.entry and x.revoked_at>=g.at);
 end $$;
 revoke all on function public.agent_permission_inflight(uuid,uuid) from public,anon,service_role;
 grant execute on function public.agent_permission_inflight(uuid,uuid) to authenticated;
+
+-- Keeps that `entry` is being taken out of the Agent's profile, by someone who may revoke, before the Engine is written:
+-- a revoke whose record cannot be kept changes nothing. It answers the record's time, so a revoke the Engine then does
+-- not take withdraws that one record (forget_permission_revoked) and an older grant names its person again.
+create function public.note_permission_revoked(c uuid, agent uuid, entry text) returns timestamptz
+language plpgsql security definer set search_path='' as $$
+declare kept timestamptz:=clock_timestamp();
+begin
+ perform public.check_permission_revoke(c,agent);
+ if entry is null or length(entry) not between 1 and 1000 then raise exception 'permissionInvalid' using errcode='22023'; end if;
+ insert into public.agent_permission_revoked(agent_id,company_id,entry,revoked_at) values(agent,c,note_permission_revoked.entry,kept)
+  on conflict on constraint agent_permission_revoked_pkey do update set company_id=excluded.company_id,revoked_at=excluded.revoked_at;
+ return kept;
+end $$;
+revoke all on function public.note_permission_revoked(uuid,uuid,text) from public,anon,service_role;
+grant execute on function public.note_permission_revoked(uuid,uuid,text) to authenticated;
+
+-- Withdraws the record a revoke kept when the Engine did not take the revoke; a later revoke's record is left alone.
+create function public.forget_permission_revoked(c uuid, agent uuid, entry text, kept timestamptz) returns void
+language plpgsql security definer set search_path='' as $$
+begin
+ perform public.check_permission_revoke(c,agent);
+ delete from public.agent_permission_revoked x where x.agent_id=agent and x.company_id=c and x.entry=forget_permission_revoked.entry and x.revoked_at=kept;
+end $$;
+revoke all on function public.forget_permission_revoked(uuid,uuid,text,timestamptz) from public,anon,service_role;
+grant execute on function public.forget_permission_revoked(uuid,uuid,text,timestamptz) to authenticated;
 
 -- A revoke the Engine confirmed, as one row on the Agent (design-reference: the click case revoke): who, the Agent, the
 -- permission as its row names it (`text`) and the entry as the Engine kept it (`entry`, so an older grant of it no longer
