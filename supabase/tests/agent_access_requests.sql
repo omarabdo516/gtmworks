@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(49);
+select plan(56);
 -- #167: a Member asks the main Agent for work that belongs to an Agent hidden from them. RS Learning: 1 Owner, 2 Manager,
 -- 3 and 5 Contributors, 4 Viewer. Reach (campaigns) is shown to the Manager; Quill (articles) to no one; Aleem has an
 -- Agent of its own for reports. Each person talks to Lead in fb…n, run ax-n; the Contributor also talks to Lead in fb…6.
@@ -85,24 +85,24 @@ select results_eq($$select agent_id,asked_by,named_to,state,pressed_at is null a
 -- Only the Member whose card it is presses it, once.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is(public.press_agent_access(current_setting('test.c')::uuid,current_setting('test.a')::bigint,true)-'at',jsonb_build_object('state','asked','first',true),'"Ask" sends the request');
-select is(public.press_agent_access(current_setting('test.c')::uuid,current_setting('test.a')::bigint,false)-'at',jsonb_build_object('state','asked','first',false),'a second press changes nothing');
-select is(public.press_agent_access(current_setting('test.c')::uuid,current_setting('test.a2')::bigint,true)->>'state','asked','the same ask from the other Conversation');
-select is(public.press_agent_access(current_setting('test.c')::uuid,current_setting('test.q')::bigint,true)->>'state','asked','and the ask for Quill');
+select is(public.press_agent_access(current_setting('test.c')::uuid,'fb000000-0000-0000-0000-000000000003',current_setting('test.a')::bigint,true)-'at',jsonb_build_object('state','asked','first',true),'"Ask" sends the request');
+select is(public.press_agent_access(current_setting('test.c')::uuid,'fb000000-0000-0000-0000-000000000003',current_setting('test.a')::bigint,false)-'at',jsonb_build_object('state','asked','first',false),'a second press changes nothing');
+select is(public.press_agent_access(current_setting('test.c')::uuid,'fb000000-0000-0000-0000-000000000006',current_setting('test.a2')::bigint,true)->>'state','asked','the same ask from the other Conversation');
+select is(public.press_agent_access(current_setting('test.c')::uuid,'fb000000-0000-0000-0000-000000000003',current_setting('test.q')::bigint,true)->>'state','asked','and the ask for Quill');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select throws_ok(format('select public.press_agent_access(%L,%s,true)',current_setting('test.c'),current_setting('test.a')),'P0002',null,'another Contributor cannot press it');
+select throws_ok(format('select public.press_agent_access(%L,%L,%s,true)',current_setting('test.c'),'fb000000-0000-0000-0000-000000000003',current_setting('test.a')),'P0002',null,'another Contributor cannot press it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select throws_ok(format('select public.press_agent_access(%L,%s,false)',current_setting('test.c'),current_setting('test.a')),'P0002',null,'nor can the Manager it names');
+select throws_ok(format('select public.press_agent_access(%L,%L,%s,false)',current_setting('test.c'),'fb000000-0000-0000-0000-000000000003',current_setting('test.a')),'P0002',null,'nor can the Manager it names');
 reset role;
 update public.members set role='viewer' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select throws_ok(format('select public.press_agent_access(%L,%s,true)',current_setting('test.c'),current_setting('test.five')),'42501',null,'a Member who became a Viewer cannot press their card');
+select throws_ok(format('select public.press_agent_access(%L,%L,%s,true)',current_setting('test.c'),'fb000000-0000-0000-0000-000000000005',current_setting('test.five')),'42501',null,'a Member who became a Viewer cannot press their card');
 reset role;
 update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
-select is(public.press_agent_access(current_setting('test.c')::uuid,current_setting('test.five')::bigint,false)->>'state','dismissed','"No, never mind" sends nothing');
+select is(public.press_agent_access(current_setting('test.c')::uuid,'fb000000-0000-0000-0000-000000000005',current_setting('test.five')::bigint,false)->>'state','dismissed','"No, never mind" sends nothing');
 
 -- Who reads what: the Member's card leaves its Agent out; the list waits on those who may open it.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
@@ -147,6 +147,38 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select results_eq($$select state,opened->>'name' from public.conversation_agent_access('fb000000-0000-0000-0000-000000000003') order by id$$,
  $$values ('opened','Reach'),('declined',null::text)$$,'the Member''s Conversation names Reach once it is opened, and never Quill');
+
+-- Review of #500: a press in another Conversation finds nothing; a card whose Agent the person sees by now sends nothing
+-- and says so; a job an Agent they see also does is never offered; an offered card names whoever may open it now.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok(format('select public.press_agent_access(%L,%L,%s,true)',current_setting('test.c'),'fb000000-0000-0000-0000-000000000006',current_setting('test.q')),'P0002',null,
+ 'a card is pressed only in its own Conversation');
+reset role;
+set local role service_role;
+select is(public.agent_ask_to_open('fb000000-0000-0000-0000-000000000006','ax-6','call-1','Campaigns and ads')->>'state','ignored','an Agent opened for them makes no new card');
+reset role;
+insert into public.agent_access_requests(company_id,conversation_id,run_id,call_id,agent_id,asked_by,named_to)
+ values ('10000000-0000-0000-0000-000000000001','fb000000-0000-0000-0000-000000000006','ax-6','call-9','fa000000-0000-0000-0000-000000000004','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000002');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is(public.press_agent_access(current_setting('test.c')::uuid,'fb000000-0000-0000-0000-000000000006',(select max(id) from public.conversation_agent_access('fb000000-0000-0000-0000-000000000006')),true),
+ jsonb_build_object('state','available','first',false),'a card for an Agent they see by now sends nothing');
+select is((select available from public.conversation_agent_access('fb000000-0000-0000-0000-000000000006') order by id desc limit 1),true,'and reads as open for them');
+reset role;
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+ ('fa000000-0000-0000-0000-00000000000a','10000000-0000-0000-0000-000000000001','fa000000-0000-0000-0000-000000000009','Pen','articles ',false,'access-test-pen');
+insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','fa000000-0000-0000-0000-00000000000a');
+set local role service_role;
+select is(public.agent_ask_to_open('fb000000-0000-0000-0000-000000000005','ax-5','call-1','Articles')->>'state','ignored','a job an Agent they see does is never asked for: that Agent does it');
+reset role;
+select is((select count(*)::int from public.agents_hidden_from('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005') where speciality='Articles'),0,
+ 'nor listed in their brief');
+update public.members set role='contributor' where company_id='10000000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000002';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select results_eq($$select named_first,named_role from public.conversation_agent_access('fb000000-0000-0000-0000-000000000006') where state='offered'$$,
+ $$values ('عمر','owner')$$,'an offered card names the Owner once the Manager it named may no longer open the Agent');
 reset role;
 select * from finish();
 rollback;

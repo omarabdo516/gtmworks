@@ -64,9 +64,12 @@ create function public.agent_access_named(c uuid, asker uuid, agent uuid) return
 $$;
 revoke all on function public.agent_access_named(uuid,uuid,uuid) from public,anon,authenticated,service_role;
 
--- The Agents of a Company hidden from one person: never the main Agent, and none for an Owner, who sees every Agent.
+-- The Agents of a Company hidden from one person whose job no Agent they see does: never the main Agent, and none for an
+-- Owner, who sees every Agent. Work an Agent they see does is handed to it, never asked for again (hand_to_agent).
 create function public.agents_hidden_from(c uuid, person uuid) returns setof public.hermes_agents language sql stable security definer set search_path='' as $$
- select a.* from public.hermes_agents a where a.company_id=c and not a.is_default and not public.agent_visible_to(c,person,a.id);
+ select a.* from public.hermes_agents a where a.company_id=c and not a.is_default and not public.agent_visible_to(c,person,a.id)
+  and not exists(select 1 from public.hermes_agents v where v.company_id=c and v.id<>a.id and public.agent_visible_to(c,person,v.id)
+   and lower(btrim(v.speciality))=lower(btrim(a.speciality)));
 $$;
 revoke all on function public.agents_hidden_from(uuid,uuid) from public,anon,authenticated,service_role;
 
@@ -166,21 +169,24 @@ grant execute on function public.agent_ask_to_open(uuid,text,text,text) to servi
 
 -- The card's two buttons, pressed by the person whose Conversation it is, while they may write: "Ask" (ask true) sends
 -- the request, "No, never mind" sends nothing. The first press is kept with its time; any later press, from another
--- tab included, changes nothing and answers what the card already says (`first` false).
-create function public.press_agent_access(c uuid, request bigint, ask boolean) returns jsonb
+-- tab included, changes nothing and answers what the card already says (`first` false), its answer included. A card
+-- whose Agent that person sees by now (opened meanwhile, from another card or in Company settings) sends nothing and
+-- answers 'available'.
+create function public.press_agent_access(c uuid, conversation uuid, request bigint, ask boolean) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare asked public.agent_access_requests;
 begin
  if ask is null then raise exception 'agentAccessAnswerMissing' using errcode='22023'; end if;
- select * into asked from public.agent_access_requests r where r.id=request and r.company_id=c and r.asked_by=auth.uid() for update;
+ select * into asked from public.agent_access_requests r where r.id=request and r.company_id=c and r.conversation_id=conversation and r.asked_by=auth.uid() for update;
  if not found or not public.is_member(c) then raise exception 'agentAccessNotFound' using errcode='P0002'; end if;
  if not public.conversation_can_write(c) then raise exception 'agentAccessNotAllowed' using errcode='42501'; end if;
  if asked.state<>'offered' then return jsonb_build_object('state',asked.state,'at',asked.pressed_at,'first',false); end if;
+ if public.agent_visible_to(c,asked.asked_by,asked.agent_id) then return jsonb_build_object('state','available','first',false); end if;
  update public.agent_access_requests set state=case when ask then 'asked' else 'dismissed' end,pressed_at=now() where id=asked.id returning * into asked;
  return jsonb_build_object('state',asked.state,'at',asked.pressed_at,'first',true);
 end $$;
-revoke all on function public.press_agent_access(uuid,bigint,boolean) from public,anon,service_role;
-grant execute on function public.press_agent_access(uuid,bigint,boolean) to authenticated;
+revoke all on function public.press_agent_access(uuid,uuid,bigint,boolean) from public,anon,service_role;
+grant execute on function public.press_agent_access(uuid,uuid,bigint,boolean) to authenticated;
 
 -- An Owner's or a Manager's answer to an asked request: open (#15's switch for that Member and that Agent, through
 -- set_agent_visible, which checks the Role again) or no. Every request that Member asked for that same Agent is
@@ -212,21 +218,26 @@ revoke all on function public.answer_agent_access(uuid,bigint,boolean) from publ
 grant execute on function public.answer_agent_access(uuid,bigint,boolean) to authenticated;
 
 -- The cards of one Conversation for its own person: the card's state, who it names (first name, whole name and Role
--- now), when it was pressed, and who answered and when. The Agent is named only once it is opened for that person and
--- they see it now; until then nothing of it is returned.
+-- now), when it was pressed, who answered and when, and whether they see its Agent now (`available`, so a card not
+-- yet answered says it is open for them instead of waiting on nobody). A card not yet pressed names whoever may open the
+-- Agent now, should the person it named have lost that; a pressed one keeps who it was sent to. The Agent is named
+-- only once it is opened for that person and they see it now; until then nothing of it is returned.
 create function public.conversation_agent_access(conversation uuid)
 returns table(id bigint, run_id text, state text, named_first text, named_name text, named_role text, pressed_at timestamptz, answered_at timestamptz,
- answerer text, opened jsonb, created_at timestamptz)
+ answerer text, opened jsonb, available boolean, created_at timestamptz)
 language sql stable security definer set search_path='' as $$
  select r.id, r.run_id, r.state, split_part(coalesce(n.name,''),' ',1), coalesce(n.name,''), coalesce(nm.role::text,''), r.pressed_at, r.answered_at,
   coalesce(a.name,''),
   case when r.state='opened' and public.agent_visible_to(r.company_id,v.person_id,r.agent_id)
    then (select jsonb_build_object('id',g.id,'connection_id',g.connection_id,'name',g.name) from public.hermes_agents g where g.id=r.agent_id) end,
+  public.agent_visible_to(r.company_id,v.person_id,r.agent_id),
   r.created_at
  from public.agent_access_requests r
  join public.conversations v on v.id=r.conversation_id and v.company_id=r.company_id
- left join public.people n on n.id=r.named_to
- left join public.members nm on nm.company_id=r.company_id and nm.person_id=r.named_to
+ cross join lateral (select case when r.state<>'offered' or public.may_open_agent_for(r.company_id,r.named_to,r.agent_id,r.asked_by) then r.named_to
+   else coalesce(public.agent_access_named(r.company_id,r.asked_by,r.agent_id),r.named_to) end named) w
+ left join public.people n on n.id=w.named
+ left join public.members nm on nm.company_id=r.company_id and nm.person_id=w.named and nm.removed_at is null
  left join public.people a on a.id=r.answered_by
  where r.conversation_id=conversation and v.person_id=auth.uid() and r.asked_by=auth.uid() and public.is_member(v.company_id)
   and public.can_see_agent(v.company_id,v.agent_id)

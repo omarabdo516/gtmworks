@@ -71,3 +71,18 @@ test('a pressed card reads its outcome from the record; a failed press keeps the
  await expect.element(waiting.getByText('Waiting for Sara')).toBeVisible();
  expect(waiting.element().querySelectorAll('button')).toHaveLength(0);
 });
+
+// Review of #500: a card whose Agent its person sees by now, from the record or from a press, sends nothing and says so.
+test('a card for an Agent the person sees by now says it is open for them, with no buttons and no toast', async () => {
+ const open = await draw({ id: 9, named: sara, state: 'available' });
+ const drawn = open.getByRole('group', { name: 'Ask Sara for it' });
+ await expect.element(drawn.getByText('That agent is open for you now: you’ll find it in your agents.')).toBeVisible();
+ expect(drawn.element().querySelectorAll('button')).toHaveLength(0);
+ await open.unmount();
+ const pressed = await draw({ id: 10, named: sara, state: 'offered' }, async () => ({ state: 'available' }));
+ onTestFinished(() => pressed.unmount());
+ const card = pressed.getByRole('group', { name: 'Ask Sara for it' });
+ await card.getByRole('button', { name: 'Ask Sara' }).click();
+ await expect.element(card.getByText('That agent is open for you now: you’ll find it in your agents.')).toBeVisible();
+ expect(pressed.container.ownerDocument.querySelector('.toast-host')?.textContent ?? '').not.toContain('Request sent');
+});

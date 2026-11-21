@@ -161,7 +161,11 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
   try {
    const response=await fetch('/api/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,conversation:conversation.id,intent:'access',card:request,ask})});
    const body=await response.json() as {state?:string,at?:string,error?:string};
-   return response.ok&&(body.state==='asked'||body.state==='dismissed')&&body.at?{state:body.state,at:body.at}:{error:body.error||'conversationFailed'};
+   if(!response.ok) return {error:body.error||'conversationFailed'};
+   // A press another tab made first may have been answered since: the card still says it was sent.
+   if(body.state==='available') return {state:'available'};
+   if(body.at&&(body.state==='dismissed'||body.state==='asked'||body.state==='opened'||body.state==='declined')) return {state:body.state==='dismissed'?'dismissed':'asked',at:body.at};
+   return {error:'conversationFailed'};
   } catch { return {error:'conversationFailed'}; }
  };
  const permit:DecidePermission=async(card,choice)=>{

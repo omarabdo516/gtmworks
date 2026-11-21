@@ -15,16 +15,17 @@ import { toast } from '@/app/toast';
 import type { AgentAccessView } from '@/lib/conversations';
 
 // How a press is kept: the state the card now reads and when it was pressed, or the failure to say.
-export type PressAccess=(request:number,ask:boolean)=>Promise<{state:'asked'|'dismissed',at:string}|{error:string}>;
+// `available`: the person sees the Agent by now, so nothing was sent.
+export type PressAccess=(request:number,ask:boolean)=>Promise<{state:'asked'|'dismissed',at:string}|{state:'available'}|{error:string}>;
 
 // `c` and `cb` are the Conversation's own words (useConversationText), passed by the chat that draws the card.
 export function AccessCard({card,fresh,press,c,cb}:{card:AgentAccessView,fresh:boolean,press?:PressAccess,c:(key:string,...values:unknown[])=>string,cb:(key:string,...values:ReactNode[])=>ReactNode[]}) {
  const {t,language}=useI18n(); const zone=useZone();
- const [pressed,setPressed]=useState<{state:'asked'|'dismissed',at:string,just:boolean}|null>(null);
+ const [pressed,setPressed]=useState<{state:'asked'|'dismissed',at:string,just:boolean}|{state:'available',just:boolean}|null>(null);
  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  const root=useRef<HTMLDivElement>(null); const held=useRef(false);
  // What a press here ended in, else the record's.
- const shown=pressed??(card.state==='offered'?null:{state:card.state,at:card.at,just:false});
+ const shown=pressed??('at' in card?{state:card.state,at:card.at,just:false}:card.state==='available'?{state:'available' as const,just:false}:null);
  const first=card.named.first||card.named.name; const role=card.named.role==='owner'?t('owner'):t('manager');
  // Today its time, another day its day, as the chat's other cards say when they were answered.
  const when=(at:string)=><time dateTime={at} data-utc={zone}>{dayOf(new Date().toISOString(),zone)===dayOf(at,zone)
@@ -36,11 +37,12 @@ export function AccessCard({card,fresh,press,c,cb}:{card:AgentAccessView,fresh:b
   held.current=false; setBusy(false);
   if('error' in result) { setError(result.error); return; }
   setPressed({...result,just:true});
-  toast(result.state==='asked'?c('accessToastSent',first):c('accessToastNotSent'),{icon:result.state==='asked'?'check':'x'});
+  if(result.state!=='available') toast(result.state==='asked'?c('accessToastSent',first):c('accessToastNotSent'),{icon:result.state==='asked'?'check':'x'});
   (root.current?.closest('.chat, dialog')??document).querySelector<HTMLTextAreaElement>('.composer__input')?.focus();
  };
  const outcome=shown?.state==='asked'
   ?<div className="card__outcome"><ShellIcon name="check"/><span>{cb('accessSent',first,when(shown.at))}</span></div>
+  :shown?.state==='available'?<div className="card__outcome"><ShellIcon name="check"/><span>{c('accessAvailable')}</span></div>
   :shown?.state==='dismissed'?<div className="card__outcome"><ShellIcon name="x"/><span>{c('accessNotSent')}</span></div>
   :!press?<div className="card__outcome"><ShellIcon name="clock"/><span>{cb('accessWaitingFor',first)}</span></div>
   :<>

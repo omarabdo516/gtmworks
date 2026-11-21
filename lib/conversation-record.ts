@@ -39,7 +39,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type HandedRow={run_id:string,goal:string,state:string,answers_person:boolean,created_at:string,to_agent:{id:string,name:string,connection_id:string}|null};
  type Face={id:string,connection_id:string,name:string};
  type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,maybe_applied?:boolean,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
- type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,created_at:string};
+ type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,available:boolean,created_at:string};
  const [{ends,messages,queued,requestRows,madeRows,handedRows,changeRows},notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
@@ -86,6 +86,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // is its own line (`decisions`).
  const accessView=(row:AccessRow):AgentAccessView=>{
   const named={first:row.named_first,name:row.named_name,role:row.named_role};
+  if(row.available&&(row.state==='offered'||row.state==='asked')) return {id:row.id,named,state:'available'};
   return row.state==='offered'||!row.pressed_at?{id:row.id,named,state:'offered'}:{id:row.id,named,state:row.state==='dismissed'?'dismissed':'asked',at:row.pressed_at};
  };
  // The Agent made for a request shows in the request's own card, so one card holds the request and its outcome.

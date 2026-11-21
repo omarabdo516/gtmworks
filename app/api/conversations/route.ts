@@ -142,11 +142,11 @@ async function later(db:Database,body:Record<string,unknown>) {
 }
 
 // A press on the card asking for an Agent hidden from its person (#167): "Ask" (ask true) or "No, never mind", never text.
-// Only the Conversation's person presses it, while they may write (press_agent_access); the first press is kept with its
-// time and any later one answers what the card already says. Nothing of the request is logged.
+// Only the Conversation's person presses it, in that Conversation, while they may write (press_agent_access); the first
+// press is kept with its time and any later one answers what the card already says. Nothing of the request is logged.
 async function access(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)||!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||typeof body.ask!=='boolean') return refuse('conversationFailed',400);
- const {data,error}=await db.rpc('press_agent_access',{c:body.company,request:body.card,ask:body.ask});
+ const {data,error}=await db.rpc('press_agent_access',{c:body.company,conversation:body.conversation,request:body.card,ask:body.ask});
  if(error) return error.code==='22023'?refuse('conversationFailed',400):refuseFor(error.code);
  return reply(data as {state:string,at:string,first:boolean});
 }
