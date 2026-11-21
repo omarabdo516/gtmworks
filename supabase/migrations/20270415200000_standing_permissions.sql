@@ -224,6 +224,24 @@ end $$;
 revoke all on function public.agent_permission_inflight(uuid,uuid) from public,anon,service_role;
 grant execute on function public.agent_permission_inflight(uuid,uuid) to authenticated;
 
+-- The entries of the Agent's always answers still being delivered (claimed, not yet settled): one may already be on its
+-- way to the Engine, handed to a closer before a revoke's hold. A revoke of such an entry waits for it to settle, and
+-- reports busy rather than success while it has not, so a successful revoke is never undone by an earlier answer.
+create function public.agent_permission_sending(c uuid, agent uuid) returns setof text
+language plpgsql stable security definer set search_path='' as $$
+begin
+ perform public.check_permission_revoke(c,agent);
+ return query select distinct a from public.reply_cards r join public.conversations v on v.id=r.conversation_id and v.company_id=r.company_id
+   cross join unnest(r.allows) a
+   where r.company_id=c and v.agent_id=agent and r.kind='permission' and r.state='sending' and r.content->>'choice'='always'
+  union
+  select distinct a from public.channel_permissions q join public.channel_runs u on u.message_id=q.message_id and u.run_id=q.run_id
+   cross join unnest(q.allows) a
+   where q.company_id=c and u.agent_id=agent and q.state='sending' and q.content->>'choice'='always';
+end $$;
+revoke all on function public.agent_permission_sending(uuid,uuid) from public,anon,service_role;
+grant execute on function public.agent_permission_sending(uuid,uuid) to authenticated;
+
 -- Keeps that `entry` is being taken out of the Agent's profile, by someone who may revoke, before the Engine is written:
 -- a revoke whose record cannot be kept changes nothing. It answers the record's time, so a revoke the Engine then does
 -- not take withdraws that one record (forget_permission_revoked) and an older grant names its person again.

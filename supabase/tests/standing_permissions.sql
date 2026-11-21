@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(42);
+select plan(44);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -169,6 +169,11 @@ select throws_ok($$select public.begin_permission_revoke('10000000-0000-0000-000
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select results_eq($$select * from public.agent_permission_inflight('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002') order by 1$$,$$values ('mcp:canva/create_design'),('recursive delete')$$,
  'a claimed Always allow is in flight, so the revoke writes it back');
+select results_eq($$select * from public.agent_permission_sending('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('mcp:canva/create_design')$$,
+ 'and it is still being delivered, so a revoke of that entry waits for it (Codex on #499)');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select * from public.agent_permission_sending('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','a Contributor reads no deliveries');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 reset role;
 set local role service_role;
 select is(public.track_run_permission('e6000000-0000-0000-0000-000000000001','s-run-6',null,false,now()),'[]'::jsonb,'while the hold lasts the Always allow is not handed to the Engine');

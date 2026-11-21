@@ -18,7 +18,7 @@ const rows=[
  {agent:lead,name:'Writer',connection:'f1000000-0000-0000-0000-000000000031',profile:shared,main:false,own:false},
 ];
 // `shared` is the database every server process reads: two sessions given the same one are two processes of one install.
-function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=false,noteFail=false,inflight=[],logDelay=0,hold=null,shared=null}={}) {
+function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=false,noteFail=false,inflight=[],logDelay=0,hold=null,shared=null,sending=()=>[]}={}) {
  const logged=[],asked=[]; const holder=hold??{held:false}; const store=shared??{noted:new Map()};
  const db={rpc:async(name,args)=>{
   asked.push(name);
@@ -26,6 +26,7 @@ function session({agents=rows,refuse=null,grants=[],grantsFail=false,logFail=fal
   if(name==='agent_permission_grants') return grantsFail?{data:null,error:{message:'down'}}:{data:grants.filter(grant=>grant.agent===args.agent).map(grant=>({entry:grant.entry,allowed_by:grant.allowed_by,allowed_at:grant.allowed_at})),error:null};
   // As the database answers: what is in flight, less what a revoke has kept as revoked since (agent_permission_revoked).
   if(name==='agent_permission_inflight') return {data:inflight.filter(entry=>!store.noted.has(entry)),error:null};
+  if(name==='agent_permission_sending') return {data:sending(),error:null};
   if(name==='check_permission_revoke') return {data:null,error:refuse?{message:refuse}:null};
   if(name==='begin_permission_revoke') { if(refuse) return {data:null,error:{message:refuse}}; if(holder.held) return {data:false,error:null}; holder.held=true; return {data:true,error:null}; }
   if(name==='end_permission_revoke') { holder.held=false; return {data:null,error:null}; }
@@ -77,7 +78,7 @@ test('a revoke is asked of the database first, removes that one entry from that 
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   assert.deepEqual(fake.settings.profiles.get(seoProfile).config.command_allowlist,['mcp:notion/create_page'],'another Agent keeps its own');
   assert.deepEqual(logged,[{c:company,agent:ads,permission:'Notion · create_page',entry:'mcp:notion/create_page'}]);
-  assert.deepEqual(asked,['company_app_agents','check_permission_revoke','begin_permission_revoke','agent_permission_inflight','note_permission_revoked','log_permission_revoked','end_permission_revoke']);
+  assert.deepEqual(asked,['company_app_agents','check_permission_revoke','begin_permission_revoke','agent_permission_sending','agent_permission_inflight','note_permission_revoked','log_permission_revoked','end_permission_revoke']);
   assert.deepEqual(await revokeAgentPermission(db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)}),{state:'gone'});
   assert.equal(logged.length,1,'an entry already gone is not logged again');
  } finally { await fake.close(); }
@@ -231,4 +232,28 @@ test('a write that timed out before the Engine applied it keeps the record and t
   assert.equal((await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})).state,'revoked');
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'the first entry is never written back');
  } finally { globalThis.fetch=engineFetch; await fake.close(); }
+});
+
+test('a revoke waits for an Always allow of the same entry still being delivered, and says busy rather than succeed while it is (Codex on #499)',async()=>{
+ const fake=await fakeHermes();
+ try {
+  // The answer settles while the revoke waits: the revoke then goes on.
+  profileOn(fake,adsProfile,['recursive delete']);
+  let checks=0;
+  const settles=session({sending:()=>++checks<3?['recursive delete']:[]});
+  assert.equal((await revokeAgentPermission(settles.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+  assert.equal(checks,3);
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
+  // It never settles: busy, the Engine is never touched, and the hold ends.
+  profileOn(fake,adsProfile,['recursive delete']);
+  const stuck=session({sending:()=>['recursive delete']});
+  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
+  assert.equal(stuck.asked.includes('note_permission_revoked'),false);
+  assert.equal(stuck.asked.at(-1),'end_permission_revoke');
+  // Another entry's answer being delivered does not hold this revoke up.
+  profileOn(fake,adsProfile,['recursive delete']);
+  const other=session({sending:()=>['mcp:notion/create_page']});
+  assert.equal((await revokeAgentPermission(other.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+ } finally { await fake.close(); }
 });
