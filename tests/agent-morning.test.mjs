@@ -410,3 +410,25 @@ test('saves and main-Agent changes run one at a time under the Company lease; a 
   assert.deepEqual(jobs(second,adsProfile).map(job=>job.state),['scheduled'],'the message is on the main Agent');
  } finally { await second.close(); leases.clear(); }
 });
+
+test('a holder whose lease ran out and was taken stops before its next Engine write, and a move carries an interval schedule', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // The save's lease is taken by another holder (it ran out) while the save reads the Engine.
+  const stealing={read:async connection=>{ const listed=await readRoutines(connection); leases.set(company,'someone-else'); return listed; }};
+  const before=writes(fake).length;
+  assert.equal((await changeAgentMorning(session().db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake),driver:stealing})).state,'busy');
+  assert.equal(writes(fake).length,before,'no write after the lease was lost');
+  assert.equal(jobs(fake,leadProfile)[0].state,'scheduled');
+  leases.clear();
+ } finally { await fake.close(); leases.clear(); }
+ const second=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(second)});
+  Object.assign(jobs(second,leadProfile)[0],{schedule:{kind:'interval',minutes:720,display:'every 720m'},schedule_display:'every 720m'});
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(second)})).state,'moved');
+  assert.deepEqual(jobs(second,adsProfile).map(job=>[job.schedule.kind,job.schedule.minutes,job.state]),[['interval',720,'scheduled']]);
+  assert.equal(jobs(second,leadProfile).length,0);
+ } finally { await second.close(); }
+});

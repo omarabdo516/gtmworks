@@ -24,23 +24,21 @@ async function respond(request:NextRequest) {
    // The change and Good morning's move (#182) run under the Company's lease, as a save of the message does, so neither
    // runs between the other's steps. The Agents are read first, with their Engine profiles, so a removed Agent's profile
    // is still known; without that list nothing is changed.
-   const changed=await withMorningLease(db,body.company,async()=>{
+   const changed=await withMorningLease(db,body.company,async fence=>{
     const {data:listing,error:listingError}=await db.rpc('company_app_agents',{c:body.company});
     if(listingError||!Array.isArray(listing)) return reply({error:'hermesAgentFailed'},503);
     const listed=listing as {agent:string,main:boolean}[];
-    const before=listed.find(row=>row.main)?.agent;
     const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,a:body.agent,replacement:body.replacement??null});
     if(error) {
      const key=['hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
      return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesNextDefault'?409:400);
     }
     // Good morning follows the main Agent with the same time and switch, and none is left on another one; with no Agent
-    // left to take it, it is paused. It is settled after every Make it main and every removal of the main Agent. The
+    // left to take it, it is paused. It is settled after every change here, whatever the Agents read first said. The
     // change itself stands whatever the Engine answers; a failure is said in the server log.
-    if(body.intent==='default'||body.agent===before) {
-     const moved=await moveAgentMorning(db,{company:body.company,agents:listed}).catch(()=>({state:'failed'}));
-     if(!['moved','paused','none'].includes(moved.state)) console.error('Good morning not settled on the main Agent:',body.company,moved.state);
-    }
+    // A move that loses the lease stops before its next Engine write (the change made here stands); it is said too.
+    const moved=await moveAgentMorning(db,{company:body.company,agents:listed,fence}).catch(()=>({state:'busy'}));
+    if(!['moved','paused','none'].includes(moved.state)) console.error('Good morning not settled on the main Agent:',body.company,moved.state);
     return null;
    });
    if(changed&&'state' in changed) return reply({error:changed.state==='notAllowed'?'hermesNotAllowed':'hermesAgentFailed'},changed.state==='notAllowed'?403:changed.state==='busy'?409:500);
