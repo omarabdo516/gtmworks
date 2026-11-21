@@ -293,7 +293,7 @@ test('an Owner or a Manager reads each Agent\'s token use from its own profile w
 // #458: an Owner adds a server by address. A Manager changes nothing; a command is refused before the Engine is asked; a
 // token goes only to the Engine, never to a database call, a log row or a response; a no-sign-in server is on at once; an
 // OAuth one comes back through gtmworks; and Remove takes a made server off every Agent profile it was on.
-test('only an Owner adds or tests an own server, and a command is refused before any Engine call', async () => {
+test('only an Owner adds or tests an own server, and a command beside an address or not one program is refused before any Engine call', async () => {
  const fake=await fakeHermes();
  try {
   makeProfile(fake,companyProfile(company));
@@ -303,12 +303,59 @@ test('only an Owner adds or tests an own server, and a command is refused before
   for(const action of ['add','test']) assert.deepEqual(await changeCompanyServer(someone.db,{company,person:member,agent:lead,action,name:'My CRM',url:'https://crm.example/mcp',kind:'none',hermes}),{status:403,body:{error:'appsNotAllowed'}},action);
   const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
   const add=(extra={})=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action:'add',name:'My CRM',url:'https://crm.example/mcp',kind:'none',hermes,...extra});
-  assert.deepEqual(await add({command:'node',args:['server.js']}),{status:400,body:{error:'appsCommandRefused'}});
+  // A command comes only as the sandbox kind (#459), never beside an address, so nothing can reach the Engine's container.
+  assert.deepEqual(await add({command:'node',args:['server.js']}),{status:400,body:{error:'appsServerInvalid'}});
+  assert.deepEqual(await add({kind:'command',command:'node',args:['server.js']}),{status:400,body:{error:'appsServerInvalid'}},'a command server has no address');
+  for(const [command,args] of [['',[]],['node server.js',[]],['node','server.js'],['node',['a\nb']],[undefined,[]]]) {
+   assert.deepEqual(await add({kind:'command',url:undefined,command,args}),{status:400,body:{error:'appsServerInvalid'}},String(command));
+  }
   assert.deepEqual(await add({name:'Stripe'}),{status:400,body:{error:'appsServerInvalid'}},'a catalogue name is never a made server');
   assert.deepEqual(await add({url:'ftp://crm.example/mcp'}),{status:400,body:{error:'appsServerInvalid'}});
   assert.deepEqual(await add({url:'https://user:pass@crm.example/mcp'}),{status:400,body:{error:'appsServerInvalid'}});
   assert.deepEqual(await add({kind:'header'}),{status:400,body:{error:'appsTokenInvalid'}});
   assert.equal(fake.settings.managementRequests.length,mark,'the Engine was never asked');
+ } finally { await fake.close(); }
+});
+
+test('a command server is handed to the Engine as ssh into the work sandbox, from the Agent\'s own folder, and reads back as typed', async () => {
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),agentProfile(writer)]) makeProfile(fake,name);
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow,writerRow]});
+  const result=await changeCompanyServer(omar.db,{company,person:owner,agent:writer,action:'add',name:'Design tool',kind:'command',command:'node',args:['/work/tools/server.mjs','--quiet'],hermes});
+  assert.deepEqual(result,{status:200,body:{key:'design-tool',state:'connected'}});
+  const server=serversOf(fake,agentProfile(writer))['design-tool'];
+  assert.equal(server.command,'ssh','the Engine starts ssh, never the Owner\'s command in its own container');
+  assert.ok(server.args.includes('pn@sandbox'));
+  assert.equal(server.args.at(-1),`builtin cd -- /work/${agentProfile(writer)} || exit 126; exec 'node' '/work/tools/server.mjs' '--quiet'`);
+  assert.equal(serversOf(fake,companyProfile(company))['design-tool'],undefined,'only the Agent it was added for');
+  assert.deepEqual(omar.logged,[['app_connected','design-tool',writer]]);
+  const read=target=>readApps({...target,managementAddress:fake.managementAddress});
+  const card=(await readCompanyApps(omar.db,{company,hermes,driver:{read}}))?.find(app=>app.key==='design-tool');
+  assert.deepEqual({source:card?.source,auth:card?.auth,command:card?.command,args:card?.args,url:card?.url},{source:'custom',auth:'command',command:'node',args:['/work/tools/server.mjs','--quiet'],url:undefined});
+  assert.deepEqual(card?.agents.map(agent=>[agent.name,agent.state]),[['Lead','off'],['Writer','connected']]);
+
+  // On for Lead too: Lead's copy starts in Lead's own folder, from the command Writer's profile records.
+  assert.deepEqual(await changeCompanyApp(omar.db,{company,person:owner,agent:lead,app:'design-tool',action:'connect',hermes,driver:{read}}),{status:200,body:{status:'connected'}});
+  assert.equal(serversOf(fake,companyProfile(company))['design-tool'].args.at(-1),`builtin cd -- /work/${companyProfile(company)} || exit 126; exec 'node' '/work/tools/server.mjs' '--quiet'`);
+ } finally { await fake.close(); }
+});
+
+test('Test probes a command server without leaving it, and a changed command replaces the server', async () => {
+ const fake=await fakeHermes();
+ try {
+  makeProfile(fake,companyProfile(company));
+  const hermes={address:fake.address,managementAddress:fake.managementAddress,key:'test-only-key'};
+  const omar=sessions(fake,{person:owner,isOwner:true,signIns:[],agents:[leadRow]});
+  const ask=(action,args)=>changeCompanyServer(omar.db,{company,person:owner,agent:lead,action,name:'Design tool',kind:'command',command:'od',args,hermes});
+  const tested=await ask('test',['mcp']);
+  assert.equal(tested.status,200);
+  assert.equal(tested.body.state,'connected');
+  assert.deepEqual(serversOf(fake,companyProfile(company)),{},'the profile is unchanged');
+  assert.equal((await ask('add',['mcp'])).status,200);
+  assert.equal((await ask('add',['mcp','--daemon-url','http://127.0.0.1:7456'])).status,200);
+  assert.match(serversOf(fake,companyProfile(company))['design-tool'].args.at(-1),/exec 'od' 'mcp' '--daemon-url' 'http:\/\/127\.0\.0\.1:7456'$/);
  } finally { await fake.close(); }
 });
 

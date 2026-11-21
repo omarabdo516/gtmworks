@@ -125,8 +125,8 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
  const [pending,startTransition]=useTransition();
  const focusNext=useRef<string|null>(null);
  const state=item.state; const on=state!=='off'; const waiting=run.following!==null;
- // A server with no sign-in, or a token, is turned on at the click: no vendor window opens.
- const direct=item.auth==='none'||item.auth==='header';
+ // A server with no sign-in, a token or a command in the work sandbox is turned on at the click: no vendor window opens.
+ const direct=item.auth==='none'||item.auth==='header'||item.auth==='command';
  const custom=item.source==='custom';
  const nameOf=(id:string)=>item.agents.find(agent=>agent.id===id)?.name??'';
  const names=(ids:string[])=>ids.map(nameOf).join(say('namesSep'));
@@ -260,7 +260,9 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
    {state==='attention'&&<p className="ro-note sov-warn" role="note"><SettingsIcon name="shield"/><span>{say('attentionNote')}</span></p>}
    <dl className="kv app-kv">
     <div className="kv__row"><dt>{say('can')}</dt><dd>{item.can}</dd></div>
-    <div className="kv__row"><dt>{say('kindTitle')}</dt><dd>{say(item.auth==='header'?'kindHeader':item.auth==='oauth'?'kindOauth':'kindNone')}</dd></div>
+    <div className="kv__row"><dt>{say('kindTitle')}</dt><dd>{say(item.auth==='header'?'kindHeader':item.auth==='oauth'?'kindOauth':item.auth==='command'?'kindCommand':'kindNone')}</dd></div>
+    {/* A command server (#459) shows the command it runs in the work sandbox, as the Owner typed it. */}
+    {item.auth==='command'&&item.command&&<div className="kv__row"><dt>{say('command')}</dt><dd><code dir="ltr" id="app-command">{[item.command,...item.args??[]].map(word=>word===''||/\s|'/.test(word)?`'${word.replaceAll("'","'\\''")}'`:word).join(' ')}</code></dd></div>}
     {item.auth==='oauth'&&<div className="kv__row"><dt>{say('signIn')}</dt><dd>{named(say('signInLine'),item.name)}</dd></div>}
    </dl>
    {owner&&item.auth==='header'&&<section className="apps-sec" aria-labelledby="app-token-h"><h4 className="apps-sec__h" id="app-token-h">{say('token')}</h4>
@@ -301,15 +303,20 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
  </>;
 }
 
-// The Owner's own server (#458): a name, an address, the sign-in kind and, for a token, the token itself. Test adds it to
-// the chosen Agent's profile and reads back the tools the server lists (names only); Add turns it on, and an OAuth server
+// The Owner's own server (#458): a name, an address, the sign-in kind and, for a token, the token itself; or, as its own
+// kind (#459), a command and its arguments, one per line, which run in the Company's work sandbox. Test adds it to the
+// chosen Agent's profile and reads back the tools the server lists (names only); Add turns it on, and an OAuth server
 // then opens the vendor's window as every app does. The token is kept in this form until the answer and cleared at once;
 // gtmworks never stores or returns it.
 function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text}) {
  const say=sayer(text); const router=useRouter(); const {language}=useI18n();
  const own=item.agents.filter(agent=>agent.own);
  const [name,setName]=useState(''); const [address,setAddress]=useState('');
- const [kind,setKind]=useState<'oauth'|'header'|'none'>('oauth'); const [token,setToken]=useState('');
+ const [kind,setKind]=useState<'oauth'|'header'|'none'|'command'>('oauth'); const [token,setToken]=useState('');
+ const [command,setCommand]=useState(''); const [argLines,setArgLines]=useState('');
+ const sandboxed=kind==='command';
+ // One argument per line, each exactly as typed; an empty line is not an argument.
+ const serverOf=()=>sandboxed?{kind,command:command.trim(),args:argLines.replace(/\r/g,'').split('\n').filter(line=>line!=='')}:{url:address,kind,token:kind==='header'?token:''};
  const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [queue,setQueue]=useState<string[]>([]);
  const [tools,setTools]=useState<string[]|null>(null); const [tested,setTested]=useState('');
  const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
@@ -351,7 +358,7 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
  const pick=(id:string)=>{ if(busy) return; setPicks(picks.includes(id)?picks.filter(other=>other!==id):[...picks,id]); };
  const submit=(action:'add'|'test')=>{
   if(busy) return;
-  if(!name.trim()||!address.trim()) { setError('ownRequired'); return; }
+  if(!name.trim()||(sandboxed?!command.trim():!address.trim())) { setError(sandboxed?'commandRequired':'ownRequired'); return; }
   if(kind==='header'&&!token.trim()) { setError('tokenNeeded'); return; }
   if(!picks.length) { setError('pickOne'); return; }
   const popup=action==='add'&&kind==='oauth'?window.open('about:blank','_blank'):null;
@@ -362,7 +369,7 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
    if(action==='test') {
     let shown:{state?:unknown,tools?:unknown}|null=null;
     for(const agent of targets) {
-     const answer=await askServer({company,agent,action,name,url:address,kind,token:kind==='header'?token:''});
+     const answer=await askServer({company,agent,action,name,...serverOf()});
      if(!answer.ok) { setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
      if(!shown||(shown.state!=='connected'&&answer.body.state==='connected')) shown=answer.body;
     }
@@ -370,11 +377,11 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
     setTested(String(shown?.state||'')); setToken(''); setBusy(false); return;
    }
    for(const agent of targets) {
-    const answer=await askServer({company,agent,action,name,url:address,kind,token:kind==='header'?token:''});
+    const answer=await askServer({company,agent,action,name,...serverOf()});
     if(!answer.ok) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
     // Added, but the engine did not reach it (an address that does not answer, a token it refused): the form stays with
     // the reason, and its card shows Needs attention.
-    if(kind!=='oauth'&&answer.body.state!=='connected') { setBusy(false); setError('connectAttention'); refreshApps(); return; }
+    if(kind!=='oauth'&&answer.body.state!=='connected') { setBusy(false); setError(sandboxed?'commandAttention':'connectAttention'); refreshApps(); return; }
     if(kind==='oauth') {
      const url=typeof answer.body.url==='string'?answer.body.url:null;
      if(!url) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
@@ -394,10 +401,14 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
   </header>
   <div className="apps-body apps-detail">
    <div className="panel-card own-form">
-    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={error==='ownRequired'&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
-    <label className="set-field"><span>{say('address')}</span><input id="own-url" type="url" inputMode="url" autoComplete="off" placeholder={say('addressHint')} aria-invalid={error==='ownRequired'&&!address.trim()||undefined} aria-describedby="own-err" value={address} onChange={event=>setAddress(event.target.value)}/></label>
-    <label className="set-field"><span>{say('kind')}</span><select id="own-kind" value={kind} onChange={event=>setKind(event.target.value as 'oauth'|'header'|'none')}>
-     <option value="oauth">{say('kindOauth')}</option><option value="header">{say('kindHeader')}</option><option value="none">{say('kindNone')}</option></select></label>
+    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={(error==='ownRequired'||error==='commandRequired')&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
+    <label className="set-field"><span>{say('kind')}</span><select id="own-kind" value={kind} onChange={event=>{ setKind(event.target.value as 'oauth'|'header'|'none'|'command'); setError(''); }}>
+     <option value="oauth">{say('kindOauth')}</option><option value="header">{say('kindHeader')}</option><option value="none">{say('kindNone')}</option><option value="command">{say('kindCommand')}</option></select></label>
+    {sandboxed?<>
+     <label className="set-field"><span>{say('command')}</span><input id="own-command" type="text" dir={command?'ltr':undefined} autoComplete="off" spellCheck={false} placeholder={say('commandHint')} aria-invalid={error==='commandRequired'&&!command.trim()||undefined} aria-describedby="own-command-hint own-err" value={command} onChange={event=>setCommand(event.target.value)}/></label>
+     <label className="set-field"><span>{say('args')}</span><textarea id="own-args" dir={argLines?'ltr':undefined} rows={3} autoComplete="off" spellCheck={false} aria-describedby="own-args-hint" value={argLines} onChange={event=>setArgLines(event.target.value)}/><span className="set-hint" id="own-args-hint">{say('argsHint')}</span></label>
+     <p className="set-hint" id="own-command-hint">{say('commandNote')}</p>
+    </>:<label className="set-field"><span>{say('address')}</span><input id="own-url" type="url" inputMode="url" autoComplete="off" placeholder={say('addressHint')} aria-invalid={error==='ownRequired'&&!address.trim()||undefined} aria-describedby="own-err" value={address} onChange={event=>setAddress(event.target.value)}/></label>}
     {kind==='header'&&<label className="set-field"><span>{say('token')}</span><input id="own-token" type="password" autoComplete="off" aria-invalid={error==='tokenNeeded'||undefined} aria-describedby="own-token-hint own-err" value={token} onChange={event=>setToken(event.target.value)}/><span className="set-hint" id="own-token-hint">{say('tokenNote')}</span></label>}
    </div>
    {owner&&<section className="apps-sec" aria-labelledby="own-pick-h"><h4 className="apps-sec__h" id="own-pick-h">{say('whoGets')} <span className="num muted">{picks.length}</span></h4>

@@ -18,14 +18,19 @@ const catalogues:Text[]=[en,ar];
 // the sheet asks for it through GET /api/company-apps, so no other page waits on the Engine.
 export const companyAppItems=cache(async(company:string,language:Language):Promise<AppItem[]|null>=>{
  try {
-  const apps=await readCompanyApps(await supabase(),{company});
+  const db=await supabase();
+  const [apps,owner]=await Promise.all([readCompanyApps(db,{company}),db.rpc('is_company_owner',{c:company}).then(({data,error})=>!error&&data===true)]);
   if(!apps) return null;
   const text:Text=language==='ar'?ar:en;
   return apps.map(entry=>{
-   const style=entry.source==='custom'?'custom':entry.key;
+   // A command server the Owner added (#459) reads as one that runs in the work sandbox.
+   const style=entry.source==='custom'?entry.auth==='command'?'command':'custom':entry.key;
    const name=entry.source==='own'?text.ownName:entry.name;
    const use=text[`use.${style}`], can=text[`can.${style}`];
-   return {...entry,name,use,can,
+   // A command server's command and arguments (#459) reach the Owner's browser only: an argument can hold what the
+   // Owner would not show every Member, as a token never is.
+   const shown=owner?entry:{...entry,command:undefined,args:undefined};
+   return {...shown,name,use,can,
     words:[name,...catalogues.flatMap(words=>[`use.${style}`,`can.${style}`,`alias.${style}`,`category.${entry.category}`].map(key=>words[key]))].join(' ')};
   });
  } catch { return null; }

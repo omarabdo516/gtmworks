@@ -1,5 +1,11 @@
 [
  {
+  "issue": 459,
+  "date": "2026-11-21",
+  "en": { "title": "Add a tool that runs as a command", "body": "Your own tool in Apps now takes a command and its arguments as well as an address: it runs in your company’s work sandbox, never in the engine, and you turn it on for the agents you choose." },
+  "ar": { "title": "ضيف أداة بتشتغل كأمر", "body": "«أداة بتاعتك» في التطبيقات بقت بتاخد أمر وخياراته كمان، مش عنوان بس: بيشتغل في صندوق الشغل بتاع شركتك، عمره ما بيشتغل في المحرك، وانت بتشغّله للوكلاء اللي تختارهم." }
+ },
+ {
   "issue": 205,
   "date": "2026-11-21",
   "en": { "title": "Routines in an agent's details", "body": "An agent's details now list its routines with when each runs next; the Owner and Managers add one by writing one sentence, such as “leads summary every day at 8 in the morning”, and a sentence with no time asks for one first." },
