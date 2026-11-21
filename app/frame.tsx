@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
-import { takeContinuedPage } from '@/lib/page-fade';
+import { continuesPage, takeContinuedPage } from '@/lib/page-fade';
 
 const narrowQuery='(max-width: 767px)';
 const subscribe=(notify:()=>void)=>{const media=window.matchMedia(narrowQuery);media.addEventListener('change',notify);return ()=>media.removeEventListener('change',notify);};
@@ -20,15 +20,18 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
  const [shown,setShown]=useState(pathname);
  if(shown!==pathname) { setShown(pathname); setOpen(false); }
  const drawer=useRef<HTMLElement>(null); const content=useRef<HTMLDivElement>(null);
- // A new page fades in, as the reference's setView replays its view's fadeIn (app/shell.css .app-content.view-enter):
- // the class is taken off and put back before the new page paints. The first page plays it as it mounts; a redraw of
- // the same page (a poll, a save, the details panel, a search change) leaves it alone, as does a new chat going on as
- // its Conversation (lib/page-fade).
- const faded=useRef(pathname);
+ // A new page fades in, as the reference's setView replays its view's fadeIn (app/shell.css .app-content.view-enter).
+ // Each route draws its own frame, so a page of another route fades as its frame mounts; within one route (another
+ // Agent's chat, the board's tabs) the class is taken off and put back before the new page paints. A redraw of the same
+ // page (a poll, a save, the details panel, a search change) leaves it alone, as does a new chat going on as its
+ // Conversation (lib/page-fade), whichever frame draws it.
+ const [enters]=useState(()=>!continuesPage(pathname));
+ const faded=useRef<string|null>(null);
  useLayoutEffect(()=>{
+  const first=faded.current===null;
   if(faded.current===pathname) return;
   faded.current=pathname;
-  if(takeContinuedPage(pathname)) return;
+  if(takeContinuedPage(pathname)||first) return;
   const region=content.current; if(!region) return;
   region.classList.remove('view-enter'); void region.offsetWidth; region.classList.add('view-enter');
  },[pathname]);
@@ -75,7 +78,7 @@ export function Frame({sidebar,title,breadcrumb,chat=false,children}:{sidebar:Re
     <button ref={menu} type="button" className="mobile-menu circle-btn md:hidden" aria-label={t('openMenu')} aria-controls="sidebar" aria-expanded={open} onClick={()=>setOpen(true)}><ShellIcon name="menu"/></button>
     <div className="contents" inert={covered}>{breadcrumb??<div className="heading m-0 min-w-0"><h1 className="text-sm font-medium uppercase tracking-wide">{title}</h1></div>}</div>
    </header>
-   <div ref={content} className="app-content view-enter flex-1 min-h-0 overflow-auto" inert={covered}>{children}</div>
+   <div ref={content} className={`app-content${enters?' view-enter':''} flex-1 min-h-0 overflow-auto`} inert={covered}>{children}</div>
   </div>
  </div>;
 }

@@ -1,0 +1,99 @@
+import { test, expect, type Page } from './fresh-seed';
+import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { laneHermes } from './lane-hermes';
+import { signIn } from './sign-in';
+
+// A page fades in when it opens, as the reference's view does (#135, design-reference setView and .view-enter): the
+// page region (.app-content) plays fadeIn once per page opened from the sidebar, a Conversation's polling plays nothing,
+// the sidebar never fades, and the row or tile that becomes current fades to its fill over the shared 150ms.
+// Supabase CLI targets the local test database by default; never pass --remote.
+const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
+const company = '10000000-0000-0000-0000-000000000001';
+
+// Every animation that starts under the frame, by the part it runs on, and the sidebar's lowest opacity on any frame.
+async function watch(page: Page) {
+ await page.addInitScript(() => {
+  const state = window as typeof window & { fades?: string[], sidebarLowest?: number };
+  state.fades = []; state.sidebarLowest = 1;
+  document.addEventListener('animationstart', event => {
+   const part = (event.target as Element).closest('.app-content') === event.target ? 'page' : (event.target as Element).closest('.sidebar') ? 'sidebar' : 'other';
+   if (part !== 'other') state.fades!.push(`${part} ${event.animationName}`);
+  }, true);
+  const sample = () => {
+   const sidebar = document.querySelector('.sidebar');
+   if (sidebar) state.sidebarLowest = Math.min(state.sidebarLowest!, Number(getComputedStyle(sidebar).opacity));
+   requestAnimationFrame(sample);
+  };
+  requestAnimationFrame(sample);
+ });
+}
+const pageFades = (page: Page) => page.evaluate(() => (window as typeof window & { fades: string[] }).fades.filter(fade => fade.startsWith('page ')));
+const sidebarFades = (page: Page) => page.evaluate(() => (window as typeof window & { fades: string[] }).fades.filter(fade => fade.startsWith('sidebar ') && fade.endsWith('gw-fade-in')));
+const sidebarLowest = (page: Page) => page.evaluate(() => (window as typeof window & { sidebarLowest: number }).sidebarLowest);
+const region = (page: Page) => page.locator('.app-content').evaluate(element => { const style = getComputedStyle(element); return [style.animationName, style.animationDuration, style.animationTimingFunction]; });
+// The shared five-property 150ms transition of everything a person can press (#128).
+const pressFade = (element: Element) => { const style = getComputedStyle(element); return [style.transitionProperty, [...new Set(style.transitionDuration.split(', '))].join()]; };
+const shared = ['background-color, box-shadow, color, border-color, transform', '0.15s'];
+const settle = (page: Page) => page.evaluate(async () => { await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))); });
+
+test('each page opened from the sidebar fades in once, polling fades nothing, and the current row fades to its fill', async ({ page }) => {
+ test.setTimeout(120000);
+ const fake = await laneHermes(); fake.settings.pendingReads = 2;
+ const agent = { id: randomUUID(), connection: randomUUID(), profile: `fade-${randomUUID().slice(0, 8)}` };
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${agent.id}','${company}','${agent.connection}','Salma','Marketing',false,'${agent.profile}')`);
+ query(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ try {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await watch(page);
+  await signIn(page, 'omar@example.com', '/c/rs-learning/work/board');
+  await expect(page.locator('.board')).toBeVisible();
+  await settle(page);
+  // The first screen after sign-in faded in as it was drawn.
+  expect(await pageFades(page)).toContain('page gw-fade-in');
+  let opened = (await pageFades(page)).length;
+  const open = async (link: string, content: string) => {
+   const href = await page.locator(link).getAttribute('href');
+   await page.locator(link).click();
+   await expect(page).toHaveURL(url => url.pathname === href);
+   await expect(page.locator(content).first()).toBeVisible();
+   expect(await region(page), link).toEqual(['gw-fade-in', '0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);
+   await settle(page);
+   const fades = await pageFades(page);
+   expect(fades.length - opened, `${link}: one fade per page opened`).toBe(1);
+   opened = fades.length;
+  };
+  await open('.nav a.sb-item[href$="/numbers"]', '.numbers-page');
+  await open('.nav a.sb-item[href$="/log"]', '.log-page');
+  await open('.nav a.sb-item[href$="/work/board"]', '.board');
+  // The current row and the current tile fade to their fill like any other change of their background.
+  const current = page.locator('.nav .sb-item[aria-current="page"]');
+  await expect(current).toHaveAttribute('href', /\/work\/board$/);
+  expect(await current.evaluate(pressFade)).toEqual(shared);
+  await open(`.sidebar .agent-tile[href$="/chat/${agent.id}"]`, '.chat');
+  const tile = page.locator(`.sidebar .agent-tile[href$="/chat/${agent.id}"]`);
+  await expect(tile).toHaveAttribute('aria-current', 'true');
+  expect(await tile.evaluate(pressFade)).toEqual(shared);
+
+  // The first message starts the Conversation: the chat goes on as the same page, and its polling until the reply
+  // arrives redraws it without fading it again.
+  let polls = 0;
+  page.on('request', request => { if (/\/api\/conversations\?company=.*&conversation=/.test(request.url())) polls++; });
+  const text = `Plan the fade week ${Date.now()}`;
+  await page.getByLabel('Message', { exact: true }).fill(text);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
+  await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
+  expect(polls, 'the Conversation asked for its record while the Run was open').toBeGreaterThan(0);
+  await settle(page);
+  expect((await pageFades(page)).length, 'the Conversation and its polling do not fade the page again').toBe(opened);
+
+  // Chats, from the sidebar, fades in once.
+  await open('.nav a.sb-item[href$="/chat"]', '.chat');
+  expect(await sidebarFades(page)).toEqual([]);
+  expect(await sidebarLowest(page)).toBe(1);
+ } finally {
+  query(`delete from public.hermes_agents where id='${agent.id}'`);
+  await fake.close();
+ }
+});

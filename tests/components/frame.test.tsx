@@ -10,9 +10,10 @@ import '@/app/shell.css';
 const route = vi.hoisted(() => ({ pathname: '/c/rs-learning/home' }));
 vi.mock('next/navigation', () => ({ usePathname: () => route.pathname }));
 
-// Links stay on the test page: a new page is the pathname changing, as the app's router changes it.
+// Links stay on the test page: a new page is the pathname changing, as the app's router changes it. Each route draws
+// a frame of its own (`route`, its key).
 const stay = (event: { preventDefault: () => void }) => event.preventDefault();
-const frame = () => <LanguageProvider language="en"><Frame title="Home" sidebar={<nav aria-label="Navigation">
+const frame = (route = '') => <LanguageProvider language="en"><Frame key={route} title="Home" sidebar={<nav aria-label="Navigation">
  <a href="#chats" onClick={stay}>Chats</a><a href="#board" onClick={stay}>Marketing board</a><button type="button">Account menu</button>
 </nav>}><a href="#card" onClick={stay}>A card on the page</a></Frame></LanguageProvider>;
 const show = async (width: number) => { route.pathname = '/c/rs-learning/home'; await page.viewport(width, 900); return render(frame()); };
@@ -121,7 +122,7 @@ test('a new page fades the page region in once; a redraw of the same page and th
 
 // A new chat whose first message starts its Conversation goes on as the same page (lib/page-fade), as the reference's
 // send() draws the thread without setView; the next page fades again.
-test('a new chat going on as its Conversation does not fade again; the next page does', async () => {
+test('a new chat going on as its Conversation does not fade again, in its frame or a new one; the next page does', async () => {
  const screen = await show(1440);
  const starts = watchStarts(event => event.animationName);
  await Promise.all(document.getAnimations().map(animation => animation.finished));
@@ -134,4 +135,19 @@ test('a new chat going on as its Conversation does not fade again; the next page
  route.pathname = '/c/rs-learning/work/board';
  await screen.rerender(frame());
  await expect.poll(() => starts).toEqual(['gw-fade-in']);
+ // Another route draws a frame of its own: it fades as it mounts, unless it is the new chat going on.
+ await Promise.all(document.getAnimations().map(animation => animation.finished));
+ continuePage('/c/rs-learning/conversations/9');
+ route.pathname = '/c/rs-learning/conversations/9';
+ await screen.rerender(frame('conversation'));
+ await new Promise(resolve => setTimeout(resolve, 250));
+ expect(starts).toEqual(['gw-fade-in']);
+ expect(content().classList.contains('view-enter')).toBe(false);
+ route.pathname = '/c/rs-learning/conversations/10';
+ await screen.rerender(frame('conversation'));
+ await expect.poll(() => starts).toEqual(['gw-fade-in', 'gw-fade-in']);
+ await Promise.all(document.getAnimations().map(animation => animation.finished));
+ route.pathname = '/c/rs-learning/log';
+ await screen.rerender(frame('log'));
+ await expect.poll(() => starts).toEqual(['gw-fade-in', 'gw-fade-in', 'gw-fade-in']);
 });

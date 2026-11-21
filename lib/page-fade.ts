@@ -3,4 +3,5 @@
 // setView: the chat names that address here before it moves, and the frame does not fade it. Any other new page clears it.
 let continued:string|null=null;
 export const continuePage=(path:string)=>{ continued=path; };
+export const continuesPage=(path:string)=>continued===path;
 export const takeContinuedPage=(path:string)=>{ const was=continued; continued=null; return was===path; };
