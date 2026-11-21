@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
@@ -7,14 +7,25 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { SettingsIcon } from './settings-icons';
 import { leaveOverlay, returnFocusTo, takeReturnFocus } from './settings-opener';
 import { holdLeave } from './settings-draft';
+import { useLeave } from '@/lib/motion';
 
 // Kept apart from the overlay's controls (settings-overlay-client.tsx), which import server actions, so the frame and
 // its close button alone are a client module that a component test can render.
+
+// Closing the overlay, as its close button and Escape do: a draft that differs keeps the page (the bar flashes and Save
+// takes the focus); otherwise the overlay leaves with the dialog's exit and only then returns to the page it was opened
+// from (#130; design-reference: sovClose). The overlay stays mounted from one section to the next, so moving between
+// them plays neither its entrance nor its leave.
+const CloseOverlay=createContext<()=>void>(()=>{});
+
 // The full-window overlay (reference: dialog#sov): it holds the keyboard's first stop and closes on Escape.
 export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFocus?:string,children:ReactNode}) {
  const router=useRouter();
  const {t}=useI18n();
  const box=useRef<HTMLDivElement>(null);
+ const leaving=useLeave();
+ const {close:leaveThen}=leaving;
+ const close=useCallback(()=>{ if(!holdLeave(t('settingsSaveFirst'))) leaveThen(()=>router.push(leaveOverlay(slug))); },[leaveThen,router,slug,t]);
  // Opening moves focus into the overlay: to the element the page names (an Agent's page: its Settings tab, as the
  // reference's openSov and sov-agent do, also when a row of the list opens it), else the dialog itself, so Tab starts at
  // its close button and section list. Focus already inside (a list row taking it back) stays.
@@ -25,19 +36,19 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
  useEffect(()=>{
   const keys=(event:globalThis.KeyboardEvent)=>{
    if(event.key!=='Escape'||event.defaultPrevented) return;
-   // A draft that differs keeps the page: the bar flashes and Save takes the focus.
-   if(holdLeave(t('settingsSaveFirst'))) return;
-   router.push(leaveOverlay(slug));
+   close();
   };
   document.addEventListener('keydown',keys);
   return ()=>document.removeEventListener('keydown',keys);
- },[router,slug,t]);
- return <div className="gw sov-root"><div ref={box} className="sov" role="dialog" aria-modal="true" aria-labelledby="sov-title" tabIndex={-1}>{children}</div></div>;
+ },[close]);
+ // While it leaves nothing in it can be pressed (a section link would move the page the leave is about to leave); once the
+ // leave has run it is taken out, so the page behind shows while the address moves back to it.
+ return <CloseOverlay.Provider value={close}><div className="gw sov-root" hidden={leaving.gone}><div ref={box} className={`sov${leaving.closing?' is-closing':''}`} inert={leaving.closing||undefined} role="dialog" aria-modal="true" aria-labelledby="sov-title" tabIndex={-1}>{children}</div></div></CloseOverlay.Provider>;
 }
 
-export function CloseButton({slug}:{slug:string}) {
- const {t}=useI18n(); const router=useRouter();
- return <button type="button" className="circle-btn" id="sov-close" aria-label={t('settingsCloseLabel')} title={t('settingsCloseTitle')} onClick={()=>{ if(!holdLeave(t('settingsSaveFirst'))) router.push(leaveOverlay(slug)); }}><SettingsIcon name="x"/></button>;
+export function CloseButton() {
+ const {t}=useI18n(); const close=useContext(CloseOverlay);
+ return <button type="button" className="circle-btn" id="sov-close" aria-label={t('settingsCloseLabel')} title={t('settingsCloseTitle')} onClick={close}><SettingsIcon name="x"/></button>;
 }
 
 // From an Agent's page back to the Agents list, where that Agent's row takes the focus (reference: sov-agent-back and
