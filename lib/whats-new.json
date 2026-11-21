@@ -6,6 +6,12 @@
   "ar": { "title": "الشات بيتحرك زي ما اتصمّم", "body": "الرسالة اللي بتوصل والشات مفتوح بتطلع مكانها بهدوء، وسطر «شغال» بيتنفّس طول ما الوكيل شغال، وسهم الإرسال بيطير لما تبعت." }
  },
  {
+  "issue": 130,
+  "date": "2026-11-21",
+  "en": { "title": "Dialogs fade out before they close", "body": "The ready-made gallery, Settings and first run’s question now fade out and sink a little before the page moves on, as the design does; with reduced motion they close at once." },
+  "ar": { "title": "النوافذ بتختفي بهدوء قبل ما تتقفل", "body": "معرض الوكلاء الجاهزين والإعدادات وسؤال أول تشغيل بقوا بيختفوا وينزلوا شوية قبل ما الصفحة تكمّل، زي التصميم بالظبط؛ ولو مقلّل الحركة بيتقفلوا على طول." }
+ },
+ {
   "issue": 129,
   "date": "2026-11-21",
   "en": { "title": "The account menu rises, the switches spring", "body": "The account menu now rises gently into place as it opens and is gone at once when it closes, a switch's knob springs across, and the message box's border and the account row fade as the approved design moves." },

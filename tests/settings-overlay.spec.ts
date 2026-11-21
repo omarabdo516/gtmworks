@@ -336,3 +336,49 @@ test('a Viewer raises none of the toasts, on the screens or through the routes',
  await page.goto('/c/rs-learning/settings?section=knowledge');
  await expect(page.locator('.toast')).toHaveCount(0);
 });
+
+// #130: the overlay leaves with the dialog's exit (design-reference: sovClose, .sov.is-closing) and only then returns to
+// the page it was opened from; moving between sections plays neither its entrance again nor its exit. A Viewer's close
+// is the same.
+for(const who of [{role:'Owner',email:'omar@example.com',sections:['account','agents','company']},{role:'Viewer',email:'viewer@example.com',sections:['account','agents','account']}]) test(`${who.role}: Settings opened from the board leaves with its exit, then is gone, then the board returns; three sections play one entrance`,async({page})=>{
+ await signIn(page,who.email,'/c/rs-learning/work/board');
+ await page.evaluate(()=>{
+  const seen:string[][]=[]; Object.assign(window,{seen});
+  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.classList.contains('sov')) seen.push([event.animationName,location.pathname]); });
+  new MutationObserver(()=>{ const root=document.querySelector('.sov-root'); if(root?.hasAttribute('hidden')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.pathname]); }).observe(document.body,{subtree:true,childList:true,attributes:true});
+ });
+ const seen=()=>page.evaluate(()=>(window as unknown as {seen:string[][]}).seen);
+ await openNavigation(page);
+ const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+ await settings.click();
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ await expect(overlay).toBeVisible();
+ for(const section of who.sections) {
+  await overlay.locator(`#sov-nav-${section}`).click();
+  await expect(overlay.locator(`#sov-nav-${section}`)).toHaveAttribute('aria-current','page');
+ }
+ expect(await seen()).toEqual([['gw-fade-in','/c/rs-learning/settings']]);
+ await overlay.getByRole('button',{name:'Close settings and go back'}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+ await expect(overlay).toHaveCount(0);
+ expect(await seen()).toEqual([['gw-fade-in','/c/rs-learning/settings'],['gw-modal-out','/c/rs-learning/settings'],['gone','/c/rs-learning/settings']]);
+});
+
+test('with reduced motion Settings leave at once, with no exit, by Escape',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await openNavigation(page);
+ const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+ await settings.click();
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ await expect(overlay).toBeVisible();
+ // In the frame after Escape the overlay is out of the page, never marked closing.
+ const after=await page.evaluate(()=>new Promise<[boolean,boolean]>(resolve=>{
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  requestAnimationFrame(()=>resolve([!!document.querySelector('.sov-root:not([hidden])'),!!document.querySelector('.sov.is-closing')]));
+ }));
+ expect(after).toEqual([false,false]);
+ await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+});
