@@ -6,6 +6,18 @@
   "ar": { "title": "البورد بيتحرّك وانت شايل البطاقة", "body": "البطاقة وانت شايلها بتميل مع حركة الماوس، ولو سبتها مكانها بترجع لوحدها، ولما تنزّلها في عمود جديد بتنزل بإطار صغير، وشرايط التقدّم بتكبر، والبطاقة اللي لسه بقت مستنياك بتهزّ علامتها وعدّاد القايمة الجانبية." }
  },
  {
+  "issue": 167,
+  "date": "2026-11-21",
+  "en": { "title": "Ask for an agent you don’t have yet", "body": "When you ask the main agent for work that belongs to an agent you don’t work with, it says so without naming it and offers to ask the Manager or Owner who chooses your agents. Once they open it for you, it shows in your sidebar and your chat says so." },
+  "ar": { "title": "اطلب وكيل لسه مش متاح ليك", "body": "لما تطلب من الوكيل الرئيسي شغل عند وكيل مش بتشتغل معاه، بيقولك ده من غير ما يسمّيه، ويعرض يبعت طلب للمدير أو المالك اللي بيختار وكلاءك. أول ما يفتحهولك بيظهر في القايمة الجانبية والمحادثة بتقولك." }
+ },
+ {
+  "issue": 178,
+  "date": "2026-11-21",
+  "en": { "title": "Settings show a waiting proposal", "body": "While an Agent’s proposed change waits for the Owner, its page in Settings says who proposed what with a link to the proposal, its row in the Agents list says Proposal waiting, and Agents carries the number waiting." },
+  "ar": { "title": "الإعدادات بتوريك الاقتراح اللي مستني", "body": "طول ما فيه تغيير اقترحه وكيل ومستني موافقة المالك، صفحته في الإعدادات بتقول مين اقترح إيه ومعاها لينك للاقتراح، وصفّه في قايمة الوكلاء بيقول «اقتراح مستنيك»، و«الوكلاء» عليها عدد الاقتراحات اللي مستنية." }
+ },
+ {
   "issue": 31,
   "date": "2026-11-21",
   "en": { "title": "Recurring tasks in Settings", "body": "Settings now lists every recurring task of every agent with when it runs next and how its last run went; the Owner and Managers can switch one off or on, run it now, change when it runs, add one or delete one, and each change is in the log." },

@@ -88,20 +88,20 @@ const useView=()=>use(ChatView)!;
 // The transcript once its record is read, in place of the placeholder.
 export function ConversationLoaded({initial,team}:{initial:ConversationRecord,team:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
- const {record,asked}=useConversationRecord({company,initial});
+ const {record,asked,reread}=useConversationRecord({company,initial});
  const {messages}=record;
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  // `asked` only sets this transcript's own state, so the one it was first given stays good.
  useLayoutEffect(()=>{ store.set({record,asked}); },[record]); // eslint-disable-line react-hooks/exhaustive-deps
  const early=useSyncExternalStore(store.subscribe,store.early,()=>0);
  // Opened from "Waiting on you" at a handed step (#140, `#hand-<card>`) or a permission request (#165,
- // `#permission-<card>`): that card in view and focused, not the newest
- // message. It runs before the effect below, on the first draw only. The address is then the Conversation's again, so a
+ // `#permission-<card>`), or from Settings at a proposed change to an Agent's settings (#178, `#change-<proposal>`): that
+// card in view and focused, not the newest message. It runs before the effect below, on the first draw only. The address is then the Conversation's again, so a
 // reload opens on the newest message, and the first message after the landing (the Agent's reply to "Done it") is
 // followed again.
  const landed=useRef<number|null>(null);
  useLayoutEffect(()=>{
-  const card=/^#(hand|permission)-\d+$/.test(location.hash)?box.current?.querySelector<HTMLElement>(location.hash):null;
+  const card=/^#(hand|permission|change)-\d+$/.test(location.hash)?box.current?.querySelector<HTMLElement>(location.hash):null;
   if(!card) return;
   stick.current=false; landed.current=messages.length;
   card.scrollIntoView({block:'center'}); card.focus({preventScroll:true});
@@ -119,7 +119,7 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  return <div className="transcript" ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  <ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked}/>
+  <ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread}/>
  </div></div>;
 }
 

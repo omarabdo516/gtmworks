@@ -203,6 +203,16 @@ test('a request for an Agent says who asked whom, and the Owner\'s yes or no wit
    ['طلب من Lead وكيل', 'عمل وكيل طلبه Youssef', 'ظهر عند Youssef', 'رفض طلب وكيل من Youssef', 'طلب', 'مستني رد المالك']]);
 });
 
+// #167: an Owner's or a Manager's answer to a Member's request for a hidden Agent names that Member and the Agent.
+test('an Agent opened for a Member, or kept hidden from them, names both, in both languages', () => {
+ const opened = describeEntry({ subject: 'agent', action: 'agent_opened_for', agent_id: writer, details: { agent_name: 'Reach', asked_by: 'يوسف' } });
+ assert.deepEqual([opened.act, opened.obj, opened.from, opened.to], [['logActAgentOpenedFor', { text: 'يوسف' }], 'Reach', { key: 'logAgentAccessRequest' }, { key: 'logAgentShowsFor', values: ['يوسف'] }]);
+ const kept = describeEntry({ subject: 'agent', action: 'agent_kept_hidden', agent_id: writer, details: { agent_name: 'Reach', asked_by: 'يوسف', private: 'managers' } });
+ assert.deepEqual([kept.act, kept.obj, kept.to], [['logActAgentKeptHidden', { text: 'يوسف' }], 'Reach', { key: 'logAgentStaysHidden' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActAgentOpenedFor', 'Youssef'), t('logActAgentKeptHidden', 'Youssef'), t('logAgentAccessRequest'), t('logAgentStaysHidden')]; }),
+  [['opened an agent for Youssef', 'kept an agent closed for Youssef', 'Request to open', 'Stays hidden'], ['فتح وكيل لـYoussef', 'خلّى وكيل مقفول لـYoussef', 'طلب فتح', 'فضل مخفي']]);
+});
+
 // #19: a proposed change names the setting and the Agent, with the value after it; the Owner's answer follows.
 test('a proposed change to an Agent\'s settings, its approval and its decline name the setting and the Agent, in both languages', () => {
  const proposed = describeEntry({ subject: 'agent', action: 'agent_change_proposed', agent_id: writer, details: { agent_name: 'Analyst', setting: 'model', new: 'google/gemini-2.5-pro', reason: 'Faster on big numbers.' } });

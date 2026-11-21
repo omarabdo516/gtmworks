@@ -20,7 +20,8 @@ const briefs={
 };
 
 // A stand-in for the database around one message: the reservation, the pins a Run makes and the message it records.
-function database({brief,main=true}={}) {
+// `tools` are the names run_tools gives the Run's person (#167): pin_run answers those of the texts it was sent.
+function database({brief,main=true,tools=null}={}) {
  const calls=[];
  const ok=data=>({data,error:null});
  const agentRow={id:agent,instructions:null,is_default:main};
@@ -29,7 +30,7 @@ function database({brief,main=true}={}) {
   calls.push([name,args]);
   if(name==='conversation_agent') return ok(null);
   if(name==='reserve_conversation_turn') return ok({state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',profile:'writer',note:null});
-  if(name==='pin_run') return ok({tools:null});
+  if(name==='pin_run') return ok({tools:tools?JSON.stringify(tools.map(tool=>JSON.parse(args.specs[tool]))):null});
   if(name==='pin_run_history'||name==='pin_run_model') return ok(null);
   if(name==='pin_lead_brief') return ok(main?brief??null:null);
   if(name==='begin_start') return ok(1);
@@ -99,4 +100,20 @@ test('a Lead Run that waited starts with the same pinned brief',async()=>{
  assert.equal(await startQueuedTurns(store.service,{hermes,engineFor:fake.engineFor}),1);
  assert.match(fake.runs[0].instructions,/"Ask Omar for it\?" with the choices "Ask Omar for it" and "Not now"/);
  assert.deepEqual(store.calls.filter(([name])=>name==='pin_lead_brief'),[['pin_lead_brief',{conversation,message_key:sendKey}]]);
+});
+
+// #167: a Contributor with an Agent hidden from them is offered ask_to_open_agent, and told the Agent's job and never its
+// name; one with none is offered neither. The database decides both (supabase/tests/agent_access_requests.sql); this
+// reads what reaches the Engine.
+test('a Contributor\'s Run carries ask_to_open_agent and the hidden job only while an Agent is hidden from them',async()=>{
+ const withHidden=database({brief:{...briefs.contributor,hidden:[{job:'Campaigns and ads',asks:'Sara',role:'manager'}]},tools:['request_agent','ask_to_open_agent']});
+ const fake=fakeEngine();
+ await send(withHidden,fake);
+ assert.deepEqual(fake.runs[0].tools.map(tool=>tool.name),['request_agent','ask_to_open_agent']);
+ assert.match(fake.runs[0].instructions,/- "Campaigns and ads": say ".*Should I ask Sara \(Manager\) to open it for you\?"/);
+ assert.doesNotMatch(fake.runs[0].instructions,/Reach/,'the hidden Agent is never named');
+ const none=database({brief:briefs.contributor,tools:['request_agent']}); const other=fakeEngine();
+ await send(none,other);
+ assert.deepEqual(other.runs[0].tools.map(tool=>tool.name),['request_agent']);
+ assert.doesNotMatch(other.runs[0].instructions,/ask_to_open_agent|isn't available to you/);
 });

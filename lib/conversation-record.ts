@@ -2,7 +2,7 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
+import { faceOf, handTurn, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
@@ -39,7 +39,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type HandedRow={run_id:string,goal:string,state:string,answers_person:boolean,created_at:string,to_agent:{id:string,name:string,connection_id:string}|null};
  type Face={id:string,connection_id:string,name:string};
  type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,maybe_applied?:boolean,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
- const [{ends,messages,queued,requestRows,madeRows,handedRows,changeRows},notes,replyRows,rows,files,{data:working},{data:me},card]=await Promise.all([
+ type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,available:boolean,created_at:string};
+ const [{ends,messages,queued,requestRows,madeRows,handedRows,changeRows},notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
    +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)),'
@@ -60,6 +61,9 @@ export async function conversationRecord(db:Database,person:string,company:strin
   db.rpc('conversation_working_for',{conversation}),
   db.from('people').select('name').eq('id',person).maybeSingle(),
   tiedCard(db,company,conversation),
+  // The cards that asked whether to request an Agent hidden from this person (#167), which never name that Agent until
+  // it is opened for them (conversation_agent_access: this person's own Conversation only).
+  db.rpc('conversation_agent_access',{conversation}).then(({data})=>(data||[]) as AccessRow[]),
  ]);
  const lead=(found.hermes_agents as {is_default?:boolean}|null)?.is_default===true;
  const asksForApps=replyRows.some(row=>row.kind==='connect');
@@ -77,6 +81,13 @@ export async function conversationRecord(db:Database,person:string,company:strin
   if(row.state==='refused') return {...base,state:'refused'};
   const by=row.answerer?.name||''; const at=row.answered_at||row.created_at;
   return row.state==='approved'?{...base,state:'approved',answeredBy:by,at}:{...base,state:'declined',answeredBy:by,at,answer:row.answer,...(row.maybe_applied?{maybeApplied:true}:{})};
+ };
+ // A card asking for a hidden Agent (#167) says what its person pressed and when, whatever answer came after; the answer
+ // is its own line (`decisions`).
+ const accessView=(row:AccessRow):AgentAccessView=>{
+  const named={first:row.named_first,name:row.named_name,role:row.named_role};
+  if(row.available&&(row.state==='offered'||row.state==='asked')) return {id:row.id,named,state:'available'};
+  return row.state==='offered'||!row.pressed_at?{id:row.id,named,state:'offered'}:row.state==='dismissed'?{id:row.id,named,state:'dismissed',at:row.pressed_at}:{id:row.id,named,state:'asked',at:row.pressed_at,waits:row.state==='asked'};
  };
  // The Agent made for a request shows in the request's own card, so one card holds the request and its outcome.
  const madeFor=(row:RequestRow)=>madeRows.find(made=>made.run_id===row.run_id&&made.call_id===row.call_id);
@@ -97,12 +108,14 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...handed,
+  ...accessRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'access',access:accessView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...changeRows.flatMap(row=>row.agent&&row.by?[{run_id:row.run_id,at:row.created_at,card:{kind:'change',change:changeView({...row,agent:row.agent,by:row.by})}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card)} satisfies PlacedCard]:[]; })];
  type SavedRow={id:string,run_id:string,agent_id:string|null,removed_at:string|null,said_at:string,body:string,suggestion:'pending'|'approved'|'rejected'|null,decided_at:string|null,decider:{name:string}|null};
  const sentTo=rows.some(row=>row.suggestion)?new Map((((await db.rpc('rule_suggestions_sent_to',{conversation})).data||[]) as {rule:string,sent_to:string[]}[]).map(row=>[row.rule,row.sent_to])):new Map<string,string[]>();
  const saved=rows.map(row=>({run_id:row.run_id,rule:{id:row.id,agent:row.agent_id,removed:row.removed_at!==null,said_at:row.said_at,...(row.suggestion?{sentTo:sentTo.get(row.id)||[]}:{})} satisfies SavedRule}));
  const decisions=[...rows.flatMap(row=>row.decided_at?[{kind:'rule',approved:row.suggestion==='approved',by:row.decider?.name||'',rule:row.body,at:row.decided_at} satisfies Decision]:[]),
+  ...accessRows.flatMap(row=>(row.state==='opened'||row.state==='declined')&&row.answered_at?[{kind:'access',by:row.answerer,at:row.answered_at,...(row.state==='opened'?{opened:true as const,agent:row.opened}:{opened:false as const})} satisfies Decision]:[]),
   ...requestRows.flatMap(row=>row.state!=='waiting'&&row.answered_at?[{kind:'request',by:row.answerer?.name||'',name:row.agent_name,at:row.answered_at,...(row.state==='made'?{made:true as const}:{made:false as const,reason:row.reason||''})} satisfies Decision]:[])];
  const {data:permit}=replyRows.some(row=>row.kind==='permission'&&row.state==='open')?await db.rpc('permission_choices',{c:company}):{data:null};
  const runner=(working as {person:string,name:string}[]|null)?.[0];

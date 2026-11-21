@@ -28,7 +28,7 @@ select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select is(pg_temp.board('10000000-0000-0000-0000-000000000001'),'Board Ads,Board Lead,Board none','the Contributor gets the Cards of Lead, of the Agent shown to them, and with no Agent');
-select is((select count(*)::int from public.work_cards where title='Board SEO'),1,'while the Card read itself still holds the hidden Agent''s Card (other lists are not changed)');
+select is((select count(*)::int from public.work_cards where title='Board SEO'),0,'nor does the Card read itself hold the hidden Agent''s Card (#367)');
 select is(pg_temp.crew_names('Board Ads'),'Ads','its crew leaves out the hidden Agent and the old role agent');
 select is((select count(*)::int from public.board_cards('10000000-0000-0000-0000-000000000001')),(select count(*)::int from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and (agent_id is null or agent_id<>'a1900000-0000-0000-0000-000000000003')),
  'every other Card of the Company stays on the board');

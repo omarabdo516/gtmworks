@@ -524,7 +524,9 @@ test('a permission that resolves after its session was cancelled starts no recor
  await pointer(button, 'pointerup'); await flush();
  await act(async () => { await vi.advanceTimersByTimeAsync(0); await Promise.resolve(); });
  expect(nextTrack.stop, 'the recording that ended is the one that stops its microphone').toHaveBeenCalled();
- expect(engine.calls).toHaveLength(1);
+ // The recording is read into a data URL by the browser before it is sent, which the fake clock does not drive (#414).
+ await expect.poll(() => engine.calls.length).toBe(1);
+ expect(engine.calls[0].body).toMatchObject({ company: 'co-1', agent: 'ag-1', mimeType: 'audio/webm' });
 });
 
 test('a recording is sent for the Agent it started on, and an answer that arrives after the Agent changed inserts nothing', async () => {
@@ -666,6 +668,8 @@ test('a finished recording writes "Writing what you said…" then puts the words
  await userEvent.type(message, 'Plan the launch'); field(screen).setSelectionRange(4, 4);
  await hold(boxOf(screen));
  await expect.element(message).toHaveAttribute('placeholder', 'Writing what you said…');
+ // "Writing" shows before the browser has read the recording; the Engine is answered only once it was asked (#414).
+ await expect.poll(() => engine.calls.length).toBe(1);
  await act(async () => { engine.finish(Response.json({ text: 'hello world' })); await Promise.resolve(); await Promise.resolve(); });
  await expect.element(message).toHaveValue('Plan hello world the launch');
  await expect.element(message).toHaveFocus();
