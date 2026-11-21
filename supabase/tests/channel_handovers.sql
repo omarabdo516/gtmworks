@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(75);
+select plan(76);
 -- #150. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The "scripts" team
 -- channel holds the Owner (1), the Manager (2), the Contributor (3) and the Viewer (4), and only Lead and Ads: Writer is
 -- the Company's third Agent, outside it. Member 5 is in the Company but not in the channel; Karim belongs to Aleem only.
@@ -270,6 +270,13 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select is((select string_agg(goal||':'||no_model::text,',' order by goal) from public.channel_handovers('c1500000-0000-0000-0000-000000000001') where goal in ('Plan the June reels','Plan the July reels')),
  'Plan the July reels:false,Plan the June reels:true','the channel says no model is connected only where Lead''s reply did not come');
+reset role;
+-- A follow-up that ended for another cause after a target with no model says that cause, not that no model is connected.
+update public.agent_handovers set follow_up_outcome='stopped', reply=null where call_id='call-answered';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select no_model from public.channel_handovers('c1500000-0000-0000-0000-000000000001') where goal='Plan the July reels'),false,
+ 'a handover whose follow-up was stopped is not read as no model');
 reset role;
 select * from finish();
 rollback;
