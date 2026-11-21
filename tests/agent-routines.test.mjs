@@ -246,3 +246,20 @@ test('the database checks the whole log row before the Engine changes, and a log
   assert.ok(errors.some(line=>line.includes('Routine change not logged')),'never silent');
  } finally { await fake.close(); }
 });
+
+test('a create whose answer is lost is found in the profile\'s list and answered done, so it is never made twice', async () => {
+ const fake=await twoAgents();
+ try {
+  await createRoutine(at(fake,adsProfile),{name:'Earlier',prompt:'Earlier',schedule:'0 7 * * *'});
+  fake.settings.loseCronCreates=1;
+  const made=await createRoutine(at(fake,adsProfile),{name:'Ads summary',prompt:'Summarise the ads',schedule:'0 9 * * *'});
+  assert.equal(made.state,'done');
+  assert.equal(made.routine.name,'Ads summary');
+  assert.deepEqual(fake.settings.cron.get(adsProfile).map(job=>job.name),['Earlier','Ads summary'],'one job, not two');
+  // An Engine that made nothing answers unreachable, and nothing is claimed as made.
+  fake.settings.managementStatus=503;
+  assert.equal((await createRoutine(at(fake,adsProfile),{name:'Other',prompt:'Other',schedule:'0 8 * * *'})).state,'unreachable');
+  fake.settings.managementStatus=200;
+  assert.equal(fake.settings.cron.get(adsProfile).length,2);
+ } finally { await fake.close(); }
+});

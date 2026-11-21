@@ -42,6 +42,9 @@ language plpgsql security definer set search_path='' as $$
 begin
  perform public.check_routine_change(c,agent,act,routine,schedule);
  if change is null then raise exception 'routineInvalid' using errcode='22023'; end if;
+ -- Two writes of one change that overlap (a retry sent while the first is still running) wait for each other here, so
+ -- the second sees the first's row.
+ perform pg_advisory_xact_lock(hashtextextended('routine_change:'||change::text,0));
  if exists(select 1 from public.company_log l where l.company_id=c and l.agent_id=agent and l.action=act and l.details->>'change'=change::text) then return; end if;
  perform public.log_agent_event(c,auth.uid(),null,agent,act,jsonb_build_object('routine',routine,'schedule',schedule,'change',change));
 end $$;
