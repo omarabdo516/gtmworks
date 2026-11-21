@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(47);
 -- #465: a send's images are not given back (discard_conversation_files) while its key is a queued turn that has neither
 -- started nor failed, or holds a Run reservation that is not abandoned: an attempted start, one marked unknown, a retry
 -- of either, or one reserved and not yet started. Once the turn settles in an ordinary way, they are given back as
@@ -40,6 +40,8 @@ reset role;
 set local role authenticated;
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001'),0,'a refused resend of an attempted start gives no path back');
 select is(pg_temp.rows('d4650000-0000-0000-0000-000000000001'),1,'and its file row stays');
+select is(pg_temp.keep('c4650000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001'),-1,
+ 'a resend keeping its images again is told they are kept: the server writes nothing over them');
 select is(public.release_conversation_run('c4650000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001',0),false,
  'a resend that made no attempt of its own cannot release it');
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001'),0,'so the file is still kept');
@@ -60,6 +62,7 @@ select is(public.keep_unknown_start('c4650000-0000-0000-0000-000000000002','d465
 reset role;
 set local role authenticated;
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000002','d4650000-0000-0000-0000-000000000002'),0,'a resend of a start marked unknown gives no path back');
+select is(pg_temp.keep('c4650000-0000-0000-0000-000000000002','d4650000-0000-0000-0000-000000000002'),-1,'nor does it keep them again');
 select is(pg_temp.reserve('c4650000-0000-0000-0000-000000000002','d4650000-0000-0000-0000-000000000002'),'queued','the resend finds it waiting');
 reset role;
 set local role service_role;
@@ -85,6 +88,7 @@ select is(pg_temp.keep('c4650000-0000-0000-0000-000000000003','d4650000-0000-000
 select is(pg_temp.reserve('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),'queued','a second waits behind it');
 select is(pg_temp.keep('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),1,'with its image');
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),0,'a waiting turn''s resend gives no path back');
+select is(pg_temp.keep('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),-1,'and keeps nothing over its image');
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000031'),0,'nor does a Run reserved and not yet started');
 -- The engine refused the first before any attempt: its sender releases it, and its file goes, as today.
 select is(public.release_conversation_run('c4650000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000031',0),true,'the refused first send is released');
@@ -95,6 +99,7 @@ select lives_ok($$select public.fail_conversation_turn('c4650000-0000-0000-0000-
 reset role;
 set local role authenticated;
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),1,'and a failed turn''s file is given back, so none is held forever');
+select is(pg_temp.keep('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),1,'and a send of that key keeps its images as any send does');
 
 -- The one-day limit on an unknown start fails its turn and abandons it: its file goes then too.
 select is(pg_temp.reserve('c4650000-0000-0000-0000-000000000004','d4650000-0000-0000-0000-000000000004'),'reserved','a message reserves its Run');

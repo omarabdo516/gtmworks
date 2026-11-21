@@ -12,15 +12,22 @@
 -- stored and takes the files, it fails, or its reservation is abandoned or released), cleanup gives them back as before.
 -- An image missing for outside reasons is unchanged: the worker's fail-safe (#368) still handles it.
 --
--- Same signature and grants: the previous app version calls it as it did, and only gets fewer paths back.
+-- Nor are they replaced: a resend of a held key keeps its files again before the Agent is asked, and the server wrote
+-- the bytes over the same paths (upsert), so the turn's retry could carry other images under the same idempotency key.
+-- reserve_conversation_files now answers such a key as it answers one a stored message already took (-1): the rows
+-- stay, and the server only puts back an object that is missing, never over one that is there (lib/message-files.ts).
+--
+-- Same signatures and grants: the previous app version calls both as it did; it only gets fewer paths back from the
+-- discard, and -1, which it already handles, for a held key.
 create or replace function public.discard_conversation_files(conversation uuid, c uuid, message_key uuid)
 returns setof text language plpgsql security definer set search_path='' as $$
 begin
  if not public.conversation_can_write(c) then raise exception 'conversationNotAllowed' using errcode='42501'; end if;
  if not exists(select 1 from public.conversations v where v.id=conversation and v.company_id=c and v.person_id=auth.uid()) then
   raise exception 'conversationNotFound' using errcode='P0002'; end if;
- -- Under the Conversation's turn lock, the one a queued turn is claimed, started or failed under, and then the agents
- -- lock a reservation is begun, released, kept unknown or abandoned under, so neither changes while this decides.
+ -- Under the Conversation's turn lock (a turn is queued and claimed under it) and then the agents lock (a turn is
+ -- recorded or failed, and a reservation begun, released, kept unknown or abandoned, under it), in the order every
+ -- other function takes them, so neither changes while this decides.
  perform pg_advisory_xact_lock(hashtextextended('conversation_turn:'||conversation::text,0));
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  if exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation and q.send_key=message_key
@@ -42,3 +49,21 @@ grant execute on function public.discard_conversation_files(uuid,uuid,uuid) to a
 -- failed every pass on "permission denied" before its start and never started. The read only: the rows are still
 -- written and given back by their sender's own functions above.
 grant select on public.conversation_attachments to service_role;
+
+-- A send key whose files are already kept and still held by its waiting turn or Run is answered -1, as a stored
+-- message's key is: nothing is inserted, and the server writes no byte over a kept file. reserve_conversation_files as
+-- 20270224000000_message_files_retry_sends.sql left it, with that one answer added after the stored message's.
+do $$
+declare def text; stored text:=$q$  return -1; end if;
+$q$;
+begin
+ def:=pg_get_functiondef('public.reserve_conversation_files(uuid,uuid,uuid,jsonb)'::regprocedure);
+ if position(stored in def)=0 or position('conversation_queued_turns' in def)>0 then raise exception 'reserve_conversation_files changed: %',def; end if;
+ execute replace(def,stored,stored||$q$ if exists(select 1 from public.conversation_attachments a where a.conversation_id=conversation and a.company_id=c and a.send_key=message_key)
+  and (exists(select 1 from public.conversation_queued_turns q where q.conversation_id=conversation and q.send_key=message_key
+    and q.started_at is null and q.failed_at is null)
+   or exists(select 1 from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key
+    and r.abandoned_at is null)) then
+  return -1; end if;
+$q$);
+end $$;

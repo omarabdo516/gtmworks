@@ -113,7 +113,7 @@ test('a Conversation\'s file opens for its own person and for nobody else',async
 });
 
 // #465: a turn with an image that waits behind a busy Agent, whose start was attempted and its answer lost, keeps its
-// image while it may still need it: its sender's resend of the same key finds it waiting and removes nothing, and once
+// image while it may still need it: its sender's resend of the same key finds it waiting and removes or replaces nothing, and once
 // the Agent is free the worker starts it as a retry with the same image (the service role reads the waiting turn's
 // files). supabase/tests/queued_turn_files_kept.sql proves the discard rule case by case.
 test('an image turn that waited, its start unknown, keeps its image and starts with it once the Agent is free',async({page})=>{
@@ -135,8 +135,9 @@ test('an image turn that waited, its start unknown, keeps its image and starts w
   const files=()=>rows<{path:string}>(`select path from public.conversation_attachments where send_key='${key}'`);
   const stored=()=>rows<{n:number}>(`select count(*)::int as n from storage.objects o join public.conversation_attachments a on o.name=a.path where o.bucket_id='creatives' and a.send_key='${key}'`)[0].n;
   expect([files().length,stored()]).toEqual([1,1]);
-  // Its sender sends it again: it is still waiting, and its image stays.
-  expect(await (await send()).json()).toEqual({conversation,queued:true});
+  // Its sender sends it again, even with another image under the same key: it is still waiting, and its image stays.
+  const other=Buffer.concat([png,Buffer.from('another image')]);
+  expect(await (await page.request.post('/api/conversations',{multipart:{company,conversation,sendKey:key,message:'Look at this chart',files:{...image,buffer:other}}})).json()).toEqual({conversation,queued:true});
   expect([files().length,stored()]).toEqual([1,1]);
   // The Run ahead of it settles: the worker starts the turn as a retry, with the image it was sent with.
   query(`delete from public.conversation_run_reservations where send_key='${blocker}'`);
