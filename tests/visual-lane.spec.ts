@@ -8,7 +8,6 @@ import { appOrigin } from './lane.mjs';
 import { asAdmin } from './slow-reads';
 import { localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { laneHermes } from './lane-hermes';
-import { levelConfig } from '../lib/agent-levels.mjs';
 import { morningMarker } from '../lib/morning-schedule.mjs';
 import { toolConfig } from '../lib/agent-toolsets.mjs';
 
@@ -62,15 +61,15 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
        ('${routine(1)}','${rsLearning}','${routine(3)}','Lead','General',true,'${companyProfile}'),
        ('${routine(2)}','${rsLearning}','${routine(4)}','Meta Ads','Runs the Meta ads.',false,'${ownProfile(routine(2))}');
-      insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${companyProfile}',agent_level,public.engine_tool_policy() from public.companies where id='${rsLearning}'
-       on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+      insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${companyProfile}',true from public.companies where id='${rsLearning}'
+       on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
       insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${routine(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;
-      insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) select '${routine(2)}','${rsLearning}',agent_level,public.engine_tool_policy() from public.companies where id='${rsLearning}';`,
+      insert into public.agent_profiles(agent_id,company_id) values ('${routine(2)}','${rsLearning}');`,
     unset: `delete from public.agent_profiles where agent_id='${routine(2)}';
       delete from public.company_profile_keepers where agent_id='${routine(1)}';
       delete from public.hermes_agents where id in ('${routine(1)}','${routine(2)}');`,
     engine: fake => {
-      for (const name of [companyProfile, ownProfile(routine(2))]) fake.settings.profiles.set(name, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: levelConfig(1), credentials: {} });
+      for (const name of [companyProfile, ownProfile(routine(2))]) fake.settings.profiles.set(name, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: toolConfig({ profile: name }), credentials: {} });
       fake.settings.cron.set(companyProfile, [routineJob('aa00000000a1', 'ملخص الصبح للفريق', '0 8 * * *', { last_run_at: day(-1, 8), last_status: 'ok' })]);
       fake.settings.cron.set(ownProfile(routine(2)), [routineJob('bb00000000b1', 'ابعتلي ملخص الإعلانات', '0 9 * * *', { last_run_at: day(-1, 9), last_status: 'ok' }),
         routineJob('bb00000000b2', 'وقّف أي إعلان تكلفة الليد فيه عدّت 45 ج', '0 16 * * 4', { enabled: false, state: 'paused', next_run_at: null })]);

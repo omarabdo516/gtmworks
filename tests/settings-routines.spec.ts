@@ -2,13 +2,13 @@ import { test, expect, freshSeed, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { levelConfig } from '../lib/agent-levels.mjs';
+import { toolConfig } from '../lib/agent-toolsets.mjs';
 
 // #31: Recurring tasks lists every Routine of every Agent the reader sees, read from each Agent's own Engine profile,
 // with its schedule, next run and last result. The Owner pauses and resumes one, runs one now, changes when it runs,
 // adds one and deletes one, each a request to that Agent's profile and one row of the Company log; a Contributor reads
-// them and changes nothing; and a Routine the main Agent makes in chat at level 3 shows here, while at level 1 the Agent
-// is offered no scheduling tool and nothing is made. RS Learning: Lead, the main Agent, and Ads. The Engine is the fake.
+// them and changes nothing; and a Routine the main Agent makes in chat with the Engine's own scheduling tool, which every
+// Agent is offered (ADR 0018, spec #389), shows here. RS Learning: Lead, the main Agent, and Ads. The Engine is the fake.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const company='10000000-0000-0000-0000-000000000001';
@@ -24,17 +24,13 @@ const job=(jobId:string,name:string,expr:string,extra:object={})=>({id:jobId,nam
  repeat:{times:null,completed:0},enabled:true,state:'scheduled',paused_at:null,paused_reason:null,created_at:'2026-11-20T08:00:00Z',
  next_run_at:tomorrowAt9(),last_run_at:null,last_status:null,last_error:null,deliver:'local',origin:null,timezone:'UTC',...extra});
 const logRows=(act:string)=>rows(`select actor_id,agent_id,details from public.company_log where company_id='${company}' and action='${act}' order by id`);
-const level=(value:number)=>{
- query(`do $$ begin update public.companies set agent_level=${value} where id='${company}'; update public.company_profiles set tools_level=${value},tools_pending=false where company_id='${company}'; end $$;`);
- fake.settings.profiles.get(profile)!.config=levelConfig(value);
-};
 
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
  freshSeed(testInfo.file,testInfo.retry>0);
  fake=await laneHermes();
- for(const name of [profile,own(ads)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:levelConfig(1),credentials:{}});
+ for(const name of [profile,own(ads)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:toolConfig({profile:name}),credentials:{}});
  fake.settings.cron.set(profile,[job('aa00000000a1','Morning brief','0 8 * * *',{last_run_at:new Date(Date.now()-3600e3).toISOString(),last_status:'ok'})]);
  fake.settings.cron.set(own(ads),[job('bb00000000b1','Ads summary','0 9 * * *')]);
  query(`update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003')`);
@@ -46,10 +42,10 @@ test.beforeAll(async({browser},testInfo)=>{
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
     ('${lead}','${company}','${id(4)}','Lead','General',true,'${profile}'),
     ('${ads}','${company}','${id(5)}','Ads','Runs the Meta ads.',false,'${own(ads)}');
-   insert into public.company_profiles(company_id,profile,tools_level,tools_policy) select id,'${profile}',agent_level,public.engine_tool_policy() from public.companies where id='${company}'
-    on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
    insert into public.company_profile_keepers(company_id,agent_id) values ('${company}','${lead}') on conflict (company_id) do update set agent_id=excluded.agent_id;
-   insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) select '${ads}','${company}',agent_level,public.engine_tool_policy() from public.companies where id='${company}';
+   insert into public.agent_profiles(agent_id,company_id) values ('${ads}','${company}');
    insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000003','${ads}') on conflict do nothing;
    set local session_replication_role=origin;
   end $$;`);
@@ -145,24 +141,19 @@ test('a Contributor reads the Routines of the Agents shown to them, On or Off, w
  await expect(section(page).getByRole('heading',{name:'Recurring tasks',level:3})).toHaveCount(0);
 });
 
-test('a Routine asked for in the main Agent\'s chat is made at level 3 and shows in Recurring tasks; at level 1 nothing is made',async({page})=>{
+test('a Routine asked for in the main Agent\'s chat is made in its own profile and shows in Recurring tasks',async({page})=>{
  test.setTimeout(90000);
  fake.settings.routineAsks=input=>/every day at 7/.test(input)?{name:'Lead summary',prompt:'Send me the new leads',schedule:'0 7 * * *'}:null;
- const ask=async(text:string)=>{
-  await page.goto('/c/rs-learning/home');
-  await page.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
-  await page.getByLabel('Message',{exact:true}).fill(text);
-  await page.getByLabel('Message',{exact:true}).press('Enter');
-  await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`,{timeout:30000});
- };
  await signIn(page,'omar@example.com','/c/rs-learning/home');
- level(1);
- await ask('Send me the new leads every day at 7');
- expect(fake.settings.cron.get(profile)!.map(each=>each.name)).toEqual(['Morning brief']);
- level(3);
- await ask('Please send me the new leads every day at 7');
+ const text='Send me the new leads every day at 7';
+ await page.locator('.sidebar').getByRole('link',{name:'New chat',exact:true}).click();
+ await page.getByLabel('Message',{exact:true}).fill(text);
+ await page.getByLabel('Message',{exact:true}).press('Enter');
+ await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`,{timeout:30000});
+ // The Run was offered the Engine's scheduling tool, and the job is in Lead's own profile alone.
+ expect(fake.settings.cron.get(profile)!.map(each=>each.name)).toEqual(['Morning brief','Lead summary']);
+ expect(fake.settings.cron.get(own(ads))!.map(each=>each.name)).not.toContain('Lead summary');
  await page.goto('/c/rs-learning/settings?section=routines');
  await expect(row(page,'Lead summary').locator('.panel-row__d')).toHaveText('Every day · 7:00 AM');
  await expect(section(page).locator('.dp-sec .dp-label').first()).toHaveText(/Lead\s*2/);
- level(1);
 });

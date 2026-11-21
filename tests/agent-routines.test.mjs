@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readRoutines, createRoutine, changeRoutine, pauseRoutine, resumeRoutine, triggerRoutine, deleteRoutine, startRun, readToolsets } from '../lib/hermes.mjs';
 import { readCompanyRoutines, changeAgentRoutine } from '../lib/agent-routines.mjs';
 import { cronOf, formOf, scheduleLabel, whenOf } from '../lib/routine-schedule.mjs';
-import { levelConfig, levelToolsets } from '../lib/agent-levels.mjs';
+import { toolConfig, noAgentGets } from '../lib/agent-toolsets.mjs';
 import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -161,23 +161,25 @@ test('a Contributor or a Viewer changes nothing: the database refuses before the
  } finally { await fake.close(); }
 });
 
-// A Routine asked for in chat (#31): the Agent makes it with the Engine's cronjob tool inside its Run, so only an Agent at
-// level 3, whose profile offers that toolset; at levels 1 and 2 the Run is offered no scheduling tool and nothing is made.
-test('a Routine asked for in chat is made only for an Agent at level 3, and the section then lists it', async () => {
- for(const level of [1,2,3]) {
-  const fake=await fakeHermes();
-  try {
-   profileOn(fake,adsProfile,levelConfig(level));
-   fake.settings.routineAsks=input=>input.includes('every day at 9')?{name:'Lead summary',prompt:'Send me the lead summary',schedule:'0 9 * * *'}:null;
-   const offered=await readToolsets({...at(fake,adsProfile)});
-   assert.equal(offered.toolsets.includes('cronjob'),level===3,`level ${level} offers the scheduling tool only at 3`);
-   assert.deepEqual(offered.toolsets.filter(name=>!levelToolsets[level].includes(name)),[],`level ${level} reads back its own toolsets alone`);
-   const run=await startRun({address:fake.address,profile:adsProfile,key:fake.settings.key,input:'Send me the lead summary every day at 9',sessionKey:'c1',idempotencyKey:`k${level}`});
-   assert.ok(run&&typeof run==='string');
-   const listed=await readCompanyRoutines(session({agents:rows}).db,{company,hermes:install(fake)});
-   assert.deepEqual(listed.agents[0].routines.map(routine=>routine.name),level===3?['Lead summary']:[]);
-  } finally { await fake.close(); }
- }
+// A Routine asked for in chat (#31): the Agent makes it with the Engine's cronjob tool inside its Run, in its own profile.
+// Every Agent is offered that toolset (ADR 0018, spec #389, which replaced the levels the ticket was written against);
+// a profile whose Runs are not offered it makes nothing.
+test('a Routine asked for in chat is made in the Agent\'s own profile with the scheduling tool every Agent is offered, and the section lists it', async () => {
+ const fake=await fakeHermes();
+ try {
+  profileOn(fake,adsProfile,toolConfig({profile:adsProfile})); profileOn(fake,seoProfile,toolConfig({profile:seoProfile}));
+  fake.settings.routineAsks=input=>input.includes('every day at 9')?{name:'Lead summary',prompt:'Send me the lead summary',schedule:'0 9 * * *'}:null;
+  const offered=await readToolsets({...at(fake,adsProfile)});
+  assert.ok(offered.toolsets.includes('cronjob'),'the fixed set offers the scheduling tool');
+  assert.deepEqual(offered.toolsets.filter(name=>noAgentGets.includes(name)),[]);
+  assert.ok(await startRun({address:fake.address,profile:adsProfile,key:fake.settings.key,input:'Send me the lead summary every day at 9',sessionKey:'c1',idempotencyKey:'k1'}));
+  const listed=await readCompanyRoutines(session({agents:rows}).db,{company,hermes:install(fake)});
+  assert.deepEqual(listed.agents.map(agent=>[agent.name,agent.routines.map(routine=>routine.name)]),[['Meta Ads',['Lead summary']],['SEO',[]]]);
+  // A profile whose Runs are not offered the tool (its config disables it) makes nothing.
+  profileOn(fake,seoProfile,{agent:{disabled_toolsets:['cronjob']}});
+  await startRun({address:fake.address,profile:seoProfile,key:fake.settings.key,input:'Send me the lead summary every day at 9',sessionKey:'c2',idempotencyKey:'k2'});
+  assert.equal(fake.settings.cron.get(seoProfile)?.length??0,0);
+ } finally { await fake.close(); }
 });
 
 test('the three schedules Settings writes are read back, in the person\'s words and their zone', () => {
