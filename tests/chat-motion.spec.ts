@@ -86,12 +86,18 @@ test('in a Conversation the sent message, the reply and the card for the Agent L
  const card=reply.getByRole('group',{name:'Agent made: Meta Ads'});
  await expect(card).toBeVisible();
  expect(await card.evaluate(element=>getComputedStyle(element).animationDuration)).toBe('0.28s');
- // The record is asked for again and the page drawn again by the server: nothing rises a second time.
- await page.waitForTimeout(5000);
+ // Another message and its Run: the record is asked for again and the page drawn again by the server, and nothing that
+ // arrived before rises a second time.
+ const read=page.waitForResponse(response=>response.url().includes('/api/conversations?company=')&&response.request().method()==='GET');
+ await page.getByLabel('Message',{exact:true}).fill('Thanks');
+ await page.getByRole('button',{name:'Send',exact:true}).click();
+ await read;
+ await expect(page.locator('.turn--agent').filter({hasText:'Reply to: Thanks'})).toBeVisible({timeout:20000});
+ await expect.poll(()=>starts(page,'gw-rise','Reply to: Thanks')).toBe(1);
  expect(await starts(page,'gw-rise',text)).toBeGreaterThanOrEqual(1);
  expect(await starts(page,'gw-rise',`Reply to: ${text}`)).toBe(1);
  expect(await page.evaluate(([text])=>(window as unknown as {starts:{name:string,text:string,cls:string}[]}).starts.filter(start=>start.name==='gw-rise'&&start.cls.includes('turn--user')&&start.text.includes(text)).length,[text])).toBe(1);
- expect(rows(`select body from public.conversation_messages where conversation_id='${conversation}' order by id`).map(row=>row.body)).toEqual([text,`Reply to: ${text}`]);
+ expect(rows(`select body from public.conversation_messages where conversation_id='${conversation}' order by id`).map(row=>row.body)).toEqual([text,`Reply to: ${text}`,'Thanks','Reply to: Thanks']);
  // Opened again, the Conversation holds the same turns and moves nothing.
  await page.reload();
  await expect(reply).toBeVisible();
@@ -124,7 +130,7 @@ test('in the general channel a Viewer sees the working line breathe and the repl
   const mine=caller.page.locator('.turn--user').filter({hasText:text.slice(6)});
   await expect(mine).toBeVisible();
   expect(await mine.evaluate(element=>getComputedStyle(element).animationName)).toBe('gw-rise');
-  expect(await caller.page.evaluate(()=>(window as unknown as {flew:string[]}).flew.length)).toBe(1);
+  await expect.poll(()=>caller.page.evaluate(()=>(window as unknown as {flew:string[]}).flew.length)).toBe(1);
   // The Viewer: the message rises when it arrives, and the line breathes while Lead works.
   const theirs=page.locator('.turn--peer').filter({hasText:text.slice(6)});
   await expect(theirs).toBeVisible({timeout:20000});
@@ -135,7 +141,9 @@ test('in the general channel a Viewer sees the working line breathe and the repl
   const reply=page.locator('.turn--agent').filter({hasText:'Reply to:'});
   await expect(reply).toBeVisible({timeout:30000});
   expect(await motionOf(reply)).toEqual(rises);
-  await page.waitForTimeout(5000);
+  // The channel is read again (its next poll) and the reply does not rise a second time.
+  await page.waitForResponse(response=>response.url().includes('/api/channels?company=')&&response.request().method()==='GET',{timeout:15000});
+  await page.waitForResponse(response=>response.url().includes('/api/channels?company=')&&response.request().method()==='GET',{timeout:15000});
   expect(await starts(page,'gw-rise','Reply to:')).toBe(1);
   expect(await starts(caller.page,'gw-rise','Reply to:')).toBe(1);
   await expect(page.locator('.composer__send')).toHaveCount(0);
