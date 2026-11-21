@@ -117,7 +117,9 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // A job command's handover (#358) is the chat's own Run: the target Agent answers the person, so its reply is drawn
  // with that Agent's face, and the chat never waits on that Run as if the Conversation's Agent worked on it.
  const commandRuns=new Set(handedRows.filter(row=>row.answers_person).map(row=>row.run));
- const faces=new Map(handedRows.map(row=>[row.to_agent,row.to_connection] as const));
+ // Only a job command's answer is a chat message from another Agent; a chain (#477) may ask the chat's own Agent back,
+ // whose messages stay its own.
+ const faces=new Map(handedRows.filter(row=>row.answers_person).map(row=>[row.to_agent,row.to_connection] as const));
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...handed,

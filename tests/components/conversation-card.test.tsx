@@ -104,6 +104,21 @@ test('a chat with Lead whose Card a handover made says so once, under the handov
  await expect.element(screen.getByRole('link', { name: 'On the board: In progress' })).toBeVisible();
 });
 
+// #477: a chain that comes back to the chat's own Agent (Lead asks Ads, Ads asks Lead) leaves Lead's follow-up its own:
+// the line still goes under it, and Lead's messages keep Lead's face.
+test('a chain that asks the chat\'s own Agent back still puts the board line under its follow-up reply', async () => {
+ await page.viewport(1440, 900);
+ const messages = { ...leadStored, conversation_messages: leadStored.conversation_messages.map(message => message.author === 'agent' ? { ...message, agent_id: 'a-lead' } : message) };
+ const chain = [
+  { id: 1, run: 'r1', from_name: 'Lead', from_connection: 'c-0', to_agent: 'a-ads', to_name: 'Ads', to_connection: 'c-3', goal: 'Plan the Meta ads', answer: 'Three ad sets.', state: 'done', target_outcome: 'completed', answers_person: false, created_at: '2026-06-10T09:41:03Z', answered_at: '2026-06-10T09:42:00Z', parent: null },
+  { id: 2, run: 'run-ads', from_name: 'Ads', from_connection: 'c-3', to_agent: 'a-lead', to_name: 'Lead', to_connection: 'c-0', goal: 'Say the budget', answer: 'EGP 9,000.', state: 'done', target_outcome: 'completed', answers_person: false, created_at: '2026-06-10T09:41:20Z', answered_at: '2026-06-10T09:41:40Z', parent: 1 },
+ ];
+ const record = await conversationRecord(database({ id: 9, column: 'progress', made: '2026-06-10T09:41:02Z' }, messages, chain), 'p-3', 'co-1', { id: 'cv-9', agent_id: 'a-lead', agent_name: 'Lead', hermes_agents: { connection_id: 'c-0', is_default: true } });
+ const boarded = record.messages.findIndex(message => message.kind === 'boarded');
+ expect(record.messages[boarded - 1]?.body).toBe('Ads planned the March intake.');
+ expect(record.messages.filter(message => message.author === 'agent' && !message.kind).map(message => message.face ?? null)).toEqual([null, null]);
+});
+
 // #375: the record says a handover did not finish when its target's leg ended without a report, though Lead followed it
 // up, or when the handover itself ended failed; one that finished says nothing of it, and none of them keeps the chat
 // asking. The row under Lead's reply then says the job did not finish.
