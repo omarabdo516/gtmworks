@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { whatsNew, checkUpdate, unseenEntries, updateSource } from '../lib/updates.mjs';
+import { whatsNew, checkUpdate, latestStableRelease, unseenEntries, updateSource } from '../lib/updates.mjs';
 
 // The file as written, before the app leaves out an entry it cannot show.
 const written = JSON.parse(readFileSync('lib/whats-new.json', 'utf8'));
@@ -68,6 +68,28 @@ test('every page of releases is read: a newer stable release past a full page of
   'https://api.test/releases?per_page=100&page=2': [{ tag_name: 'v2.1.0', published_at: '2026-11-18T00:00:00Z' }],
  });
  assert.equal((await checkUpdate({ installed: '2.0.0', local, source, fetch }))?.version, 'v2.1.0');
+});
+
+// #483: the install proof's release-update area installs the release a stable install runs, picked by this same rule.
+test('the latest stable release is the highest vX.Y.Z on every page, never a draft, a prerelease or another tag', async () => {
+ const seen = [];
+ const fetch = async (url, init) => { seen.push([url, init?.headers?.authorization]); return answering({
+  'https://api.test/releases?per_page=100&page=1': [
+   ...Array.from({ length: 98 }, (_, i) => ({ tag_name: `v9.0.${i}`, published_at: '2026-11-19T00:00:00Z', prerelease: true })),
+   { tag_name: 'v1.10.0', published_at: '2026-11-17T00:00:00Z', draft: true },
+   { tag_name: 'nightly', published_at: '2026-11-20T00:00:00Z' },
+  ],
+  'https://api.test/releases?per_page=100&page=2': [
+   { tag_name: 'v1.2.1', published_at: '2026-11-19T10:00:00Z' },
+   { tag_name: 'v1.9.0', published_at: '2026-11-18T10:00:00Z' },
+   { tag_name: 'v1.10.0-rc.1', published_at: '2026-11-19T10:00:00Z' },
+  ],
+ })(url); };
+ const release = await latestStableRelease({ source, fetch, headers: { authorization: 'Bearer t' } });
+ assert.equal(release?.tag_name, 'v1.9.0');
+ assert.deepEqual(seen, [['https://api.test/releases?per_page=100&page=1', 'Bearer t'], ['https://api.test/releases?per_page=100&page=2', 'Bearer t']]);
+ assert.equal(await latestStableRelease({ source, fetch: answering({ 'https://api.test/releases?per_page=100&page=1': [] }) }), null, 'none published yet');
+ await assert.rejects(latestStableRelease({ source, fetch: answering({ 'https://api.test/releases?per_page=100&page=1': { message: 'rate limited' } }) }));
 });
 
 test('a newer release whose what\'s-new file cannot be read for another reason fails the check', async () => {

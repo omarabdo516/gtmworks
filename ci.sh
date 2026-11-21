@@ -247,6 +247,14 @@ case "${1:-check}" in
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
   DOCKER_HOST=$host_docker docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
   images="$images $sandbox_tag"
+  # Behind an HTTPS proxy (a cloud session) Node reaches GitHub through it, as curl and git do.
+  [[ -z ${HTTPS_PROXY:-}${https_proxy:-} ]] || export NODE_USE_ENV_PROXY=1
+  # The release-update area installs the latest published release, whose files pin images of their own (#483): read
+  # from the same releases list the area reads, pulled here and loaded in with the rest.
+  if [[ -z ${1:-} || $1 == release-update ]]; then
+    node --no-warnings scripts/latest-release.mjs "$work/latest-release" > /dev/null
+    images="$images $(grep -h -E '^[[:space:]]*image:' "$work/latest-release/docker-compose.install.yml" | awk '{print $2}' | grep -v '\$' | sort -u | tr '\n' ' ')"
+  fi
   for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
   DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null
   # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it
@@ -259,5 +267,5 @@ case "${1:-check}" in
   export INSTALL_LANE_FOREIGN_OWNER=1
   bash scripts/ci-install-check.sh "$@"
   ;;
-  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

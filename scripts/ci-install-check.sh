@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # The install proof, one command of the repo (#402): each CI install job runs this file for its area on an isolated
 # Docker machine and holds no check of its own, and `./ci.sh install [area]` starts such a machine here and runs it.
-# Without an area the nine areas (spec #401's seven, `rollback` and `engines-update`, #389) run one after another, then the profile-size measurement; with one, only
+# Without an area every area (spec #401's seven, `rollback` and `engines-update`, #389, and those named below) run one after another, then the profile-size measurement; with one, only
 # that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat), `companies` (Companies
 # and their Engines), `agents` (Agents on their Engines), `backup` (backup and restore), `proxy` (the public address
-# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `previous-archive` (the previous release's own archive restored), `sandbox-update`
+# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `previous-archive` (the previous release's own archive restored), `release-update` (the latest published release, read
+# from the releases list, updated to this one, #483), `sandbox-update`
 # (an install the release before the work sandbox made, updated to this one, #397), `staged-update` (the staged removal of
 # Agent levels: updates that fail after its first step, then the cutover, ADR 0023), `sizes` (the measured
 # sizes and the default sandbox limits a render finishes within, #400), `engines-update` (a release that pins another Engine image), `one-line` (the one-line install) and `measure` (the
@@ -13,7 +14,8 @@
 # (#406–#409), so no area needs another to have run. The helpers the areas share are in scripts/ci-install-lib.sh,
 # sourced below, so each is written once.
 # DOCKER_HOST names that machine; RUNNER_TEMP is a scratch folder; INSTALL_REF and GH_TOKEN come from CI or ci.sh
-# (GH_TOKEN only reaches the update's source download, scripts/install.sh).
+# (GH_TOKEN only reaches the update's source download, scripts/install.sh, and the release-update area's releases list,
+# scripts/latest-release.mjs).
 set -e
 # An install piped into tee keeps its own exit status.
 set -o pipefail
@@ -1339,6 +1341,85 @@ docker exec -u hermes "$(first_engine_id)" ssh -i /opt/data/ssh/id_ed25519 -o Ba
   || fail 'the Engine the previous release archive restored reaches its work sandbox'
 }
 
+# release-update: the update a stable install really takes (#483): the latest published release, read from GitHub's
+# releases list on every run (lib/updates.mjs latestStableRelease, the release Update ready offers and `gtmworks update`
+# installs), installed from its own two published files and the images they pin, first run made and an Agent told a
+# fact, then updated to this release. The update and previous-archive areas build a fixed commit to prove one shape's
+# path (#378, C1); this area moves with each release, so its checks hold for any release's shape: the install it made
+# keeps its one Company, its Owner and what the Agent was told, runs this release with every migration, and the install
+# command again keeps it.
+release_update() {
+cd "$root"
+reset_install
+trap - EXIT
+set +o pipefail
+fail_prefix='release install check failed: '
+start_registry
+publish_releases
+dir="$PWD/stable-release-install"
+docker run --rm -v "$root:/root-folder" alpine:3.21 rm -rf /root-folder/stable-release-install
+stable=$(node scripts/latest-release.mjs "$dir") || fail 'the latest published release and its two files'
+echo "latest published release: $stable; this release: $first"
+[[ $(ls -A "$dir" | wc -l) == 2 ]] || fail 'the release install directory holds only the two release files'
+sh "$dir/install.sh" || fail "install $stable from its two published files"
+cd "$dir"
+[[ $(cat .install-release) == "$(sed -n 's/^release_image=//p' install.sh)" ]] || fail "the install runs the image $stable pins"
+probe "on $stable"
+code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
+docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
+  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" \
+  || fail "first run on $stable"
+company=$(db -c "select id from public.companies where name='Proxy Company'") || fail "read the Company $stable made"
+[[ -n $company ]] || fail "first run made the Company on $stable"
+people=$(db -c "select person_id||' '||role from public.members where company_id='$company' order by 1") || fail "read the Company's people on $stable"
+# The Engine the release runs, in its own shape: one per Company from its own folder (ADR 0018), or the one `hermes`
+# service of the releases before it. The worker makes the Company's profile there.
+if [[ -f .engines/first/.env ]]; then engine_before=$(engine_value .engines/first NAME); else engine_before=gtmworks-install-hermes-1; fi
+profile=co-${company//-/}
+for attempt in $(seq 1 180); do
+  docker exec "$engine_before" test -d "/opt/data/profiles/$profile" 2> /dev/null && break
+  [[ $attempt == 180 ]] && fail "the worker made the Company profile in the Engine $stable runs"
+  sleep 1
+done
+# What the Agent was told, and the sign-in the Company made, before the update: both live in the Engine's data.
+marker="stable-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+docker exec -i "$engine_before" sh -ec \
+  'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1"' \
+  sh "$profile" "$marker" || fail "write a memory in the Company's profile on $stable"
+docker exec -i "$engine_before" sh -ec \
+  'umask 077; printf "%s\n" "{\"accessToken\":\"install-check-token\",\"refreshToken\":\"install-check-refresh\",\"expiresAt\":4102444800000}" > /opt/data/.anthropic_oauth.json; chown hermes:hermes /opt/data/.anthropic_oauth.json' \
+  || fail "sign the Company in on its Engine on $stable"
+# The update to this release, as a stable install takes it: this release's two files in place of the old ones, then update.
+cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
+sh install.sh update || fail "the update from $stable to this release"
+[[ $(cat .install-release) == "$first" ]] || fail 'the update records this release'
+probe "after the update from $stable"
+[[ $(db -c 'select id from public.companies') == "$company" ]] || fail "the update keeps the one Company $stable made"
+[[ $(db -c "select person_id||' '||role from public.members where company_id='$company' order by 1") == "$people" ]] || fail "the update keeps the Company's people and their roles"
+compose exec -T db ls /migrations | sort > "$RUNNER_TEMP/stable-seen" || fail 'list the migrations the database sees'
+ls "$root/supabase/migrations" | sort > "$RUNNER_TEMP/stable-expected"
+diff -u "$RUNNER_TEMP/stable-expected" "$RUNNER_TEMP/stable-seen" || fail "the updated database sees this release's migrations"
+key=$(first_engine_key)
+engine=$(first_engine_id)
+[[ -n $key && -n $engine ]] || fail "the updated install runs the Company's Engine from its own folder"
+[[ $(db -c "select count(*) from public.company_engines e join public.companies c on c.engine_id=e.id where c.id='$company'") == 1 ]] \
+  || fail 'the updated Company names its own Engine'
+sandbox=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')
+[[ -n $sandbox && $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox") == healthy ]] || fail "the updated Company's work sandbox is healthy"
+[[ $(docker inspect -f '{{.Config.Image}}' "$sandbox") == "$(cat .work-sandbox-image)" ]] || fail 'the updated sandbox runs the image the install recorded'
+# The Owner signs in, the Company's sign-in still serves, and the Agent still remembers what it was told on $stable.
+ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
+  || fail "the Agent remembers what it was told on $stable and the Company's sign-in still serves"
+# Running the install command again keeps the updated install: the same settings, key, Engine and sandbox.
+cp .env.install .env.install.before
+sh install.sh || fail 'the install command again'
+cmp .env.install .env.install.before || fail 'the install command again leaves .env.install as it was'
+[[ $(first_engine_key) == "$key" && $(first_engine_id) == "$engine" ]] || fail 'the install command again keeps the Engine'
+[[ $(docker ps -q --filter 'name=^gtmworks-sandbox-first$') == "$sandbox" ]] || fail 'the install command again leaves the sandbox running'
+echo "release-update: $stable updated to this release"
+}
+
 # sandbox-update: an install the release before the work sandbox made, with two Companies, updated to this release (#397,
 # ADR 0018). First an update whose migration fails, which leaves that release serving with no sandbox begun; then the
 # update itself, after which each Company has its own sandbox, exit and work folder, its Engine is pinned to that sandbox,
@@ -2153,7 +2234,7 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (sandbox_update); (staged_update); (sizes); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sizes); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
@@ -2162,6 +2243,7 @@ case "${1:-all}" in
  rollback) rollback;;
  update) update;;
  previous-archive) previous_archive;;
+ release-update) release_update;;
  sandbox-update) sandbox_update;;
  staged-update) staged_update;;
  sizes) sizes;;
@@ -2169,5 +2251,5 @@ case "${1:-all}" in
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac
