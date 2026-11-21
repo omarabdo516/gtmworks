@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(16);
 -- #182, #183: Good morning is changed by an active Owner or Manager of its Company, for the main Agent, and each change is one row of the log; each run of its job is recorded once, and opens a new
 -- Conversation with the main Agent for each Member with anything in a part of their card, never one for a Member with
 -- nothing. RS Learning: 1 Owner, 2 Manager, 3 Contributor, 4 Viewer, 5 Contributor. Written without the guards, as
@@ -64,5 +64,19 @@ select is(public.pin_run_history((select id from public.conversations where good
 select is(public.pin_run_history((select id from public.conversations where good_morning is not null and person_id='20000000-0000-0000-0000-000000000003'),'b1830000-0000-0000-0000-000000000001'),
  '[{"role":"assistant","content":"Good morning, team."}]'::jsonb,'and a retry the same');
 select is(public.pin_run_history('c1000000-0000-0000-0000-000000000181','b1830000-0000-0000-0000-000000000002'),null,'a Conversation the morning did not open carries none');
+
+-- An item on a Card of an Agent the Manager does not see is no reason to send them a morning: their card would not show it.
+set local session_replication_role=replica;
+insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
+ ('c1000000-0000-0000-0000-000000000182','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','e1000000-0000-0000-0000-000000000182','Ads');
+insert into public.work_cards(id,company_id,stage_id,title,board_order,conversation_id,agent_id) overriding system value
+ values (918301,'10000000-0000-0000-0000-000000000001',(select min(id) from public.work_stages where company_id='10000000-0000-0000-0000-000000000001'),'Ads card',1,'c1000000-0000-0000-0000-000000000182','e1000000-0000-0000-0000-000000000182');
+insert into public.waiting_items(company_id,person_id,kind,title,card_id) values
+ ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','question','On the Ads card',918301);
+set local session_replication_role=origin;
+select is(public.record_good_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000181','local-0004','2026-11-14','2026-11-14T07:00:00Z','Morning.','[]'::jsonb),
+ 2,'the Members something they may see waits on get the morning: the Owner, with the seed''s approvals, and the Contributor 5');
+select ok(not exists(select 1 from public.conversations c join public.good_mornings g on g.id=c.good_morning where g.session_id='local-0004' and c.person_id='20000000-0000-0000-0000-000000000002'),
+ 'the Manager, whose only item is on a Card of an Agent hidden from them, gets none');
 select * from finish();
 rollback;

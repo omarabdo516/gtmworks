@@ -108,7 +108,13 @@ begin
  for member in select m.person_id from public.members m where m.company_id=c and m.removed_at is null order by m.person_id loop
   -- Each Member's parts are read as that Member, with the very reads their own card makes.
   perform set_config('request.jwt.claim.sub',member.person_id::text,true);
-  if exists(select 1 from public.waiting_list(c))
+  -- The reader's own card shows only what their session may read: an item on a Card only while they see that Card
+  -- (card_agent_visible), and an approval only while they see its Agent (lib/board-columns.mjs visibleApprovals). This
+  -- function reads past row-level security, so it asks the same two questions itself.
+  if exists(select 1 from public.waiting_list(c) x
+    where (x.card_id is null or public.can_see_card(c,x.card_id))
+     and (x.kind<>'approval' or not exists(select 1 from public.work_cards w where w.company_id=c and w.id=x.id
+      and w.agent_id is not null and not public.can_see_agent(c,w.agent_id))))
    or exists(select 1 from public.good_morning_results r where r.morning_id=morning and public.can_see_agent(c,r.agent_id)) then
    talk:=gen_random_uuid();
    insert into public.conversations(id,company_id,person_id,agent_id,agent_name,good_morning,good_morning_day)
