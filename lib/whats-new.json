@@ -1,5 +1,11 @@
 [
  {
+  "issue": 131,
+  "date": "2026-11-21",
+  "en": { "title": "The board moves as you carry a Card", "body": "A carried Card leans with your pointer, flies back when you let it go where it was, lands with a short ring in its new column, progress bars grow in, and a Card newly waiting on you nudges its badge and the sidebar count." },
+  "ar": { "title": "البورد بيتحرّك وانت شايل البطاقة", "body": "البطاقة وانت شايلها بتميل مع حركة الماوس، ولو سبتها مكانها بترجع لوحدها، ولما تنزّلها في عمود جديد بتنزل بإطار صغير، وشرايط التقدّم بتكبر، والبطاقة اللي لسه بقت مستنياك بتهزّ علامتها وعدّاد القايمة الجانبية." }
+ },
+ {
   "issue": 19,
   "date": "2026-11-21",
   "en": { "title": "Agents propose changes to their settings", "body": "An Agent, or Lead for another Agent, can propose a new model, new core instructions, sub-agents or one of its settings, with the reason. It waits in the Owner’s Waiting on you, and nothing changes until the Owner approves it." },

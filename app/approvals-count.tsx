@@ -1,5 +1,5 @@
 import { Suspense, use } from 'react';
-import Link from '@/lib/link';
+import { CountPill } from './approvals-count-pill';
 import { waitingLabel } from '@/lib/sidebar.mjs';
 
 type T=(key:string,...values:unknown[])=>string;
@@ -19,5 +19,5 @@ function Counted({count,...props}:Props&{count:Promise<number>}) {
 
 function Pill({slug,current,t,count}:Props&{count?:number}) {
  const [key,...values]=count===undefined?['approvals']:waitingLabel(count);
- return <Link className={`sb-count${count?'':' sb-count--none'}`} href={`/c/${slug}/approvals`} aria-current={current?'page':undefined} aria-label={t(key,...values)}><span className="sb-count__n">{count}</span></Link>;
+ return <CountPill href={`/c/${slug}/approvals`} current={current} label={t(key,...values)} count={count}/>;
 }
