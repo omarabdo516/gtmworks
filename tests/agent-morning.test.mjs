@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readRoutines, createRoutine, triggerRoutine, isSilentReply, readRoutineLastReply } from '../lib/hermes.mjs';
-import { readAgentMorning, changeAgentMorning, moveAgentMorning, morningName, morningTime, morningCron } from '../lib/agent-morning.mjs';
+import { readAgentMorning, changeAgentMorning, moveAgentMorning, morningName } from '../lib/agent-morning.mjs';
+import { morningTime, morningCron } from '../lib/morning-schedule.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // Good morning (#182): the main Agent's daily message is one job of its own Engine profile, made, timed, paused and

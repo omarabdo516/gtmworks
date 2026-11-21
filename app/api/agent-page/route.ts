@@ -7,6 +7,7 @@ import { changeAgentAbout } from '@/lib/agent-about.mjs';
 import { changeAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { changeAgentVoice } from '@/lib/agent-voice.mjs';
 import { changeAgentEffort } from '@/lib/agent-effort.mjs';
+import { changeAgentMorning } from '@/lib/agent-morning.mjs';
 import { changeCompanySkillEnabled } from '@/lib/company-skills.mjs';
 
 // One Agent's settings page (#161, #162, #176, #179, #180): every changed field is saved at once on the Agent's own Engine
@@ -16,7 +17,8 @@ import { changeCompanySkillEnabled } from '@/lib/company-skills.mjs';
 // team's rules section, written by the Owner alone (check_agent_owner_setting); `voice` is the Voice section's values,
 // its speaking language, speed and voice (check_agent_setting / log_agent_setting); `effort` is the thinking level, the
 // Owner's alone (check_agent_owner_setting / log_engine_setting, with old and new); and `skill:<name>` is one Skill's
-// switch, "on" or "off" (check_skill_write / log_skill_change, one row per Skill). Later fields join with their own
+// switch, "on" or "off" (check_skill_write / log_skill_change, one row per Skill); `morning` is the main Agent's daily
+// message (#182), `{on, time, zone}`, a job of its own Engine profile (check_agent_setting / log_agent_setting). Later fields join with their own
 // checks. Nothing in this body reaches a log, and the Engine's answer is what the page shows.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const skillName=/^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -27,7 +29,8 @@ const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'C
 // Each refusal of a field, as the page's answer: a person not allowed or an Agent not theirs, a malformed or too long
 // field or a voice the Engine does not offer, no Engine, or the Engine's own failure.
 const refused=(state:string)=>state==='notOwn'||state==='notAllowed'?reply({error:'agentPageNotAllowed'},403)
- :state==='invalid'||state==='tooLong'||state==='noVoices'||state==='shared'||state==='essential'?reply({error:'agentPageInvalid'},400)
+ :state==='levelLow'?reply({error:'agentPageLevelLow'},409)
+ :state==='invalid'||state==='tooLong'||state==='noVoices'||state==='shared'||state==='essential'||state==='notMain'?reply({error:'agentPageInvalid'},400)
  :state==='noEngine'?reply({error:'agentPageNoEngine'},503):reply({error:'agentPageFailed'},502);
 export async function POST(request:NextRequest) {
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -44,12 +47,13 @@ export async function POST(request:NextRequest) {
  const instructions=typeof changes.instructions==='string'?changes.instructions:undefined;
  const effort=typeof changes.effort==='string'?changes.effort:undefined;
  const voice=changes.voice;
+ const morning=changes.morning as {on?:unknown,time?:unknown,zone?:unknown}|undefined;
  // A key pasted into About or How it works is refused here, as the note and Skill writes refuse it, before any write.
  if((about!==undefined&&secretLike(about))||(instructions!==undefined&&secretLike(instructions))) return reply({error:'agentPageInvalid'},400);
  const skills:Record<string,boolean>={};
  for(const [key,value] of Object.entries(changes)) {
   if(key==='about'||key==='instructions'||key==='effort') { if(typeof value!=='string') return reply({error:'agentPageInvalid'},400); continue; }
-  if(key==='voice') { if(!value||typeof value!=='object'||Array.isArray(value)) return reply({error:'agentPageInvalid'},400); continue; }
+  if(key==='voice'||key==='morning') { if(!value||typeof value!=='object'||Array.isArray(value)) return reply({error:'agentPageInvalid'},400); continue; }
   const name=key.startsWith('skill:')?key.slice(6):null;
   if(!name||!skillName.test(name)||(value!=='on'&&value!=='off')) return reply({error:'agentPageInvalid'},400);
   skills[name]=value==='on';
@@ -76,6 +80,11 @@ export async function POST(request:NextRequest) {
    const changed=await changeAgentVoice(db,{company:body.company,agent:body.agent,voice});
    if(changed.state!=='written') return refused(changed.state);
    saved.voice=changed.voice;
+  }
+  if(morning!==undefined) {
+   const changed=await changeAgentMorning(db,{company:body.company,agent:body.agent,on:morning.on,time:morning.time,zone:morning.zone});
+   if(changed.state!=='written') return refused(changed.state);
+   saved.morning=changed.morning;
   }
   for(const [name,enabled] of Object.entries(skills)) {
    const changed=await changeCompanySkillEnabled(db,{company:body.company,agent:body.agent,name,enabled});

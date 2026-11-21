@@ -1,5 +1,11 @@
 [
  {
+  "issue": 182,
+  "date": "2026-11-21",
+  "en": { "title": "Good morning can be switched on", "body": "On the main agent’s page, the Owner and Managers can switch on a morning summary every day and pick its time; it stays quiet when there is nothing new, moves with the main agent, and needs agents that may do scheduled work." },
+  "ar": { "title": "صباح الخير بقى ممكن يتفتح", "body": "في صفحة الوكيل الرئيسي، المالك والمديرين يقدروا يفتحوا ملخص الصبح كل يوم ويختاروا ميعاده؛ مش بيبعت حاجة لو مفيش جديد، وبيتنقل مع الوكيل الرئيسي، ومحتاج إن الوكلاء يكون مسموحلهم بالشغل اللي في ميعاد." }
+ },
+ {
   "issue": 31,
   "date": "2026-11-21",
   "en": { "title": "Recurring tasks in Settings", "body": "Settings now lists every recurring task of every agent with when it runs next and how its last run went; the Owner and Managers can switch one off or on, run it now, change when it runs, add one or delete one, and each change is in the log." },

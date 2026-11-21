@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
+import { moveAgentMorning } from '@/lib/agent-morning.mjs';
 
 const columns='id,company_id,connection_id,name,speciality,is_default';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,10 +21,18 @@ async function respond(request:NextRequest) {
   if(!await routeAllowed(db,'app/api/hermes-agents/route.ts',request.method,body.company,user.id)) return reply({error:'hermesNotAllowed'},403);
   if(writing) {
    if(!['default','remove'].includes(body.intent)||!body.agent||['agent','replacement'].some(key=>body[key]!==undefined&&(typeof body[key]!=='string'||!uuid.test(body[key])))) return reply({error:'hermesAgentFailed'},400);
+   // The main Agent before the change: its daily message (#182) moves to the new one once the database made it main.
+   const before=body.intent==='default'?(await db.from('hermes_agents').select('id').eq('company_id',body.company).eq('is_default',true).maybeSingle()).data?.id as string|undefined:undefined;
    const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,a:body.agent,replacement:body.replacement??null});
    if(error) {
     const key=['hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
     return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesNextDefault'?409:400);
+   }
+   // Good morning moves with the main Agent, with the same time and switch, and none is left on the old one. The new main
+   // Agent is made whatever the Engine answers; a move that fails is said in the server log.
+   if(before&&before!==body.agent) {
+    const moved=await moveAgentMorning(db,{company:body.company,from:before,to:body.agent}).catch(()=>({state:'failed'}));
+    if(!['moved','none','kept'].includes(moved.state)) console.error('Good morning not moved to the new main Agent:',body.company,moved.state);
    }
   }
   const {data:agents,error}=await db.from('hermes_agents').select(columns).eq('company_id',body.company).order('name');

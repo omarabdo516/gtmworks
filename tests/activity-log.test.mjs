@@ -56,6 +56,11 @@ test('Card, Member and Agent rows say who changed what', () => {
  // The Voice section saved on the Agent's page (#162): one row named by the section, with no value in it.
  const voice = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Ads', field: 'voice' } });
  assert.deepEqual([voice.act, voice.obj, voice.from, voice.to], [['logActSettingChanged', { key: 'logFieldVoice' }, { text: 'Ads' }], undefined, undefined, undefined]);
+ // Good morning (#182): the time before and after, or Off.
+ const morning = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Lead', field: 'morning', old: 'off', new: '9:00' } });
+ assert.deepEqual([morning.act, morning.from, morning.to], [['logActSettingChanged', { key: 'logFieldMorning' }, { text: 'Lead' }], { key: 'logOff' }, { text: '9:00' }]);
+ const morningOff = describeEntry({ subject: 'agent', action: 'agent_setting_changed', agent_id: lead, details: { agent_name: 'Lead', field: 'morning', old: '9:30', new: 'off' } });
+ assert.deepEqual([morningOff.from, morningOff.to], [{ text: '9:30' }, { key: 'logOff' }]);
  assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); const [key, ...args] = voice.act; return t(key, ...args.map(value => 'key' in value ? t(value.key) : value.text)); }),
   ['changed the voice in the settings of Ads', 'غيّر الصوت في إعدادات Ads']);
  // A setting on an Agent's Engine profile (#125): its label, then the value before and after; a yes or no is a word.

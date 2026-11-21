@@ -444,3 +444,10 @@
 .gw .sov .rt-form .panel-form__err { font-size: var(--gw-fs-xs); color: var(--gw-danger-text); }
 .gw .sov .rt-delete { margin-inline-end: auto; }
 @media (prefers-reduced-motion: reduce) { .gw .sov .rt-running { animation: none; } }
+
+/* Good morning (#182; design-reference/index.html .ck-time, .ck-hint): the time select keeps its own width, reads muted
+   while the switch is off, and the hint sits under the card. */
+.gw .sov .ck-time { width: auto; min-width: 120px; flex: none; cursor: pointer; appearance: auto; padding-inline-end: 6px; }
+.gw .sov .ck-time:disabled { color: var(--gw-text-4); cursor: default; }
+.gw .sov .ck-hint { padding-inline: var(--s3); margin: 0; }
+.gw .sov .ck-hint + .ck-hint { margin-top: var(--s1); }
