@@ -210,3 +210,25 @@ test('a revoke whose write may have landed keeps its record, so another server p
   assert.equal(shared.noted.has('recursive delete'),false);
  } finally { globalThis.fetch=engineFetch; await fake.close(); }
 });
+
+test('a write that timed out before the Engine applied it keeps the record and the hold, so the late write never lets a later revoke restore the entry (CodeRabbit on #499)',async()=>{
+ const fake=await fakeHermes(); const engineFetch=globalThis.fetch;
+ try {
+  profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
+  const shared={noted:new Map()}; const hold={held:false};
+  const first=session({shared,hold,inflight:['mcp:notion/create_page','mcp:canva/create_design']});
+  let late=null;
+  globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { late=()=>engineFetch(url,init); return Promise.reject(new Error('timeout')); } return engineFetch(url,init); };
+  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)})).state,'unreachable');
+  globalThis.fetch=engineFetch;
+  assert.equal(shared.noted.has('mcp:notion/create_page'),true,'the record stays');
+  assert.equal(first.asked.includes('end_permission_revoke'),false,'the hold is left to end by itself');
+  assert.equal(hold.held,true);
+  // The Engine applies the late write; the hold then ends by itself and another process revokes the other entry.
+  await late();
+  hold.held=false;
+  const second=session({shared,hold,inflight:['mcp:notion/create_page','mcp:canva/create_design']});
+  assert.equal((await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})).state,'revoked');
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'the first entry is never written back');
+ } finally { globalThis.fetch=engineFetch; await fake.close(); }
+});

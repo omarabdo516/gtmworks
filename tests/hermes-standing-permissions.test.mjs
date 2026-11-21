@@ -144,3 +144,16 @@ test('a write the Engine took whose read-back fails is an unknown outcome, never
   assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'mcp:notion/create_page'}),{state:'unreachable'});
  } finally { globalThis.fetch=engineFetch; await fake.close(); }
 });
+
+test('a write the Engine never confirmed is an unknown outcome even when the read-back still shows the entry: it may land later (CodeRabbit on #499)',async()=>{
+ const fake=await fakeHermes(); const engineFetch=globalThis.fetch;
+ try {
+  profileOn(fake,{command_allowlist:['recursive delete','mcp:notion/create_page']});
+  // The PUT times out before the Engine applies it.
+  globalThis.fetch=async(url,init)=>init?.method==='PUT'?Promise.reject(new Error('timeout')):engineFetch(url,init);
+  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'unreachable',removed:'maybe'});
+  // A write the Engine confirmed that left the entry is a sure failure.
+  globalThis.fetch=engineFetch; fake.settings.staleConfig=true;
+  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'failed',removed:'no'});
+ } finally { globalThis.fetch=engineFetch; await fake.close(); }
+});
