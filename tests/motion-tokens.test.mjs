@@ -78,9 +78,11 @@ const unlistedTransitions = text => {
     }
     if (value === 'none') continue;
     for (const item of topLevel(value, /,/)) {
-      const property = topLevel(item, /\s/)[0];
-      if (property === 'all') problems.push(`line ${line}: transition: ${item} moves all`);
-      else if (timing.test(property)) problems.push(`line ${line}: transition: ${item} names no property`);
+      // The property may stand anywhere in the item (`200ms ease opacity` is valid CSS): every token that is not a time,
+      // a curve, a keyword or a var() names it.
+      const properties = topLevel(item, /\s/).filter(token => !timing.test(token));
+      if (properties.includes('all')) problems.push(`line ${line}: transition: ${item} moves all`);
+      else if (properties.length === 0) problems.push(`line ${line}: transition: ${item} names no property`);
     }
   }
   return problems;
@@ -89,6 +91,8 @@ const unlistedTransitions = text => {
 test('the guard catches transition: all, a shorthand with no property and transition-property: all', () => {
   assert.deepEqual(unlistedTransitions('.gw .a { transition: background-color 150ms ease-out, transform 200ms; }'), []);
   assert.deepEqual(unlistedTransitions('.gw .a { transition: none; }'), []);
+  assert.deepEqual(unlistedTransitions('.gw .a { transition: 200ms ease opacity; }'), []);
+  assert.equal(unlistedTransitions('.gw .a { transition: 200ms ease all; }').length, 1);
   assert.deepEqual(unlistedTransitions('.gw .a { transition: color var(--d, 160ms) var(--e); }'), []);
   assert.equal(unlistedTransitions('.gw .a { transition: all 150ms; }').length, 1);
   assert.equal(unlistedTransitions('.gw .a { transition: 150ms ease-out; }').length, 1);
