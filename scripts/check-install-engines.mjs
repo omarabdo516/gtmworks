@@ -41,7 +41,9 @@ for(const company of await checked(service.from('companies').select('id,name').o
  const target=engineTarget({company,agent,engine});
  if(target) targets.push(target);
 }
-assert.ok(targets.length>=2,`two Companies or more, each with its main Agent and its own Engine: ${targets.map(target=>target.name).join(', ')}`);
+// The sandbox mode also runs on the update of a one-Company install (#397); the job counts the Companies it expects itself.
+const least=mode==='sandbox'?1:2;
+assert.ok(targets.length>=least,`${least} Companies or more, each with its main Agent and its own Engine: ${targets.map(target=>target.name).join(', ')}`);
 const distinct=pick=>new Set(targets.map(pick)).size===targets.length;
 assert.ok(distinct(target=>target.engine.address),'each Company is on its own Engine');
 assert.ok(distinct(target=>target.engine.key),'each Engine has its own key');

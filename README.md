@@ -56,7 +56,7 @@ run 44848354569, which prints these numbers on every run):
 
 - **Without video: 2 CPU cores and 4 GB RAM.** Idle, the install's own services
   (web app, worker, Postgres, sign-in, REST, Storage, gateway and mail inbox) use
-  493 MiB, the first Company's Engine 466 MiB and its work sandbox 2 MiB: about
+  493 MiB, the first Company's idle Engine 466 MiB and its idle work sandbox 1 MiB: about
   1 GB for one Company, which leaves room for the system, an Engine at work and a
   few more Companies.
 - **With video: 4 CPU cores and 8 GB RAM.** One short render (60 frames of
@@ -64,10 +64,10 @@ run 44848354569, which prints these numbers on every run):
   13.7 s and peaked at 337 MiB in its sandbox. A sandbox may use up to its limit,
   **1 GB of RAM and 2 CPUs** by default, so each Company rendering at the same time
   needs up to 1 GB and 2 cores more than the size without video.
-- **Each added Company** costs its Engine, 466 to 473 MiB idle (775 MiB before its
-  Agents' profiles and 825 MiB with twenty of them, see below), its sandbox, under
-  4 MiB idle and up to its 1 GB limit while it works, and its internet exit, a small
-  proxy held to 256 MiB.
+- **Each added Company** costs its Engine, 466 MiB idle with its main Agent (the
+  same `install-sizes` run; an Engine holding twenty more Agent profiles is measured
+  apart, see below), its sandbox, 1 MiB idle and up to its 1 GB limit while it
+  works, and its internet exit, a small proxy held to 256 MiB.
 
 The limits are the install's defaults, set in one place (the sandbox service of
 `scripts/engine-template.yml`), and the install job runs the render at them on every
@@ -168,9 +168,9 @@ command says anything; a sandbox that does not start or cannot be reached is rem
 the same way, with its work folder and its keys. `gtmworks company list` shows every
 Company with the state of its Engine and of its work sandbox, and `gtmworks status`
 reports every Engine and every sandbox.
-Each Engine adds roughly the memory one Engine takes. The install job prints the memory one idle Engine uses on every run.
-The measured figures below are 775 MiB before its Agents' profiles and 825 MiB with twenty of them, so size the server
-for that much per Company.
+Each Engine adds roughly the memory one Engine takes. The install job prints the memory one idle Engine uses on every run
+(`install-sizes`): 466 MiB with its main Agent, as Server size states. An Engine that holds many Agent profiles takes more: the `install-measure`
+job's Engine held 825 MiB with twenty of them (below), so size the server for that much per Company with many Agents.
 
 **Agent profiles and isolation (ADR 0014).** Inside its Engine a Company keeps the
 shape gtmworks has: the worker gives the Company its own profile (`co-<company
@@ -337,11 +337,20 @@ made beside its Engine as `company add` makes them. Each Engine is recreated on
 its own data volume and pinned to its Company's sandbox, so every Agent's
 terminal, files and code run there, and the worker brings every Agent, those
 made before the update included, to the one fixed set of tools. Agents, their
-memory, Skills, history and the Company's sign-in are kept. The Company's Agent
-level is gone, and its past level changes still read in the Company's log. An
-update whose migration fails leaves the release you ran serving with no sandbox
-begun, and running the install command again on an updated install keeps every
-sandbox and its work folder.
+memory, Skills, history and the Company's sign-in are kept, and so are the files
+each Agent made: the update copies the files of the Agent's old Library folder
+(`workspace` in its profile, on the Engine's disk) once into the Agent's own
+folder of its Company's work folder, never over a file already there and never
+into another Agent's or another Company's folder, and leaves the originals on the
+Engine as they were. The Company's Agent
+level is gone, and its past level changes still read in the Company's log. The
+sandbox image is pulled before any migration, so an update whose image cannot be
+pulled, like one whose migration fails, leaves the release you ran serving with no
+migration applied and no sandbox begun. A sandbox that fails after the migrations
+ran (one that does not start, say) leaves the install on the new release, as any
+failure after the migrations does: `gtmworks install` finishes the update. Running
+the install command again on an updated install keeps every sandbox and its work
+folder, and copies no old file again.
 
 It refuses a release older than the data: when the database has applied a
 migration the chosen release does not carry, a later release migrated it, and
