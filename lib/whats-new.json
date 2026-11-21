@@ -1,5 +1,11 @@
 [
  {
+  "issue": 31,
+  "date": "2026-11-21",
+  "en": { "title": "Recurring tasks in Settings", "body": "Settings now lists every recurring task of every agent with when it runs next and how its last run went; the Owner and Managers can switch one off or on, run it now, change when it runs, add one or delete one, and each change is in the log." },
+  "ar": { "title": "المهام المتكررة في الإعدادات", "body": "الإعدادات بقت بتعرض كل المهام المتكررة لكل وكيل، وإمتى هتشتغل المرة الجاية وآخر مرة اشتغلت عملت إيه؛ والمالك والمديرين يقدروا يوقفوا مهمة أو يرجّعوها، يشغّلوها دلوقتي، يغيّروا ميعادها، يضيفوا مهمة أو يمسحوها، وكل تغيير بيتسجّل في السجل." }
+ },
+ {
   "issue": 19,
   "date": "2026-11-21",
   "en": { "title": "Agents propose changes to their settings", "body": "An Agent, or Lead for another Agent, can propose a new model, new core instructions, sub-agents or one of its settings, with the reason. It waits in the Owner’s Waiting on you, and nothing changes until the Owner approves it." },

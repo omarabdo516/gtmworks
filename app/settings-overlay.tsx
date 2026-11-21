@@ -43,6 +43,8 @@ import { AgentTabs } from './settings-agent-tabs';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
 import type { MemoryNote } from '@/lib/engine.mjs';
 import { BackupSection } from './settings-backup';
+import { RoutinesSection } from './settings-routines';
+import { readCompanyRoutines } from '@/lib/agent-routines.mjs';
 
 type Agent={id:string,connection_id:string,name:string,speciality:string,is_default:boolean,created_at:string|null,requested_by:string|null,requester_opened_at:string|null,requester:unknown,lead_made_agents:unknown};
 type Member={person_id:string,role:string,people:{name:string|null}|null};
@@ -89,6 +91,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // service's own refusal on the page, never an empty mode.
  const skillPage=section==='learning'&&query.agent&&query.skill?await readCompanySkillPage(db,{company:company.id,agent:query.agent,name:query.skill,person:userId}).catch(()=>null):null;
  const learning=section==='learning'&&!skillPage?await readCompanyLearning(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null,rules:null,lessons:null})):null;
+ // Every Routine of every Agent the reader sees (#31), read from each Agent's own Engine profile; gtmworks keeps no copy.
+ const routines=section==='routines'?await readCompanyRoutines(db,{company:company.id}).catch(()=>({state:'failed' as const,agents:null})):null;
  // The person's own note for the Agents in this Company (RLS: nobody else reads it).
  const memberNote=section==='account'?(await db.from('member_notes').select('note').eq('company_id',company.id).eq('person_id',userId).maybeSingle()).data?.note||'':'';
  const agent=section==='agents'&&query.agent?agents.find(item=>item.id===query.agent):undefined;
@@ -122,6 +126,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
+  :section==='routines'&&routines?<>{ro}<RoutinesSection company={company.id} state={routines.state} agents={routines.agents??[]} canManage={canManage} now={new Date().toISOString()}/></>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
@@ -329,7 +334,6 @@ function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent,def
  if(section==='models') return <><Head title={t('settingsModels')} sub={t('settingsModelsSub')}/>{ro}
   {subscriptions}{keys}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
   {defaultEffort}{eachAgent}</>;
- if(section==='routines') return <><Head title={t('settingsRoutines')} sub={t('settingsRoutinesSub')}/><Soon t={t}/></>;
  return null;
 }
 

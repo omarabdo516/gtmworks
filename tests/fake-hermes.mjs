@@ -100,6 +100,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // Each profile's memory (#350): the entries of its MEMORY.md and its USER.md, as the memory tool parses them (the
   // learning graph lists one node per entry, its id carrying the entry's position and a digest of its text).
   memory:/** @type {Map<string,{memory:string[],profile:string[]}>} */(new Map()),
+  // Each profile's Routines (#31): its cron jobs, as the pinned release keeps them in the profile's own cron/jobs.json
+  // (cron/jobs.py create_job). `cronOutcome` is how a run now ends ('ok' or 'error'). `routineAsks` names the Routine a
+  // chat Run's input asks for: the Run makes it with the Engine's own cronjob tool, so only on a profile whose Runs are
+  // offered that toolset, in that Run's own profile (tools/cronjob_tools.py).
+  cron:/** @type {Map<string,any[]>} */(new Map()),cronOutcome:/** @type {'ok'|'error'} */('ok'),
+  routineAsks:/** @type {(input:string)=>{name:string,prompt:string,schedule:string}|null} */(()=>null),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -152,6 +158,27 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
+ // A cron job as the pinned release stores and lists it (cron/jobs.py create_job, web_server_cron.py
+ // _annotate_cron_job). Only the shapes gtmworks reads are parsed: a five-field cron expression and "every <n>m|h".
+ const cronStore=name=>{ if(!settings.cron.has(name)) settings.cron.set(name,[]); return settings.cron.get(name); };
+ const parseCron=text=>{
+  const value=String(text||'').trim();
+  if(/^(\S+\s+){4}\S+$/.test(value)&&value.split(/\s+/).every(part=>/^[\d*,/-]+$/.test(part))) return {kind:'cron',expr:value,display:value};
+  const every=/^every\s+(\d+)\s*(m|h)$/i.exec(value);
+  if(every) { const minutes=Number(every[1])*(every[2].toLowerCase()==='h'?60:1); return {kind:'interval',minutes,display:`every ${minutes}m`}; }
+  return null;
+ };
+ const nextRun=()=>new Date(Date.now()+864e5).toISOString();
+ const cronJob=({name,prompt,schedule,timezone=null,paused=false,origin=null})=>{
+  const parsed=parseCron(schedule); if(!parsed) throw new Error(`Invalid schedule '${schedule}'`);
+  return {id:randomUUID().replaceAll('-','').slice(0,12),name:name||prompt.slice(0,50),prompt,skills:[],skill:null,schedule:parsed,schedule_display:parsed.display,
+   repeat:{times:null,completed:0},enabled:!paused,state:paused?'paused':'scheduled',paused_at:null,paused_reason:null,created_at:new Date().toISOString(),
+   next_run_at:paused?null:nextRun(),last_run_at:null,last_status:null,last_error:null,deliver:'local',origin,...(timezone?{timezone}:{})};
+ };
+ // The profile that holds a job: the hint when it does, else whichever profile does (web_routers/cron.py _job_owner_profile).
+ const cronOwner=(id,hint)=>hint&&settings.cron.get(hint)?.some(job=>job.id===id)?hint:[...settings.cron].find(([,jobs])=>jobs.some(job=>job.id===id))?.[0]??null;
+ // A job stored with a profile of its own (a test of an answer that mixed profiles) keeps it.
+ const annotated=(job,name)=>({...job,profile:job.profile??name,profile_name:job.profile??name,hermes_home:name==='default'?'/opt/data':`/opt/data/profiles/${name}`,is_default_profile:name==='default',scheduler_heartbeat_age_s:3});
  // The toolsets the pinned release lets an api_server Run use when its profile names none (hermes-api-server).
  const defaultToolsets=['web','browser','terminal','file','code_execution','vision','image_gen','skills','todo','memory','session_search','delegation','cronjob','connections'];
  const configurable=['web','browser','terminal','file','code_execution','vision','video','image_gen','video_gen','x_search','tts','skills','todo','kanban','memory','session_search','connections','clarify','delegation','cronjob','computer_use'];
@@ -205,6 +232,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      if(settings.refusedModels.has(sent.model)) return send(response,400,{error:{message:`Model '${sent.model}' is not available`,type:'invalid_request_error'}});
      const asked=settings.questions(inputText(sent.input)).map(each=>({prompt_id:randomUUID().replaceAll('-','').slice(0,10),question:each.question,choices:each.choices??[],multi_select:each.multi_select===true,settled:null}));
      const approvals=settings.approvals(inputText(sent.input)).map(each=>({request_id:randomUUID().replaceAll('-',''),description:each.description,command:each.command,choices:each.choices??['once','session','always','deny'],settled:null}));
+     const runProfile=decodeURIComponent(request.url.match(/^\/p\/([^/]+)\//)?.[1]||'default');
+     const asks=settings.routineAsks(inputText(sent.input));
+     if(asks&&enabledToolsets(profileOf(runProfile)?.config).includes('cronjob')) cronStore(runProfile).push(cronJob({...asks,origin:{platform:'api_server'}}));
      run={id:`run_${instance}_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
      streams.set(run.id,{backlog:[],next:0,ended:false,readers:new Set()});
     }
@@ -725,6 +755,42 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      if(scoped==='default'&&settings.defaultPool[provider]?.length) { delete settings.defaultPool[provider]; delete home.credentials[provider]; return send(response,200,{ok:true,provider}); }
      if(!home.credentials[provider]) return send(response,409,{detail:`No stored credentials were removed for ${provider==='anthropic'?'Anthropic Account':'ChatGPT or Codex Subscription'}.`});
      delete home.credentials[provider]; return send(response,200,{ok:true,provider});
+    }
+   }
+   // A profile's Routines (#31, hermes_cli/web_routers/cron.py 735-806): every route takes ?profile=, and a job's own
+   // routes act on whichever profile holds it, the hint only preferred, as the pinned release does.
+   if(url.pathname==='/api/cron/jobs'&&request.method==='GET') {
+    const named=url.searchParams.get('profile')||'all';
+    if(named!=='all'&&!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+    return send(response,200,named==='all'?[...settings.cron].flatMap(([name,jobs])=>jobs.map(job=>annotated(job,name))):cronStore(named).map(job=>annotated(job,named)));
+   }
+   if(url.pathname==='/api/cron/jobs'&&request.method==='POST') {
+    const named=url.searchParams.get('profile')||'default';
+    if(!profileOf(named)) return send(response,404,{detail:`Profile '${named}' does not exist.`});
+    if(typeof body?.schedule!=='string') return send(response,422,{detail:'schedule'});
+    if(!String(body.prompt||'').trim()) return send(response,400,{detail:'A prompt, skill or script is required.'});
+    let job; try { job=cronJob({name:body.name,prompt:body.prompt,schedule:body.schedule,timezone:body.timezone,paused:body.paused===true}); } catch(failure) { return send(response,400,{detail:failure.message}); }
+    cronStore(named).push(job); return send(response,200,annotated(job,named));
+   }
+   const cronPath=url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)(?:\/(pause|resume|trigger))?$/);
+   if(cronPath) {
+    const owner=cronOwner(decodeURIComponent(cronPath[1]),url.searchParams.get('profile'));
+    if(!owner) return send(response,404,{detail:'Job not found'});
+    const jobs=cronStore(owner); const job=jobs.find(found=>found.id===decodeURIComponent(cronPath[1]));
+    if(!cronPath[2]&&request.method==='GET') return send(response,200,annotated(job,owner));
+    if(!cronPath[2]&&request.method==='DELETE') { jobs.splice(jobs.indexOf(job),1); return send(response,200,{ok:true}); }
+    if(!cronPath[2]&&request.method==='PUT') {
+     const updates=body?.updates; if(!updates||typeof updates!=='object') return send(response,422,{detail:'updates'});
+     if('schedule' in updates) { const parsed=parseCron(updates.schedule); if(!parsed) return send(response,400,{detail:`Invalid schedule '${updates.schedule}'`}); job.schedule=parsed; job.schedule_display=parsed.display; if(job.state!=='paused') job.next_run_at=nextRun(); }
+     for(const key of ['name','prompt','timezone']) if(typeof updates[key]==='string') job[key]=updates[key];
+     return send(response,200,annotated(job,owner));
+    }
+    if(request.method==='POST'&&cronPath[2]==='pause') { Object.assign(job,{enabled:false,state:'paused',paused_at:new Date().toISOString(),next_run_at:null}); return send(response,200,annotated(job,owner)); }
+    if(request.method==='POST'&&cronPath[2]==='resume') { Object.assign(job,{enabled:true,state:'scheduled',paused_at:null,paused_reason:null,next_run_at:nextRun()}); return send(response,200,annotated(job,owner)); }
+    // A paused job run now is resumed and claimed at once (_trigger_cron_job_sync's force).
+    if(request.method==='POST'&&cronPath[2]==='trigger') {
+     Object.assign(job,{enabled:true,state:'scheduled',paused_at:null,last_run_at:new Date().toISOString(),last_status:settings.cronOutcome,last_error:settings.cronOutcome==='error'?'The model did not answer.':null,next_run_at:job.next_run_at||nextRun()});
+     return send(response,200,annotated(job,owner));
     }
    }
    send(response,404,{detail:'Not Found'});
