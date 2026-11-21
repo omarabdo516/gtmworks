@@ -497,7 +497,10 @@ restore_old_engine() {
   rm -f .install-lock/work-sandbox-image
   engine first down --remove-orphans > /dev/null 2>&1 || true
   docker rm -f "$(engine_project first)" "$(sandbox_container first)" "$(exit_container first)" > /dev/null 2>&1 || true
-  [ -z "$(docker ps -aq --filter "name=^$(engine_project first)\$" 2> /dev/null)" ] \
+  # A listing Docker could not give is never read as "removed": both Engines would write the one volume.
+  left_engine=$(docker ps -aq --filter "name=^$(engine_project first)\$" 2> /dev/null) \
+    || { echo "Docker could not say whether the Engine $(engine_project first) is gone, so the previous release's Engine stays stopped." >&2; return 1; }
+  [ -z "$left_engine" ] \
     || { echo "The Engine $(engine_project first) could not be removed, so the previous release's Engine stays stopped." >&2; return 1; }
   first_network=$(engine_network_of first)
   for service in web worker; do

@@ -35,7 +35,7 @@ docker() {
       case "$*" in
         *-aq*com.docker.compose.service=hermes*) sed -n 's/^\\([^ ]*\\) [^ ]*-hermes-1 .*/\\1/p' "$state/containers";;
         *com.docker.compose.service=hermes*) sed -n 's/^\\([^ ]*\\) [^ ]*-hermes-1 running$/\\1/p' "$state/containers";;
-        *name=*) name=$(printf '%s' "$*" | sed -n 's/.*name=^\\([^$]*\\)\\$.*/\\1/p'); sed -n "s/^\\([^ ]*\\) $name .*/\\1/p" "$state/containers";;
+        *name=*) [ -z "\${PS_FAILS:-}" ] || return 1; name=$(printf '%s' "$*" | sed -n 's/.*name=^\\([^$]*\\)\\$.*/\\1/p'); sed -n "s/^\\([^ ]*\\) $name .*/\\1/p" "$state/containers";;
       esac;;
     stop) shift; for id in "$@"; do sed -i "s/^$id \\([^ ]*\\) .*/$id \\1 exited/" "$state/containers"; done;;
     start) shift; for id in "$@"; do sed -i "s/^$id \\([^ ]*\\) .*/$id \\1 running/" "$state/containers"; done;;
@@ -93,6 +93,16 @@ test('the old hermes Engine is stopped, never removed, until the first Company\'
   assert.ok(stop >= 0 && start > stop && remove > start, log.join('\n'));
   assert.deepEqual(install.containers(), ['web-1 gtmworks-install-web-1 running', 'new-1 gtmworks-engine-first running']);
   assert.ok(!existsSync(join(install.dir, '.install-lock/old-engine')));
+});
+
+test('a listing Docker cannot give leaves the old Engine stopped', t => {
+  const install = singleEngineInstall(t);
+  assert.equal(install.run('keep_previous_engine').status, 0);
+  assert.notEqual(install.run('first_engine_up', { ENGINE_FAILS: '1' }).status, 0);
+  const restored = install.run('restore_previous_engine', { PS_FAILS: '1' });
+  assert.notEqual(restored.status, 0);
+  assert.match(restored.stderr, /could not say whether the Engine gtmworks-engine-first is gone/);
+  assert.ok(install.containers().includes('old-1 gtmworks-install-hermes-1 exited'), install.containers().join('\n'));
 });
 
 test('an old container Docker will not remove fails nothing once the new Engine serves', t => {
