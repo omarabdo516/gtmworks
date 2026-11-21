@@ -48,7 +48,9 @@ export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'fai
 // An Agent's standing permissions (#166): its own profile's entries, each as the Engine keeps it; revoking one is
 // revoked (read back without it), gone (it was not there), or why it could not be done.
 export type StandingPermissions={state:'found',entries:string[]}|{state:'refused'|'unreachable'|'failed',entries:null};
-export type StandingRevoke={state:'revoked'|'gone'|'refused'|'unreachable'|'failed'};
+// `removed`, once the write was sent: whether a read-back still showed the entry ('no'), no longer did ('yes'), or could
+// not tell ('maybe'); absent when nothing was written.
+export type StandingRevoke={state:'revoked'|'gone'|'refused'|'unreachable'|'failed',removed?:'no'|'maybe'|'yes'};
 // An Agent's Routine (#31): one cron job of its own Engine profile, as the contract reads it.
 export type RoutineSchedule={kind:string,expr:string|null,minutes:number|null,display:string|null};
 export type Routine={id:string,name:string,prompt:string,schedule:RoutineSchedule,timezone:string|null,on:boolean,state:'scheduled'|'paused'|'running'|'completed'|'error',nextRunAt:string|null,lastRunAt:string|null,lastStatus:'ok'|'failed'|null,lastError:string|null};

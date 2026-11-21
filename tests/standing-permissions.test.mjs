@@ -186,3 +186,27 @@ test('a revoke waits for another one\'s hold, and says busy when it never ends; 
   assert.equal(failing.asked.at(-1),'end_permission_revoke','a failed revoke ends its hold');
  } finally { await fake.close(); }
 });
+
+test('a revoke whose write may have landed keeps its record, so another server process never writes the entry back (CodeRabbit on #499)',async()=>{
+ const fake=await fakeHermes(); const engineFetch=globalThis.fetch;
+ try {
+  profileOn(fake,adsProfile,['mcp:notion/create_page','mcp:canva/create_design']);
+  const shared={noted:new Map()};
+  const first=session({shared,inflight:['mcp:notion/create_page','mcp:canva/create_design']});
+  const second=session({shared,inflight:['mcp:notion/create_page','mcp:canva/create_design']});
+  // The first process's write lands, then its read-back fails.
+  let written=false;
+  globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { written=true; return engineFetch(url,init); } if(written) return new Response('down',{status:500}); return engineFetch(url,init); };
+  assert.equal((await revokeAgentPermission(first.db,{company,agent:ads,entry:'mcp:notion/create_page',hermes:install(fake)})).state,'unreachable');
+  globalThis.fetch=engineFetch;
+  assert.equal(shared.noted.has('mcp:notion/create_page'),true,'the record is kept while the outcome is unknown');
+  assert.equal(first.asked.includes('forget_permission_revoked'),false);
+  assert.equal((await revokeAgentPermission(second.db,{company,agent:ads,entry:'mcp:canva/create_design',hermes:install(fake)})).state,'revoked');
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'the first entry is not written back');
+  // A read-back that still shows the entry is a sure failure: the record is withdrawn.
+  profileOn(fake,adsProfile,['recursive delete']); fake.settings.staleConfig=true;
+  const stale=session({shared});
+  assert.equal((await revokeAgentPermission(stale.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'failed');
+  assert.equal(shared.noted.has('recursive delete'),false);
+ } finally { globalThis.fetch=engineFetch; await fake.close(); }
+});

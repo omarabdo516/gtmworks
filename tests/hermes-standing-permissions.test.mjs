@@ -38,19 +38,19 @@ test('a removal writes the list back without that entry and reads it back; the o
  try {
   profileOn(fake,{command_allowlist:['mcp:meta-ads/create_campaign','recursive delete'],approvals:{mode:'manual'}});
   profileOn(fake,{command_allowlist:['mcp:meta-ads/create_campaign']},seo);
-  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'mcp:meta-ads/create_campaign'}),{state:'revoked'});
+  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'mcp:meta-ads/create_campaign'}),{state:'revoked',removed:'yes'});
   assert.deepEqual(fake.settings.profiles.get(ads).config,{command_allowlist:['recursive delete'],approvals:{mode:'manual'}});
   assert.deepEqual(writes(fake).map(each=>[each.path,each.body]),[[`/api/config?profile=${ads}`,{config:{command_allowlist:['recursive delete']}}]],'one write, of the list alone');
   assert.deepEqual(fake.settings.profiles.get(seo).config.command_allowlist,['mcp:meta-ads/create_campaign'],'another Agent keeps its own');
   // Already gone: nothing is written.
   assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'mcp:meta-ads/create_campaign'}),{state:'gone'});
   assert.equal(writes(fake).length,1);
-  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'revoked'});
+  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'revoked',removed:'yes'});
   assert.deepEqual(await readStandingPermissions(connection(fake)),{state:'found',entries:[]});
   // An Engine that answers the write and keeps the old list has not revoked it.
   profileOn(fake,{command_allowlist:['recursive delete']});
   fake.settings.staleConfig=true;
-  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'failed'});
+  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'failed',removed:'no'});
  } finally { await fake.close(); }
 });
 
@@ -86,7 +86,7 @@ test('a request says what always keeps, an always answer keeps it on the Run\'s 
   const other=/** @type {string} */(await engineFor(connection(fake,seo)).start({conversation:'t',input:'Launch',idempotencyKey:'k3'}));
   assert.ok((await engineFor(connection(fake,seo)).read(other)).permission,'nor does it apply to another Agent');
 
-  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'mcp:meta-ads/create_campaign'}),{state:'revoked'});
+  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'mcp:meta-ads/create_campaign'}),{state:'revoked',removed:'yes'});
   const after=/** @type {string} */(await engine.start({conversation:'s',input:'Launch',idempotencyKey:'k4'}));
   assert.ok((await engine.read(after)).permission,'once revoked, the same tool asks again');
 
@@ -106,13 +106,13 @@ test('a grant that lands between the reads is read again, and one that the write
   // and the write keeps it.
   let reads=0; const engineFetch=globalThis.fetch;
   globalThis.fetch=async(url,init)=>{ const answer=await engineFetch(url,init); if(String(url).includes('/api/config?')&&(!init?.method||init.method==='GET')&&++reads===1) fake.settings.profiles.get(ads).config.command_allowlist=['recursive delete','mcp:notion/create_page']; return answer; };
-  try { assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'revoked'}); }
+  try { assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'revoked',removed:'yes'}); }
   finally { globalThis.fetch=engineFetch; }
   assert.deepEqual(fake.settings.profiles.get(ads).config.command_allowlist,['mcp:notion/create_page'],'the grant that landed meanwhile is kept');
   // An Engine whose write loses another entry is a failed revoke, not a quiet one.
   profileOn(fake,{command_allowlist:['recursive delete','mcp:notion/create_page']});
   globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { fake.settings.profiles.get(ads).config.command_allowlist=[]; return new Response(JSON.stringify({ok:true}),{status:200}); } return engineFetch(url,init); };
-  try { assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'failed'}); }
+  try { assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'failed',removed:'yes'}); }
   finally { globalThis.fetch=engineFetch; }
  } finally { await fake.close(); }
 });
@@ -124,8 +124,23 @@ test('a grant that lands just before the write is kept when the caller names it,
   const engineFetch=globalThis.fetch;
   globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') fake.settings.profiles.get(ads).config.command_allowlist=['recursive delete','mcp:notion/create_page']; return engineFetch(url,init); };
   try {
-   assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete',keep:['mcp:notion/create_page']}),{state:'revoked'});
+   assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete',keep:['mcp:notion/create_page']}),{state:'revoked',removed:'yes'});
    assert.deepEqual(fake.settings.profiles.get(ads).config.command_allowlist,['mcp:notion/create_page'],'the grant that landed is written back');
   } finally { globalThis.fetch=engineFetch; }
  } finally { await fake.close(); }
+});
+
+test('a write the Engine took whose read-back fails is an unknown outcome, never a sure failure (CodeRabbit on #499)',async()=>{
+ const fake=await fakeHermes(); const engineFetch=globalThis.fetch;
+ try {
+  profileOn(fake,{command_allowlist:['recursive delete','mcp:notion/create_page']});
+  let written=false;
+  globalThis.fetch=async(url,init)=>{ if(init?.method==='PUT') { written=true; return engineFetch(url,init); } if(written) return new Response('down',{status:500}); return engineFetch(url,init); };
+  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'recursive delete'}),{state:'unreachable',removed:'maybe'});
+  globalThis.fetch=engineFetch;
+  assert.deepEqual(fake.settings.profiles.get(ads).config.command_allowlist,['mcp:notion/create_page'],'the Engine did take it');
+  // Nothing written at all (the reads fail first) says nothing of removal.
+  fake.settings.managementStatus=500;
+  assert.deepEqual(await revokeStandingPermission(connection(fake),{entry:'mcp:notion/create_page'}),{state:'unreachable'});
+ } finally { globalThis.fetch=engineFetch; await fake.close(); }
 });
