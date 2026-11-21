@@ -384,3 +384,19 @@ test('an Agent\'s usage counts the Runs of its design profile, and an Agent with
   assert.deepEqual(after.models,[{model:'m',input:140,output:14,sessions:2}]);
  } finally { await fake.close(); }
 });
+
+test('an Engine whose profile list cannot be read leaves key changes unfinished, never reports a design profile cleared', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  fake.settings.profiles.set(spaceOf,{soul:'',provider:'auto',model:'',key:null,config:{},credentials:{},env:{}});
+  assert.equal((await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic',value:'sk-ant-new-key-1234567890'})).profiles[target.profile],'written');
+  const listing=fake.settings.profilesListStatus;
+  fake.settings.profilesListStatus=503;
+  const removed=await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'});
+  assert.notEqual(removed.profiles[target.profile],'removed','unknown whether a design profile keeps it');
+  fake.settings.profilesListStatus=listing;
+  assert.equal((await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'})).profiles[target.profile],'removed');
+  assert.equal(fake.settings.profiles.get(designProfileOf(target.profile)).env.ANTHROPIC_API_KEY,undefined);
+ } finally { await fake.close(); }
+});

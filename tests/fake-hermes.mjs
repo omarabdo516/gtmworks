@@ -115,6 +115,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // A function of the job answers each job its own way (#183: the night's results beside the morning's greeting).
   cronReply:/** @type {string|((job:any)=>string)} */('Here is what ran overnight.'),
   routineAsks:/** @type {(input:string)=>{name:string,prompt:string,schedule:string}|null} */(()=>null),
+  profilesListStatus:/** @type {number|null} */(null),
   // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value.
   reveals:/** @type {{profile:string,key:string}[]} */([]),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
@@ -479,6 +480,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!found||found.profile!==(url.searchParams.get('profile')||'default')) return send(response,404,{detail:'Session not found'});
     return send(response,200,{id,profile:found.profile,started_at:found.started_at??Date.now()/1000,message_count:found.messages.length,input_tokens:found.input_tokens??0,output_tokens:found.output_tokens??0});
    }
+   // A profile list that answers with this status instead (an Engine busy or going away).
+   if(url.pathname==='/api/profiles'&&request.method==='GET'&&settings.profilesListStatus) return send(response,settings.profilesListStatus,{detail:'Service unavailable'});
    if(url.pathname==='/api/profiles'&&request.method==='GET') return send(response,200,{profiles:[{name:'default',path:'/opt/data',is_default:true,model:'default-model',provider:'auto',display_name:null,description:'',description_auto:true,bot_title:null},...[...settings.profiles].map(([name,profile])=>({name,path:`/opt/data/profiles/${name}`,is_default:false,model:profile.model,provider:profile.provider,display_name:profile.display_name??null,description:profile.description??'',description_auto:profile.description_auto!==false,bot_title:profile.bot_title??null}))]});
    if(url.pathname==='/api/profiles'&&request.method==='POST') {
     if(body?.name==='default'||settings.profiles.has(body?.name)) return send(response,400,{detail:`A profile named '${body.name}' already exists. Choose another name.`});
