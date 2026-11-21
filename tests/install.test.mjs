@@ -1091,7 +1091,8 @@ test('installer preserves secrets, tightens permissions and streams ordered tran
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
  for(const file of ['install-nginx.conf','install-gateway-real-ip.sh']) copyFileSync(join('scripts',file),join(directory,'scripts',file));
- for(const name of ['002_second.sql','001_first.sql','001_first.verify.sql']) writeFileSync(join(directory,'supabase/migrations',name),'select 1;');
+ // 003 is the second step of a change the previous release could not run against (ADR 0023): it is a cutover.
+ for(const name of ['002_second.sql','001_first.sql','001_first.verify.sql','003_third_cutover.sql']) writeFileSync(join(directory,'supabase/migrations',name),'select 1;');
  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o644});
  writeFileSync(join(directory,'bin/docker'),`#!/bin/sh
@@ -1100,12 +1101,13 @@ case "$*" in
   *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *validate*) exit "\${VALIDATION_EXIT:-0}";;
  *engine-key*) printf '%s\n' "$ENGINE_KEY";;
- *'exec -T db psql'*) printf '%s\n' "$*" > "$INSTALL_SQL.args"; cat > "$INSTALL_SQL";;
+ *'exec -T db psql'*) printf '%s\n' "$*" > "$INSTALL_SQL.args"; n=$(ls "$INSTALL_SQL".* 2> /dev/null | grep -c '\.[0-9]*$' || true); cat > "$INSTALL_SQL.$n"; cp "$INSTALL_SQL.$n" "$INSTALL_SQL";;
 esac
 `,{mode:0o755});
  const engineKey='a1'.repeat(32);
  const env={...process.env,PATH:`${directory}/bin:${process.env.PATH}`,INSTALL_SQL:join(directory,'migration.sql'),ENGINE_KEY:engineKey};
  for(const attempt of [1,2]) {
+  for(const file of readdirSync(directory).filter(name=>/^migration\.sql\.\d+$/.test(name))) rmSync(join(directory,file));
   const result=spawnSync('sh',['scripts/install.sh'],{cwd:directory,env,encoding:'utf8'});
   assert.equal(result.status,0,`${attempt}: ${result.stderr}`);
   assert.equal(readFileSync(join(directory,'.env.install'),'utf8'),secrets);
@@ -1113,7 +1115,13 @@ esac
   // The install's own secrets stay in .env.install; the Engine's key is in the Engine's own file, and stays.
   assert.match(readFileSync(join(directory,'.engines/first/.env'),'utf8'),new RegExp(`^ENGINE_KEY=${engineKey}$`,'m'));
   assert.equal(statSync(join(directory,'.engines/first/.env')).mode & 0o777,0o600);
-  const sql=readFileSync(env.INSTALL_SQL,'utf8');
+  // Two transactions: every migration but the cutover before the app starts, then the cutover alone once it answers.
+  const runs=readdirSync(directory).filter(name=>/^migration\.sql\.\d+$/.test(name)).sort().map(name=>readFileSync(join(directory,name),'utf8'));
+  assert.equal(runs.length,2,`${attempt}: one transaction before the app and one after`);
+  const [sql,cutover]=runs;
+  assert.doesNotMatch(sql,/003_third_cutover/,'the cutover is not applied before the app answers');
+  assert.match(cutover,/\\echo Applying migration: 003_third_cutover\.sql\n\\ir \/migrations\/003_third_cutover\.sql/);
+  assert.doesNotMatch(cutover,/00[12]_/,'the cutover transaction applies the cutover alone');
   assert.match(readFileSync(`${env.INSTALL_SQL}.args`,'utf8'),/ON_ERROR_STOP=1 --single-transaction/);
   assert.match(sql,/pg_advisory_xact_lock/);
   assert.match(sql,/\\gset\n\\if :applied\n\\else\n\\echo Applying migration: 001_first.sql\n\\ir \/migrations\/001_first.sql/);

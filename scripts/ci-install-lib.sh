@@ -125,10 +125,11 @@ YAML
   docker restart "$1" > /dev/null || fail 'restart the Engine'
   engine_healthy "$1" 60 || fail 'the Engine is healthy after configuration'
 }
-publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks:$1"; }
+# The registry's own digest is the one named: Docker's containerd image store also lists the digest of a local tag.
+publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "localhost:5000/gtmworks:$1" | grep -m 1 '^localhost:5000/gtmworks@'; }
 # The work sandbox image the source install built (or CI loaded), pushed beside the app image so a release file pins it
 # as the app image is pinned (#392, ADR 0020).
-publish_sandbox() { docker push -q "localhost:5000/gtmworks-sandbox:$1" > /dev/null && docker image inspect --format '{{index .RepoDigests 0}}' "localhost:5000/gtmworks-sandbox:$1"; }
+publish_sandbox() { docker push -q "localhost:5000/gtmworks-sandbox:$1" > /dev/null && docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "localhost:5000/gtmworks-sandbox:$1" | grep -m 1 '^localhost:5000/gtmworks-sandbox@'; }
 # The local registry a release area serves its test releases from: each area that needs one starts its own (#406).
 start_registry() {
   docker rm -f install-registry > /dev/null 2>&1 || true

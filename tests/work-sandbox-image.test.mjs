@@ -65,5 +65,5 @@ test('every release file the install proof writes for this release names the wor
   const calls = [...run.matchAll(/node scripts\/release-assets\.mjs ([^|]*)\)? \|\|/g)].map(([, args]) => args);
   assert.ok(calls.length >= 5, 'the proof writes release files');
   // The release that pins another work sandbox image (#399) names that one.
-  for (const args of calls.filter(args => !args.startsWith('"$previous"') && !args.startsWith('"$before"') && !args.includes('"$unpulled"'))) assert.match(args, /"\$(other_)?sandbox"/, args);
+  for (const args of calls.filter(args => !args.startsWith('"$previous"') && !args.startsWith('"$before"') && !args.includes('"$unpulled"'))) assert.match(args, /"\$(other_|broken_)?sandbox"/, args);
 });

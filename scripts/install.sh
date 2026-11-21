@@ -370,6 +370,29 @@ engines_up() {
   done
   [ "$failed" -eq 0 ]
 }
+# The previous release's own Engine files, kept when an update starts and before anything replaces them (ADR 0023): an
+# update whose Engines or work sandboxes do not all start puts them back. Nothing is kept for an install that has none.
+keep_previous_engine() {
+  mkdir -p .install-lock/previous-engine
+  for file in scripts/engine-*; do
+    [ -f "$file" ] || continue
+    cp "$file" .install-lock/previous-engine/ || return 1
+  done
+}
+# An update whose Engines or work sandboxes did not all start (ADR 0023): the previous release's own Engine files go back,
+# and every Engine starts again from them, without the containers this release's template added beside it (each
+# Company's sandbox and exit). The previous release's app and worker were never replaced and keep serving, on a schema it
+# was built for, since the cutover had not run; their networks to each Engine are the Engines' own and stay. Non-zero when
+# there were no files to put back or an Engine did not start from them.
+restore_previous_engine() {
+  [ -f .install-lock/previous-engine/engine-template.yml ] || return 1
+  cp .install-lock/previous-engine/engine-* scripts/ || return 1
+  restored=0
+  for name in $(engine_names); do
+    engine "$name" up -d --remove-orphans --wait --wait-timeout 300 || restored=1
+  done
+  return "$restored"
+}
 # Every Engine stopped before its data volume is copied: a live Engine writes under its volume while the archive reads
 # it, and a restore replaces what is in it (#386). An install the previous release made has no .engines/first until its
 # key is adopted; its one Engine is the first one.
@@ -718,7 +741,13 @@ volumes() {
 # install and an update run it before the app starts, and a restore runs it on the database it just put back, so an
 # archive from an earlier release never serves on a schema this release cannot read (#378, C3). It is the same block an
 # update applies to a previous release's database, so that path already proves it.
+#
+# A migration whose name ends in _cutover is the second step of a change the release it replaces could not run against
+# (ADR 0023): `apply_migrations` leaves it out, and `apply_migrations cutover` applies it alone, once this release's app
+# and worker answer. Every other migration keeps the database usable by the previous release, so a run that fails before
+# the cutover leaves that release serving on a schema it was built for.
 apply_migrations() {
+  stage=${1:-}
   {
     printf '%s\n' 'select pg_advisory_xact_lock(237);' 'create schema if not exists gtmworks_install;' \
       'revoke all on schema gtmworks_install from public, anon, authenticated, service_role;' \
@@ -727,6 +756,10 @@ apply_migrations() {
       '\if :bootstrap' '\ir /bootstrap-grants.sql' '\endif'
     for file in supabase/migrations/*.sql; do
       case "$file" in *.verify.sql) continue;; esac
+      case "$file" in
+        *_cutover.sql) [ "$stage" = cutover ] || continue;;
+        *) [ "$stage" != cutover ] || continue;;
+      esac
       migration=${file##*/}
       printf '%s\n' "select exists(select 1 from gtmworks_install.schema_migrations where name='$migration') as applied \gset" \
         '\if :applied' '\else' "\echo Applying migration: $migration" "\ir /migrations/$migration" \
@@ -1000,6 +1033,8 @@ elif [ "$operation" = restore ]; then
   fi
   # The image the restored install's sandboxes start from is recorded only now that the restore is whole (#393).
   mv .install-lock/work-sandbox-image .work-sandbox-image || { echo 'The restored install could not record its work sandbox image.' >&2; return 1; }
+  # The cutover (ADR 0023), once this release's app and worker answer on the restored database.
+  apply_migrations cutover || { echo 'The restore finished, but its cutover migrations did not apply: run the install command again.' >&2; return 1; }
   return
 elif [ "$operation" = check-restore ]; then
   # get.sh runs this with the target release's own installer before it changes anything (#378, T4): the same check a
@@ -1009,10 +1044,12 @@ elif [ "$operation" = check-restore ]; then
   echo 'The backup can be restored.'
   return
 elif [ "$operation" = update ] && [ -n "$release_image" ]; then
+  keep_previous_engine || exit 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   test -z "${2:-}" || { echo 'A release install updates to the next release: put its docker-compose.install.yml and install.sh here, then run sh install.sh update.' >&2; exit 1; }
   refuse_several_companies || return 1
 elif [ "$operation" = update ]; then
+  keep_previous_engine || exit 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   refuse_several_companies || return 1
   ref=${2:-main}
@@ -1112,8 +1149,18 @@ if [ -z "$release_image" ]; then
   fi
 fi
 # Every Engine is made from the template before the app and the worker start, recreated when the release pins a new
-# image, and left running otherwise.
-engines_up
+# image, and left running otherwise. An update whose Engines or sandboxes do not all start puts the previous release's
+# Engines back and stops before its app or worker is replaced (ADR 0023).
+if ! engines_up; then
+  if [ "$operation" = update ]; then
+    if restore_previous_engine; then
+      echo 'An Engine or a work sandbox did not start, so this update stopped: the previous release keeps serving, with its own Engines again. Nothing of this release serves.' >&2
+    else
+      echo 'An Engine or a work sandbox did not start, and the previous release could not get its own Engines back: run the install command again.' >&2
+    fi
+  fi
+  exit 1
+fi
 if [ "$operation" = update ] && [ -z "$release_image" ]; then
   # auth is recreated when its settings changed (password rules, reset-link lifetime, session length) and must be healthy.
   compose up -d --no-deps --wait --wait-timeout 300 auth web worker
@@ -1137,6 +1184,10 @@ ENGINE_ADDRESS="$engine_address" ENGINE_KEY="$(engine_key)" compose exec -T -e E
 # configuration), and the app's health answers 503 meanwhile: the probes try again once a second, 60 tries in all, and
 # fail naming the address and its last answer when 200 never comes.
 compose exec -T web node -e "let tries=60; for(const url of ['http://gateway:8080/api/health','http://gateway:8080/sign-in','$engine_address/health']) { for(;;) { let answer; try { answer=(await fetch(url)).status; } catch(error) { answer=error.message; } if(answer===200) { console.log(url+' 200'); break; } if(--tries<=0) throw new Error(url+' returned '+answer); await new Promise(resolve=>setTimeout(resolve,1000)); } }" --input-type=module
+# The cutover (ADR 0023): the migrations the release this one replaced could not run against apply now that this release's
+# app and worker answer. Until here a failed run left that release serving on the database it was built for; one that
+# fails now leaves this release serving, and the install command applies them again.
+apply_migrations cutover || { echo 'This release serves, but its cutover migrations did not apply: run the install command again.' >&2; exit 1; }
 # The gtmworks command (#437): a folder the one line made keeps get.sh as gtmworks.sh, and the release now running leaves
 # the one its image carries. A command from before #437 never replaced itself, but its update runs this, so the update
 # brings the new command too. The new file is moved over the old one, never written into it: the old one may be the

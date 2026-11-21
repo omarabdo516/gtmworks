@@ -168,7 +168,11 @@ case "$*" in
  *install-env.mjs\\ engine-key*) printf 'a1%.0s' $(seq 1 32);;
  *install-env.mjs\\ generate*) printf 'GENERATED=1\\n';;
  *'count(*) from public.companies'*) echo 1;;
- *'exec -T db psql'*) cat > "$MIGRATION_SQL"; exit "\${MIGRATION_EXIT:-0}";;
+ *'exec -T db psql'*)
+  # The cutover's own transaction is kept apart from the migrations before it (ADR 0023).
+  cat > "$MIGRATION_SQL.in"
+  if grep -q 'Applying migration: [^ ]*_cutover\.sql' "$MIGRATION_SQL.in"; then mv "$MIGRATION_SQL.in" "$MIGRATION_SQL.cutover"; else mv "$MIGRATION_SQL.in" "$MIGRATION_SQL"; fi
+  exit "\${MIGRATION_EXIT:-0}";;
 esac
 `;
 function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app),sandboxImage=sandbox}={}) {
@@ -183,6 +187,7 @@ function releaseDirectory(t,{compose=releaseCompose(sourceCompose,app),sandboxIm
  const runWith=(extra,...args)=>spawnSync('sh',['install.sh',...args],{cwd:directory,env:{...env,...extra},encoding:'utf8'});
  return {directory,imageRoot:env.IMAGE_ROOT,run:(...args)=>runWith({},...args),runWith,clear:()=>rmSync(env.COMMANDS,{force:true}),
   commands:()=>existsSync(env.COMMANDS)?readFileSync(env.COMMANDS,'utf8'):'',sql:()=>readFileSync(env.MIGRATION_SQL,'utf8'),
+  cutover:()=>existsSync(`${env.MIGRATION_SQL}.cutover`)?readFileSync(`${env.MIGRATION_SQL}.cutover`,'utf8'):'',
   installed:()=>existsSync(join(directory,'.install-release'))?readFileSync(join(directory,'.install-release'),'utf8'):null,
   sandboxImage:()=>existsSync(join(directory,'.work-sandbox-image'))?readFileSync(join(directory,'.work-sandbox-image'),'utf8'):null,
   use:image=>{
@@ -214,6 +219,13 @@ test('a release install pulls the image by digest, takes its install files from 
  assert.equal(index(/\bbuild\b/),-1);
  assert.equal(index(/\blogin\b/),-1);
  assert.ok(index(/exec -T db psql/)<index(/up -d --wait --wait-timeout 300$/));
+ // The cutover is its own transaction, after the app and the worker started (ADR 0023): the release this one replaced
+ // stops serving before anything it reads is removed.
+ const transactions=commands.map((line,at)=>/exec -T db psql .*--single-transaction/.test(line)?at:-1).filter(at=>at>=0);
+ assert.equal(transactions.length,2,commands.join('\n'));
+ assert.ok(transactions[1]>index(/up -d --wait --wait-timeout 300$/),'the cutover comes after the app starts');
+ assert.match(release.cutover(),/\\ir \/migrations\/20270416000000_one_set_of_tools_cutover\.sql/);
+ assert.doesNotMatch(release.sql(),/_cutover\.sql/,'the migrations before the app leave the cutover out');
  // The files the compose file mounts are in place before anything starts, and the migrations come from the image.
  for(const path of checkoutPaths()) assert.ok(existsSync(join(release.directory,path)),path);
  assert.equal(statSync(join(release.directory,'scripts/install-key.sh')).mode & 0o111,0o111);

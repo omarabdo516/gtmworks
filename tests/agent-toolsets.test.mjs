@@ -142,7 +142,8 @@ test('no level route, level function, policy copy or level setting is left in th
  // Both message catalogues are read as text, so a level setting that only survives in one language fails here too.
  const files=[...sources('app'),...sources('lib'),...sources('scripts'),...sources('worker'),...sources('tests'),
   ...sources('lib/messages',/\.json$/),...sources('supabase/tests',/\.sql$/)]
-  .filter(file=>!file.endsWith('tests/agent-toolsets.test.mjs')&&file!=='supabase/tests/company_profiles.sql');
+  // The staged removal's own test names what the first step keeps and the cutover removes (ADR 0023).
+  .filter(file=>!file.endsWith('tests/agent-toolsets.test.mjs')&&!file.endsWith('tests/staged-migrations.test.mjs')&&file!=='supabase/tests/company_profiles.sql');
  for(const file of files) {
   const text=readFileSync(file,'utf8');
   for(const [pattern,name] of gone) assert.doesNotMatch(text,pattern,`${file} still names ${name}`);

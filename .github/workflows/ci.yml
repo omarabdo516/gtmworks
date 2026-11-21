@@ -663,7 +663,7 @@ jobs:
       # Every area runs to its end, so one red area still shows the others' faults (#406).
       fail-fast: false
       matrix:
-        area: [first-install, companies, agents, backup, proxy, rollback, update, previous-archive, sandbox-update, sizes, engines-update, one-line, updater]
+        area: [first-install, companies, agents, backup, proxy, rollback, update, previous-archive, sandbox-update, staged-update, sizes, engines-update, one-line, updater]
     # 10.7 min measured for its slowest area, update, on run 44726291691 (#389): 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:
@@ -673,7 +673,7 @@ jobs:
         with:
           # Only the update and previous-archive areas build and install the last release before the Engines, a fixed commit
           # (#378, C1), and the sandbox-update area the last release before the work sandbox, another fixed commit (#397).
-          fetch-depth: ${{ (matrix.area == 'update' || matrix.area == 'previous-archive' || matrix.area == 'sandbox-update') && '0' || '1' }}
+          fetch-depth: ${{ (matrix.area == 'update' || matrix.area == 'previous-archive' || matrix.area == 'sandbox-update' || matrix.area == 'staged-update') && '0' || '1' }}
       # The isolated Docker machine and the image the run built once, as one action the measurement also uses (#403,
       # #411): the area of scripts/ci-install-check.sh the matrix names runs on it, and the last step removes it, also
       # after a failure, on a runner that is reused.

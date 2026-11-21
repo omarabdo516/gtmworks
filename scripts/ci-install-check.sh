@@ -5,7 +5,8 @@
 # that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat), `companies` (Companies
 # and their Engines), `agents` (Agents on their Engines), `backup` (backup and restore), `proxy` (the public address
 # behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `previous-archive` (the previous release's own archive restored), `sandbox-update`
-# (an install the release before the work sandbox made, updated to this one, #397), `sizes` (the measured
+# (an install the release before the work sandbox made, updated to this one, #397), `staged-update` (the staged removal of
+# Agent levels: updates that fail after its first step, then the cutover, ADR 0023), `sizes` (the measured
 # sizes and the default sandbox limits a render finishes within, #400), `engines-update` (a release that pins another Engine image), `one-line` (the one-line install) and `measure` (the
 # profile-size measurement, on a push to main and a manual run only, never on a pull request, #408). Every area makes
 # the install, its first run, the Companies, the archives, the local registry and the release files it needs itself
@@ -1885,6 +1886,130 @@ gtmworks updater || fail 'the updater right after a check'
 [[ $(cat .install-release) == "$later" ]] || fail 'the updater waits an hour between checks'
 }
 
+# staged-update: the staged removal of Agent levels (ADR 0023) against the release an existing install runs before it, the
+# same fixed commit the sandbox-update area updates from. Its migrations apply before this release starts, and the cutover
+# only once this release answers. Two updates fail after those migrations, one whose work sandbox does not start and one
+# whose Engine does not: each puts the previous release's Engines back, and the previous release keeps serving on its own
+# schema, which its own code proves (its worker records a profile with its level, its app's Conversation is answered, and
+# its call that makes an Agent for Lead still reaches its database function). Then the update itself: the cutover removes
+# the level, its past change still reads, and the profile is confirmed with the one fixed set of tools.
+staged_update() {
+cd "$root"
+reset_install
+trap - EXIT
+set +o pipefail
+fail_prefix='release install check failed: '
+start_registry
+before_sandbox=a404785204c76ddf27ae8ea97c7c9b5b4ae73304
+git cat-file -e "$before_sandbox^{commit}" 2> /dev/null || git fetch --no-tags origin "$before_sandbox" || fail 'the release before the staged removal commit'
+git worktree add "$RUNNER_TEMP/staged-previous-release" "$before_sandbox" || fail 'the release before the staged removal checkout'
+docker build -q --build-arg NEXT_SKIP_CHECKS=true -t localhost:5000/gtmworks:0.0.0-staged "$RUNNER_TEMP/staged-previous-release" > /dev/null \
+  || fail 'build the release before the staged removal'
+before=$(publish 0.0.0-staged) || fail 'push the release before the staged removal'
+( cd "$RUNNER_TEMP/staged-previous-release" && node scripts/release-assets.mjs "$before" "$root/release-before-staged" ) || fail 'the release before the staged removal files'
+publish_releases
+# A release whose work sandbox does not start: this release with a sandbox image that exits at once.
+docker build -q -t localhost:5000/gtmworks-sandbox:0.0.3-broken - > /dev/null <<DOCKERFILE || fail 'build a work sandbox image that does not start'
+FROM $sandbox
+ENTRYPOINT ["sh","-c","echo this work sandbox does not start >&2; exit 1"]
+DOCKERFILE
+broken_sandbox=$(publish_sandbox 0.0.3-broken) || fail 'push the work sandbox image that does not start'
+node scripts/release-assets.mjs "$first" release-broken-sandbox "$broken_sandbox" || fail 'the release files whose work sandbox does not start'
+# A release whose Engine does not start: this release with an Engine image that holds no Hermes.
+docker tag alpine:3.21 gtmworks-engine-broken:0.0.4 || fail 'tag an Engine image that does not start'
+docker build -q -t localhost:5000/gtmworks:0.0.4-broken-engine - > /dev/null <<'DOCKERFILE' || fail 'build the release whose Engine does not start'
+FROM localhost:5000/gtmworks:0.0.0-ci
+RUN sed -i '0,/^\( *image:\).*/s//\1 gtmworks-engine-broken:0.0.4/' /app/install/scripts/engine-template.yml
+DOCKERFILE
+broken_engine=$(publish 0.0.4-broken-engine) || fail 'push the release whose Engine does not start'
+node scripts/release-assets.mjs "$broken_engine" release-broken-engine "$sandbox" || fail 'the release files whose Engine does not start'
+dir="$PWD/staged-release-install"
+mkdir "$dir" && cp release-before-staged/docker-compose.install.yml release-before-staged/install.sh "$dir/" || fail 'the release before the staged removal folder'
+sh "$dir/install.sh" || fail 'install the release before the staged removal'
+cd "$dir"
+code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
+docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
+  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail 'first run on the release before the staged removal'
+company=$(db -c "select id from public.companies where name='Proxy Company'") || fail 'read the Company'
+for attempt in $(seq 1 240); do
+  [[ $(db -c "select count(*) from public.company_profiles where company_id='$company' and tools_level is not null and not tools_pending") == 1 ]] && break
+  [[ $attempt == 240 ]] && fail "the previous release's worker sets up the Company profile"
+  sleep 1
+done
+owner=$(db -c "select person_id from public.members where company_id='$company' and role='owner'") || fail "read the Company's Owner"
+db -c "begin; select set_config('request.jwt.claims','{\"sub\":\"$owner\",\"role\":\"authenticated\"}',true); set local role authenticated; select public.set_agent_level('$company',2); commit;" > /dev/null \
+  || fail 'the Owner changes the Company level on the previous release'
+staged_level_log() { db -c "select json_build_object('id',id,'subject',subject,'action',action,'details',details)::text from public.company_log where company_id='$company' and action='agent_level_changed'"; }
+level_before=$(staged_level_log) || fail 'read the level change from the log'
+staged_level_column() { db -c "select count(*) from information_schema.columns where table_schema='public' and table_name='companies' and column_name='agent_level'"; }
+staged_cutovers() { db -c "select count(*) from gtmworks_install.schema_migrations where name like '%\\_cutover.sql'"; }
+web=$(compose ps -q web) worker=$(compose ps -q worker)
+engine_image=$(docker inspect -f '{{.Config.Image}}' gtmworks-engine-first)
+# What a failed update must leave (ADR 0023): the previous release's app and worker, never replaced; its Engine from its own
+# template again, with no sandbox or exit beside it; the first step's columns, the level still there and no cutover; and
+# that release's own code working on it.
+previous_release_serves() {
+  [[ $(compose ps -q web) == "$web" && $(compose ps -q worker) == "$worker" ]] || fail_update "the update $1 leaves the previous release's app and worker serving"
+  probe "after the update $1"
+  [[ $(docker inspect -f '{{.Config.Image}}' gtmworks-engine-first) == "$engine_image" ]] || fail_update "the update $1 starts the previous release's Engine again"
+  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' gtmworks-engine-first) == healthy ]] || fail_update "the previous release's Engine is healthy after the update $1"
+  [[ -z $(docker ps -aq --filter 'name=^gtmworks-(sandbox|exit)-') ]] || fail_update "the update $1 leaves no sandbox or exit beside the previous release's Engine"
+  [[ ! -e .work-sandbox-image ]] || fail_update "the update $1 records no work sandbox image"
+  [[ $(staged_level_column) == 1 && $(staged_cutovers) == 0 ]] || fail_update "the update $1 keeps the level and applies no cutover"
+  [[ $(db -c "select count(*) from information_schema.columns where table_schema='public' and table_name='company_profiles' and column_name='tools_confirmed'") == 1 ]] \
+    || fail_update "the update $1 applied the first step of the staged removal"
+  # The previous release's worker records the Company profile again with its own function and its level.
+  db -c "update public.company_profiles set tools_pending=true where company_id='$company'" > /dev/null || fail 'mark the Company profile as changing'
+  for attempt in $(seq 1 180); do
+    [[ $(db -c "select count(*) from public.company_profiles where company_id='$company' and tools_level is not null and not tools_pending") == 1 ]] && break
+    [[ $attempt == 180 ]] && fail_update "after the update $1 the previous release's worker records the Company profile with its level"
+    sleep 1
+  done
+  # Its call that makes an Agent for Lead, by the names it passes, still reaches the database function; so does this
+  # release's, by its own names, with no ambiguity between them.
+  compose exec -T web node --input-type=module -e "
+    const call=async args=>{ const response=await fetch('http://gateway:8080/rest/v1/rpc/lead_create_agent',{method:'POST',headers:{apikey:process.env.SUPABASE_SERVICE_ROLE_KEY,Authorization:'Bearer '+process.env.SUPABASE_SERVICE_ROLE_KEY,'Content-Type':'application/json'},body:JSON.stringify({conversation:crypto.randomUUID(),run:'staged',call:'staged',agent_name:'Staged',job:'Checks the staged removal.',apps:[],...args})}); return response.status+' '+await response.text(); };
+    for(const args of [{own_level:1,own_policy:1},{},{own_profile:true}]) { const answer=await call(args); console.log(answer); if(answer!=='200 {\"state\": \"refused\"}'&&answer!=='200 {\"state\":\"refused\"}') process.exit(1); }" < /dev/null \
+    || fail_update "after the update $1 both releases' calls that make an Agent for Lead reach their function"
+  # And its app's Conversation is answered by its worker, through its own code.
+  engine_node "$(first_engine_key)" - < "$RUNNER_TEMP/staged-previous-release/scripts/check-install-conversation.mjs" \
+    || fail_update "after the update $1 the previous release answers a Conversation"
+}
+for failing in sandbox engine; do
+  cp "$root/release-broken-$failing/docker-compose.install.yml" "$root/release-broken-$failing/install.sh" . || fail "the release files whose $failing does not start in place"
+  if GTMWORKS_ENGINE_WAIT=40 sh install.sh update > update.log 2>&1; then fail_update "the update whose $failing does not start must fail"; fi
+  grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update "the update whose $failing does not start says the previous release keeps serving"
+  # The release files of a failed update stay in the folder, as a real one leaves them: the previous release's own go
+  # back with its command (scripts/get.sh); here they go back by hand.
+  cp "$root/release-before-staged/docker-compose.install.yml" "$root/release-before-staged/install.sh" . || fail "the previous release files back after the $failing failure"
+  previous_release_serves "whose $failing does not start"
+done
+# The update itself: this release starts, then the cutover removes the level; its past change still reads, and the
+# Company profile is confirmed with the one fixed set of tools.
+cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
+sh install.sh update > update.log 2>&1 || fail_update 'the staged update to this release'
+grep -Fq 'Applying migration: 20270416000000_one_set_of_tools_cutover.sql' update.log || fail_update 'the update applies the cutover'
+[[ $(grep -n 'Applying migration: 20270416000000_one_set_of_tools_cutover.sql' update.log | cut -d: -f1) -gt $(grep -n 'gateway:8080/api/health 200' update.log | cut -d: -f1) ]] \
+  || fail_update 'the cutover applies after this release answers'
+[[ $(staged_level_column) == 0 && $(staged_cutovers) == 1 ]] || fail 'the update removes the level at the cutover'
+[[ $(staged_level_log) == "$level_before" ]] || fail 'the past level change stays in the log as it was'
+compose exec -T -e LEVEL_ROW="$level_before" web node --input-type=module -e "const {describeEntry}=await import('/app/lib/activity-log.mjs'); const read=describeEntry(JSON.parse(process.env.LEVEL_ROW)); console.log(JSON.stringify([read.act,read.from,read.to]));" \
+  | grep -qxF '[["logActAgentLevel"],{"key":"agentLevel1"},{"key":"agentLevel2"}]' || fail 'the past level change still reads in the log'
+[[ $(db -c "select count(*) from pg_proc where pronamespace='public'::regnamespace and proname in ('set_agent_level','engine_tool_policy')") == 0 ]] \
+  || fail "the cutover removes the previous release's level functions"
+for attempt in $(seq 1 240); do
+  [[ $(db -c "select count(*) from public.company_profiles where company_id='$company' and tools_confirmed and not tools_pending") == 1 ]] && break
+  [[ $attempt == 240 ]] && fail 'the worker confirms the Company profile with the fixed set after the cutover'
+  sleep 1
+done
+compose exec -T web node --input-type=module -e "
+  const {engineOf}=await import('/app/lib/company-engine.mjs'); const {readToolsets}=await import('/app/lib/hermes.mjs'); const {toolsDiffer,companyProfile}=await import('/app/lib/agent-toolsets.mjs');
+  const engine=await engineOf('$company'); const read=await readToolsets({address:engine.address,key:engine.key,profile:companyProfile('$company')});
+  console.log(read.state,(read.toolsets||[]).join(' ')); if(read.state!=='found'||toolsDiffer(read.toolsets,{subagents:false})) process.exit(1);" < /dev/null \
+  || fail "the Company profile's Engine offers the one fixed set of tools after the cutover"
+}
+
 # sizes: the measured sizes (#400). The README's two server sizes and the install's default sandbox limits come from these
 # numbers, and a pull request runs them, so a change that makes a render outgrow the defaults fails here. On an install with
 # two Companies it prints the memory the idle install services, each idle Engine and each idle sandbox use; runs one short
@@ -2018,7 +2143,7 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (sandbox_update); (sizes); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (sandbox_update); (staged_update); (sizes); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
@@ -2028,10 +2153,11 @@ case "${1:-all}" in
  update) update;;
  previous-archive) previous_archive;;
  sandbox-update) sandbox_update;;
+ staged-update) staged_update;;
  sizes) sizes;;
  engines-update) engines_update;;
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sandbox-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac
