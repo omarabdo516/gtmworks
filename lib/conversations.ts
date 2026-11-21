@@ -99,9 +99,9 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
 }
 // A file a person sent with a message (#155; design-reference: filesHTML): its name, and the id its own route serves it by.
 type MessageFile={id:number,name:string};
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
-export const messageColumns='id,author,author_name,body,run_id,hand_card,created_at';
+export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_session_id,hermes_agents(connection_id,is_default)';
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored; the main Agent's question is drawn as the reference's chip card by its Agent's
@@ -128,7 +128,7 @@ const isAsked=(row:PlacedCard)=>row.card.kind==='reply'&&(row.card.card.kind==='
 export type StoredFile={id:number,name:string,message_id:number|null,send_key:string|null,position:number};
 export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[],files:StoredFile[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const sent=files.filter(row=>row.message_id===message.id).map(({id,name})=>({id,name}));
- const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at,...(sent.length?{files:sent}:{})};
+ const plain={id:message.id,author:message.author,author_name:message.author_name,body:message.body,lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at,...(message.agent_id?{agent_id:message.agent_id}:{}),...(sent.length?{files:sent}:{})};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
  // A connect card (#203) sits right under the reply's text, before the run's other cards (design-reference: msgHTML).
  const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isAsked(row)).sort((a,b)=>Number(isConnect(b))-Number(isConnect(a))); const cards=ofRun.map(row=>row.card);
@@ -161,8 +161,9 @@ export const withDecisions=(record:ConversationMessage[],decisions:Decision[],ag
 // How each ended run ended (conversation_run_ends); its token use is Hermes's own (#347).
 // A run that failed for a cause a retry cannot fix is no_model (#422), no_credit, key_refused or model_missing (#457).
 export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'};
-// A person's message whose run has no stored reply yet and has not been recorded as ended.
-export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[])=>messages.filter(message=>message.author==='person'&&!messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)&&!ends.some(run=>run.run_id===message.run_id));
+// A person's message whose run has no stored reply yet and has not been recorded as ended. A job command's Run (#358)
+// is the target Agent's, which the handover's own row closes: it is no Run of the chat's Agent and never waits here.
+export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[],handed:ReadonlySet<string>=new Set())=>messages.filter(message=>message.author==='person'&&!handed.has(message.run_id)&&!messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)&&!ends.some(run=>run.run_id===message.run_id));
 // How the latest message's run ended without a reply (any end but completed), or null when it did not.
 export const latestEnd=(messages:StoredMessage[],ends:RunEnd[])=>{ const latest=messages.filter(message=>message.author==='person').at(-1); return (latest&&ends.find(run=>run.run_id===latest.run_id&&run.outcome!=='completed')?.outcome)||null; };
 // A chat is named by its first message: its first line, or, for a message that carries images alone, its first file
