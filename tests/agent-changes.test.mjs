@@ -423,5 +423,13 @@ test('the sub-agents\' model is edited among the models of the provider they run
   fake.settings.profiles.set(own(ads),{...base,config:{delegation:{provider:'',model:''}}});
   const anthropic=await readChangeContext(db(),{...options,proposal:1});
   assert.deepEqual(anthropic.edit?.choices,['claude-sonnet-5-5']);
+  // A proposed provider is written alone too: only the providers that list the sub-agents' own model, else every one.
+  fake.settings.providerModels.anthropic=['claude-sonnet-5-5','gpt-5.5'];
+  const providerRows=[{id:2,agent_id:ads,change:'setting',setting:'delegation.provider',state:'waiting'}];
+  const providerDb=()=>{ const read=reader(providerRows); return {...read,rpc:(name,args)=>name==='company_agent_models'?Promise.resolve({data:subagents,error:null}):read.rpc(name,args)}; };
+  fake.settings.profiles.set(own(ads),{...base,config:{delegation:{provider:'openai',model:'gpt-5-mini'}}});
+  assert.deepEqual((await readChangeContext(providerDb(),{...options,proposal:2})).edit?.choices,['openai']);
+  fake.settings.profiles.set(own(ads),{...base,config:{delegation:{provider:'',model:''}}});
+  assert.deepEqual([...(await readChangeContext(providerDb(),{...options,proposal:2})).edit?.choices??[]].sort(),['anthropic','openai']);
  } finally { await fake.close(); }
 });
