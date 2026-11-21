@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(56);
+select plan(58);
 -- #478 (spec #474): Stop ends the whole Handover chain. RS Learning has Lead, Writer, Ads and Critic, each on its own
 -- profile. The Owner (1) talks to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the
 -- Viewer (4) work with Writer, and the Manager (2) made the channel but is not in it.
@@ -193,6 +193,10 @@ select is(public.channel_hand_to_agent(current_setting('test.m1')::bigint,'run-m
  'message 1''s Writer Run, open at Stop, hands nothing on when it closes');
 select is((select string_agg(ordinal||':'||coalesce(outcome,'open'),' | ' order by ordinal) from public.channel_runs where message_id=current_setting('test.m1')::bigint),
  '1:open | 2:stopped','Critic, not started, never starts; Writer''s Run ends as stopped when next closed');
+select is((select string_agg(run||'@'||profile,' | ') from public.stopped_runs_open() where run like 'run-m1-%'),'run-m1-writer@ag-a4780000000000000000000000000013',
+ 'the worker keeps stopping message 1''s own Writer Run while it is open');
+update public.channel_runs set outcome='stopped', closed_at=now() where message_id=current_setting('test.m1')::bigint and run_id='run-m1-writer';
+select is((select count(*)::int from public.stopped_runs_open() where run like 'run-m1-%'),0,'and not once it closed');
 select is((select state||':'||target_outcome from public.agent_handovers where channel_message_id=current_setting('test.m1')::bigint),'done:stopped','message 1''s handover ended as stopped');
 select is((select state||':'||coalesce(target_outcome,'-') from public.agent_handovers where channel_message_id=current_setting('test.m2')::bigint),'target:-','and message 2''s keeps going');
 set local role authenticated;

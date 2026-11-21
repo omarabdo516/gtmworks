@@ -49,7 +49,7 @@ export function record(place,...tops) {
  const stop=(/** @type {number|null} */ message)=>rows.filter(row=>open(row)&&(message===null||row.message===message))
   .map(row=>unsure(row)?(row.stop_requested=true,{run:null,profile:null}):end(row));
  // The chat's own Run still open, when a test starts one (its Agent is the first handover's asking Agent).
- const chat=/** @type {{run:string|null,agent:string}} */ ({run:null,agent:tops[0]?.from??'Writer'});
+ const chat=/** @type {{run:string|null,agent:string,stopped?:boolean,closed?:boolean}} */ ({run:null,agent:tops[0]?.from??'Writer'});
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
   const row=rows.find(entry=>entry.id===args.h);
   if(name==='handovers_due') return ok(rows.filter(entry=>open(entry)&&entry.id>args.after&&!(entry.state==='handing'&&rows.some(child=>child.parent===entry.id&&open(child)))).map(entry=>({id:entry.id,state:entry.state,conversation:place==='conversation'?where:null,company,
@@ -81,6 +81,7 @@ export function record(place,...tops) {
    return ok(true);
   }
   if(name==='stop_late_handover_run') { const stopped=!!row&&row.state==='done'&&(row.target_outcome==='stopped'||row.follow_up_outcome==='stopped'); if(stopped) row.stopping_run??=args.run; return ok(stopped); }
+  if(name==='stopped_runs_open') return ok(chat.stopped&&chat.run&&!chat.closed?[{run:chat.run,profile:team[chat.agent].profile,company}]:[]);
   if(name==='handover_runs_stopping') return ok(rows.filter(entry=>entry.stopping_run&&entry.id>args.after).map(entry=>({id:entry.id,run:entry.stopping_run,company,
    profile:team[entry.follow_up_outcome==='stopped'?entry.from:entry.to].profile})));
   if(name==='handover_run_stopped') { const cleared=row?.stopping_run===args.run; if(cleared) row.stopping_run=null; return ok(cleared); }
@@ -107,7 +108,7 @@ export function record(place,...tops) {
    Object.assign(row,{state:'done',follow_up_outcome:args.run_outcome}); return ok(true);
   }
   // The person's side (#478): the Conversation's Stop, and a channel message's.
-  if(name==='stop_conversation_handovers') return ok(place==='conversation'&&args.conversation===where?stop(null):[]);
+  if(name==='stop_conversation_handovers') { if(chat.run) chat.stopped=true; return ok(place==='conversation'&&args.conversation===where?stop(null):[]); }
   if(name==='conversation_stop_target') return chat.run?ok([{run:chat.run,profile:team[chat.agent].profile}]):{data:null,error:{code:'P0002',message:'conversationNothingToStop'}};
   if(name==='stop_channel_message') return ok(place==='channel'?stop(args.message):[]);
   return {data:null,error:{message:`unexpected ${name}`}};

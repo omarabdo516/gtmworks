@@ -52,6 +52,21 @@ test('Stop in a Conversation whose own Run is still open stops that Run and the 
  assert.deepEqual(replies,[]);
 });
 
+test('the chat\'s own Run whose Engine missed the stop at the press is stopped by the worker\'s next pass',async()=>{
+ const {rows,service,where,chat}=record('conversation',job);
+ const {fakes,stops,engineFor}=engines({},{missedStops:1});
+ fakes.Ads.settings.pendingReads=1000;
+ fakes.Writer.settings.pendingReads=1000;
+ await drive(service,engineFor,rows,{until:()=>rows[0].state==='target'});
+ chat.run=/** @type {string} */ (await engineFor({...hermes,profile:'ag-04770000000000000000000000000013'}).start({conversation:where,input:'And add a call to action',idempotencyKey:'chat:2'}));
+ assert.deepEqual(await stopConversationRun(service,{company,conversation:where,hermes,engineFor}),{stopped:true});
+ const own=/** @type {any} */ (fakes.Writer.runs.find(run=>run.id===chat.run));
+ assert.equal(own.stopped,false,'the Engine could not be reached for the chat\'s own Run');
+ await driveHandovers(service,{hermes,engineFor});
+ assert.equal(own.stopped,true,'the worker stops it on its next pass');
+ assert.equal(stops.filter(stop=>stop.run===chat.run).length,2);
+});
+
 test('Stop while the asking Agent\'s follow-up runs stops that Run too, and keeps no reply',async()=>{
  const {rows,replies,service,where}=record('conversation',job);
  const {fakes,stops,engineFor}=engines();

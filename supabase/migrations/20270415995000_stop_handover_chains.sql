@@ -160,6 +160,24 @@ $$;
 revoke all on function public.handover_runs_stopping(bigint) from public,anon,authenticated;
 grant execute on function public.handover_runs_stopping(bigint) to service_role;
 
+-- The worker's list of a place's own Runs Stop found open that have not closed yet, on their profiles: a channel
+-- message's started Runs, and the chat's own Run. The worker stops each again while its Engine says it runs; each leaves
+-- the list once its Run closes (the place's own driver closes it as stopped).
+create function public.stopped_runs_open() returns table(run text, profile text, company uuid)
+language sql stable security definer set search_path='' as $$
+ select s.run_id, r.profile, s.company_id from public.stopped_runs s
+  join public.channel_runs r on r.message_id=s.channel_message_id and r.run_id=s.run_id and r.outcome is null
+ union all
+ select s.run_id, a.profile, s.company_id from public.stopped_runs s
+  join public.conversations c on c.id=s.conversation_id
+  join public.hermes_agents a on a.id=c.agent_id and a.company_id=c.company_id
+ where not exists(select 1 from public.conversation_run_ends u where u.conversation_id=s.conversation_id and u.run_id=s.run_id)
+  and not exists(select 1 from public.conversation_messages m where m.conversation_id=s.conversation_id and m.author='agent' and m.run_id=s.run_id)
+  and s.stopped_at > now()-interval '1 day';
+$$;
+revoke all on function public.stopped_runs_open() from public,anon,authenticated;
+grant execute on function public.stopped_runs_open() to service_role;
+
 -- That Run's Engine says it ended (or its Agent is gone): nothing is left to stop.
 create function public.handover_run_stopped(h bigint, run text) returns boolean
 language plpgsql security definer set search_path='' as $$
