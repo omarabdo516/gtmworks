@@ -162,6 +162,7 @@ sandbox_keys() {
   docker volume create "$volume" > /dev/null || return 1
   docker volume create "$(host_key_volume "$slug")" > /dev/null || return 1
   docker volume create "$(work_volume "$slug")" > /dev/null || return 1
+  keys_failed=0
   keys=$(docker run --rm --user 0 --entrypoint sh -v "$volume:/data" -v "$(host_key_volume "$slug"):/keys" \
     -v "$(work_volume "$slug"):/work" "$image" -ec '
       set -e
@@ -182,6 +183,7 @@ sandbox_keys() {
       install -d -m 700 -o 10000 -g 10000 /data/ssh
       if [ ! -s /data/ssh/id_ed25519 ]; then
         ssh-keygen -q -t ed25519 -N "" -C "gtmworks-work-sandbox" -f /data/ssh/id_ed25519
+        echo made
       else
         ssh-keygen -y -f /data/ssh/id_ed25519 > /data/ssh/id_ed25519.pub
       fi
@@ -202,7 +204,11 @@ sandbox_keys() {
       chmod 600 /data/.ssh/known_hosts
       printf "client %s\n" "$(cat /data/ssh/id_ed25519.pub)"
       printf "host %s\n" "$(cat /keys/ssh_host_ed25519_key.pub)"
-    ') || return 1
+    ') || keys_failed=1
+  # An Engine whose key this run made is named in the scratch folder, so an update that goes back takes that key out
+  # again (remove_new_sandbox_parts, #479); also when a later step of the same run failed, since the key stays made.
+  if printf '%s\n' "$keys" | grep -qx made; then printf '%s\n' "$slug" >> .install-lock/sandbox-keys-made; fi
+  [ "$keys_failed" = 0 ] || return 1
   sandbox_key=$(printf '%s\n' "$keys" | sed -n 's/^client //p')
   sandbox_host_key=$(printf '%s\n' "$keys" | sed -n 's/^host //p')
   test -n "$sandbox_key" && test -n "$sandbox_host_key" \
@@ -393,6 +399,57 @@ keep_previous_engine() {
     [ -f "$file" ] || continue
     cp "$file" .install-lock/previous-engine/ || return 1
   done
+  keep_sandbox_parts
+}
+# The work sandboxes' volumes and networks the install already has, listed beside the kept Engine files before the update
+# makes anything (#479), so an update that goes back removes only the ones it made itself. A list Docker could not give
+# stops the update before anything changes: an empty list read as "none existed" would remove what was there.
+keep_sandbox_parts() {
+  volumes=$(docker volume ls -q) || return 1
+  networks=$(docker network ls --format '{{.Name}}') || return 1
+  # A work folder and its work network share one name, so each line says which it is.
+  { printf '%s\n' "$volumes" | sed -n -e 's/^gtmworks-work-/volume &/p' -e 's/^gtmworks-sandbox-hostkey-/volume &/p'
+    printf '%s\n' "$networks" | sed -n -e 's/^gtmworks-work-/network &/p' -e 's/^gtmworks-exit-/network &/p'; } > .install-lock/previous-engine/sandbox-parts
+}
+# What a failed update made for the work sandboxes, removed once the previous release's Engines are back (#479), when that
+# release runs none (it recorded no sandbox image): every Company's sandbox and exit container, the sandbox key this
+# update made in an Engine's volume (so the next update copies that Engine's old Library into its work folder again, as
+# sandbox_keys does for an Engine with no key), and each work folder, host-key volume, work network and exit network
+# the install did not have when the update began. A previous release that runs sandboxes has just started its own from
+# these parts, so they stay. What Docker would not remove is named, with how to remove it; the Engines that came back
+# keep serving either way.
+remove_new_sandbox_parts() {
+  record=.install-lock/previous-engine/sandbox-parts
+  [ -z "$(work_sandbox_ref)" ] || return 0
+  left=
+  for name in $(engine_names); do
+    docker rm -f "$(sandbox_container "$name")" "$(exit_container "$name")" > /dev/null 2>&1 || true
+    if grep -qxF "$name" .install-lock/sandbox-keys-made 2> /dev/null; then
+      volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$(engine_folder "$name")/.env")
+      if [ -n "$volume" ]; then
+        # The node image the installer already ran: a host that cannot pull still has it.
+        docker run --rm --user 0 --entrypoint sh -v "$volume:/data" "$node_image" -ec '
+          rm -rf /data/ssh
+          if [ -f /data/.ssh/known_hosts ]; then
+            grep -v "^\[sandbox\]:2222 " /data/.ssh/known_hosts > /data/.ssh/known_hosts.kept || true
+            if [ -s /data/.ssh/known_hosts.kept ]; then cat /data/.ssh/known_hosts.kept > /data/.ssh/known_hosts; else rm -f /data/.ssh/known_hosts; fi
+            rm -f /data/.ssh/known_hosts.kept
+            rmdir /data/.ssh 2> /dev/null || true
+          fi' > /dev/null 2>&1 || left="$left the folder ssh in the volume $volume (docker run --rm -v $volume:/data $node_image rm -rf /data/ssh),"
+      fi
+    fi
+    # An update begun with no list removes no volume or network it cannot tell apart.
+    [ -f "$record" ] || continue
+    for part in "$(work_volume "$name")" "$(host_key_volume "$name")"; do
+      grep -qxF "volume $part" "$record" || ! docker volume inspect "$part" > /dev/null 2>&1 \
+        || docker volume rm "$part" > /dev/null 2>&1 || left="$left the volume $part (docker volume rm $part),"
+    done
+    for part in "$(work_network "$name")" "$(exit_network "$name")"; do
+      grep -qxF "network $part" "$record" || ! docker network inspect "$part" > /dev/null 2>&1 \
+        || docker network rm "$part" > /dev/null 2>&1 || left="$left the network $part (docker network rm $part),"
+    done
+  done
+  [ -z "$left" ] || echo "What this update made for the work sandboxes could not all be removed, and an update run again keeps it as it is: remove${left%,}; then run the update again." >&2
 }
 # An update whose Engines or work sandboxes did not all start (ADR 0023): the previous release's own Engine files go back,
 # and every Engine starts again from them, without the containers this release's template added beside it (each
@@ -418,6 +475,7 @@ restore_previous_engine() {
     # A restored sandbox counts only once its own Engine reaches it over SSH: its health check sees the port, not the key.
     if [ -n "$sandbox_key" ]; then sandbox_reachable "$name" > /dev/null 2>&1 || restored=1; fi
   done
+  remove_new_sandbox_parts
   return "$restored"
 }
 # Every Engine stopped before its data volume is copied: a live Engine writes under its volume while the archive reads
@@ -1094,8 +1152,10 @@ elif [ "$operation" = update ] && [ -n "$release_image" ]; then
 elif [ "$operation" = update ] && [ "$GTMWORKS_UPDATE_DOWNLOADED" = 1 ]; then
   # The installer the update downloaded, which finishes it with its own steps: its migrations in their stages (ADR 0023),
   # its work sandbox image and keys, its Engines.
-  # The run that downloaded it kept the previous release's Engine files in the scratch folder this one inherited.
-  :
+  # The run that downloaded it kept the previous release's Engine files in the scratch folder this one inherited. An
+  # installer from before #479 listed no sandbox parts beside them; nothing of a sandbox is made yet, so the list is
+  # made here.
+  [ -f .install-lock/previous-engine/sandbox-parts ] || keep_sandbox_parts || exit 1
 elif [ "$operation" = update ]; then
   keep_previous_engine || exit 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
