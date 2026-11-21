@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -30,7 +30,7 @@ test('the Engine template runs the pinned Hermes release, by tag and digest, the
  assert.equal(readFileSync('docker-compose.install.yml','utf8').includes('nousresearch/hermes-agent'),false);
 });
 
-test('an Engine publishes no host port, joins only its own network, and keeps its own volume and key', () => {
+test('an Engine publishes no host port, joins its install network and its work network, and keeps its own volume and key', () => {
  const engine=template.services.engine;
  assert.equal(engine.ports,undefined);
  assert.equal(engine.expose,undefined);
@@ -38,29 +38,103 @@ test('an Engine publishes no host port, joins only its own network, and keeps it
  assert.equal(engine.env_file,undefined);
  assert.equal(engine.restart,'unless-stopped');
  assert.equal(engine.container_name,'${ENGINE_NAME:?Run scripts/install.sh}');
- assert.equal(engine.environment.API_SERVER_HOST,'0.0.0.0');
+ // The listeners bind to the install network's own address, resolved when the Engine starts: a wildcard bind answers on
+ // the sandbox's network too (docs/engine-probes/work-sandbox-ssh.md, section 6). The hook that writes it is mounted here,
+ // and the install job proves the behaviour: it reads every port the Engine listens on and asks each from the work
+ // network, after a restart and after a restore (#393).
+ assert.equal(engine.environment.API_SERVER_HOST,undefined);
+ assert.equal(engine.environment.HERMES_DASHBOARD_HOST,undefined);
+ assert.ok(engine.volumes.includes('./engine-listener-address.sh:/etc/cont-init.d/05-engine-listener-address:ro'));
+ assert.deepEqual(engine.networks,{engine:null,work:null});
+ assert.equal(engine.environment.API_SERVER_PORT,8642);
  // The Engine's own key is required and is the only key in it: an Engine with none refuses to start rather than serve.
  assert.equal(engine.environment.API_SERVER_KEY,'${ENGINE_KEY:?Run scripts/install.sh}');
  assert.equal(engine.environment.HERMES_DASHBOARD,'1');
  assert.equal(engine.environment.HERMES_DASHBOARD_SESSION_TOKEN,'${ENGINE_KEY:?Run scripts/install.sh}');
- assert.equal(engine.environment.HERMES_DASHBOARD_HOST,undefined);
- assert.equal(engine.environment.HERMES_DASHBOARD_PORT,undefined);
+ // The dashboard refuses a Host header that is not the address it bound (DNS-rebinding guard), and the app and the
+ // worker reach it by this Engine's container name: the name is declared as the one public host, so the name answers on
+ // the install address and the sandbox's network leg still refuses.
+ assert.equal(engine.environment.HERMES_DASHBOARD_PUBLIC_URL,'http://${ENGINE_NAME:?Run scripts/install.sh}:9119');
+ // The file tools write only under the work folder, which is the sandbox's (#390).
+ assert.equal(engine.environment.HERMES_WRITE_SAFE_ROOT,'/work');
+ // A start hook that fails stops the Engine (s6-overlay's own switch): the file-sync patch and the listener address
+ // either hold or the Engine does not serve, never an Engine that started without them.
+ assert.equal(engine.environment.S6_BEHAVIOUR_IF_STAGE2_FAILS,2);
  assert.ok(engine.volumes.includes('data:/opt/data'));
+ // The Company's work folder, read-only: the Library reads an Agent's folder in it through this Engine's file routes,
+ // and nothing on the Engine may write what its Agents made (#395).
+ assert.ok(engine.volumes.includes('work:/opt/data/work:ro'));
+ assert.ok(engine.volumes.includes('./engine-managed.yml:/etc/hermes/config.yaml:ro'));
+ assert.ok(engine.volumes.includes('./engine-listener-address.py:/etc/hermes/listener-address.py:ro'));
  assert.equal(template.volumes.data.name,'${ENGINE_VOLUME:?Run scripts/install.sh}');
- assert.ok(engine.networks.includes('engine'));
  assert.equal(template.networks.engine.name,'${ENGINE_NETWORK:?Run scripts/install.sh}');
- assert.match(engine.healthcheck.test.join(' '),/127\.0\.0\.1:8642\/health/);
+ assert.deepEqual(engine.healthcheck.test.slice(0,3),['CMD','/opt/hermes/.venv/bin/python','/etc/hermes/listener-address.py']);
+ assert.equal(engine.healthcheck.test.at(-1),'--health');
  assert.deepEqual(engine.command.slice(0,2),['sh','-ec']);
  const start=engine.command[2].replaceAll('$$','$');
  assert.match(start,/exec hermes gateway run$/);
- const started=key=>spawnSync('sh',['-ec',start.replace('exec hermes gateway run','echo gateway started')],{env:{PATH:process.env.PATH,API_SERVER_KEY:key},encoding:'utf8'});
+ // The key guard still runs before anything else: an Engine with no key refuses rather than serve.
+ const guard=start.slice(0,start.indexOf('exec hermes gateway run'));
+ const started=key=>spawnSync('sh',['-ec',`${guard} echo gateway started`],{env:{PATH:process.env.PATH,API_SERVER_KEY:key},encoding:'utf8'});
  assert.equal(started('k'.repeat(64)).stdout,'gateway started\n');
  const refused=started('');
  assert.notEqual(refused.status,0);
  assert.equal(refused.stdout,'');
  assert.match(refused.stderr,/The Engine has no key/);
+ // The install's managed scope pins the sandbox backend, so no profile and no Settings write moves it.
+ const managed=load(readFileSync('scripts/engine-managed.yml','utf8'));
+ assert.deepEqual(managed,{terminal:{backend:'ssh',ssh_host:'sandbox',ssh_user:'pn',ssh_port:2222,ssh_key:'/opt/data/ssh/id_ed25519',ssh_sync_files:false}});
+ // Nothing is copied between the Engine and the sandbox (#393): ssh_sync_files is false in the managed scope, and the
+ // cont-init hook that adds that key to the pinned Engine runs before anything starts and fails the start if the pinned
+ // text moved. The Engine's launch home (/opt/data) names no shared Skills folder, so nothing of a profile's Skills is
+ // reachable from there either.
+ assert.equal(managed.terminal.ssh_sync_files,false,'the ssh backend copies nothing in and nothing back');
+ assert.ok(engine.volumes.includes('./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro'),'the file-sync switch patch runs at start');
+ // The install job runs the hook against the pinned image and proves the ssh sandbox is built with sync off.
+ assert.ok(statSync('scripts/engine-ssh-sync-files.sh').mode&0o111,'the hook is executable as s6 runs it');
+ const launch=readFileSync('scripts/ci-install-lib.sh','utf8');
+ assert.match(launch,/cat > \/opt\/data\/config\.yaml/,'the install names the launch profile it writes');
+ assert.doesNotMatch(launch,/external_dirs/,'the launch profile names no shared Skills folder');
  // Only the address the browser reaches (the gateway) and the mail viewer are published, on loopback.
  for(const [name,service] of Object.entries(compose.services)) for(const port of service.ports||[]) assert.match(port,/^127\.0\.0\.1:/,name);
+});
+
+test('every Company\'s work sandbox is the least container its Agents\' work needs, on a network with no way out', () => {
+ const sandbox=template.services.sandbox;
+ // The Company's one work sandbox (#393, ADR 0018): its own image (built once, or a release's pinned digest), its own
+ // container, and no host port, env file or socket of any kind.
+ assert.equal(sandbox.image,'${SANDBOX_IMAGE:-gtmworks-work-sandbox:local}');
+ assert.equal(sandbox.container_name,'${SANDBOX_NAME:-gtmworks-sandbox}');
+ assert.equal(sandbox.restart,'unless-stopped');
+ for(const key of ['ports','expose','network_mode','env_file','user']) assert.equal(sandbox[key],undefined,`the sandbox sets no ${key}`);
+ // Hardening: the image's own ordinary user, no capability, no new privilege, and the limits the install gives it.
+ assert.deepEqual(sandbox.cap_drop,['ALL']);
+ assert.deepEqual(sandbox.security_opt,['no-new-privileges:true']);
+ assert.equal(sandbox.pids_limit,2048);
+ assert.equal(sandbox.shm_size,'1gb','shared memory large enough for Chromium');
+ assert.equal(sandbox.mem_limit,'${SANDBOX_MEMORY:-1g}');
+ assert.equal(sandbox.cpus,'${SANDBOX_CPUS:-2.0}');
+ // The template is the one place those defaults are set (#400): the installer repeats none of them, so nothing can drift
+ // from the measured figures; it passes only a Company's own limits, read from that Company's file (#396).
+ assert.doesNotMatch(readFileSync('scripts/install.sh','utf8'),/SANDBOX_(MEMORY|CPUS|PIDS|SHM)=[0-9'"]|sandbox_(memory|cpus|pids|shm)=/);
+ // The README's server sizes state those same defaults, and the shared-kernel risk in plain words (#400).
+ const readme=readFileSync('README.md','utf8');
+ assert.match(readme,new RegExp(`\\*\\*${sandbox.mem_limit.match(/:-(\d+)g\}$/)[1]} GB of RAM and ${Number(sandbox.cpus.match(/:-([\d.]+)\}$/)[1])} CPUs\\*\\* by default`));
+ assert.match(readme,/\*\*The sandbox shares the server's kernel\.\*\*/);
+ // The Company's work folder and the sandbox's own host key, and nothing else; the only key that reaches it is a public
+ // one, passed when the container starts.
+ assert.deepEqual(sandbox.volumes,['work:/work','host-key:/home/pn/.ssh-host:ro']);
+ assert.deepEqual(Object.keys(sandbox.environment),['SSH_AUTHORIZED_KEY']);
+ assert.deepEqual(JSON.parse(JSON.stringify(sandbox.networks)),{work:{aliases:['sandbox']}});
+ assert.match(sandbox.healthcheck.test.join(' '),/2222/);
+ // One volume per Company's work folder and host key, and one internal network with no route out of the install.
+ assert.equal(template.volumes.work.name,'${WORK_VOLUME:-gtmworks-work-first}');
+ assert.equal(template.volumes['host-key'].name,'${SANDBOX_HOST_KEY_VOLUME:-gtmworks-sandbox-hostkey-first}');
+ assert.equal(template.networks.work.name,'${WORK_NETWORK:-gtmworks-work-first}');
+ assert.equal(template.networks.work.internal,true);
+ // The sandbox mounts no Docker socket and holds no gtmworks secret: the loop below covers every service.
+ assert.equal(String(JSON.stringify(sandbox)).includes('docker.sock'),false);
+ assert.equal(String(JSON.stringify(sandbox)).includes('.env.install'),false);
 });
 
 test('no container of the install mounts the Docker socket', () => {
@@ -121,6 +195,7 @@ const dockerShim=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'tar -xzf /install/.install-lock/source.tgz'*) cp "$NEW_INSTALLER" scripts/install.sh;;
  *alpine:3.21*) exit 0;;
  *'ps -q web'*) echo web-id;;

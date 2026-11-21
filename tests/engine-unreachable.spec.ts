@@ -24,7 +24,7 @@ test('an Engine that is not running says so once in Settings, refuses a message 
   query(`update public.people set language='en' where id='${omar}'`);
   query(`update public.hermes_agents set is_default=false where company_id='${company}' and is_default`);
   // The Company's own Engine profile and its main Agent, as the worker leaves them.
-  if(!hadProfile) query(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${profile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}'`);
+  if(!hadProfile) query(`insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) select id,'${profile}',true,true from public.companies where id='${company}'`);
   query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${agent}','${company}','${randomUUID()}','Lead','General',true,'${profile}')`);
   await signIn(page,'omar@example.com','/c/rs-learning/home');
 

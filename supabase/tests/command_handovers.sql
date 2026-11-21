@@ -4,15 +4,15 @@ select plan(42);
 -- #358. RS Learning: Lead on the Company's own profile, Reach (made from the meta role) and Faye on profiles of their
 -- own. The Owner and the Manager see every Agent; the Contributor (…03) sees only the ones given to them; the Viewer
 -- (…04) writes nothing.
-insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy,skills_shared) values
- ('a3580000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy(),true),
- ('a3580000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',1,public.engine_tool_policy(),true);
+insert into public.agent_profiles(agent_id,company_id,tools_confirmed,skills_shared) values
+ ('a3580000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001',true,true),
+ ('a3580000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001',true,true);
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile,instructions,template) values
  ('a3580000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','f3580000-0000-0000-0000-000000000011','Lead','General',true,'co-10000000000000000000000000000001','Lead the team.',null),
  ('a3580000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001','f3580000-0000-0000-0000-000000000012','Reach','Meta ads',false,'ag-a3580000000000000000000000000012','Run the Meta ads.','meta'),
  ('a3580000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000001','f3580000-0000-0000-0000-000000000013','Faye','Marketing',false,'ag-a3580000000000000000000000000013','Write short.',null);
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values
- ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy(),true);
+insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) values
+ ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true,true);
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('c3580000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a3580000-0000-0000-0000-000000000011','Lead'),
  ('c3580000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a3580000-0000-0000-0000-000000000013','Faye'),

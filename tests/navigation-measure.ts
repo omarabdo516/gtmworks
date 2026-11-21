@@ -23,16 +23,23 @@ export const clickPath: Step[] = [
   { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals', motion: opensPage },
   { name: 'activity log', link: '.nav a[href$="/log"]', path: '/log', content: '.log-page', motion: opensPage },
 ];
+// An Agent face's own life is not part of opening a page (#133): its look toward the pointer, its blink, its hop, the
+// tile's hover lift and a working Agent's loop (design-reference: faceSVG, applyLive). These animations, by name, and
+// these transitions, by the face part they move, are left out of "settled" and of idle(), as the copied carets are.
+export const faceAnimations = ['gw-face-scan', 'gw-face-hop', 'gw-think-dot', 'gw-think-in', 'gw-dot-ping', 'gw-ck-pop', 'gw-draw-check'];
+export const faceTransitions = '.face, .face__f, .face__eye';
 export type Timing = { shown: number; settled: number; progress: boolean; longest: number; all: string[] };
 export const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 
 export async function idle(page: Page) {
   await page.waitForLoadState('networkidle');
-  await page.evaluate(async () => {
+  await page.evaluate(async ({ names, parts }) => {
     await document.fonts.ready;
-    await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {})));
+    const face = (animation: Animation) => animation instanceof CSSAnimation ? names.includes(animation.animationName)
+      : animation instanceof CSSTransition && !!((animation.effect as KeyframeEffect | null)?.target as Element | null)?.matches(parts);
+    await Promise.all(document.getAnimations().filter(animation => !face(animation)).map(animation => animation.finished.catch(() => {})));
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  });
+  }, { names: faceAnimations, parts: faceTransitions });
 }
 
 // Measure in the browser from the actual click event, excluding Playwright's actionability waits.
@@ -40,7 +47,9 @@ export async function idle(page: Page) {
 export async function measureClick(page: Page, step: Step): Promise<Timing> {
   await page.locator(step.link).hover();
   await idle(page);
-  await page.evaluate(step => {
+  await page.evaluate(({ step, names, parts }) => {
+    const face = (animation: Animation) => animation instanceof CSSAnimation ? names.includes(animation.animationName)
+      : animation instanceof CSSTransition && !!((animation.effect as KeyframeEffect | null)?.target as Element | null)?.matches(parts);
     const state = window as typeof window & { clickTiming?: Timing };
     delete state.clickTiming;
     document.addEventListener('click', () => {
@@ -55,7 +64,7 @@ export async function measureClick(page: Page, step: Step): Promise<Timing> {
         // The page-opening feedback (lib/link and the new-card fallback). The board's cards carry their own progress
         // bars since #34, which are content, not navigation feedback.
         progress ||= !!document.querySelector('.navigation-progress[role="progressbar"]');
-        const animations = document.getAnimations().filter(a => a.playState === 'running' || a.pending);
+        const animations = document.getAnimations().filter(a => (a.playState === 'running' || a.pending) && !face(a));
         for (const animation of animations) {
           if (!seen.has(animation)) {
             seen.add(animation);
@@ -85,7 +94,7 @@ export async function measureClick(page: Page, step: Step): Promise<Timing> {
       };
       frame = requestAnimationFrame(sample);
     }, { once: true, capture: true });
-  }, step);
+  }, { step, names: faceAnimations, parts: faceTransitions });
   await page.locator(step.link).click();
   await page.waitForFunction(() => !!(window as typeof window & { clickTiming?: Timing }).clickTiming);
   const timing = await page.evaluate(() => (window as typeof window & { clickTiming: Timing }).clickTiming);

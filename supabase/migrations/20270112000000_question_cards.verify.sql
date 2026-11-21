@@ -23,7 +23,7 @@ select json_build_object(
   and position('agent_request' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0,
  'logged_from_its_source',position('''reply_card_answers''' in pg_get_constraintdef((select oid from pg_constraint where conname='company_log_source_check')))>0
   and position('''member_invitations''' in pg_get_constraintdef((select oid from pg_constraint where conname='company_log_source_check')))>0,
- 'policy_at_least_3',public.engine_tool_policy()>=3,
+ 'no_policy_copy',to_regprocedure('public.engine_tool_policy()') is null,
  'person_answers',has_function_privilege('authenticated','public.answer_question(uuid,uuid,bigint,int,text,uuid)','execute')
   and not has_function_privilege('anon','public.answer_question(uuid,uuid,bigint,int,text,uuid)','execute')
   and not has_function_privilege('service_role','public.answer_question(uuid,uuid,bigint,int,text,uuid)','execute'),

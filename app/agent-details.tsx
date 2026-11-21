@@ -4,7 +4,7 @@ import { Suspense, memo, use, useCallback, useEffect, useRef, useState, useSyncE
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { LiveFaceWrap } from '@/app/agent-face-dot';
 import { MadeLine } from '@/app/agent-made';
 import type { Made } from '@/lib/agent-made';
 import { onComposerFocus } from '@/lib/composer-focus';
@@ -102,7 +102,7 @@ export function AgentDetails({panel,agent,details,tab:first,slug}:{panel:Details
  };
  return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={<Link className="circle-btn" id="dp-settings" href={overlayHref(slug,'agents',{agent:agent.id})} aria-haspopup="dialog" aria-label={t('chatAgentSettings',agent.name)} title={t('settings')} onClick={()=>rememberOpener('dp-settings')}><ShellIcon name="gear"/></Link>}>
   <div className="dp-id">
-   <span className="face-wrap face-wrap--lg" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/><Later details={details} part="dot"/></span>
+   <LiveFaceWrap agent={agent} size={64} lg><Later details={details} part="dot"/></LiveFaceWrap>
    <div>
     <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
     <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}<Later details={details} part="state"/></span></div>

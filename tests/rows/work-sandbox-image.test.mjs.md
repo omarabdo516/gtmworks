@@ -1,0 +1,1 @@
+| `work-sandbox-image.test.mjs` | The work sandbox image is built on the Engine's own sandbox image, pinned by tag and digest in one place, and a pin by tag alone or by digest alone is refused (#392). | 0.1 s | scripts/check-work-sandbox.mjs (a built image) | new (#392) |

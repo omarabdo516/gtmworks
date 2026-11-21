@@ -1,0 +1,25 @@
+# The work sandbox's sshd: a key is the only way in, and the key is the one that arrived when the container started.
+# There is no password, no empty password, no interactive challenge, no root login and no user but the work user.
+Port 2222
+
+# The host key lives in a folder of its own: an install mounts the Company's host-key volume read-only here, so a
+# recreated sandbox keeps the key its Engine's known_hosts is pinned to. A container started without one makes its own.
+HostKey /home/pn/.ssh-host/ssh_host_ed25519_key
+PidFile /home/pn/.ssh/sshd.pid
+
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+PermitRootLogin no
+UsePAM no
+AllowUsers pn
+AuthorizedKeysFile .ssh/authorized_keys
+
+PrintMotd no
+PrintLastLog no
+AcceptEnv LANG LC_*
+# Every session the Engine opens reaches the internet through the Company's exit and nothing else (#394): the same values
+# as the image's environment (sandbox/Dockerfile), which sshd does not pass on by itself.
+SetEnv HTTP_PROXY=http://exit:3128 HTTPS_PROXY=http://exit:3128 http_proxy=http://exit:3128 https_proxy=http://exit:3128 NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 NODE_USE_ENV_PROXY=1
+Subsystem sftp internal-sftp

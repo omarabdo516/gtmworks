@@ -192,7 +192,7 @@ const workspace=(baseURL:string)=>localQuery(`select c.work_mode,
 // The worker gives a new Company its own profile and its main Agent, Lead (lib/company-profiles.mjs); the browser suite
 // runs without the bundled engine, so the test does that step through the same database function.
 const workerAddsLead=(baseURL:string)=>{
- localQuery(`insert into public.company_profiles(company_id,profile,tools_level,tools_policy,tools_pending,skills_shared) select id,public.company_engine_profile(id),agent_level,public.engine_tool_policy(),false,true from public.companies returning company_id`,baseURL);
+ localQuery(`insert into public.company_profiles(company_id,profile,tools_confirmed,tools_pending,skills_shared) select id,public.company_engine_profile(id),true,false,true from public.companies returning company_id`,baseURL);
  return localQuery(`select public.attach_company_profile(id) attached from public.companies`,baseURL);
 };
 

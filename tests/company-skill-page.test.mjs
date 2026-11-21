@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, readProfileModels, readOwnSkill } from '../lib/hermes.mjs';
 import { readCompanySkillPage } from '../lib/company-skill-page.mjs';
-import { companyProfile } from '../lib/agent-levels.mjs';
+import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #181: one learned Skill's page in Settings › Learning. Its text is read from GET /api/skills/content for that Agent's
