@@ -490,19 +490,20 @@ test('a message\'s time the server drew in UTC shows in the reader\'s own zone o
  const chat: ConversationRecord = { ...waiting, messages: [
   { id: 1, author: 'person', author_name: 'Youssef', body: 'Plan this week', created_at: late },
   { id: 2, author: 'agent', author_name: 'Lead', body: 'Here is the plan.', created_at: late },
+  { id: 3, author: 'agent', author_name: 'Lead', body: '', created_at: late, kind: 'decided', decided: { kind: 'request', by: 'Omar', name: 'FollowUp', at: late, made: false, reason } },
  ] };
  await zone('UTC');
  const host = document.body.appendChild(document.createElement('div'));
  host.innerHTML = renderToString(view(chat));
  const times = () => [...host.querySelectorAll('.turns time')];
- expect(times().map(time => time.textContent)).toEqual(['10:30 PM', '10:30 PM']);
- expect(times().map(time => getComputedStyle(time).visibility), 'hidden until the reader\'s zone is known').toEqual(['hidden', 'hidden']);
+ expect(times().map(time => time.textContent)).toEqual(['10:30 PM', '10:30 PM', '10:30 PM']);
+ expect(times().map(time => getComputedStyle(time).visibility), 'hidden until the reader\'s zone is known').toEqual(['hidden', 'hidden', 'hidden']);
  await zone('Africa/Cairo');
  const recoverable = vi.fn();
  const root = await act(async () => hydrateRoot(host, view(chat), { onRecoverableError: recoverable }));
  try {
-  await expect.poll(() => times().map(time => time.textContent)).toEqual(['12:30 AM', '12:30 AM']);
-  expect(times().map(time => getComputedStyle(time).visibility)).toEqual(['visible', 'visible']);
+  await expect.poll(() => times().map(time => time.textContent)).toEqual(['12:30 AM', '12:30 AM', '12:30 AM']);
+  expect(times().map(time => getComputedStyle(time).visibility)).toEqual(['visible', 'visible', 'visible']);
   expect(recoverable).not.toHaveBeenCalled();
  } finally { act(() => root.unmount()); host.remove(); }
 });
