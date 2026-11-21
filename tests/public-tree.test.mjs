@@ -8,15 +8,16 @@ import { load } from 'js-yaml';
 // Patterns naming private places are assembled from pieces so this file does not match itself.
 const piece = (...parts) => parts.join('');
 
+// The approved design reference is frozen byte for byte (its SHA256SUMS, which the comparison tool checks before each
+// capture) and was read when it was approved, so it is never edited here and no CI test reads it (#271).
+const outsideReference = path => !path.startsWith('design-reference/');
 const tracked = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8' })
- .split('\0').filter(path => path && existsSync(path) && statSync(path).isFile());
+ .split('\0').filter(path => path && outsideReference(path) && existsSync(path) && statSync(path).isFile());
 const texts = new Map();
 for (const path of tracked) {
  const bytes = readFileSync(path);
  if (!bytes.subarray(0, 8000).includes(0)) texts.set(path, bytes.toString('utf8'));
 }
-// The approved design reference is frozen byte for byte (its SHA256SUMS), so it is never edited here.
-const outsideReference = path => !path.startsWith('design-reference/');
 
 function offenders(pattern, keep = () => true) {
  const found = [];
@@ -80,7 +81,7 @@ test('no identifier of our own hosted instance', () => {
  assert.deepEqual(offenders(new RegExp(piece('services/', 'gtmworks'))), [], 'server deploy script path');
  assert.deepEqual(offenders(new RegExp(piece('~omar', '/'))), [], 'server home path');
  // The hosted domain is ours; examples use example.com, which is reserved for documentation.
- assert.deepEqual(offenders(new RegExp(piece('gtmworks', '\\.cloud\\b')), outsideReference), [], 'hosted domain');
+ assert.deepEqual(offenders(new RegExp(piece('gtmworks', '\\.cloud\\b'))), [], 'hosted domain');
 });
 
 test('the README install, update, backup and restore are the only way described to run gtmworks', () => {
@@ -105,10 +106,10 @@ test('no link to a private place', () => {
  assert.deepEqual(links, []);
 });
 
-test('no build-host detail outside the design reference', () => {
+test('no build-host detail', () => {
  // The Hermes address tests document private-range and tailnet literals on purpose: they prove such addresses are refused or allowed.
  const fixtures = new Set(['lib/hermes.mjs', 'tests/hermes-address.test.mjs', 'tests/fake-hermes.mjs']);
- const keep = path => outsideReference(path) && !fixtures.has(path);
+ const keep = path => !fixtures.has(path);
  for (const pattern of [
   new RegExp(piece('/home/', 'omar')),
   /[\w-]+\.ts\.net\b/,
@@ -123,7 +124,7 @@ test('no build-host detail outside the design reference', () => {
 
 test('the old evidence directory is gone with every reference to it', () => {
  assert.equal(existsSync('evidence'), false);
- assert.deepEqual(offenders(new RegExp(piece('evi', 'dence/')), outsideReference), []);
+ assert.deepEqual(offenders(new RegExp(piece('evi', 'dence/'))), []);
 });
 
 test('no phone number or personal email address', () => {

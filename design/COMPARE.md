@@ -5,7 +5,8 @@
 ## The reference is frozen
 
 - Nobody edits it. Its source of truth is the frozen approval `d893-approved-2026-11-12`, kept outside this repository, and its `SHA256SUMS` ships with it. Everything in that folder is copied into the repo unchanged, dot-folders included.
-- `tests/design-reference.test.mjs` recomputes every checksum. It fails when a file changes, goes missing, or is added without a line in `SHA256SUMS`. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The comparison tool recomputes every checksum before it captures (`referenceProblems` in `scripts/design-compare-lib.mjs`). It stops when a file changes, goes missing, or is added without a line in `SHA256SUMS`, and the `Design compare` workflow runs it on every pull request that changes `design-reference/`. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The tool is the reference's one reader. No CI suite compares the product with it (#271): matching it is a delivery check, done once per screen (below).
 - The product never serves it. Next serves only its routes, and the runtime image copies only the build output. `tests/design-reference.spec.ts` asks the production build for `/design-reference/...` and expects 404.
 
 ## Opening the reference by hand
@@ -168,6 +169,21 @@ gh workflow run design-compare.yml --ref <branch> -f screen=connect-card -f fixt
 ```
 
 Add `-f lang=en`, `-f theme=light` and `-f width=390` for the other variants; both sides always use the same width, language and theme.
+
+## The delivery record
+
+A screen, or a part's motion, is matched with the reference once, in the pull request that delivers it. That pull request's body carries its delivery record, under a `## Delivery record` heading:
+
+```md
+## Delivery record
+
+- Screen: `NAME` (`scripts/design-compare-lib.mjs`), or the motion issue it ships.
+- Captures: the side-by-side image for each width, language and theme the issue names (at least 1440 and 390 wide, Arabic and English), made by `npm run design:compare` or the `Design compare` workflow.
+- Motion: what moves, its time and curve as the reference has it, and the test that holds the behaviour (reduced motion, a timer, a press).
+- Differences kept on purpose: each one with its reason, or "none".
+```
+
+The same pull request adds its row to [DELIVERY.md](DELIVERY.md), which lists every delivered screen with the pull request that holds its record. After delivery the screen's look is our own: the visual lane compares it with our last approved screenshots (`docs/agents/visual-comparison.md`), not with the reference.
 
 ## Demo-only parts of the reference (do not build)
 

@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { request } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture } from '../scripts/design-compare-lib.mjs';
+import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture, referenceProblems } from '../scripts/design-compare-lib.mjs';
+import { createHash } from 'node:crypto';
 
 const valid = ['--screen', 'home', '--width', '1440', '--lang', 'ar', '--theme', 'dark'];
 
@@ -289,4 +290,34 @@ test('the static server serves the reference and answers 404 for traversal', asy
     await new Promise(resolve => server.close(resolve));
     rmSync(parent, { recursive: true, force: true });
   }
+});
+
+// The tool checks the reference it draws from against its SHA256SUMS before it captures (#285, #271), on a copy made
+// here: no CI test reads the frozen reference itself.
+test('the tool accepts a reference that is its SHA256SUMS, file for file, and names every difference otherwise', () => {
+  const root = mkdtempSync(join(tmpdir(), 'design-reference-'));
+  const sum = text => createHash('sha256').update(text).digest('hex');
+  try {
+    mkdirSync(join(root, '.assets'));
+    writeFileSync(join(root, 'index.html'), '<p>reference</p>');
+    writeFileSync(join(root, '.assets', 'face.svg'), '<svg/>');
+    writeFileSync(join(root, 'SHA256SUMS'), `${sum('<p>reference</p>')}  ./index.html\n${sum('<svg/>')} *.assets/face.svg\n`);
+    assert.deepEqual(referenceProblems(root), []);
+    writeFileSync(join(root, 'index.html'), '<p>edited</p>');
+    writeFileSync(join(root, 'extra.js'), 'x');
+    rmSync(join(root, '.assets', 'face.svg'));
+    writeFileSync(join(root, 'SHA256SUMS'), `${readFileSync(join(root, 'SHA256SUMS'), 'utf8')}not a line\n`);
+    assert.deepEqual(referenceProblems(root).sort(), [
+      'SHA256SUMS line is not "<sha256>  <path>": not a line', 'changed: index.html', 'listed file is missing: .assets/face.svg', 'not in SHA256SUMS: extra.js',
+    ].sort());
+    rmSync(join(root, 'SHA256SUMS'));
+    assert.deepEqual(referenceProblems(root), [`${join(root, 'SHA256SUMS')} is missing`]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the tool checks the reference before it captures, and stops on a difference', () => {
+  const tool = readFileSync('scripts/design-compare.mjs', 'utf8');
+  assert.ok(tool.indexOf('referenceProblems(referenceRoot)') > 0 && tool.indexOf('referenceProblems(referenceRoot)') < tool.indexOf('chromium.launch()'));
 });
