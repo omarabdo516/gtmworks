@@ -2,7 +2,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { clockLabel, scheduleLabel } from '@/lib/routine-schedule.mjs';
-import { morningDefault, morningTimes } from '@/lib/morning-schedule.mjs';
+import { morningDefault, morningTimes, zoneCities } from '@/lib/morning-schedule.mjs';
 import { seedDraft, setDraftValue, useDraftValue } from './settings-draft';
 
 // Good morning on the main Agent's page (#182; design-reference/app.js checkinSetHTML 3018-3028, the set-checkin handler
@@ -16,15 +16,14 @@ export type MorningProps={on:boolean,time:string|null,expr:string|null,display:s
 const never=()=>()=>{};
 const readZone=()=>{ try { return Intl.DateTimeFormat().resolvedOptions().timeZone||null; } catch { return null; } };
 const clockParts=/^(\d{1,2}):(\d{2})$/;
-// The zone's city, as the reference's "Cairo time": the last part of its IANA name, in Arabic for the region's own cities.
-const arabicCities:Record<string,string>={Cairo:'القاهرة',Riyadh:'الرياض',Dubai:'دبي',Kuwait:'الكويت',Qatar:'قطر',Bahrain:'البحرين',Amman:'عمّان',Beirut:'بيروت',Baghdad:'بغداد',Muscat:'مسقط',Casablanca:'الدار البيضاء',Tunis:'تونس',Algiers:'الجزائر',Tripoli:'طرابلس',Khartoum:'الخرطوم',Jerusalem:'القدس',Damascus:'دمشق',Aden:'عدن',London:'لندن',Paris:'باريس',Berlin:'برلين',Istanbul:'إسطنبول'};
-function cityOf(zone:string,language:string) {
+// The zone's city, as the reference's "Cairo time": the last part of its IANA name, named by the catalogue when it holds it.
+function cityOf(zone:string,t:(key:string,...values:unknown[])=>string) {
  const city=zone.split('/').at(-1)?.replaceAll('_',' ')||zone;
- return language==='ar'?arabicCities[city]??city:city;
+ return zoneCities.includes(city)?t(`zoneCity${city}`):city;
 }
 
 export function AgentMorning({agent,editable,morning}:{agent:string,editable:boolean,morning:MorningProps|null}) {
- const {t,language}=useI18n();
+ const {t}=useI18n();
  const savedOn=morning?.on===true?'on':'off';
  const savedTime=morning?.time??morning?.expr??morningDefault;
  const on=useDraftValue(agent,'morning.on',savedOn)==='on';
@@ -52,7 +51,7 @@ export function AgentMorning({agent,editable,morning}:{agent:string,editable:boo
     <button type="button" className="switch" role="switch" id="set-ck-on" aria-checked={on} aria-labelledby="set-ck-t" aria-disabled={locked||undefined} aria-describedby={allowed?undefined:'set-ck-level'}
      onClick={()=>{ if(!locked) setDraftValue('morning.on',on?'off':'on'); }}/></li>
    <li className="panel-row"><span className="panel-row__text"><label className="panel-row__t" htmlFor="set-ck-time">{t('settingsCheckinTime')}</label>
-    <span className="panel-row__d" id="set-ck-zone">{zone?t('settingsCheckinZone',cityOf(zone,language)):' '}</span></span>
+    <span className="panel-row__d" id="set-ck-zone">{zone?t('settingsCheckinZone',cityOf(zone,t)):' '}</span></span>
     <select className="set-input ck-time num" id="set-ck-time" value={time} disabled={!on} onChange={event=>setDraftValue('morning.time',event.target.value)}>
      {choices.map(choice=><option key={choice} value={choice}>{label(choice)}</option>)}
     </select></li>
