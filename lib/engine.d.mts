@@ -70,3 +70,4 @@ export type Engine={
 };
 export function engineFor(connection:EngineConnection):Engine;
 export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;
+export function endOf(run:Pick<RunState,'state'|'reply'|'noModel'>):'completed'|'failed'|'no_model'|'stopped'|'lost'|null;

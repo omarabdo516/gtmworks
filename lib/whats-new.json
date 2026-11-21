@@ -1,5 +1,11 @@
 [
  {
+  "issue": 428,
+  "date": "2026-11-21",
+  "en": { "title": "Channels say when no model is connected", "body": "When an agent called in a channel, or a job Lead hands to another agent, can’t answer because the company has no AI subscription or model key yet, the channel or chat now says so, with the link to Subscription and models for the Owner, instead of only saying the reply failed." },
+  "ar": { "title": "القنوات بتقولك لو مفيش موديل متوصّل", "body": "لما وكيل ناديته في قناة، أو شغلانة Lead سلّمها لوكيل تاني، ميقدرش يرد عشان الشركة لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل، القناة أو المحادثة بقت بتقول كده، ومعاها لينك الاشتراك والموديلات للمالك، بدل ما تقول بس إن الرد فشل." }
+ },
+ {
   "issue": 446,
   "date": "2026-11-21",
   "en": { "title": "The app keeps fewer keys", "body": "The app and the background worker now get only the settings they use, so neither holds the database password or the key that signs sign-ins, and a break-in into the app cannot use them." },
