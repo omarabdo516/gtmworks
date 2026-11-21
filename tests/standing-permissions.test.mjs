@@ -258,20 +258,40 @@ test('a revoke waits for an Always allow of the same entry still being delivered
   // The answer settles while the revoke waits: the revoke then goes on.
   profileOn(fake,adsProfile,['recursive delete']);
   let checks=0;
-  const settles=session({sending:()=>++checks<3?['recursive delete']:[]});
+  const settles=session({sending:()=>++checks<3?[{entry:'recursive delete',handed:false}]:[]});
   assert.equal((await revokeAgentPermission(settles.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
   assert.equal(checks,3);
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
   // It never settles: busy, the Engine is never touched, and the hold ends.
   profileOn(fake,adsProfile,['recursive delete']);
-  const stuck=session({sending:()=>['recursive delete']});
+  const stuck=session({sending:()=>[{entry:'recursive delete',handed:false}]});
   assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
   assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
   assert.equal(stuck.asked.includes('note_permission_revoked'),false);
   assert.equal(stuck.asked.at(-1),'end_permission_revoke');
-  // Another entry's answer being delivered does not hold this revoke up.
+  // Another entry's answer withheld by the hold, not handed out, does not hold this revoke up, and is not written in.
   profileOn(fake,adsProfile,['recursive delete']);
-  const other=session({sending:()=>['mcp:notion/create_page']});
+  const other=session({sending:()=>[{entry:'mcp:notion/create_page',handed:false}]});
   assert.equal((await revokeAgentPermission(other.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[]);
+ } finally { await fake.close(); }
+});
+
+test('a revoke waits for another entry\'s Always allow already handed to a closer, and never writes in one the Engine did not take (Codex on #499)',async()=>{
+ const fake=await fakeHermes();
+ try {
+  // B is handed out before the hold; its request then expires, so its delivery settles as gone and the Engine never took
+  // it: the revoke of A writes the list without B.
+  profileOn(fake,adsProfile,['recursive delete']);
+  let checks=0;
+  const settles=session({sending:()=>++checks<3?[{entry:'mcp:notion/create_page',handed:true}]:[]});
+  assert.equal((await revokeAgentPermission(settles.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)})).state,'revoked');
+  assert.equal(checks,3,'it waited for the delivery to settle');
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,[],'B is not granted by the revoke');
+  // A delivery that never settles: busy, and the Engine is never touched.
+  profileOn(fake,adsProfile,['recursive delete']);
+  const stuck=session({sending:()=>[{entry:'mcp:notion/create_page',handed:true}]});
+  assert.deepEqual(await revokeAgentPermission(stuck.db,{company,agent:ads,entry:'recursive delete',hermes:install(fake)}),{state:'busy'});
+  assert.deepEqual(fake.settings.profiles.get(adsProfile).config.command_allowlist,['recursive delete']);
  } finally { await fake.close(); }
 });

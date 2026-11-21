@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(47);
 -- #166. What an "Always allow" keeps in the Engine is kept on the request (`allows`), so each standing entry names who
 -- allowed it and when; everyone who sees the Agent reads that, only an active Owner or Manager who sees it may revoke,
 -- and a revoke is one Company log row. RS Learning: 1 Owner, 2 Manager, 3 and 5 Contributors, 4 Viewer. Ads (own
@@ -167,10 +167,10 @@ select is(public.begin_permission_revoke('10000000-0000-0000-0000-000000000001',
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.begin_permission_revoke('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','a Contributor takes no hold');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select results_eq($$select * from public.agent_permission_inflight('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002') order by 1$$,$$values ('mcp:canva/create_design'),('recursive delete')$$,
- 'a claimed Always allow is in flight, so the revoke writes it back');
-select results_eq($$select * from public.agent_permission_sending('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('mcp:canva/create_design')$$,
- 'and it is still being delivered, so a revoke of that entry waits for it (Codex on #499)');
+select results_eq($$select * from public.agent_permission_inflight('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002') order by 1$$,$$values ('recursive delete')$$,
+ 'a claimed Always allow the Engine has not taken is never written back: its request may be gone (Codex on #499)');
+select results_eq($$select * from public.agent_permission_sending('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('mcp:canva/create_design',false)$$,
+ 'it is still being delivered, not yet handed out, so only a revoke of that entry waits for it (Codex on #499)');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select * from public.agent_permission_sending('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,'42501','permissionNotAllowed','a Contributor reads no deliveries');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
@@ -200,6 +200,11 @@ select public.end_permission_revoke('10000000-0000-0000-0000-000000000001','e500
 reset role;
 set local role service_role;
 select is(jsonb_array_length(public.track_run_permission('e6000000-0000-0000-0000-000000000001','s-run-6',null,false,now())),1,'once it ends, the next read hands it to the Engine');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select results_eq($$select * from public.agent_permission_sending('10000000-0000-0000-0000-000000000001','e5000000-0000-0000-0000-000000000002')$$,$$values ('mcp:canva/create_design',true)$$,
+ 'once handed to a closer it may reach the Engine, so every revoke waits for it to settle (Codex on #499)');
 reset role;
 select ok(not has_function_privilege('anon','public.agent_permission_grants(uuid,uuid)','execute')
  and not has_function_privilege('anon','public.check_permission_revoke(uuid,uuid)','execute')
