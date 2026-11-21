@@ -25,7 +25,8 @@ The copy does not update itself. To move to a newer upstream commit:
 
 1. Set `pin=` in `scripts/vendor-matt-skills.sh` to the new commit, and add or drop names in its list if upstream did.
 2. Run `bash scripts/vendor-matt-skills.sh`. It fetches that commit, checks every listed skill is there, and replaces
-   each listed folder in `.claude/skills/` with upstream's; folders it does not list are left alone.
+   each listed folder in `.claude/skills/` with upstream's; folders it does not list are left alone, so delete a
+   dropped skill's folder by hand (`tests/matt-skills.test.mjs` fails while `.claude/skills/` holds an unlisted folder).
 3. Put the same commit in the Matt Pocock section of `THIRD_PARTY_NOTICES.md`, and its licence text if it changed.
 4. Read the diff (a skill may now expect something `docs/agents/` lacks), run `npm test`, and open a pull request.
 
