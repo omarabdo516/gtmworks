@@ -9,7 +9,10 @@ import '@/app/tokens.css';
 import '@/app/shell.css';
 
 const reducedMotion = (on: boolean) => cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }] });
-afterEach(async () => { vi.useRealTimers(); await reducedMotion(false); });
+// A link the press follows, as next/link does: the app draws the page it opens, however long that takes.
+const follow = (event: React.MouseEvent<HTMLAnchorElement>) => { event.preventDefault(); history.pushState(null, '', event.currentTarget.href); };
+const start = location.href;
+afterEach(async () => { vi.useRealTimers(); await reducedMotion(false); history.replaceState(null, '', start); });
 
 const agent = (id: string) => ({ connection_id: `connection-${id}`, name: `Agent ${id}` });
 const features = (name: string) => document.querySelector(`[aria-label="${name}"] .face__f`)!;
@@ -93,11 +96,6 @@ test('a press that opens no page: a face drawn after 450ms does not hop', async 
  expect(document.querySelector('section .face')!.classList.contains('is-happy')).toBe(false);
 });
 
-// A link the press follows, as next/link does: the app draws the page it opens, however long that takes.
-const follow = (event: React.MouseEvent<HTMLAnchorElement>) => { event.preventDefault(); history.pushState(null, '', event.currentTarget.href); };
-const here = location.href;
-afterEach(() => history.replaceState(null, '', here));
-
 test('a pressed link carries its hop to the page it opens however long that page takes, then for 450ms from its first face', async () => {
  const screen = await render(<div className="gw"><FaceMotion/><a href="/next-page" onClick={follow}><CompanyAgentFace agent={agent('a')} size={32}/>Open</a></div>);
  document.querySelector('a')!.click();
@@ -123,6 +121,31 @@ test('a pressed link whose page is not drawn within 10s carries no hop', async (
  await screen.rerender(<div className="gw"><FaceMotion key="next page"/><section><CompanyAgentFace agent={agent('a')} size={64}/></section></div>);
  await new Promise(resolve => queueMicrotask(() => resolve(null)));
  await vi.advanceTimersByTimeAsync(50);
+ expect(document.querySelector('section .face')!.classList.contains('is-happy')).toBe(false);
+});
+
+test('a link press whose page has not drawn the Agent yet: copies redrawn on the old page hop within 450ms, faces drawn before the press never', async () => {
+ const screen = await render(<div className="gw"><FaceMotion/><a href="/next-page" onClick={event => event.preventDefault()}><CompanyAgentFace agent={agent('a')} size={32}/>Open</a><aside><CompanyAgentFace agent={agent('a')} size={32}/></aside></div>);
+ document.querySelector('a')!.click();
+ // The press's page is still the one drawn: its copy redrawn now hops, as the reference's does.
+ await screen.rerender(<div className="gw"><FaceMotion/><a href="/next-page" onClick={event => event.preventDefault()}><CompanyAgentFace agent={agent('a')} size={32}/>Open</a><aside><CompanyAgentFace agent={agent('a')} size={32}/></aside><section><CompanyAgentFace agent={agent('a')} size={64}/></section></div>);
+ await expect.poll(() => document.querySelector('section .face')?.classList.contains('is-happy')).toBe(true);
+ // The face already drawn before the press was not drawn again.
+ expect(document.querySelector('aside .face')!.classList.contains('is-happy')).toBe(false);
+ await new Promise(resolve => setTimeout(resolve, 500));
+ await screen.rerender(<div className="gw"><FaceMotion/><a href="/next-page" onClick={event => event.preventDefault()}><CompanyAgentFace agent={agent('a')} size={32}/>Open</a><aside><CompanyAgentFace agent={agent('a')} size={32}/></aside><section><CompanyAgentFace agent={agent('a')} size={64}/></section><footer><CompanyAgentFace agent={agent('a')} size={32}/></footer></div>);
+ await new Promise(resolve => setTimeout(resolve, 50));
+ expect(document.querySelector('footer .face')!.classList.contains('is-happy')).toBe(false);
+});
+
+test('a press whose opened page never draws the Agent carries no hop to the page after it', async () => {
+ const screen = await render(<div className="gw"><FaceMotion/><a href="/next-page" onClick={follow}><CompanyAgentFace agent={agent('a')} size={32}/>Open</a></div>);
+ document.querySelector('a')!.click();
+ await screen.rerender(<div className="gw"><FaceMotion key="next page"/><p>No Agent here</p></div>);
+ await new Promise(resolve => setTimeout(resolve, 50));
+ history.pushState(null, '', '/another-page');
+ await screen.rerender(<div className="gw"><FaceMotion key="another page"/><section><CompanyAgentFace agent={agent('a')} size={64}/></section></div>);
+ await new Promise(resolve => setTimeout(resolve, 50));
  expect(document.querySelector('section .face')!.classList.contains('is-happy')).toBe(false);
 });
 
