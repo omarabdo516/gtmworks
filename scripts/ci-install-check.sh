@@ -678,7 +678,9 @@ docker exec -i "$sandbox" sh -ec 'mkdir -p /work/tools; cat > /work/tools/sandbo
 engine_node "$engine_key" - sandbox-mcp "$mcp_marker" < scripts/check-install-profiles.mjs > sandbox-mcp-proof.log 2>&1 &
 mcp_check=$!
 mcp_calling=''
-for attempt in $(seq 1 300); do
+# The Engine connects a server added to a profile at its next MCP reconcile (up to about two minutes), so the check asks
+# again until a Run offers the tool; this waits for the call up to ten minutes.
+for attempt in $(seq 1 600); do
   docker exec "$sandbox" test -f "/work/$first/$mcp_marker-calling.txt" 2> /dev/null && { mcp_calling=yes; break; }
   kill -0 "$mcp_check" 2> /dev/null || break
   sleep 1

@@ -566,13 +566,20 @@ model=started.model; const {reply}=started;
  const person=await signedIn();
  const {data:{user}}=await person.auth.getUser();
  assert.ok(user,'the first-run Owner signs in');
- const conversation=randomUUID();
- const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-MCP ${marker}: call your design tool.`};
- const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
- assert.deepEqual(sent,{conversation});
- const answer=await until('the reply after the tool call',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300);
- assert.ok(answer.body.includes(reply),answer.body);
- assert.ok(offered,'the Run offers the server\'s tool');
+ // A server added to a profile reaches Runs when the Engine's MCP reconcile connects it: a housekeeping chore every 60 s
+ // whose first tick only primes (gateway/run_profile_reconcile.py, _mcp_config_reconciler). The Agent is asked in a new
+ // Conversation every 20 s until a Run offers the tool, for up to four minutes.
+ let answered=null;
+ for(let attempt=0;attempt<12&&!offered;attempt++) {
+  if(attempt) await new Promise(resolve=>setTimeout(resolve,20000));
+  const conversation=randomUUID();
+  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-MCP ${marker}: call your design tool.`};
+  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+  assert.deepEqual(sent,{conversation});
+  answered=await until('the reply',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300);
+ }
+ assert.ok(answered?.body.includes(reply),answered?.body);
+ assert.ok(offered,'a Run offers the server\'s tool within four minutes of its adding');
  assert.equal(results.length,1,JSON.stringify(results));
  // The answer comes back as the Engine wraps a tool's result ({"result": "<host> <folder> <pid>"} inside its
  // untrusted-result block): only the host name and the /work path are read out of it.
