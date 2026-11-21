@@ -49,17 +49,25 @@ export function AgentRoutines({company,agent,name,canManage,canWrite}:{company:s
  const close=()=>{ setAdding(false); setAsking(null); setText(''); setEmpty(false); setFailed(null); focusAdd(); };
  const open=()=>{ if(adding) { close(); return; } setAdding(true); setTimeout(()=>document.getElementById('dp-rt-new')?.focus()); };
 
- const create=(sentence:string,read:Sentence,form:ScheduleForm)=>startTransition(async()=>{
-  const schedule=cronOf(form); if(!schedule) return;
+ // One create at a time: a second Enter or Add while one is on its way makes nothing (each run is a paid Run). The
+ // mark is a ref, set at once, so two presses in the same moment cannot both pass; a failed create clears it for a retry.
+ const creating=useRef(false);
+ const create=(sentence:string,read:Sentence,form:ScheduleForm)=>{
+  const schedule=cronOf(form); if(!schedule||creating.current) return;
+  creating.current=true;
+  startTransition(async()=>{
   setFailed(null);
   const {error,unlogged,routine}=await send(company,agent,'create',{name:read.name??t('agentRoutineNewName'),prompt:read.prompt,schedule,timezone:browserZone()});
+  creating.current=false;
   if(error) { setFailed(error); return; }
   if(routine) setFlash(routine.id);
   toast(t('agentRoutineIsOn',sentence));
   warnUnlogged(t,unlogged);
   close(); readAgain();
- });
+  });
+ };
  const save=()=>{
+  if(creating.current) return;
   const sentence=text.trim();
   if(!sentence) { setEmpty(true); document.getElementById('dp-rt-new')?.focus(); return; }
   const read=readRoutineSentence(sentence); if(!read) return;
@@ -72,9 +80,10 @@ export function AgentRoutines({company,agent,name,canManage,canWrite}:{company:s
   if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); event.nativeEvent.stopImmediatePropagation(); close(); }
  };
 
- // "See it in details": once the list is drawn, the section in view and the focus on the newest row's switch.
- const [shown,setShown]=useState(0);
- useEffect(()=>onShowRoutines(()=>setShown(count=>count+1)),[]);
+ // "See it in details": the list is read again (the Routine was made in the chat after it was read), and once that read
+ // is drawn, the section in view and the focus on the newest row's switch. A section still on its first read takes the
+ // ask when that read lands.
+ useEffect(()=>onShowRoutines(readAgain),[readAgain]);
  useEffect(()=>{
   if(routines===undefined||!takeShowRoutines()) return;
   const timer=setTimeout(()=>{
@@ -84,7 +93,7 @@ export function AgentRoutines({company,agent,name,canManage,canWrite}:{company:s
    (last?.querySelector<HTMLElement>('.switch')??last)?.focus({preventScroll:true});
   });
   return ()=>clearTimeout(timer);
- },[routines,shown]);
+ },[routines]);
 
  const count=routines?.length??0;
  const example=t('routineExample');

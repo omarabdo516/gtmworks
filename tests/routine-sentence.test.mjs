@@ -57,3 +57,20 @@ test('a monthly Routine reads back in words in both languages', () => {
  assert.equal(scheduleLabel(en,{expr:'30 10 1 * *',display:null}),'1st of every month · 10:30 AM');
  assert.equal(scheduleLabel(ar,{expr:'30 10 1 * *',display:null}),'أول كل شهر 10:30 الصبح');
 });
+
+// Review of #517: a sentence is never given a time or a day it did not say.
+test('a number in the task is no time, and a named day, a date of the month or an impossible clock is never replaced', () => {
+ assert.deepEqual(read('Every day send me a summary of the top 3 ads'),{name:'Summary of the top 3 ads',cron:null},'no time said: it asks');
+ assert.deepEqual(read('Every day send me the top 3 ads at 9am'),{name:'Top 3 ads',cron:'0 9 * * *'},'the marked time wins over the task\'s number');
+ assert.equal(readRoutineSentence('Every day send me the top 3 ads at 9am')?.prompt,'send me the top 3 ads');
+ assert.deepEqual(read('Send me a report every week on Monday at 9am'),{name:'Report',cron:'0 9 * * 1'});
+ assert.equal(readRoutineSentence('Send me a report every week on Monday at 9am')?.prompt,'Send me a report');
+ assert.deepEqual(read('Send me the report every month on the 15th at 9am'),{name:'Report on the 15th',cron:null},'only the first of the month is a schedule it makes: it asks, and the 15th stays in the task');
+ assert.deepEqual(read('ابعتلي التقرير كل شهر يوم 15 الساعة 9 الصبح')?.cron,null);
+ assert.deepEqual(read('Send me the report every morning'),{name:'Report',cron:null},'every morning says no hour');
+ assert.deepEqual(read('Send me the report every morning at 8'),{name:'Report',cron:'0 8 * * *'});
+ assert.deepEqual(read('Send me the report every evening at 7'),{name:'Report',cron:'0 19 * * *'});
+ assert.deepEqual(read('Send me the report every day at 25:90'),{name:'Report',cron:null},'an impossible clock asks');
+ assert.deepEqual(read('ابعتلي التقرير كل يوم 25 الصبح')?.cron,null);
+ assert.deepEqual(read('ابعتلي ملخص كل يوم فيه 3 إعلانات'),{name:'ملخص فيه 3 إعلانات',cron:null},'an Arabic task number is no time either');
+});

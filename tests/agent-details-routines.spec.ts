@@ -119,7 +119,8 @@ test('Add opens the field; an empty one is refused, Escape and Cancel close it, 
  // One sentence, Enter: made on Ads' profile with its schedule, the row last and flashing, the toast, a log row.
  const sentence='Send me the leads summary every day at 8 in the morning';
  await field.fill(sentence);
- await field.press('Enter');
+ // Two Enters in the same moment make one Routine.
+ await field.evaluate(input=>{ const enter=()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})); enter(); enter(); });
  await expect(page.locator('.toast')).toContainText(`“${sentence}” is on`);
  await expect(titles(page,'Ads')).toHaveText(['Ads summary','Spend check','Leads summary']);
  await expect(row(page,'Ads','Leads summary')).toHaveClass(/is-flash/);
@@ -212,8 +213,10 @@ test('under a reply in which the Agent made a Routine the Conversation says so, 
   {role:'assistant',content:'',tool_calls:[call],timestamp:sent+3},
   {role:'tool',tool_call_id:'call_1',tool_name:'cronjob_manage',content:JSON.stringify({success:true,job_id:'cc00000000c1',name:'Cost per lead',schedule:'0 9 * * 0'}),timestamp:sent+5},
   {role:'assistant',content:'Done. I will send it every Sunday.',timestamp:sent+8}]});
- jobs(ads).push(job('cc00000000c1','Cost per lead','0 9 * * 0'));
  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+ // The details read Ads' list as the chat opened; the Routine is in the Engine only afterwards, so the link must read it.
+ await expect(titles(page,'Ads')).toHaveCount(4);
+ jobs(ads).push(job('cc00000000c1','Cost per lead','0 9 * * 0'));
  const line=page.locator('.turns .note[data-kind="routine"]');
  await expect(line).toHaveText('Routine created: Cost per lead · Every Sunday · 9:00 AMSee it in details');
  // The panel is hidden first, so the link has to open it.
