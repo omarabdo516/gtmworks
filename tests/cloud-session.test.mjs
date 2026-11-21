@@ -21,12 +21,13 @@ function machine() {
  const stub=(name,body)=>{ writeFileSync(join(dir,'bin',name),`#!/usr/bin/env bash\necho "${name} $*" >> "${dir}/calls.log"\n${body}\n`); chmodSync(join(dir,'bin',name),0o755); };
  // Only the tools the script needs, so a machine without dockerd is one where the stand-in is gone; each the system's
  // own, not a wrapper an agent session puts first on its PATH.
- for(const tool of ['bash','cat','cut','dirname','id','mkdir','nohup','seq','rm','setsid','sha256sum','sleep','tail','touch','tr']) symlinkSync(execFileSync('bash',['-c',`command -v ${tool}`],{encoding:'utf8',env:{PATH:'/usr/local/bin:/usr/bin:/bin'}}).trim(),join(dir,'bin',tool));
+ for(const tool of ['bash','cat','cut','dirname','flock','grep','id','mkdir','nohup','seq','rm','setsid','sha256sum','sleep','tail','touch','tr']) symlinkSync(execFileSync('bash',['-c',`command -v ${tool}`],{encoding:'utf8',env:{PATH:'/usr/local/bin:/usr/bin:/bin'}}).trim(),join(dir,'bin',tool));
  stub('npm','mkdir -p node_modules');
  // No daemon answers until the stand-in dockerd has run once.
  stub('docker',`[[ -f "${dir}/dockerd-started" ]]`);
  stub('dockerd',`touch "${dir}/dockerd-started"`);
- stub('pgrep',`[[ -f "${dir}/dockerd-started" ]]`);
+ // pgrep finds dockerd once the stand-in has run, or when proc/ lists one.
+ stub('pgrep',`[[ -f "${dir}/dockerd-started" ]] || grep -qx dockerd "${dir}"/proc/* 2> /dev/null`);
  // \`ps -o comm= -p <pid>\` prints the process's name, or fails when no such process runs.
  stub('ps',`[[ -f "${dir}/proc/\${@: -1}" ]] && cat "${dir}/proc/\${@: -1}"`);
  mkdirSync(join(dir,'run/docker/containerd'),{recursive:true}); mkdirSync(join(dir,'proc'));
@@ -125,9 +126,11 @@ test('`docker` removes pid files whose pid is another process, and containerd\'s
 
 test('`docker` leaves the pid files of a containerd or dockerd that really runs',()=>{
  withStalePids({180:'containerd',181:'dockerd'},m=>{
-  assert.equal(m.run(['docker']).status,0);
+  // The hook's start returns at once (dockerd runs, it only has not answered yet); `docker` would wait for it.
+  assert.equal(m.run([],{CLAUDE_CODE_REMOTE:'true'}).status,0);
   assert.deepEqual(m.containerdLeft(),containerdFiles);
   assert.equal(m.dockerPidLeft(),true);
+  assert.equal(m.calls().filter(call=>call.startsWith('dockerd')).length,0,'a running dockerd is not started twice');
  });
  // A live containerd keeps its files while a stale docker.pid still goes.
  withStalePids({180:'containerd',181:'bash'},m=>{

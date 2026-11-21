@@ -44,15 +44,22 @@ clear_stale_pid_files() {
 }
 
 # Starts dockerd detached when no daemon answers and none is running. With `wait`, waits up to 90 seconds for it.
+# One start at a time (the hook's and `cloud:up`'s can overlap): the lock covers the check, the stale files and the
+# launch, until the new dockerd shows in the process list, so no start removes the files of a daemon another just began.
 docker_up() {
  docker info > /dev/null 2>&1 && return 0
+ exec 9> "$log_dir/gtmworks-docker-up.lock"
+ flock -w 30 9 || { echo 'another Docker start held its lock for 30 seconds' >&2; return 1; }
  if ! pgrep -x dockerd > /dev/null 2>&1; then
-  command -v dockerd > /dev/null 2>&1 || { echo 'no Docker daemon answers and dockerd is not installed' >&2; return 1; }
+  command -v dockerd > /dev/null 2>&1 || { exec 9>&-; echo 'no Docker daemon answers and dockerd is not installed' >&2; return 1; }
   local sudo=()
   if [[ $(id -u) != 0 ]] && command -v sudo > /dev/null 2>&1; then sudo=(sudo -n); fi
   clear_stale_pid_files "${sudo[@]}"
-  setsid nohup "${sudo[@]}" dockerd > "$log_dir/gtmworks-dockerd.log" 2>&1 < /dev/null &
+  # The daemon must not inherit the lock, or it would hold it as long as it runs.
+  setsid nohup "${sudo[@]}" dockerd > "$log_dir/gtmworks-dockerd.log" 2>&1 < /dev/null 9>&- &
+  for _ in $(seq 1 50); do pgrep -x dockerd > /dev/null 2>&1 && break; sleep 0.1; done
  fi
+ exec 9>&-
  [[ ${1:-} == wait ]] || return 0
  for _ in $(seq 1 90); do docker info > /dev/null 2>&1 && return 0; sleep 1; done
  echo "the Docker daemon did not answer within 90 seconds (log: $log_dir/gtmworks-dockerd.log)" >&2
