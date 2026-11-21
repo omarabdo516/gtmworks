@@ -57,7 +57,7 @@ export function AgentRoutines({company,agent,name,canManage,canWrite}:{company:s
   creating.current=true;
   startTransition(async()=>{
   setFailed(null);
-  const {error,unlogged,routine}=await send(company,agent,'create',{name:read.name??t('agentRoutineNewName'),prompt:read.prompt,schedule,timezone:browserZone()});
+  const {error,unlogged,routine}=await send(company,agent,'create',{name:read.name??t('agentRoutineNewName'),prompt:read.prompt,schedule,timezone:read.zone??browserZone()});
   creating.current=false;
   if(error) { setFailed(error); return; }
   if(routine) setFlash(routine.id);

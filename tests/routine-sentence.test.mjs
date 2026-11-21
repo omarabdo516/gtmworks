@@ -37,11 +37,11 @@ test('the same sentences in English read into the same schedules', () => {
 
 // Omar, 2026-11-18: each run is a paid Run, so a sentence that does not say when is asked a time; nothing defaults.
 test('a sentence that does not say fully when gives no schedule, only what it did say', () => {
- assert.deepEqual(readRoutineSentence('ملخص الليدز'),{name:'ملخص الليدز',prompt:'ملخص الليدز',form:null,draft:null});
- assert.deepEqual(readRoutineSentence('Send me the leads every day'),{name:'Leads',prompt:'Send me the leads',form:null,draft:{kind:'daily'}});
+ assert.deepEqual(readRoutineSentence('ملخص الليدز'),{name:'ملخص الليدز',prompt:'ملخص الليدز',form:null,draft:null,zone:null});
+ assert.deepEqual(readRoutineSentence('Send me the leads every day'),{name:'Leads',prompt:'Send me the leads',form:null,draft:{kind:'daily'},zone:null});
  assert.deepEqual(readRoutineSentence('ابعتلي التقرير كل أسبوع')?.draft,{kind:'weekly',dow:4});
  assert.equal(readRoutineSentence('Send me a summary of the top 3 ads')?.form,null,'a number in the task is no time');
- assert.deepEqual(readRoutineSentence('summary at 9am'),{name:'Summary',prompt:'summary',form:null,draft:{kind:'daily',h:9,m:0}},'a time with no "every" asks how often');
+ assert.deepEqual(readRoutineSentence('summary at 9am'),{name:'Summary',prompt:'summary',form:null,draft:{kind:'daily',h:9,m:0},zone:null},'a time with no "every" asks how often');
  assert.equal(readRoutineSentence('   '),null);
 });
 
@@ -117,4 +117,14 @@ test('an Arabic day named after «every week», with or without «ال» and «�
 test('«كل يوم الاتنين», a day with its article right after «every day», runs on that day, not every day', () => {
  assert.deepEqual(read('ابعتلي تقرير كل يوم الاتنين الساعة 9 الصبح'),{name:'تقرير',cron:'0 9 * * 1'});
  assert.deepEqual(read('ابعتلي تقرير كل يوم 9 الصبح'),{name:'تقرير',cron:'0 9 * * *'},'every day alone stays daily');
+});
+
+test('a stated time zone is kept with the schedule (UTC, GMT), and one it cannot carry asks', () => {
+ const utc=readRoutineSentence('Send me a report every day at 9am UTC');
+ assert.deepEqual([utc?.form&&cronOf(utc.form),utc?.zone,utc?.prompt],['0 9 * * *','UTC','Send me a report']);
+ assert.equal(readRoutineSentence('Send me a report every day at 9am GMT')?.zone,'UTC');
+ assert.equal(readRoutineSentence('Send me a report every day at 9am EST')?.form,null,'another zone asks');
+ assert.equal(readRoutineSentence('Send me a report every day at 9am GMT+2')?.form,null);
+ assert.equal(readRoutineSentence('ابعتلي تقرير كل يوم 9 الصبح بتوقيت السعودية')?.form,null);
+ assert.equal(readRoutineSentence('Send me a report every day at 9am')?.zone,null,'no zone said: the person\'s own');
 });
