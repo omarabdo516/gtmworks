@@ -2,7 +2,7 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
+import { faceOf, handTurn, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withTeamWork, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
@@ -37,16 +37,20 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type Message={id:number,author:'person'|'agent',author_name:string,agent_id:string|null,body:string,run_id:string,hand_card:number|null,created_at:string};
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
  type HandedRow={run_id:string,goal:string,state:string,answers_person:boolean,created_at:string,to_agent:{id:string,name:string,connection_id:string}|null};
- const [{ends,messages,queued,requestRows,madeRows,handedRows},notes,replyRows,rows,files,{data:working},{data:me},card]=await Promise.all([
+ type Face={id:string,connection_id:string,name:string};
+ type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,reason:string,state:ChangeProposalView['state'],answered_at:string|null,answer:string|null,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
+ const [{ends,messages,queued,requestRows,madeRows,handedRows,changeRows},notes,replyRows,rows,files,{data:working},{data:me},card]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
    +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)),'
-   +'agent_handovers(run_id,goal,state,answers_person,created_at,to_agent:hermes_agents!to_agent(id,name,connection_id))')
+   +'agent_handovers(run_id,goal,state,answers_person,created_at,to_agent:hermes_agents!to_agent(id,name,connection_id)),'
+   // A change the chat's Agent proposed (#19), read by the Conversation's person while they see both Agents (RLS).
+   +'agent_change_proposals(id,run_id,change,setting,value,reason,state,answered_at,answer,created_at,answerer:people!answered_by(name),agent:hermes_agents!agent_id(id,connection_id,name),by:hermes_agents!proposed_by(id,connection_id,name))')
    .eq('id',conversation).order('id',{referencedTable:'conversation_messages'}).order('queued_at',{referencedTable:'conversation_queued_turns'})
    .order('id',{referencedTable:'lead_agent_requests'}).order('created_at',{referencedTable:'lead_made_agents'})
-   .order('created_at',{referencedTable:'agent_handovers'}).maybeSingle()
-   .then(({data})=>{ const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:HandedRow[]}|null;
-    return {ends:read?.conversation_run_ends||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],handedRows:read?.agent_handovers||[]}; }),
+   .order('created_at',{referencedTable:'agent_handovers'}).order('id',{referencedTable:'agent_change_proposals'}).maybeSingle()
+   .then(({data})=>{ const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:HandedRow[],agent_change_proposals:ChangeRow[]}|null;
+    return {ends:read?.conversation_run_ends||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],handedRows:read?.agent_handovers||[],changeRows:read?.agent_change_proposals||[]}; }),
   db.from('conversation_notes').select(noteColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as StoredNote[]),
   db.from('reply_cards').select(replyCardColumns).eq('conversation_id',conversation).order('id').then(({data})=>(data||[]) as ReplyCardRow[]),
   db.from('agent_rules').select('id,run_id,agent_id,removed_at,said_at,body,suggestion,decided_at,decider:people!decided_by(name)').eq('conversation_id',conversation).order('said_at').then(({data})=>(data||[]) as unknown as SavedRow[]),
@@ -62,7 +66,17 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const states=apps&&found.agent_id&&replyRows.some(row=>row.kind==='connect'&&row.state==='open')?await apps(found.agent_id):null;
  const {data:isOwner}=asksForApps?await db.rpc('is_company_owner',{c:company}):{data:false};
  const connect=asksForApps?{owner:isOwner===true,owners:isOwner===true?[]:await ownerNames(db,company)}:null;
- const owners=requestRows.some(row=>row.state==='waiting')?await ownerNames(db,company):[];
+ const changeWaits=changeRows.some(row=>row.state==='waiting');
+ const owners=requestRows.some(row=>row.state==='waiting')||changeWaits?await ownerNames(db,company):[];
+ // The Owner answers a proposal from the chat too (design-reference: chgHTML), so the record says whether this person is one.
+ const {data:ownsChanges}=changeWaits?await db.rpc('is_company_owner',{c:company}):{data:false};
+ const changeView=(row:ChangeRow&{agent:Face,by:Face}):ChangeProposalView=>{
+  const base={id:row.id,change:row.change,setting:row.setting,value:row.value,reason:row.reason,agent:row.agent,by:row.by};
+  if(row.state==='waiting') return {...base,state:'waiting',owners};
+  if(row.state==='refused') return {...base,state:'refused'};
+  const by=row.answerer?.name||''; const at=row.answered_at||row.created_at;
+  return row.state==='approved'?{...base,state:'approved',answeredBy:by,at}:{...base,state:'declined',answeredBy:by,at,answer:row.answer};
+ };
  // The Agent made for a request shows in the request's own card, so one card holds the request and its outcome.
  const madeFor=(row:RequestRow)=>madeRows.find(made=>made.run_id===row.run_id&&made.call_id===row.call_id);
  const requestView=(row:RequestRow):AgentRequestView=>{
@@ -82,6 +96,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...handed,
+  ...changeRows.flatMap(row=>row.agent&&row.by?[{run_id:row.run_id,at:row.created_at,card:{kind:'change',change:changeView({...row,agent:row.agent,by:row.by})}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card)} satisfies PlacedCard]:[]; })];
  type SavedRow={id:string,run_id:string,agent_id:string|null,removed_at:string|null,said_at:string,body:string,suggestion:'pending'|'approved'|'rejected'|null,decided_at:string|null,decider:{name:string}|null};
  const sentTo=rows.some(row=>row.suggestion)?new Map((((await db.rpc('rule_suggestions_sent_to',{conversation})).data||[]) as {rule:string,sent_to:string[]}[]).map(row=>[row.rule,row.sent_to])):new Map<string,string[]>();
@@ -117,6 +132,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),
   ...(permit?{permit:permit as PermissionChoice[]}:{}),
   ...(connect?{connect}:{}),
+  ...(ownsChanges===true?{changeOwner:true as const}:{}),
   failed:ended!==null,
   ...(ended==='no_model'?{noModel:{owner:ownsIt===true}}:{}),
   ...(reason?{modelRefused:{reason,owner:ownsIt===true}}:{}),

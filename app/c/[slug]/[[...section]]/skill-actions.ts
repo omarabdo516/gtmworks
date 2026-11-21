@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
 import { changeCompanySkill, skillProblems } from '@/lib/company-skills.mjs';
 import { answerRequest } from '@/lib/agent-requests.mjs';
+import { answerChange } from '@/lib/agent-changes.mjs';
 // Back to the skills screen: done, a refusal it names, or a failure, which is logged by its state only.
 function skillsScreen(action:string,path:string,state:string,done:string) {
  revalidatePath(path);
@@ -42,4 +43,18 @@ export const answerAgentRequest=withActionLog('answerAgentRequest',async functio
  revalidatePath(`/c/${slug}`,'layout');
  if(state!=='made'&&state!=='declined') logActionFailure('answerAgentRequest',{message:state},{form});
  redirect(state==='made'||state==='declined'?path:`${path}?failed=request-${state}`);
+});
+
+// A proposed change to an Agent's settings (#19): the Owner alone approves or declines it, from "Waiting on you" or the
+// chat it was proposed in (`back`, a path inside this Company, where a done answer returns). Approving writes it to that Agent's own profile first
+// (lib/agent-changes.mjs). The reason is never logged: a failure line names only the action and the answer's state.
+export const answerAgentChange=withActionLog('answerAgentChange',async function answerAgentChange(form:FormData) {
+ const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug'));
+ const back=String(form.get('back')||''); const path=back.startsWith(`/c/${slug}/`)&&!back.includes('?')&&!back.includes('//')?back:`/c/${slug}/approvals`;
+ const {state}=!await actionAllowed(db,'answerAgentChange',company)?{state:'notAllowed'}:await answerChange(db,{company,proposal:Number(form.get('proposal')),approve:form.get('intent')==='approve',reason:String(form.get('reason')||'')});
+ // An approved model or setting changes what the Agent's settings page and the chat read: the whole frame is refreshed.
+ revalidatePath(`/c/${slug}`,'layout');
+ if(state!=='approved'&&state!=='declined') logActionFailure('answerAgentChange',{message:state},{form});
+ // A failure is said where every Owner's answers wait, which names it.
+ redirect(state==='approved'||state==='declined'?path:`/c/${slug}/approvals?failed=change-${state}`);
 });

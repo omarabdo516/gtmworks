@@ -203,6 +203,23 @@ test('a request for an Agent says who asked whom, and the Owner\'s yes or no wit
    ['طلب من Lead وكيل', 'عمل وكيل طلبه Youssef', 'ظهر عند Youssef', 'رفض طلب وكيل من Youssef', 'طلب', 'مستني رد المالك']]);
 });
 
+// #19: a proposed change names the setting and the Agent, with the value after it; the Owner's answer follows.
+test('a proposed change to an Agent\'s settings, its approval and its decline name the setting and the Agent, in both languages', () => {
+ const proposed = describeEntry({ subject: 'agent', action: 'agent_change_proposed', agent_id: writer, details: { agent_name: 'Analyst', setting: 'model', new: 'google/gemini-2.5-pro', reason: 'Faster on big numbers.' } });
+ assert.deepEqual([proposed.act, proposed.from, proposed.to], [['logActChangeProposed', { key: 'settingModel' }, { text: 'Analyst' }], { text: 'google/gemini-2.5-pro' }, { key: 'logChangeWaiting' }]);
+ const approved = describeEntry({ subject: 'agent', action: 'agent_change_approved', agent_id: writer, details: { agent_name: 'Analyst', setting: 'delegation', new: true } });
+ assert.deepEqual([approved.act, approved.from, approved.to], [['logActChangeApproved', { key: 'logChangeSubagents' }, { text: 'Analyst' }], { key: 'logChangeProposal' }, { key: 'logOn' }]);
+ const soul = describeEntry({ subject: 'agent', action: 'agent_change_approved', agent_id: writer, details: { agent_name: 'Analyst', setting: 'instructions' } });
+ assert.deepEqual([soul.act[1], soul.to], [{ key: 'logFieldInstructions' }, { key: 'logChangeApplied' }], 'the instructions themselves never reach the log');
+ const declined = describeEntry({ subject: 'agent', action: 'agent_change_declined', agent_id: writer, details: { agent_name: 'Analyst', setting: 'timezone', new: 'Africa/Cairo' } });
+ assert.deepEqual([declined.act, declined.to], [['logActChangeDeclined', { key: 'settingTimezone' }, { text: 'Analyst' }], { key: 'logChangeNothing' }]);
+ const reasoned = describeEntry({ subject: 'agent', action: 'agent_change_declined', agent_id: writer, details: { agent_name: 'Analyst', setting: 'model', reason: 'Keep it this month.' } });
+ assert.deepEqual(reasoned.to, { text: 'Keep it this month.' });
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActChangeProposed', 'main model', 'Analyst'), t('logActChangeApproved', 'sub-agents', 'Analyst'), t('logActChangeDeclined', 'the instructions', 'Analyst'), t('logChangeWaiting')]; }),
+  [['proposed a change to main model in the settings of Analyst', 'approved a change to sub-agents in the settings of Analyst', 'declined a change to the instructions in the settings of Analyst', 'Waiting for the Owner’s OK'],
+   ['اقترح تغيير main model في إعدادات Analyst', 'وافق على تغيير sub-agents في إعدادات Analyst', 'رفض تغيير the instructions في إعدادات Analyst', 'مستني موافقة المالك']]);
+});
+
 test('the filters: everyone, one person, one Agent, gtmworks itself, one Card', () => {
  const rows = [
   { id: 1, actor_kind: 'person', actor_id: omar, card_id: 5, agent_id: null },

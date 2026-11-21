@@ -1014,3 +1014,11 @@
 .gw .install-update__line { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
 .gw .install-update__ask { display: grid; gap: 8px; }
 .gw .install-update .set-err { color: var(--gw-danger-text); }
+
+/* A proposed change to an Agent's settings (#19; design-reference: .chg-card, .pp-card): the Agent request's card, solid,
+   with the reference's narrower labels; the new instructions keep their lines. */
+.gw .chg-card .card__sub { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
+.gw .chg-card .kv__row { grid-template-columns: 104px minmax(0, 1fr); }
+.gw .chg-card .chg-text { white-space: pre-wrap; max-height: 12lh; overflow: auto; }
+.gw .chg-card { container-type: inline-size; }
+@container (max-width: 420px) { .gw .chg-card .kv__row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
