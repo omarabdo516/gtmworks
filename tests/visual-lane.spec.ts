@@ -110,9 +110,9 @@ const screenStates: Record<string, { set: string, unset: string, engine?: Engine
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
        ('${standing(1)}','${rsLearning}','${standing(5)}','Lead','General',true,'visual-standing-lead'),
        ('${standing(2)}','${rsLearning}','${standing(6)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'ag-${standing(2).replaceAll('-', '')}');
-      insert into public.agent_profiles(agent_id,company_id,tools_level,tools_policy) values ('${standing(2)}','${rsLearning}',1,public.engine_tool_policy());
-      insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values ('${rsLearning}','co-${rsLearning.replaceAll('-', '')}',1,public.engine_tool_policy())
-       on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+      insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${standing(2)}','${rsLearning}',true);
+      insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${rsLearning}','co-${rsLearning.replaceAll('-', '')}',true)
+       on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
       insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${standing(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;
       insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${standing(3)}','${rsLearning}','${omar}','${standing(2)}','Meta Ads','2026-06-15T11:00:00Z');
       insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
