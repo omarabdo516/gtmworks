@@ -129,9 +129,11 @@ test('without pgrep, which the cleanup needs, the lane starts no machine and say
   const tools = join(root, 'no-pgrep');
   if (!existsSync(tools)) {
     mkdirSync(tools);
+    // The first of each name on PATH, as a shell finds it; a name is counted once it is linked, broken links included.
+    const linked = new Set(['pgrep']);
     for (const dir of process.env.PATH.split(':')) {
       if (!existsSync(dir) || !/^\/(usr\/)?(local\/)?s?bin$/.test(dir)) continue;
-      for (const name of readdirSync(dir)) if (name !== 'pgrep' && !existsSync(join(tools, name))) symlinkSync(join(dir, name), join(tools, name));
+      for (const name of readdirSync(dir)) if (!linked.has(name)) { linked.add(name); symlinkSync(join(dir, name), join(tools, name)); }
     }
   }
   const run = lane(t, { env: { PATH: `${bin}:${tools}` } });
