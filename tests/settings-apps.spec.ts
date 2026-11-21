@@ -60,7 +60,7 @@ async function sheetMatches(page:Page,section:Awaited<ReturnType<typeof catalogu
  await expect(page.locator('#btn-apps .sb-apps__n')).toHaveText(section.count);
  await page.locator('#btn-apps').click();
  await expect(sheetOf(page).locator('#apps-q')).toBeFocused();
- await expect(sheetOf(page).locator('.app-card')).toHaveCount(33);
+ await expect(sheetOf(page).locator('.app-card')).toHaveCount(34);
  expect(await catalogueOf(sheetOf(page))).toEqual(section);
 }
 
@@ -79,7 +79,7 @@ test('the apps and their states are the Engine\'s: connected, needing attention 
  await expect(card(page,'Notion').locator('.app__state')).toHaveText('Needs attention');
  await expect(card(page,'Notion').getByRole('link',{name:'Reconnect Notion'})).toBeVisible();
  await expect(card(page,'Canva').locator('.app__state')).toHaveText('Not connected');
- await expect(page.locator('.app__name'),'every app the Engine offers, the ready-made ones and the form').toHaveCount(33);
+ await expect(page.locator('.app__name'),'every app the Engine offers, the ready-made ones and the form').toHaveCount(34);
  const section=await catalogueOf(page.locator('.sov'));
  await page.locator('#apps-q').fill('كانفا');
  await expect(page.locator('.app__name')).toHaveText(['Canva']);
