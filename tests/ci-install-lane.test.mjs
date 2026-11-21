@@ -22,6 +22,7 @@ case $1 in
   if [ -n "${'${FAKE_DOCKER_RUN_WAIT:-}'}" ]; then touch "$state/starting"; sleep "$FAKE_DOCKER_RUN_WAIT"; fi
   id=$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n'); echo "$name $label" > "$host/$id"; echo "$id"; touch "$state/started";;
  rm) shift; status=0
+  if [ -e "$state/area-pid" ]; then ps -o stat= -p "$(cat "$state/area-pid")" 2> /dev/null | grep -q '^[^Z]' && echo running > "$state/area-at-removal"; fi
   for arg; do case $arg in -*) continue;; esac; found=
    for f in "$host"/*; do [ -e "$f" ] || continue; read -r n _ < "$f"
     if [ "$(basename "$f")" = "$arg" ] || [ "$n" = "$arg" ]; then rm -f "$f"; found=1; fi; done
@@ -35,10 +36,11 @@ exit 0
 `;
 
 // The proof the lane runs, standing in for scripts/ci-install-check.sh: it says which Docker it was given, then passes,
-// fails, or waits to be stopped in an area of its own subshell, as the real proof runs its areas.
+// fails, or waits to be stopped in an area of its own subshell, as the real proof runs its areas; the area ignores
+// SIGTERM, as a command can.
 const proof = `#!/usr/bin/env bash
 printf %s "\${DOCKER_HOST:-}" > "$FAKE_DOCKER_STATE/proof-docker-host"; echo $$ > "$FAKE_DOCKER_STATE/proof-pid"
-case $LANE_PROOF in pass) exit 0;; fail) exit 1;; wait) (echo $BASHPID > "$FAKE_DOCKER_STATE/area-pid"; touch "$FAKE_DOCKER_STATE/proving"; sleep 60);; esac
+case $LANE_PROOF in pass) exit 0;; fail) exit 1;; wait) (trap '' TERM; echo $BASHPID > "$FAKE_DOCKER_STATE/area-pid"; touch "$FAKE_DOCKER_STATE/proving"; while :; do sleep 1; done);; esac
 `;
 
 let root, repo, bin;
@@ -144,6 +146,7 @@ test('SIGTERM to the lane alone while the proof runs stops the proof and its are
     for (let i = 0; i < 20 && alive(pid); i++) await sleep(50);
     assert.equal(alive(pid), false, `${file}: the proof is not left running against a machine that is gone`);
   }
+  assert.equal(existsSync(join(run.state, 'area-at-removal')), false, 'the area had ended before the machine was removed');
 });
 
 const settled = async state => {
@@ -171,6 +174,20 @@ test('a machine that starts after the trap has stopped waiting for it is removed
   assert.equal((await run.ended).signal, 'SIGTERM');
   await run.reached('started');
   await settled(run.state);
+  cleanedUp(run.state);
+});
+
+test('a start that outlasts even the guard\'s wait keeps the work folder, and the next run removes its machine', async t => {
+  const run = lane(t, { env: { FAKE_DOCKER_RUN_WAIT: '4', INSTALL_LANE_START_WAIT: '1', INSTALL_LANE_GUARD_START_WAIT: '1' } });
+  await run.reached('starting');
+  process.kill(run.child.pid, 'SIGTERM');
+  await run.ended;
+  await run.reached('started');
+  await sleep(1500);
+  assert.equal(machines(run.state).length, 1, 'the late machine is there');
+  assert.equal(workFolders().length, 1, 'its work folder is kept for the next run');
+  const next = lane(t, { env: { FAKE_DOCKER_STATE: run.state } });
+  assert.equal((await next.ended).code, 0);
   cleanedUp(run.state);
 });
 

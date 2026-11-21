@@ -45,7 +45,9 @@ stop_tree() {
   [[ -n $pids ]] || return 0
   kill -TERM $pids 2> /dev/null
   for _ in $(seq 1 20); do running $pids || return 0; sleep 0.25; done
+  # Whatever ignored SIGTERM is killed, and the machine is removed only once none of them runs.
   kill -KILL $pids 2> /dev/null
+  while running $pids; do sleep 0.1; done
 }
 
 # True only once Docker has listed no machine of this run: a listing Docker refuses is not an empty one.
@@ -101,7 +103,8 @@ case "${1:-}" in
   # start removes what is left.
   work=$2
   [[ -d $work ]] || exit 0
-  start_done 3600
+  # A start that outlasts even this wait keeps WORK, so the next run's start removes its machine.
+  start_done "${INSTALL_LANE_GUARD_START_WAIT:-3600}" || exit 0
   for _ in $(seq 1 720); do machine_gone && { remove_files; exit 0; }; sleep 5; done
   ;;
  guard)
