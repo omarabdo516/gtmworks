@@ -807,3 +807,24 @@ test('a Good morning copy left on an Agent that is not main is never switched on
   assert.equal((await changeAgentRoutine(db,{company,agent:ads,action:'resume',routine:own.id,hermes:install(fake)})).state,'done');
  } finally { await fake.close(); leases.clear(); }
 });
+
+test('a long cleanup renews the lease before each pause and stops once another holder has it', async () => {
+ const fake=await engine();
+ try {
+  // Lead → Ads loses its lease while reading; three copies away from Ads are to be paused.
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  for(const n of [7,8]) await createRoutine(at(fake,leadProfile),{name:morningName,prompt:`${morningMarker}\nOld ${n}`,schedule:`0 ${n} * * *`,timezone:'Africa/Cairo'});
+  const {db}=session({agents:agentRows(ads)});
+  const {pauseRoutine}=await import('../lib/hermes.mjs');
+  let pauses=0;
+  const driver={
+   read:async connection=>{ const listed=await readRoutines(connection); leases.get(company).live=false; return listed; },
+   // After the first pause, the cleanup runs past its lease and another request takes it.
+   pause:async(connection,routine)=>{ pauses++; const done=await pauseRoutine(connection,routine); leases.set(company,{holder:'another',live:true,profiles:[]}); return done; },
+  };
+  const answer=await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,agents:agentRows(lead),hermes:install(fake),driver,fence}));
+  assert.equal(answer.state,'busy');
+  assert.equal(pauses,1,'no pause is sent once another holder has the lease');
+  assert.equal(jobs(fake,leadProfile).filter(job=>job.state==='scheduled').length,2,'the rest is left to that holder');
+ } finally { await fake.close(); leases.clear(); }
+});
