@@ -333,3 +333,18 @@ test('the card for an Agent Lead makes while the Conversation is open rises in o
  await expect.poll(() => document.querySelector('.ac-card')).toBeTruthy();
  expect(motionOf(document.querySelector('.ac-card')!)).toEqual(['gw-rise', '0.28s', 'cubic-bezier(0.2, 0, 0, 1)']);
 });
+
+test('the made card moved from its own turn into the Agent\'s reply does not rise again', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ const agent = { id: 'ag-9', connection_id: 'c-9', name: 'Reach', job: 'Runs Meta ads', apps: [], fresh: false, created_at: at };
+ const alone = { id: 4, author: 'agent' as const, author_name: 'Mona', body: '', created_at: at, kind: 'made' as const, cards: [{ kind: 'made' as const, agent }] };
+ const reply = { id: 5, author: 'agent' as const, author_name: 'Mona', body: 'Made it.', created_at: at, cards: [{ kind: 'made' as const, agent }] };
+ const answers = [talk([sent, alone], { pending: true }), talk([sent, reply])];
+ vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? talk([sent, reply]))));
+ await render(inShell(talk([sent], { pending: true })));
+ await vi.advanceTimersByTimeAsync(500);
+ await expect.poll(() => document.querySelector('.ac-card')?.className).toBe('ac-card card-in');
+ await vi.advanceTimersByTimeAsync(1500);
+ await expect.poll(() => turnOf('Made it.')).toBeTruthy();
+ expect(document.querySelector('.ac-card')!.className).toBe('ac-card');
+});
