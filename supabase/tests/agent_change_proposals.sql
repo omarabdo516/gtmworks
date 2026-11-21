@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(49);
+select plan(54);
 -- #19: an Agent proposes a change to its own profile, or Lead to another Agent's, and the proposal waits for an Owner.
 -- The database keeps what would change, the reason and the state; a change that is not on the list is kept as refused
 -- and waits on nobody. Only an active Owner approves or declines, and both answers are logged.
@@ -95,34 +95,43 @@ select throws_ok($$select public.answer_agent_change(current_setting('test.c')::
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,null)$$,'22023','agentChangeAnswerMissing','an answer needs yes or no');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true)$$,'22023','agentChangeNotClaimed','an approval is marked only after the Owner claimed it for the Engine write');
 select throws_ok($$select public.claim_agent_change('10000000-0000-0000-0000-000000000003',current_setting('test.model')::bigint)$$,'P0002','agentChangeNotFound','a proposal is claimed in its own Company only');
-select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint),
+-- Each claim has a token of its own, which renewing its lease, giving it back and approving it name.
+select set_config('test.claim1',public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)::text,true);
+select is(current_setting('test.claim1')::jsonb-'token',
  jsonb_build_object('state','claimed','retry',false,'agent','ec000000-0000-0000-0000-000000000004','change','model','setting',null,'value','anthropic/claude-sonnet-5-5'),'the Owner claims one, with what to write to which Agent');
+select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint),jsonb_build_object('state','busy'),'while its lease holds, every other claim is busy, the same Owner''s from another tab included');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,false,'No')$$,'22023','agentChangeApplying','it cannot be declined while its approval is being written');
-select is((select count(*)::int from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_change'),2,'it still waits on the Owner, so an approval whose outcome was lost can be sent again');
-select lives_ok($$select public.release_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)$$,'a write refused before it reached the Engine gives the claim back');
+select is(public.renew_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,gen_random_uuid()),false,'a lease is renewed by its own token only');
+select is(public.renew_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,(current_setting('test.claim1')::jsonb->>'token')::uuid),true,'and renewed by it right before the Engine write');
+select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true,null,gen_random_uuid())$$,'22023','agentChangeBusy','an approval with another token is busy, never answered');
+select is((select count(*)::int from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_change'),2,'it still waits on the Owner while it is written');
+select lives_ok($$select public.release_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,(current_setting('test.claim1')::jsonb->>'token')::uuid)$$,'a write refused before it reached the Engine gives the claim back');
 reset role;
 select is((select state from public.agent_change_proposals where id=current_setting('test.model')::bigint),'waiting','and the proposal waits again');
 set local role authenticated;
-select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)->>'state','claimed','it is claimed again');
-select is((public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)->>'retry')::boolean,true,'a claim taken again says so, so the app never gives it back');
-select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true),'approved','the Owner approves one');
+select set_config('test.claim2',public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)::text,true);
+select lives_ok($$select public.release_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,(current_setting('test.claim2')::jsonb->>'token')::uuid,true)$$,'an outcome that may have reached the Engine ends the lease and keeps the proposal applying');
+reset role;
+select is((select state from public.agent_change_proposals where id=current_setting('test.model')::bigint),'applying','so it is never sent back to waiting');
+set local role authenticated;
+select set_config('test.claim3',public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint)::text,true);
+select is((current_setting('test.claim3')::jsonb->>'retry')::boolean,true,'approving again takes it over at once, as a retry the app never gives back');
+select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true,null,(current_setting('test.claim3')::jsonb->>'token')::uuid),'approved','the Owner approves one, by the token of its claim');
 select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,true),'approved','and approving again answers the same');
 select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint),jsonb_build_object('state','approved'),'an approved proposal is never claimed again');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.model')::bigint,false)$$,'22023','agentChangeAnswered','but it cannot then be declined');
--- Another Owner's fresh claim answers busy; once it is two minutes old the proposal may be declined, saying an earlier
--- approval may have reached the Engine.
-select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint)->>'state','claimed','the second proposal is claimed');
+-- An approval paused before its Engine write: once its lease has run out the proposal may be declined, saying an earlier
+-- approval may have reached the Engine, and the paused approval can no longer renew its lease, so it writes nothing.
+select set_config('test.claim4',public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint)::text,true);
+select is(current_setting('test.claim4')::jsonb->>'state','claimed','the second proposal is claimed');
 reset role;
-update public.agent_change_proposals set claimed_by='20000000-0000-0000-0000-000000000002' where id=current_setting('test.soul')::bigint;
-set local role authenticated;
-select is(public.claim_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint)->>'state','busy','another approval being written answers busy');
-select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,true)$$,'22023','agentChangeBusy','and an approval of a claim taken over is busy, never answered');
-reset role;
-update public.agent_change_proposals set claimed_at=now()-interval '3 minutes' where id=current_setting('test.soul')::bigint;
+update public.agent_change_proposals set claimed_at=now()-interval '6 minutes' where id=current_setting('test.soul')::bigint;
 set local role authenticated;
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,repeat('x',1001))$$,'22023','agentChangeReasonLong','a reason over 1,000 characters is refused');
 select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,'  ')$$,'22023','agentChangeReasonMissing','a team''s Owner declines only with a reason');
-select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,' Keep it as it is this month. '),'declined','and declines the other, with a reason');
+select is(public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,false,' Keep it as it is this month. '),'declined','and declines the other once its lease ran out, with a reason');
+select is(public.renew_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,(current_setting('test.claim4')::jsonb->>'token')::uuid),false,'the paused approval then finds its claim gone and writes nothing');
+select throws_ok($$select public.answer_agent_change(current_setting('test.c')::uuid,current_setting('test.soul')::bigint,true,null,(current_setting('test.claim4')::jsonb->>'token')::uuid)$$,'22023','agentChangeAnswered','nor can it mark the declined proposal approved');
 select is((select count(*)::int from public.waiting_list(current_setting('test.c')::uuid) where kind='agent_change'),0,'nothing waits any more');
 reset role;
 select results_eq($$select maybe_applied from public.agent_change_proposals where id in (current_setting('test.model')::bigint,current_setting('test.soul')::bigint) order by id$$,
@@ -147,7 +156,7 @@ reset role;
 select results_eq('select n,rows from logged order by n',$$values (2,2),(3,0)$$,'the log rows stay with the Owners and the person whose Conversation it came from');
 
 select ok(not has_function_privilege('authenticated','public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text)','execute'),'a signed-in person cannot keep a proposal themselves');
-select ok(not has_function_privilege('anon','public.answer_agent_change(uuid,bigint,boolean,text)','execute'),'and nobody signed out answers one');
+select ok(not has_function_privilege('anon','public.answer_agent_change(uuid,bigint,boolean,text,uuid)','execute'),'and nobody signed out answers one');
 select ok(not has_table_privilege('authenticated','public.agent_change_proposals','insert,update,delete'),'nor writes the table');
 select * from finish();
 rollback;

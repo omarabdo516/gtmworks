@@ -91,8 +91,11 @@ const agents=[
  {agent:ads,name:'Ads',profile:own(ads),own:true,choosable:true,model_choice:null,subagents:false},
  {agent:writer,name:'Writer',profile:own(writer),own:true,choosable:true,model_choice:null,subagents:false},
 ];
-// The database as the Owner's session: claim_agent_change answers from the proposals it holds and takes a waiting one.
-function owner(proposals,{isOwner=true,answer=null,busy=false}={}) {
+// The database as the Owner's session: claim_agent_change answers from the proposals it holds and takes a waiting one, or an
+// applying one whose lease ran out (`lease:'over'`), with a token; a lease it holds answers busy, and `lost` is a claim
+// taken away before the Engine write (renew_agent_change answers false).
+let tokens=0;
+function owner(proposals,{isOwner=true,answer=null,busy=false,lost=false}={}) {
  const calls=[];
  const db={
   rpc:async(name,args)=>{
@@ -106,11 +109,16 @@ function owner(proposals,{isOwner=true,answer=null,busy=false}={}) {
     const row=proposals.find(found=>found.id===args.proposal&&args.c===company);
     if(!row) return {data:null,error:{code:'P0002',message:'agentChangeNotFound'}};
     if(row.state!=='waiting'&&row.state!=='applying') return {data:{state:row.state},error:null};
-    if(busy) return {data:{state:'busy'},error:null};
-    const retry=row.state==='applying'; row.state='applying';
-    return {data:{state:'claimed',retry,agent:row.agent_id,change:row.change,setting:row.setting,value:row.value},error:null};
+    if(busy||row.state==='applying'&&row.lease!=='over') return {data:{state:'busy'},error:null};
+    const retry=row.state==='applying'; row.state='applying'; row.token=`token-${++tokens}`; row.lease='held';
+    return {data:{state:'claimed',token:row.token,retry,agent:row.agent_id,change:row.change,setting:row.setting,value:row.value},error:null};
    }
-   if(name==='release_agent_change') { const row=proposals.find(found=>found.id===args.proposal); if(row) row.state='waiting'; return {data:null,error:null}; }
+   if(name==='renew_agent_change') { const row=proposals.find(found=>found.id===args.proposal); return {data:!lost&&row?.token===args.claim&&row.lease==='held',error:null}; }
+   if(name==='release_agent_change') {
+    const row=proposals.find(found=>found.id===args.proposal&&found.token===args.claim);
+    if(row) Object.assign(row,args.uncertain?{lease:'over'}:{state:'waiting',token:undefined,lease:undefined});
+    return {data:null,error:null};
+   }
    if(name==='answer_agent_change') return answer??{data:args.approve?'approved':'declined',error:null};
    return {data:null,error:{message:`unexpected ${name}`}};
   },
@@ -140,7 +148,7 @@ test('approving a model change and an instructions change writes each to its own
   assert.equal(fake.settings.profiles.get(companyProfile(company)).model,'openai/gpt-5.5');
   assert.equal(fake.settings.profiles.get(own(writer)).model,'openai/gpt-5.5');
   const answered=calls.filter(call=>call.name==='answer_agent_change').map(call=>call.args);
-  assert.deepEqual(answered,[{c:company,proposal:1,approve:true,reason:null},{c:company,proposal:2,approve:true,reason:null}]);
+  assert.deepEqual(answered.map(({claim,...rest})=>({...rest,claimed:typeof claim==='string'})),[{c:company,proposal:1,approve:true,reason:null,claimed:true},{c:company,proposal:2,approve:true,reason:null,claimed:true}]);
   // Each is claimed before the Engine's write, and marked approved only after it.
   const order=calls.map(call=>call.name);
   assert.ok(order.indexOf('claim_agent_change')<order.indexOf('set_agent_model'));
@@ -158,16 +166,17 @@ test('declining writes nothing to the Engine and sends the reason; an Engine tha
   const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
   assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:false,reason:'Keep it this month.'}),{state:'declined'});
   assert.deepEqual(calls.map(call=>call.name),['is_company_owner','answer_agent_change']);
-  assert.deepEqual(calls.at(-1).args,{c:company,proposal:1,approve:false,reason:'Keep it this month.'});
+  assert.deepEqual(calls.at(-1).args,{c:company,proposal:1,approve:false,reason:'Keep it this month.',claim:null});
   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'),[]);
-  // The Engine refuses the write: nothing is marked approved, and the claim stays, so a decline cannot land while the
-  // Engine's state is unknown; the next approval writes again and finishes it.
+  // The Engine refuses the write: nothing is marked approved, and the proposal stays applying with its lease ended, so the
+  // next approval takes it over at once, writes again and finishes it.
   fake.settings.managementStatus=401;
   const again=proposalsOf().model;
   const refused=owner([again]);
   assert.deepEqual(await answerChange(refused.db,{...options,proposal:1,approve:true}),{state:'notApplied',applied:'refused'});
-  assert.equal(refused.calls.some(call=>call.name==='answer_agent_change'||call.name==='release_agent_change'),false);
-  assert.equal(again.state,'applying');
+  assert.equal(refused.calls.some(call=>call.name==='answer_agent_change'),false);
+  assert.deepEqual(refused.calls.filter(call=>call.name==='release_agent_change').map(call=>call.args.uncertain),[true]);
+  assert.deepEqual([again.state,again.lease],['applying','over']);
   fake.settings.managementStatus=200;
   assert.deepEqual(await answerChange(refused.db,{...options,proposal:1,approve:true}),{state:'approved'});
  } finally { await fake.close(); }
@@ -182,20 +191,36 @@ test('a change the writer refuses before any Engine write gives the claim back a
   const {db,calls}=owner([depth]);
   assert.deepEqual(await answerChange(db,{company,proposal:3,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'cannotApply',applied:'subagentsOff'});
   assert.equal(depth.state,'waiting');
-  assert.deepEqual(calls.filter(call=>call.name.endsWith('_agent_change')).map(call=>call.name),['claim_agent_change','release_agent_change']);
+  assert.deepEqual(calls.filter(call=>call.name.endsWith('_agent_change')).map(call=>call.name),['claim_agent_change','renew_agent_change','release_agent_change']);
   assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'),[]);
  } finally { await fake.close(); }
 });
 
 test('a claim taken again after an unconfirmed write is never given back, even when the next write is refused before the Engine',async()=>{
- // The first approval reached the Engine but was never confirmed, so the proposal is still applying; now the Company has
- // no Engine at all. The earlier write may hold, so the claim stays and a decline cannot say that nothing changed.
- const pending={id:4,agent_id:ads,change:'model',setting:null,value:'openai/gpt-5',state:'applying'};
+ // The first approval reached the Engine but was never confirmed, so the proposal is still applying with its lease over;
+ // now the Company has no Engine at all. The earlier write may hold, so it stays applying and is never sent back to waiting.
+ const pending={id:4,agent_id:ads,change:'model',setting:null,value:'openai/gpt-5',state:'applying',lease:'over'};
  const {db,calls}=owner([pending]);
  const noEngine={...db,rpc:async(name,args)=>name==='company_engine_target'?{data:[],error:null}:db.rpc(name,args)};
  assert.deepEqual(await answerChange(noEngine,{company,proposal:4,approve:true,hermes:null}),{state:'notApplied',applied:'noEngine'});
  assert.equal(pending.state,'applying');
- assert.equal(calls.some(call=>call.name==='release_agent_change'),false);
+ assert.deepEqual(calls.filter(call=>call.name==='release_agent_change').map(call=>call.args.uncertain),[true]);
+});
+
+test('a lease another request holds answers busy, and a claim lost before the Engine write writes nothing',async()=>{
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
+  // The same Owner's other tab holds the lease: this request is busy and never reaches the Engine.
+  const held={id:5,agent_id:ads,change:'model',setting:null,value:'openai/gpt-5',state:'applying',lease:'held',token:'other'};
+  const tab=owner([held]);
+  assert.deepEqual(await answerChange(tab.db,{company,proposal:5,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'busy'});
+  // The claim is taken away (its lease ran out and it was declined) between the claim and the write: nothing is written.
+  const paused=owner([proposalsOf().model],{lost:true});
+  assert.deepEqual(await answerChange(paused.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)}),{state:'busy'});
+  assert.equal(paused.calls.some(call=>call.name==='answer_agent_change'),false);
+  assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'),[]);
+ } finally { await fake.close(); }
 });
 
 test('only an Owner answers, an unknown proposal is not found, and an answered or busy one is never written again',async()=>{
