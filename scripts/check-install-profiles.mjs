@@ -625,7 +625,13 @@ if(step==='open-design-add') {
  await pointAtFakeModel(firstEngine,first.profile);
  let added=false;
  try {
+  // A provider key the Agent's profile holds (a fake one, never used): the design profile gets it inside the Engine.
+  const keyed=await manage(firstEngine,`/api/env?profile=${encodeURIComponent(first.profile)}`,{method:'PUT',body:JSON.stringify({key:'OPENROUTER_API_KEY',value:`sk-or-v1-${marker}`})});
+  assert.equal(keyed.status,200,'a provider key is set on the Agent\'s profile');
   assert.equal(await prepareApp(target,key,null),null,'Open Design is turned on for the Agent');
+  const designEnv=await (await manage(firstEngine,`/api/env?profile=${encodeURIComponent(design)}`)).json();
+  assert.equal(designEnv.OPENROUTER_API_KEY?.is_set,true,'the design profile has the Agent\'s provider key, inside the Engine');
+  await manage(firstEngine,`/api/env?profile=${encodeURIComponent(first.profile)}`,{method:'DELETE',body:JSON.stringify({key:'OPENROUTER_API_KEY'})});
   const config=await (await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`)).json();
   const entry=config.mcp_servers?.[key];
   assert.equal(entry?.command,'ssh','the Engine starts ssh into the sandbox, never Open Design itself');

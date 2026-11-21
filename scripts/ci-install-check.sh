@@ -768,10 +768,10 @@ cat open-design-proof.log
 docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's file is in the Agent's own folder of the Company's work folder"
 # No provider credential in the sandbox: the Engine's model key is in no process environment and no file there, and no
 # provider key variable is set for any process.
-if docker exec --user 0 "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"' | grep -E -q 'fake-model-key|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN='; then
+if docker exec --user 0 "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"' | grep -E -q "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN="; then
   fail 'no process of the sandbox holds a provider credential'
 fi
-if docker exec --user 0 "$sandbox" grep -rIl --exclude-dir=proc fake-model-key /home /work /tmp /run 2> /dev/null | grep -q .; then
+if docker exec --user 0 "$sandbox" grep -rIl --exclude-dir=proc -e fake-model-key -e "sk-or-v1-$od_marker" /home /work /tmp /run 2> /dev/null | grep -q .; then
   fail 'no file of the sandbox holds a provider credential'
 fi
 # Nor a sign-in or key file of the Engine's kind: no auth.json, no .env and no Hermes home in the work user's home or the
