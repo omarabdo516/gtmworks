@@ -35,6 +35,8 @@ const landings = (id: number) => {
 const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const options = () => vi.mocked(toast).mock.calls.at(-1)![1] as { icon?: string, action?: { label: string, run: () => void } } | undefined;
 const undone = (props: ReturnType<typeof workProps>) => Object.fromEntries(vi.mocked(props.undoMove).mock.calls.at(-1)![0]);
+// The board as the server's answer to the move draws it (#131): the Card in Planned, where it lands.
+const inPlanned = (props: ReturnType<typeof workProps>) => ({ ...props, cards: props.cards.map(each => each.id === 1 ? { ...each, stage_id: 2 } : each) });
 // A Card in Ideas, drawn where the database put it.
 const ideas = () => workProps({ cards: [card({ id: 1, title: 'Launch post', stage_id: 1, board_order: 1 })], undoMove: vi.fn(async () => ({ state: 'undone' as const, column: 'ideas' })) });
 
@@ -48,7 +50,9 @@ test('a move to another column is told with Undo, and Undo puts the Card back wh
  // The move is told with "Undo", and nothing happens until it is pressed.
  await expect.poll(() => toast).toHaveBeenCalledWith('Moved to “Planned”', { action: { label: 'Undo', run: expect.any(Function) } });
  expect(props.undoMove).not.toHaveBeenCalled();
- // The move's own landing starts and ends first, so the landing checked after "Undo" is the Undo's own.
+ // The move's own landing starts once the Card is drawn in Planned, and ends first, so the landing checked after "Undo"
+ // is the Undo's own.
+ await screen.rerender(workView(inPlanned(props)));
  await expect.poll(landed).toBe(1);
  await expect.poll(() => landing(1), { timeout: 1500 }).toBe(false);
  options()!.action!.run();
@@ -86,13 +90,14 @@ test('a Card that moved on stays where it is, and the toast says so with no land
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
  await expect.poll(() => toast).toHaveBeenCalledWith('Moved to “Planned”', { action: { label: 'Undo', run: expect.any(Function) } });
  const run = options()!.action!.run;
- // The move's own landing starts and ends before "Undo" is pressed: it starts a frame after the toast, so the test waits
- // for it to start before it waits for it to end.
+ // The move's own landing starts and ends before "Undo" is pressed: it starts once the Card is drawn in Planned, so the
+ // test waits for it to start before it waits for it to end.
+ await screen.rerender(workView(inPlanned(props)));
  await expect.poll(landed).toBe(1);
  await expect.poll(() => landing(1), { timeout: 1500 }).toBe(false);
  run();
  await expect.poll(() => toast).toHaveBeenLastCalledWith('The card moved on, so it stayed where it is', { icon: 'x' });
- await screen.rerender(workView(props));
+ await screen.rerender(workView(inPlanned(props)));
  await frames();
  // No second landing: the Card stayed where it is.
  expect(landed()).toBe(1);
