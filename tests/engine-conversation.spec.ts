@@ -151,8 +151,9 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  expect(made()).toEqual([]);
  const closed=await Promise.all([close(),close()]);
  expect(closed[0]+closed[1]).toBe(1);
- // #317: Lead may hand the job to another Agent, so its Runs are offered hand_to_agent after create_agent.
- expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change'],['create_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']]);
+ // #317, #475: hand_to_agent names the Company's other Agents, and this Company has none yet, so Lead's Runs are offered
+ // no hand_to_agent (the Manager's Run below, once Meta Ads is made, is).
+ expect(fake.runs.map(run=>run.tools.map(tool=>tool.name))).toEqual([['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change'],['create_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']]);
  expect(fake.agentReads).toContain(profile);
  const [agent]=made();
  expect(made()).toEqual([{id:agent.id,name:'Meta Ads',speciality:'Runs the Meta ads.',apps:'Meta Ads Manager|Canva',requested_by:omar,dated:true,is_default:false,profile}]);
@@ -257,7 +258,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const send=(message:string)=>sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
   const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
   expect(await send(rule)).toEqual({conversation});
-  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+  expect(fake.runs[0].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
   // No Run is told the Company knowledge (#344): every profile auto-loads it as the shared Skill company-knowledge.
   expect(fake.runs[0].instructions,'no instructions are sent: the fake engine keeps an absent field as null').toBeNull();
   // A reader and the worker close the run at once: the rule is saved once, before the reply is stored.
@@ -279,7 +280,7 @@ test('integration: an Agent saves the rule the Owner tells it, with its log row,
   const tell=(message:string)=>sendMessage(member,service,{person:contributor,company,conversation:theirs,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor});
   const closeTheirs=()=>closeOpenRuns(service,{hermes,conversation:theirs,owner:contributor,engineFor:fake.engineFor});
   expect(await tell('Draft the teaser')).toEqual({conversation:theirs});
-  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+  expect(fake.runs[2].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
   expect(fake.runs[2].instructions??'').not.toContain(rule);
   expect(await closeTheirs()).toBe(1);
 
@@ -330,7 +331,7 @@ test('integration: an Agent shows a draft once under its reply, also when two cl
   const close=()=>closeOpenRuns(service,{hermes,conversation,owner:contributor,engineFor:fake.engineFor});
   for(const [index,message] of Object.keys(calls).entries()) {
    expect(await sendMessage(person,service,{person:contributor,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs[index].tools.map(tool=>tool.name)).toEqual(['hand_to_agent','suggest_team_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    // A reader and the worker close the run at once: the card is kept once, before the reply is stored.
    const closed=await Promise.all([close(),close()]);
    expect(closed[0]+closed[1]).toBe(1);
@@ -426,7 +427,7 @@ test('integration: an Agent shows a review once under its reply, shows none for 
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the review's runs are measured after it. The Card
@@ -467,7 +468,7 @@ test('integration: an Agent hands a step over once under its reply, shows none w
   const conversation=randomUUID();
   const send=async(message:string)=>{
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
-   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
+   expect(fake.runs.at(-1)?.tools.map(tool=>tool.name)).toEqual(['hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change']);
    expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
   };
   // The Conversation's first Run puts its Card on the board (#144), so the hand's runs are measured after it. The Card
@@ -1170,7 +1171,13 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
   const kinds=()=>page.locator('.turns > li').evaluateAll(turns=>turns.map(turn=>turn.getAttribute('data-author')||turn.getAttribute('data-kind')));
   const line=page.locator('.turns > li[data-kind="boarded"]'), pill=page.locator('.chat__corner .corner-pill');
-  expect(await kinds()).toEqual(['person','agent','agent','boarded']);
+  // #475: the row names both Agents, Salma's answer follows under its own name "to Lead", then Lead's own reply.
+  expect(await kinds()).toEqual(['person','agent','agent','agent','boarded']);
+  await expect(page.locator('.turns [data-handover] .handed__t')).toHaveText('Lead asked Salma');
+  const answer=page.locator('.turns > li[data-kind="handed"]');
+  await expect(answer.locator('.sender bdi').first()).toHaveText('Salma');
+  await expect(answer.locator('.sender__to')).toHaveText('to Lead');
+  await expect(answer.locator('.bubble')).toHaveText('Three ad sets, 30 days, EGP 9,000.');
   await expect(line).toHaveText('This card was added to the board under “In progress”');
   await expect(pill).toHaveAccessibleName('On the board: In progress');
 
@@ -1203,5 +1210,56 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
  } finally {
   language('en'); for(const context of opened) await context.close();
   target.detach(); next.detach(); await fake.close();
+ }
+});
+
+// #475 (decision 0057): any Agent hands over, not only Lead, and to an Agent the person cannot see. A Contributor talks
+// to Salma; Salma's Run is offered hand_to_agent naming the Company's other Agents with their jobs, asks Tarek (hidden
+// from the Contributor), Tarek works on its own profile, and Salma replies. The Contributor's chat draws "Salma asked
+// Tarek", Tarek's answer under its own name "to Salma", then Salma's reply, though Tarek stays hidden from them.
+test('any Agent hands a job to another Agent of its Company, one hidden from the person included, and the chat draws both',async({page})=>{
+ test.setTimeout(240000);
+ const fake=await laneHermes();
+ const hermes={address:fake.address,key:fake.settings.key};
+ const salma=attachTarget('Salma','Writes the ad copy.');
+ const tarek=attachTarget('Tarek','Reads the campaign numbers.');
+ const reviewer='20000000-0000-0000-0000-000000000003';
+ query(`delete from public.member_agent_access where person_id='${reviewer}' and agent_id='${tarek.agent}'`);
+ const conversation=randomUUID();
+ const ask=`Ask Tarek.\n\n\`\`\`gtmworks-tool\n${JSON.stringify({name:'hand_to_agent',arguments:{agent:'Tarek',goal:'Last campaign\'s leads and cost per lead',context:'For the March copy.'}})}\n\`\`\``;
+ fake.settings.reply=input=>input.startsWith('Salma in the team is handing you a job')?'1,240 leads at EGP 7.30 each.'
+  :input.startsWith('You handed this job to Tarek')?'The copy leads with 1,240 leads at EGP 7.30 each.'
+  :ask;
+ const {service}=await clients();
+ const {person}=await memberClient('reviewer@example.com');
+ const drive=async()=>{ await closeOpenRuns(service,{hermes,conversation}); await driveHandovers(service,{hermes,conversation}); };
+ const handed=()=>JSON.parse(query(`select from_agent,to_agent,state,target_outcome from public.agent_handovers where conversation_id='${conversation}'`));
+ try {
+  expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent:salma.agent,message:'Write the March ad copy',hermes})).toEqual({conversation});
+  // The tool Salma's Run was sent names the Company's other Agents, Tarek with its job among them, never Salma.
+  const pinned=JSON.parse(JSON.parse(query(`select tools from public.conversation_run_notes where conversation_id='${conversation}'`))[0].tools);
+  const hand=pinned.find((tool:{name:string})=>tool.name==='hand_to_agent');
+  expect(hand.parameters.properties.agent.enum).toContain('Tarek');
+  expect(hand.parameters.properties.agent.enum).not.toContain('Salma');
+  expect(hand.description).toContain('- Tarek: Reads the campaign numbers.');
+  await expect.poll(async()=>{ await drive(); return handed()[0]?.state; },{timeout:60000}).toBe('done');
+  expect(handed()).toEqual([{from_agent:salma.agent,to_agent:tarek.agent,state:'done',target_outcome:'completed'}]);
+  // The tool's block is the Engine's, never the chat's: Salma's message keeps its words alone.
+  expect(agentRows(conversation)).toEqual([{body:'Ask Tarek.'},{body:'The copy leads with 1,240 leads at EGP 7.30 each.'}]);
+
+  await signIn(page,'reviewer@example.com',`/c/rs-learning/conversations/${conversation}`);
+  const kinds=()=>page.locator('.turns > li').evaluateAll(turns=>turns.map(turn=>turn.getAttribute('data-author')+(turn.getAttribute('data-kind')?`:${turn.getAttribute('data-kind')}`:'')));
+  // Salma's chat put its own Card on the board with its first reply (#144); the handover leaves that Card Salma's.
+  await expect.poll(kinds).toEqual(['person','agent','null:boarded','agent:handed','agent']);
+  expect(JSON.parse(query(`select agent_id from public.work_cards where conversation_id='${conversation}'`))).toEqual([{agent_id:salma.agent}]);
+  await expect(page.locator('.turns [data-handover] .handed__t')).toHaveText('Salma asked Tarek');
+  await expect(page.locator('.turns [data-handover] .handed__d')).toHaveText('Last campaign\'s leads and cost per lead');
+  const answer=page.locator('.turns > li[data-kind="handed"]');
+  await expect(answer.locator('.sender bdi').first()).toHaveText('Tarek');
+  await expect(answer.locator('.sender__to')).toHaveText('to Salma');
+  await expect(answer.locator('.bubble')).toHaveText('1,240 leads at EGP 7.30 each.');
+  await expect(page.locator('.turns > li').last().locator('.bubble')).toHaveText('The copy leads with 1,240 leads at EGP 7.30 each.');
+ } finally {
+  salma.detach(); tarek.detach(); await fake.close();
  }
 });

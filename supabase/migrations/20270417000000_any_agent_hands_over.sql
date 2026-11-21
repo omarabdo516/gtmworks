@@ -4,7 +4,8 @@
 -- but the asking one, whether or not the person may see it or talk to it. An Agent of another Company is never a target,
 -- and a name that matches none is ignored, so the Run still closes.
 --
--- The tool names its targets: conversation_handover_agents lists the Company's other Agents with their job line, and
+-- The tool names its targets: conversation_handover_agents lists the Company's other Agents with their job line for a
+-- Run, read from that Run's reservation as pin_run reads it (a first message has no Conversation row yet), and
 -- the app makes that list the tool's enum (lib/agent-tools.mjs), pinned with the Run by pin_run as every tool's text is.
 -- The Conversation draws each handover from gtmworks's own record through conversation_handovers: the row "{asking
 -- Agent} asked {asked Agent}", the asked Agent's answer under its own name, then the asking Agent's reply. The record
@@ -35,18 +36,19 @@ begin
 end $$;
 
 -- The Agents a Conversation's Run may hand work to, as the tool names them: every other Agent of the Company that can
--- run, each with its job line, by name. None when the Conversation's person may not hand work over to anyone.
-create function public.conversation_handover_agents(conversation uuid) returns table(name text, job text)
+-- run, each with its job line, by name. The Run is its reservation, as pin_run reads it: the Agent it was reserved for
+-- and the person who sent it. None when that person may not hand work over to anyone.
+create function public.conversation_handover_agents(conversation uuid, message_key uuid) returns table(name text, job text)
 language sql stable security definer set search_path='' as $$
  select a.name, a.speciality
- from public.conversations c
-  join public.hermes_agents a on a.company_id=c.company_id
- where c.id=conversation_handover_agents.conversation and c.agent_id is not null and a.id<>c.agent_id and a.profile is not null
-  and btrim(a.name)<>'' and public.may_hand_to_agent(c.company_id,c.agent_id,c.person_id)
+ from public.conversation_run_reservations r
+  join public.hermes_agents a on a.company_id=r.company_id
+ where r.conversation_id=conversation_handover_agents.conversation and r.send_key=message_key and r.agent_id is not null
+  and a.id<>r.agent_id and a.profile is not null and btrim(a.name)<>'' and public.may_hand_to_agent(r.company_id,r.agent_id,r.person_id)
  order by a.name, a.id;
 $$;
-revoke all on function public.conversation_handover_agents(uuid) from public,anon,authenticated;
-grant execute on function public.conversation_handover_agents(uuid) to service_role;
+revoke all on function public.conversation_handover_agents(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.conversation_handover_agents(uuid,uuid) to service_role;
 
 -- 20270324000000's lead_hand_to_agent, with any Agent of the Conversation as the one who asks and any other Agent of its
 -- Company as the target, seen by the person or not. The Card follows a handover only from the main Agent (#147): a chat

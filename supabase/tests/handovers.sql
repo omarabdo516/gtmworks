@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(77);
+select plan(79);
 -- #317, #475. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The Contributor
 -- (…03) is shown Ads and not Writer; the Viewer (…04) writes nothing. Aleem has its own Lead and Ads. Any Agent of a
 -- Company hands work to any other Agent of it, seen by the person or not (decision 0057).
@@ -151,9 +151,17 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name) va
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values
  ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000006','person','20000000-0000-0000-0000-000000000003','Contributor','Write the ad copy',gen_random_uuid(),'run-ads'),
  ('10000000-0000-0000-0000-000000000001','c3170000-0000-0000-0000-000000000007','person','20000000-0000-0000-0000-000000000004','Viewer','Write the ad copy',gen_random_uuid(),'run-ads-viewer');
-select is((select string_agg(name||':'||job,',' order by name) from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000006')),'Lead:General,Writer:SEO',
+-- The Run's reservation names its Agent and person, as pin_run reads them; a first message has no Conversation yet.
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id) values
+ ('c3170000-0000-0000-0000-000000000006','e4750000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'20000000-0000-0000-0000-000000000003','a3170000-0000-0000-0000-000000000012'),
+ ('c3170000-0000-0000-0000-000000000099','e4750000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',gen_random_uuid(),'20000000-0000-0000-0000-000000000004','a3170000-0000-0000-0000-000000000012'),
+ ('c3170000-0000-0000-0000-000000000098','e4750000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003',gen_random_uuid(),'20000000-0000-0000-0000-000000000001','a3170000-0000-0000-0000-000000000022');
+select is((select string_agg(name||':'||job,',' order by name) from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000006','e4750000-0000-0000-0000-000000000001')),'Lead:General,Writer:SEO',
  'the tool names the Company''s other Agents with their job line, never the asking Agent');
-select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000007')),0,'and none to a Viewer''s Run');
+select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000099','e4750000-0000-0000-0000-000000000002')),0,'and none to a Viewer''s Run');
+select is((select string_agg(name,',' order by name) from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000098','e4750000-0000-0000-0000-000000000003')),'Lead',
+ 'another Company''s Run names that Company''s Agents alone');
+select is((select count(*)::int from public.conversation_handover_agents('c3170000-0000-0000-0000-000000000006',gen_random_uuid())),0,'and a send with no reservation names none');
 select is(public.lead_hand_to_agent('c3170000-0000-0000-0000-000000000006','run-ads','call-1','Writer','Write three headlines','For the March intake.'),
  '{"state":"created","agent":"Writer"}'::jsonb,'Ads keeps a handover to Writer, which the person does not see');
 select is((select from_agent||'>'||to_agent from public.agent_handovers where run_id='run-ads'),'a3170000-0000-0000-0000-000000000012>a3170000-0000-0000-0000-000000000013','from Ads to Writer');

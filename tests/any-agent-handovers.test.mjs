@@ -38,7 +38,7 @@ test('a Run of an Agent that is not the main one is offered hand_to_agent naming
  const fake=fakeEngine(); const stores=databases(); const sent=/** @type {any[]} */([]);
  const engineFor=(/** @type {any} */ connection)=>{ const engine=fake.engineFor(connection); return {...engine,start:(/** @type {any} */ args)=>{ sent.push(args); return engine.start(args); }}; };
  assert.deepEqual(await send(stores,engineFor),{conversation:'c4750000-0000-0000-0000-000000000001'});
- assert.deepEqual(stores.given.conversation_handover_agents,[{conversation:'c4750000-0000-0000-0000-000000000001'}],'the list is the database\'s, for this Conversation');
+ assert.deepEqual(stores.given.conversation_handover_agents,[{conversation:'c4750000-0000-0000-0000-000000000001',message_key:'k1'}],'the list is the database\'s, for this Run');
  const run=fake.runs[0];
  const hand=run.tools.find((/** @type {any} */ tool)=>tool.name==='hand_to_agent');
  assert.ok(hand,'the Writer is offered hand_to_agent');
