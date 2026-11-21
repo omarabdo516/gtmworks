@@ -41,12 +41,16 @@ const ideas = () => workProps({ cards: [card({ id: 1, title: 'Launch post', stag
 test('a move to another column is told with Undo, and Undo puts the Card back where it was, focused and landing', async () => {
  const props = ideas();
  const screen = await showWork(props);
+ const landed = landings(1);
  link(1).focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
  await expect.poll(() => placed(props)).toEqual([{ company: 'co-1', slug: 'rs-learning', card: '1', column: 'planned', before: '' }]);
  // The move is told with "Undo", and nothing happens until it is pressed.
  await expect.poll(() => toast).toHaveBeenCalledWith('Moved to “Planned”', { action: { label: 'Undo', run: expect.any(Function) } });
  expect(props.undoMove).not.toHaveBeenCalled();
+ // The move's own landing starts and ends first, so the landing checked after "Undo" is the Undo's own.
+ await expect.poll(landed).toBe(1);
+ await expect.poll(() => landing(1), { timeout: 1500 }).toBe(false);
  options()!.action!.run();
  // The server is asked to undo exactly this Card, and its answer names the column the Card is back in.
  await expect.poll(() => vi.mocked(props.undoMove).mock.calls.length).toBe(1);
@@ -54,7 +58,8 @@ test('a move to another column is told with Undo, and Undo puts the Card back wh
  await expect.poll(() => toast).toHaveBeenLastCalledWith('Back in “Ideas”');
  // The board draws the Card in that column again: it lands there and takes the keyboard.
  await screen.rerender(workView(props));
- await expect.poll(() => landing(1)).toBe(true);
+ await expect.poll(landed).toBe(2);
+ expect(landing(1)).toBe(true);
  expect(document.activeElement).toBe(link(1));
  await expect.poll(() => landing(1), { timeout: 1500 }).toBe(false);
 });
