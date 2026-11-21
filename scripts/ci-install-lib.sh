@@ -64,7 +64,8 @@ engine_listen_ports() {
 }
 # The second Company on an Engine of its own, made by the command a person runs (#382): the caller names its failure and
 # where the output goes; an area running a release's own installer names that script instead.
-second_company() { sh "${1:-scripts/install.sh}" company add --name 'Second Company' --owner proxy-owner@example.com; }
+# Any argument after the installer's path is passed to `company add`, such as the sandbox limits (#396).
+second_company() { sh "${1:-scripts/install.sh}" company add --name 'Second Company' --owner proxy-owner@example.com "${@:2}"; }
 # The app image a source install runs, from its compose file's `web` service: CI loads the run's one build under this
 # tag and the release areas tag their test releases from it, so a tag change is made in that file alone (#411).
 web_image_tag() { sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1; }

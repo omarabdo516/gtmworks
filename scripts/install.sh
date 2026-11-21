@@ -92,8 +92,42 @@ work_network() { printf 'gtmworks-work-%s' "$1"; }
 host_key_volume() { printf 'gtmworks-sandbox-hostkey-%s' "$1"; }
 # What one sandbox gets by default (the RAM and CPU the install gives a Company's sandbox, and the process limit and shared
 # memory Chromium needs) is set in one place, the sandbox service of scripts/engine-template.yml, from the install job's
-# measurement (#400). A person raises any of them in the environment of the install's own command (SANDBOX_MEMORY,
-# SANDBOX_CPUS, SANDBOX_PIDS, SANDBOX_SHM), which reaches Compose unchanged; nothing here repeats a default.
+# measurement (#400); nothing here repeats a default. A Company's own memory and CPU limit (#396), given to `company add`
+# or `company limits`, is kept in its Engine's folder beside its key, as SANDBOX_MEMORY and SANDBOX_CPUS, and only that
+# file gives them to Compose: a value left in the shell never reaches a sandbox, so an update, a restore and a recreate
+# give every sandbox the limits its Company was given, and a Company given none the template's default.
+sandbox_limit() { sed -n "s/^SANDBOX_$2=//p" "$(engine_folder "$1")/.env" 2> /dev/null; }
+# A limit is refused before anything changes when it is not one Docker reads as a size or a number of CPUs; what Docker
+# itself refuses (more CPUs than the server has) fails the sandbox's start, which takes the change back.
+check_limits() {
+  [ -z "$1" ] || printf '%s\n' "$1" | grep -Eqx '[1-9][0-9]*[mg]' \
+    || { echo "The memory limit is a whole number of megabytes or gigabytes, such as 512m or 2g, not $1." >&2; return 1; }
+  [ -z "$2" ] || { printf '%s\n' "$2" | grep -Eqx '[0-9]+(\.[0-9]{1,2})?' && awk -v cpus="$2" 'BEGIN { exit !(cpus > 0) }'; } \
+    || { echo "The CPU limit is a number of CPUs above 0, such as 1 or 1.5, not $2." >&2; return 1; }
+}
+# One Company's limits written into its Engine's file, owner-only, under a temporary name then moved into place; an
+# empty value leaves that limit to the template's default.
+write_limits() {
+  file="$(engine_folder "$1")/.env"
+  {
+    grep -Ev '^SANDBOX_(MEMORY|CPUS)=' "$file" || true
+    [ -z "$2" ] || printf 'SANDBOX_MEMORY=%s\n' "$2"
+    [ -z "$3" ] || printf 'SANDBOX_CPUS=%s\n' "$3"
+  } > "$file.tmp" || return 1
+  chmod 600 "$file.tmp" || return 1
+  mv "$file.tmp" "$file" || return 1
+}
+# The Engine reaches its sandbox as every Agent's command does (#396): over ssh, as the Engine's own user, with its own
+# key and the host key its known_hosts pins. A few tries, as Docker's name for the sandbox can take a moment to answer.
+sandbox_reachable() {
+  for attempt in 1 2 3; do
+    docker exec -u hermes "$(engine_project "$1")" ssh -i /opt/data/ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/opt/data/.ssh/known_hosts -o LogLevel=ERROR -o ConnectTimeout=10 -p 2222 pn@sandbox true > /dev/null 2>&1 \
+      && return 0
+    sleep 2
+  done
+  return 1
+}
 # The private key an Engine dials its sandbox with, and the sandbox's own host key, both made in the one sandbox image
 # (it has ssh-keygen; the Engine has none) and written into the Engine's data volume and the host-key volume. The Engine's
 # known_hosts is written to the host key's public half at the address its ssh client uses, so a recreated sandbox keeps
@@ -162,6 +196,8 @@ engine() {
   SANDBOX_IMAGE=${SANDBOX_IMAGE:-$(work_sandbox_ref || printf '%s' "$work_sandbox_tag")} \
   SANDBOX_NAME=$(sandbox_container "$slug") \
   SANDBOX_AUTHORIZED_KEY=${sandbox_key:-} \
+  SANDBOX_MEMORY=$(sandbox_limit "$slug" MEMORY) \
+  SANDBOX_CPUS=$(sandbox_limit "$slug" CPUS) \
   SANDBOX_HOST_KEY_VOLUME=$(host_key_volume "$slug") \
   WORK_VOLUME=$(work_volume "$slug") \
   WORK_NETWORK=$(work_network "$slug") \
@@ -204,11 +240,14 @@ write_engine_env() {
   slug=$1 key=$2 volume=$3 network=$4
   folder=$(engine_folder "$slug")
   mkdir -p "$folder" || return 1
+  # The Company's own sandbox limits (#396) stay when the file is written again, as each run writes the first Engine's.
+  kept=$(grep -E '^SANDBOX_(MEMORY|CPUS)=' "$folder/.env" 2> /dev/null || true)
   {
     printf 'ENGINE_NAME=%s\n' "$(engine_project "$slug")" &&
     printf 'ENGINE_KEY=%s\n' "$key" &&
     printf 'ENGINE_VOLUME=%s\n' "$volume" &&
-    printf 'ENGINE_NETWORK=%s\n' "$network"
+    printf 'ENGINE_NETWORK=%s\n' "$network" &&
+    { [ -z "$kept" ] || printf '%s\n' "$kept"; }
   } > "$folder/.env.tmp" || return 1
   chmod 600 "$folder/.env.tmp" || return 1
   mv "$folder/.env.tmp" "$folder/.env" || return 1
@@ -374,6 +413,16 @@ sign_in() {
   done
   [ "$provider" = claude ] || { echo 'gtmworks sign-in signs in claude.' >&2; return 1; }
   test -n "$company_name" || { echo 'gtmworks sign-in claude needs --company <id-or-name>.' >&2; return 1; }
+  company_engine "$company_name" || return 1
+  echo "Signing $name in to Claude on its Engine: $host. One account serves one Company."
+  if [ -t 0 ]; then tty=-t; else tty=; fi
+  docker exec -i $tty -u hermes "$host" hermes auth add anthropic --type oauth --no-browser
+}
+# The one Company a person names by id or exact name, and its Engine's container (`host`) and name (`name`), from the
+# install's database. The Engine's address names its container (scripts/engine-template.yml); an address whose whole
+# value is not an Engine of this install is refused.
+company_engine() {
+  company_name=$1
   test -f .env.install || { echo 'Install first.' >&2; return 1; }
   rows=$(printf '%s\n' "select e.address,c.name from public.companies c join public.company_engines e on e.id=c.engine_id where c.id::text=:'company' or lower(c.name)=lower(:'company') order by c.id limit 2;" \
     | compose exec -T db psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 -v company="$company_name") \
@@ -385,13 +434,10 @@ sign_in() {
   printf '%s\n' "$address" | grep -Eq '^http://gtmworks-engine-[a-z0-9-]+:8642$' \
     || { echo "The Engine record of $name names no Engine of this install. Nothing was changed." >&2; return 1; }
   host=${address#*://} host=${host%%:*}
-  echo "Signing $name in to Claude on its Engine: $host. One account serves one Company."
-  if [ -t 0 ]; then tty=-t; else tty=; fi
-  docker exec -i $tty -u hermes "$host" hermes auth add anthropic --type oauth --no-browser
 }
 
 company_usage() {
-  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list' >&2
+  echo 'Usage: gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] | gtmworks company limits <Company> [--memory <size>] [--cpus <number>] | gtmworks company link <Company> | gtmworks company list' >&2
   exit 1
 }
 # `gtmworks company add` (#382, #383, ADR 0018, 0019): one new Company, its Engine made from the template with its own
@@ -399,16 +445,19 @@ company_usage() {
 # held behind a first-Owner link whose secret is printed once, after `#`. The Engine is made and waited on before either;
 # a failure removes everything this command made, in one plain line, so the same command can be run again.
 company_add() {
-  company_name= owner_email= has_owner=no
+  company_name= owner_email= has_owner=no memory= cpus=
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) [ $# -ge 2 ] || company_usage; company_name=$2; shift;;
       --owner) [ $# -ge 2 ] || company_usage; owner_email=$2; has_owner=yes; shift;;
+      --memory) [ $# -ge 2 ] || company_usage; memory=$2; shift;;
+      --cpus) [ $# -ge 2 ] || company_usage; cpus=$2; shift;;
       *) company_usage;;
     esac
     shift
   done
   test -n "$company_name" || company_usage
+  check_limits "$memory" "$cpus" || return 1
   test -f .env.install || { echo 'Install first.' >&2; exit 1; }
   # A versioned restore replaces the install over several installer runs and holds .install-restore while it does
   # (#378, C5): a Company made between its safety backup and the replacement would be lost without being in that backup,
@@ -451,14 +500,25 @@ company_add() {
     add_slug=
   }
   trap 'rollback_add; exit 1' HUP INT TERM
-  write_engine_env "$slug" "$key" "$volume" "$network" || {
+  { write_engine_env "$slug" "$key" "$volume" "$network" && write_limits "$slug" "$memory" "$cpus"; } || {
     rollback_add
     echo "Company \"$company_name\" was not made: its Engine's folder could not be written. Nothing was left behind."
     return 1
   }
-  if ! engine_start "$slug" >&2 || ! join_engine_network "$network"; then
+  if ! engine_start "$slug" >&2; then
     rollback_add
-    echo "Company \"$company_name\" was not made: its Engine did not become healthy. Nothing was left behind; run the same command again."
+    echo "Company \"$company_name\" was not made: its Engine or its work sandbox did not start. Nothing was left behind; run the same command again."
+    return 1
+  fi
+  # The sandbox is part of what this command makes (#396): its Engine reaches it before anything is announced.
+  if ! sandbox_reachable "$slug"; then
+    rollback_add
+    echo "Company \"$company_name\" was not made: its work sandbox could not be reached from its Engine. Nothing was left behind; run the same command again."
+    return 1
+  fi
+  if ! join_engine_network "$network"; then
+    rollback_add
+    echo "Company \"$company_name\" was not made: the app could not join its Engine's network. Nothing was left behind; run the same command again."
     return 1
   fi
   # One add for both paths: the Owner is the only difference, and a failure removes what this command made (#378, C11): a
@@ -506,11 +566,88 @@ company_link() {
   fi
   compose exec -T web node scripts/company-add.mjs link --name "$company_name"
 }
+# `gtmworks company limits <Company> [--memory <size>] [--cpus <number>]` (#396): an existing Company's sandbox limits,
+# kept in its Engine's file. Only that Company's sandbox is made again with them (its Engine, its exit, its work folder
+# and every other Company stay as they run), and its Engine reaches it before the command says so. A sandbox that does
+# not start with the new limits is started again with its earlier ones, which its file keeps.
+company_limits() {
+  company_name=${1:-} memory= cpus=
+  [ $# -gt 0 ] && shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --memory) [ $# -ge 2 ] || company_usage; memory=$2; shift;;
+      --cpus) [ $# -ge 2 ] || company_usage; cpus=$2; shift;;
+      *) company_usage;;
+    esac
+    shift
+  done
+  test -n "$company_name" && { [ -n "$memory" ] || [ -n "$cpus" ]; } || company_usage
+  check_limits "$memory" "$cpus" || return 1
+  if [ -f .install-restore ] && ! flock -n .install-restore true > /dev/null 2>&1; then
+    echo 'A restore is running: wait for it to finish, then run this again.' >&2
+    return 1
+  fi
+  company_engine "$company_name" || return 1
+  slug=${host#gtmworks-engine-}
+  test -f "$(engine_folder "$slug")/.env" || { echo "The Engine of $name has no folder on this install. Nothing was changed." >&2; return 1; }
+  old_memory=$(sandbox_limit "$slug" MEMORY) old_cpus=$(sandbox_limit "$slug" CPUS)
+  write_limits "$slug" "${memory:-$old_memory}" "${cpus:-$old_cpus}" || return 1
+  if ! sandbox_restart "$slug" >&2; then
+    write_limits "$slug" "$old_memory" "$old_cpus" || return 1
+    sandbox_restart "$slug" >&2 || true
+    echo "The limits of Company \"$name\" were not changed: its work sandbox did not start with them. It runs with its earlier limits."
+    return 1
+  fi
+  docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$(sandbox_container "$slug")" \
+    | awk -v name="$name" '{ printf "Company \"%s\": its work sandbox now has %d MiB of memory and %g CPUs.\n", name, $1/1048576, $2/1000000000 }'
+}
+# One Company's sandbox made again from its Engine's file, alone: the keys are read first so it keeps accepting its
+# Engine's key, and the Engine reaches it before this returns.
+sandbox_restart() {
+  sandbox_keys "$1" || return 1
+  engine "$1" up -d --no-deps --wait --wait-timeout "${GTMWORKS_ENGINE_WAIT:-300}" sandbox || return 1
+  sandbox_reachable "$1"
+}
+# Each Company's work sandbox and its state, from the host's Docker, which the web container does not hold, after the
+# lines of the given report (scripts/company-list.mjs), whose Engine line names the sandbox's Company. Non-zero when one
+# is not running.
+sandbox_report() {
+  printf '%s\n' "$1"
+  found=0
+  for name in $(engine_names); do
+    container=$(sandbox_container "$name")
+    line=$(printf '%s\n' "$1" | grep -F "Engine http://$(engine_project "$name"):8642" | head -n 1)
+    company=$(printf '%s\n' "$line" | sed -n 's/.*Company "\([^"]*\)".*/\1/p')
+    if ! listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null); then
+      state=unknown
+    elif [ -z "$listed" ]; then
+      state='not created'
+    else
+      running=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null || echo unknown)
+      health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container" 2> /dev/null || echo unknown)
+      if [ "$running" != true ]; then state=stopped
+      elif [ "$health" = healthy ]; then state=running
+      else state="running, not healthy ($health)"; fi
+    fi
+    [ "$state" = running ] || found=1
+    if [ -n "$company" ]; then
+      echo "Sandbox $container: $state (Company \"$company\")"
+    else
+      echo "Sandbox $container: $state"
+    fi
+  done
+  return "$found"
+}
 company() {
   case "${1:-}" in
     add) shift; company_add "$@";;
+    limits) shift; company_limits "$@";;
     link) shift; company_link "$@";;
-    list) compose exec -T web node scripts/company-list.mjs companies;;
+    list)
+      report_status=0
+      report=$(compose exec -T web node scripts/company-list.mjs companies) || report_status=$?
+      sandbox_report "$report" || true
+      return "$report_status";;
     *) company_usage;;
   esac
 }
@@ -650,16 +787,19 @@ check_backup() {
       || { echo 'The backup does not hold an Engine for every Company.' >&2; return 1; }
   fi
   # An archive is not trusted with an Engine folder's name or its whole file (#378, X2): each Engine folder is named like
-  # an Engine, and only its ENGINE_KEY is taken (64 hex characters), which this installer writes from below with this
-  # release's own ENGINE_NAME/ENGINE_VOLUME/ENGINE_NETWORK. A file that could point the install network or the database's
-  # volume at something else is never used.
+  # an Engine, and only its ENGINE_KEY is taken (64 hex characters), and its Company's sandbox limits (#396) when they
+  # are a size and a number of CPUs, which this installer writes from below with this release's own
+  # ENGINE_NAME/ENGINE_VOLUME/ENGINE_NETWORK. A file that could point the install network or the database's volume at
+  # something else is never used.
   for name in $engine_key_folders; do
     printf '%s\n' "$name" | grep -Eq '^[a-z0-9-]+$' \
       || { echo "The backup names an Engine folder that is not usable: $name" >&2; return 1; }
-    key=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
-      tar -xOzf /backup/backup.tgz ".engines/$name/.env" | sed -n 's/^ENGINE_KEY=//p') || return 1
-    printf '%s\n' "$key" | grep -Eq '^[a-f0-9]{64}$' \
+    engine_file=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
+      tar -xOzf /backup/backup.tgz ".engines/$name/.env") || return 1
+    printf '%s\n' "$engine_file" | sed -n 's/^ENGINE_KEY=//p' | grep -Eqx '[a-f0-9]{64}' \
       || { echo "The backup's Engine $name has no usable key." >&2; return 1; }
+    check_limits "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_MEMORY=//p')" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_CPUS=//p')" \
+      || { echo "The backup's Engine $name names sandbox limits that are not usable." >&2; return 1; }
   done
   return 0
 }
@@ -744,13 +884,16 @@ elif [ "$operation" = restore ]; then
    # container, volume and network (#378, X2). Reading as the container's root also works under rootless Docker, where
    # the invoking user's own files are root's inside a container.
    for name in $engine_key_folders; do
-     key=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
-       tar -xOzf /backup/backup.tgz ".engines/$name/.env" | sed -n 's/^ENGINE_KEY=//p') || exit 1
+     engine_file=$(docker run --rm -v "$PWD/.install-lock:/backup:ro" alpine:3.21 \
+       tar -xOzf /backup/backup.tgz ".engines/$name/.env") || exit 1
+     key=$(printf '%s\n' "$engine_file" | sed -n 's/^ENGINE_KEY=//p')
      if [ "$name" = first ]; then
        write_engine_env first "$key" "$engine_volume" "$(engine_project first)"
      else
        write_engine_env "$name" "$key" "$(engine_project "$name")" "$(engine_project "$name")"
      fi
+     # The Company's sandbox limits, checked with the archive above, come back with its key.
+     write_limits "$name" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_MEMORY=//p')" "$(printf '%s\n' "$engine_file" | sed -n 's/^SANDBOX_CPUS=//p')" || exit 1
    done
   fi
   if [ "$engines_layout" = yes ]; then
@@ -856,35 +999,11 @@ elif [ "$operation" = engines ]; then
   # sandbox does not answer, so `gtmworks status` names it.
   report_status=0
   report=$(compose exec -T web node scripts/company-list.mjs engines) || report_status=$?
-  printf '%s\n' "$report"
   status=$report_status
-  for name in $(engine_names); do
-    folder=$(engine_folder "$name")
-    [ -f "$folder/.env" ] || continue
-    container=$(sandbox_container "$name")
-    line=$(printf '%s\n' "$report" | grep -F "Engine http://$(engine_project "$name"):8642:" | head -n 1)
-    company=$(printf '%s\n' "$line" | sed -n 's/.*Company "\([^"]*\)".*/\1/p')
-    if ! listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null); then
-      state=unknown
-    elif [ -z "$listed" ]; then
-      state='not created'
-    else
-      running=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null || echo unknown)
-      health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container" 2> /dev/null || echo unknown)
-      if [ "$running" != true ]; then state=stopped
-      elif [ "$health" = healthy ]; then state=running
-      else state="running, not healthy ($health)"; fi
-    fi
-    [ "$state" = running ] || status=1
-    if [ -n "$company" ]; then
-      echo "Sandbox $container: $state (Company \"$company\")"
-    else
-      echo "Sandbox $container: $state"
-    fi
-  done
+  sandbox_report "$report" || status=1
   return "$status"
 elif [ "$operation" != install ]; then
-  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] | company link <Company> | company list | engines]' >&2; exit 1
+  echo 'Usage: sh scripts/install.sh [update [ref] | backup [directory] | restore <archive> | company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>] | company limits <Company> [--memory <size>] [--cpus <number>] | company link <Company> | company list | engines]' >&2; exit 1
 fi
 # A plain install run on an install the previous release made (its `hermes` container, no Engine folder) moves it to this
 # release as an update does, so it is refused the same way when that install holds several Companies on its one Engine,

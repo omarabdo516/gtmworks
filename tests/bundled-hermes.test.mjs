@@ -110,13 +110,13 @@ test('every Company\'s work sandbox is the least container its Agents\' work nee
  // Hardening: the image's own ordinary user, no capability, no new privilege, and the limits the install gives it.
  assert.deepEqual(sandbox.cap_drop,['ALL']);
  assert.deepEqual(sandbox.security_opt,['no-new-privileges:true']);
- assert.equal(sandbox.pids_limit,'${SANDBOX_PIDS:-2048}');
- assert.equal(sandbox.shm_size,'${SANDBOX_SHM:-1gb}','shared memory large enough for Chromium');
+ assert.equal(sandbox.pids_limit,2048);
+ assert.equal(sandbox.shm_size,'1gb','shared memory large enough for Chromium');
  assert.equal(sandbox.mem_limit,'${SANDBOX_MEMORY:-1g}');
  assert.equal(sandbox.cpus,'${SANDBOX_CPUS:-2.0}');
- // The template is the one place those defaults are set (#400): the installer repeats none of them, so a person's own
- // value in the install command's environment reaches Compose and nothing else can drift from the measured figures.
- assert.doesNotMatch(readFileSync('scripts/install.sh','utf8'),/SANDBOX_(MEMORY|CPUS|PIDS|SHM)=|sandbox_(memory|cpus|pids|shm)=/);
+ // The template is the one place those defaults are set (#400): the installer repeats none of them, so nothing can drift
+ // from the measured figures; it passes only a Company's own limits, read from that Company's file (#396).
+ assert.doesNotMatch(readFileSync('scripts/install.sh','utf8'),/SANDBOX_(MEMORY|CPUS|PIDS|SHM)=[0-9'"]|sandbox_(memory|cpus|pids|shm)=/);
  // The README's server sizes state those same defaults, and the shared-kernel risk in plain words (#400).
  const readme=readFileSync('README.md','utf8');
  assert.match(readme,new RegExp(`\\*\\*${sandbox.mem_limit.match(/:-(\d+)g\}$/)[1]} GB of RAM and ${Number(sandbox.cpus.match(/:-([\d.]+)\}$/)[1])} CPUs\\*\\* by default`));

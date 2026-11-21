@@ -10,7 +10,8 @@
 # (the image carries it, #437) in the folder as gtmworks.sh and puts a `gtmworks` command in ~/.local/bin that runs it:
 #   gtmworks status | update | backup | restore <archive> | install | sign-in claude
 #   gtmworks update-button on|off | gtmworks auto-update on|off | gtmworks updater (one run of the updater, #443)
-#   gtmworks company add --name <Company> [--owner <email>] | gtmworks company link <Company> | gtmworks company list
+#   gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>]
+#   gtmworks company limits <Company> [--memory <size>] [--cpus <number>] | gtmworks company link <Company> | gtmworks company list
 #
 # The latest stable release is the highest published vX.Y.Z that GitHub does not mark as a prerelease, the release the
 # stable image tag follows. `--channel main` installs the newest main image instead: main publishes no GitHub Release, so
@@ -50,9 +51,10 @@ Usage:
   gtmworks restore <archive> [--version vX.Y.Z | --version main@sha256:<digest> [--yes] [--no-backup]]
   gtmworks sign-in claude --company <id-or-name>
   gtmworks install          (repair: the same as running the line again)
-  gtmworks company add --name <Company> [--owner <email>]
+  gtmworks company add --name <Company> [--owner <email>] [--memory <size>] [--cpus <number>]
+  gtmworks company limits <Company> [--memory <size>] [--cpus <number>]  (its work sandbox's memory and CPUs)
   gtmworks company link <Company>  (a fresh first-Owner link for a Company still waiting)
-  gtmworks company list     (each Company and the state of its Engine)
+  gtmworks company list     (each Company, the state of its Engine and of its work sandbox)
   gtmworks update-button on|off  (the Update now button Owners see; on by default)
   gtmworks auto-update on|off    (install each newer version of this channel by itself; off by default)
   gtmworks updater          (one run of the updater; its timer runs it every minute)

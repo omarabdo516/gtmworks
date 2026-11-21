@@ -71,7 +71,17 @@ run 44848354569, which prints these numbers on every run):
 
 The limits are the install's defaults, set in one place (the sandbox service of
 `scripts/engine-template.yml`), and the install job runs the render at them on every
-run. A render that needs more memory than its Company's limit is stopped at the
+run. A Company can have its own: `gtmworks company add --memory 2g --cpus 1.5` gives
+the new Company's sandbox those, and `gtmworks company limits "Second Company"
+--memory 3g` (or `--cpus 3`, or both) changes an existing Company's, the first one's
+included. Memory is a whole number of megabytes or gigabytes (`512m`, `2g`) and CPUs a
+number above 0 (`1`, `1.5`); a limit not named keeps its value. `company limits`
+starts only that Company's sandbox again, with its work folder kept, while its Engine
+and every other Company keep running; if the sandbox does not start with the new
+limits (more CPUs than the server has, say), it starts again with the earlier ones and
+the command says so. A Company's limits are kept with its own files beside its
+Engine's key, so an update, a backup and restore and a repeat install give its sandbox
+the same limits; a Company given none follows the install's default. A render that needs more memory than its Company's limit is stopped at the
 limit, and every other Company's sandbox keeps answering: one Company's video cannot
 starve the others.
 
@@ -151,8 +161,13 @@ healthy, registers it and then makes the Company with that Person as its Owner, 
 holds the name behind the link; the worker then gives the Company its main Agent on
 its own Engine. If the Engine does not become healthy the command says so in one line,
 removes what it made (its container, volume, network and folder, and its record), and
-leaves no Company, so running it again is safe. `gtmworks company list` shows every
-Company with the state of its Engine, and `gtmworks status` reports every Engine.
+leaves no Company, so running it again is safe. The Company's work sandbox and exit
+are made with its Engine, with the memory and CPU limit `--memory` and `--cpus` name
+(the install's default with none), and the Engine must reach the sandbox before the
+command says anything; a sandbox that does not start or cannot be reached is removed
+the same way, with its work folder and its keys. `gtmworks company list` shows every
+Company with the state of its Engine and of its work sandbox, and `gtmworks status`
+reports every Engine and every sandbox.
 Each Engine adds roughly the memory one Engine takes. The install job prints the memory one idle Engine uses on every run.
 The measured figures below are 775 MiB before its Agents' profiles and 825 MiB with twenty of them, so size the server
 for that much per Company.
@@ -245,6 +260,8 @@ restore <archive>` there.
 ```sh
 gtmworks company add --name "Second Company" --owner person@example.com
 gtmworks company add --name "Third Company"     # prints a first-Owner link instead
+gtmworks company add --name "Video Company" --owner person@example.com --memory 2g --cpus 1.5
+gtmworks company limits "Second Company" --memory 3g --cpus 3   # its work sandbox's limits
 gtmworks company link "Third Company"          # a fresh link for a Company still waiting
 gtmworks company list
 ```
@@ -254,9 +271,11 @@ healthy, and makes the Company with that existing Person as its Owner; with no
 `--owner` it prints a first-Owner link instead and makes the Company when that link is
 sent. `company link` prints a fresh link for a Company still waiting and ends the
 earlier one. A failed Engine leaves nothing behind and the same command can be run
-again. `company list` shows every Company with the state of its Engine, including one
-still waiting for its Owner. `gtmworks status` reports every Engine beside the
-services. See **One Engine per Company** under Install for what each Engine holds and
+again. `company limits` changes a Company's work sandbox memory and CPUs and starts
+only that sandbox again (see **Server size** under Install). `company list` shows
+every Company with the state of its Engine, including one still waiting for its
+Owner, and each Company's work sandbox and its state. `gtmworks status` reports every
+Engine and every sandbox beside the services. See **One Engine per Company** under Install for what each Engine holds and
 how much memory it adds.
 
 ## Update

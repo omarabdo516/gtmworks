@@ -14,6 +14,7 @@ const fakeDocker=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
+  *'exec -u hermes '*' ssh '*) exit "\${SSH_EXIT:-0}";;
   *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'company-add.mjs check'*) printf '%s\\n' "\${SLUG:-second-company-0000abcd}"; exit "\${CHECK_EXIT:-0}";;
  *'company-add.mjs add'*)
@@ -24,9 +25,15 @@ case "$*" in
  *' ps -q web'*) echo web-id;;
  *' ps -q worker'*) echo worker-id;;
  *'network inspect '*) exit 1;;
- *' up -d --wait '*)
+ *' up -d '*)
+  printf 'limits memory=%s cpus=%s\\n' "\${SANDBOX_MEMORY:-}" "\${SANDBOX_CPUS:-}" >> "$COMMANDS"
   if [ "\${KILL_ON_UP:-}" = 1 ]; then kill -TERM "$PPID"; exit 1; fi
+  case "$*" in *' sandbox') exit "\${SANDBOX_UP_EXIT:-0}";; esac
   exit "\${ENGINE_EXIT:-0}";;
+ *'exec -T db psql'*) printf '%s\\n' "\${COMPANY_ROW-http://gtmworks-engine-second-company-0000abcd:8642|Second Company}";;
+ *'ps -aq --filter name=^gtmworks-sandbox-'*) echo sandbox-id;;
+ *'{{.State.Running}}'*) echo true;;
+ *'.HostConfig.Memory'*) echo '2147483648 1500000000';;
 esac
 exit 0
 `;
@@ -43,7 +50,7 @@ function install(t,{env}={}) {
  const commands=join(directory,'commands');
  const run=(...args)=>spawnSync('sh',['scripts/install.sh',...args],{cwd:directory,env:{...process.env,PATH:`${directory}/bin:${process.env.PATH}`,COMMANDS:commands,...env},encoding:'utf8'});
  const lines=()=>existsSync(commands)?readFileSync(commands,'utf8').trimEnd().split('\n'):[];
- return {directory,run,lines,envFile:slug=>join(directory,`.engines/${slug}/.env`)};
+ return {directory,run,lines,commandsFile:commands,envFile:slug=>join(directory,`.engines/${slug}/.env`)};
 }
 
 test('company add makes one Engine from the template, joins it, then makes the Company with that Engine', t => {
@@ -99,7 +106,7 @@ test('a refused Owner or a failed Engine leaves nothing and says so in one plain
  const failing=install(t,{env:{ENGINE_EXIT:'1'}});
  const failed=failing.run('company','add','--name','Second Company','--owner','person@example.com');
  assert.notEqual(failed.status,0);
- assert.deepEqual(failed.stdout.trim().split('\n'),['Company "Second Company" was not made: its Engine did not become healthy. Nothing was left behind; run the same command again.']);
+ assert.deepEqual(failed.stdout.trim().split('\n'),['Company "Second Company" was not made: its Engine or its work sandbox did not start. Nothing was left behind; run the same command again.']);
  const cleanup=failing.lines().join('\n');
  assert.match(cleanup,/down -v/);
  assert.match(cleanup,/rm -f gtmworks-engine-second-company-0000abcd/);
@@ -321,4 +328,109 @@ test('an interrupt while the Company is being made keeps its Engine and says to 
  assert.doesNotMatch(commands,/company-add\.mjs drop|down -v --remove-orphans|volume rm |network rm /);
  assert.match(interrupted.stderr,/The Engine gtmworks-engine-second-company-0000abcd stays: its Company may be made\. Run gtmworks company list to see its state\./);
  assert.ok(existsSync(join(installDir.directory,'.engines/second-company-0000abcd/.env')),'the Engine folder stays');
+});
+
+// A Company's sandbox limits (#396): `company add` takes a memory and a CPU limit, keeps them with the Company's own
+// files and gives Compose those, never a value left in the shell, so an update, a restore or a recreate gives the
+// sandbox the limits its Company was given. With none, the Company's file holds none and the template's default applies.
+test('company add keeps the limits it was given with the Company, and its sandbox starts with them whatever the shell holds', t => {
+ const installDir=install(t,{env:{SANDBOX_MEMORY:'8g',SANDBOX_CPUS:'4'}});
+ const result=installDir.run('company','add','--name','Second Company','--owner','person@example.com','--memory','2g','--cpus','1.5');
+ assert.equal(result.status,0,result.stderr);
+ const env=readFileSync(installDir.envFile('second-company-0000abcd'),'utf8');
+ assert.match(env,/^SANDBOX_MEMORY=2g$/m);
+ assert.match(env,/^SANDBOX_CPUS=1\.5$/m);
+ assert.ok(installDir.lines().includes('limits memory=2g cpus=1.5'),installDir.lines().join('\n'));
+ // No limit given: the Company's file names none and Compose gets none, so the template's default is the sandbox's.
+ const plain=install(t,{env:{SANDBOX_MEMORY:'8g'}});
+ assert.equal(plain.run('company','add','--name','Second Company','--owner','person@example.com').status,0);
+ assert.doesNotMatch(readFileSync(plain.envFile('second-company-0000abcd'),'utf8'),/SANDBOX_/);
+ assert.ok(plain.lines().includes('limits memory= cpus='),plain.lines().join('\n'));
+});
+
+test('a limit that is not a size or a number of CPUs is refused before anything is made', t => {
+ for(const [option,value,line] of [['--memory','lots','The memory limit is a whole number of megabytes or gigabytes, such as 512m or 2g, not lots.'],
+  ['--cpus','0','The CPU limit is a number of CPUs above 0, such as 1 or 1.5, not 0.']]) {
+  const installDir=install(t);
+  const refused=installDir.run('company','add','--name','Second Company','--owner','person@example.com',option,value);
+  assert.notEqual(refused.status,0);
+  assert.equal(refused.stderr.trim(),line);
+  assert.deepEqual(installDir.lines(),[],'the refused add asked Docker for nothing');
+ }
+});
+
+// `company add` checks its Engine reaches the sandbox, with the Engine's own key and pinned host key, before it says
+// anything: a sandbox the Engine cannot reach is taken back with the rest.
+test('a sandbox its Engine cannot reach takes the whole add back, in one plain line', t => {
+ const installDir=install(t,{env:{SSH_EXIT:'255'}});
+ const failed=installDir.run('company','add','--name','Second Company','--owner','person@example.com');
+ assert.notEqual(failed.status,0);
+ assert.deepEqual(failed.stdout.trim().split('\n'),['Company "Second Company" was not made: its work sandbox could not be reached from its Engine. Nothing was left behind; run the same command again.']);
+ const commands=installDir.lines().join('\n');
+ assert.match(commands,/exec -u hermes gtmworks-engine-second-company-0000abcd ssh .*pn@sandbox true/);
+ assert.match(commands,/down -v/);
+ assert.match(commands,/rm -f gtmworks-engine-second-company-0000abcd gtmworks-sandbox-second-company-0000abcd gtmworks-exit-second-company-0000abcd/);
+ assert.equal(commands.includes('company-add.mjs add'),false,'no Company was made');
+ assert.equal(existsSync(join(installDir.directory,'.engines/second-company-0000abcd')),false);
+ // A sandbox that does not start at all is the same: nothing stays.
+ const notStarted=install(t,{env:{ENGINE_EXIT:'1'}});
+ const result=notStarted.run('company','add','--name','Second Company','--owner','person@example.com','--cpus','512');
+ assert.deepEqual(result.stdout.trim().split('\n'),['Company "Second Company" was not made: its Engine or its work sandbox did not start. Nothing was left behind; run the same command again.']);
+});
+
+// `company limits` changes an existing Company's limits: the Company's file holds the new ones, only that Company's
+// sandbox is started again with them (no Engine, exit or other Company), and its Engine reaches it before the command
+// says so. A limit not named keeps its value.
+function withCompany(t,env={}) {
+ const installDir=install(t,{env});
+ assert.equal(installDir.run('company','add','--name','Second Company','--owner','person@example.com','--memory','2g','--cpus','1.5').status,0);
+ writeFileSync(installDir.commandsFile,'');
+ return installDir;
+}
+test('company limits changes one Company\'s limits and starts only its sandbox again', t => {
+ const installDir=withCompany(t,{SANDBOX_MEMORY:'8g'});
+ const result=installDir.run('company','limits','Second Company','--memory','3g');
+ assert.equal(result.status,0,result.stderr);
+ const env=readFileSync(installDir.envFile('second-company-0000abcd'),'utf8');
+ assert.match(env,/^SANDBOX_MEMORY=3g$/m);
+ assert.match(env,/^SANDBOX_CPUS=1\.5$/m);
+ assert.match(env,/^ENGINE_KEY=[a-f0-9]{64}$/m,'the Engine keeps its key');
+ const commands=installDir.lines();
+ const ups=commands.filter(line=>line.includes(' up -d '));
+ assert.equal(ups.length,1,commands.join('\n'));
+ assert.match(ups[0],/^compose --project-name gtmworks-engine-second-company-0000abcd .* up -d --no-deps --wait --wait-timeout \d+ sandbox$/);
+ assert.ok(commands.includes('limits memory=3g cpus=1.5'),commands.join('\n'));
+ assert.ok(commands.some(line=>/exec -u hermes gtmworks-engine-second-company-0000abcd ssh .*pn@sandbox true/.test(line)));
+ assert.equal(result.stdout.trim(),'Company "Second Company": its work sandbox now has 2048 MiB of memory and 1.5 CPUs.');
+});
+
+test('company limits that the sandbox cannot start with puts the earlier limits back', t => {
+ const installDir=withCompany(t,{SANDBOX_UP_EXIT:'1'});
+ const result=installDir.run('company','limits','Second Company','--cpus','512');
+ assert.notEqual(result.status,0);
+ assert.equal(result.stdout.trim(),'The limits of Company "Second Company" were not changed: its work sandbox did not start with them. It runs with its earlier limits.');
+ const env=readFileSync(installDir.envFile('second-company-0000abcd'),'utf8');
+ assert.match(env,/^SANDBOX_MEMORY=2g$/m);
+ assert.match(env,/^SANDBOX_CPUS=1\.5$/m);
+ assert.ok(installDir.lines().includes('limits memory=2g cpus=1.5'),'the sandbox is started again with its earlier limits');
+});
+
+test('company limits needs a known Company and a limit', t => {
+ const installDir=withCompany(t);
+ const none=installDir.run('company','limits','Second Company');
+ assert.notEqual(none.status,0);
+ assert.match(none.stderr,/Usage: gtmworks company add/);
+ const unknown=install(t,{env:{COMPANY_ROW:''}});
+ const missing=unknown.run('company','limits','Nobody','--memory','2g');
+ assert.notEqual(missing.status,0);
+ assert.equal(missing.stderr.trim(),"No Company in this install is named Nobody. Pass the Company's id or its exact name.");
+ assert.equal(unknown.lines().some(line=>line.includes(' up -d ')),false);
+});
+
+test('company list shows each Company\'s sandbox and its state', t => {
+ const installDir=withCompany(t);
+ const listed=installDir.run('company','list');
+ assert.equal(listed.status,0,listed.stderr);
+ assert.deepEqual(listed.stdout.trim().split('\n'),['Company "Second Company": Engine http://gtmworks-engine-second-company-0000abcd:8642 (healthy)',
+  'Sandbox gtmworks-sandbox-second-company-0000abcd: running (Company "Second Company")']);
 });

@@ -488,9 +488,9 @@ test('the backup area makes the install, the Companies and the archives it needs
  assert.ok(at('install_source backup-install.log || fail')<at('complete_setup ||'));
  // The source install's own archive is made after first run and before the second Company has an Engine of its own.
  assert.ok(at('complete_setup ||')<at("sh scripts/install.sh backup || fail 'backup'"));
- assert.ok(at("sh scripts/install.sh backup || fail 'backup'")<at('second_company ||'));
+ assert.ok(at("sh scripts/install.sh backup || fail 'backup'")<at('second_company scripts/install.sh --memory'));
  // The source install's own archive is restored into a fresh install, then the every-Engine one is made and restored.
- assert.ok(at('second_company ||')<at("sh scripts/install.sh backup || fail 'backup of every Engine'"));
+ assert.ok(at('second_company scripts/install.sh --memory')<at("sh scripts/install.sh backup || fail 'backup of every Engine'"));
  assert.ok(at("fail 'backup'")<at('first_archive=$(find backups'));
  assert.ok(at('sh scripts/install.sh restore "$first_archive"')<at("fail 'backup of every Engine'"));
  assert.ok(at("fail 'backup of every Engine'")<at('sh scripts/install.sh restore "$every_engine"'));

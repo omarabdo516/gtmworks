@@ -319,25 +319,38 @@ grep -Fq 'No Person on this install has the email nobody@example.com. Nothing wa
 [[ $(ls -d .engines/* | wc -l) == 1 ]] || fail 'the refused add made no Engine folder'
 [[ $(db -c "select count(*) from public.companies where name='No Owner'") == 0 ]] || fail 'the refused add made no Company'
 [[ $(db -c "select count(*) from public.company_engines where address like '%no-owner%'") == 0 ]] || fail 'the refused add made no Engine record'
+# A failed add leaves nothing of the Company behind (#396): no Engine, sandbox or exit container, no volume (the Engine's
+# data with its key, the work folder, the host key), no network, no folder with its key file, and no record.
+nothing_left() {
+  [[ $(ls -d .engines/* | wc -l) == 1 ]] || fail "$1 removed its Engine folder and the key in it"
+  if docker ps -aq --filter 'name=^gtmworks-engine-' | while read -r id; do docker inspect -f '{{.Name}}' "$id"; done | grep -vq '^/gtmworks-engine-first$'; then fail "$1 left an Engine container"; fi
+  [[ $(docker volume ls -q --filter 'name=^gtmworks-engine' | wc -l) == 0 ]] || fail "$1 left an Engine volume"
+  [[ $(docker network ls -q --filter 'name=^gtmworks-engine' | wc -l) == 1 ]] || fail "$1 left an Engine network"
+  [[ -z $(docker ps -aq --filter 'name=^gtmworks-sandbox-second-company-') ]] || fail "$1 left a sandbox container"
+  if docker volume ls -q | grep -Eq '^gtmworks-(work|sandbox-hostkey)-second-company-'; then fail "$1 left a sandbox volume"; fi
+  if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-work-second-company-'; then fail "$1 left a work network"; fi
+  [[ -z $(docker ps -aq --filter 'name=^gtmworks-exit-second-company-') ]] || fail "$1 left an exit container"
+  if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-exit-second-company-'; then fail "$1 left an exit's network"; fi
+  [[ $(db -c "select count(*) from public.companies where name='Second Company'") == 0 ]] || fail "$1 left no Company"
+  [[ $(db -c "select count(*) from public.company_engines where address like '%second-company%'") == 0 ]] || fail "$1 left no Engine record"
+}
 if GTMWORKS_ENGINE_WAIT=1 second_company > company-failed.log 2>&1; then
   cat company-failed.log; docker compose version
   fail 'company add with an Engine that never becomes healthy must fail'
 fi
 cat company-failed.log
-grep -Fq 'Company "Second Company" was not made: its Engine did not become healthy. Nothing was left behind; run the same command again.' company-failed.log || fail 'a failed Engine is one plain line'
-[[ $(ls -d .engines/* | wc -l) == 1 ]] || fail 'the failed add removed its Engine folder'
-if docker ps -aq --filter 'name=^gtmworks-engine-' | while read -r id; do docker inspect -f '{{.Name}}' "$id"; done | grep -vq '^/gtmworks-engine-first$'; then fail 'the failed add left an Engine container'; fi
-[[ $(docker volume ls -q --filter 'name=^gtmworks-engine' | wc -l) == 0 ]] || fail 'the failed add left an Engine volume'
-[[ $(docker network ls -q --filter 'name=^gtmworks-engine' | wc -l) == 1 ]] || fail 'the failed add left an Engine network'
-[[ -z $(docker ps -aq --filter 'name=^gtmworks-sandbox-second-company-') ]] || fail 'the failed add left a sandbox container'
-if docker volume ls -q | grep -Eq '^gtmworks-(work|sandbox-hostkey)-second-company-'; then fail 'the failed add left a sandbox volume'; fi
-if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-work-second-company-'; then fail 'the failed add left a work network'; fi
-[[ -z $(docker ps -aq --filter 'name=^gtmworks-exit-second-company-') ]] || fail 'the failed add left an exit container'
-if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-exit-second-company-'; then fail "the failed add left an exit's network"; fi
-[[ $(db -c "select count(*) from public.companies where name='Second Company'") == 0 ]] || fail 'the failed add left no Company'
-[[ $(db -c "select count(*) from public.company_engines where address like '%second-company%'") == 0 ]] || fail 'the failed add left no Engine record'
-# Running it again, on an Engine that becomes healthy, succeeds.
-second_company || fail 'company add makes the second Company'
+grep -Fq 'Company "Second Company" was not made: its Engine or its work sandbox did not start. Nothing was left behind; run the same command again.' company-failed.log || fail 'a failed Engine is one plain line'
+nothing_left 'the failed add'
+# A sandbox Docker will not start (more CPUs than the machine has) is taken back with its Engine, in the same one line.
+if second_company scripts/install.sh --cpus 512 > company-sandbox-failed.log 2>&1; then
+  cat company-sandbox-failed.log
+  fail 'company add with a sandbox that cannot start must fail'
+fi
+cat company-sandbox-failed.log
+grep -Fq 'Company "Second Company" was not made: its Engine or its work sandbox did not start. Nothing was left behind; run the same command again.' company-sandbox-failed.log || fail 'a failed sandbox is one plain line'
+nothing_left 'the add whose sandbox did not start'
+# Running it again, on an Engine that becomes healthy, succeeds, with the memory and CPU limit it is given (#396).
+second_company scripts/install.sh --memory 1536m --cpus 1.5 || fail 'company add makes the second Company'
 second_folder=$(ls -d .engines/* | grep -v '/first$')
 second_container=$(engine_value "$second_folder" NAME)
 second_network=$(engine_value "$second_folder" NETWORK)
@@ -412,8 +425,10 @@ for folder in .engines/*/; do
   [[ $(docker inspect -f '{{join .HostConfig.SecurityOpt ","}}' "$sandbox") == *no-new-privileges* ]] || fail "the sandbox of $slug has no new privileges"
   [[ $(docker inspect -f '{{.HostConfig.PidsLimit}}' "$sandbox") == 2048 ]] || fail "the sandbox of $slug has its process limit"
   [[ $(docker inspect -f '{{.HostConfig.ShmSize}}' "$sandbox") == 1073741824 ]] || fail "the sandbox of $slug has shared memory for Chromium"
-  [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == "$(sandbox_memory_bytes)" ]] || fail "the sandbox of $slug has the install's default memory"
-  [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == "$(sandbox_nano_cpus)" ]] || fail "the sandbox of $slug has the install's default CPU"
+  # The first Company was given no limit, so its sandbox has the install's default; the second has the ones its add named.
+  if [[ $slug == first ]]; then want_memory=$(sandbox_memory_bytes) want_cpus=$(sandbox_nano_cpus); else want_memory=1610612736 want_cpus=1500000000; fi
+  [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == "$want_memory" ]] || fail "the sandbox of $slug has the memory its Company was given, or the install's default"
+  [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == "$want_cpus" ]] || fail "the sandbox of $slug has the CPUs its Company was given, or the install's default"
   [[ $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$sandbox") == 0 ]] || fail "the sandbox of $slug publishes no host port"
   if docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$sandbox" | grep -q 'docker.sock'; then fail "the sandbox of $slug mounts no Docker socket"; fi
   # Each Company's exit (#394), from the same template: the same image, healthy, an ordinary user with no capability,
@@ -458,10 +473,39 @@ docker exec "$engine_id" cat /opt/data/ssh/id_ed25519 | docker run --rm -i -e SA
   if ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no $options -p 2222 pn@$SANDBOX_IP true 2> /tmp/password.err; then echo "a password was accepted" >&2; exit 1; fi
   grep -q "Permission denied (publickey)" /tmp/password.err
 ' || fail "the sandbox accepts its Engine's key and no password"
-# `gtmworks company list` and `gtmworks status` report each Company's own Engine and its state.
+# The second Company's Agent works in the second Company's sandbox (#396): its command runs there, in its own folder,
+# and the file it writes is in that Company's work folder alone. The first Company's sandbox, and the first Engine's
+# read-only copy of its work folder that its Library lists, hold no trace of it. The host's Docker says where it landed.
+company_marker="company-sandbox-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - company-sandbox "$company_marker" 'Second Company' < scripts/check-install-profiles.mjs | tee company-sandbox.log \
+  || fail "the second Company's Agent runs a command"
+company_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' company-sandbox.log | tail -n 1)
+company_cwd=$(sed -n 's/.*"cwd":"\([^"]*\)".*/\1/p' company-sandbox.log | tail -n 1)
+[[ -n $company_host && $company_host == "$(docker exec "$second_sandbox" hostname)" ]] || fail "the second Company's Agent's command runs in the second Company's sandbox"
+[[ $(docker exec "$second_sandbox" cat "$company_cwd/$company_marker.txt") == "$company_marker" ]] || fail "the second Company's Agent's file is in its own work folder"
+[[ -z $(docker exec "$first_sandbox" sh -c 'find /work -name "$1*"; grep -rl -- "$1" /work 2> /dev/null; true' sh "$company_marker") ]] \
+  || fail "the second Company's Agent's file never appears in the first Company's sandbox"
+[[ -z $(docker exec "$engine_id" sh -c 'find /opt/data/work -name "$1*"; grep -rl -- "$1" /opt/data/work 2> /dev/null; true' sh "$company_marker") ]] \
+  || fail "the second Company's Agent's file never appears in the first Company's Library"
+# And the other way round from the second Company's check above: from the first Company's sandbox, the second Company's
+# sandbox, Engine and exit are reached neither directly nor through the first Company's exit.
+second_engine_ips=$(addresses_of "$second_container")
+second_sandbox_ip=$(addresses_of "$second_sandbox")
+second_exit_ips=$(addresses_of "$second_exit")
+other_direct=$(for item in "$second_sandbox:2222" "$second_container:8642" "$second_container:9119" "$second_exit:3128" "$second_sandbox_ip:2222" \
+  $(for ip in ${second_engine_ips//,/ }; do printf '%s:8642 %s:9119 ' "$ip" "$ip"; done) $(for ip in ${second_exit_ips//,/ }; do printf '%s:3128 ' "$ip"; done); do
+  printf '{"host":"%s","port":%s},' "${item%:*}" "${item##*:}"; done | sed 's/,$//')
+other_refused=$(for host in "$second_sandbox_ip" ${second_engine_ips//,/ } ${second_exit_ips//,/ }; do printf '"%s",' "$host"; done | sed 's/,$//')
+other_unreached=$(for item in "$second_sandbox:2222" "$second_container:8642" "$second_container:9119" "$second_exit:3128"; do
+  printf '{"host":"%s","port":%s},' "${item%:*}" "${item##*:}"; done | sed 's/,$//')
+sandbox_exit_probe "$engine_id" "$(printf '{"direct":[%s],"refused":[%s],"unreached":[%s]}' "$other_direct" "$other_refused" "$other_unreached" | base64 -w0)" \
+  || fail "the first Company's sandbox reaches nothing of the second Company's, directly or through its exit"
+# `gtmworks company list` and `gtmworks status` report each Company's own Engine and its state, and its sandbox (#396).
 sh scripts/install.sh company list | tee company-list.log || fail 'company list'
 grep -F '"Proxy Company": Engine http://gtmworks-engine-first:8642 (healthy)' company-list.log || fail 'company list names the first Company and its healthy Engine'
 grep -F "\"Second Company\": Engine $second_address (healthy)" company-list.log || fail 'company list names the second Company and its healthy Engine'
+grep -F 'Sandbox gtmworks-sandbox-first: running (Company "Proxy Company")' company-list.log || fail 'company list names the first sandbox and its state'
+grep -F "Sandbox $second_sandbox: running (Company \"Second Company\")" company-list.log || fail 'company list names the second sandbox and its state'
 sh scripts/install.sh engines | tee engines.log || fail 'every Engine is reported'
 grep -F "Engine $second_address: healthy (Company \"Second Company\")" engines.log || fail 'the Engine report names the second Engine'
 # `gtmworks status` reports each Company's work sandbox beside its Engine, and fails when one is not running (#393).
@@ -473,6 +517,8 @@ if sh scripts/install.sh engines > engines-sandbox-stopped.log 2>&1; then
   fail 'a stopped sandbox must fail the report'
 fi
 grep -F "Sandbox $second_sandbox: stopped (Company \"Second Company\")" engines-sandbox-stopped.log || fail 'the report says the sandbox is stopped'
+sh scripts/install.sh company list > company-list-stopped.log 2>&1 || true
+grep -F "Sandbox $second_sandbox: stopped (Company \"Second Company\")" company-list-stopped.log || { cat company-list-stopped.log; fail 'company list says the sandbox is stopped'; }
 docker start "$second_sandbox" > /dev/null || fail 'start the second sandbox'
 for attempt in $(seq 1 60); do
   [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$second_sandbox") == healthy ]] && break
@@ -514,6 +560,29 @@ docker stop "$second_container" > /dev/null || fail 'stop the second Engine'
 engine_node "$engine_key" - < scripts/check-install-conversation.mjs || fail 'the first Company still answers while the second Engine is stopped'
 docker start "$second_container" > /dev/null || fail 'start the second Engine'
 engine_healthy "$second_container" 120 || fail 'the second Engine is healthy again'
+# `gtmworks company limits` (#396) changes one Company's limits: its sandbox alone is made again with them, its Engine
+# and the first Company's sandbox run on untouched meanwhile, and its work folder is kept.
+limits_of() { docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$1"; }
+started_of() { docker inspect -f '{{.Id}} {{.State.StartedAt}}' "$1"; }
+docker exec "$second_sandbox" sh -ec 'printf kept > /work/limits-kept.txt' || fail 'write a file in the second work folder'
+[[ $(limits_of "$second_sandbox") == '1610612736 1500000000' ]] || fail 'the second sandbox has the limits its add named'
+first_before=$(started_of gtmworks-sandbox-first) second_engine_before=$(started_of "$second_container") second_before=$(started_of "$second_sandbox")
+second_exit_before=$(started_of "$second_exit")
+sh scripts/install.sh company limits 'Second Company' --memory 768m --cpus 1 | tee company-limits.log || fail 'company limits changes the second Company'
+grep -Fx 'Company "Second Company": its work sandbox now has 768 MiB of memory and 1 CPUs.' company-limits.log || fail 'company limits says the limits the sandbox has'
+[[ $(limits_of "$second_sandbox") == '805306368 1000000000' ]] || fail 'the second sandbox runs with its new limits'
+[[ $(started_of "$second_sandbox") != "$second_before" ]] || fail 'the second sandbox was started again with its new limits'
+[[ $(started_of gtmworks-sandbox-first) == "$first_before" ]] || fail "the first Company's sandbox kept running while the second's limits changed"
+[[ $(started_of "$second_container") == "$second_engine_before" && $(started_of "$second_exit") == "$second_exit_before" ]] || fail "only the second Company's sandbox was started again"
+[[ $(docker exec "$second_sandbox" cat /work/limits-kept.txt) == kept ]] || fail 'the work folder is kept when the limits change'
+[[ $(limits_of gtmworks-sandbox-first) == "$(sandbox_memory_bytes) $(sandbox_nano_cpus)" ]] || fail "the first Company's sandbox keeps the install's default"
+# The first Company too, by its one limit; then a repeat install with other values left in the shell: every sandbox keeps
+# the limits its Company was given, which are kept with the Company's own files (the review's finding on #400).
+sh scripts/install.sh company limits 'Proxy Company' --cpus 1.5 || fail 'company limits changes the first Company'
+[[ $(limits_of gtmworks-sandbox-first) == "$(sandbox_memory_bytes) 1500000000" ]] || fail "the first Company's sandbox runs with its new CPU limit and the default memory"
+SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh > companies-repeat.log 2>&1 || { cat companies-repeat.log; fail 'a repeat install with limits in the shell'; }
+[[ $(limits_of gtmworks-sandbox-first) == "$(sandbox_memory_bytes) 1500000000" ]] || fail "a repeat install keeps the first Company's limits"
+[[ $(limits_of "$second_sandbox") == '805306368 1000000000' ]] || fail "a repeat install keeps the second Company's limits"
 }
 
 # agents: Agents on their Engines (#378, #408): an Agent made and run through the contract, the Engine management listener
@@ -760,8 +829,8 @@ diff -u data.before data.after || fail 'restored identities match'
 db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
 diff -u before restored || fail 'restored migration history'
 # A second Company on an Engine of its own for the every-Engine archive: the first run's Owner is its Owner, and the
-# worker gives it its main Agent by itself.
-second_company || fail 'the second Company for the every-Engine backup'
+# worker gives it its main Agent by itself. It is given its own sandbox limits (#396), which the restore brings back.
+second_company scripts/install.sh --memory 1536m --cpus 1.5 || fail 'the second Company for the every-Engine backup'
 # Every Company's Engine is in one backup and comes back from it (#386, ADR 0018). Each Company's main Agent is told
 # a code word in its own Engine first; after the restore each Company's Agent answers on its own Engine, with its own
 # code word and never the other Company's.
@@ -801,7 +870,7 @@ if grep -qx 'opt/data/' "$RUNNER_TEMP/every-engine.list"; then fail 'the every-E
 remove_install || fail 'remove the install before the every-Engine restore'
 rm -f .env.install
 sh scripts/install.sh || fail 'fresh install before the every-Engine restore'
-sh scripts/install.sh restore "$every_engine" || fail 'restore every Engine'
+SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh restore "$every_engine" || fail 'restore every Engine'
 [[ $(ls -d .engines/*/ | wc -l) == "$engines_before" ]] || fail 'the every-Engine restore brings every Engine back'
 for folder in .engines/*/; do
   name=$(engine_value "$folder" NAME)
@@ -820,6 +889,9 @@ for folder in .engines/*/; do
   sandbox=$(docker ps -q --filter "name=^gtmworks-sandbox-${name#gtmworks-engine-}$")
   [[ -n $sandbox ]] || fail "the restored install runs the sandbox of $name"
   [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox") == healthy ]] || fail "the restored sandbox of $name is healthy"
+  # Each sandbox comes back with the limits its Company was given, whatever the shell of the restore held (#396).
+  if [[ $name == gtmworks-engine-first ]]; then want_limits="$(sandbox_memory_bytes) $(sandbox_nano_cpus)"; else want_limits='1610612736 1500000000'; fi
+  [[ $(docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$sandbox") == "$want_limits" ]] || fail "the restored sandbox of $name has its Company's limits"
 done
 # The restored Engine binds every listener to its install-network address alone again, over every port it listens on:
 # the work-network check runs after the restore, on the other side of a restart (#393).
@@ -1705,9 +1777,9 @@ default_mib=$(( $(sandbox_memory_bytes) / 1048576 ))
 [[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the render at the defaults had no process killed at the memory limit'
 echo "sizes: one short render at the default limits took $render_seconds s and peaked at $render_peak MiB of the $default_mib MiB limit"
 # A render that needs more memory than its Company's limit: the second Company's sandbox gets half the render's measured
-# peak. `company add` takes no limit yet (#396 builds `--memory` and `company limits`), so the low limit is set on the
-# running sandbox with `docker update`, the cgroup change a Company's own limit makes; swap is held at the same figure so
-# the render cannot spill into it.
+# peak. It is set on the running sandbox with `docker update`, the cgroup change a Company's own limit (`company limits`,
+# #396, which the companies area proves) makes, because only this way can swap be held at the same figure so the render
+# cannot spill into it.
 low_mib=$(( render_peak / 2 ))
 (( low_mib >= 64 )) || low_mib=64
 (( render_peak > low_mib )) || fail "the render needs more memory ($render_peak MiB) than the low limit ($low_mib MiB)"

@@ -33,6 +33,9 @@
 //     plants a link to the Company's second Agent's memory on the Engine's disk (the job wrote `<marker>-leak` in it), a
 //     link up into that Agent's folder, a link to a folder and a hidden file: none is listed or read, and no byte of the
 //     memory comes back.
+//   company-sandbox <marker> <Company>: the named Company's main Agent, on its own Engine, runs one command that prints
+//     where it ran and writes `<marker>.txt` in its own folder (#396). It needs no earlier step: the companies area runs
+//     it on a Company `company add` made, and reads the host's Docker for which sandbox holds the file.
 // The companies and their Owner's sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -396,6 +399,38 @@ try {
  first.capacity=(first.capacity||[]).concat(made);
  writeFileSync(state,JSON.stringify(pair),{mode:0o600});
  writeProof({step:'capacity',kind:marker,made:made.length,state:'answered',company:first.company});
+} finally { model.close(); model.closeAllConnections(); }
+} else if(step==='company-sandbox') {
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const name=process.argv[4];
+const person=await signedIn();
+const {data:{user}}=await person.auth.getUser();
+assert.ok(user,'the Owner signs in');
+const [company]=await checked(service.from('companies').select('id').eq('name',name));
+assert.ok(company,`the Company ${name}`);
+const agent=await until(`${name}'s main Agent`,async()=>(await checked(person.from('hermes_agents').select('id,profile,is_default').eq('company_id',company.id))).find(found=>found.is_default&&found.profile),180);
+const engine=await engineFor(company.id);
+await until(`${agent.profile} on its Engine`,async()=>(await (await manage(engine,'/api/profiles')).json()).profiles?.some(profile=>profile.name===agent.profile),180);
+await pointAtFakeModel(engine,agent.profile);
+const command=`hostname; pwd; printf '%s' '${marker}' > '${marker}.txt'`;
+const plan=messages=>messages.some(message=>message.role==='user'&&String(typeof message.content==='string'?message.content:JSON.stringify(message.content)).includes(`COMPANY-SANDBOX ${marker}`))
+ &&!messages.some(message=>message.role==='tool')
+ ? {id:'call_company_sandbox',type:'function',function:{name:'terminal',arguments:JSON.stringify({command})}}
+ : null;
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const conversation=randomUUID();
+ const send={person:user.id,company:company.id,conversation,sendKey:randomUUID(),agent:agent.id,message:`COMPANY-SANDBOX ${marker}: run the check.`};
+ const sent=await until(`${name}'s Agent ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until(`reply of ${name}'s Agent`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ assert.ok(answer.body.includes(reply),answer.body);
+ const terminal=(()=>{ try { return JSON.parse(String(results[0])); } catch { return null; } })();
+ assert.equal(terminal?.exit_code,0,String(results[0]));
+ const [host,cwd]=String(terminal.output).trim().split('\n');
+ assert.equal(cwd,`/work/${agent.profile}`,'the command starts in the Agent\'s own folder of its Company\'s work folder');
+ writeProof({step:'company-sandbox',marker,sandbox_host:host,profile:agent.profile,cwd});
 } finally { model.close(); model.closeAllConnections(); }
 } else if(step==='sandbox') {
 // The work sandbox (#393, ADR 0018): a command, a file and code an Agent asks for run in the Company's sandbox and never
