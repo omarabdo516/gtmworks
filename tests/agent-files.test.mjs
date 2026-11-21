@@ -91,28 +91,57 @@ test('an Agent\'s library is the folders and files in its own folder of the Comp
  } finally { await fake.close(); }
 });
 
-test('the work root is the Agent\'s own folder of the Company\'s work folder: empty before its first command, and never its profile\'s old workspace', async () => {
+test('an Agent\'s work root is the empty folder it is before its first command, not a missing one', async () => {
  const {fake,at}=await engine();
  try {
-  // The sandbox makes the Agent's folder at its first command: until then the Engine has none, and the Library is the
-  // empty folder it is, not a missing one. A folder inside it is not made for it.
+  // The sandbox makes the Agent's folder at its first command: until then the Engine has none (404).
   fake.settings.files.delete(work);
   assert.deepEqual(await listAgentFiles(at),{state:'found',entries:[]});
   assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(work)}`),'the Engine was asked, and answered 404');
+  // A folder inside it is not made for it: only the root itself is empty rather than missing.
   assert.deepEqual(await listAgentFiles(at,'reports'),{state:'missing',entries:null});
+ } finally { await fake.close(); }
+});
+
+test('the work root never shows the profile\'s old workspace on the Engine\'s disk', async () => {
+ const {fake,at}=await engine();
+ try {
   // The folder in the profile's own home that the Library showed until now is never read: nothing could write to it.
   fake.settings.files.set(`${home}/workspace`,[{name:'old.md',size:2,mtime}]);
   fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
   assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['made.md']);
   assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).includes(encodeURIComponent(`${home}/workspace`))),'the old workspace is never asked about');
-  // Another Agent's folder of the same work folder is that Agent's Library, not this one's.
+ } finally { await fake.close(); }
+});
+
+test('another Agent\'s folder of the same work folder is that Agent\'s Library, not this one\'s', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
   fake.settings.files.set(`/opt/data/work/${otherProfile}`,[{name:'theirs.md',size:1,mtime}]);
   assert.deepEqual((await listAgentFiles({...at,profile:otherProfile})).entries?.map(entry=>entry.name),['theirs.md']);
   assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['made.md']);
-  // A file's text is read in the sandbox too, by the path the sandbox holds it at.
+ } finally { await fake.close(); }
+});
+
+test('a work file\'s text is read in the sandbox, by the path the sandbox holds it at', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
   fake.settings.fileBytes.set(`${work}/made.md`,{body:'Made',type:'text/markdown'});
   assert.deepEqual(await readAgentFile(at,{name:'made.md'}),{state:'found',name:'made.md',type:'text/markdown',byteSize:4,truncated:false,text:'Made'});
   assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/read-text?path=${encodeURIComponent(`${sandbox}/made.md`)}&profile=${profile}`));
+ } finally { await fake.close(); }
+});
+
+test('a stopped work sandbox still lists the work folder, and its files read as unreachable, not missing', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'brief.md',size:4,mtime}]);
+  fake.settings.sandboxDown=true;
+  assert.deepEqual(await listAgentFiles(at),{state:'found',entries:[{name:'brief.md',isFolder:false,size:4,time:clock}]});
+  assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'unreachable'});
+  assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'unreachable'});
  } finally { await fake.close(); }
 });
 
@@ -379,6 +408,9 @@ test('the download route serves the bytes as an attachment to an Owner and a Man
   const before=downloaded(fake).length;
   assert.equal((await ask(route(database().db),{name:'../../etc/passwd'})).status,404);
   assert.equal(downloaded(fake).length,before);
+  // A stopped work sandbox is a service that is down, not a file that is gone.
+  fake.settings.sandboxDown=true;
+  assert.equal((await ask(route(database().db),{name:'brief.md'})).status,503);
  } finally { await fake.close(); }
 });
 

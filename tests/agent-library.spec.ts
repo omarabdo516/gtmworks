@@ -87,7 +87,7 @@ test('the Owner opens the Agent\'s Library above its files, its generated images
  await expect(briefRow.locator('.panel-row__d')).toContainText(fileSize(Buffer.byteLength(brief)));
  await expect(briefRow.locator('time')).toHaveAttribute('datetime',new Date(at*1000).toISOString());
  // The hint, and the line that says the work folder is the Company's: every Agent of it can read and change it (#395).
- await expect(library.locator('.lib-hint')).toHaveText(['Files in Librarian’s work folder, and the images it generated, show here. You can view and download them, and ask for edits in the chat.',
+ await expect(library.locator('.lib-hint')).toHaveText(['Files in Librarian’s folder in the company’s work folder, and the images it generated, show here. You can view and download them, and ask for edits in the chat.',
   'Every agent of the company can read and change these files.']);
 
  // A folder opens in place with its own count of files, the focus on the way back to the Library (the reference's
@@ -174,7 +174,7 @@ test('a Contributor and a Viewer have no Library, and the server refuses them',a
 test('the shared-folder line and an empty Library, in English and in Arabic',async({page})=>{
  const {panel}=await openFiles(page,'omar@example.com',{id:idle,name:'Archivist'});
  const library=panel.locator('.dp-library');
- await expect(library.locator('.lib-empty')).toHaveText('Nothing here yet. Files Archivist makes in its work folder, and the images it generates, will show here.');
+ await expect(library.locator('.lib-empty')).toHaveText('Nothing here yet. Files Archivist makes in its folder of the company’s work folder, and the images it generates, will show here.');
  await expect(library.locator('.lib-hint').nth(1)).toHaveText('Every agent of the company can read and change these files.');
  await expect(library).not.toContainText(/card/i);
  await chooseLanguageInSettings(page,'ar');
@@ -184,8 +184,8 @@ test('the shared-folder line and an empty Library, in English and in Arabic',asy
   await expect(details).toBeVisible();
   await details.getByRole('tab',{name:'ملفات',exact:true}).click();
   const arabic=details.getByRole('tabpanel').locator('.dp-library');
-  await expect(arabic.locator('.lib-empty')).toHaveText('مفيش حاجة هنا لسه. الملفات اللي Archivist هيعملها في فولدر شغله، والصور اللي هيطلّعها، هتظهر هنا.');
-  await expect(arabic.locator('.lib-hint')).toHaveText(['ملفات Archivist اللي في فولدر شغله، والصور اللي عملها، بتظهر هنا. تقدر تشوفها وتنزّلها، والتعديل اطلبه منه في الشات.',
+  await expect(arabic.locator('.lib-empty')).toHaveText('مفيش حاجة هنا لسه. الملفات اللي Archivist هيعملها في فولدره جوّه فولدر شغل الشركة، والصور اللي هيطلّعها، هتظهر هنا.');
+  await expect(arabic.locator('.lib-hint')).toHaveText(['ملفات Archivist اللي في فولدره جوّه فولدر شغل الشركة، والصور اللي عملها، بتظهر هنا. تقدر تشوفها وتنزّلها، والتعديل اطلبه منه في الشات.',
    'كل وكيل في الشركة يقدر يقرا الملفات دي ويغيّرها.']);
   // The Agent with files reads the same line in Arabic beside its Library.
   await page.goto(`/c/rs-learning/chat/${agent}`);
