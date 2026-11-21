@@ -146,3 +146,15 @@ test('an explicit "every …" wins over a frequency word that describes the task
  assert.deepEqual([monthly?.form&&cronOf(monthly.form),monthly?.prompt],['0 9 1 * *','Send me the daily ad spend']);
  assert.equal(read('Send me the report daily at 9am')?.cron,'0 9 * * *','a bare "daily" still schedules when it is the only one');
 });
+
+test('scheduling words left in the task that no schedule here can hold (except, weekdays, twice, every other, until) ask', () => {
+ for(const sentence of ['Send me a report every day at 9am except weekends','Send me a report every day except Sunday at 9am','Send me a report on weekdays at 9am','Send me a report twice a day at 9am','Send me a report every other day at 9am','Send me a report every day at 9am until December','ابعتلي تقرير كل يوم 9 الصبح ماعدا الجمعة','ابعتلي تقرير مرتين كل يوم 9 الصبح'])
+  assert.equal(read(sentence)?.cron,null,sentence);
+ assert.equal(read('Send me the daily ad spend every month at 9am')?.cron,'0 9 1 * *','a frequency word describing the task is no such word');
+ assert.equal(read('ابعتلي ملخص الإعلانات كل يوم 9 الصبح')?.cron,'0 9 * * *');
+});
+
+test('«الحد» (Sunday) is no «until»', () => {
+ assert.equal(read('ابعتلي تقرير كل أسبوع يوم الحد الساعة 9 الصبح')?.cron,'0 9 * * 0');
+ assert.equal(read('ابعتلي تقرير كل يوم 9 الصبح لحد آخر الشهر')?.cron,null);
+});
