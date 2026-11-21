@@ -1169,10 +1169,10 @@ set +o pipefail
 fail_prefix='release install check failed: '
 start_registry
 # The release an existing install runs before the work sandbox: a fixed commit of main, the one spec #389's branch last
-# merged (#469), with an Engine per Company made by `company add` (spec #378), no sandbox, no exit, and Agent levels still
+# merged (#472), with an Engine per Company made by `company add` (spec #378), no sandbox, no exit, and Agent levels still
 # stored. Not origin/main or this pull request's base: once spec #389 merges main has the sandbox, and the proof would
 # update this release's own shape to itself. Main's own CI already linted and type-checked it, so its build skips both.
-before_sandbox=5423700c090b4bb8e927cb2615f6e404af4213b1
+before_sandbox=a404785204c76ddf27ae8ea97c7c9b5b4ae73304
 git cat-file -e "$before_sandbox^{commit}" 2> /dev/null || git fetch --no-tags origin "$before_sandbox" || fail 'the release before the work sandbox commit'
 git worktree add "$RUNNER_TEMP/sandbox-previous-release" "$before_sandbox" || fail 'the release before the work sandbox checkout'
 docker build -q --build-arg NEXT_SKIP_CHECKS=true -t localhost:5000/gtmworks:0.0.0-engines "$RUNNER_TEMP/sandbox-previous-release" > /dev/null \
