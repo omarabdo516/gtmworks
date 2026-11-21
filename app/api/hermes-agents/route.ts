@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { moveAgentMorning, stopAgentMorning } from '@/lib/agent-morning.mjs';
+import { moveAgentMorning } from '@/lib/agent-morning.mjs';
 
 const columns='id,company_id,connection_id,name,speciality,is_default';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,22 +26,16 @@ async function respond(request:NextRequest) {
    // removed Agent's profile is still known.
    const listed=(await db.rpc('company_app_agents',{c:body.company})).data as {agent:string,main:boolean}[]|null;
    const before=Array.isArray(listed)?listed.find(row=>row.main)?.agent:undefined;
-   const next=body.intent==='default'?body.agent:body.agent===before?body.replacement:undefined;
    const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,a:body.agent,replacement:body.replacement??null});
    if(error) {
     const key=['hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
     return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesNextDefault'?409:400);
    }
-   // Good morning moves with the main Agent, with the same time and switch, and none is left on the old one. The new main
-   // Agent is made whatever the Engine answers; a move that fails is said in the server log.
-   if(before&&typeof next==='string'&&next!==before) {
-    const moved=await moveAgentMorning(db,{company:body.company,from:before,to:next,agents:listed}).catch(()=>({state:'failed'}));
-    if(moved.state!=='moved'&&moved.state!=='none') console.error('Good morning not moved to the new main Agent:',body.company,moved.state);
-   }
-   // The main Agent removed with none to take its place (the last Agent): its message is paused, never left sending.
-   if(body.intent==='remove'&&before&&body.agent===before&&typeof next!=='string') {
-    const stopped=await stopAgentMorning(db,{company:body.company,agent:before,agents:listed}).catch(()=>({state:'failed'}));
-    if(stopped.state!=='paused'&&stopped.state!=='none') console.error('Good morning not paused for the removed main Agent:',body.company,stopped.state);
+   // Good morning follows the main Agent, with the same time and switch, and none is left on another one; with no Agent
+   // left to take it, it is paused. The change itself stands whatever the Engine answers; a failure is said in the log.
+   if(before&&(body.intent==='default'?body.agent!==before:body.agent===before)) {
+    const moved=await moveAgentMorning(db,{company:body.company,agents:listed}).catch(()=>({state:'failed'}));
+    if(!['moved','paused','none'].includes(moved.state)) console.error('Good morning not settled on the main Agent:',body.company,moved.state);
    }
   }
   const {data:agents,error}=await db.from('hermes_agents').select(columns).eq('company_id',body.company).order('name');
