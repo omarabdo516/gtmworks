@@ -1451,5 +1451,22 @@
   "routineEvery6": "Saturday",
   "routineWeekday6": "Saturday",
   "routineNotLogged": "Done, but it couldn’t be written in the log. Tell the Owner.",
-  "waitingChangeEditInvalid": "That value can’t be approved for this change. Nothing changed: check it and approve again."
+  "waitingChangeEditInvalid": "That value can’t be approved for this change. Nothing changed: check it and approve again.",
+  "routineEveryMonth": "1st of every month · {0}",
+  "routineMonthly": "Every month",
+  "agentRoutines": "Routines",
+  "agentRoutineAdd": "Add",
+  "agentRoutineNew": "New routine",
+  "agentRoutineHint": "For example: leads summary every day at 8 in the morning",
+  "agentRoutineEmpty": "Write the routine first, even a short sentence.",
+  "agentRoutineSave": "Add",
+  "agentRoutineIsOn": "“{0}” is on",
+  "agentRoutinesNone": "No routines yet. Write what you want repeated in the chat, and {0} sets it up on its own.",
+  "agentRoutineTry": "Try writing",
+  "routineExample": "Send me a summary of what you did every Thursday at 4 in the afternoon",
+  "agentRoutineAskTime": "When should it run? Each run uses the Company’s subscription.",
+  "agentRoutineUnread": "This agent’s routines can’t be read right now.",
+  "agentRoutineNewName": "New routine",
+  "chatRoutineMade": "Routine created: {0} · {1}",
+  "chatRoutineSee": "See it in details"
 }

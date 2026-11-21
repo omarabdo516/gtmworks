@@ -6,6 +6,12 @@
   "ar": { "title": "عدّل التغيير المقترح قبل ما توافق عليه", "body": "التغيير اللي الوكيل بيقترحه في إعداداته بقى بيوريك الوكيل عنده إيه دلوقتي جنب اللي هيبقى عنده، وتقدر تعدّل الموديل أو التعليمات أو الإعداد قبل ما توافق؛ وفي «مستنيك» بقى بطاقة بتفتح الاقتراح كله." }
  },
  {
+  "issue": 205,
+  "date": "2026-11-21",
+  "en": { "title": "Routines in an agent's details", "body": "An agent's details now list its routines with when each runs next; the Owner and Managers add one by writing one sentence, such as “leads summary every day at 8 in the morning”, and a sentence with no time asks for one first." },
+  "ar": { "title": "الروتينات في تفاصيل الوكيل", "body": "تفاصيل الوكيل بقت بتعرض روتيناته وإمتى كل واحد هيشتغل المرة الجاية؛ والمالك والمديرين يضيفوا روتين بجملة واحدة، زي «ملخص الليدز كل يوم 8 الصبح»، ولو الجملة مفيهاش ميعاد بيتسألوا عنه الأول." }
+ },
+ {
   "issue": 446,
   "date": "2026-11-21",
   "en": { "title": "The app keeps fewer keys", "body": "The app and the background worker now get only the settings they use, so neither holds the database password or the key that signs sign-ins, and a break-in into the app cannot use them." },
