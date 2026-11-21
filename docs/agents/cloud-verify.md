@@ -15,7 +15,8 @@ prints one line when it is done.
 
 One command, about a minute and a half on a warm VM:
 
-1. waits for Docker (starting `dockerd` if the hook's start has not answered yet) and installs dependencies if needed;
+1. waits for Docker (starting `dockerd` if the hook's start has not answered yet), installs dependencies if needed, and
+   installs Chromium when the build this checkout's Playwright pins is not on the machine;
 2. stops whatever an earlier `cloud:up` started;
 3. rebuilds the local Supabase stack with its migrations and seed (`scripts/local-db.sh`);
 4. starts the fake Engine (`scripts/cloud-hermes.mjs`, the browser suite's fake Hermes) where the app looks for the

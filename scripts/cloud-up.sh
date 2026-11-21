@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One command brings the whole local app up (#485; docs/agents/cloud-verify.md): `npm run cloud:up` starts Docker when no
-# daemon answers, installs the dependencies when the lockfile changed (scripts/cloud-session-setup.sh), rebuilds the local
+# daemon answers, installs the dependencies when the lockfile changed and Chromium when Playwright's build is missing
+# (scripts/cloud-session-setup.sh), rebuilds the local
 # Supabase stack with its seed (scripts/local-db.sh), starts the fake Engine (scripts/cloud-hermes.mjs) and the app with
 # its worker (scripts/web.sh) in the background, waits until the app answers, signs the seeded Owner in with a browser
 # (scripts/cloud-verify.mjs --sign-in) and prints where everything is. Every credential is the local stack's own.
@@ -44,6 +45,7 @@ fi
 
 bash scripts/cloud-session-setup.sh docker
 bash scripts/cloud-session-setup.sh deps
+bash scripts/cloud-session-setup.sh browser
 stop_own
 # The app's port, and the fake Engine's where scripts/web.sh points lane 0's app (tests/lane.mjs hermesHostOf).
 for address in 127.0.0.1/3000 127.0.0.110/8642; do

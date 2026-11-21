@@ -6,6 +6,7 @@
 # `npm run cloud:up` (scripts/cloud-up.sh) runs the same steps by name on any machine:
 #   deps     install the dependencies when package-lock.json changed or node_modules is missing
 #   docker   start dockerd if no daemon answers, and wait until one does
+#   browser  install the Chromium this checkout's Playwright pins when it is not on the machine yet
 set -euo pipefail
 cd "$(dirname "$0")/.."
 stamp=node_modules/.gtmworks-lock-hash
@@ -36,6 +37,13 @@ docker_up() {
  return 1
 }
 
+# Cloud images carry a Chromium for their own Playwright; a checkout pinning another release needs its own build.
+browser() {
+ node -e 'process.exit(require("fs").existsSync(require("playwright").chromium.executablePath())?0:1)' 2> /dev/null && return 0
+ echo "Installing the Chromium this checkout's Playwright uses…"
+ npx --no-install playwright install chromium > "$log_dir/gtmworks-playwright-install.log" 2>&1 || { tail -20 "$log_dir/gtmworks-playwright-install.log" >&2; return 1; }
+}
+
 case ${1:-hook} in
  hook)
   [[ ${CLAUDE_CODE_REMOTE:-} == true ]] || exit 0
@@ -45,5 +53,6 @@ case ${1:-hook} in
   ;;
  deps) deps ;;
  docker) docker_up wait ;;
- *) echo 'usage: scripts/cloud-session-setup.sh [hook|deps|docker]' >&2; exit 2 ;;
+ browser) browser ;;
+ *) echo 'usage: scripts/cloud-session-setup.sh [hook|deps|docker|browser]' >&2; exit 2 ;;
 esac

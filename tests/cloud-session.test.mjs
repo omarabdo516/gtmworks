@@ -82,6 +82,22 @@ test('`docker` waits for the daemon it started, and names the failure when none 
  } finally { m.done(); }
 });
 
+test('`browser` installs Chromium only when the Playwright build it needs is missing',()=>{
+ const m=machine();
+ try {
+  // A machine where Playwright finds its browser: nothing is installed.
+  writeFileSync(join(m.dir,'bin/node'),'#!/usr/bin/env bash\nexit 0\n'); chmodSync(join(m.dir,'bin/node'),0o755);
+  writeFileSync(join(m.dir,'bin/npx'),`#!/usr/bin/env bash\necho "npx $*" >> "${m.dir}/calls.log"\n`); chmodSync(join(m.dir,'bin/npx'),0o755);
+  assert.equal(m.run(['browser']).status,0);
+  assert.deepEqual(m.calls(),[]);
+  // One where it does not: the pinned Chromium is installed.
+  writeFileSync(join(m.dir,'bin/node'),'#!/usr/bin/env bash\nexit 1\n');
+  const result=m.run(['browser']);
+  assert.equal(result.status,0,result.stderr);
+  assert.deepEqual(m.calls(),['npx --no-install playwright install chromium']);
+ } finally { m.done(); }
+});
+
 test('the repo settings run the hook at session start and keep the plugin settings',()=>{
  const settings=json('.claude/settings.json');
  assert.deepEqual(settings.enabledPlugins,{'mattpocock-skills@mattpocock':true});
