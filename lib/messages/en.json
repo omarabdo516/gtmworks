@@ -1425,5 +1425,6 @@
   "routineEvery5": "Friday",
   "routineWeekday5": "Friday",
   "routineEvery6": "Saturday",
-  "routineWeekday6": "Saturday"
+  "routineWeekday6": "Saturday",
+  "routineNotLogged": "Done, but it couldn’t be written in the log. Tell the Owner."
 }

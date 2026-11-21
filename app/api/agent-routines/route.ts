@@ -30,6 +30,6 @@ export async function POST(request:NextRequest) {
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.company)) return reply({error:'routineInvalid'},400);
   if(!await routeAllowed(db,'app/api/agent-routines/route.ts','POST',body.company,user.id)) return reply({error:'routineNotAllowed'},403);
   const changed=await changeAgentRoutine(db,{company:body.company,agent:body.agent,action:body.action,routine:body.routine,name:body.name,prompt:body.prompt,schedule:body.schedule,timezone:body.timezone});
-  return changed.state==='done'?reply({routine:changed.routine}):refused(changed.state);
+  return changed.state==='done'?reply({routine:changed.routine,logged:changed.logged}):refused(changed.state);
  } catch { return reply({error:'routineFailed'},500); }
 }

@@ -1425,5 +1425,6 @@
   "routineEvery5": "جمعة",
   "routineWeekday5": "الجمعة",
   "routineEvery6": "سبت",
-  "routineWeekday6": "السبت"
+  "routineWeekday6": "السبت",
+  "routineNotLogged": "اتعمل، بس ماتسجّلش في السجل. قول للمالك."
 }

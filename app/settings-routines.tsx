@@ -45,10 +45,11 @@ export function RoutinesSection({company,state,agents,canManage,now}:{company:st
   </>}</>;
 }
 
-async function send(company:string,agent:string,action:RoutineAction,fields:Record<string,unknown>={}) {
+async function send(t:T,company:string,agent:string,action:RoutineAction,fields:Record<string,unknown>={}) {
  const response=await fetch('/api/agent-routines',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,action,...fields})}).catch(()=>null);
  if(!response) return 'routineFailed';
- if(response.ok) return null;
+ // Done, but its row is not in the Company log: the change stands, and the person is told so.
+ if(response.ok) { const body=await response.json().catch(()=>null) as {logged?:boolean}|null; if(body?.logged===false) toast(t('routineNotLogged'),{icon:'shield'}); return null; }
  const body=await response.json().catch(()=>null) as {error?:string}|null;
  return body?.error==='routineBusy'?'routineBusy':'routineFailed';
 }
@@ -65,7 +66,7 @@ function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,
  const act=(action:RoutineAction,fields:Record<string,unknown>={},done?:()=>void)=>startTransition(async()=>{
   setFailed(null);
   if(action==='run') setRunning(true);
-  const error=await send(company,agent,action,fields);
+  const error=await send(t,company,agent,action,fields);
   setRunning(false);
   if(error) { setFailed(error); return; }
   done?.();
@@ -135,7 +136,7 @@ function NewRoutine({t,company,agents,agent,onClose}:{t:T,company:string,agents:
   check={()=>{ const ok=what.trim().length>0; setEmpty(!ok); if(!ok) document.getElementById('rt-new')?.focus(); return ok; }}
   onSubmit={form=>startTransition(async()=>{
    setFailed(null);
-   const error=await send(company,who,'create',{prompt:what.trim(),schedule:cronOf(form),timezone:browserZone()});
+   const error=await send(t,company,who,'create',{prompt:what.trim(),schedule:cronOf(form),timezone:browserZone()});
    if(error) { setFailed(error); return; }
    toast(t('routineAdded',what.trim().length>40?`${what.trim().slice(0,40)}…`:what.trim()));
    close(); router.refresh();

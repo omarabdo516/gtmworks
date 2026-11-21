@@ -96,14 +96,14 @@ test('a list that holds another profile\'s job, a schedule that is not a plain c
 // The signed-in person's session: company_app_agents lists the Agents they see, and check_routine_change answers their
 // Role (`refuse` names the refusal). Every log call is kept.
 function session({agents,refuse=null,logFails=false}={}) {
- const logged=[],checked=[];
+ const logged=[],checked=[],tries=[];
  const db={rpc:async(name,args)=>{
   if(name==='company_app_agents') return {data:agents,error:null};
   if(name==='check_routine_change') { checked.push(args); return {data:null,error:refuse?{message:refuse}:null}; }
-  if(name==='log_routine_change') { if(logFails) return {data:null,error:{message:'connection reset'}}; logged.push(args); return {data:null,error:null}; }
+  if(name==='log_routine_change') { tries.push(args); if(logFails&&tries.length<=logFails) return {data:null,error:{message:'connection reset'}}; logged.push(args); return {data:null,error:null}; }
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
- return {db,logged,checked};
+ return {db,logged,checked,tries};
 }
 const rows=[
  {agent:ads,name:'Meta Ads',connection:'f0000000-0000-0000-0000-000000000011',profile:adsProfile,main:false,own:true},
@@ -221,14 +221,19 @@ test('the database checks the whole log row before the Engine changes, and a log
   assert.equal((await changeAgentRoutine(refused.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *',hermes})).state,'invalid');
   assert.deepEqual(refused.checked,[{c:company,agent:ads,act:'routine_created',routine:'Summary',schedule:'0 9 * * *'}]);
   assert.equal(fake.settings.cron.get(adsProfile)?.length??0,0,'nothing was made');
-  const outage=session({agents:rows,logFails:true});
+  // One failed write is tried again and goes through: done, logged once.
+  const blip=session({agents:rows,logFails:1});
+  const again=await changeAgentRoutine(blip.db,{company,agent:ads,action:'create',prompt:'Again',schedule:'0 10 * * *',hermes});
+  assert.deepEqual([again.state,again.logged,blip.tries.length,blip.logged.length],['done',true,2,1]);
+  const outage=session({agents:rows,logFails:9});
   const errors=[]; const said=console.error; console.error=(...args)=>errors.push(args.join(' '));
   try {
    const made=await changeAgentRoutine(outage.db,{company,agent:ads,action:'create',prompt:'Summary',schedule:'0 9 * * *',hermes});
    assert.equal(made.state,'done','the Engine holds it, so a retry would make a second one');
    assert.equal(made.logged,false);
+   assert.equal(outage.tries.length,3,'tried three times');
   } finally { console.error=said; }
-  assert.equal(fake.settings.cron.get(adsProfile).length,1);
+  assert.equal(fake.settings.cron.get(adsProfile).length,2);
   assert.ok(errors.some(line=>line.includes('Routine change not logged')),'never silent');
  } finally { await fake.close(); }
 });
