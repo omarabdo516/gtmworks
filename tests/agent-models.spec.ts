@@ -80,7 +80,8 @@ test('the Owner chooses the Company default and one Agent\'s own model, each rea
  // OpenRouter's entry (`anthropic/claude-opus-4.6`), not Anthropic's own `claude-opus-4-6` the same test's key adds.
  await page.getByRole('radio',{name:/^anthropic\/claude-opus-4\.6/}).click();
  await expect.poll(()=>fake.settings.profiles.get(space)?.model).toBe('anthropic/claude-opus-4.6');
- expect(fake.settings.profiles.get(co)?.model).toBe('anthropic/claude-opus-4.6');
+ // The Company's own profile is written after its shared space, so it is waited for as the space is.
+ await expect.poll(()=>fake.settings.profiles.get(co)?.model).toBe('anthropic/claude-opus-4.6');
  await page.getByRole('combobox',{name:'Model for Writer'}).selectOption({label:'anthropic/claude-opus-4.6'});
  await expect.poll(()=>fake.settings.profiles.get(writerProfile)?.model).toBe('anthropic/claude-opus-4.6');
  // The page shows the Agent's own choice once the whole save has answered; the record and the log row follow it.
