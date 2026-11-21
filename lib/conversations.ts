@@ -123,7 +123,7 @@ export function stepsOfReplies(messages:{author:string,run_id:string,created_at:
 }
 // A file a person sent with a message (#155; design-reference: filesHTML): its name, and the id its own route serves it by.
 type MessageFile={id:number,name:string};
-export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
+export type ConversationMessage={id:number,author:'person'|'agent',author_name:string,body:string,lost?:boolean,created_at:string,kind?:'note'|'queued'|'made'|'saved'|'decided'|'boarded'|'asked'|'answer'|'handed'|'handedOn',to?:string,failed?:boolean,model_refused?:boolean,agent_id?:string|null,face?:string,cards?:LeadCard[],saved?:SavedRule[],decided?:Decision,steps?:RunSteps,files?:MessageFile[]};
 type StoredMessage=ConversationMessage&{run_id:string,hand_card?:number|null};
 export const messageColumns='id,author,agent_id,author_name,body,run_id,hand_card,created_at';
 export const conversationColumns='id,agent_id,agent_name,hermes_session_id,good_morning,good_morning_day,hermes_agents(connection_id,is_default)';
@@ -181,6 +181,12 @@ export const withBoardNote=(record:ConversationMessage[],reply:number|undefined)
 export type HandoverAnswer={id:number,from:string,name:string,face:string,body:string,at:string};
 export const withHandoverAnswers=(record:ConversationMessage[],answers:HandoverAnswer[]):ConversationMessage[]=>
  mergedByTime(record,[...answers].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((answer):ConversationMessage=>({id:answer.id,author:'agent',author_name:answer.name,face:answer.face,body:answer.body,created_at:answer.at,kind:'handed',to:answer.from})),'after');
+// #477: a job an asked Agent handed on, made inside that Agent's Run rather than under a reply of the chat, is its own
+// quiet row among the turns (`kind` handedOn), where it was made: after the answer that handed it on was asked for, and
+// before the answer it brought back.
+export type HandedOn={id:number,card:Extract<LeadCard,{kind:'handed'}>,at:string};
+export const withHandedOn=(record:ConversationMessage[],steps:HandedOn[]):ConversationMessage[]=>
+ mergedByTime(record,[...steps].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((step):ConversationMessage=>({id:step.id,author:'agent',author_name:step.card.from.name,face:step.card.from.face,body:'',created_at:step.at,kind:'handedOn',cards:[step.card]})),'after');
 // Lines no message stores, each put where it happened among the record's items: already in time order, and drawn before
 // an item of the same moment (`before`) or after it (`after`).
 const mergedByTime=(record:ConversationMessage[],lines:ConversationMessage[],ties:'before'|'after'):ConversationMessage[]=>{

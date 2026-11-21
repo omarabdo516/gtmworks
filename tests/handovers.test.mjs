@@ -21,7 +21,7 @@ function handover(overrides = {}) {
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  const input=()=>{
   if(row.state==='waiting') return `hand this to Ads: ${row.goal}\n\nWhat Lead knows: ${row.context}`
-   +'\n\nDo not save anything to memory, do not schedule anything, and do not hand the job on.';
+   +'\n\nNobody but Lead reads this chat: put anything you need from the person in your reply.';
   return row.target_outcome==='completed'?`The job Ads was given: ${row.goal}\n\nWhat Ads reported:\n${row.summary}`:`The job Ads was given did not finish: ${row.goal}`;
  };
  const service={
@@ -62,7 +62,7 @@ const drive=async(/** @type {any} */ service,/** @type {any} */ engineFor,/** @t
  for(let pass=0;pass<most&&row.state!=='done'&&row.state!=='failed';pass++) await driveHandovers(service,{hermes,engineFor});
 };
 
-test('Lead\'s handover runs the job on the target\'s own profile with no tools, then a follow-up Lead Run in the conversation\'s session reports what came of it',async()=>{
+test('Lead\'s handover runs the job on the target\'s own profile, then a follow-up Lead Run in the conversation\'s session reports what came of it',async()=>{
  const {row,service,messages,calls}=handover();
  const {lead,target,engineFor}=engines();
  target.settings.reply=()=>'Three ad sets, 30 days, EGP 9,000.';
@@ -76,13 +76,14 @@ test('Lead\'s handover runs the job on the target\'s own profile with no tools, 
  const targetRuns=target.runs.filter(run=>run.key===`handover:${row.id}:target`);
  assert.equal(targetRuns.length,1,'the Target runs once');
  assert.equal(targetRuns[0].conversation,targetSession,'in a session of its own for this chat, never Lead\'s');
- assert.deepEqual(targetRuns[0].tools,[],'the Target is offered no gtmworks tools: it cannot ask, write shared memory, schedule work or hand on');
+ // This stand-in lists no other Agent for the Target to hand to, so it is offered no gtmworks tool; the chain's own test
+ // offers hand_to_agent (tests/handover-chains.test.mjs).
+ assert.deepEqual(targetRuns[0].tools,[],'the Target is offered no card tool, and here no Agent to hand to');
  assert.equal(targetRuns[0].instructions,null,'its instructions are its own profile\'s soul, never the Company\'s Agent instructions');
  assert.match(targetRuns[0].input,/Plan the Meta ads for the March intake/);
  assert.match(targetRuns[0].input,/EGP 9,000 for 30 days\./);
- // #317/#354: the pinned Engine cannot switch the target's toolsets per Run, so the target's own profile keeps its memory
- // and cronjob tools: the input says plainly not to use them, nor to hand the job on.
- assert.match(targetRuns[0].input,/Do not save anything to memory, do not schedule anything, and do not hand the job on\./);
+ // #477: the Target works with all its own tools; nobody but the asking Agent reads its chat, so a need goes in its reply.
+ assert.match(targetRuns[0].input,/put anything you need from the person in your reply\./);
  assert.deepEqual(target.answers.map(answer=>answer.text),[''],'its question is answered empty');
  assert.deepEqual(target.permits.map(permit=>permit.choice),['deny'],'its action is not allowed');
  assert.deepEqual([target.provided,target.agentReads],[[],[]],'nothing is made or read on the Target\'s profile');

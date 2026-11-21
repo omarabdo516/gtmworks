@@ -84,8 +84,20 @@ type StoredCard=ReplyCardRow&{channel_message_id:number,channel_ordinal:number|n
 type StoredSession={message_id:number,agent_id:string,profile:string,session:string,reply:number};
 // One handover of the channel (#150) as channel_handovers answers it: both Agents and their faces, the job, what the
 // target reported, Lead's reply and when each came. Only what the chat draws; never the context or the Engine's runs.
-type StoredHandover={id:number,message:number,from_agent:string,from_name:string,from_connection:string,to_agent:string,to_name:string,
+export type StoredHandover={id:number,message:number,from_agent:string,from_name:string,from_connection:string,to_agent:string,to_name:string,
  to_connection:string,goal:string,summary:string|null,reply:string|null,state:string,target_outcome:string|null,created_at:string,answered_at:string|null,closed_at:string|null,no_model?:boolean};
+// The lines each handover adds to the transcript (#150, #476): its row, the asked Agent's answer once it came, and the
+// asking Agent's reply once it came. A chain (#477) adds each of its steps the same way, a step handed on having no reply
+// of its own: its answer is the Agent's that asked it, whose own answer follows.
+export const handoverLines=(rows:StoredHandover[]):ChannelMessage[]=>rows.flatMap((row):ChannelMessage[]=>[
+ {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
+  ...(handoverUnfinished(row)?{failed:true as const}:{}),...(row.no_model?{noModel:true as const}:{})},
+ ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
+ ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,body:row.reply,at:row.closed_at}]:[]),
+]);
+// The lines in the order they were written: a note is drawn where it happened, after a message written at the same
+// moment (the sort is stable, and the messages come first), and a handover's row after the reply that made it.
+export const inWrittenOrder=(lines:ChannelMessage[]):ChannelMessage[]=>[...lines].sort((a,b)=>a.at<b.at?-1:a.at>b.at?1:0);
 // A channel's replies read their Run's steps from the Agent's Hermes session when the channel opens (#346), never kept.
 // `profile` is the one the Run was pinned to; the callback reads the session there.
 type ReadSession=(agent:string,session:string,profile:string)=>Promise<{turns:SessionTurn[],usage:SessionUsage|null}|null>;
@@ -213,15 +225,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // (design-reference: the handoff row, `to` on the sender line). Only handovers of the messages shown are drawn, and a
  // completed asked Agent's answer and the asking Agent's reply appear as soon as each comes in.
  const shownIds=new Set(ordered.map(message=>message.id));
- const handoverMessages=((handed||[]) as StoredHandover[]).filter(row=>shownIds.has(row.message)).flatMap((row):ChannelMessage[]=>[
-  {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
-   ...(handoverUnfinished(row)?{failed:true as const}:{}),...(row.no_model?{noModel:true as const}:{})},
-  ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
-  ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,body:row.reply,at:row.closed_at}]:[]),
- ]);
- // The lines in the order they were written: a note is drawn where it happened, after a message written at the same
- // moment (the sort is stable, and the messages come first), and a handover's row after the reply that made it.
- const messages=[...written.flat(),...handoverMessages].sort((a,b)=>a.at<b.at?-1:a.at>b.at?1:0);
+ const messages=inWrittenOrder([...written.flat(),...handoverLines(((handed||[]) as StoredHandover[]).filter(row=>shownIds.has(row.message)))]);
  // Only a channel that shows a no-model failure asks whether the reader owns the Company, for its line's link (#428).
  const noModel=messages.some(message=>message.author==='handoff'?message.noModel===true:message.author==='person'&&(message.mentions??[]).some(mention=>mention.state==='noModel'));
  const {data:owner}=noModel?await db.rpc('is_company_owner',{c:company}):{data:false};

@@ -2,7 +2,7 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, handoverUnfinished, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
+import { faceOf, handTurn, handoverUnfinished, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 
@@ -38,7 +38,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type RequestRow={id:number,run_id:string,call_id:string,agent_name:string,job:string,apps:string[],asked_with:string,state:AgentRequestView['state'],answered_at:string|null,reason:string|null,created_at:string,answerer:{name:string}|null,asker:{name:string}|null};
  type Message={id:number,author:'person'|'agent',author_name:string,agent_id:string|null,body:string,run_id:string,hand_card:number|null,created_at:string};
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
- type HandedRow={id:number,run:string,from_name:string,from_connection:string,to_agent:string,to_name:string,to_connection:string,goal:string,answer:string|null,state:string,target_outcome:string|null,answers_person:boolean,created_at:string,answered_at:string|null};
+ type HandedRow={id:number,run:string,from_name:string,from_connection:string,to_agent:string,to_name:string,to_connection:string,goal:string,answer:string|null,state:string,target_outcome:string|null,answers_person:boolean,created_at:string,answered_at:string|null,parent?:number|null};
  type Face={id:string,connection_id:string,name:string};
  type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,approved_value?:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,maybe_applied?:boolean,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
  type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,available:boolean,created_at:string};
@@ -110,14 +110,19 @@ export async function conversationRecord(db:Database,person:string,company:strin
   return {...base,state:'made',by,at,agent:agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name}:null};
  };
  const requested=new Set(requestRows.map(row=>`${row.run_id}:${row.call_id}`));
- const handed=handedRows.map(row=>({run_id:row.run,at:row.created_at,card:{kind:'handed',from:{name:row.from_name,face:row.from_connection},name:row.to_name,face:row.to_connection,goal:row.goal,...(handoverUnfinished(row)?{failed:true as const}:{})} satisfies LeadCard}));
+ const handedCard=(row:HandedRow)=>({kind:'handed',from:{name:row.from_name,face:row.from_connection},name:row.to_name,face:row.to_connection,goal:row.goal,...(handoverUnfinished(row)?{failed:true as const}:{})}) satisfies LeadCard;
+ // A handover the chat's Agent made sits under the reply of its Run; one an asked Agent handed on (#477) is its own row.
+ const handed=handedRows.filter(row=>row.parent==null).map(row=>({run_id:row.run,at:row.created_at,card:handedCard(row)}));
+ const handedOn=handedRows.filter(row=>row.parent!=null).map(row=>({id:row.id,at:row.created_at,card:handedCard(row)}));
  // The asked Agent's answer, once it came, for the asking Agent to reply with (a job command's answer is the chat's own
  // message instead, and none comes here).
  const answers=handedRows.flatMap(row=>row.answer&&row.answered_at?[{id:row.id,from:row.from_name,name:row.to_name,face:row.to_connection,body:row.answer,at:row.answered_at}]:[]);
  // A job command's handover (#358) is the chat's own Run: the target Agent answers the person, so its reply is drawn
  // with that Agent's face, and the chat never waits on that Run as if the Conversation's Agent worked on it.
  const commandRuns=new Set(handedRows.filter(row=>row.answers_person).map(row=>row.run));
- const faces=new Map(handedRows.map(row=>[row.to_agent,row.to_connection] as const));
+ // Only a job command's answer is a chat message from another Agent; a chain (#477) may ask the chat's own Agent back,
+ // whose messages stay its own.
+ const faces=new Map(handedRows.filter(row=>row.answers_person).map(row=>[row.to_agent,row.to_connection] as const));
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...handed,
@@ -152,7 +157,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
   ...(found.good_morning_day?{morningDay:found.good_morning_day}:{}),
-  messages:withBoardNote(withTeamWork(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),answers),notes,queued,me?.name||'',files),firstReply)
+  messages:withBoardNote(withTeamWork(withHandedOn(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),answers),handedOn),notes,queued,me?.name||'',files),firstReply)
    .map(message=>message.agent_id&&faces.has(message.agent_id)?{...message,face:faces.get(message.agent_id)}:message),
   usage:(await read)?.usage??null,
   pending:waiting(messages,ends,commandRuns).length>0||queuedWaiting(queued),

@@ -103,8 +103,9 @@ select is((select profile||':'||session||':'||instructions from begun),
  'the target''s own profile, in the session it has in this channel, with its own instructions');
 select ok((select input from begun) like '%Plan the Meta ads for the March intake%' and (select input from begun) like '%EGP 9,000 for 30 days.%'
  and (select input from begun) like '%in this channel%'
- and (select input from begun) like '%Do not save anything to memory, do not schedule anything, and do not hand the job on.%',
- 'the job, its context and the channel go with it, and the target is told not to use the memory and cronjob tools its own profile keeps, nor hand the job on');
+ and (select input from begun) not like '%memory%' and (select input from begun) not like '%do not hand the job on%'
+ and (select input from begun) like '%put anything you need from the team in your reply%',
+ 'the job, its context and the channel go with it; the target keeps its own tools (#477) and puts any need from the team in its reply');
 select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-lead'))),0,'nor does it start again within thirty seconds');
 select is(public.answer_handover((select id from public.agent_handovers where run_id='run-lead'),1,'run-target'),true,'the target''s Run is kept once');
 select is((select state||':'||run from public.handovers_due(null,0,'c1500000-0000-0000-0000-000000000001')),'target:run-target','and is read on the target''s profile');
