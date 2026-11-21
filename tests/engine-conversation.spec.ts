@@ -199,7 +199,7 @@ test('integration: Lead makes the Agent the Owner asks for, and nothing for a Ma
  const manager=(await memberClient('manager@example.com')).person;
  const theirs=randomUUID();
  expect(await sendMessage(manager,service,{person:'20000000-0000-0000-0000-000000000002',company,conversation:theirs,sendKey:randomUUID(),agent:lead,message:'I want someone to handle Meta ads',hermes,engineFor:fake.engineFor})).toEqual({conversation:theirs});
- // #167: the seeded Agents hidden from the Manager give Lead the card that asks for one.
+ // #167: Meta Ads, made for the Owner above, is hidden from the Manager, so Lead is offered the card that asks for one.
  expect(fake.runs[3].tools.map(tool=>tool.name)).toEqual(['request_agent','hand_to_agent','save_rule','show_draft','show_review','hand_over','ask_for_app','propose_change','ask_to_open_agent']);
  expect(await closeOpenRuns(service,{hermes,conversation:theirs,engineFor:fake.engineFor})).toBe(1);
  expect(made()).toHaveLength(2);
@@ -209,6 +209,8 @@ test('integration: Lead keeps a Manager\'s and a Contributor\'s request for an A
  test.setTimeout(120000);
  const {lead}=bundledLead();
  const fake=fakeEngine();
+ // #167: an Agent hidden from both Members, so their Runs are offered the card that asks for one, whatever ran before.
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values (gen_random_uuid(),'${company}',gen_random_uuid(),'Quill','Articles',false,'engine-conversation-quill')`);
  fake.settings.toolCalls=()=>[{id:'call-0',name:'request_agent',arguments:{name:' WhatsApp Leads ',job:'Follows up the WhatsApp leads.',apps:['WhatsApp Business']}}];
  const agents=()=>JSON.parse(query(`select count(*)::int as n from public.hermes_agents where company_id='${company}'`))[0].n;
  const before=agents();
