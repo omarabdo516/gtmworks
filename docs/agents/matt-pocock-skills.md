@@ -1,0 +1,34 @@
+# Matt Pocock's skills in this repo
+
+Matt Pocock's engineering skills (https://github.com/mattpocock/skills, MIT) are copied into `.claude/skills/`, one
+folder per skill, at the commit pinned in `scripts/vendor-matt-skills.sh` (#473). Claude Code reads `.claude/skills/`
+from the clone, so every session lists them: local, cloud, and cloud sessions with several repositories. A plugin or
+marketplace named in `.claude/settings.json` loads in local sessions only, so the repo settings name none; a person who
+also turned the `mattpocock-skills` plugin on for their own account sees each skill twice and can turn the plugin off.
+
+The skills read this repo's setup from `docs/agents/` (issue tracker, triage labels, domain docs, code review rules),
+pointed at by the Agent skills section of `CLAUDE.md`.
+
+## Which skills
+
+Every skill the upstream plugin ships (its `.claude-plugin/plugin.json`), less `teach`, which turns the working folder
+into a teaching workspace. `setup-matt-pocock-skills` is kept because the other skills send a session that lacks this
+repo's setup to it. It reads the existing `docs/agents/` and asks before it writes, so it does not need to run here.
+
+The list is in `scripts/vendor-matt-skills.sh`. `code-review`, `prototype` and `research` share a name with a skill
+bundled with Claude Code. Claude Code's skills documentation (https://code.claude.com/docs/en/skills) gives a project
+skill precedence over a bundled one of the same name, so in this repo `/code-review` runs Matt's two-axis review
+(`.claude/skills/code-review/SKILL.md`), the skill `AGENTS.md` names for every pull request.
+
+## Refreshing the copy
+
+The copy does not update itself. To move to a newer upstream commit:
+
+1. Set `pin=` in `scripts/vendor-matt-skills.sh` to the new commit, and add or drop names in its list if upstream did.
+2. Run `bash scripts/vendor-matt-skills.sh`. It fetches that commit, checks every listed skill is there, and replaces
+   each listed folder in `.claude/skills/` with upstream's; folders it does not list are left alone, so delete a
+   dropped skill's folder by hand (`tests/matt-skills.test.mjs` fails while `.claude/skills/` holds an unlisted folder).
+3. Put the same commit in the Matt Pocock section of `THIRD_PARTY_NOTICES.md`, and its licence text if it changed.
+4. Read the diff (a skill may now expect something `docs/agents/` lacks), run `npm test`, and open a pull request.
+
+Change a skill only upstream, or by dropping it from the list: the next refresh overwrites a local edit.

@@ -6,6 +6,12 @@
   "ar": { "title": "كل وكيل بيطلب من الفريق", "body": "أي وكيل بتكلمه، مش الرئيسي بس، بقى يقدر يطلب من وكيل تاني في شركتك شغل محتاجه، حتى لو وكيل مش بتشتغل معاه: المحادثة بتوريك مين طلب من مين، والرد باسم الوكيل ده، وبعدين رد وكيلك." }
  },
  {
+  "issue": 370,
+  "date": "2026-11-21",
+  "en": { "title": "Memory and skill changes always reach the log", "body": "When you edit, forget or reset an agent's memory, or change a skill, and the agent already holds the change, it is saved and shown as saved even if its log line is late, and the log gets exactly one line for it." },
+  "ar": { "title": "تغييرات الذاكرة والمهارات دايمًا بتوصل للسجل", "body": "لما تعدّل أو تمسح أو تصفّر ذاكرة وكيل، أو تغيّر مهارة، والوكيل خلاص شايل التغيير، بيتحفظ ويظهر إنه اتحفظ حتى لو سطره في السجل اتأخر، والسجل بياخد سطر واحد بس ليه." }
+ },
+ {
   "issue": 167,
   "date": "2026-11-21",
   "en": { "title": "Ask for an agent you don’t have yet", "body": "When you ask the main agent for work that belongs to an agent you don’t work with, it says so without naming it and offers to ask the Manager or Owner who chooses your agents. Once they open it for you, it shows in your sidebar and your chat says so." },

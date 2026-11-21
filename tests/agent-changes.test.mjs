@@ -5,7 +5,7 @@ import { readProfileModels, writeProfileModel, readModels, readConfig, readSaved
  readAgentInstructions as readInstructions, writeAgentInstructions as writeInstructions } from '../lib/hermes.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { answerChange } from '../lib/agent-changes.mjs';
-import { engineSettings } from '../lib/engine-settings.mjs';
+import { engineSettings, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -252,6 +252,37 @@ test('a write that lands after the proposal was declined meanwhile says so to th
   const timedOut=owner([proposalsOf().model]);
   assert.deepEqual((await answerChange(timedOut.db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)})).state,'notApplied');
   assert.deepEqual(timedOut.calls.filter(call=>call.name==='release_agent_change').map(call=>call.args.uncertain),[true]);
+ } finally { await fake.close(); }
+});
+
+// #436: an approval of a setting waits its turn behind the Company's other setting writes. Its claim is renewed once that
+// turn has come, not before the wait, so a claim another Owner declined while it waited writes nothing.
+test('an approval waiting behind a Company-wide write renews its claim only once that write ends, and a claim lost meanwhile writes nothing',async()=>{
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),own(ads),own(writer),`cs-${company.replaceAll('-','')}`]) profileOn(fake,name);
+  const {model}=proposalsOf();
+  const {db,calls}=owner([model]);
+  let open=()=>{};
+  const gate=new Promise(resolve=>{ open=resolve; });
+  let held=false;
+  const slow={...settingDriver(fake),writeModel:async(target,change)=>{ held=true; await gate; return settingDriver(fake).writeModel(target,change); }};
+  const companyWide=changeCompanySetting(db,{company,setting:'model',value:'openrouter/openai/gpt-5.4',hermes:install(fake),driver:slow});
+  while(!held) await new Promise(resolve=>setTimeout(resolve,5));
+  const approval=answerChange(db,{company,proposal:1,approve:true,hermes:install(fake),settingDriver:settingDriver(fake)});
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.ok(calls.some(call=>call.name==='claim_agent_change'),'the proposal is claimed at once');
+  assert.equal(calls.some(call=>call.name==='renew_agent_change'),false,'the claim is not renewed while the Company-wide write holds the turn');
+  // Its lease runs out while it waits and another Owner declines it.
+  Object.assign(model,{state:'declined',lease:'over'});
+  open();
+  const [wide,answer]=await Promise.all([companyWide,approval]);
+  assert.equal(wide.state,'written',JSON.stringify(wide));
+  assert.deepEqual(answer,{state:'busy'});
+  const renewedAt=calls.findIndex(call=>call.name==='renew_agent_change');
+  assert.ok(renewedAt>calls.findLastIndex(call=>call.name==='log_engine_setting'),'renewed only after the Company-wide write ended');
+  assert.equal(calls.some(call=>call.name==='answer_agent_change'||call.name==='release_agent_change'||call.name==='set_agent_model'),false,'the lost claim is neither answered nor released');
+  assert.equal(fake.settings.profiles.get(own(ads)).model,'openai/gpt-5.4','Ads keeps the Company default: the declined change is never written');
  } finally { await fake.close(); }
 });
 
