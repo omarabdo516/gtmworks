@@ -9,7 +9,7 @@ work=$(mktemp -d)
 stop_containers() { docker rm -f gtmworks-proxy-app gtmworks-proxy-caddy >/dev/null 2>&1 || true; docker volume rm gtmworks-proxy-caddy-data >/dev/null 2>&1 || true; }
 trap 'stop_containers; rm -rf "$work"' EXIT INT TERM
 stop_containers
-[[ -n "$(docker image ls -q gtmworks:ci)" ]] || docker build -t gtmworks:ci .
+[[ -n "$(docker image ls -q gtmworks:ci)" ]] || bash scripts/docker-build.sh -t gtmworks:ci .
 status=$(npx supabase status -o env)
 api_url=$(printf '%s\n' "$status" | sed -n 's/^API_URL="\(.*\)"$/\1/p')
 service_key=$(printf '%s\n' "$status" | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')

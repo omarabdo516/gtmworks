@@ -67,6 +67,18 @@ role the change concerns and click through it yourself, the same way: with Playw
 database (`npx supabase db query "<sql>" -o json --agent no`). `scripts/cloud-verify.mjs` is a starting point to copy
 from. Any email goes to the local inbox; a test that must name an outside address uses `delivered@resend.dev`.
 
+## The image and integration jobs
+
+`./ci.sh integration` (the browser suite; `-- --shard=1/6` for one of CI's shards) and `bash scripts/ci-image.sh` (the
+`image` job's build and health check) run in a cloud session as they do on CI's runner, with the stack from step 1 up.
+Every app image build goes through `scripts/docker-build.sh` (#562): the session's network re-signs every TLS connection
+with its own CA, which the VM's Node trusts through `NODE_EXTRA_CA_CERTS` and a container does not, so the helper hands
+that file to the build as the BuildKit secret `build-ca`, and the Dockerfile's npm steps trust it only while they run.
+Nothing of it reaches the image, and where the variable names no file (CI, a release) it is the plain `docker build`. A
+build you type yourself does the same with `bash scripts/docker-build.sh -t gtmworks:ci .`. Docker needs no proxy setting
+here: the network reaches containers directly (plain HTTP, such as the sandbox image's `apt-get`, works as it is), and
+the session proxy at `127.0.0.1` would be the container's own loopback.
+
 ## When it does not start
 
 - `the Docker daemon did not answer within 90 seconds`: read `$TMPDIR/gtmworks-dockerd.log`.
