@@ -107,7 +107,7 @@ remove_install() { compose down -v && remove_engine; }
 reset_install() {
   # The release areas install a previous release in a folder of its own: one an earlier area left in the same checkout
   # (./ci.sh install, all of them, on one Docker machine) is taken down from that folder, with its volumes, first.
-  for fixture in release-install stable-release-install sandbox-release-install staged-release-install; do
+  for fixture in release-install stable-release-install sandbox-release-install staged-release-install rollback-release-install; do
     [ -f "$fixture/.env.install" ] || continue
     (cd "$fixture" && remove_install) || return 1
     rm -f "$fixture/.env.install" 2> /dev/null || docker run --rm -v "$PWD/$fixture:/fixture" alpine:3.21 rm -f /fixture/.env.install

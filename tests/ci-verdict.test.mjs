@@ -143,7 +143,7 @@ test('the install job runs as one matrix of nine areas on a fresh Docker machine
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
   const { install, check } = jobs;
   assert.equal(install.name, 'install-${{ matrix.area }}');
-  assert.deepEqual(install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sizes', 'engines-update', 'one-line', 'updater'] } });
+  assert.deepEqual(install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sandbox-rollback', 'sizes', 'engines-update', 'one-line', 'updater'] } });
   assert.deepEqual(install.needs, ['changes', 'image']);
   assert.ok(check.needs.includes('install'), 'the required check waits for the proof');
   const env = check.steps.at(-1).env;
