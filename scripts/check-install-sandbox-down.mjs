@@ -68,7 +68,7 @@ try {
  const profile=companyProfile(company);
  const pointed=await management(`/api/config?profile=${encodeURIComponent(profile)}`,{method:'PUT',body:JSON.stringify({config:{model:{provider:'custom',default:'fake-model',base_url:'http://web:8080/v1',api_key:'fake-model-key',context_length:128000}}})});
  assert.equal(pointed.status,200,'the Company profile points at the fake model');
- const agent=await until('the Company profile ready for a run',async()=>(await checked(service.from('hermes_agents').select('id').eq('company_id',company).eq('is_default',true).maybeSingle()))?.id,180);
+ const agent=await until('the Company profile ready for a run',async()=>(await checked(person.from('hermes_agents').select('id').eq('company_id',company).eq('is_default',true).maybeSingle()))?.id,180);
  // The Company's own read of its work sandbox, the one Settings shows (#398): one answer, no polling.
  assert.deepEqual(await readWorkSandbox(engine),{state:down?'notRunning':'running'},`the work sandbox reads ${down?'not running':'running'}`);
  const send=async text=>{
@@ -77,7 +77,7 @@ try {
   assert.deepEqual(result,{conversation});
   const body=await until('reply stored',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
   assert.ok(body.body.includes(reply),body.body);
-  const {hermes_session_id:session}=await checked(service.from('conversations').select('hermes_session_id').eq('id',conversation).single());
+  const {hermes_session_id:session}=await checked(person.from('conversations').select('hermes_session_id').eq('id',conversation).single());
   assert.ok(session,'the reply names its Engine session');
   const read=await readSession({...engine,managementAddress,profile},session);
   assert.equal(read.state,'found','the reply has a session to read');

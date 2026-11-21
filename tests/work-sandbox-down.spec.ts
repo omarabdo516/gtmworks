@@ -11,8 +11,8 @@ const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','qu
 const company='10000000-0000-0000-0000-000000000001';
 const profile=`co-${company.replaceAll('-','')}`;
 const omar='20000000-0000-0000-0000-000000000001';
-const english='This Company\'s work sandbox is not running. Ask the install owner to start it.';
-const arabic='صندوق الشغل بتاع الشركة مش شغال. اسأل صاحب التثبيت يشغّله.';
+const english='This Company’s work sandbox is not running. Ask the install owner to start it.';
+const arabic='صندوق الشغل بتاع الشركة دي مش شغال. اسأل صاحب التثبيت يشغّله.';
 const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 let lead:string;
