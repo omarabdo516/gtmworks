@@ -185,3 +185,16 @@ sandbox_exit_probe() {
     -o UserKnownHostsFile=/opt/data/.ssh/known_hosts -o LogLevel=ERROR -p 2222 pn@sandbox \
     node --input-type=module - "$2" < scripts/check-install-sandbox-exit.mjs
 }
+# The install's default RAM and CPU for one sandbox, read from the one place they are set, the sandbox service of
+# scripts/engine-template.yml (#400): `sandbox_default mem_limit` prints its memory (as Compose reads it, e.g. 2g) and
+# `sandbox_default cpus` its CPUs. sandbox_memory_bytes and sandbox_nano_cpus give the values `docker inspect` reports.
+sandbox_default() { sed -n "/^  sandbox:$/,/^  [a-z]/s/^    $1: \${SANDBOX_[A-Z]*:-\(.*\)}$/\1/p" scripts/engine-template.yml; }
+sandbox_memory_bytes() {
+  memory=$(sandbox_default mem_limit)
+  case $memory in
+    *g) echo $(( ${memory%g} * 1073741824 ));;
+    *m) echo $(( ${memory%m} * 1048576 ));;
+    *) return 1;;
+  esac
+}
+sandbox_nano_cpus() { awk -v cpus="$(sandbox_default cpus)" 'BEGIN { printf "%d\n", cpus * 1000000000 }'; }

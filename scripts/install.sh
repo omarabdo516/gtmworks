@@ -90,13 +90,10 @@ exit_network() { printf 'gtmworks-exit-%s' "$1"; }
 work_volume() { printf 'gtmworks-work-%s' "$1"; }
 work_network() { printf 'gtmworks-work-%s' "$1"; }
 host_key_volume() { printf 'gtmworks-sandbox-hostkey-%s' "$1"; }
-# What one sandbox gets by default, in one place: the RAM and CPU the install gives a Company's sandbox, and the process
-# limit and shared memory it needs for Chromium. #400 replaces the memory figure from its measurement; a person can
-# raise any of them in the environment of the install's own command.
-sandbox_memory=${SANDBOX_MEMORY:-2g}
-sandbox_cpus=${SANDBOX_CPUS:-2.0}
-sandbox_pids=${SANDBOX_PIDS:-2048}
-sandbox_shm=${SANDBOX_SHM:-1gb}
+# What one sandbox gets by default (the RAM and CPU the install gives a Company's sandbox, and the process limit and shared
+# memory Chromium needs) is set in one place, the sandbox service of scripts/engine-template.yml, from the install job's
+# measurement (#400). A person raises any of them in the environment of the install's own command (SANDBOX_MEMORY,
+# SANDBOX_CPUS, SANDBOX_PIDS, SANDBOX_SHM), which reaches Compose unchanged; nothing here repeats a default.
 # The private key an Engine dials its sandbox with, and the sandbox's own host key, both made in the one sandbox image
 # (it has ssh-keygen; the Engine has none) and written into the Engine's data volume and the host-key volume. The Engine's
 # known_hosts is written to the host key's public half at the address its ssh client uses, so a recreated sandbox keeps
@@ -156,7 +153,7 @@ engine_names() {
     printf '%s\n' "${name%/}"
   done
 }
-# The sandbox's names, image and limits reach Compose in its environment only, never in .env.install or the Engine's own
+# The sandbox's names and image reach Compose in its environment only, never in .env.install or the Engine's own
 # file: the names are derived from the folder above, so a restore needs no second record, and the public key that
 # belongs to this Engine's private key is passed here.
 engine() {
@@ -166,10 +163,6 @@ engine() {
   SANDBOX_NAME=$(sandbox_container "$slug") \
   SANDBOX_AUTHORIZED_KEY=${sandbox_key:-} \
   SANDBOX_HOST_KEY_VOLUME=$(host_key_volume "$slug") \
-  SANDBOX_MEMORY=${SANDBOX_MEMORY:-$sandbox_memory} \
-  SANDBOX_CPUS=${SANDBOX_CPUS:-$sandbox_cpus} \
-  SANDBOX_PIDS=${SANDBOX_PIDS:-$sandbox_pids} \
-  SANDBOX_SHM=${SANDBOX_SHM:-$sandbox_shm} \
   WORK_VOLUME=$(work_volume "$slug") \
   WORK_NETWORK=$(work_network "$slug") \
   EXIT_NAME=$(exit_container "$slug") \

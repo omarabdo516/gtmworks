@@ -246,5 +246,5 @@ case "${1:-check}" in
   export INSTALL_LANE_FOREIGN_OWNER=1
   bash scripts/ci-install-check.sh "$@"
   ;;
-  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | engines-update | one-line | updater | measure]' >&2; exit 2;;
+  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

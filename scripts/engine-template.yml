@@ -71,10 +71,14 @@ services:
     security_opt:
       - no-new-privileges:true
     # A process limit and shared memory large enough for Chromium (the base image's own browser, which the screen and a
-    # rendered page run); the RAM and CPU a sandbox gets are the install's defaults, set in one place (scripts/install.sh).
+    # rendered page run), and the RAM and CPU a sandbox gets. These defaults are the install's, set here and nowhere else
+    # (#400), from the install job's measurement (`install-sizes`, run 44848354569): one short render (60 frames of
+    # 1280x720 drawn by Chromium, joined by ffmpeg) peaked at 337 MiB and took 13.7 s on 2 CPUs, so 1g is about three
+    # times that peak, room for a longer or larger render, and 2 CPUs keep it to seconds. A person's own value in the
+    # install command's environment replaces one.
     pids_limit: ${SANDBOX_PIDS:-2048}
     shm_size: ${SANDBOX_SHM:-1gb}
-    mem_limit: ${SANDBOX_MEMORY:-2g}
+    mem_limit: ${SANDBOX_MEMORY:-1g}
     cpus: ${SANDBOX_CPUS:-2.0}
     environment:
       # The public key that arrived when the container started; no private key is here, and a sandbox that gets none
