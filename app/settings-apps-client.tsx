@@ -262,7 +262,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
     <div className="kv__row"><dt>{say('can')}</dt><dd>{item.can}</dd></div>
     <div className="kv__row"><dt>{say('kindTitle')}</dt><dd>{say(item.auth==='header'?'kindHeader':item.auth==='oauth'?'kindOauth':item.auth==='command'?'kindCommand':'kindNone')}</dd></div>
     {/* A command server (#459) shows the command it runs in the work sandbox, as the Owner typed it. */}
-    {item.auth==='command'&&item.command&&<div className="kv__row"><dt>{say('command')}</dt><dd><code dir="ltr" id="app-command">{[item.command,...item.args??[]].join(' ')}</code></dd></div>}
+    {item.auth==='command'&&item.command&&<div className="kv__row"><dt>{say('command')}</dt><dd><code dir="ltr" id="app-command">{[item.command,...item.args??[]].map(word=>word===''||/\s|'/.test(word)?`'${word.replaceAll("'","'\\''")}'`:word).join(' ')}</code></dd></div>}
     {item.auth==='oauth'&&<div className="kv__row"><dt>{say('signIn')}</dt><dd>{named(say('signInLine'),item.name)}</dd></div>}
    </dl>
    {owner&&item.auth==='header'&&<section className="apps-sec" aria-labelledby="app-token-h"><h4 className="apps-sec__h" id="app-token-h">{say('token')}</h4>
@@ -315,8 +315,8 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
  const [kind,setKind]=useState<'oauth'|'header'|'none'|'command'>('oauth'); const [token,setToken]=useState('');
  const [command,setCommand]=useState(''); const [argLines,setArgLines]=useState('');
  const sandboxed=kind==='command';
- // One argument per line, each exactly as typed; an empty last line is not an argument.
- const serverOf=()=>sandboxed?{kind,command:command.trim(),args:argLines.replace(/\r/g,'').split('\n').filter((line,at,all)=>line!==''||at<all.length-1)}:{url:address,kind,token:kind==='header'?token:''};
+ // One argument per line, each exactly as typed; an empty line is not an argument.
+ const serverOf=()=>sandboxed?{kind,command:command.trim(),args:argLines.replace(/\r/g,'').split('\n').filter(line=>line!=='')}:{url:address,kind,token:kind==='header'?token:''};
  const [picks,setPicks]=useState<string[]>(()=>own.filter(agent=>agent.main).map(agent=>agent.id)); const [queue,setQueue]=useState<string[]>([]);
  const [tools,setTools]=useState<string[]|null>(null); const [tested,setTested]=useState('');
  const [error,setError]=useState(''); const [busy,setBusy]=useState(false);
@@ -381,7 +381,7 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
     if(!answer.ok) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
     // Added, but the engine did not reach it (an address that does not answer, a token it refused): the form stays with
     // the reason, and its card shows Needs attention.
-    if(kind!=='oauth'&&answer.body.state!=='connected') { setBusy(false); setError('connectAttention'); refreshApps(); return; }
+    if(kind!=='oauth'&&answer.body.state!=='connected') { setBusy(false); setError(sandboxed?'commandAttention':'connectAttention'); refreshApps(); return; }
     if(kind==='oauth') {
      const url=typeof answer.body.url==='string'?answer.body.url:null;
      if(!url) { popup?.close(); setBusy(false); setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
@@ -401,7 +401,7 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
   </header>
   <div className="apps-body apps-detail">
    <div className="panel-card own-form">
-    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={error==='ownRequired'&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
+    <label className="set-field"><span>{say('name')}</span><input id="own-name" type="text" autoComplete="off" placeholder={say('nameHint')} aria-invalid={(error==='ownRequired'||error==='commandRequired')&&!name.trim()||undefined} aria-describedby="own-err" value={name} onChange={event=>setName(event.target.value)}/></label>
     <label className="set-field"><span>{say('kind')}</span><select id="own-kind" value={kind} onChange={event=>{ setKind(event.target.value as 'oauth'|'header'|'none'|'command'); setError(''); }}>
      <option value="oauth">{say('kindOauth')}</option><option value="header">{say('kindHeader')}</option><option value="none">{say('kindNone')}</option><option value="command">{say('kindCommand')}</option></select></label>
     {sandboxed?<>

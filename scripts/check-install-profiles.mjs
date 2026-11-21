@@ -566,7 +566,7 @@ try {
  assert.equal(cwd,`/work/${first.profile}`,'the server starts in the Agent\'s own folder of the Company\'s work folder');
  assert.equal((await disconnectApp(target,key)).state,'disconnected','Remove takes the server out of the profile');
  writeProof({step:'sandbox-mcp',marker,sandbox_host:host,profile:first.profile,cwd});
-} finally { model.close(); model.closeAllConnections(); }
+} finally { model.close(); model.closeAllConnections(); await disconnectApp(target,key).catch(()=>{}); }
 } else if(step==='sandbox-key') {
 // The Engine's pinned ssh client is hard-coded `StrictHostKeyChecking=accept-new`, which trusts a host it has not seen
 // but refuses one whose key changed (tools/environments/ssh.py). The install pre-seeds the Engine's known_hosts with its
