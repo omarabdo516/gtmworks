@@ -87,3 +87,14 @@ test('the agents area proves an Agent\'s file reaches its Library, and a write f
  assert.match(script,/step==='library'/);
  for(const read of ['agentLibrary(person','agentFilePreview(person','agentFileDownload(person']) assert.ok(script.includes(read),`${read} is the app's own service`);
 });
+
+// #553: the agents-sandbox area runs the sandbox steps without the verify step, so the `second` step makes the first
+// Company's second Agent alone. Both steps make it through one helper, so the Agent the sandbox steps start in is made
+// exactly as verify makes it, and `second` keeps it in the state file the sandbox steps read.
+test('the verify and second steps make the first Company\'s second Agent through one helper', () => {
+ const branch=name=>script.slice(script.indexOf(`step==='${name}') {`),script.indexOf('} else if(',script.indexOf(`step==='${name}') {`)));
+ assert.equal(script.match(/lead_create_agent',\{conversation:first\.conversation/g).length,1,'one place makes the first Company\'s second Agent');
+ for(const name of ['verify','second']) assert.match(branch(name),/await firstSecond\(/,`${name} makes it through the helper`);
+ assert.match(branch('second'),/writeFileSync\(state,/,'second keeps the Agent for the sandbox steps');
+ assert.match(branch('second'),/checkProfile\(firstEngine,first\.secondProfile\)/,'second checks the moved Agent\'s profile');
+});

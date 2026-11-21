@@ -13,6 +13,8 @@
 //     serves no Run and holds the one shared Skills folder read by exactly its own Agents. Then a fake key for a provider
 //     the Engine catalogues is set through the driver (#124): it is set in the first Company's space and both of its
 //     Agents' profiles, in none of the second Company's and never the root, and removed from both again.
+//   second: the first Company's second Agent alone, made as verify makes it and moved by the worker to its own profile,
+//     for the sandbox steps when no verify ran before them (the agents-sandbox area, #553).
 //   capacity <with-skills|no-skills>: ten more Agent profiles in the first Company on its Engine, each printed with its
 //     name and the seconds it took to be ready. The install job measures that Engine's memory and the volume's disk around
 //     them; the check ends with a Run on the first Agent still answered.
@@ -126,6 +128,38 @@ const fakeModel=async(requests,results=[],plan=skillPlan)=>{
  return {model,reply};
 };
 
+// A message from the Owner to an Agent of the Company in a new Conversation, answered: whether the marker reached the
+// model, the Conversation, and what the model was sent. The verify and second steps each ask through their own fake model.
+const asker=({asked,reply,person})=>async(entry,agent,label,message='مرحباً، اكتب عنواناً قصيراً.',client=person)=>{
+ const before=asked.length;
+ const conversation=randomUUID();
+ // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
+ // stores nothing, so the same send is made again until it is ready (#282).
+ const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message};
+ const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(client,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until(`reply on ${label}`,async()=>(await checked(client.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ assert.ok(answer.body.includes(reply),answer.body);
+ assert.ok(asked.length>before,`${label} asked the model`);
+ return {remembered:Boolean(marker)&&asked.slice(before).some(raw=>raw.includes(marker)),conversation,sent:asked.slice(before)};
+};
+// The first Company's second Agent, made on the company profile as the previous app version made one and moved by the
+// worker to its own profile (#121), keeps its Conversation and starts empty. The verify step makes it before its checks;
+// the second step makes it alone, for the sandbox steps of the agents-sandbox area (#553).
+const firstSecond=async(ask,person,first,firstEngine)=>{
+ first.conversation=(await ask(first,first.agent,first.profile)).conversation;
+ const [{run_id:run}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',first.conversation).eq('author','person'));
+ const made=await checked(service.rpc('lead_create_agent',{conversation:first.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check.',apps:[]}));
+ assert.equal(made.state,'created');
+ assert.equal(await profileOf(person,made.agent),first.profile,'the previous version makes the Agent on the company profile');
+ const own=`ag-${made.agent.replaceAll('-','')}`;
+ await until(`${own} made by the worker`,async()=>(await (await manage(firstEngine,'/api/profiles')).json()).profiles.some(profile=>profile.name===own),180);
+ await pointAtFakeModel(firstEngine,own);
+ await until(`the Agent moved to ${own}`,async()=>await profileOf(person,made.agent)===own,240);
+ assert.equal(await profileOf(person,first.agent),first.profile,'the main Agent keeps the company profile');
+ first.second=made.agent; first.secondProfile=own;
+};
+
 if(step==='prepare') {
 const person=await signedIn();
 const {data:{user}}=await person.auth.getUser();
@@ -206,37 +240,10 @@ try {
  assert.ok(user,'the first-run Owner signs in');
  const personOf=()=>person;
  for(const entry of pair) entry.person=user.id;
- // A message from the Owner to an Agent of the Company in a new Conversation, answered: whether the marker reached the
- // model, the Conversation, and what the model was sent.
- const ask=async(entry,agent,label,message='مرحباً، اكتب عنواناً قصيراً.',client=person)=>{
-  const before=asked.length;
-  const conversation=randomUUID();
-  // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
-  // stores nothing, so the same send is made again until it is ready (#282).
-  const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message};
-  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(client,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
-  assert.deepEqual(sent,{conversation});
-  const answer=await until(`reply on ${label}`,async()=>(await checked(client.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
-  assert.ok(answer.body.includes(reply),answer.body);
-  assert.ok(asked.length>before,`${label} asked the model`);
-  return {remembered:asked.slice(before).some(raw=>raw.includes(marker)),conversation,sent:asked.slice(before)};
- };
+ const ask=asker({asked,reply,person});
  const first=pair[0], other=pair[1];
  const firstEngine=engines[0], otherEngine=engines[1];
- // The first Company's second Agent, made on the company profile as the previous app version made one and moved by the
- // worker to its own profile (#121), keeps its Conversation and starts empty.
- first.conversation=(await ask(first,first.agent,first.profile)).conversation;
- const [{run_id:run}]=await checked(person.from('conversation_messages').select('run_id').eq('conversation_id',first.conversation).eq('author','person'));
- const made=await checked(service.rpc('lead_create_agent',{conversation:first.conversation,run,call:'install-check',agent_name:'Install writer',job:'Writes the install check.',apps:[]}));
- assert.equal(made.state,'created');
- assert.equal(await profileOf(person,made.agent),first.profile,'the previous version makes the Agent on the company profile');
- const own=`ag-${made.agent.replaceAll('-','')}`;
- await until(`${own} made by the worker`,async()=>(await (await manage(firstEngine,'/api/profiles')).json()).profiles.some(profile=>profile.name===own),180);
- await pointAtFakeModel(firstEngine,own);
- await until(`the Agent moved to ${own}`,async()=>await profileOf(person,made.agent)===own,240);
- assert.equal(await profileOf(person,first.agent),first.profile,'the main Agent keeps the company profile');
- first.second=made.agent; first.secondProfile=own;
-
+ await firstSecond(ask,person,first,firstEngine);
  // The second Company's second Agent, on its own profile at creation, on the second Company's own Engine: the Engine
  // provides the profile it will be named for, and the database attaches the Agent to it (#126, #120).
  other.conversation=(await ask(other,other.agent,other.profile)).conversation;
@@ -366,6 +373,22 @@ try {
  assert.deepEqual(await providerKeys(),[false,false,false,false,false,false,false],'the key is removed again');
  writeFileSync(state,JSON.stringify(pair),{mode:0o600});
  writeProof({step:'verify',companies:pair.map(shown),memory,skills:lessons,keys:keyedStates,provider});
+} finally { model.close(); model.closeAllConnections(); }
+} else if(step==='second') {
+const pair=JSON.parse(readFileSync(state,'utf8'));
+const first=pair[0];
+const firstEngine=await engineFor(first.company);
+const asked=[];
+const {model,reply}=await fakeModel(asked);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ for(const entry of pair) entry.person=user.id;
+ await firstSecond(asker({asked,reply,person}),person,first,firstEngine);
+ await checkProfile(firstEngine,first.secondProfile);
+ writeFileSync(state,JSON.stringify(pair),{mode:0o600});
+ writeProof({step:'second',companies:pair.map(shown)});
 } finally { model.close(); model.closeAllConnections(); }
 } else if(step==='capacity') {
 assert.ok(['with-skills','no-skills'].includes(marker),'capacity names with-skills or no-skills');
