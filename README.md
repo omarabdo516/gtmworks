@@ -343,6 +343,11 @@ update whose migration fails leaves the release you ran serving with no sandbox
 begun, and running the install command again on an updated install keeps every
 sandbox and its work folder.
 
+When a release pins another work sandbox image, the update pulls it and makes every
+Company's sandbox and exit again from it. Each Company's work folder is a volume of
+its own, so the files in it are kept; what lives only on a sandbox's own disk (its
+home folder and the tool caches there) starts empty.
+
 It refuses a release older than the data: when the database has applied a
 migration the chosen release does not carry, a later release migrated it, and
 the update stops with a plain message before changing anything. Going back past
@@ -380,10 +385,14 @@ never replaced itself, still ends with the new one.
 gtmworks backup                              # dated archive in backups/
 ```
 
-Backup briefly stops the stack — every Company's Engine included — for a consistent
-copy of the database and its configuration (which holds each Company's Engine record),
-the Storage files, each Company's Engine data volume, each Engine's key file
-(`.engines/`) and `.env.install`, then starts every Engine and the stack again. Each
+Backup briefly stops the stack — every Company's Engine included, and its work sandbox — for
+a consistent copy of the database and its configuration (which holds each Company's
+Engine record), the Storage files, each Company's Engine data volume, each Company's
+work folder (the files its Agents made in its work sandbox), each Engine's key file
+(`.engines/`) and `.env.install`, then starts every Engine, sandbox and the stack again.
+It leaves out the tool caches an Agent's commands leave in a work folder (folders named
+`.cache`, `node_modules` or `__pycache__`), which a command makes again, and whatever
+lives only on a sandbox's own disk. Each
 Engine's data holds that Company's Agents, their profiles, rules, memory, skills and
 history, so a restore brings every Company back as it was. An
 optional directory after `backup` changes the destination.
@@ -405,9 +414,12 @@ and restarts the stack, every Company's Engine included: each Company comes back
 its own Engine, in that Engine's own container with its own network, volume and key,
 so its Engine record still finds it. This is a full-install backup, not a company
 export, and it includes every Company's Engine data, so every Agent comes back with
-its knowledge, rules, skills and memory. Before it changes anything, restore refuses
-an archive it cannot fully restore, such as one naming an Engine without that
-Engine's data or its key. An archive made before each Company had its own Engine
+its knowledge, rules, skills and memory, and every Company's work folder comes back
+into its own sandbox, without the tool caches the backup left out. Before it changes
+anything, restore refuses an archive it cannot fully restore, such as one naming an
+Engine without that Engine's data or its key, or one holding the work folder of some
+Companies and not the others. An archive made before work folders were included
+still restores: each Company gets an empty work folder and a working sandbox. An archive made before each Company had its own Engine
 still restores: it holds one Engine and comes back as one Company on its own Engine.
 An archive made before that data was included still restores: the
 command says in one line that the Agents' Hermes data was not in it, and the worker

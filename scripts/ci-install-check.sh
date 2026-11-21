@@ -854,6 +854,18 @@ while read -r company profile address; do
   docker exec "$container" sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$profile" "$code" \
     || fail "write a memory in the Engine of $company"
 done < engines.txt
+# Every Company's work folder is in the same backup (#399): its main Agent's folder gets a file of its own, and a large
+# file in each of the tool caches an Agent's commands leave there (`.cache`, `node_modules`), which the archive leaves out.
+work_marker="backup-work-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+while read -r company profile address; do
+  slug=$(printf '%s\n' "$address" | sed -n 's#^http://gtmworks-engine-\([a-z0-9-]*\):8642$#\1#p')
+  docker exec "gtmworks-sandbox-$slug" sh -ec '
+    mkdir -p "/work/$1/.cache" "/work/$1/site/node_modules/pkg"
+    printf "%s" "$2" > "/work/$1/$2.txt"
+    head -c 8388608 /dev/urandom > "/work/$1/.cache/$2-cache.bin"
+    head -c 1048576 /dev/urandom > "/work/$1/site/node_modules/pkg/$2-module.js"
+  ' sh "$profile" "$work_marker-${company//-/}" || fail "write in the work folder of $company"
+done < engines.txt
 sh scripts/install.sh backup || fail 'backup of every Engine'
 every_engine=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
 [[ -f $every_engine ]] || fail 'the every-Engine backup archive'
@@ -866,6 +878,13 @@ for folder in .engines/*/; do
   grep -qx "\.engines/$name/\.env" "$RUNNER_TEMP/every-engine.list" || fail "the backup holds the key of the Engine $name"
 done
 if grep -qx 'opt/data/' "$RUNNER_TEMP/every-engine.list"; then fail 'the every-Engine backup holds no opt/data'; fi
+while read -r company profile address; do
+  slug=$(printf '%s\n' "$address" | sed -n 's#^http://gtmworks-engine-\([a-z0-9-]*\):8642$#\1#p')
+  grep -qx "work/$slug/$profile/$work_marker-${company//-/}.txt" "$RUNNER_TEMP/every-engine.list" || fail "the backup holds the work folder of $company"
+done < engines.txt
+if grep -E -- "$work_marker-[0-9a-f]+-(cache\.bin|module\.js)\$|^work/.*/(\.cache|node_modules)/" "$RUNNER_TEMP/every-engine.list"; then
+  fail 'the backup holds no tool cache of a work folder'
+fi
 # The install is made empty and the one archive brings both Companies and both Engines back.
 remove_install || fail 'remove the install before the every-Engine restore'
 rm -f .env.install
@@ -908,8 +927,28 @@ docker exec "$(first_engine_id)" cat /opt/data/ssh/id_ed25519 | docker run --rm 
   cat > /tmp/key; chmod 600 /tmp/key
   test "$(ssh -i /tmp/key -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 pn@sandbox id -un)" = pn
 ' || fail 'the restored sandbox accepts its restored Engine key'
-# A Run on each Company answers on its own Engine, and the code word its own Engine kept reaches its own Run only.
-compose exec -T web node --input-type=module - < scripts/check-install-engines.mjs || fail 'every Company answers on its own Engine after the restore'
+# A Run on each Company answers on its own Engine, the code word its own Engine kept reaches its own Run only, and its
+# main Agent runs a command in its own Company's sandbox (#399).
+restore_marker="restore-run-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+compose exec -T web node --input-type=module - sandbox "$restore_marker" < scripts/check-install-engines.mjs > restore-run.log 2>&1 \
+  || { cat restore-run.log; fail 'every Company answers on its own Engine after the restore, and its Agent runs a command in its sandbox'; }
+cat restore-run.log
+# Each Company's work folder came back into its own sandbox, its files the sandbox's user's, its caches left out; the
+# command its Agent ran landed in its own sandbox; and no other Company's sandbox holds either.
+while read -r company profile address; do
+  slug=$(printf '%s\n' "$address" | sed -n 's#^http://gtmworks-engine-\([a-z0-9-]*\):8642$#\1#p')
+  file="$work_marker-${company//-/}" ran="$restore_marker-${company//-/}"
+  [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$profile/$file.txt") == "$file" ]] || fail "the restore brings back the work folder of $company"
+  [[ $(docker exec "gtmworks-sandbox-$slug" stat -c %u "/work/$profile/$file.txt") == 1000 ]] || fail "the restored work folder of $company belongs to the sandbox's user"
+  if docker exec "gtmworks-sandbox-$slug" test -e "/work/$profile/.cache/$file-cache.bin"; then fail "the restore brings back no tool cache of $company"; fi
+  [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$ran.txt") == "$ran" ]] || fail "the Agent of $company runs a command in its own sandbox after the restore"
+  while read -r other _ other_address; do
+    other_slug=$(printf '%s\n' "$other_address" | sed -n 's#^http://gtmworks-engine-\([a-z0-9-]*\):8642$#\1#p')
+    [[ $other_slug == "$slug" ]] && continue
+    if docker exec "gtmworks-sandbox-$other_slug" sh -c 'find /work -name "$1*" | grep -q .' sh "$file"; then fail "the work folder of $company comes back into no other Company's sandbox"; fi
+    if docker exec "gtmworks-sandbox-$other_slug" test -e "/work/$ran.txt"; then fail "the command of $company's Agent ran in no other Company's sandbox"; fi
+  done < engines.txt
+done < engines.txt
 # An archive naming an Engine without its data cannot be fully restored: it is refused before anything stops or changes.
 # The archive keeps its engines.list, so the check that catches it is the manifest one (#378, C4).
 incomplete="$RUNNER_TEMP/incomplete-engines"
@@ -944,6 +983,24 @@ fi
 grep -Fq 'Unsafe backup path.' hard-link.log || { cat hard-link.log >&2; fail 'the hard link is refused as an unsafe path'; }
 [[ $(compose ps -q web) == "$web" ]] || fail 'the refused hard-link restore replaced the web container'
 [[ $(docker ps -q --filter 'name=^gtmworks-engine-first$') == "$engine" ]] || fail 'the refused hard-link restore stopped no Engine'
+# An archive holding the work folder of one Company and not the other's cannot be fully restored (#399): it is refused
+# before anything stops or changes, and every sandbox keeps running with its files.
+partial="$RUNNER_TEMP/partial-work"
+rm -rf "$partial" && mkdir -p "$partial"
+tar -xzf "$every_engine" -C "$partial" || fail 'read the every-Engine archive again'
+rm -rf "$partial/work/$second_name" || fail "leave a Company's work folder out of the archive"
+( cd "$partial" && tar -czf "$RUNNER_TEMP/partial-work.tgz" .env.install .engines engines work engines.list var/lib/postgresql/data etc/postgresql-custom var/lib/storage ) \
+  || fail 'make the archive without one work folder'
+sandboxes=$(docker ps -q --filter 'name=^gtmworks-sandbox-' | sort)
+if sh scripts/install.sh restore "$RUNNER_TEMP/partial-work.tgz" > partial-work.log 2>&1; then
+  cat partial-work.log >&2; fail "an archive without one Company's work folder must be refused"
+fi
+cat partial-work.log
+grep -Fq "The backup does not hold a work folder for every Company's Engine." partial-work.log || fail 'the refusal says the backup does not hold every work folder'
+[[ $(compose ps -q web) == "$web" ]] || fail 'the refused work-folder restore replaced the web container'
+[[ $(docker ps -q --filter 'name=^gtmworks-sandbox-' | sort) == "$sandboxes" ]] || fail 'the refused work-folder restore stopped no sandbox'
+first_profile=$(sed -n 1p engines.txt | cut -d' ' -f2) first_company=$(sed -n 1p engines.txt | cut -d' ' -f1)
+docker exec gtmworks-sandbox-first test -e "/work/$first_profile/$work_marker-${first_company//-/}.txt" || fail 'the refused work-folder restore changed no work folder'
 }
 
 # proxy: the public address behind a proxy (issue #40, #41): first run, the emailed sign-in and invitation links on
@@ -1236,6 +1293,15 @@ engine_node "$key" - < "$root/scripts/check-install-conversation.mjs" \
   || fail 'the Company the previous release archive restored answers on its own Engine'
 ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
   || fail 'the Company the previous release archive restored answers on its own Engine and its Agent remembers'
+# An archive made before the work sandbox holds no work folder (#399): the restored Company gets an empty one, which its
+# sandbox runs on, healthy, and which its Engine reaches as every Agent's command does.
+sandbox=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')
+[[ -n $sandbox && $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox") == healthy ]] \
+  || fail 'the Company the previous release archive restored has a healthy work sandbox'
+[[ -z $(docker exec "$sandbox" find /work -mindepth 1 -type f) ]] || fail 'the Company the previous release archive restored gets an empty work folder'
+docker exec -u hermes "$(first_engine_id)" ssh -i /opt/data/ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=/opt/data/.ssh/known_hosts -o LogLevel=ERROR -p 2222 pn@sandbox true \
+  || fail 'the Engine the previous release archive restored reaches its work sandbox'
 }
 
 # sandbox-update: an install the release before the work sandbox made, with two Companies, updated to this release (#397,
@@ -1434,6 +1500,15 @@ for folder in .engines/*/; do
   name=$(engine_value "$folder" NAME)
   echo "$name $(docker inspect -f '{{.Id}} {{.Config.Image}}' "$name")" >> engines-before
 done
+# Each Company's sandbox and a file in its work folder before the update (#399): the release also pins another work
+# sandbox image, so every sandbox is made again from it, and the work folder stays.
+: > sandboxes-before
+update_marker="update-work-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+for folder in .engines/*/; do
+  name=$(engine_value "$folder" NAME); slug=${name#gtmworks-engine-}
+  docker exec "gtmworks-sandbox-$slug" sh -ec 'printf "%s" "$1" > "/work/$1.txt"' sh "$update_marker-$slug" || fail "write in the work folder of $name"
+  echo "$slug $(docker inspect -f '{{.Id}}' "gtmworks-sandbox-$slug")" >> sandboxes-before
+done
 # The release pins another Engine image: the pinned image under another tag, so the update runs the same Hermes without
 # another pull.
 docker tag "$hermes_image" gtmworks-engine-check:0.0.2 || fail 'tag the other Engine image'
@@ -1442,7 +1517,15 @@ FROM localhost:5000/gtmworks:0.0.1-ci
 RUN sed -i '0,/^\( *image:\).*/s//\1 gtmworks-engine-check:0.0.2/' /app/install/scripts/engine-template.yml
 DOCKERFILE
 fourth=$(publish 0.0.2-ci) || fail 'push the release that pins another Engine image'
-( cd "$root" && node scripts/release-assets.mjs "$fourth" release-engines "$sandbox" ) || fail 'the release files that pin another Engine image'
+# Another work sandbox image too: the same tools under one more label, so its digest is another one and nothing is pulled
+# from outside the machine.
+docker build -q -t localhost:5000/gtmworks-sandbox:0.0.2-ci - > /dev/null <<DOCKERFILE || fail 'build another work sandbox image'
+FROM $sandbox
+LABEL org.gtmworks.check=0.0.2
+DOCKERFILE
+other_sandbox=$(publish_sandbox 0.0.2-ci) || fail 'push another work sandbox image'
+[[ $other_sandbox != "$sandbox" ]] || fail 'the other work sandbox image has its own digest'
+( cd "$root" && node scripts/release-assets.mjs "$fourth" release-engines "$other_sandbox" ) || fail 'the release files that pin another Engine image'
 cp "$root/release-engines/docker-compose.install.yml" "$root/release-engines/install.sh" . || fail 'the release files that pin another Engine image in place'
 sh install.sh update || fail 'update every Company Engine'
 [[ $(cat .install-release) == "$fourth" ]] || fail 'the update records the release that pins another Engine image'
@@ -1457,8 +1540,20 @@ for folder in .engines/*/; do
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done
-# A Run on each Company answers on its own Engine, and the code word its own Engine kept reaches its own Run only.
-compose exec -T web node --input-type=module - < "$root/scripts/check-install-engines.mjs" || fail 'a Run on each Company answers after the update'
+# Every sandbox was made again from the work sandbox image the release pins, and its work folder kept what it held (#399).
+[[ $(cat .work-sandbox-image) == "$other_sandbox" ]] || fail 'the update records the work sandbox image the release pins'
+while read -r slug before; do
+  sandbox_id=$(docker ps -q --no-trunc --filter "name=^gtmworks-sandbox-$slug$")
+  [[ -n $sandbox_id && $sandbox_id != "$before" ]] || fail "the update made the sandbox of $slug again"
+  [[ $(docker inspect -f '{{.Config.Image}}' "gtmworks-sandbox-$slug") == "$other_sandbox" ]] || fail "the sandbox of $slug runs the work sandbox image the release pins"
+  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "gtmworks-sandbox-$slug") == healthy ]] || fail "the remade sandbox of $slug is healthy"
+  [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$update_marker-$slug.txt") == "$update_marker-$slug" ]] || fail "the update keeps the work folder of $slug"
+done < sandboxes-before
+# A Run on each Company answers on its own Engine, the code word its own Engine kept reaches its own Run only, and its
+# Agent runs a command in the remade sandbox.
+compose exec -T web node --input-type=module - sandbox "$update_marker" < "$root/scripts/check-install-engines.mjs" > engines-update.log 2>&1 \
+  || { cat engines-update.log; fail 'a Run on each Company answers after the update, and its Agent runs a command in its sandbox'; }
+cat engines-update.log
 }
 
 # one-line: the one line (#51) and `gtmworks update` (#52) against test releases served the way GitHub Releases serves

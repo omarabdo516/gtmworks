@@ -360,7 +360,8 @@ engines_up() {
 # key is adopted; its one Engine is the first one.
 engine_stop() {
   for name in $(engine_names); do
-    docker stop "$(engine_project "$name")" > /dev/null 2>&1 || true
+    # Its sandbox too (#399): it writes the Company's work folder, which a backup copies and a restore replaces.
+    docker stop "$(engine_project "$name")" "$(sandbox_container "$name")" > /dev/null 2>&1 || true
   done
   [ -f "$(engine_folder first)/.env" ] || docker stop "$(engine_project first)" > /dev/null 2>&1 || true
 }
@@ -369,15 +370,16 @@ engine_stop() {
 engines_stopped() {
   running=
   for name in $(engine_names); do
-    container=$(engine_project "$name")
-    # A container Docker does not list is stopped; one it lists but cannot report on is not known to be stopped.
-    listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null) || { running="$running $container"; continue; }
-    [ -n "$listed" ] || continue
-    state=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null) || state=unknown
-    [ "$state" = false ] || running="$running $container"
+    for container in "$(engine_project "$name")" "$(sandbox_container "$name")"; do
+      # A container Docker does not list is stopped; one it lists but cannot report on is not known to be stopped.
+      listed=$(docker ps -aq --filter "name=^${container}$" 2> /dev/null) || { running="$running $container"; continue; }
+      [ -n "$listed" ] || continue
+      state=$(docker inspect -f '{{.State.Running}}' "$container" 2> /dev/null) || state=unknown
+      [ "$state" = false ] || running="$running $container"
+    done
   done
   [ -z "$running" ] || {
-    echo "This Engine did not stop:$running. Nothing was archived, and what was stopped starts again." >&2
+    echo "This Engine or work sandbox did not stop:$running. Nothing was archived, and what was stopped starts again." >&2
     return 1
   }
 }
@@ -690,9 +692,12 @@ volumes() {
     test -n "$volume" || { echo "The Engine $name names no data volume: run sh scripts/install.sh." >&2; return 1; }
     if [ "$mode" = rw ]; then docker volume create "$volume" > /dev/null || return 1; fi
     set -- -v "$volume:/engines/$name:$mode" "$@"
+    # Each Company's work folder (#399), under its Engine folder's name, beside its Engine's data.
+    if [ "$mode" = rw ]; then docker volume create "$(work_volume "$name")" > /dev/null || return 1; fi
+    set -- -v "$(work_volume "$name"):/work/$name:$mode" "$@"
   done
   docker run --rm --volumes-from "$(compose ps -aq db)" --volumes-from "$(compose ps -aq storage)" \
-    --tmpfs /engines "$@"
+    --tmpfs /engines --tmpfs /work "$@"
 }
 # The migrations this release carries, applied in one transaction and recorded in gtmworks_install.schema_migrations: an
 # install and an update run it before the app starts, and a restore runs it on the database it just put back, so an
@@ -734,7 +739,7 @@ check_backup() {
   if grep -Eq '^(l|h)| -> | link to ' .install-lock/listing; then echo 'Unsafe backup path.' >&2; return 1; fi
   while IFS= read -r entry; do
     case "$entry" in /*|*../*|../*|*/..) echo 'Unsafe backup path.' >&2; return 1;; esac
-    case "$entry" in .env.install|engines.list|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*) ;; *) echo 'Unrecognised backup.' >&2; return 1;; esac
+    case "$entry" in .env.install|engines.list|var/lib/postgresql/data/*|etc/postgresql-custom/*|var/lib/storage/*|opt/data|opt/data/*|engines|engines/*|.engines|.engines/*|work|work/*) ;; *) echo 'Unrecognised backup.' >&2; return 1;; esac
   done < .install-lock/entries
   for entry in var/lib/postgresql/data/ etc/postgresql-custom/ var/lib/storage/ .env.install; do
     grep -Fx "$entry" .install-lock/entries >/dev/null || { echo 'Incomplete backup.' >&2; return 1; }
@@ -785,6 +790,17 @@ check_backup() {
   else
     test -z "$(printf '%s\n' "$engine_key_folders" | grep -vx first | grep .)" \
       || { echo 'The backup does not hold an Engine for every Company.' >&2; return 1; }
+  fi
+  # Every Company's work folder (#399): an archive made by this release holds one under work/ for each Engine it holds,
+  # named as that Engine's folder, and no other; an archive made before it holds none, and its Companies get empty work
+  # folders. One that holds work folders for some Engines and not others, or one without its Engine, or work folders in
+  # the one-Engine layout, cannot be fully restored.
+  work_folders=no
+  if grep -Eq '^work/' .install-lock/entries; then
+    work_folders=yes
+    test "$engines_layout" = yes || { echo 'Unrecognised backup.' >&2; return 1; }
+    work_names=$(sed -n 's#^work/\([^/][^/]*\)/.*#\1#p' .install-lock/entries | sort -u)
+    test "$work_names" = "$engine_data" || { echo "The backup does not hold a work folder for every Company's Engine." >&2; return 1; }
   fi
   # An archive is not trusted with an Engine folder's name or its whole file (#378, X2): each Engine folder is named like
   # an Engine, and only its ENGINE_KEY is taken (64 hex characters), and its Company's sandbox limits (#396) when they
@@ -848,10 +864,17 @@ if [ "$operation" = backup ]; then
   # Engine's key lives in .engines/ (#385), so a restore brings back an Engine that answers to the same key. An install
   # that has not run this installer yet has no .engines/; its key is in .env.install. engines.list names the Engines the
   # Companies name, so a restore can refuse an archive that would leave one of them out (#378, C4).
+  # Every Company's work folder goes in too, under work/ by its Engine folder's name (#399), without the tool caches an
+  # Agent's commands leave in it (`.cache`, `node_modules`, `__pycache__`): each one found under work/ is excluded by its
+  # own path, so a file of the same name anywhere else in the archive (an upload in Storage) is kept. Caches outside the
+  # work folder live on the sandbox's own disk, which nothing keeps.
   mkdir -p .engines
   volumes ro -v "$PWD/.env.install:/.env.install:ro" -v "$PWD/.engines:/.engines:ro" \
-    -v "$PWD/.install-lock/engines.list:/engines.list:ro" alpine:3.21 tar -czf - \
-    -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines .env.install .engines engines.list > .install-lock/backup.tgz
+    -v "$PWD/.install-lock/engines.list:/engines.list:ro" alpine:3.21 sh -ec '
+      cd /
+      find work -mindepth 1 -type d \( -name .cache -o -name node_modules -o -name __pycache__ \) -prune > /tmp/caches
+      tar -czf - -X /tmp/caches -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines work .env.install .engines engines.list
+    ' > .install-lock/backup.tgz
   archive="$destination/gtmworks-$(date -u +%Y%m%dT%H%M%SZ)-$$.tgz"
   mv .install-lock/backup.tgz "$archive"
   echo "Backup: $archive"
@@ -899,19 +922,24 @@ elif [ "$operation" = restore ]; then
   if [ "$engines_layout" = yes ]; then
     # One folder per Engine (#386): each Engine's volume is mounted under its folder's name, emptied, and the archive's
     # data for it goes back where its record's address finds it.
+    # Each Company's work folder is emptied too, and gets the archive's when it holds one (#399).
     volumes rw -v "$PWD/.install-lock:/backup:ro" alpine:3.21 sh -ec '
       find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-      for folder in /engines/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
+      for folder in /engines/*/ /work/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
       # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.
-      tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines
-    '
+      if [ "$1" = yes ]; then
+        tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines work
+      else
+        tar -xzpf /backup/backup.tgz --numeric-owner -C / var/lib/postgresql/data etc/postgresql-custom var/lib/storage engines
+      fi
+    ' sh "$work_folders"
   else
     # An archive from before this release: the first Engine is the install's one Engine, and its data is at opt/data.
     first_volume=$engine_volume
     if [ -f "$(engine_folder first)/.env" ]; then first_volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$(engine_folder first)/.env"); fi
     volumes rw -v "$first_volume:/opt/data" -v "$PWD/.install-lock:/backup:ro" alpine:3.21 sh -ec '
       find /var/lib/postgresql/data /etc/postgresql-custom /var/lib/storage -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-      for folder in /engines/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
+      for folder in /engines/*/ /work/*/; do [ -d "$folder" ] || continue; find "$folder" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; done
       if [ "$1" = yes ]; then
         find /opt/data -mindepth 1 -maxdepth 1 -exec rm -rf {} +
         # Keep the image UIDs/GIDs and modes instead of resolving owners in this helper.

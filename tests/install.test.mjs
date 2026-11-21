@@ -517,7 +517,12 @@ test('the install job updates two Companies to a release pinning another Engine 
   "== gtmworks-engine-check:0.0.2 ]] || fail \"the Engine $name runs the image the release pins\"",
   "|| fail \"the Engine $name keeps its own volume through the update\"",
   "|| fail \"the Engine $name joins its own network and its work network only after the update\"",
-  "check-install-engines.mjs\" || fail 'a Run on each Company answers after the update'",
+  "fail 'a Run on each Company answers after the update, and its Agent runs a command in its sandbox'",
+  // The release also pins another work sandbox image (#399): every sandbox is made again from it and keeps its work folder.
+  "node scripts/release-assets.mjs \"$fourth\" release-engines \"$other_sandbox\"",
+  "|| fail \"the update made the sandbox of $slug again\"",
+  "|| fail \"the sandbox of $slug runs the work sandbox image the release pins\"",
+  "|| fail \"the update keeps the work folder of $slug\"",
  ]) assert.ok(run.includes(text),text);
  // The code word was written into each Company's own Engine before the update, and each container's id and image were
  // read before it, so a recreation is proven rather than assumed.
@@ -632,7 +637,8 @@ test('backup and restore round-trip every Engine\'s volume and key; failed extra
  const directory=mkdtempSync(join(tmpdir(),'gtmworks-roundtrip-'));
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','.engines/first','.engines/second-company',
-  ...paths.map(path=>`volumes/${path}`),`volumes/${firstVolume}/agents`,`volumes/${secondVolume}/profiles/co-second/memories`]) {
+  ...paths.map(path=>`volumes/${path}`),`volumes/${firstVolume}/agents`,`volumes/${secondVolume}/profiles/co-second/memories`,
+  'volumes/gtmworks-work-first/co-first/.cache','volumes/gtmworks-work-second-company/ag-second/site/node_modules/pkg']) {
   mkdirSync(join(directory,folder),{recursive:true});
  }
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
@@ -651,6 +657,11 @@ test('backup and restore round-trip every Engine\'s volume and key; failed extra
  for(const path of paths) writeFileSync(join(directory,'volumes',path,'saved'),'original',{mode:0o640});
  writeFileSync(join(directory,'volumes',firstVolume,'agents','SOUL.md'),'the team says this',{mode:0o600});
  writeFileSync(join(directory,'volumes',secondVolume,'profiles','co-second','memories','MEMORY.md'),'the second team says this',{mode:0o600});
+ // Each Company's work folder (#399), with a file its Agent made and the tool caches its commands left.
+ writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),'the first brief',{mode:0o644});
+ writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/.cache/big.bin'),'cache');
+ writeFileSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site/index.html'),'the second site',{mode:0o644});
+ writeFileSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site/node_modules/pkg/index.js'),'module');
  writeFileSync(join(directory,'bin/docker'),`#!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { appendFileSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -659,14 +670,15 @@ const args=process.argv.slice(2),cwd=process.cwd(),root=cwd+'/volumes';
 appendFileSync(cwd+'/commands',JSON.stringify(args)+'\\n');
 if(args.includes('{{.State.Health.Status}}')) { console.log('healthy'); process.exit(0); }
 if(args.some(arg=>String(arg).includes('/data/ssh/id_ed25519'))) { console.log('client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost'); process.exit(0); }
-// Each named volume mounted at /engines/<folder> is the folder of that name in ./volumes (Docker would mount it there);
-// the volume's own folder is a link to it, so a mount is a real directory to tar.
+// Each named volume mounted at /engines/<folder> or /work/<folder> is the folder of that name in ./volumes (Docker would
+// mount it there); the volume's own folder is a link to it, so a mount is a real directory to tar.
 mkdirSync(root+'/engines',{recursive:true});
+mkdirSync(root+'/work',{recursive:true});
 for(let index=0;index<args.length;index++) {
  if(args[index]!=='-v') continue;
  const [source,target]=args[index+1].split(':');
- if(!target||!target.startsWith('/engines/')) continue;
- const name=target.slice('/engines/'.length),from=root+'/'+source,to=root+'/engines/'+name;
+ if(!target||!/^\\/(engines|work)\\//.test(target)) continue;
+ const from=root+'/'+source,to=root+target;
  if(existsSync(from)&&lstatSync(from).isSymbolicLink()) continue;
  rmSync(to,{recursive:true,force:true});
  if(existsSync(from)) renameSync(from,to); else mkdirSync(to,{recursive:true});
@@ -691,9 +703,12 @@ if(args[0]==='compose') {
   assert.equal(args[args.indexOf('--volumes-from')+1],'db-stopped');
   assert.ok(args.includes('storage-stopped'),'the files volume is archived too');
  }
- if(command[0]==='tar' && command[1]==='-czf') {
+ const backingUp=command[0]==='sh'&&String(command[2]).includes('tar -czf');
+ if(backingUp) {
   // BusyBox has one global -C, unlike GNU tar's positional -C options.
-  assert.equal(command.filter(arg=>arg==='-C').length,1);
+  assert.equal(command[2].match(/ -C /g).length,1);
+  assert.ok(args.includes('gtmworks-work-first:/work/first:ro'),'the first work folder is archived');
+  assert.ok(args.includes('gtmworks-work-second-company:/work/second-company:ro'),'the second work folder is archived');
   assert.ok(args.includes(cwd+'/.env.install:/.env.install:ro'));
   assert.ok(args.includes(cwd+'/.engines:/.engines:ro'),'the Engine keys are archived too');
   assert.ok(args.includes(cwd+'/.install-lock/engines.list:/engines.list:ro'),'the Engines the Companies name are archived too');
@@ -708,7 +723,7 @@ if(args[0]==='compose') {
   const child=spawnSync(command[0],[...command.slice(1,command.indexOf('-C')).map(arg=>arg.replaceAll('/backup/',cwd+'/.install-lock/')),'-C',cwd,'.engines'],{stdio:'inherit'});
   process.exit(child.status ?? 1);
  }
- if(command[0]==='sh') {
+ if(command[0]==='sh' && !backingUp) {
   assert.ok(command[2].includes('--numeric-owner'));
   assert.ok(command[2].includes('-xzpf'));
   if(process.env.FAIL_EXTRACTION==='1') process.exit(9);
@@ -719,7 +734,9 @@ if(args[0]==='compose') {
   .replaceAll('/etc/postgresql-custom',root+'/etc/postgresql-custom')
   .replaceAll('/opt/data',root+'/opt/data')
   .replaceAll('/engines',root+'/engines')
-  .replaceAll('-C / ','-C '+root+' '));
+  .replaceAll('/work',root+'/work')
+  .replaceAll('-C / ','-C '+root+' ')
+  .replaceAll('cd /\\n','cd '+root+'\\n'));
  const child=spawnSync(mapped[0],mapped.slice(1),{stdio:'inherit'});
  process.exit(child.status ?? 1);
 }
@@ -732,9 +749,10 @@ if(args[0]==='compose') {
  assert.equal(statSync(join(directory,archive)).mode & 0o777,0o600);
  // Every Engine was stopped before its volume was copied.
  const commands=readFileSync(join(directory,'commands'),'utf8');
- const copied=commands.indexOf('"-czf"');
- for(const name of ['gtmworks-engine-first','gtmworks-engine-second-company']) {
-  const stopped=commands.indexOf(JSON.stringify(['stop',name]));
+ const copied=commands.indexOf('tar -czf');
+ // Every Engine and its work sandbox (#399).
+ for(const name of ['first','second-company']) {
+  const stopped=commands.indexOf(JSON.stringify(['stop',`gtmworks-engine-${name}`,`gtmworks-sandbox-${name}`]));
   assert.ok(stopped>=0&&stopped<copied,`${name} is stopped before the copy: ${commands}`);
  }
  // Both Engine volumes are in the archive, each under its own folder, their files under their own names and modes.
@@ -746,6 +764,9 @@ if(args[0]==='compose') {
   assert.ok(entries.includes(entry),entry);
  }
  assert.ok(entries.includes('var/lib/storage/'));
+ // Every Company's work folder is in the archive under its Engine folder's name, without its tool caches (#399).
+ for(const entry of ['work/first/co-first/brief.md','work/second-company/ag-second/site/index.html']) assert.ok(entries.includes(entry),entry);
+ assert.ok(!entries.some(entry=>/\/(\.cache|node_modules)\//.test(entry)),'the archive holds no tool cache');
  assert.ok(!entries.some(entry=>entry==='opt/data/'||entry.startsWith('opt/data/')),'the new layout holds no opt/data');
  // The archive names the Engines its Companies name, so a restore knows every one it must hold (#378, C4).
  assert.ok(entries.includes('engines.list'),'the archive holds the Engines manifest');
@@ -780,6 +801,10 @@ if(args[0]==='compose') {
  assert.equal(readFileSync(join(directory,'volumes',secondVolume,'profiles','co-second','memories','MEMORY.md'),'utf8'),'the second team says this');
  assert.equal(readFileSync(join(directory,'.engines/first/.env'),'utf8'),firstEnv);
  assert.equal(readFileSync(join(directory,'.engines/second-company/.env'),'utf8'),secondEnv);
+ // Each Company's work folder is emptied and put back as the archive kept it, its caches left out (#399).
+ assert.deepEqual(readdirSync(join(directory,'volumes/gtmworks-work-first/co-first')),['brief.md']);
+ assert.equal(readFileSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),'utf8'),'the first brief');
+ assert.deepEqual(readdirSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site')),['index.html']);
  assert.doesNotMatch(restore.stdout,/Hermes data was not in this backup/);
  assert.match(readFileSync(join(directory,'commands'),'utf8'),/--force-recreate/);
  // Every Engine starts from its own folder again, and the app and the worker join each Engine's network.
@@ -1485,13 +1510,13 @@ esac
  for(const failure of [{INSPECT_FAILS:'1'},{PS_FAILS:'1'}]) {
   const unknown=backup(failure);
   assert.notEqual(unknown.status,0,unknown.stdout);
-  assert.match(unknown.stderr,/This Engine did not stop: gtmworks-engine-first\./,Object.keys(failure)[0]);
+  assert.match(unknown.stderr,/This Engine or work sandbox did not stop: gtmworks-engine-first\./,Object.keys(failure)[0]);
   assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');
   writeFileSync(commands,'');
  }
  const result=backup({});
  assert.notEqual(result.status,0,result.stdout);
- assert.match(result.stderr,/This Engine did not stop: gtmworks-engine-first\. Nothing was archived, and what was stopped starts again\./);
+ assert.match(result.stderr,/This Engine or work sandbox did not stop: gtmworks-engine-first\. Nothing was archived, and what was stopped starts again\./);
  assert.doesNotMatch(readFileSync(commands,'utf8'),/tar -czf/,'the volume was never read');
  assert.deepEqual(readdirSync(join(directory,'backups')),[]);
  // What was stopped starts again: the exit handler brings the stack and the Engine back.
