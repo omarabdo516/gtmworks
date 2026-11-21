@@ -94,7 +94,11 @@ export const motionTable = [
   { ref: '.composer__btn', built: '.gw .composer__btn', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__btn" aria-label="More"></button></div></div></div>', held: 0.96 },
   { ref: '.composer__btn', built: '.gw .composer__btn', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__btn" aria-disabled="true" aria-label="More · Soon"></button></div></div></div>', held: 1 },
   // The "+" menu rises over the composer, and the "+" turns to a cross while it is open (#153).
-  { ref: '.menu', built: '.gw .composer .menu', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><div class="menu" role="menu" aria-label="More"></div></div></div></div>' },
+  { ref: '.menu', built: '.gw .menu', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><div class="menu" role="menu" aria-label="More"></div></div></div></div>' },
+  // The account menu rises as every menu does; drawn again for the page it was kept open for, it has risen already (#129).
+  { ref: '.menu', built: '.gw .menu', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-foot"><div class="menu me-menu" id="me-menu" role="menu"></div></div></aside></div>' },
+  // The composer's border darkens as its field takes the focus (#129).
+  { ref: '.composer', built: '.gw .composer', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer-area"><div class="composer"></div></div></div></div>' },
   { ref: '.composer__btn .od-icon', built: '.gw .composer__btn .gw-icon', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__btn" aria-expanded="true" aria-label="More"><svg class="gw-icon"></svg></button></div></div></div>' },
   { ref: '.composer__send', built: '.gw .composer__send', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__send" aria-label="Send"></button></div></div></div>', held: 0.94 },
   { ref: '.composer__send', built: '.gw .composer__send', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__send" aria-label="Send" disabled></button></div></div></div>', held: 1 },
@@ -146,6 +150,10 @@ export const motionTable = [
   // The settings overlay fades in; a Member × Agent switch.
   { ref: '.sov[open]', built: '.gw .sov', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"></div></div>' },
   { ref: '.switch', built: '.gw .sov .switch', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"><button type="button" class="switch" role="switch" aria-checked="false"></button></div></div>' },
+  // Its thumb travels on the spring and fades its colour, in the settings overlay and the Team dialog (#129). A row may
+  // name a part's ::before or ::after; tests/components/motion.test.tsx reads that pseudo-element of the part.
+  { ref: '.switch::after', built: '.gw .sov .switch::after', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"><button type="button" class="switch" role="switch" aria-checked="true"></button></div></div>' },
+  { ref: '.switch::after', built: '.gw .modal.team-dlg .switch::after', file: 'app/settings.css', html: '<div class="gw"><dialog class="gw modal team-dlg" open><button type="button" class="switch" role="switch" aria-checked="false"></button></dialog></div>' },
   // First run fades in, its column rises, its choices answer the pointer.
   { ref: '.fr[open]', built: '.gw .fr', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr" role="dialog"></div></div>' },
   { ref: '.fr__col > *', built: '.gw .fr__col > *', file: 'app/first-run-choice.css', html: '<div class="gw"><form class="fr__col"><div class="fr__head"></div></form></div>' },

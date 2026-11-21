@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition, type ComponentProps } from 'react';
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import Link, { pageBeingOpened } from '@/lib/link';
@@ -39,6 +39,14 @@ const closeMenu=()=>{ if(menuState.open) setMenuState(closedMenu); };
 // Where each arrow key, Home and End move the focus, from item `index` of `count`.
 const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=>(i+1)%n,ArrowUp:(i,n)=>(i-1+n)%n,Home:()=>0,End:(_,n)=>n-1};
 const subscribeMenu=(listener:()=>void)=>{ menuListeners.add(listener); return ()=>{ menuListeners.delete(listener); }; };
+
+// The open menu rises once, as the reference's does (design-reference: .menu, rise; #129). A menu drawn again for the
+// page it was kept open for (a new shell, see above) has risen already, so it is drawn where it is: whether it rises is
+// read once, when it is drawn, from whether it was just opened. Closing removes it at once, with no leave.
+function MenuBox(props:Omit<ComponentProps<'div'>,'className'|'id'|'role'>) {
+ const [rises]=useState(()=>menuState.fresh);
+ return <div {...props} className={rises?'menu me-menu':'menu me-menu is-kept'} id="me-menu" role="menu" aria-labelledby="btn-me"/>;
+}
 
 export type AccountMenuProps={slug?:string,company?:string,personId?:string,personName:string,role:string,owner?:boolean,canManage?:boolean,alone?:boolean,theme:string,companyName?:string,settingsHref?:string,team?:TeamActions};
 type Save=(state:string,form:FormData)=>Promise<string>;
@@ -88,7 +96,7 @@ export default function AccountMenuView({slug,company,personId,personName,role,o
  });
  const initial=personName.trim().slice(0,1).toUpperCase();
  return <div ref={box} className="contents">
-  {open&&<div className="menu me-menu" id="me-menu" role="menu" aria-labelledby="btn-me" onFocus={event=>{ const index=[...event.currentTarget.querySelectorAll('[role^="menuitem"]')].indexOf(event.target); if(index>=0) menuState.focus=index; }} onKeyDown={event=>{
+  {open&&<MenuBox onFocus={event=>{ const index=[...event.currentTarget.querySelectorAll('[role^="menuitem"]')].indexOf(event.target); if(index>=0) menuState.focus=index; }} onKeyDown={event=>{
    if(event.key==='Tab') { closeMenu(); return; }
    const move=moves[event.key]; if(!move) return;
    event.preventDefault();
@@ -116,7 +124,7 @@ export default function AccountMenuView({slug,company,personId,personName,role,o
     <div className="menu__label" id="me-more-lbl">{t('shellMoreSections')}</div>
     <div role="group" aria-labelledby="me-more-lbl">{moreSections.map(([path,label,icon])=><Link key={path} className="menu__item" role="menuitem" href={`/c/${slug}/${path}`} onClick={()=>closeMenu()}><ShellIcon name={icon}/><span className="menu__t">{t(label)}</span></Link>)}</div>
    </>}
-  </div>}
+  </MenuBox>}
   {teamOpen&&company&&team&&<TeamDialog company={company} alone={alone} userId={personId||''} owner={owner} role={role} personName={personName} actions={team} close={()=>setTeamOpen(false)}/>}
   <button ref={button} type="button" className="me" id="btn-me" aria-haspopup="menu" aria-expanded={open} aria-controls="me-menu" aria-label={t('accountMenu')} onClick={toggle}>
    <span className="me__av" aria-hidden="true">{initial}</span>

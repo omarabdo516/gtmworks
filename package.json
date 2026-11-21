@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "bash scripts/local-db.sh && bash scripts/web.sh",
     "dev:web": "bash scripts/web.sh",
+    "cloud:up": "bash scripts/cloud-up.sh",
+    "cloud:down": "bash scripts/cloud-up.sh --down",
+    "cloud:verify": "node scripts/cloud-verify.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint components app lib scripts tests middleware.ts",
