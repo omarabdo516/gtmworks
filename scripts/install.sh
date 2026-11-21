@@ -289,11 +289,36 @@ write_engine_env() {
   mv "$folder/.env.tmp" "$folder/.env" || return 1
 }
 # A container from the one-Hermes install (before ADR 0018) is not part of this compose file any more. It must stop
-# before the Engine template uses the same volume, and its volume is the first Engine's data.
-retire_old_engine() {
+# before the Engine template uses the same volume, and its volume is the first Engine's data. It is stopped, never
+# removed, until the first Company's Engine answers (#502): an update whose new Engine or work sandbox does not start
+# starts it again (restore_old_engine), on the networks Docker kept for it, so the previous release's app and worker keep
+# their Engine. Its id is kept under .install-lock, with the sandbox parts the install has (keep_sandbox_parts) when no
+# earlier step listed them, before anything of a sandbox is made.
+stop_old_engine() {
   old=$(docker ps -aq --filter 'label=com.docker.compose.project=gtmworks-install' \
     --filter 'label=com.docker.compose.service=hermes') || return 1
-  [ -z "$old" ] || docker rm -f $old > /dev/null
+  [ -n "$old" ] || return 0
+  # An install that already had its Engine folder before this run, whose old container is stopped, is not that release:
+  # an earlier run moved its Engine and left the container it could not remove (remove_old_engine). That container goes
+  # now, and is never what a failed start brings back. One still running is that release's Engine, whatever the folder.
+  running=$(docker ps -q --filter 'label=com.docker.compose.project=gtmworks-install' \
+    --filter 'label=com.docker.compose.service=hermes') || return 1
+  if [ "$1" != yes ] && [ -z "$running" ]; then
+    docker rm -f $old > /dev/null \
+      || echo "The previous release's Engine container is stopped but could not be removed; the next install run removes it." >&2
+    return 0
+  fi
+  [ -f .install-lock/previous-engine/sandbox-parts ] || { mkdir -p .install-lock/previous-engine && keep_sandbox_parts; } || return 1
+  printf '%s\n' $old > .install-lock/old-engine || return 1
+  docker stop $old > /dev/null || return 1
+}
+# The old container goes once the first Company's Engine answers in its place. A removal Docker refuses fails nothing: the
+# new Engine serves, and the next run finds the stopped container by its labels and removes it then.
+remove_old_engine() {
+  [ -f .install-lock/old-engine ] || return 0
+  docker rm -f $(cat .install-lock/old-engine) > /dev/null \
+    || echo "The previous release's Engine container is stopped but could not be removed; the next install run removes it." >&2
+  rm -f .install-lock/old-engine
 }
 # The app and the worker reach every Engine by its container name. Compose recreates them on an update, which drops the
 # extra networks, so each connection is made again after every start of the stack. The app answers on each Engine's
@@ -338,9 +363,14 @@ engine_start() {
   sandbox_keys "$1" || return 1
   engine "$1" up -d --wait --wait-timeout "$wait" || return 1
   container=$(engine_project "$1")
-  while [ "$(docker inspect -f '{{.State.Health.Status}}' "$container" 2> /dev/null)" != healthy ]; do
-    wait=$((wait-1))
-    [ "$wait" -gt 0 ] || { echo "The Engine $container did not become healthy." >&2; return 1; }
+  healthy_within "$container" "$wait" || { echo "The Engine $container did not become healthy." >&2; return 1; }
+}
+# Zero once the container reports healthy, within the seconds given.
+healthy_within() {
+  seconds=$2
+  while [ "$(docker inspect -f '{{.State.Health.Status}}' "$1" 2> /dev/null)" != healthy ]; do
+    seconds=$((seconds-1))
+    [ "$seconds" -gt 0 ] || return 1
     sleep 1
   done
 }
@@ -362,12 +392,16 @@ engine_destroy() {
   rm -rf "$(engine_folder "$slug")"
 }
 first_engine_up() {
+  # Whether the install is still the release before ADR 0018's own shape, read before its key moves into the folder.
+  single_engine=no
+  [ -f "$(engine_folder first)/.env" ] || single_engine=yes
   adopt_engine_key || return 1
   key=$(engine_key)
   test -n "$key" || { echo 'The install has no Engine key: run sh scripts/install.sh.' >&2; return 1; }
-  retire_old_engine || return 1
+  stop_old_engine "$single_engine" || return 1
   engine_start first || return 1
-  join_engine_network gtmworks-engine-first
+  join_engine_network gtmworks-engine-first || return 1
+  remove_old_engine
 }
 # Every Engine the install has, the first one included: an update starts each from its own folder after the release's
 # template replaced the one on disk, so a release that pins another Engine image recreates every Company's Engine with
@@ -451,12 +485,55 @@ remove_new_sandbox_parts() {
   done
   [ -z "$left" ] || echo "What this update made for the work sandboxes could not all be removed, and an update run again keeps it as it is: remove${left%,}; then run the update again." >&2
 }
+# A run from the release before ADR 0018 whose first Company's Engine or work sandbox did not start (#502): that release
+# shipped no Engine template to put back, and its one Engine is the `hermes` container stop_old_engine kept. The Engine the
+# template made goes first, with its sandbox and exit but never its data volume, which is the old Engine's; what it made
+# for the sandbox goes as remove_new_sandbox_parts removes it. The old container then starts on the networks Docker kept,
+# answering as `hermes` to the app and the worker that were never replaced, and the install is that release's own shape
+# again: the key back in .env.install and no Engine folder. Non-zero, with the old container left stopped, when the new
+# Engine is still there to write its volume, or when the old one does not start or become healthy.
+restore_old_engine() {
+  old_engine=$(cat .install-lock/old-engine)
+  rm -f .install-lock/work-sandbox-image
+  engine first down --remove-orphans > /dev/null 2>&1 || true
+  docker rm -f "$(engine_project first)" "$(sandbox_container first)" "$(exit_container first)" > /dev/null 2>&1 || true
+  # A listing Docker could not give is never read as "removed": both Engines would write the one volume.
+  left_engine=$(docker ps -aq --filter "name=^$(engine_project first)\$" 2> /dev/null) \
+    || { echo "Docker could not say whether the Engine $(engine_project first) is gone, so the previous release's Engine stays stopped." >&2; return 1; }
+  [ -z "$left_engine" ] \
+    || { echo "The Engine $(engine_project first) could not be removed, so the previous release's Engine stays stopped." >&2; return 1; }
+  first_network=$(engine_network_of first)
+  for service in web worker; do
+    id=$(compose ps -q "$service" 2> /dev/null || true)
+    [ -z "$id" ] || docker network disconnect -f "$first_network" "$id" > /dev/null 2>&1 || true
+  done
+  docker network rm "$first_network" > /dev/null 2>&1 || true
+  remove_new_sandbox_parts
+  # The previous release's own shape before its Engine starts, so a start that fails leaves that shape too: its installer
+  # reads the Engine key from .env.install, as its app and worker, never replaced, already hold it in their environment;
+  # no container of this release reads that file's key (#378, C7 still holds for every Engine folder).
+  old_key=$(engine_key first)
+  if [ -n "$old_key" ] && ! grep -q '^HERMES_API_KEY=' .env.install; then
+    { cat .env.install && printf 'HERMES_API_KEY=%s\n' "$old_key"; } > .install-lock/env.tmp || return 1
+    chmod 600 .install-lock/env.tmp || return 1
+    mv .install-lock/env.tmp .env.install || return 1
+  fi
+  rm -rf "$(engine_folder first)"
+  rmdir .engines 2> /dev/null || true
+  rm -f .install-lock/old-engine
+  docker start $old_engine > /dev/null || return 1
+  # The previous release's own wait: its Engine's health check allows a two-minute start and five minutes in all.
+  for id in $old_engine; do
+    healthy_within "$id" 300 || { echo "The previous release's Engine did not become healthy again." >&2; return 1; }
+  done
+}
 # An update whose Engines or work sandboxes did not all start (ADR 0023): the previous release's own Engine files go back,
 # and every Engine starts again from them, without the containers this release's template added beside it (each
 # Company's sandbox and exit). The previous release's app and worker were never replaced and keep serving, on a schema it
 # was built for, since the cutover had not run; their networks to each Engine are the Engines' own and stay. Non-zero when
 # there were no files to put back or an Engine did not start from them.
 restore_previous_engine() {
+  if [ -f .install-lock/old-engine ]; then restore_old_engine; return; fi
   [ -f .install-lock/previous-engine/engine-template.yml ] || return 1
   cp .install-lock/previous-engine/engine-* scripts/ || return 1
   # The sandboxes start again from the image the previous run recorded, never the one this run made: a release names it
@@ -1264,7 +1341,8 @@ fi
 # image, and left running otherwise. An update whose Engines or sandboxes do not all start puts the previous release's
 # Engines back and stops before its app or worker is replaced (ADR 0023).
 if ! engines_up; then
-  if [ "$operation" = update ]; then
+  # A plain install run on the release before ADR 0018 moves its Engine as an update does, and puts it back the same way.
+  if [ "$operation" = update ] || [ -f .install-lock/old-engine ]; then
     if restore_previous_engine; then
       echo 'An Engine or a work sandbox did not start, so this update stopped: the previous release keeps serving, with its own Engines again. Nothing of this release serves.' >&2
     else
