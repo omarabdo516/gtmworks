@@ -81,6 +81,9 @@ export const motionTable = [
   { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-item" href="#">Board</a></div></aside></div>', held: 0.985 },
   { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-foot"><button type="button" class="sb-item sb-apps" aria-disabled="true">Connect apps</button></div></aside></div>', held: 1 },
   { ref: '.agent-tile', built: '.gw .agent-tile', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><ul class="agent-grid"><li><a class="agent-tile" href="#">Lead</a></li></ul></aside></div>', held: 0.96 },
+  // A tile that arrives in the grid during a visit flashes a ring once (#134). The reference's rule is read alone, without
+  // the tile's press above it, so the flash is held to it in tests/components/agent-grid.test.tsx (its computed animation)
+  // and by sharedKeyframes below (its frames, tileFlash's).
   // The row and the tile that are current, and a link being opened, fade to their fill as any other row does (#135).
   { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-item" href="#" aria-current="page">Board</a></div></aside></div>', held: 0.985 },
   { ref: '.agent-tile', built: '.gw .agent-tile', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><ul class="agent-grid"><li><a class="agent-tile" href="#" aria-current="true">Lead</a></li></ul></aside></div>', held: 0.96 },
@@ -174,7 +177,7 @@ export const motionTable = [
 export const motionTokens = ['--dur-fast', '--dur', '--dur-slow', '--ease-out', '--ease-in', '--ease-spring'];
 
 // The reference's keyframes the product shares, each written once in app/shell.css under its gw- name.
-export const sharedKeyframes = { fadeIn: 'gw-fade-in', rise: 'gw-rise', breathe: 'gw-breathe', modalOut: 'gw-modal-out', settle: 'gw-settle', ckPop: 'gw-ck-pop', drawCheck: 'gw-draw-check', nudge: 'gw-nudge' };
+export const sharedKeyframes = { fadeIn: 'gw-fade-in', rise: 'gw-rise', breathe: 'gw-breathe', modalOut: 'gw-modal-out', settle: 'gw-settle', ckPop: 'gw-ck-pop', drawCheck: 'gw-draw-check', nudge: 'gw-nudge', barFlash: 'gw-ring-flash', tileFlash: 'gw-ring-flash' };
 
 /** @param {string} token */
 export const builtToken = token => `--gw-${token.slice(2)}`;

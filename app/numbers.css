@@ -15,6 +15,13 @@
 .gw .numbers-page .kpi__label { font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 .gw .numbers-page .kpi__val { font-size: clamp(24px, 2.1vw, var(--p-fs-2xl)); font-weight: 600; line-height: 1.25; white-space: nowrap; color: var(--gw-text-1); }
 .gw .numbers-page .kpi__val--none { color: var(--gw-text-3); }
+/* A figure's count (#134): the number as it counts is drawn for the eye, the value itself is read to a screen reader.
+   With reduced motion the value is what is drawn, even before the page's script runs. */
+.gw .numbers-page .kpi__final { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .gw .numbers-page .kpi__count { display: none; }
+  .gw .numbers-page .kpi__final { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; }
+}
 .gw .numbers-page .kpi__unit { font-size: var(--gw-fs-base); font-weight: 400; color: var(--gw-text-2); margin-inline-start: 4px; }
 .gw .numbers-page .kpi__unit--pre { margin-inline-start: 0; margin-inline-end: 4px; }
 .gw .numbers-page .kpi__delta { display: inline-flex; align-items: center; gap: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }

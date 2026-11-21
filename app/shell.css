@@ -12,6 +12,10 @@
 @keyframes gw-settle { from { opacity: .55; transform: scale(.985); } }
 /* A badge and a chat's pill that just started waiting on the reader shake once (design-reference: nudge; #146). */
 @keyframes gw-nudge { 0%, 100% { transform: none; } 20% { transform: translateX(-3px) rotate(-2deg); } 40% { transform: translateX(3px) rotate(2deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
+/* An inside ring of the ink that holds, then goes (design-reference: barFlash and tileFlash, the same frames): an Agent
+   page's save bar when a way out is tried (#161), a new Agent's sidebar tile (#134). The frames keep the reference's own
+   token name, which each part that flashes resolves to the app's colour. */
+@keyframes gw-ring-flash { 0%, 40% { box-shadow: inset 0 0 0 2px var(--text-1); } 100% { box-shadow: inset 0 0 0 0 transparent; } }
 
 /* The product's global button look (app/globals.css: border, padding, 36px floor, half opacity when disabled) is not
    the reference's; the shell's buttons start bare, as the reference's do. The reset has no more weight than one class,
@@ -133,6 +137,9 @@
 /* "New" on a tile Lead just made, for the person who asked, until they open it (design-reference: .agent-tile__new) */
 .gw .agent-tile__new { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-top: -2px; border-radius: var(--gw-r-full); background: var(--gw-primary); color: var(--gw-on-primary); font-size: var(--gw-fs-xs); line-height: 1; font-weight: 600; white-space: nowrap; }
 .gw .agent-tile--new { border: 1px dashed var(--gw-border-1); padding-block: 7px 5px; }
+/* A tile that arrives in the grid during a visit, as when Lead has just made its Agent, flashes a ring once (#134;
+   design-reference: .agent-tile.is-flash, tileFlash); app/agent-grid.tsx marks it and takes the mark away after 1500ms. */
+.gw .agent-tile.is-flash { --text-1: var(--gw-text-1); animation: gw-ring-flash 1.4s var(--gw-ease-out); }
 .gw .agent-tile--new .agent-tile__name { color: var(--gw-text-2); }
 /* The state dot on a tile's face, its ring the sidebar's colour (design-reference: .dot, .face-wrap .dot, .agent-tile) */
 .gw .agent-tile .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--gw-idle-dot); box-shadow: 0 0 0 2.5px var(--gw-bg-sidebar); }

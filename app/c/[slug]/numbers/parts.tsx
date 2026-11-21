@@ -2,10 +2,10 @@ import type { ReactNode } from 'react';
 import Link from '@/lib/link';
 import type { I18n, Language } from '@/lib/i18n.mjs';
 import type { WaitingItem } from '@/lib/approval-queue';
-import { formatFigure, type NumbersTile, type Period } from '@/lib/numbers.mjs';
+import { figureDigits, type NumbersTile, type Period } from '@/lib/numbers.mjs';
 import { chatPlace } from '@/lib/board-columns.mjs';
 import { PageIcon } from '../log/icons';
-import { PeriodSwitch } from './numbers-client';
+import { FigureCount, FigureRow, PeriodSwitch } from './numbers-client';
 
 // The parts of the Numbers page (page.tsx) drawn from what the server read. They import no server code, so a component
 // test draws them as the page does.
@@ -18,12 +18,13 @@ export function NumbersHead({t,slug,period}:{t:T,slug:string,period:Period}) {
 
 export function NumbersFigures({t,language,locale,period,connected,tiles}:{t:T,language:Language,locale:string,period:Period,connected:boolean,tiles:NumbersTile[]}) {
  const periodLabel=t(period==='7'?'numbersLast7':'numbersLast30');
- const money=(value:string,currency:string|null)=>currency?(language==='ar'?<>{value}<span className="kpi__unit">{currency}</span></>:<><span className="kpi__unit kpi__unit--pre">{currency}</span>{value}</>):value;
- return <div className="kpis" data-connected={connected}>{tiles.map(tile=>{const value=formatFigure(tile,locale); return <div className="kpi" key={tile.name} data-figure={tile.name}>
+ const money=(value:ReactNode,currency:string|null)=>currency?(language==='ar'?<>{value}<span className="kpi__unit">{currency}</span></>:<><span className="kpi__unit kpi__unit--pre">{currency}</span>{value}</>):value;
+ // Each figure with a value counts up to it (FigureCount, #134); an unavailable one is drawn as it is.
+ return <FigureRow period={period} connected={connected} figures={tiles.map(({name,value})=>({name,value}))}>{tiles.map(tile=>{const value=tile.value; const count=value==null?null:<FigureCount name={tile.name} value={value} digits={figureDigits(tile.name)} locale={locale} period={period}/>; return <div className="kpi" key={tile.name} data-figure={tile.name}>
   <span className="kpi__label">{t(tile.label)}</span>
-  {value==null?<span className="kpi__val kpi__val--none" aria-label={t('unavailable')}>—</span>:<span className="kpi__val num">{tile.money?money(value,tile.currency):value}</span>}
-  <span className="kpi__delta">{value==null?t('numbersNoSource'):t('numbersSource',tile.sources.join(language==='ar'?'، ':', '),periodLabel)}</span>
- </div>;})}</div>;
+  {count==null?<span className="kpi__val kpi__val--none" aria-label={t('unavailable')}>—</span>:<span className="kpi__val num">{tile.money?money(count,tile.currency):count}</span>}
+  <span className="kpi__delta">{count==null?t('numbersNoSource'):t('numbersSource',tile.sources.join(language==='ar'?'، ':', '),periodLabel)}</span>
+ </div>;})}</FigureRow>;
 }
 
 export function NoApp({t,slug}:{t:T,slug:string}) {

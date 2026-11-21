@@ -19,6 +19,7 @@ import RecentChats from './recent-chats';
 import ChannelList from './channel-list';
 import { channelSidebar } from '@/lib/channels';
 import FirstRunChoice from './first-run-choice';
+import AgentGrid from './agent-grid';
 import { chooseWorkMode } from './work-mode-actions';
 import NewChatKey from './new-chat-key';
 import { SidebarSearchProvider, SearchToggle, SearchBox } from './sidebar-search';
@@ -94,13 +95,14 @@ export default async function Shell({company,companies,section,title,crumbs,pers
    </div>)}</div>
    <section className="sb-sec" aria-labelledby="lbl-agents">
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>
-    <ul className="agent-grid">{agents.map(agent=>{const fresh=isNewFor(agent,personId); const status=stateOf(agent.id); return <li key={agent.id}>
-     <Link className="agent-tile" href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={[agent.name,agent.is_default&&t('mainAgent'),fresh&&t('agentNew'),agent.speciality,t(statusKeys[status])].filter(Boolean).join(' · ')} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
+    {/* A tile that arrives during the visit flashes once (#134). */}
+    <AgentGrid company={id||''} agents={agents.map(agent=>agent.id)}>{agents.map(agent=>{const fresh=isNewFor(agent,personId); const status=stateOf(agent.id); return <li key={agent.id}>
+     <Link className="agent-tile" data-agent={agent.id} href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={[agent.name,agent.is_default&&t('mainAgent'),fresh&&t('agentNew'),agent.speciality,t(statusKeys[status])].filter(Boolean).join(' · ')} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
       <AgentFaceDot live agent={{id:agent.id,connection_id:agent.connection_id,name:agent.name}} size={52} status={status}/><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
       {fresh&&<span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span>}
      </Link>
     </li>;})}
-    {(owner||asksForAgents)&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t(owner?'newAgent':'settingsAskAgent')}</span></Link></li>}</ul>
+    {(owner||asksForAgents)&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t(owner?'newAgent':'settingsAskAgent')}</span></Link></li>}</AgentGrid>
    </section>
    <section className="sb-sec" id="sb-recent" aria-label={t('recentChats')}>
     {company?.id&&<ChannelList slug={slug} company={company.id} person={personId} initial={channels} current={channelId} manage={manage}/>}
