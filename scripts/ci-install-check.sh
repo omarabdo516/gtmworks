@@ -1351,8 +1351,9 @@ docker exec -u hermes "$(first_engine_id)" ssh -i /opt/data/ssh/id_ed25519 -o Ba
 }
 
 # sandbox-update: an install the release before the work sandbox made, with two Companies, updated to this release (#397,
-# ADR 0018). First an update whose migration fails, which leaves that release serving with no sandbox begun; then the
-# update itself, after which each Company has its own sandbox, exit and work folder, its Engine is pinned to that sandbox,
+# ADR 0018). First an update whose migration fails, which leaves that release serving with no sandbox begun, and one whose
+# second Company's sandbox does not start after the first Company's was made, which leaves nothing of either (#479); then
+# the update itself, after which each Company has its own sandbox, exit and work folder, its Engine is pinned to that sandbox,
 # an Agent made before the update runs a command there and still remembers, the Company's level is gone and its past change
 # still reads in the log; and the install command again keeps every sandbox and its work folder.
 sandbox_update() {
@@ -1466,6 +1467,30 @@ if grep -Fq 'Applying migration:' update.log; then fail_update 'the update whose
 [[ $(compose ps -q web) == "$web" ]] || fail_update 'the update whose sandbox image cannot be pulled leaves the release before the work sandbox serving'
 probe 'after the update whose sandbox image cannot be pulled'
 [[ -z $(sandbox_parts) && ! -e .work-sandbox-image ]] || fail_update 'the update whose sandbox image cannot be pulled begins no sandbox'
+# An update whose second Company's sandbox does not start, after its migrations applied and the first Company's sandbox,
+# exit, work folder and networks were made (#479): its Company is given more CPUs than Docker has, which Docker refuses at
+# the sandbox's start. The previous release keeps serving with its own Engines, and nothing of a sandbox is left: no
+# container, volume or network of either Company, no key in an Engine's volume, and no image recorded.
+second_slug=$(ls .engines | grep -vx first)
+[[ -n $second_slug ]] || fail "read the second Company's Engine folder"
+printf 'SANDBOX_CPUS=100000\n' >> ".engines/$second_slug/.env"
+cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place for the failed sandbox start'
+if GTMWORKS_ENGINE_WAIT=60 sh install.sh update > update.log 2>&1; then fail_update "the update whose second Company's sandbox does not start must fail"; fi
+grep -Fq 'Applying migration:' update.log || fail_update "the update whose second Company's sandbox does not start applies its migrations first"
+grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update "the update whose second Company's sandbox does not start says the previous release keeps serving"
+if grep -Fq 'could not all be removed' update.log; then fail_update "the update whose second Company's sandbox does not start removes what it made"; fi
+[[ $(compose ps -q web) == "$web" ]] || fail_update "the update whose second Company's sandbox does not start leaves the release before the work sandbox serving"
+probe "after the update whose second Company's sandbox does not start"
+[[ $(level_column) == 1 ]] || fail_update "the update whose second Company's sandbox does not start leaves the Company level that release reads"
+while read -r name id; do
+  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$name") == healthy ]] || fail_update "the Engine $name is healthy again after the failed sandbox start"
+  [[ $(docker inspect -f '{{range $n, $_ := .NetworkSettings.Networks}}{{println $n}}{{end}}' "$name" | grep -c .) == 1 ]] || fail_update "the Engine $name is back on its own network only"
+  if docker exec -u 0 "$name" test -e /opt/data/ssh; then fail_update "the failed sandbox start leaves no sandbox key in the Engine $name"; fi
+done < engines-before
+half=$(sandbox_parts)
+[[ -z $half ]] || fail_update "the failed sandbox start leaves no half-made sandbox: $half"
+[[ ! -e .work-sandbox-image ]] || fail_update 'the failed sandbox start records no work sandbox image'
+sed -i '/^SANDBOX_CPUS=/d' ".engines/$second_slug/.env"
 # The update to this release: each Company gets its own sandbox, exit and work folder, and its Engine, recreated on its own
 # volume, is pinned to that sandbox.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'

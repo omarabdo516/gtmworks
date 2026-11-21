@@ -387,12 +387,57 @@ engines_up() {
 }
 # The previous release's own Engine files, kept when an update starts and before anything replaces them (ADR 0023): an
 # update whose Engines or work sandboxes do not all start puts them back. Nothing is kept for an install that has none.
+# The work sandboxes' volumes and networks the install already has are listed beside them (#479), so that update removes
+# only the ones it made itself. A list Docker could not give stops the update before anything changes: an empty list
+# read as "none existed" would remove a previous release's own work folders.
 keep_previous_engine() {
   mkdir -p .install-lock/previous-engine
   for file in scripts/engine-*; do
     [ -f "$file" ] || continue
     cp "$file" .install-lock/previous-engine/ || return 1
   done
+  volumes=$(docker volume ls -q) || return 1
+  networks=$(docker network ls --format '{{.Name}}') || return 1
+  # A work folder and its work network share one name, so each line says which it is.
+  { printf '%s\n' "$volumes" | sed -n -e 's/^gtmworks-work-/volume &/p' -e 's/^gtmworks-sandbox-hostkey-/volume &/p'
+    printf '%s\n' "$networks" | sed -n -e 's/^gtmworks-work-/network &/p' -e 's/^gtmworks-exit-/network &/p'; } > .install-lock/previous-engine/sandbox-parts
+}
+# What a failed update made of each Company's work sandbox, removed once the previous release's Engines are back (#479):
+# a Company whose work folder this update made gets no sandbox or exit container, no sandbox key in its Engine's volume
+# (so the next update copies its old Library into a new work folder again, as sandbox_keys does for an Engine with no
+# key), and no work folder, host-key volume, work network or exit network this update made. A part the install had
+# before the update is the previous release's own and stays. What Docker would not remove is named; the Engines that
+# came back keep serving either way.
+remove_new_sandbox_parts() {
+  record=.install-lock/previous-engine/sandbox-parts
+  # An update begun by an installer that kept no list removes nothing it cannot tell apart.
+  [ -f "$record" ] || return 0
+  left=
+  for name in $(engine_names); do
+    if ! grep -qxF "volume $(work_volume "$name")" "$record"; then
+      docker rm -f "$(sandbox_container "$name")" "$(exit_container "$name")" > /dev/null 2>&1 || true
+      volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$(engine_folder "$name")/.env")
+      if [ -n "$volume" ] && docker volume inspect "$volume" > /dev/null 2>&1; then
+        docker run --rm --user 0 --entrypoint sh -v "$volume:/data" alpine:3.21 -ec '
+          rm -rf /data/ssh
+          if [ -f /data/.ssh/known_hosts ]; then
+            grep -v "^\[sandbox\]:2222 " /data/.ssh/known_hosts > /data/.ssh/known_hosts.kept || true
+            if [ -s /data/.ssh/known_hosts.kept ]; then cat /data/.ssh/known_hosts.kept > /data/.ssh/known_hosts; else rm -f /data/.ssh/known_hosts; fi
+            rm -f /data/.ssh/known_hosts.kept
+            rmdir /data/.ssh 2> /dev/null || true
+          fi' > /dev/null 2>&1 || left="$left the sandbox key in $volume,"
+      fi
+    fi
+    for part in "$(work_volume "$name")" "$(host_key_volume "$name")"; do
+      grep -qxF "volume $part" "$record" || ! docker volume inspect "$part" > /dev/null 2>&1 \
+        || docker volume rm "$part" > /dev/null 2>&1 || left="$left the volume $part,"
+    done
+    for part in "$(work_network "$name")" "$(exit_network "$name")"; do
+      grep -qxF "network $part" "$record" || ! docker network inspect "$part" > /dev/null 2>&1 \
+        || docker network rm "$part" > /dev/null 2>&1 || left="$left the network $part,"
+    done
+  done
+  [ -z "$left" ] || echo "What this update made for the work sandboxes could not all be removed:${left%,}. Run the install command again." >&2
 }
 # An update whose Engines or work sandboxes did not all start (ADR 0023): the previous release's own Engine files go back,
 # and every Engine starts again from them, without the containers this release's template added beside it (each
@@ -418,6 +463,7 @@ restore_previous_engine() {
     # A restored sandbox counts only once its own Engine reaches it over SSH: its health check sees the port, not the key.
     if [ -n "$sandbox_key" ]; then sandbox_reachable "$name" > /dev/null 2>&1 || restored=1; fi
   done
+  remove_new_sandbox_parts
   return "$restored"
 }
 # Every Engine stopped before its data volume is copied: a live Engine writes under its volume while the archive reads
