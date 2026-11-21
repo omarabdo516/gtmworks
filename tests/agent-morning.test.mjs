@@ -659,3 +659,20 @@ test('a move that cannot carry words changed on the source meanwhile keeps the s
   assert.ok(jobs(fake,adsProfile)[0].prompt.endsWith('Also list the ads that ran.'));
  } finally { await fake.close(); }
 });
+
+test('a move whose lease runs out before it writes still pauses the old main Agent\'s copy before it stops', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // Ads was made main (committed); the lease runs out while the move reads the profiles, before its first write.
+  const ranOut={read:async connection=>{ const listed=await readRoutines(connection); leases.get(company).live=false; return listed; }};
+  const db=session({agents:agentRows(ads)}).db;
+  const answer=await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,agents:agentRows(lead),hermes:install(fake),driver:ranOut,fence}));
+  assert.equal(answer.state,'busy');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused'],'nothing sends from the Agent that is no longer main');
+  assert.equal(jobs(fake,adsProfile).length,0);
+  // The next settle brings it to Ads, as it was left.
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,hermes:install(fake)})).state,'moved');
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>job.schedule.expr),['0 9 * * *']);
+ } finally { await fake.close(); leases.clear(); }
+});
