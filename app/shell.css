@@ -11,6 +11,9 @@
    gw-ck-pop and gw-draw-check. */
 @keyframes gw-settle { from { opacity: .55; transform: scale(.985); } }
 /* A badge and a chat's pill that just started waiting on the reader shake once (design-reference: nudge; #146). */
+/* The send arrow takes off and the button's new icon pops in (design-reference: sendFly, iconIn; #132). */
+@keyframes gw-send-fly { to { transform: translateY(-28px) scale(.8); opacity: 0; } }
+@keyframes gw-icon-in { from { transform: scale(.5) rotate(-30deg); opacity: 0; } }
 @keyframes gw-nudge { 0%, 100% { transform: none; } 20% { transform: translateX(-3px) rotate(-2deg); } 40% { transform: translateX(3px) rotate(2deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
 /* An inside ring of the ink that holds, then goes (design-reference: barFlash and tileFlash, the same frames): an Agent
    page's save bar when a way out is tried (#161), a new Agent's sidebar tile (#134). The frames keep the reference's own
@@ -309,6 +312,8 @@
 .gw .turns { display: flex; flex-direction: column; gap: 24px; margin: 0; padding: 0; list-style: none; }
 .gw .turn { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
 .gw .turn--user { align-items: flex-end; }
+/* A message or a line that arrives while the chat is open rises in once (design-reference: .msg-in; #132). */
+.gw .msg-in { animation: gw-rise var(--gw-dur) var(--gw-ease-out); }
 .gw .sender { display: flex; align-items: center; gap: 6px; padding-inline-start: 4px; font-size: var(--gw-fs-xs); line-height: 16px; color: var(--gw-text-2); }
 .gw .sender__time, .gw .bubble__time { color: var(--gw-text-3); opacity: 0; transition: opacity var(--gw-dur-fast) var(--gw-ease-out); }
 .gw .turn:hover :is(.sender__time, .bubble__time), .gw .turn:focus-within :is(.sender__time, .bubble__time) { opacity: 1; }
@@ -337,6 +342,10 @@
 .gw .priv-line .gw-icon { width: 13px; height: 13px; flex: none; }
 [dir="ltr"] .gw .priv-line span { unicode-bidi: plaintext; }
 .gw .thinking { padding: 2px 4px; font-size: var(--gw-fs-base); color: var(--gw-text-2); }
+/* While the Agent works, the line's words breathe; with reduced motion they are still and fully drawn
+   (design-reference: .shimmer, .thinking .shimmer; #132). */
+.gw .thinking .shimmer { display: inline-block; color: var(--gw-text-2); animation: gw-breathe 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .gw .thinking .shimmer { animation: none; } }
 /* A turn waiting for the current reply (also the line under a message to a person), and the stop square
    (design-reference: .queued, .is-queued, .is-stop) */
 .gw .queued { display: inline-flex; align-items: center; gap: 4px; padding-inline-end: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
@@ -451,6 +460,15 @@
 }
 .gw .composer__send:active:not(:disabled) { transform: scale(0.94); }
 .gw .composer__send .gw-icon { width: 16px; height: 16px; }
+/* On send a copy of the arrow leaves the button upward and fades; when the button turns into the stop square or back,
+   the new icon pops in (design-reference: .send-fly, .od-icon.is-morph; #132). The copy sits over the page, outside the
+   chat, so it carries the .gw root itself. */
+.gw.send-fly {
+  position: fixed; z-index: 130; display: inline-flex; align-items: center; justify-content: center; pointer-events: none;
+  color: var(--gw-text-1); animation: gw-send-fly 380ms var(--gw-ease-in) forwards;
+}
+.gw.send-fly .gw-icon { width: 16px; height: 16px; }
+.gw .composer__send .gw-icon.is-morph { animation: gw-icon-in 240ms var(--gw-ease-spring); }
 .gw .composer__send:disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); }
 @media (hover: hover) { .gw .composer__send:hover:not(:disabled) { background: var(--gw-primary-hover); } }
 .gw .composer-error { margin: 0; padding: 0 16px 10px; font-size: var(--gw-fs-sm); color: var(--gw-danger-text); }
@@ -729,6 +747,8 @@
 }
 
 /* The card for an Agent Lead made, in Lead's turn (design-reference: agentCardHTML; .card, .kv, .ac-*, .badge--made) */
+/* The card for an Agent Lead just made rises in once (design-reference: agentCardHTML's .card-in; #132). */
+.gw .ac-card.card-in { animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out); }
 .gw .ac-card { display: flex; flex-direction: column; width: 100%; overflow: clip; background: var(--gw-bg-pane); border-radius: var(--gw-r-card); box-shadow: var(--gw-shadow-card); }
 .gw .hcard__top { padding: 16px 16px 0; }
 .gw .badge--made { background: var(--gw-primary); color: var(--gw-on-primary); font-weight: 600; }
