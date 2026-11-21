@@ -319,7 +319,8 @@ test('a change the Engine refused is dropped even when the database takes the dr
  const {data:held}=await db.rpc('hold_agent_change',{c:company,agent:ads,act:'memory_reset'});
  assert.deepEqual(await madeAndLogged(db,held,'reset',async()=>({state:'refused'}),{waits:[1,1],laterWaits:[5,5]}),{state:'refused'},'the answer does not wait on the drop');
  assert.equal(changes.held.size,1,'three drops the database did not take');
- await new Promise(resolve=>setTimeout(resolve,50));
+ // The background retries run on timers, which a loaded machine may fire late: wait until the drop lands, never a guess.
+ for(const deadline=Date.now()+2000;changes.held.size>0&&Date.now()<deadline;) await new Promise(resolve=>setTimeout(resolve,5));
  assert.equal(changes.held.size,0,'the drop is taken in the background');
  assert.deepEqual(await logHeldAgentChanges(db),{logged:0});
  assert.deepEqual(changes.logged,[]);
