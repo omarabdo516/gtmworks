@@ -121,12 +121,19 @@ services:
     build: .
     image: gtmworks-local:237
     restart: unless-stopped
-    env_file: .env.install
+    # Only the values the app reads, each by name (#446, lib/install-env.mjs CONTAINER_ENV): never the whole .env.install,
+    # so the database password, pgsodium's root key and the JWT secret are not in this container. No Engine address or key
+    # either (#385, ADR 0018): the app asks its Company's Engine record, and each Engine's key is in that Engine's own file.
     environment:
-      # No Engine address or key here (#385, ADR 0018): the app asks its Company's Engine record, and each Engine's key
-      # is in that Engine's own file (.engines/<name>/.env), never in .env.install.
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Run scripts/install.sh}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?Run scripts/install.sh}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Run scripts/install.sh}
+      WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:?Run scripts/install.sh}
+      APP_ORIGIN: ${APP_ORIGIN:?Run scripts/install.sh}
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:?Run scripts/install.sh}
+      SETUP_CODE: ${SETUP_CODE:?Run scripts/install.sh}
       GTMWORKS_SELF_HOSTED: "true"
-    command: [sh, -c, "node lib/install-env.mjs validate && exec node server.js"]
+    command: [sh, -c, "node lib/install-env.mjs validate web && exec node server.js"]
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(response=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -135,10 +142,15 @@ services:
   worker:
     image: gtmworks-local:237
     restart: unless-stopped
-    env_file: .env.install
+    # The worker's own list (#446): what the app gets, less the setup code and the public address it never reads.
     environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Run scripts/install.sh}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?Run scripts/install.sh}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Run scripts/install.sh}
+      WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:?Run scripts/install.sh}
+      APP_ORIGIN: ${APP_ORIGIN:?Run scripts/install.sh}
       GTMWORKS_SELF_HOSTED: "true"
-    command: [sh, -c, "node lib/install-env.mjs validate && exec node worker/index.mjs"]
+    command: [sh, -c, "node lib/install-env.mjs validate worker && exec node worker/index.mjs"]
 volumes:
   database:
   database-config:

@@ -6,6 +6,12 @@
   "ar": { "title": "القنوات بتقولك لو مفيش موديل متوصّل", "body": "لما وكيل ناديته في قناة، أو شغلانة Lead سلّمها لوكيل تاني، ميقدرش يرد عشان الشركة لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل، القناة أو المحادثة بقت بتقول كده، ومعاها لينك الاشتراك والموديلات للمالك، بدل ما تقول بس إن الرد فشل." }
  },
  {
+  "issue": 446,
+  "date": "2026-11-21",
+  "en": { "title": "The app keeps fewer keys", "body": "The app and the background worker now get only the settings they use, so neither holds the database password or the key that signs sign-ins, and a break-in into the app cannot use them." },
+  "ar": { "title": "التطبيق بقى شايل مفاتيح أقل", "body": "التطبيق والشغّال اللي في الخلفية بقوا بياخدوا الإعدادات اللي بيستخدموها بس، فمحدش فيهم معاه باسورد قاعدة البيانات ولا المفتاح اللي بيوقّع تسجيل الدخول، ولو حد اخترق التطبيق مش هيقدر يستخدمهم." }
+ },
+ {
   "issue": 375,
   "date": "2026-11-21",
   "en": { "title": "A handed job that didn't finish says so", "body": "When Lead hands a job to another Agent and it doesn't finish, the \"Handed to\" row in the chat and in the channel now says so after the job." },
