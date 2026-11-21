@@ -370,7 +370,7 @@
  "careMoney": "Every Member who talks to an Agent with this app on reaches its money and can spend through it.",
  "allTools": "All its tools",
  "tokenNeeded": "Paste the token this server needs.",
- "kindTitle": "How it signs in",
+ "kindTitle": "How it connects",
  "connectedTools": "Connected · {0} tools",
  "ownAdded": "{0} added",
  "ownAttention": "{0} was added, but it did not answer. Check the address and token.",
