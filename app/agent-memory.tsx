@@ -12,7 +12,7 @@ import type { MemoryNote } from '@/lib/engine.mjs';
 // it takes the notes and the flags rather than reading them itself. An Owner and a Manager edit a note in place (#191,
 // canEdit); the Owner alone forgets one (canForget), which hides at once and is removed from the Engine when
 // the six-second toast ends or the page is left, unless Undo restores it. The server checks each Role again
-// (/api/agent-memory, check_memory_edit and check_memory_forget) and writes one log row with no note text. No "Add" is
+// (/api/agent-memory, hold_agent_change) and writes one log row with no note text, even when it is late (#370). No "Add" is
 // drawn for anyone: the Engine has no route that adds a note, so a person adds one by telling the Agent in its chat.
 // The search (#192) narrows the notes as a person types, in the browser, while the heading keeps the whole count; a
 // search that finds nothing offers "Clear search", and Escape in a filled field does the same. The intro's second line
