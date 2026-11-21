@@ -482,6 +482,43 @@ open the package's **Package settings**, choose **Change visibility** and set it
 `stable`, `latest` and the GitHub Release are not published; afterwards, re-run that
 workflow run's failed jobs.
 
+## Roadmap
+
+Next: the first real Company goes live on gtmworks, then keys for sandbox tools, then triggers and efficiency, then the rest. Building software from gtmworks comes last.
+
+- ✅ Install with one line, update with one click
+- 🟡 Hermes inside, one Engine and one work sandbox per Company (merged, waiting for the release, #572)
+- ✅ Lead, the main Agent, runs the team and makes new Agents
+- 🟡 Every Agent asks any other Agent for a job (Handovers) (merged, waiting for the release, #572)
+- ✅ Conversations, channels and "Waiting on you"
+- 🟡 Board, Cards, Projects and Routines (merged, waiting for the release, #572)
+- ✅ Company knowledge, Skills, memory and team lessons
+- 🟡 Connect any MCP server, and run command tools in the sandbox (merged, waiting for the release, #572)
+- ✅ Roles, invite links and per-Member Agent access
+- 🟡 Good morning message from the main Agent (merged, waiting for the release, #572)
+- ✅ English and Egyptian Arabic, dictation in Egyptian Arabic
+- 🟡 Open Design: Agents make designs
+- 🟡 Watch the Agent's screen, and take control for one session
+- 🟡 Stop ends a whole Handover chain
+- 🟡 Numbers from connected apps (page built, no live source yet)
+- ⚪ RS Academy on gtmworks: first Agents, deep knowledge
+- ⚪ A key for command MCP servers in the sandbox
+- ⚪ Ready-made connections: Google Drive (one folder), GitHub, Odoo
+- ⚪ Event door: a webhook wakes the right Agent
+- ⚪ Routine check before the model wakes, and a cheaper model for routines
+- ⚪ Publishing to Meta, Instagram and TikTok
+- ⚪ Presenter videos made from a Card
+- ⚪ Ad campaigns, Results and a monthly Diagnosis
+- ⚪ Monthly plan, Brand check, Segments, Key dates, Offerings
+- ⚪ Several model accounts with failover
+- ⚪ Stronger Agent memory
+- ⚪ Talk to an Agent live by voice
+- ⚪ Business lines inside a Company (only if real mixing shows the need)
+- ⚪ Repo manager Agent (deferred)
+- ⚪ Running the coding process from inside gtmworks (last)
+
+The full list, with what each line means and its evidence, is in [ROADMAP.md](ROADMAP.md).
+
 ## Licence
 
 gtmworks is released under the MIT License. See [LICENSE](LICENSE).
