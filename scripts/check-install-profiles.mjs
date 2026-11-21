@@ -563,7 +563,9 @@ const plan=(messages,body)=>{
  const tools=(body?.tools||[]).map(tool=>tool?.function).filter(Boolean);
  const direct=tools.find(tool=>typeof tool.name==='string'&&tool.name.endsWith('__prove'))?.name;
  const deferred=tools.find(tool=>tool.name==='tool_search')?.description?.match(/mcp__\w+__prove/)?.[0];
- offered=direct??deferred??null;
+ // The Engine asks the model again after the tool's answer, and for its own auxiliary calls with no tools, so the tool
+ // once offered stays offered.
+ offered=offered??direct??deferred??null;
  if(direct) return {id:'call_sandbox_mcp',type:'function',function:{name:direct,arguments:JSON.stringify({marker})}};
  return deferred&&tools.some(tool=>tool.name==='tool_call')
   ?{id:'call_sandbox_mcp',type:'function',function:{name:'tool_call',arguments:JSON.stringify({calls:[{name:deferred,arguments:{marker}}]})}}:null;
@@ -589,7 +591,7 @@ try {
  }
  assert.ok(answered?.body.includes(reply),answered?.body);
  assert.ok(offered,'a Run offers the server\'s tool once the Engine has started with it');
- assert.equal(results.length,1,JSON.stringify(results));
+ assert.ok(results.length>=1,'the tool\'s answer reached the model');
  // The answer comes back as the Engine wraps a tool's result ({"result": "<host> <folder> <pid>"} inside its
  // untrusted-result block): only the host name and the /work path are read out of it.
  const [,host,cwd]=String(results[0]).match(/([a-z0-9][a-z0-9.-]*) (\/work\/[a-z0-9_-]+) \d+/)??[];
