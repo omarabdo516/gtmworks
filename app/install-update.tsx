@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n-client';
 // and, where a newer version is offered (`offer`), the button that asks for it. The app only records the request; while
 // the update runs gtmworks is down for about a minute, so the state is read again every few seconds until the updater
 // says how it ended. Anyone else reads nothing and sees nothing; a failed read shows nothing.
-export type InstallUpdateState = { button: boolean, state: 'idle'|'requested'|'updating'|'updated'|'failed', version: string|null, changedAt: string };
+export type InstallUpdateState = { button: boolean, state: 'idle'|'requested'|'updating'|'updated'|'current'|'failed', version: string|null, changedAt: string };
 const seenKey='gtmworks-update-seen';
 // Said by the instance that recorded a request, so the sidebar's own line reads the state again and shows Updating.
 const asked='gtmworks:update-asked';
@@ -62,13 +62,17 @@ export default function InstallUpdate({offer=false,initial,onAsked}:{offer?:bool
   } catch { setProblem('updateRequestFailed'); }
   setPending(false);
  };
- const result=(update.state==='updated'||update.state==='failed')&&seen!==update.changedAt;
- const canAsk=offer&&update.button&&!running(update.state);
+ const result=(update.state==='updated'||update.state==='current'||update.state==='failed')&&seen!==update.changedAt;
+ // Nothing newer on the channel (#468): the Owner is told so, and Update now waits until they close that line, so the
+ // same offer does not come straight back.
+ const canAsk=offer&&update.button&&!running(update.state)&&!(update.state==='current'&&result);
  if(!running(update.state)&&!result&&!canAsk&&!problem) return null;
  return <div className="install-update" aria-live="polite">
   {running(update.state)&&<p className="install-update__line" role="status">{t('updating')}</p>}
   {result&&update.state==='updated'&&<p className="install-update__line" role="status">{t('updatedTo',versionName(update.version))}{' '}
    <button type="button" className="link-btn" onClick={()=>{ dismiss(); location.reload(); }}>{t('updateReload')}</button>{' '}
+   <button type="button" className="link-btn" onClick={dismiss}>{t('close')}</button></p>}
+  {result&&update.state==='current'&&<p className="install-update__line" role="status">{t('updateIsNewest')}{' '}
    <button type="button" className="link-btn" onClick={dismiss}>{t('close')}</button></p>}
   {result&&update.state==='failed'&&<p className="install-update__line set-err" role="alert">{update.version?t('updateFailed',versionName(update.version)):t('updateFailedUnknown')}{' '}
    <button type="button" className="link-btn" onClick={dismiss}>{t('close')}</button></p>}
