@@ -680,23 +680,31 @@ if docker exec "$engine_id" sh -ec "test -e /work/$sandbox_marker-terminal.txt -
   fail 'nothing an Agent wrote is on the Engine'
 fi
 # A command MCP server runs in the work sandbox (#459, ADR 0024): a small stdio server placed in the Company's work folder
-# is added as the Owner's own command server, Test lists its tool, and an Agent calls it from a Conversation. While the
-# call holds, the host's Docker lists both containers' processes: the server is a process of the sandbox, and the
-# Engine holds only the ssh client that reaches it. Then the job releases the call and reads where it wrote.
+# is added as the Owner's own command server and Test lists its tool. The Engine is then restarted, which connects every
+# configured server at its start (its MCP reconcile tick otherwise took from 23 s to over 4 min here), and an Agent calls
+# the tool from a Conversation. While the call holds, the host's Docker lists both containers' processes: the server is a
+# process of the sandbox, and the Engine holds only the ssh client that reaches it. Then the job releases the call and
+# reads where it wrote.
 mcp_marker="sandbox-mcp-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 docker exec -i "$sandbox" sh -ec 'mkdir -p /work/tools; cat > /work/tools/sandbox-proof-mcp.mjs' < scripts/sandbox-proof-mcp.mjs \
   || fail 'place the small MCP server in the work sandbox'
+engine_node "$engine_key" - sandbox-mcp-add "$mcp_marker" < scripts/check-install-profiles.mjs \
+  || fail 'a command server the Owner adds is ssh into the work sandbox, and Test lists its tool'
+docker restart "$engine_id" > /dev/null || fail 'restart the Engine'
+engine_healthy "$engine_id" 60 || fail 'the Engine is healthy after its restart'
 engine_node "$engine_key" - sandbox-mcp "$mcp_marker" < scripts/check-install-profiles.mjs > sandbox-mcp-proof.log 2>&1 &
 mcp_check=$!
 mcp_calling=''
-# The Engine connects a server added to a profile at its next MCP reconcile (up to about two minutes), so the check asks
-# again until a Run offers the tool; this waits for the call up to ten minutes.
-for attempt in $(seq 1 600); do
+for attempt in $(seq 1 420); do
   docker exec "$sandbox" test -f "/work/$first/$mcp_marker-calling.txt" 2> /dev/null && { mcp_calling=yes; break; }
   kill -0 "$mcp_check" 2> /dev/null || break
   sleep 1
 done
-[[ $mcp_calling == yes ]] || { cat sandbox-mcp-proof.log >&2; fail 'an Agent calls the tool of a command server in the work sandbox'; }
+if [[ $mcp_calling != yes ]]; then
+  cat sandbox-mcp-proof.log >&2
+  docker exec "$engine_id" sh -c 'grep -h "sandbox-proof\|reconciled\|MCP server" /opt/data/logs/*.log /opt/data/profiles/*/logs/*.log 2> /dev/null | tail -n 20' >&2 || true
+  fail 'an Agent calls the tool of a command server in the work sandbox'
+fi
 # Each container's process list is read whole first: under pipefail a `| grep -q` that stops reading early can fail the
 # pipe on a match. Each check prints the list it read when it fails. Node names its main thread, so the server's command
 # name reads `node-MainThread` once it runs.
