@@ -218,19 +218,21 @@ test('an Agent\'s own mode made during a Company-wide mode ends with the Engine 
   const modes=new Map();
   const {db}=database({agents:alone,modes});
   const hermes={address:fake.address,key:fake.settings.key};
-  let agentDone=null;
+  // Settled once the Agent's own choice has ended; made before the Company-wide write starts, so the hold below waits on it.
+  let agentFinished=()=>{};
+  const agentEnded=new Promise(resolve=>{ agentFinished=resolve; });
   let released=null;
   // The Company-wide write waits on the Engine until the Agent's own choice has finished, or a while when that choice
   // waits on the Company-wide write itself.
   const held={...settingsDriver(fake),write:async(target,config)=>{
-   released??=Promise.race([agentDone,new Promise(resolve=>setTimeout(resolve,300))]);
+   released??=Promise.race([agentEnded,new Promise(resolve=>setTimeout(resolve,300))]);
    await released;
    return settingsDriver(fake).write(target,config);
   }};
   const companyWide=changeLearningMode(db,{company,mode:'ask',hermes,driver:held});
   // The Agent's choice starts once the Company-wide write has read which Agents chose their own.
   while(!released) await new Promise(resolve=>setTimeout(resolve,5));
-  agentDone=changeLearningMode(db,{company,agent:writer,mode:'auto',hermes,driver:settingsDriver(fake)});
+  const agentDone=changeLearningMode(db,{company,agent:writer,mode:'auto',hermes,driver:settingsDriver(fake)}).finally(agentFinished);
   const [wide,own]=await Promise.all([companyWide,agentDone]);
   assert.equal(wide.state,'written',JSON.stringify(wide));
   assert.equal(own.state,'written',JSON.stringify(own));

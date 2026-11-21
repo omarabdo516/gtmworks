@@ -366,19 +366,21 @@ test('an Agent\'s own model chosen during a Company default ends with the Engine
    if(name==='set_agent_model') { const row=state.find(found=>found.agent===args.agent); row.model_choice=args.model; }
    return answer(name,args);
   };
-  let agentDone=null;
+  // Settled once the Agent's own choice has ended; made before the Company-wide write starts, so the hold below waits on it.
+  let agentFinished=()=>{};
+  const agentEnded=new Promise(resolve=>{ agentFinished=resolve; });
   let released=null;
   // The default's Engine writes wait until the Agent's own choice has finished, or a while when that choice waits on the
   // default itself.
   const held={...driver(fake),writeModel:async(target,change)=>{
-   released??=Promise.race([agentDone,new Promise(resolve=>setTimeout(resolve,300))]);
+   released??=Promise.race([agentEnded,new Promise(resolve=>setTimeout(resolve,300))]);
    await released;
    return driver(fake).writeModel(target,change);
   }};
   const companyDefault=changeCompanySetting(db,{company,setting:'model',value:'openrouter/openai/gpt-5.4',hermes:install(fake),driver:held});
   // The Agent's choice starts once the default has read which Agents chose their own.
   while(!released) await new Promise(resolve=>setTimeout(resolve,5));
-  agentDone=changeCompanySetting(db,{company,agent:writer,setting:'model',value:'anthropic/claude-opus-4-6',hermes:install(fake),driver:driver(fake)});
+  const agentDone=changeCompanySetting(db,{company,agent:writer,setting:'model',value:'anthropic/claude-opus-4-6',hermes:install(fake),driver:driver(fake)}).finally(agentFinished);
   const [wide,chosen]=await Promise.all([companyDefault,agentDone]);
   assert.equal(wide.state,'written',JSON.stringify(wide));
   assert.equal(chosen.state,'written',JSON.stringify(chosen));
