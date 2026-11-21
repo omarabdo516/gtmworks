@@ -230,8 +230,10 @@ probe_config=$(printf '{"direct":[%s],"publicName":"example.com","refused":[%s],
 sandbox_exit_probe "$engine_id" "$probe_config" | tee sandbox-exit.log || { docker logs --tail 80 "$exit_id" >&2; fail 'from the sandbox only HTTP and HTTPS to a public address leave, through the exit'; }
 [[ $(docker run --rm --network host curlimages/curl:8.12.1 -sS "http://$standin/count") == '{"raw":0,"udp":0}' ]] \
   || fail 'no connection and no datagram from the sandbox reached the stand-in host but HTTP and HTTPS'
-docker logs "$exit_id" 2>&1 | grep -q "^exit: refused (cloud metadata) 169.254.169.254:443$" || fail "the exit's log names what it refused"
-if docker logs "$exit_id" 2>&1 | grep -qF "$standin_token"; then fail "the exit's log holds no page it carried"; fi
+# Read once: grep -q ending a pipe early would fail it under pipefail.
+exit_log=$(docker logs "$exit_id" 2>&1) || fail "read the exit's log"
+grep -qx 'exit: refused (cloud metadata) 169.254.169.254:443' <<< "$exit_log" || fail "the exit's log names what it refused"
+if grep -qF "$standin_token" <<< "$exit_log"; then fail "the exit's log holds no page it carried"; fi
 docker rm -f exit-standin > /dev/null || true
 # The repeat install leaves the settings file as it was, so keep a copy to compare after it. The data a restore must
 # bring back is the backup area's (#409); an archive in the shape the release before this one made is made by that
