@@ -140,7 +140,8 @@ function NewRoutine({t,company,agents,agent,onClose}:{t:T,company:string,agents:
   onSubmit={form=>startTransition(async()=>{
    setFailed(null);
    const {error,unlogged}=await send(company,who,'create',{prompt:what.trim(),schedule:cronOf(form),timezone:browserZone()});
-   if(error) { setFailed(error); return; }
+   // A failed add still refreshes the list, so a Routine the Engine did make shows rather than inviting a second one.
+   if(error) { setFailed(error); router.refresh(); return; }
    toast(t('routineAdded',what.trim().length>40?`${what.trim().slice(0,40)}…`:what.trim()));
    warnUnlogged(t,unlogged);
    close(); router.refresh();

@@ -104,7 +104,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // (cron/jobs.py create_job). `cronOutcome` is how a run now ends ('ok' or 'error'). `routineAsks` names the Routine a
   // chat Run's input asks for: the Run makes it with the Engine's own cronjob tool, so only on a profile whose Runs are
   // offered that toolset, in that Run's own profile (tools/cronjob_tools.py).
-  cron:/** @type {Map<string,any[]>} */(new Map()),cronOutcome:/** @type {'ok'|'error'} */('ok'),
+  cron:/** @type {Map<string,any[]>} */(new Map()),cronOutcome:/** @type {'ok'|'error'} */('ok'),loseCronCreates:0,
   // What a Routine's run now answers (#182): each run is a cron session of the job's profile, `cron_<id>_<time>`, holding
   // the prompt and this reply, listed newest first by the job's runs route.
   cronReply:'Here is what ran overnight.',
@@ -812,7 +812,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(typeof body?.schedule!=='string') return send(response,422,{detail:'schedule'});
     if(!String(body.prompt||'').trim()) return send(response,400,{detail:'A prompt, skill or script is required.'});
     let job; try { job=cronJob({name:body.name,prompt:body.prompt,schedule:body.schedule,timezone:body.timezone,paused:body.paused===true}); } catch(failure) { return send(response,400,{detail:failure.message}); }
-    cronStore(named).push(job); return send(response,200,annotated(job,named));
+    cronStore(named).push(job);
+    // A create whose answer is lost after the job was made (loseCronCreates of them): the connection closes unanswered.
+    if(settings.loseCronCreates>0) { settings.loseCronCreates--; request.socket.destroy(); return; }
+    return send(response,200,annotated(job,named));
    }
    const cronPath=url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)(?:\/(pause|resume|trigger|runs))?$/);
    if(cronPath) {
