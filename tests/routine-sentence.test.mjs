@@ -91,3 +91,8 @@ test('a date of the month said without "the", or more than one time of day, asks
  assert.deepEqual(read('Send a report every day at 9am and 5pm')?.cron,null,'two times are no one schedule');
  assert.deepEqual(read('ابعتلي تقرير كل يوم 9 الصبح و5 العصر')?.cron,null);
 });
+
+test('a date of the month said as a bare number after "on" asks too', () => {
+ assert.equal(read('Send me the report every month on 15 at 9am')?.cron,null);
+ assert.equal(read('Send me the report every month on 1 at 9am')?.cron,'0 9 1 * *');
+});
