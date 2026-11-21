@@ -416,9 +416,10 @@ test('CI updates a release install on a real database, applying a new migration 
   // The previous release is the last one before the Engines, a fixed commit rather than this pull request's base or
   // origin/main (#378, C1), built and installed from its own two release files; the next release carries one migration
   // more, which the update must read through the running db's /migrations.
-  /previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6/,
+  /previous_release_commit=8f47abe1761548a45de72937fac443a4bdea3eb6/,
+  /previous_release=\$previous_release_commit/,
   /git worktree add "\$RUNNER_TEMP\/previous-release" "\$previous_release"/,
-  /docker build -q -t localhost:5000\/gtmworks:0\.0\.0-main "\$RUNNER_TEMP\/previous-release"/,
+  /release_image "\$previous_release" localhost:5000\/gtmworks:0\.0\.0-main "\$RUNNER_TEMP\/previous-release"/,
   /node scripts\/release-assets\.mjs "\$previous" "\$root\/release-previous"/,
   /FROM localhost:5000\/gtmworks:0\.0\.0-ci\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
   /node scripts\/release-assets\.mjs "\$first" release-first "\$sandbox" \|\|/,
