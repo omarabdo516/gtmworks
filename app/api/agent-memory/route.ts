@@ -6,10 +6,10 @@ import { editAgentMemory, forgetAgentMemory, readAgentMemory, resetAgentMemory }
 
 // An Agent's memory (#350): the notes of its own Engine profile, read for any Member who is shown the Agent, and the
 // Owner's reset of them. The request runs as the signed-in person: company_app_agents lists only the Agents they see, so
-// an Agent hidden from them is not found, and the database checks the Role again (check_memory_reset). A reset writes
-// one row of the Company log (log_memory_reset) and carries no note text either way.
-// One note is rewritten by an Owner or Manager (#191, check_memory_edit) and removed by the Owner alone
-// (check_memory_forget); each change writes one row of the Company log with no note text.
+// an Agent hidden from them is not found, and the database checks the Role again (hold_agent_change). A reset writes
+// one row of the Company log and carries no note text either way.
+// One note is rewritten by an Owner or Manager (#191) and removed by the Owner alone; each change the Engine holds is
+// told as made and writes one row of the Company log with no note text, a late one by the worker's pass (#370).
 // A body that is not JSON, or not the shape asked for, is the caller's (400); a note over the limit is a refusal (400,
 // `agentMemoryRefused`) so the screen shows its own "That note is too long" line; anything else that throws is ours (500).
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -41,10 +41,10 @@ export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[
 // An Agent's memory (#350), read from its own profile: its notes, each with the Engine's id and its text, never a skill.
 export type MemoryNote={id:string,text:string};
 export type MemoryNotes={state:'found',notes:MemoryNote[]}|{state:'refused'|'unreachable'|'failed',notes:null};
-export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed'};
+export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed',unsent?:true};
 // One note rewritten or removed by the Engine's own id (#191); a note that changed since it was read is `stale`.
-export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed'};
-export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed'};
+export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed',unsent?:true};
+export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed',unsent?:true};
 // An Agent's standing permissions (#166): its own profile's entries, each as the Engine keeps it; revoking one is
 // revoked (read back without it), gone (it was not there), or why it could not be done.
 export type StandingPermissions={state:'found',entries:string[]}|{state:'refused'|'unreachable'|'failed',entries:null};

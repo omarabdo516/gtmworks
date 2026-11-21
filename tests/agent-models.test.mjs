@@ -350,3 +350,43 @@ test('a sub-agent\'s model is one save of the provider and the bare model id the
   }
  } finally { await fake.close(); }
 });
+
+// #436: a Company default reads which Agents chose a model, then writes every other profile. One Agent's own model chosen
+// while that write waits on the Engine used to be overwritten there while the database kept the choice; the two writes now
+// run one after the other for the Company, so after both the Engine holds what the record says.
+test('an Agent\'s own model chosen during a Company default ends with the Engine holding that Agent\'s choice', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake); schema(fake);
+  // The record is the database's: a choice remembered by set_agent_model is what the next read answers.
+  const state=rows();
+  const {db}=database({rowsFor:state});
+  const answer=db.rpc;
+  db.rpc=async(name,args)=>{
+   if(name==='set_agent_model') { const row=state.find(found=>found.agent===args.agent); row.model_choice=args.model; }
+   return answer(name,args);
+  };
+  // Settled once the Agent's own choice has ended; made before the Company-wide write starts, so the hold below waits on it.
+  let agentFinished=()=>{};
+  const agentEnded=new Promise(resolve=>{ agentFinished=resolve; });
+  let released=null;
+  // The default's Engine writes wait until the Agent's own choice has finished, or a while when that choice waits on the
+  // default itself.
+  const held={...driver(fake),writeModel:async(target,change)=>{
+   released??=Promise.race([agentEnded,new Promise(resolve=>setTimeout(resolve,300))]);
+   await released;
+   return driver(fake).writeModel(target,change);
+  }};
+  const companyDefault=changeCompanySetting(db,{company,setting:'model',value:'openrouter/openai/gpt-5.4',hermes:install(fake),driver:held});
+  // The Agent's choice starts once the default has read which Agents chose their own.
+  while(!released) await new Promise(resolve=>setTimeout(resolve,5));
+  const agentDone=changeCompanySetting(db,{company,agent:writer,setting:'model',value:'anthropic/claude-opus-4-6',hermes:install(fake),driver:driver(fake)}).finally(agentFinished);
+  const [wide,chosen]=await Promise.all([companyDefault,agentDone]);
+  assert.equal(wide.state,'written',JSON.stringify(wide));
+  assert.equal(chosen.state,'written',JSON.stringify(chosen));
+  assert.equal(state.find(row=>row.agent===writer).model_choice,'anthropic/claude-opus-4-6','the database keeps the Writer\'s choice');
+  const engine=fake.settings.profiles.get(own(writer));
+  assert.deepEqual([engine.provider,engine.model],['anthropic','claude-opus-4-6'],'the Engine holds the Writer\'s choice too');
+  for(const name of [space,companyProfileName]) assert.equal(fake.settings.profiles.get(name).model,'openai/gpt-5.4',`${name} takes the default`);
+ } finally { await fake.close(); }
+});

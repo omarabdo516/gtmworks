@@ -98,10 +98,9 @@ test('`browser` installs Chromium only when the Playwright build it needs is mis
  } finally { m.done(); }
 });
 
-test('the repo settings run the hook at session start and keep the plugin settings',()=>{
+// The skills themselves are vendored into .claude/skills/ (#473, tests/matt-skills.test.mjs).
+test('the repo settings run the hook at session start',()=>{
  const settings=json('.claude/settings.json');
- assert.deepEqual(settings.enabledPlugins,{'mattpocock-skills@mattpocock':true});
- assert.deepEqual(settings.extraKnownMarketplaces.mattpocock.source,{source:'github',repo:'mattpocock/skills'});
  const commands=settings.hooks.SessionStart.flatMap(entry=>entry.hooks).map(hook=>hook.command);
  assert.deepEqual(commands,['bash "$CLAUDE_PROJECT_DIR/scripts/cloud-session-setup.sh"']);
 });

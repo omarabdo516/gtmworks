@@ -12,7 +12,7 @@ insert into isolation_matrix(name) values
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
- ('hermes_agents'),
+ ('held_agent_changes'),('hermes_agents'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('reply_cards'),('role_permissions'),
@@ -36,6 +36,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('channel_attachments', $${"channel_id": "'e3370000-0000-0000-0000-00000000000d'",
    "path": "'10000000-0000-0000-0000-000000000001/channels/e3370000-0000-0000-0000-00000000000d/isolation'"}$$),
  ('channel_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
+ -- A held memory or skill change (#370) names its act; a memory one names no skill.
+ ('held_agent_changes', $${"act": "'memory_reset'"}$$),
  -- A channel's quiet line names its invited person or its Card (#207, #151); this row is an invitation's.
  ('channel_notes', $${"kind": "'invite'", "invitee_name": "'Mona'"}$$),
  ('channel_permissions', $${"state": "'open'",
