@@ -288,10 +288,6 @@ test('a turn that arrives while the Conversation is open rises once; the turns i
  const started = { id: 3, author: 'person' as const, author_name: 'Omar', body: 'And the budget?', created_at: at };
  const answers = [talk([sent, reply, queued], { pending: true }), talk([sent, reply, started], { pending: true }), talk([sent, reply, started], { pending: true }), talk([sent, reply, started], { pending: true })];
  vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? answers.at(-1))));
- const starts: string[] = [];
- const count = (event: AnimationEvent) => { if (event.animationName === 'gw-rise') starts.push((event.target as Element).textContent ?? ''); };
- document.addEventListener('animationstart', count);
- onTestFinished(() => document.removeEventListener('animationstart', count));
  await render(inShell(talk([sent], { pending: true })));
  expect(motionOf(turnOf('Draft the long launch plan'))[0]).toBe('none');
  await vi.advanceTimersByTimeAsync(500);
@@ -299,11 +295,16 @@ test('a turn that arrives while the Conversation is open rises once; the turns i
  expect(motionOf(turnOf('Here is the plan.'))).toEqual(rises);
  expect(motionOf(turnOf('And the budget?'))).toEqual(rises);
  expect(motionOf(turnOf('Draft the long launch plan'))[0]).toBe('none');
- // Three further reads: the queued turn starts, then the record comes back the same twice.
+ // An animation plays again only when its element is put in the page again or its class comes back. Three further
+ // reads (the queued turn starts, then the record comes back the same twice) keep the reply's element as it was, and
+ // the started turn, drawn as a new element, carries no rise.
+ const replyTurn = turnOf('Here is the plan.');
  for (let read = 0; read < 3; read++) await vi.advanceTimersByTimeAsync(1500);
- await expect.poll(() => starts.length).toBe(2);
- expect(starts.filter(text => text.includes('Here is the plan.'))).toHaveLength(1);
- expect(starts.filter(text => text.includes('And the budget?'))).toHaveLength(1);
+ await expect.poll(() => turnOf('And the budget?').classList.contains('is-queued')).toBe(false);
+ expect(turnOf('Here is the plan.')).toBe(replyTurn);
+ expect(replyTurn.classList.contains('msg-in')).toBe(true);
+ expect(motionOf(turnOf('And the budget?'))[0]).toBe('none');
+ expect(motionOf(turnOf('Draft the long launch plan'))[0]).toBe('none');
 });
 
 test('a Conversation opened with its history moves nothing but the working line\'s words, which breathe, and are still with reduced motion', async () => {

@@ -428,10 +428,6 @@ test('a Viewer sees the working line breathe and the reply rise once when it arr
  const watch = new MutationObserver(records => records.forEach(each => each.addedNodes.forEach(node => { if (node instanceof Element && node.matches('.send-fly, :has(.send-fly)')) flew.push(node.outerHTML); })));
  watch.observe(document.body, { subtree: true, childList: true });
  onTestFinished(() => watch.disconnect());
- const rose: string[] = [];
- const count = (event: AnimationEvent) => { if (event.animationName === 'gw-rise') rose.push((event.target as Element).textContent ?? ''); };
- document.addEventListener('animationstart', count);
- onTestFinished(() => document.removeEventListener('animationstart', count));
  const screen = await render(<div className="gw"><LanguageProvider language="en"><ChannelView slug="rs-learning" person="p-1" initial={record([peer, called('open')], { writer: false })}/></LanguageProvider></div>);
  await expect.element(screen.getByText('Read before the page drew')).toBeVisible();
  const words = screen.container.querySelector('.thinking .shimmer')!;
@@ -441,8 +437,12 @@ test('a Viewer sees the working line breathe and the reply rise once when it arr
  await expect.element(screen.getByText('Two things are due.'), { timeout: 5000 }).toBeVisible();
  const turn = screen.container.querySelector('.turn--agent')!;
  expect([getComputedStyle(turn).animationName, getComputedStyle(turn).animationDuration, getComputedStyle(turn).animationTimingFunction]).toEqual(['gw-rise', '0.2s', 'cubic-bezier(0.2, 0, 0, 1)']);
+ // An animation plays again only when its element is put in the page again: further reads keep the reply's element,
+ // and what the channel opened with, its first read included, carries no rise.
  await new Promise(resolve => setTimeout(resolve, 3500));
- expect(rose, 'the reply rose once, and nothing the channel opened with').toEqual([expect.stringContaining('Two things are due.')]);
+ expect(screen.container.querySelector('.turn--agent')).toBe(turn);
+ const still = [...screen.container.querySelectorAll('.turns > li')].filter(item => item !== turn && getComputedStyle(item).animationName !== 'none');
+ expect(still.map(item => item.textContent), 'the reply rose, and nothing the channel opened with').toEqual([]);
  expect(screen.container.querySelector('.composer__send')).toBeNull();
  expect(flew).toEqual([]);
 });
