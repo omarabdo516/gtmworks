@@ -78,6 +78,8 @@ for _ in $(seq 1 240); do
  sleep 1
 done
 curl -fsS -o /dev/null "$origin/sign-in" || { echo "the app did not answer at $origin/sign-in within 4 minutes" >&2; tail -30 "$state/web.log" >&2; exit 1; }
+# The app answering is not enough: a message to an Agent needs the fake Engine listening too.
+taken 127.0.0.110/8642 || { echo 'the fake Engine is not answering at 127.0.0.110:8642:' >&2; tail -30 "$state/hermes.log" >&2; exit 1; }
 
 signed_in=''
 if [[ $mode == up ]]; then
