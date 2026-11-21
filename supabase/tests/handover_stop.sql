@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(49);
 -- #478 (spec #474): Stop ends the whole Handover chain. RS Learning has Lead, Writer, Ads and Critic, each on its own
 -- profile. The Owner (1) talks to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the
 -- Viewer (4) work with Writer, and the Manager (2) made the channel but is not in it.
@@ -108,6 +108,21 @@ select is((select state||':'||target_outcome||':'||follow_up_outcome||':'||summa
  'Ads''s answer stays, and the follow-up ended as stopped');
 select is((select run||'@'||profile from public.handover_runs_stopping() where id=current_setting('test.r')::bigint),'run-writer-2@ag-a4780000000000000000000000000013',
  'the follow-up''s Run is kept to stop on the Writer''s profile');
+
+-- A start whose answer was lost when Stop is pressed: only a retry with the same key can learn its Run.
+select is(public.lead_hand_to_agent('c4780000-0000-0000-0000-000000000001','run-writer','call-4','Critic','Once more',null),'{"state":"created","agent":"Critic"}'::jsonb,'Writer asks Critic');
+select set_config('test.u',(select id::text from public.agent_handovers where call_id='call-4'),true);
+update public.agent_handovers set target_attempts=1, attempted_at=now() where id=current_setting('test.u')::bigint;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is((select coalesce(run,'-') from public.stop_conversation_handovers('c4780000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001')),'-',
+ 'Stop reaches it with no Run to stop yet');
+reset role;
+select is((select state||':'||(stop_requested_at is not null) from public.agent_handovers where id=current_setting('test.u')::bigint),'waiting:true',
+ 'the leg is left to the worker, marked to stop');
+select is(public.answer_handover(current_setting('test.u')::bigint,1,'run-critic-found','waiting'),false,'its Run id, come back on a retry, is not kept as its Run');
+select is((select state||':'||target_outcome from public.agent_handovers where id=current_setting('test.u')::bigint),'done:stopped','the leg ended as stopped');
+select is(public.stop_late_handover_run(current_setting('test.u')::bigint,'run-critic-found'),true,'and its Run is kept to stop');
 
 -- In a channel: two messages of the Contributor, each with a handover open; Stop on the first ends only its own.
 insert into public.channels(id,company_id,kind,name,created_by,create_key) values

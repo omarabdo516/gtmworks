@@ -14,6 +14,7 @@ select json_build_object(
   and (select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
    from unnest(array['public.stop_late_handover_run(bigint,text)','public.handover_runs_stopping(bigint)','public.handover_run_stopped(bigint,text)']) f)
   and not has_column_privilege('authenticated','public.agent_handovers','stopping_run','select'),
+ 'a_lost_start_ends_once_known',position('stop_requested_at' in pg_get_functiondef('public.answer_handover(bigint,integer,text,text)'::regprocedure))>0,
  'a_moving_chain_keeps_stop',position('agent_handovers' in pg_get_functiondef('public.conversation_working_for(uuid)'::regprocedure))>0,
  'a_stopped_run_hands_nothing_on',(select relrowsecurity from pg_class where oid='public.stopped_runs'::regclass)
   and not has_table_privilege('authenticated','public.stopped_runs','select')

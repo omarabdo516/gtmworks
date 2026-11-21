@@ -94,6 +94,23 @@ test('a Run whose Engine missed the stop at the press is stopped by the worker\'
  assert.equal(stops.length,2,'and it is never asked again');
 });
 
+test('a leg whose start\'s answer was lost when Stop was pressed ends as stopped once a retry learns its Run, which is then stopped',async()=>{
+ const {rows,replies,service,where}=record('conversation',job);
+ const {fakes,stops,engineFor}=engines({},{lostStarts:['handover:1:target']});
+ fakes.Ads.settings.pendingReads=1000;
+ await driveHandovers(service,{hermes,engineFor});
+ assert.equal(rows[0].state,'waiting','the start was made, its answer lost');
+ assert.equal(fakes.Ads.runs.length,1);
+ assert.deepEqual(await stopConversationRun(service,{company,conversation:where,hermes,engineFor}),{stopped:true});
+ assert.equal(rows[0].state,'waiting','only a retry with the same key can learn that Run, so the leg waits for it');
+ await drive(service,engineFor,rows);
+ assert.deepEqual(state(rows),['Writer>Ads:done:stopped:-'],'it ended as stopped when its Run id came back');
+ assert.equal(fakes.Ads.runs.length,1,'the retry was the same Run');
+ assert.equal(fakes.Ads.runs[0].stopped,true,'and that Run is stopped');
+ assert.deepEqual(stops.map(stop=>stop.run),[fakes.Ads.runs[0].id]);
+ assert.deepEqual(replies,[]);
+});
+
 test('Stop with nothing open in the chat says there is nothing to stop',async()=>{
  const {rows,service,where}=record('conversation',job);
  const {engineFor}=engines();

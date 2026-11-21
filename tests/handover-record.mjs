@@ -23,7 +23,7 @@ export const others=(/** @type {string} */ agent)=>Object.entries(team).filter((
  * @param {'conversation'|'channel'} place @param {...{from:string,to:string,goal:string}} tops */
 export function record(place,...tops) {
  const where=place==='conversation'?'c4770000-0000-0000-0000-000000000001':'d4770000-0000-0000-0000-000000000001';
- const fresh={state:'waiting',target_attempts:0,answer_attempts:0,return_attempts:0,target_run:null,answer_run:null,follow_up_run:null,target_outcome:null,follow_up_outcome:null,summary:null,tools:null,stopping_run:null};
+ const fresh={state:'waiting',target_attempts:0,answer_attempts:0,return_attempts:0,target_run:null,answer_run:null,follow_up_run:null,target_outcome:null,follow_up_outcome:null,summary:null,tools:null,stopping_run:null,stop_requested:false};
  /** @type {any[]} */
  const rows=tops.map((top,index)=>({...fresh,id:index+1,parent:null,message:place==='channel'?index+1:null,from:top.from,to:top.to,goal:top.goal,run_id:`run-chat-${index+1}`,call_id:'call-1'}));
  const replies=/** @type {{agent:string,body:string}[]} */([]);
@@ -34,7 +34,9 @@ export function record(place,...tops) {
  const unfinished=(/** @type {any} */ row)=>`${row.to} did not finish`;
  /** Every open handover of the place (or of one message) ends as stopped; the Runs it had going come back to be stopped.
   * @param {number|null} message */
- const stop=message=>rows.filter(row=>open(row)&&(message===null||row.message===message)).flatMap(row=>{
+ // A leg whose start was sent and its answer lost: only a retry with the same key learns its Run, so Stop marks it.
+ const unsure=(/** @type {any} */ row)=>row.state==='waiting'&&row.target_attempts>0||row.state==='handing'&&row.answer_attempts>0||row.state==='returning'&&row.return_attempts>0;
+ const end=(/** @type {any} */ row)=>{
   const was=row.state;
   if(['waiting','target','handing','answering'].includes(was)) row.target_outcome='stopped';
   else if(row.parent===null) row.follow_up_outcome='stopped';
@@ -42,8 +44,10 @@ export function record(place,...tops) {
   const run=was==='target'?{run:row.target_run,profile:team[row.to].profile}:was==='answering'?{run:row.answer_run,profile:team[row.to].profile}
    :was==='follow_up'?{run:row.follow_up_run,profile:team[row.from].profile}:null;
   row.stopping_run=run?.run??null;
-  return [run??{run:null,profile:null}];
- });
+  return run??{run:null,profile:null};
+ };
+ const stop=(/** @type {number|null} */ message)=>rows.filter(row=>open(row)&&(message===null||row.message===message))
+  .map(row=>unsure(row)?(row.stop_requested=true,{run:null,profile:null}):end(row));
  // The chat's own Run still open, when a test starts one (its Agent is the first handover's asking Agent).
  const chat=/** @type {{run:string|null,agent:string}} */ ({run:null,agent:tops[0]?.from??'Writer'});
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
@@ -70,6 +74,7 @@ export function record(place,...tops) {
   if(name==='pin_handover_tools') { pins.push(row.id); row.tools??=args.spec??''; return ok(row.tools); }
   if(name==='answer_handover') {
    if(args.run===null||args.leg!==row.state) return ok(false);
+   if(row.stop_requested) { end(row); return ok(false); }
    if(row.state==='waiting') Object.assign(row,{target_run:args.run,state:'target'});
    else if(row.state==='handing') Object.assign(row,{answer_run:args.run,state:'answering'});
    else Object.assign(row,{follow_up_run:args.run,state:'follow_up'});
@@ -112,9 +117,10 @@ export function record(place,...tops) {
 
 /** One fake Engine per Agent, routed by profile, with every start logged in order. `ends` names the runs (by key) the
  * Engine ends otherwise than completed: failed, stopped or lost. `missedStops` is how many stop requests the Engines
- * miss (unreachable at the press) before they take one. @param {Record<string,'failed'|'stopped'|'lost'>} [ends] */
-export function engines(ends={},{missedStops=0}={}) {
- let missing=missedStops;
+ * miss (unreachable at the press) before they take one; `lostStarts` the idempotency keys whose first start is made but
+ * its answer lost. @param {Record<string,'failed'|'stopped'|'lost'>} [ends] @param {{missedStops?:number,lostStarts?:string[]}} [options] */
+export function engines(ends={},{missedStops=0,lostStarts=[]}={}) {
+ let missing=missedStops; const losing=new Set(lostStarts);
  const fakes=Object.fromEntries(Object.keys(team).map(agent=>[agent,fakeEngine()]));
  const started=/** @type {{agent:string,key:string,session:string,input:string,tools:any[]}[]} */([]);
  const stops=/** @type {{agent:string,run:string}[]} */([]);
@@ -122,7 +128,9 @@ export function engines(ends={},{missedStops=0}={}) {
   const agent=/** @type {string} */ (Object.keys(team).find(name=>team[name].profile===connection.profile));
   const fake=fakes[agent]; const engine=fake.engineFor(connection);
   return {...engine,
-   start:async(/** @type {any} */ args)=>{ const run=await engine.start(args); if(!started.some(entry=>entry.key===args.idempotencyKey)) started.push({agent,key:args.idempotencyKey,session:args.conversation,input:typeof args.input==='string'?args.input:'',tools:args.tools??[]}); return run; },
+   start:async(/** @type {any} */ args)=>{ const run=await engine.start(args); if(!started.some(entry=>entry.key===args.idempotencyKey)) started.push({agent,key:args.idempotencyKey,session:args.conversation,input:typeof args.input==='string'?args.input:'',tools:args.tools??[]});
+    if(losing.delete(args.idempotencyKey)) return {state:'unknown'};
+    return run; },
    stop:async(/** @type {string} */ id)=>{ stops.push({agent,run:id}); if(missing>0) { missing--; throw new Error('Engine unreachable'); } return engine.stop(id); },
    read:async(/** @type {string} */ id)=>{ const result=await engine.read(id); const run=fake.runs.find(entry=>entry.id===id);
     return run&&ends[run.key]&&result.state==='completed'?{...result,state:ends[run.key],reply:null,toolCalls:[]}:result; }};
