@@ -20,6 +20,7 @@ function databases() {
   if(name==='company_engine_target') return {data:[{profile,profiles:[profile]}],error:null};
   if(name==='conversation_agent') return {data:null,error:null};
   if(name==='reserve_conversation_turn') return {data:{state:'reserved',connection,profile,note:null},error:null};
+  if(name==='conversation_handover_agents') return {data:[],error:null};
   if(name==='pin_run') return {data:{tools:null},error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};

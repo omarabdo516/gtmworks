@@ -13,6 +13,7 @@ function databases(refused) {
   const rpc = async name => {
     if (name === 'conversation_agent') return refused ? { data: null, error: { code: '42501' } } : { data: null, error: null };
     if (name === 'reserve_conversation_turn') return { data: { state: 'reserved', connection: owners, profile: 'writer', note: null }, error: null };
+    if (name === 'conversation_handover_agents') return { data: [], error: null };
     if (['pin_run', 'pin_run_history', 'pin_run_model'].includes(name)) return { data: null, error: null };
     if (name === 'begin_start') return { data: 1, error: null };
     if (name === 'send_conversation_message') return { data: true, error: null };
@@ -44,6 +45,7 @@ test('a first message after an Agent is picked starts the Conversation with the 
   const rpc = async (/** @type {string} */ name, /** @type {any} */ given) => {
     if (name === 'conversation_agent') return { data: null, error: null };
     if (name === 'reserve_conversation_turn') return { data: { state: 'reserved', connection: owners, profile: 'writer', note: null }, error: null };
+    if (name === 'conversation_handover_agents') return { data: [], error: null };
     if (['pin_run', 'pin_run_history', 'pin_run_model'].includes(name)) return { data: null, error: null };
     if (name === 'begin_start') return { data: 1, error: null };
     if (name === 'send_conversation_message') { recorded.push({ agent: given.agent }); return { data: true, error: null }; }

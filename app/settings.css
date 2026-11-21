@@ -103,14 +103,6 @@
 .gw .sov .set-card { gap: var(--s4); padding: var(--s3); }
 .gw :is(.sov, .modal.team-dlg) .set-field { display: grid; gap: 6px; }
 .gw :is(.sov, .modal.team-dlg) .set-label { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
-.gw :is(.sov, .modal.team-dlg) .set-input {
-  display: block; width: 100%; height: 34px; min-height: 0; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
-  background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); outline: none; box-shadow: none;
-  transition: border-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
-}
-.gw :is(.sov, .modal.team-dlg) .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
-.gw :is(.sov, .modal.team-dlg) .set-input::placeholder { color: var(--gw-text-4); opacity: 1; }
-.gw :is(.sov, .modal.team-dlg) .set-input[readonly] { cursor: default; }
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .set-hint { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
 .gw .sov .set-textarea { height: auto; min-height: 88px; padding: var(--s2) 10px; line-height: 1.7; resize: vertical; }
@@ -125,15 +117,6 @@
 .gw .sov .segmented--field { justify-content: stretch; padding: 2px; border-radius: var(--gw-r-full); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; }
 .gw .sov .segmented--field button { flex: 1 1 0; padding: 5px 0; text-align: center; }
 @media (hover: hover) { .gw .sov .segmented :is(button, a):hover:not([aria-disabled="true"]) { color: var(--gw-text-1); } }
-.gw :is(.sov, .modal.team-dlg) .switch {
-  display: inline-flex; align-items: center; width: 32px; height: 20px; padding: 2px; flex: none; border-radius: var(--gw-r-full);
-  background: var(--gw-border-1); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
-}
-.gw :is(.sov, .modal.team-dlg) .switch::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF; box-shadow: #1C1C1C1F 0 1px 3px; transition: transform 320ms var(--gw-ease-spring), background-color var(--gw-dur) var(--gw-ease-out); }
-.gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"] { background: var(--gw-primary); }
-.gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
-[dir="ltr"] .gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"]::after { transform: translateX(12px); }
-:root[data-theme="dark"] .gw :is(.sov, .modal.team-dlg) .switch[aria-checked="true"]::after { background: #121212; }
 /* A skill the Engine says the Agent learned on its own (#180; design-reference: .sk-learned). No version: the Engine
    numbers none. Its link to the steps comes with #181. */
 .gw .sov .sk-learned { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); --od-icon-size: 12px; }
@@ -427,27 +410,7 @@
 .gw .sov .bk-cmd .sub-code { margin-top: 2px; max-width: 100%; }
 .gw .sov .bk-copy { flex: none; }
 
-/* Recurring tasks (#31; design-reference/index.html: "routines: next run, run now", .sov-ag-l, .panel-form): each
-   Routine's row with its schedule, next run and Run now beside its switch, and the form that adds one or changes when it
-   runs, set with the overlay's own inputs. */
+/* A Routine section's Agent in Settings, Recurring tasks (#31; design-reference/index.html: .sov-ag-l). The rows and
+   their form are drawn in the details too, so they live in app/shell.css. */
 .gw .sov .sov-ag-l { display: inline-flex; align-items: center; gap: var(--s2); color: var(--gw-text-1); }
-.gw .sov .panel-row.rt-row { align-items: flex-start; padding-block: 10px; }
-.gw .sov .rt-row .panel-row__icon { margin-top: 1px; }
-.gw .sov .rt-row .switch { margin-top: 2px; }
-.gw .sov .rt-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--s2); margin-top: 6px; }
-.gw .sov .rt-next { flex: 1 1 auto; min-width: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-1); }
-.gw .sov .rt-next.is-off { color: var(--gw-text-3); }
-.gw .sov .rt-run { margin-inline-start: auto; font-size: var(--gw-fs-xs); font-weight: 600; color: var(--gw-text-1); }
-.gw .sov .rt-change { font-size: var(--gw-fs-xs); margin-inline-end: -6px; }
-.gw .sov .rt-running { margin-inline-start: auto; font-size: var(--gw-fs-xs); line-height: 22px; color: var(--gw-text-2); animation: gw-breathe 1.4s ease-in-out infinite; }
-.gw .sov :is(.rt-row, .rt-new) .set-err { display: block; margin-top: 4px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
-.gw .sov .rt-form { display: grid; gap: var(--s2); padding: var(--s2) 0 0; }
-.gw .sov .rt-new .rt-form { padding: var(--s3); }
-.gw .sov .rt-when { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.gw .sov .rt-when .rt-field { flex: 1 1 120px; }
-.gw .sov .rt-field { display: grid; gap: 4px; min-width: 0; }
-.gw .sov .rt-field__l { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
-.gw .sov .rt-form select.set-input { appearance: auto; padding-inline-end: 6px; }
-.gw .sov .rt-form .panel-form__err { font-size: var(--gw-fs-xs); color: var(--gw-danger-text); }
-.gw .sov .rt-delete { margin-inline-end: auto; }
-@media (prefers-reduced-motion: reduce) { .gw .sov .rt-running { animation: none; } }
+

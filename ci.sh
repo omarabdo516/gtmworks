@@ -253,13 +253,12 @@ case "${1:-check}" in
   # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's.
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
   docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
-  images="$images $sandbox_tag"
-  # The app image, as CI's image job builds it once and every area loads it (#403, GTMWORKS_IMAGE_PREBUILT): built here on
-  # this host from the committed checkout, under the tag the source install's compose file names, because a build inside
-  # the machine cannot pull its base images. The release areas make their test releases from it.
-  web_tag=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1)
-  docker build -q --build-arg NEXT_SKIP_CHECKS=true -t "$web_tag" "$work/src" > /dev/null
-  images="$images $web_tag"
+  # The app image the same way, as CI's install jobs load the image job's build under the compose file's tag and set
+  # GTMWORKS_IMAGE_PREBUILT (#411): built here through scripts/docker-build.sh, so a cloud session's CA reaches its npm
+  # steps (#562), and never inside the machine, whose nested network stalls.
+  web_tag=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' "$work/src/docker-compose.install.yml" | head -n 1)
+  bash scripts/docker-build.sh -q -t "$web_tag" "$work/src" > /dev/null
+  images="$images $sandbox_tag $web_tag"
   export GTMWORKS_IMAGE_PREBUILT=true
   # Behind an HTTPS proxy (a cloud session) Node reaches GitHub through it, as curl and git do.
   [[ -z ${HTTPS_PROXY:-}${https_proxy:-} ]] || export NODE_USE_ENV_PROXY=1

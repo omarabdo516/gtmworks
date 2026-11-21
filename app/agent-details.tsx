@@ -1,6 +1,6 @@
 'use client';
 import '@/app/log.css';
-import { Suspense, memo, use, useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as KeyEvent, type ReactNode } from 'react';
+import { Suspense, memo, use, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as KeyEvent, type ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
@@ -12,6 +12,7 @@ import { pickTab, statusKeys, type DetailsTab } from '@/lib/agent-details.mjs';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { rememberOpener, takeReturnFocus } from '@/app/settings-opener';
 import type { AgentDetailsView } from '@/app/agent-details-server';
+import { DetailsChat, onShowRoutines } from '@/app/details-routines';
 
 export type DetailsAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,made?:Made|null};
 // The reference keeps the details beside the chat from 1024px up; below that they slide over it (design-reference:
@@ -75,14 +76,21 @@ export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,la
 // `details` may still be on its way (the chat page streams it, decision 0042): the panel is drawn at once with the Agent,
 // and what its reads give (the state, the tab's lists) takes its place when they arrive. `tab` is then the open tab.
 type Details=AgentDetailsView|Promise<AgentDetailsView>;
-export function AgentDetails({panel,agent,details,tab:first,slug}:{panel:DetailsPanel,agent:DetailsAgent,details:Details,tab?:DetailsTab,slug:string}) {
+// `suggest` puts a sentence in this Agent's chat message field (the Routines section's "Try writing", #205); it is
+// missing for a reader who may not write.
+export function AgentDetails({panel,agent,details,tab:first,slug,suggest}:{panel:DetailsPanel,agent:DetailsAgent,details:Details,tab?:DetailsTab,slug:string,suggest?:(sentence:string)=>void}) {
  const {t,language}=useI18n();
  const [tab,setTab]=useState<Tab>(()=>pickTab(first??(details as AgentDetailsView).tab) as Tab);
  // Back from the Agent's settings the gear takes the focus again (reference: the overlay's close); over the chat the
  // panel starts closed, so it opens first. This runs after the panel's own focus on its close button. The first
  // hydrated render reads the window as wide (the server's answer), so it waits until the width is the real one.
  const back=useRef<boolean|null>(null);
- const {overlay,expanded,open:show}=panel;
+ const {overlay,expanded,open:show,close:hide}=panel;
+ // "See it in details" under a reply in which the Agent made a Routine (#205): the panel opens on Activity, where the
+ // Routines section takes the ask.
+ useEffect(()=>onShowRoutines(()=>{ show(); setTab('activity'); }),[show]);
+ // "Try writing" leaves the panel where it sits beside the chat, and closes it where it covers the chat.
+ const chat=useMemo(()=>({suggest:suggest&&((sentence:string)=>{ if(overlay) hide(); suggest(sentence); })}),[suggest,overlay,hide]);
  useEffect(()=>{
   back.current??=takeReturnFocus(id=>id==='dp-settings')!==null;
   if(!back.current||window.matchMedia(overlayQuery).matches!==overlay) return;
@@ -111,7 +119,7 @@ export function AgentDetails({panel,agent,details,tab:first,slug}:{panel:Details
   </div>
   <div className="segmented dp-tabs" role="tablist" aria-label={t('chatDetailsOf',agent.name)} onKeyDown={move}>{tabs.map(item=>
    <button key={item.key} type="button" role="tab" id={`dp-tab-${item.key}`} aria-selected={tab===item.key} aria-controls="dp-panel" tabIndex={tab===item.key?0:-1} onClick={()=>setTab(item.key)}>{t(item.label)}</button>)}</div>
-  <div id="dp-panel" role="tabpanel" aria-labelledby={`dp-tab-${tab}`} className="dp-sections"><Later details={details} part={tab}/></div>
+  <div id="dp-panel" role="tabpanel" aria-labelledby={`dp-tab-${tab}`} className="dp-sections"><DetailsChat value={chat}><Later details={details} part={tab}/></DetailsChat></div>
  </DetailsShell>;
 }
 

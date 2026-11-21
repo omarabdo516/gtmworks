@@ -676,7 +676,7 @@ function conversationDatabases({profile,reserve=null,record=null}) {
    if(name==='release_conversation_run') return {data:true,error:null};
    return {data:null,error:{message:'unexpected'}}; },
   from:()=>{ const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:'a9000000-0000-0000-0000-000000000001'},error:null})}; return chain; }};
- const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_history'?{data:null,error:null}:name==='pin_run_model'?{data:null,error:null}:{data:null,error:{message:'unexpected'}}; }};
+ const service={rpc:async(name)=>{ order.push(`service ${name}`); return name==='begin_start'?{data:1,error:null}:name==='conversation_handover_agents'?{data:[],error:null}:name==='pin_run'?{data:{tools:null,rules:[]},error:null}:name==='pin_run_history'?{data:null,error:null}:name==='pin_run_model'?{data:null,error:null}:{data:null,error:{message:'unexpected'}}; }};
  return {db,service,order};
 }
 const engine=order=>({engineFor:connection=>({start:async()=>{ order.push(`start ${connection.profile}`); return 'run_1'; }})});
@@ -690,7 +690,7 @@ test('a run is reserved on its pinned profile before Hermes is called, and recor
  assert.equal(db.args.reserve_conversation_turn.message,'Hi');
  // The record names the pin the run started on, the one the reservation made.
  assert.equal(db.args.send_conversation_message.started_on,'f9000000-0000-0000-0000-000000000001');
- assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','service pin_run','service pin_run_history','service pin_run_model','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
+ assert.deepEqual(order,['conversation_agent','reserve_conversation_turn','service conversation_handover_agents','service pin_run','service pin_run_history','service pin_run_model','service begin_start',`start ${companyProfile(two)}`,'send_conversation_message']);
 });
 
 test('a run never starts on another company\'s profile, nor while the profile\'s tools are not the fixed set', async () => {
