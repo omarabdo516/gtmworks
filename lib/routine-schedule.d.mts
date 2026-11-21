@@ -1,4 +1,4 @@
-export type ScheduleForm = { kind: 'daily', h: number, m: number } | { kind: 'weekly', dow: number, h: number, m: number } | { kind: 'hourly' };
+export type ScheduleForm = { kind: 'daily', h: number, m: number } | { kind: 'weekly', dow: number, h: number, m: number } | { kind: 'monthly', h: number, m: number } | { kind: 'hourly' };
 type T = (key: string, ...values: unknown[]) => string;
 export function cronOf(form: unknown): string | null;
 export function formOf(expr: unknown): ScheduleForm | null;

@@ -5,7 +5,8 @@
 ## The reference is frozen
 
 - Nobody edits it. Its source of truth is the frozen approval `d893-approved-2026-11-12`, kept outside this repository, and its `SHA256SUMS` ships with it. Everything in that folder is copied into the repo unchanged, dot-folders included.
-- `tests/design-reference.test.mjs` recomputes every checksum. It fails when a file changes, goes missing, or is added without a line in `SHA256SUMS`. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The comparison tool recomputes every checksum before it captures (`referenceProblems` in `scripts/design-compare-lib.mjs`). It stops when a file changes, goes missing, or is added without a line in `SHA256SUMS`, and the `Design compare` workflow runs it on every pull request that changes `design-reference/`. `GTMWORKS_DESIGN_REFERENCE` points the tool at another copy; its test gives it a broken one. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The tool is the reference's one reader. No CI suite compares the product with it (#271): matching it is a delivery check, done once per screen (below).
 - The product never serves it. Next serves only its routes, and the runtime image copies only the build output. `tests/design-reference.spec.ts` asks the production build for `/design-reference/...` and expects 404.
 
 ## Opening the reference by hand
@@ -65,6 +66,9 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `agent-screen` | The SEO Agent's chat, details on Activity: its screen card, asleep (#21). The product always shows the empty frame: the pinned Engine shows no Agent's screen | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `agent-tools` | The Ads Agent's details, Activity: "Connected tools", Meta Ads and Google Ads connected and GA4 not (#204) | none (needs an Agent with apps in its own Engine profile; pass `--built-path /c/rs-learning/chat/<its id>`) |
 | `agent-tools-manage` | The same, with Manage pressed: each connected row ends in Disconnect and the heading reads Done (#204) | none (as `agent-tools`) |
+| `agent-routines` | The Ads Agent's details, Activity: "Routines" with its count and rows, each with its schedule, next run, Run now and the switch (#205) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002` (needs the fixture's Ads on a profile of its own whose Engine holds Routines) |
+| `agent-routines-add` | The same, with Add pressed: the one-line field under the rows (#205) | as `agent-routines` |
+| `agent-routines-empty` | A newly made Agent's details, Activity: "No routines yet" and Try writing (#205) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000003` (the fixture's SEO & Content on a profile of its own with no Routine) |
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
 | `invite` | Settings, Company: "Invite a member", one invitation sent (its row marked Invite sent and the toast), then the form opened again (#185). The same steps run on the built page | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
@@ -89,6 +93,8 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `permission-card` | Sidebar, the SEO article chat (`th-seo`): the approval card to publish the article on the academy website, waiting, built in the fixture's chat with Ads (#163) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000008`) |
 | `permission-waiting` | Sidebar, Marketing board, scrolled to the SEO article's card waiting on Omar's OK to publish (`c-seo`): the reference's "Waiting on you" for a request an Agent's Run waits on (#165) | `/c/rs-learning/approvals`, scrolled to its permission item (needs the fixture's waiting request, #163) |
 | `permission-channel` | Sidebar, the SEO article chat (`th-seo`): the approval card, waiting. The reference draws a request only in a chat, so a channel's request is compared with it (#165) | none (pass `--built-path /c/rs-learning/channels/<id>` of a channel in which the signed-in Member called an Agent whose Run waits on their OK) |
+| `standing-activity` | Always allow on the SEO article chat's approval (`th-seo`), then SEO's details on Activity: its standing permission at the end (#166) | none (pass `--built-path /c/rs-learning/chat/<agent>` of an Agent whose own profile keeps an entry an Always allow put there) |
+| `standing-settings` | The same Always allow, then Settings, Agents, SEO: its standing permission after Tools (#166) | none (pass `--built-path /c/rs-learning/settings?section=agents&agent=<agent>` of that Agent) |
 | `run-steps` | Sidebar, the Meta campaign chat (`th-meta`): Ads's reply with "Used 4 tools · 41 sec" pressed open, its four steps, one skipped (#141) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000007`; the steps are pressed open on both) |
 | `made-agent` | Settings, Agents, Ads: the page of an Agent Lead made, with when and at whose request, and the rules it was told (#18) | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `rule-saved` | Sidebar, the chat in which Omar told Ads a lasting rule (`th-rule-ads`), with the saved line under Ads's reply (#18) | none (a uuid path; with the fixture pass `--built-path /c/rs-learning/conversations/62000000-0000-0000-0000-000000000003`) |
@@ -97,6 +103,8 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `ask-agent` | Viewing as Youssef (team), his "Ask for an agent" tile: Lead's chat with the Member's hint (#17) | `/c/rs-learning/chat?new=agent` (with `--sign-in reviewer@example.com`) |
 | `request-sent` | Viewing as Youssef, his chat with Lead (`th-wa`) holding his request, not made yet (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
 | `request-waiting` | Omar's chat with Lead (`th-wa-req`): Youssef's request with No and Make it. The product decides it where it waits (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
+| `change-opened` | Omar's chat with Lead (`th-lead-model`): Lead's proposed model for Analyst. Built: its board card in Waiting on you, opened, with the "Now" row (#484) | `/c/rs-learning/approvals`, the board card opened (needs the fixture and an Engine that holds Analyst's profile) |
+| `change-edit` | The same card after "Edit, then approve": the model choices (#484) | `/c/rs-learning/approvals`, the board card opened, then Edit (the same) |
 | `request-made` | Omar presses Make it, then viewing as Youssef, his chat with the made request (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
 | `access-ask` | Viewing as Youssef, a new chat with Lead asking for an SEO article, the job of an agent hidden from him: Lead's sentence and the card "Ask Sara for it?" with its two buttons (#167) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000020` (needs the fixture; with `--sign-in reviewer@example.com`) |
 | `access-sent` | The same, after "Ask Sara": the card reads "Sent to Sara · time" (#167) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000021` (needs the fixture; with `--sign-in reviewer@example.com`) |
@@ -167,6 +175,21 @@ gh workflow run design-compare.yml --ref <branch> -f screen=connect-card -f fixt
 ```
 
 Add `-f lang=en`, `-f theme=light` and `-f width=390` for the other variants; both sides always use the same width, language and theme.
+
+## The delivery record
+
+A screen, or a part's motion, is matched with the reference once, in the pull request that delivers it. That pull request's body carries its delivery record, under a `## Delivery record` heading:
+
+```md
+## Delivery record
+
+- Screen: `NAME` (`scripts/design-compare-lib.mjs`), or the motion issue it ships.
+- Captures: the side-by-side image for each width, language and theme the issue names (at least 1440 and 390 wide, Arabic and English), made by `npm run design:compare` or the `Design compare` workflow.
+- Motion: what moves, its time and curve as the reference has it, and the test that holds the behaviour (reduced motion, a timer, a press).
+- Differences kept on purpose: each one with its reason, or "none".
+```
+
+The same pull request adds its row to [DELIVERY.md](DELIVERY.md), which lists every delivered screen with the pull request that holds its record. After delivery the screen's look is our own: the visual lane compares it with our last approved screenshots (`docs/agents/visual-comparison.md`), not with the reference.
 
 ## Demo-only parts of the reference (do not build)
 

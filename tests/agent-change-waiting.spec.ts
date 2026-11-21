@@ -80,7 +80,7 @@ test('the Owner sees each waiting proposal on its Agent\'s row, its number on Ag
 
  // Writer's proposal came from the Manager's chat, which only the Manager may open: it opens in Waiting on you.
  await page.goto(settings(writer));
- await expect(note(page).locator(':scope > span')).toHaveText('Writer proposed New model: anthropic/claude-sonnet-5-5 · waiting for your OK. Nothing changes here before that.');
+ await expect(note(page).locator(':scope > span')).toHaveText('Writer proposed New model: claude-sonnet-5-5 · waiting for your OK. Nothing changes here before that.');
  await expect(page.locator('#sov-pend + #sov-agent-panel')).toHaveCount(1);
  await page.getByRole('tab',{name:'Memory'}).click();
  await expect(page).toHaveURL(/tab=memory/);
@@ -88,7 +88,7 @@ test('the Owner sees each waiting proposal on its Agent\'s row, its number on Ag
  await note(page).getByRole('link',{name:'Open the proposal'}).click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/approvals#change-${proposalId(writer)}$`));
  await expect(page.locator('.sov')).toHaveCount(0);
- await expect(page.locator(`#change-${proposalId(writer)}`)).toContainText('New model: anthropic/claude-sonnet-5-5');
+ await expect(page.getByRole('dialog').locator(`#change-${proposalId(writer)}`)).toContainText('New model: claude-sonnet-5-5');
 
  // Analyst's was proposed by Lead in the Owner's own chat: it opens there, on its card.
  await page.goto(settings(analyst));
@@ -112,7 +112,7 @@ test('the Manager whose chat it came from reads the note waiting for the Owner, 
  await expect(row(page,analyst)).toHaveCount(0);
  await expect(agentsEntry(page)).toHaveAccessibleName('Agents');
  await page.goto(settings(writer));
- await expect(note(page).locator(':scope > span')).toHaveText('Writer proposed New model: anthropic/claude-sonnet-5-5 · waiting for عمر. Nothing changes here before that.');
+ await expect(note(page).locator(':scope > span')).toHaveText('Writer proposed New model: claude-sonnet-5-5 · waiting for عمر. Nothing changes here before that.');
  await expect(note(page).getByRole('link',{name:'Open the proposal'})).toHaveAttribute('href',`/c/rs-learning/conversations/${managerTalk}#change-${proposalId(writer)}`);
  await note(page).getByRole('link',{name:'Open the proposal'}).click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${managerTalk}$`));
@@ -131,19 +131,21 @@ test('a Contributor who sees the Agent but may not open the chat gets no note, n
 
 test('each answer takes its note, mark and number away',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/approvals');
- await page.locator('.chg-card').filter({hasText:'New model: anthropic/claude-sonnet-5-5'}).getByRole('button',{name:'Approve'}).click();
- await expect(page.locator('.chg-card')).toHaveCount(1);
+ await page.getByRole('button',{name:'Writer on claude-sonnet-5-5?'}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Approve',exact:true}).click();
+ await expect(page.locator('.chg-kcard')).toHaveCount(1);
  await page.goto(settings(writer));
  await expect(page.getByRole('tablist',{name:'Writer'})).toBeVisible();
  await expect(note(page)).toHaveCount(0);
  await expect(agentsEntry(page)).toHaveAccessibleName('Agents 1 waiting for your OK');
 
  await page.goto('/c/rs-learning/approvals');
- const soul=page.locator('.chg-card').filter({hasText:'New core instructions'});
+ await page.locator('.chg-kcard').filter({hasText:'New core instructions'}).locator('.kcard__title').click();
+ const soul=page.getByRole('dialog').locator('.chg-card');
  await soul.getByRole('button',{name:'Decline'}).click();
  await soul.getByRole('textbox',{name:'Reason for declining'}).fill('Keep it as it is.');
  await soul.getByRole('button',{name:'Decline'}).click();
- await expect(page.locator('.chg-card')).toHaveCount(0);
+ await expect(page.locator('.chg-kcard')).toHaveCount(0);
  await page.goto(settings());
  await expect(agentsEntry(page)).toHaveAccessibleName('Agents');
  await expect(page.locator('.panel-row__meta--wait')).toHaveCount(0);

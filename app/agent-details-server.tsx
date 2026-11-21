@@ -15,8 +15,11 @@ import { detailsTabs } from '@/app/agent-details-tabs';
 import { ConnectedTools } from '@/app/connected-tools';
 import { AgentLibrary } from '@/app/agent-library';
 import { AgentMemory } from '@/app/agent-memory';
+import { AgentRoutines } from '@/app/agent-routines';
 import { companyKnowledgeHref } from '@/lib/settings-overlay.mjs';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
+import { readAgentPermissions } from '@/lib/standing-permissions.mjs';
+import { StandingPermissions } from '@/app/standing-permissions';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentStatus,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
@@ -43,7 +46,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
  const talkFiles=((talkFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,conversation_id:string,conversations:{agent_name:string}}[]).map(file=>({...file,agent_name:file.conversations.agent_name}));
  const talks=[...new Set(talkFiles.map(file=>file.conversation_id))];
- const [{items:waiting},{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts,memory]=await Promise.all([waitingRead,
+ const [{items:waiting},{data:stages},{data:checklist},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts,memory,standing]=await Promise.all([waitingRead,
   ids.length?db.from('work_stages').select('id,name,board_column').eq('company_id',company):Promise.resolve({data:[]}),
   ids.length?db.from('work_checklist').select('card_id,title,done').eq('company_id',company).in('card_id',ids).order('id'):Promise.resolve({data:[]}),
   run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
@@ -54,6 +57,8 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
   // The Agent's memory (#350) is its own Engine profile's; an Agent the reader does not see is not found, and an Engine
   // that cannot be read leaves the tab unread rather than empty.
   readAgentMemory(db,{company,agent}).catch(()=>({state:'failed' as const,main:false,notes:null})),
+  // Its standing permissions (#166), from that same own profile; one that cannot be read draws no section.
+  readAgentPermissions(db,{company,agent}).catch(()=>({state:'failed',permissions:null})),
  ]);
  const tasks=agentTasks(cards,stages||[],checklist||[],waiting);
  const recent=latestActivity(rows,feedSince());
@@ -93,7 +98,10 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  const library=role==='owner'||role==='manager'?<AgentLibrary company={company} slug={slug} agent={agent} name={name}/>:undefined;
 
  return {status:agentStatus({waitingMine:waiting.some(item=>item.card_id!=null&&ids.includes(item.card_id)),running:!!run}),tab:pickTab(tab),
-  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
+  tabs:detailsTabs({t,slug,agent,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,
+   // The Agent's Routines (#205): read in the browser too; the Owner and Managers change them, as in Settings (#31).
+   routines:<AgentRoutines key={agent} company={company} agent={agent} name={name} canManage={role==='owner'||role==='manager'} canWrite={writer}/>,
+   permissions:standing.permissions?.length?<StandingPermissions key={`standing-${agent}`} company={company} agent={agent} permissions={standing.permissions} canRevoke={role==='owner'||role==='manager'} returnTo="dp-settings"/>:undefined,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
    memory:memory.state==='found'?<AgentMemory key={agent} company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>:undefined,
    log,logCount:count??rows.length})};
 }

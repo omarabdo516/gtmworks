@@ -34,7 +34,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
  // itself, so a fake's reply, questions and approvals read a person's words as they always did.
  const inputText=input=>typeof input==='string'?input:Array.isArray(input)?(input.at(-1)?.content??[]).flatMap(part=>part.type==='text'?[part.text]:[]).join(''):String(input);
- const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,key?:string,session?:string,input:any,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
+ const settings={version:'0.23.0',status:200,key:'test-only-key',features:{run_submission:true,run_events_sse:true},requests:/** @type {{method?:string,path?:string,authorization?:string,session?:string,idempotency?:string}[]} */([]),runs:/** @type {{id:string,profile?:string,key?:string,session?:string,input:any,instructions?:string,history?:{role:string,content:string}[],body?:string,reads:number,stopped?:boolean,asked:{prompt_id:string,question:string,choices:string[],multi_select:boolean,answer?:string,settled:'answered'|'expired'|null}[],approvals:{request_id:string,description:string,command:string,patternKeys:string[],kept:string[],choices:string[],choice?:string,settled:'answered'|'expired'|null}[]}[]} */([]),pendingReads:0,loseStarts:0,stallEvents:false,reply:input=>`Reply to: ${input}`,
   // How a finished run ends and the usage it reports; a run cleared from runs is one Hermes lost (404).
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
@@ -48,7 +48,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // request in `approval` until it is answered on the run's approval route, times out (expireApproval(run), the
   // profile's approvals.timeout) or the run is stopped. The reply is given each request's choice, null for one that timed
   // out.
-  approvals:/** @type {(input:string)=>{description:string,command:string,choices?:string[]}[]} */(()=>[]),
+  // A request is a flagged command, reported under its `keys` (its description, or 'recursive delete' when that is
+  // blank), or with `app` an app's tool on an untrusted server, in the trust gate's own words with the placeholder key
+  // mcp_elicitation (tools/mcp_tool_handlers.py _ask_for_call). Always keeps the command's keys, or mcp:<server>/<tool>,
+  // in the run's profile's command_allowlist (#166), and a later request whose kept key is there is not asked: it reads
+  // as allowed (`standing`), as tools/approval.py _approval_scope does, at once after the list changes.
+  approvals:/** @type {(input:string)=>{description?:string,command?:string,choices?:string[],keys?:string[],app?:{server:string,tool:string}}[]} */(()=>[]),
   // `permits` keeps every approval request's status and body; with `flatPermitErrors` the route answers a refusal's code
   // at the top of its body instead of under `error`.
   permits:/** @type {{run:string,status:number,body:any}[]} */([]),flatPermitErrors:false,
@@ -170,6 +175,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,model?:string,started_at?:number,ended_at?:number}>} */(new Map()),
   approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
+ const allowlistOf=name=>{ const list=profileOf(name)?.config?.command_allowlist; return Array.isArray(list)?list:[]; };
+ // A request in the pinned release's words, with the keys it is reported under and the ones an always answer keeps.
+ const requestOf=each=>each.app?{description:each.description??`Server '${each.app.server}' is configured 'trust: untrusted'. Approve to run '${each.app.tool}' once, for this session, or always, or deny to block it.`,
+  command:each.command??`MCP tool '${each.app.tool}' on UNTRUSTED server '${each.app.server}' wants to run. This tool is write-capable (no readOnlyHint=true annotation) and may modify external state.`,
+  patternKeys:['mcp_elicitation'],kept:[`mcp:${each.app.server}/${each.app.tool}`]}
+  :(keys=>({description:each.description??'',command:each.command??'',patternKeys:keys,kept:keys}))(each.keys??[each.description||'recursive delete']);
  const credentialsOf=name=>profileOf(name)?.credentials||{};
  // A cron job as the pinned release stores and lists it (cron/jobs.py create_job, web_server_cron.py
  // _annotate_cron_job). Only the shapes gtmworks reads are parsed: a five-field cron expression and "every <n>m|h".
@@ -248,11 +259,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const sent=JSON.parse(raw);
      if(settings.refusedModels.has(sent.model)) return send(response,400,{error:{message:`Model '${sent.model}' is not available`,type:'invalid_request_error'}});
      const asked=settings.questions(inputText(sent.input)).map(each=>({prompt_id:randomUUID().replaceAll('-','').slice(0,10),question:each.question,choices:each.choices??[],multi_select:each.multi_select===true,settled:null}));
-     const approvals=settings.approvals(inputText(sent.input)).map(each=>({request_id:randomUUID().replaceAll('-',''),description:each.description,command:each.command,choices:each.choices??['once','session','always','deny'],settled:null}));
+     const approvals=settings.approvals(inputText(sent.input)).map(each=>({request_id:randomUUID().replaceAll('-',''),...requestOf(each),choices:each.choices??['once','session','always','deny'],settled:null}));
      const runProfile=decodeURIComponent(request.url.match(/^\/p\/([^/]+)\//)?.[1]||'default');
      const asks=settings.routineAsks(inputText(sent.input));
      if(asks&&enabledToolsets(profileOf(runProfile)?.config).includes('cronjob')) cronStore(runProfile).push(cronJob({...asks,origin:{platform:'api_server'}}));
-     run={id:`run_${instance}_${settings.runs.length+1}`,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
+     run={id:`run_${instance}_${settings.runs.length+1}`,profile:runProfile,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
      streams.set(run.id,{backlog:[],next:0,ended:false,readers:new Set()});
     }
     // A start whose answer is lost: the run exists, but the connection closes before any answer (loseStarts of them).
@@ -273,9 +284,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      question:`${waiting.question}\nReply "skip" to skip this question.`,choices:waiting.choices.map((choice,index)=>index===0&&waiting.choices.length>=2?`${choice} (Recommended)`:choice),multi_select:waiting.multi_select}]});
     // The request as the pinned release sends it (api_server.py _approval_request_event): its words, the envelope, the
     // choices it takes back.
+    const standing=allowlistOf(run.profile);
+    for(const each of run.approvals||[]) { if(each.settled) continue; if(!each.kept.some(key=>standing.includes(key))) break; Object.assign(each,{settled:'answered',choice:'standing'}); }
     const asking=run.approvals?.find(each=>!each.settled);
     if(asking) return send(response,200,{object:'hermes.run',run_id:run.id,status:'waiting_for_approval',session_id:run.session,last_event:'approval.request',...times,pending_controls:[],
-     approval:{command:asking.command,description:asking.description,pattern_key:'recursive delete',pattern_keys:['recursive delete'],request_id:asking.request_id,timeout_s:300,
+     approval:{command:asking.command,description:asking.description,pattern_key:asking.patternKeys[0],pattern_keys:asking.patternKeys,request_id:asking.request_id,timeout_s:300,
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
@@ -303,6 +316,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const asking=run.approvals.find(each=>!each.settled&&(!id||each.request_id===id));
      if(!asking) return permitted(409,{error:{message:`Run has no pending approval: ${run.id}`,code:'approval_not_pending'}});
      Object.assign(asking,{settled:'answered',choice});
+     if(choice==='always') { const home=profileOf(run.profile); if(home) { home.config={...home.config,command_allowlist:[...new Set([...allowlistOf(run.profile),...asking.kept])]}; if(run.profile==='default') settings.defaultConfig=home.config; } }
      return permitted(200,{object:'hermes.run.approval_response',run_id:run.id,choice,...(id?{request_id:id}:{}),resolved:1});
     }
     const answered=(status,result)=>{ settings.answers.push({run:runAction[1],status,body}); return send(response,status,result); };
@@ -711,10 +725,17 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      keepServers(body.servers); return send(response,200,{ok:true});
     }
     const name=(body?.name||'').trim();
-    if(!name||body?.command) return send(response,400,{detail:'Provide exactly one of URL or command'});
+    // hermes_cli/web_server_mcp.py _normalize_mcp_server_create: exactly one of an address or a command (stdio), and a
+    // stdio server takes no HTTP sign-in.
+    if(!name||Boolean((body?.url||'').trim())===Boolean((body?.command||'').trim())) return send(response,400,{detail:'Provide exactly one of URL or command'});
     if(Object.hasOwn(servers,name)) return send(response,409,{detail:`Server '${name}' already exists`});
     const auth=(body.auth||'none').toLowerCase();
     if(!['none','oauth','header'].includes(auth)) return send(response,400,{detail:'Unsupported auth mode'});
+    if(body.command) {
+     if(auth!=='none'||body.bearer_token!==undefined) return send(response,400,{detail:'HTTP authentication is not supported for stdio MCP servers'});
+     keepServers({...servers,[name]:{command:body.command,...(Array.isArray(body.args)&&body.args.length?{args:[...body.args]}:{})}});
+     return send(response,200,{name,transport:'stdio',url:null,command:body.command,args:body.args||[],auth:null,enabled:true,tools:null,source:'config',plugin:null});
+    }
     if(auth==='header'&&!body.bearer_token) return send(response,400,{detail:'Bearer token is required'});
     const cfg={url:body.url,...(auth==='oauth'?{auth:'oauth'}:{}),...(auth==='header'?{headers:{Authorization:'Bearer MCP_BEARER_TOKEN'}}:{})};
     if(auth==='header') settings.serverTokens.set(`${scoped}:${name}`,String(body.bearer_token));

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # The install proof, one command of the repo (#402): each CI install job runs this file for its area on an isolated
 # Docker machine and holds no check of its own, and `./ci.sh install [area]` starts such a machine here and runs it.
-# Without an area the nine areas (spec #401's seven, `rollback` and `engines-update`, #389) run one after another, then the profile-size measurement; with one, only
+# Without an area every area (spec #401's seven, `rollback` and `engines-update`, #389, and those named below) run one after another, then the profile-size measurement; with one, only
 # that area runs, on a fresh Docker machine: `first-install` (the first install and its repeat), `companies` (Companies
 # and their Engines), `agents` (Agents on their Engines), `backup` (backup and restore), `proxy` (the public address
-# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `previous-archive` (the previous release's own archive restored), `sandbox-update`
+# behind a proxy), `rollback` (a failed update rolled back), `update` (the update between releases), `previous-archive` (the previous release's own archive restored), `release-update` (the latest published release, read
+# from the releases list, updated to this one, #483), `sandbox-update`
 # (an install the release before the work sandbox made, updated to this one, #397), `staged-update` (the staged removal of
 # Agent levels: updates that fail after its first step, then the cutover, ADR 0023), `sizes` (the measured
 # sizes and the default sandbox limits a render finishes within, #400), `engines-update` (a release that pins another Engine image), `one-line` (the one-line install) and `measure` (the
@@ -13,7 +14,8 @@
 # (#406–#409), so no area needs another to have run. The helpers the areas share are in scripts/ci-install-lib.sh,
 # sourced below, so each is written once.
 # DOCKER_HOST names that machine; RUNNER_TEMP is a scratch folder; INSTALL_REF and GH_TOKEN come from CI or ci.sh
-# (GH_TOKEN only reaches the update's source download, scripts/install.sh).
+# (GH_TOKEN only reaches the update's source download, scripts/install.sh, and the release-update area's releases list,
+# scripts/latest-release.mjs).
 set -e
 # An install piped into tee keeps its own exit status.
 set -o pipefail
@@ -90,6 +92,17 @@ engine_key=$(first_engine_key)
 # The Engine's key is in the Engine's own file, owner-only, and never in the install's environment file (#385).
 [[ $engine_key =~ ^[a-f0-9]{64}$ && $(stat -c %a .engines/first/.env) == 600 ]] || fail 'the Engine key is in .engines/first/.env'
 if grep -q '^HERMES_API_KEY=' .env.install; then fail '.env.install holds no Engine key'; fi
+# The app and the worker hold only the values they read (#446): neither the database password, pgsodium's root key nor
+# the JWT secret is in their environment, by name or by value, while they still answer.
+for service in web worker; do
+  environment=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(compose ps -q "$service")") || fail "inspect the $service container"
+  for name in POSTGRES_PASSWORD PGSODIUM_ROOT_KEY SUPABASE_JWT_SECRET; do
+    value=$(sed -n "s/^$name=//p" .env.install)
+    [[ $value =~ ^[a-f0-9]{64}$ ]] || fail ".env.install holds $name"
+    if grep -q "^$name=" <<< "$environment" || grep -qF "$value" <<< "$environment"; then fail "the $service container holds no $name"; fi
+  done
+  grep -q '^SUPABASE_SERVICE_ROLE_KEY=' <<< "$environment" || fail "the $service container holds the service-role key it reads"
+done
 [[ $(db -c "select key_encrypted from public.company_engines where id=(select engine_id from public.companies where id='$company_id')") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
 compose exec -T -e EXPECTED_KEY="$engine_key" web \
   node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='$engine_address'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
@@ -668,6 +681,52 @@ second_pwd=$(sed -n 's/.*"pwd":"\/work\/\([^"]*\)".*/\1/p' sandbox-proof.log | t
 if docker exec "$engine_id" sh -ec "test -e /work/$sandbox_marker-terminal.txt -o -e /work/$sandbox_marker-file.txt -o -e /work/$sandbox_marker-code.txt"; then
   fail 'nothing an Agent wrote is on the Engine'
 fi
+# A command MCP server runs in the work sandbox (#459, ADR 0024): a small stdio server placed in the Company's work folder
+# is added as the Owner's own command server and Test lists its tool. The Engine is then restarted, which connects every
+# configured server at its start (its MCP reconcile tick otherwise took from 23 s to over 4 min here), and an Agent calls
+# the tool from a Conversation. While the call holds, the host's Docker lists both containers' processes: the server is a
+# process of the sandbox, and the Engine holds only the ssh client that reaches it. Then the job releases the call and
+# reads where it wrote.
+mcp_marker="sandbox-mcp-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+docker exec -i "$sandbox" sh -ec 'mkdir -p /work/tools; cat > /work/tools/sandbox-proof-mcp.mjs' < scripts/sandbox-proof-mcp.mjs \
+  || fail 'place the small MCP server in the work sandbox'
+engine_node "$engine_key" - sandbox-mcp-add "$mcp_marker" < scripts/check-install-profiles.mjs \
+  || fail 'a command server the Owner adds is ssh into the work sandbox, and Test lists its tool'
+docker restart "$engine_id" > /dev/null || fail 'restart the Engine'
+engine_healthy "$engine_id" 60 || fail 'the Engine is healthy after its restart'
+engine_node "$engine_key" - sandbox-mcp "$mcp_marker" < scripts/check-install-profiles.mjs > sandbox-mcp-proof.log 2>&1 &
+mcp_check=$!
+mcp_calling=''
+for attempt in $(seq 1 420); do
+  docker exec "$sandbox" test -f "/work/$first/$mcp_marker-calling.txt" 2> /dev/null && { mcp_calling=yes; break; }
+  kill -0 "$mcp_check" 2> /dev/null || break
+  sleep 1
+done
+if [[ $mcp_calling != yes ]]; then
+  cat sandbox-mcp-proof.log >&2
+  docker exec "$engine_id" sh -c 'grep -h "sandbox-proof\|reconciled\|MCP server" /opt/data/logs/*.log /opt/data/profiles/*/logs/*.log 2> /dev/null | tail -n 20' >&2 || true
+  fail 'an Agent calls the tool of a command server in the work sandbox'
+fi
+# Each container's process list is read whole first: under pipefail a `| grep -q` that stops reading early can fail the
+# pipe on a match. Each check prints the list it read when it fails. Node names its main thread, so the server's command
+# name reads `node-MainThread` once it runs.
+sandbox_ps=$(docker exec "$sandbox" ps -eo comm=,args=) || fail 'list the work sandbox processes'
+engine_ps=$(docker exec "$engine_id" ps -eo comm=,args=) || fail 'list the Engine processes'
+awk '$1 ~ /^node/ && /sandbox-proof-mcp[.]mjs/ {found=1} END {exit !found}' <<< "$sandbox_ps" \
+  || { printf '%s\n' "$sandbox_ps" >&2; fail 'the command server is a process of the work sandbox during the call'; }
+if awk '$1 != "ssh" && /sandbox-proof-mcp[.]mjs/ {found=1} END {exit !found}' <<< "$engine_ps"; then
+  printf '%s\n' "$engine_ps" >&2; fail 'no process of the Engine runs the command server'
+fi
+awk '$1 == "ssh" && /pn@sandbox/ && /sandbox-proof-mcp[.]mjs/ {found=1} END {exit !found}' <<< "$engine_ps" \
+  || { printf '%s\n' "$engine_ps" >&2; fail 'the Engine reaches the command server over ssh into the sandbox'; }
+docker exec "$sandbox" touch "/work/$first/$mcp_marker.release" || fail 'release the call'
+wait "$mcp_check" || { cat sandbox-mcp-proof.log >&2; fail 'a command server the Owner adds runs in the work sandbox and an Agent calls its tool'; }
+cat sandbox-mcp-proof.log
+mcp_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' sandbox-mcp-proof.log | tail -n 1)
+[[ -n $mcp_host && $mcp_host == "$(docker exec "$sandbox" hostname)" ]] || fail 'the command server ran in the work sandbox'
+docker exec "$sandbox" grep -q "^$mcp_host /work/$first " "/work/$first/$mcp_marker-mcp.txt" \
+  || fail "the command server wrote in the Agent's own folder of the Company's work folder"
+if docker exec "$engine_id" test -e "/work/$first/$mcp_marker-mcp.txt"; then fail 'nothing the command server wrote is on the Engine'; fi
 # The Library shows the Company's work folder (#395): an Agent's file and picture in its own folder are listed, previewed
 # and downloaded with the same bytes through gtmworks; the Engine reads that folder and cannot write to it, as root or as
 # its own user, and nothing it tried reaches the sandbox.
@@ -1100,10 +1159,10 @@ status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null 
 # and previous_backup set.
 previous_release_install() {
 # The previous release is the last one before each Company got its own Engine (spec #378): its own schema (no Engine
-# record, no companies.engine_id), its own one `hermes` service, and its own key in .env.install. It is a fixed commit,
-# not this pull request's base or origin/main: after this release merges, main has the Engines, and the update proof would
-# build this release's own shape twice and prove nothing (#378, C1).
-previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6
+# record, no companies.engine_id), its own one `hermes` service, and its own key in .env.install. It is a fixed commit
+# (previous_release_commit, scripts/ci-install-lib.sh), not this pull request's base or origin/main: after this release
+# merges, main has the Engines, and the update proof would build this release's own shape twice and prove nothing (#378, C1).
+previous_release=$previous_release_commit
 git cat-file -e "$previous_release^{commit}" 2> /dev/null || git fetch --no-tags origin "$previous_release" || fail 'the previous release commit'
 # The update and previous-archive areas each make this install in the same places: one that ran before this one in
 # the same checkout (./ci.sh install, all of them) leaves its worktree and folder, which go first.
@@ -1112,7 +1171,7 @@ git worktree remove --force "$RUNNER_TEMP/previous-release" > /dev/null 2>&1 || 
 docker run --rm -v "$RUNNER_TEMP:/temp" -v "$root:/root-folder" alpine:3.21 rm -rf /temp/previous-release /root-folder/release-install /root-folder/release-previous
 git worktree prune
 git worktree add "$RUNNER_TEMP/previous-release" "$previous_release" || fail 'the previous release checkout'
-docker build -q -t localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release" > /dev/null || fail 'build the previous release image'
+release_image "$previous_release" localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release" || fail 'build the previous release image'
 previous=$(publish 0.0.0-main) || fail 'push the previous release image'
 ( cd "$RUNNER_TEMP/previous-release" && node scripts/release-assets.mjs "$previous" "$root/release-previous" ) || fail 'previous release files'
 publish_releases
@@ -1145,12 +1204,8 @@ done
 # What the Agent was told, and the sign-in the Company made, before the update: both live in the Engine's data,
 # which the update must carry over (#385, ADR 0018).
 marker="release-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-docker exec -i gtmworks-install-hermes-1 sh -ec \
-  'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1"' \
-  sh "$profile" "$marker" || fail "write a memory in the Company's profile"
-docker exec -i gtmworks-install-hermes-1 sh -ec \
-  'umask 077; printf "%s\n" "{\"accessToken\":\"install-check-token\",\"refreshToken\":\"install-check-refresh\",\"expiresAt\":4102444800000}" > /opt/data/.anthropic_oauth.json; chown hermes:hermes /opt/data/.anthropic_oauth.json' \
-  || fail 'sign the Company in on the Engine before the update'
+tell_engine gtmworks-install-hermes-1 "$profile" "$marker" || fail "write a memory in the Company's profile"
+sign_in_engine gtmworks-install-hermes-1 || fail 'sign the Company in on the Engine before the update'
 # The backup the previous release's own installer makes of its one-Company install, kept before the update (#378, C3): it
 # holds that release's own shape (one Engine at opt/data, its key in .env.install, no .engines/), so restoring it is a
 # real archive made before the Engines, not one repacked from this release's database.
@@ -1339,9 +1394,88 @@ docker exec -u hermes "$(first_engine_id)" ssh -i /opt/data/ssh/id_ed25519 -o Ba
   || fail 'the Engine the previous release archive restored reaches its work sandbox'
 }
 
+# release-update: the update a stable install really takes (#483): the latest published release, read from GitHub's
+# releases list on every run (lib/updates.mjs latestStableRelease, the release Update ready offers and `gtmworks update`
+# installs), installed from its own two published files and the images they pin, first run made and an Agent told a
+# fact, then updated to this release. The update and previous-archive areas build a fixed commit to prove one shape's
+# path (#378, C1); this area moves with each release, so its checks hold for any release's shape: the install it made
+# keeps its one Company, its Owner and what the Agent was told, runs this release with every migration, and the install
+# command again keeps it.
+release_update() {
+cd "$root"
+reset_install
+trap - EXIT
+set +o pipefail
+fail_prefix='release install check failed: '
+start_registry
+publish_releases
+dir="$PWD/stable-release-install"
+docker run --rm -v "$root:/root-folder" alpine:3.21 rm -rf /root-folder/stable-release-install
+stable=$(node scripts/latest-release.mjs "$dir") || fail 'the latest published release and its two files'
+echo "latest published release: $stable; this release: $first"
+[[ $(ls -A "$dir" | wc -l) == 2 ]] || fail 'the release install directory holds only the two release files'
+sh "$dir/install.sh" || fail "install $stable from its two published files"
+cd "$dir"
+[[ $(cat .install-release) == "$(sed -n 's/^release_image=//p' install.sh)" ]] || fail "the install runs the image $stable pins"
+probe "on $stable"
+docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY|SETUP_CODE)=' .env.install) \
+  -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail "first run on $stable"
+company=$(db -c "select id from public.companies where name='Proxy Company'") || fail "read the Company $stable made"
+[[ -n $company ]] || fail "first run made the Company on $stable"
+people=$(db -c "select person_id||' '||role from public.members where company_id='$company' order by 1") || fail "read the Company's people on $stable"
+# The Engine the release runs, in its own shape: one per Company from its own folder (ADR 0018), or the one `hermes`
+# service of the releases before it. The worker makes the Company's profile there.
+if [[ -f .engines/first/.env ]]; then engine_before=$(engine_value .engines/first NAME); else engine_before=gtmworks-install-hermes-1; fi
+profile=co-${company//-/}
+for attempt in $(seq 1 180); do
+  docker exec "$engine_before" test -d "/opt/data/profiles/$profile" 2> /dev/null && break
+  [[ $attempt == 180 ]] && fail "the worker made the Company profile in the Engine $stable runs"
+  sleep 1
+done
+# What the Agent was told, and the sign-in the Company made, before the update: both live in the Engine's data.
+marker="stable-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+tell_engine "$engine_before" "$profile" "$marker" || fail "write a memory in the Company's profile on $stable"
+sign_in_engine "$engine_before" || fail "sign the Company in on its Engine on $stable"
+# The update to this release, as a stable install takes it: this release's two files in place of the old ones, then update.
+cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
+sh install.sh update || fail "the update from $stable to this release"
+[[ $(cat .install-release) == "$first" ]] || fail 'the update records this release'
+probe "after the update from $stable"
+[[ $(db -c 'select id from public.companies') == "$company" ]] || fail "the update keeps the one Company $stable made"
+[[ $(db -c "select person_id||' '||role from public.members where company_id='$company' order by 1") == "$people" ]] || fail "the update keeps the Company's people and their roles"
+compose exec -T db ls /migrations | sort > "$RUNNER_TEMP/stable-seen" || fail 'list the migrations the database sees'
+ls "$root/supabase/migrations" | sort > "$RUNNER_TEMP/stable-expected"
+diff -u "$RUNNER_TEMP/stable-expected" "$RUNNER_TEMP/stable-seen" || fail "the updated database sees this release's migrations"
+# Every one of them is applied, not only mounted: the names the installer records once a migration ran, its cutovers
+# included, every file but the .verify.sql checks (scripts/install.sh apply_migrations).
+grep -v '\.verify\.sql$' "$RUNNER_TEMP/stable-expected" > "$RUNNER_TEMP/stable-to-apply"
+migrations | sort > "$RUNNER_TEMP/stable-applied" || fail 'read the applied migrations'
+diff -u "$RUNNER_TEMP/stable-to-apply" "$RUNNER_TEMP/stable-applied" || fail "the update from $stable applies every migration of this release"
+key=$(first_engine_key)
+engine=$(first_engine_id)
+[[ -n $key && -n $engine ]] || fail "the updated install runs the Company's Engine from its own folder"
+[[ $(db -c "select count(*) from public.company_engines e join public.companies c on c.engine_id=e.id where c.id='$company'") == 1 ]] \
+  || fail 'the updated Company names its own Engine'
+sandbox=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')
+[[ -n $sandbox && $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox") == healthy ]] || fail "the updated Company's work sandbox is healthy"
+[[ $(docker inspect -f '{{.Config.Image}}' "$sandbox") == "$(cat .work-sandbox-image)" ]] || fail 'the updated sandbox runs the image the install recorded'
+# The Owner signs in, the Company's sign-in still serves, and the Agent still remembers what it was told on $stable.
+ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
+  || fail "the Agent remembers what it was told on $stable and the Company's sign-in still serves"
+# Running the install command again keeps the updated install: the same settings, key, Engine and sandbox.
+cp .env.install .env.install.before
+sh install.sh || fail 'the install command again'
+cmp .env.install .env.install.before || fail 'the install command again leaves .env.install as it was'
+[[ $(first_engine_key) == "$key" && $(first_engine_id) == "$engine" ]] || fail 'the install command again keeps the Engine'
+[[ $(docker ps -q --filter 'name=^gtmworks-sandbox-first$') == "$sandbox" ]] || fail 'the install command again leaves the sandbox running'
+echo "release-update: $stable updated to this release"
+}
+
 # sandbox-update: an install the release before the work sandbox made, with two Companies, updated to this release (#397,
-# ADR 0018). First an update whose migration fails, which leaves that release serving with no sandbox begun; then the
-# update itself, after which each Company has its own sandbox, exit and work folder, its Engine is pinned to that sandbox,
+# ADR 0018). First an update whose migration fails, which leaves that release serving with no sandbox begun, and one whose
+# second Company's sandbox does not start after the first Company's was made, which leaves nothing of either (#479); then
+# the update itself, after which each Company has its own sandbox, exit and work folder, its Engine is pinned to that sandbox,
 # an Agent made before the update runs a command there and still remembers, the Company's level is gone and its past change
 # still reads in the log; and the install command again keeps every sandbox and its work folder.
 sandbox_update() {
@@ -1352,13 +1486,13 @@ set +o pipefail
 fail_prefix='release install check failed: '
 start_registry
 # The release an existing install runs before the work sandbox: a fixed commit of main, the one spec #389's branch last
-# merged (#472), with an Engine per Company made by `company add` (spec #378), no sandbox, no exit, and Agent levels still
-# stored. Not origin/main or this pull request's base: once spec #389 merges main has the sandbox, and the proof would
-# update this release's own shape to itself. Main's own CI already linted and type-checked it, so its build skips both.
-before_sandbox=a404785204c76ddf27ae8ea97c7c9b5b4ae73304
+# merged (#472, before_sandbox_release_commit in scripts/ci-install-lib.sh), with an Engine per Company made by `company
+# add` (spec #378), no sandbox, no exit, and Agent levels still stored. Main's own CI already linted and type-checked it,
+# so its build skips both.
+before_sandbox=$before_sandbox_release_commit
 git cat-file -e "$before_sandbox^{commit}" 2> /dev/null || git fetch --no-tags origin "$before_sandbox" || fail 'the release before the work sandbox commit'
 git worktree add "$RUNNER_TEMP/sandbox-previous-release" "$before_sandbox" || fail 'the release before the work sandbox checkout'
-docker build -q --build-arg NEXT_SKIP_CHECKS=true -t localhost:5000/gtmworks:0.0.0-engines "$RUNNER_TEMP/sandbox-previous-release" > /dev/null \
+release_image "$before_sandbox" localhost:5000/gtmworks:0.0.0-engines "$RUNNER_TEMP/sandbox-previous-release" --build-arg NEXT_SKIP_CHECKS=true \
   || fail 'build the release before the work sandbox'
 before=$(publish 0.0.0-engines) || fail 'push the release before the work sandbox'
 ( cd "$RUNNER_TEMP/sandbox-previous-release" && node scripts/release-assets.mjs "$before" "$root/release-before-sandbox" ) || fail 'the release before the work sandbox files'
@@ -1455,6 +1589,33 @@ if grep -Fq 'Applying migration:' update.log; then fail_update 'the update whose
 [[ $(compose ps -q web) == "$web" ]] || fail_update 'the update whose sandbox image cannot be pulled leaves the release before the work sandbox serving'
 probe 'after the update whose sandbox image cannot be pulled'
 [[ -z $(sandbox_parts) && ! -e .work-sandbox-image ]] || fail_update 'the update whose sandbox image cannot be pulled begins no sandbox'
+# An update whose second Company's sandbox does not start, after its migrations applied and the first Company's sandbox,
+# exit, work folder and networks were made (#479): its Company is given more CPUs than Docker has, which Docker refuses at
+# the sandbox's start. The previous release keeps serving with its own Engines, and nothing of a sandbox is left: no
+# container, volume or network of either Company, no key in an Engine's volume, and no image recorded.
+second_slug=$(ls .engines | grep -vx first)
+[[ -n $second_slug && $second_slug != *$'\n'* ]] || fail "read the second Company's one Engine folder"
+printf 'SANDBOX_CPUS=100000\n' >> ".engines/$second_slug/.env"
+# The updates that failed above left this release's Engine files on disk, as a real one leaves them; the previous release's
+# own go back with its command (scripts/get.sh), here by hand from the commit its image was built from.
+cp "$RUNNER_TEMP/sandbox-previous-release/scripts/"engine-* scripts/ || fail "the previous release's Engine files back before the failed sandbox start"
+cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place for the failed sandbox start'
+if GTMWORKS_ENGINE_WAIT=60 sh install.sh update > update.log 2>&1; then fail_update "the update whose second Company's sandbox does not start must fail"; fi
+grep -Fq 'Applying migration:' update.log || fail_update "the update whose second Company's sandbox does not start applies its migrations first"
+grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update "the update whose second Company's sandbox does not start says the previous release keeps serving"
+if grep -Fq 'could not all be removed' update.log; then fail_update "the update whose second Company's sandbox does not start removes what it made"; fi
+[[ $(compose ps -q web) == "$web" ]] || fail_update "the update whose second Company's sandbox does not start leaves the release before the work sandbox serving"
+probe "after the update whose second Company's sandbox does not start"
+[[ $(level_column) == 1 ]] || fail_update "the update whose second Company's sandbox does not start leaves the Company level that release reads"
+while read -r name id; do
+  [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$name") == healthy ]] || fail_update "the Engine $name is healthy again after the failed sandbox start"
+  [[ $(docker inspect -f '{{range $n, $_ := .NetworkSettings.Networks}}{{println $n}}{{end}}' "$name" | grep -c .) == 1 ]] || fail_update "the Engine $name is back on its own network only"
+  if docker exec -u 0 "$name" test -e /opt/data/ssh; then fail_update "the failed sandbox start leaves no sandbox key in the Engine $name"; fi
+done < engines-before
+half=$(sandbox_parts)
+[[ -z $half ]] || fail_update "the failed sandbox start leaves no half-made sandbox: $half"
+[[ ! -e .work-sandbox-image ]] || fail_update 'the failed sandbox start records no work sandbox image'
+sed -i '/^SANDBOX_CPUS=/d' ".engines/$second_slug/.env"
 # The update to this release: each Company gets its own sandbox, exit and work folder, and its Engine, recreated on its own
 # volume, is pinned to that sandbox.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
@@ -1909,10 +2070,10 @@ trap - EXIT
 set +o pipefail
 fail_prefix='release install check failed: '
 start_registry
-before_sandbox=a404785204c76ddf27ae8ea97c7c9b5b4ae73304
+before_sandbox=$before_sandbox_release_commit
 git cat-file -e "$before_sandbox^{commit}" 2> /dev/null || git fetch --no-tags origin "$before_sandbox" || fail 'the release before the staged removal commit'
 git worktree add "$RUNNER_TEMP/staged-previous-release" "$before_sandbox" || fail 'the release before the staged removal checkout'
-docker build -q --build-arg NEXT_SKIP_CHECKS=true -t localhost:5000/gtmworks:0.0.0-staged "$RUNNER_TEMP/staged-previous-release" > /dev/null \
+release_image "$before_sandbox" localhost:5000/gtmworks:0.0.0-staged "$RUNNER_TEMP/staged-previous-release" --build-arg NEXT_SKIP_CHECKS=true \
   || fail 'build the release before the staged removal'
 before=$(publish 0.0.0-staged) || fail 'push the release before the staged removal'
 ( cd "$RUNNER_TEMP/staged-previous-release" && node scripts/release-assets.mjs "$before" "$root/release-before-staged" ) || fail 'the release before the staged removal files'
@@ -2153,7 +2314,7 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (sandbox_update); (staged_update); (sizes); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sizes); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
@@ -2162,6 +2323,7 @@ case "${1:-all}" in
  rollback) rollback;;
  update) update;;
  previous-archive) previous_archive;;
+ release-update) release_update;;
  sandbox-update) sandbox_update;;
  staged-update) staged_update;;
  sizes) sizes;;
@@ -2169,5 +2331,5 @@ case "${1:-all}" in
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

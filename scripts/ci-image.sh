@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # CI builds the image in its own job and the browser suite loads it (CI_IMAGE_PREBUILT=true, #403); a local run builds
 # it here.
-[[ "${CI_IMAGE_PREBUILT:-}" == "true" ]] || docker build -t gtmworks:ci .
+[[ "${CI_IMAGE_PREBUILT:-}" == "true" ]] || bash scripts/docker-build.sh -t gtmworks:ci .
 status=$(npx supabase status -o env)
 api_url=$(printf '%s\n' "$status" | sed -n 's/^API_URL="\(.*\)"$/\1/p')
 service_key=$(printf '%s\n' "$status" | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')
@@ -12,9 +12,10 @@ jwt_secret=${jwt_secret:-super-secret-jwt-token-with-at-least-32-characters-long
 # Sign a local anonymous token distinct from the rejected development fallback.
 anon_key=$(JWT_SECRET="$jwt_secret" node -e 'const c=require("crypto"); const b=x=>Buffer.from(JSON.stringify(x)).toString("base64url"); const p=b({alg:"HS256",typ:"JWT"})+"."+b({role:"anon",iss:"supabase-demo",exp:4102444800}); process.stdout.write(p+"."+c.createHmac("sha256",process.env.JWT_SECRET).update(p).digest("base64url"))')
 export NEXT_PUBLIC_SUPABASE_URL="$api_url" NEXT_PUBLIC_SUPABASE_ANON_KEY="$anon_key"
-export SUPABASE_SERVICE_ROLE_KEY="$service_key" SUPABASE_JWT_SECRET="$jwt_secret"
+# The JWT secret only signs the anonymous key above; the app is never given it (#446).
+export SUPABASE_SERVICE_ROLE_KEY="$service_key"
 export WEBHOOK_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= APP_ORIGIN=https://example.test
-args=(--network host -e NEXT_PUBLIC_SUPABASE_URL -e NEXT_PUBLIC_SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY -e SUPABASE_JWT_SECRET -e WEBHOOK_ENCRYPTION_KEY -e APP_ORIGIN)
+args=(--network host -e NEXT_PUBLIC_SUPABASE_URL -e NEXT_PUBLIC_SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY -e WEBHOOK_ENCRYPTION_KEY -e APP_ORIGIN)
 trap 'docker rm -f gtmworks-ci gtmworks-worker-ci >/dev/null 2>&1 || true' EXIT
 docker run -d --name gtmworks-ci "${args[@]}" gtmworks:ci >/dev/null
 docker run -d --name gtmworks-worker-ci "${args[@]}" gtmworks:ci npm run worker >/dev/null

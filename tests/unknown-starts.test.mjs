@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { startRun, startUnknown } from '../lib/hermes.mjs';
+import { startNotReached, startRun, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { encryptSecret } from '../lib/agent-crypto.mjs';
 import { noteInstructions, sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
@@ -38,6 +38,7 @@ function databases({reserve={state:'reserved',connection,profile:'writer',note:n
   // begin_start answers which attempt of the key this is (0: the reservation is no longer active).
   if(name==='begin_start') return {data:attempt,error:null};
   // The run's note: its first start pins the tools offered then, as the text sent, and its rules; every later start
+  if(name==='conversation_handover_agents') return {data:[],error:null};
   // reads them (pin_run). A run the previous app version already started keeps its tools and is told no rules.
   if(name==='pin_run') {
    if(runNote.rules===undefined&&!runNote.started) { runNote.tools=runNote.offersTools?`[${given.specs.create_agent}]`:null; runNote.rules=[]; }
@@ -159,6 +160,15 @@ test('a sent Run the Engine refused for its model is released and refused in one
  // A stale attempt, or one whose model was already changed, is told as a refused start.
  const stale=databases({model,modelRefused:false});
  assert.deepEqual(await sendMessage(stale.db,stale.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(stale.order,null)}),{error:'conversationHermesFailed',status:502});
+});
+
+// #413: an Engine that is not running never got the start, so it says nothing about the Conversation's model: the attempt
+// is released and the person reads the Engine's one plain error, and the model the Conversation chose is kept.
+test('a sent Run whose Engine is not running is released, and its chosen model is not refused', async () => {
+ const unreached=databases({model:{provider:'openrouter',model:'openai/gpt-5.5'}});
+ assert.deepEqual(await sendMessage(unreached.db,unreached.service,{company:'co',conversation:'c',sendKey:'k',message:'Hi',hermes,...engine(unreached.order,startNotReached)}),{error:'conversationHermesFailed',status:502});
+ assert.deepEqual(unreached.args.release_conversation_run,{conversation:'c',c:'co',message_key:'k',attempt:1});
+ assert.ok(!unreached.order.some(step=>step.endsWith(' refuse_conversation_run_model')||step.endsWith(' keep_unknown_start')),'the model stays, and nothing is kept as unknown');
 });
 
 test('a lost start whose reservation is gone answers by what was stored, never as waiting', async () => {

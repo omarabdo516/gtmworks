@@ -173,7 +173,7 @@ test('a pull request that changes install files starts the install proof as one 
   const run = started({ event: 'pull_request', draft: false, files: ['scripts/install.sh'] });
   for (const job of installJobs) assert.ok(run.includes(job), job);
   // One matrix job: each entry's name is the area that failed, and one area's fault leaves the rest running.
-  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous-archive', 'sandbox-update', 'staged-update', 'sizes', 'engines-update', 'one-line', 'updater'] } });
+  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sizes', 'engines-update', 'one-line', 'updater'] } });
   assert.equal(ci.jobs.install.name, 'install-${{ matrix.area }}');
 });
 
@@ -206,6 +206,7 @@ test('the image build skips the lint and type check the fast job ran, and only i
   const dockerfile = readFileSync('Dockerfile', 'utf8');
   const stage = dockerfile.indexOf('FROM dependencies AS build');
   const argument = dockerfile.indexOf('ARG NEXT_SKIP_CHECKS=false');
-  const buildRun = dockerfile.indexOf('RUN npm run build');
+  // The build step may mount the build CA first (#562).
+  const buildRun = dockerfile.search(/^RUN .*\bnpm run build$/m);
   assert.ok(stage >= 0 && stage < argument && argument < buildRun, 'the build stage declares NEXT_SKIP_CHECKS, defaulting to the checks');
 });

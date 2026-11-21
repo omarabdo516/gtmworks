@@ -53,6 +53,7 @@ const day = (offset: number, hour: number) => `${new Date(Date.now() + offset * 
 const routineJob = (id: string, name: string, expr: string, extra: object = {}) => ({ id, name, prompt: name, skills: [], skill: null, schedule: { kind: 'cron', expr, display: expr },
   schedule_display: expr, repeat: { times: null, completed: 0 }, enabled: true, state: 'scheduled', paused_at: null, created_at: '2026-06-01T08:00:00Z', next_run_at: day(1, Number(expr.split(' ')[1]) || 9),
   last_run_at: null, last_status: null, last_error: null, deliver: 'local', origin: null, ...extra });
+const standing = (n: number) => `69400000-0000-0000-0000-00000000000${n}`;
 const screenStates: Record<string, { set: string, unset: string, engine?: (fake: Awaited<ReturnType<typeof laneHermes>>) => void }> = {
   // Recurring tasks (#31): Lead's morning brief and two of Meta Ads's Routines, one switched off, on their own profiles.
   routines: {
@@ -129,6 +130,39 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
       delete from public.conversation_messages where conversation_id='${change(3)}';
       delete from public.conversations where id='${change(3)}';
       delete from public.hermes_agents where id in ('${change(1)}','${change(2)}');`,
+  },
+  // Meta Ads's page in Settings: Lead's proposal of a faster model for it waiting on Omar's OK (#178), and after Tools the
+  // one standing permission Omar gave it (#166), Always allow on the Meta Ads app's create_campaign, kept in Meta Ads's
+  // own profile in the Engine. One screen holds both: the lane keeps fifteen.
+  'settings-proposal': {
+    set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
+       ('${standing(1)}','${rsLearning}','${standing(5)}','Lead','General',true,'visual-standing-lead'),
+       ('${standing(2)}','${rsLearning}','${standing(6)}','Meta Ads','Runs the Meta ads and asks before it publishes or spends.',false,'ag-${standing(2).replaceAll('-', '')}');
+      insert into public.agent_profiles(agent_id,company_id,tools_confirmed) values ('${standing(2)}','${rsLearning}',true);
+      insert into public.company_profiles(company_id,profile,tools_confirmed) values ('${rsLearning}','co-${rsLearning.replaceAll('-', '')}',true)
+       on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
+      insert into public.company_profile_keepers(company_id,agent_id) values ('${rsLearning}','${standing(1)}') on conflict (company_id) do update set agent_id=excluded.agent_id;
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${standing(3)}','${rsLearning}','${omar}','${standing(2)}','Meta Ads','2026-06-15T11:00:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${standing(3)}','person','${omar}','عمر','اطلق حملة يونيو','${standing(4)}','visual-standing','2026-06-15T11:00:00Z');
+      insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,decided_by,decided_at,allows,created_at) values
+       ('${rsLearning}','${standing(3)}','visual-standing','visual-standing-1','permission','Launch the campaign',
+        '{"description":"Launch the campaign","command":"create_campaign","choices":["once","always","deny"],"choice":"always"}','decided','${omar}','2026-06-15T11:01:00Z',
+        '{mcp:meta-ads/create_campaign}','2026-06-15T11:00:30Z');
+      insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at) values ('${standing(7)}','${rsLearning}','${omar}','${standing(1)}','Lead','2026-06-10T11:26:00Z');
+      insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
+       ('${rsLearning}','${standing(7)}','person','${omar}',null,'عمر','حملة يونيو بطيئة في التقارير.','${standing(8)}','visual-standing-change','2026-06-10T11:26:00Z');
+      insert into public.agent_change_proposals(company_id,conversation_id,run_id,call_id,agent_id,proposed_by,asked_by,change,value,reason,created_at) values
+       ('${rsLearning}','${standing(7)}','visual-standing-change','call-0','${standing(2)}','${standing(1)}','${omar}','model','"google/gemini-2.5-pro"',
+        'التقارير بتقرا أرقام كتير وبتتأخر عن ميعادها. Gemini 2.5 Pro أسرع في الأرقام الكبيرة.','2026-06-10T11:30:00Z');`,
+    unset: `delete from public.agent_change_proposals where conversation_id='${standing(7)}';
+      delete from public.reply_cards where conversation_id='${standing(3)}';
+      delete from public.conversation_messages where conversation_id in ('${standing(3)}','${standing(7)}');
+      delete from public.conversations where id in ('${standing(3)}','${standing(7)}');
+      delete from public.agent_profiles where agent_id='${standing(2)}';
+      delete from public.company_profile_keepers where agent_id='${standing(1)}';
+      delete from public.hermes_agents where id in ('${standing(1)}','${standing(2)}');`,
+    engine: fake => { fake.settings.profiles.set(`ag-${standing(2).replaceAll('-', '')}`, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: { command_allowlist: ['mcp:meta-ads/create_campaign'] }, credentials: {} }); },
   },
 };
 for (const screen of screens) if (screen.state && !screenStates[screen.state]) throw new Error(`${screen.name}: no state "${screen.state}"`);

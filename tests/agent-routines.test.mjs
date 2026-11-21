@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readRoutines, createRoutine, changeRoutine, pauseRoutine, resumeRoutine, triggerRoutine, deleteRoutine, startRun, readToolsets } from '../lib/hermes.mjs';
-import { readCompanyRoutines, changeAgentRoutine } from '../lib/agent-routines.mjs';
+import { readCompanyRoutines, readAgentRoutines, changeAgentRoutine } from '../lib/agent-routines.mjs';
 import { cronOf, formOf, scheduleLabel, whenOf } from '../lib/routine-schedule.mjs';
 import { toolConfig, noAgentGets } from '../lib/agent-toolsets.mjs';
 import { i18n } from '../lib/i18n.mjs';
@@ -263,5 +263,24 @@ test('a create whose answer is lost is found in the profile\'s list and answered
   assert.equal((await createRoutine(at(fake,adsProfile),{name:'Other',prompt:'Other',schedule:'0 8 * * *'})).state,'unreachable');
   fake.settings.managementStatus=200;
   assert.equal(fake.settings.cron.get(adsProfile).length,2);
+ } finally { await fake.close(); }
+});
+
+// An Agent's details (#205) read that one Agent's Routines alone, in its own profile, as the reader sees it.
+test('an Agent\'s details read its own Routines alone, and an Agent hidden from the reader or not on its own profile is missing', async () => {
+ const fake=await twoAgents();
+ try {
+  const hermes=install(fake);
+  await createRoutine(at(fake,adsProfile),{name:'Ads summary',prompt:'Summary',schedule:'0 9 * * *'});
+  await createRoutine(at(fake,seoProfile),{name:'Rankings',prompt:'Rankings',schedule:'0 11 * * 1'});
+  const {db}=session({agents:rows});
+  const read=await readAgentRoutines(db,{company,agent:seo,hermes});
+  assert.equal(read.state,'found');
+  assert.deepEqual(read.routines.map(routine=>routine.name),['Rankings']);
+  assert.ok(cronCalls(fake).filter(request=>request.method==='GET').every(request=>profileOfCall(request)!==null));
+  assert.equal((await readAgentRoutines(session({agents:[rows[0]]}).db,{company,agent:seo,hermes})).state,'missing','an Agent hidden from the reader');
+  assert.equal((await readAgentRoutines(session({agents:[{...rows[1],own:false}]}).db,{company,agent:seo,hermes})).state,'missing','an Agent still on the shared profile');
+  assert.equal((await readAgentRoutines(db,{company,agent:'not-an-id',hermes})).state,'invalid');
+  assert.equal((await readAgentRoutines(db,{company,agent:seo,hermes:null})).state,'noEngine');
  } finally { await fake.close(); }
 });

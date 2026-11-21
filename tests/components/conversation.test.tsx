@@ -207,11 +207,11 @@ for (const language of ['en', 'ar'] as const) for (const reason of ['credit', 'k
  }
 });
 
-// #317: a job Lead handed another Agent is a quiet row under Lead's reply, drawn from gtmworks's own record: both
-// faces, the arrow pointing the way the interface reads, the other Agent's name and the job.
-for (const [language, line, arrow] of [['en', 'Handed to', 'M5 12h14'], ['ar', 'سلّم الشغل لـ', 'M19 12H5']] as const) test(`in ${language} a job Lead handed another Agent reads under Lead's reply with both faces and the job`, async () => {
+// #317, #475: a job Lead handed another Agent is a quiet row under Lead's reply, drawn from gtmworks's own record: both
+// faces, the arrow pointing the way the interface reads, "Lead asked Ads" and the job.
+for (const [language, line, arrow] of [['en', 'Lead asked Ads', 'M5 12h14'], ['ar', 'Lead طلب من Ads', 'M19 12H5']] as const) test(`in ${language} a job Lead handed another Agent reads under Lead's reply with both faces and the job`, async () => {
  const record: ConversationRecord = talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'I handed the March intake to Ads.', created_at: at,
-  cards: [{ kind: 'handed', name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake' }] }]);
+  cards: [{ kind: 'handed', from: { name: 'Lead', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake' }] }]);
  const screen = await render(view(record, language));
  const row = screen.container.querySelector('.turn--agent [data-handover]');
  expect(row).not.toBeNull();
@@ -222,12 +222,66 @@ for (const [language, line, arrow] of [['en', 'Handed to', 'M5 12h14'], ['ar', '
  expect(row?.querySelector('.gw-icon path')?.getAttribute('d')).toBe(arrow);
 });
 
+// #475: any Agent asks, not only Lead. In a chat with Writer, Writer asks Ads: the row names both, then Ads's answer under
+// its own name and face with "to Writer" on its sender line, then Writer's own reply, in Arabic and English, light and
+// dark (design-reference: the handoff row, `.handoff`, and `.sender__to`).
+const handing: ConversationRecord = { ...talk([
+ { ...sent, body: 'Write the March ad copy' },
+ { id: 2, author: 'agent', author_name: 'Writer', body: 'I asked Ads for last campaign\'s numbers.', created_at: '2026-06-10T09:41:00Z',
+  cards: [{ kind: 'handed', from: { name: 'Writer', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Last campaign\'s leads and cost per lead' }] },
+ { id: 9, author: 'agent', author_name: 'Ads', face: 'c-3', body: '1,240 leads at EGP 7.30 each.', created_at: '2026-06-10T09:42:00Z', kind: 'handed', to: 'Writer' },
+ { id: 3, author: 'agent', author_name: 'Writer', body: 'The copy leads with 1,240 leads at EGP 7.30 each.', created_at: '2026-06-10T09:43:00Z' },
+]), conversation: { id: 'cv-3', agent_id: null, agent_name: 'Writer', face: 'c-2' } };
+for (const [language, line, to] of [['en', 'Writer asked Ads', 'to Writer'], ['ar', 'Writer طلب من Ads', 'لـ Writer']] as const)
+ for (const theme of ['light', 'dark'] as const) test(`in ${language}, ${theme}, an Agent that is not the main one asks another, whose answer reads under its own name to the asker before the asker's reply`, async () => {
+  document.documentElement.dataset.theme = theme;
+  onTestFinished(() => { delete document.documentElement.dataset.theme; });
+  const screen = await render(<div className="gw">{view(handing, language)}</div>);
+  const turns = [...screen.container.querySelectorAll('.turn--agent')];
+  expect(turns.map(turn => turn.querySelector('.sender bdi')?.textContent)).toEqual(['Writer', 'Ads', 'Writer']);
+  const row = turns[0].querySelector('[data-handover]');
+  expect(row?.querySelector('.handed__t')?.textContent).toBe(line);
+  expect(row?.querySelector('.handed__d')?.textContent).toBe('Last campaign\'s leads and cost per lead');
+  expect([...row!.querySelectorAll('.agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['Writer', 'Ads']);
+  // The answer wears the asked Agent's own face, the one the row draws for it, and says whom it went to.
+  expect(turns[1].querySelector('.sender .agent-face')?.innerHTML).toBe(row!.querySelectorAll('.agent-face')[1].innerHTML);
+  expect(turns[1].querySelector('.sender__to')?.textContent).toBe(to);
+  expect(turns[1].querySelector('.bubble')?.textContent).toBe('1,240 leads at EGP 7.30 each.');
+  expect(turns[0].querySelector('.sender__to')).toBeNull();
+  expect(turns[2].querySelector('.sender__to')).toBeNull();
+  // The names read in the theme's first text colour, and the job and the "to" line in its quiet one.
+  const [first, quiet] = theme === 'dark' ? ['rgb(245, 245, 245)', 'rgba(245, 245, 245, 0.6)'] : ['rgb(28, 28, 28)', 'rgba(28, 28, 28, 0.64)'];
+  expect(getComputedStyle(row!.querySelector('.handed__t bdi')!).color).toBe(first);
+  expect(getComputedStyle(row!.querySelector('.handed__d')!).color).toBe(quiet);
+  expect(getComputedStyle(turns[1].querySelector('.sender__to')!).color).toBe(quiet);
+ });
+// #375: a handover that did not finish says so on its row, after the job, in the interface's language; one that finished
+// says nothing of it.
+for (const [language, line] of [['en', 'The job didn’t finish'], ['ar', 'الشغل ماخلصش']] as const) test(`in ${language} a job Lead handed that did not finish says so on its row`, async () => {
+ const record: ConversationRecord = talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'I handed the March intake to Ads.', created_at: at,
+  cards: [{ kind: 'handed', from: { name: 'Lead', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake', failed: true }] }]);
+ const screen = await render(view(record, language));
+ const row = screen.container.querySelector('.turn--agent [data-handover]');
+ expect(row?.hasAttribute('data-failed')).toBe(true);
+ expect([...row!.children].map(part => part.className)).toEqual(['handed__faces', 'handed__t', 'handed__d', 'handed__failed']);
+ expect(row?.querySelector('.handed__failed')?.textContent).toBe(line);
+ expect(row?.textContent).toContain('Plan the Meta ads for the March intake');
+});
+test('a job Lead handed that finished draws no line saying it did not', async () => {
+ const record: ConversationRecord = talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'I handed the March intake to Ads.', created_at: at,
+  cards: [{ kind: 'handed', from: { name: 'Lead', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads' }] }]);
+ const screen = await render(view(record));
+ const row = screen.container.querySelector('.turn--agent [data-handover]');
+ expect(row?.hasAttribute('data-failed')).toBe(false);
+ expect(row?.querySelector('.handed__failed')).toBeNull();
+});
+
 // #358: the Agent a job command hands the work to answers in the same chat, drawn from that Agent: its own name on the
 // reply and its own face, the one the row that handed the job over shows — never the Conversation's Agent's.
 test('a job command\'s answer in the main Agent\'s chat is drawn from the Agent handed the work, with its own face', async () => {
  const record: ConversationRecord = talk([
   { id: 1, author: 'person', author_name: 'Youssef', body: '/campaign Launch the December ads', created_at: at },
-  { id: 2, author: 'agent', author_name: 'Mona', body: '', created_at: at, cards: [{ kind: 'handed', name: 'Reach', face: 'c-3', goal: 'Launch the December ads' }] },
+  { id: 2, author: 'agent', author_name: 'Mona', body: '', created_at: at, cards: [{ kind: 'handed', from: { name: 'Mona', face: 'c-2' }, name: 'Reach', face: 'c-3', goal: 'Launch the December ads' }] },
   { id: 3, author: 'agent', author_name: 'Reach', agent_id: 'a-3', face: 'c-3', body: 'Three ad sets, 30 days, EGP 9,000.', created_at: at },
  ]);
  const screen = await render(view(record));
@@ -246,7 +300,7 @@ test('a job command\'s answer in the main Agent\'s chat is drawn from the Agent 
 test('a handed job keeps the chat asking until Lead\'s follow-up reply is in the record', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  const handed: ConversationRecord = { ...talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'I handed it to Ads.', created_at: at,
-  cards: [{ kind: 'handed', name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads' }] }]), handover: true };
+  cards: [{ kind: 'handed', from: { name: 'Lead', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads' }] }]), handover: true };
  const replied: ConversationRecord = talk([...handed.messages, { id: 3, author: 'agent', author_name: 'Lead', body: 'Ads planned three ad sets.', created_at: at }]);
  const asks = vi.fn(async () => Response.json(replied));
  vi.stubGlobal('fetch', asks);

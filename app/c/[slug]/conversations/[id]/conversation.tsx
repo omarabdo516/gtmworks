@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, createContext, memo, use, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type Ref } from 'react';
+import { Suspense, createContext, memo, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type Ref } from 'react';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { LiveFace } from '@/app/agent-face-dot';
@@ -46,11 +46,12 @@ export default function ConversationView({slug,agent,details,tab,company,convers
  // The same object for the page's life: a new context value reaching a transcript that still streams in would make React
  // draw it again in the browser and leave the streamed copy hidden in the page (#172, #253).
  const view=useMemo(()=>({slug,agent,company,conversation,writer,suggest:(text:string)=>composer.current?.insert(text),live}),[slug,agent,company,conversation,writer,live]);
+ const fill=useCallback((text:string)=>composer.current?.fill(text),[]);
  return <ChatView value={view}>{first&&<FirstRunToast mode={first} agent={conversation.agent_name} invites={invites}/>}<div className="convo"><div className="chat">
   <ChatHead panel={panel} slug={slug} agent={agent} conversation={conversation} title={title} writer={writer} board={board}/>
   <Transcript>{children}</Transcript>
   <ChatComposer company={company} conversation={conversation} writer={writer} box={composer}/>
- </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} tab={tab} slug={slug}/>}</div></ChatView>;
+ </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} tab={tab} slug={slug} suggest={writer?fill:undefined}/>}</div></ChatView>;
 }
 
 // The chat's floating title and its corner, as the loaded transcript keeps them (#297): they subscribe to the frame's
@@ -120,7 +121,7 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  return <div className="transcript" ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  <ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread}/>
+  <ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread} details={!!agent}/>
  </div></div>;
 }
 

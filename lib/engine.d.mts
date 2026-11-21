@@ -12,11 +12,13 @@ export type RunInputMessage={role:'user',content:RunInputPart[]};
 export type RunInput=string|RunInputMessage[];
 export type RunQuestion={id:string,text:string,choices:string[],multiple:boolean};
 export type PermissionChoice='once'|'always'|'deny';
-export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[]};
+// `allows` is what an "always" answer keeps among the profile's standing permissions (#166), none when it is not offered.
+export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[],allows?:string[]};
 export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,noModel?:true,modelRefused?:'credit'|'key'|'model'};
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
 export type AnsweredPermission='answered'|'gone'|'unreachable';
-export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true};
+// `routine`: the Routine a create through the Engine's scheduling tool made (#205), its name and schedule as the Engine shows them.
+export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'failed',sandbox?:true,routine?:{name:string,schedule:string}};
 export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 export type SessionUsage={input:number,output:number};
 export type SessionRead={state:'found',turns:SessionTurn[],usage:SessionUsage|null}|{state:'missing'|'refused'|'unreachable',turns:null,usage:null};
@@ -40,10 +42,17 @@ export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[
 // An Agent's memory (#350), read from its own profile: its notes, each with the Engine's id and its text, never a skill.
 export type MemoryNote={id:string,text:string};
 export type MemoryNotes={state:'found',notes:MemoryNote[]}|{state:'refused'|'unreachable'|'failed',notes:null};
-export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed'};
+export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed',unsent?:true};
 // One note rewritten or removed by the Engine's own id (#191); a note that changed since it was read is `stale`.
-export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed'};
-export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed'};
+export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed',unsent?:true};
+export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed',unsent?:true};
+// An Agent's standing permissions (#166): its own profile's entries, each as the Engine keeps it; revoking one is
+// revoked (read back without it), gone (it was not there), or why it could not be done.
+export type StandingPermissions={state:'found',entries:string[]}|{state:'refused'|'unreachable'|'failed',entries:null};
+// `removed`, once the write was sent: whether a read-back still showed the entry ('no'), no longer did ('yes'), or could
+// not tell ('maybe'); absent when nothing was written. `unconfirmed`: the Engine never confirmed the write, so it may
+// still land later, whatever the read-back showed.
+export type StandingRevoke={state:'revoked'|'gone'|'refused'|'unreachable'|'failed',removed?:'no'|'maybe'|'yes',unconfirmed?:true};
 // An Agent's Routine (#31): one cron job of its own Engine profile, as the contract reads it.
 export type RoutineSchedule={kind:string,expr:string|null,minutes:number|null,display:string|null};
 export type Routine={id:string,name:string,prompt:string,schedule:RoutineSchedule,timezone:string|null,on:boolean,state:'scheduled'|'paused'|'running'|'completed'|'error',nextRunAt:string|null,lastRunAt:string|null,lastStatus:'ok'|'failed'|null,lastError:string|null};
@@ -70,3 +79,4 @@ export type Engine={
 };
 export function engineFor(connection:EngineConnection):Engine;
 export function outcomeOf(run:Pick<RunState,'state'|'reply'>):'completed'|'failed'|'stopped'|'lost'|null;
+export function endOf(run:Pick<RunState,'state'|'reply'|'noModel'>):'completed'|'failed'|'no_model'|'stopped'|'lost'|null;

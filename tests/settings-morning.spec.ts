@@ -140,8 +140,8 @@ test('making another Agent the main one moves the daily message to its profile w
  await page.goto(agentPage(ads));
  await expect(overlay(page).locator('#set-make-main')).toBeEnabled();
  await overlay(page).locator('#set-make-main').click();
- await expect.poll(()=>morningJobs(own(ads)).length).toBe(1);
- expect(morningJobs(profile)).toHaveLength(0);
+ // The copy is made paused, switched on once the source is read again, and the source then goes: wait for all three.
+ await expect.poll(()=>[morningJobs(own(ads)).map(job=>job.state),morningJobs(profile).length]).toEqual([['scheduled'],0]);
  const [moved]=morningJobs(own(ads));
  expect([moved.schedule.expr,moved.timezone,moved.state]).toEqual(['30 7 * * *','Africa/Cairo','scheduled']);
  // The new main Agent's page reads it.
@@ -160,8 +160,7 @@ test('removing the main Agent with a replacement moves the daily message to the 
  expect(morningJobs(own(ads))).toHaveLength(1);
  const removed=await page.request.post('/api/hermes-agents',{data:{company,intent:'remove',agent:ads,replacement:lead}});
  expect(removed.status()).toBe(200);
- await expect.poll(()=>morningJobs(profile).length).toBe(1);
- expect(morningJobs(own(ads))).toHaveLength(0);
+ await expect.poll(()=>[morningJobs(profile).map(job=>job.state),morningJobs(own(ads)).length]).toEqual([['scheduled'],0]);
  expect([morningJobs(profile)[0].schedule.expr,morningJobs(profile)[0].state]).toEqual(['30 7 * * *','scheduled']);
  await page.goto(agentPage(lead));
  await hydrated(page);

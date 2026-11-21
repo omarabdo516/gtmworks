@@ -24,7 +24,9 @@ test('card creation allows editing roles only', async () => {
  for(const role of ['viewer','unknown','',undefined]) assert.equal(canCreateCard(/** @type {any} */({role,agencyAccess:true})),false,role);
 });
 
-test('app motion contains no broad transitions or page entrance animations', () => {
+// A page fades in as the reference's view does (app/shell.css .app-content.view-enter, #135); the product's older page
+// entrances (the work view's slide, the veil, view transitions) stay gone, as does a transition of every property.
+test('app motion contains no broad transitions or the old page entrances', () => {
  for (const file of readdirSync('app', {recursive:true}).filter(file => /\.(?:css|tsx)$/.test(file))) {
   assert.doesNotMatch(readFileSync(`app/${file}`, 'utf8'), /transition\s*:\s*all\b|work-enter|work-in|view-transition|420ms|veil-out|card-close|modal-wrap\.closing/, file);
  }
@@ -87,9 +89,9 @@ test('agent dates use western digits and UTC independent of the host time zone',
 
 test('production settings report missing names and reject unsafe values', async () => {
  const {checkSettings,LOCAL_ANON_KEY}=await import('../lib/settings.mjs');
- const env={NODE_ENV:'production',NEXT_PUBLIC_SUPABASE_URL:'http://localhost:54321',NEXT_PUBLIC_SUPABASE_ANON_KEY:'public-test-key',SUPABASE_SERVICE_ROLE_KEY:'test-service',SUPABASE_JWT_SECRET:'test-jwt',WEBHOOK_ENCRYPTION_KEY:Buffer.alloc(32,1).toString('base64'),APP_ORIGIN:'https://example.test'};
+ const env={NODE_ENV:'production',NEXT_PUBLIC_SUPABASE_URL:'http://localhost:54321',NEXT_PUBLIC_SUPABASE_ANON_KEY:'public-test-key',SUPABASE_SERVICE_ROLE_KEY:'test-service',WEBHOOK_ENCRYPTION_KEY:Buffer.alloc(32,1).toString('base64'),APP_ORIGIN:'https://example.test'};
  assert.doesNotThrow(()=>checkSettings(env));
- assert.throws(()=>checkSettings({...env,SUPABASE_JWT_SECRET:'',SUPABASE_SERVICE_ROLE_KEY:''}),/SUPABASE_SERVICE_ROLE_KEY.*SUPABASE_JWT_SECRET/);
+ assert.throws(()=>checkSettings({...env,WEBHOOK_ENCRYPTION_KEY:'',SUPABASE_SERVICE_ROLE_KEY:''}),/SUPABASE_SERVICE_ROLE_KEY.*WEBHOOK_ENCRYPTION_KEY/);
  assert.throws(()=>checkSettings({...env,NEXT_PUBLIC_SUPABASE_ANON_KEY:LOCAL_ANON_KEY}),/NEXT_PUBLIC_SUPABASE_ANON_KEY.*fallback/);
  assert.throws(()=>checkSettings({...env,APP_ORIGIN:'http://example.test'}),/APP_ORIGIN.*https/);
  assert.throws(()=>checkSettings({...env,WEBHOOK_ENCRYPTION_KEY:'bad'}),/WEBHOOK_ENCRYPTION_KEY/);
@@ -120,7 +122,9 @@ test('production worker exits with all missing setting names', async () => {
  const {spawnSync}=await import('node:child_process');
  const result=spawnSync(process.execPath,['worker/index.mjs'],{env:{NODE_ENV:'production'},encoding:'utf8',timeout:10000});
  assert.notEqual(result.status,0);
- for(const name of ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_JWT_SECRET','WEBHOOK_ENCRYPTION_KEY','APP_ORIGIN']) assert.match(result.stderr,new RegExp(name));
+ for(const name of ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','WEBHOOK_ENCRYPTION_KEY','APP_ORIGIN']) assert.match(result.stderr,new RegExp(name));
+ // The worker signs no token, so it never asks for the JWT secret (#446).
+ assert.doesNotMatch(result.stderr,/SUPABASE_JWT_SECRET/);
 });
 
 test('every unavailable Home metric and chart remains unavailable rather than zero', async()=>{

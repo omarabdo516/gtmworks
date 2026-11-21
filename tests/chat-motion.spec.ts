@@ -51,8 +51,12 @@ const motionOf=(part:Locator)=>part.evaluate(element=>{ const style=getComputedS
 const motion=(page:Page,selector:string)=>motionOf(page.locator(selector).first());
 const rises=['gw-rise','0.2s','cubic-bezier(0.2, 0, 0, 1)','1'];
 const breathes=['gw-breathe','1.4s','ease-in-out','infinite'];
-// What still runs on the page: every animation in play, by its name.
-const running=(page:Page)=>page.evaluate(()=>document.getAnimations().filter(animation=>animation.playState==='running').map(animation=>(animation as CSSAnimation).animationName??'transition'));
+// What still runs on the page: every animation in play, by its name. The page's own entrance is left out: a page fades
+// in as it opens, a reload too (#135, design-reference setView), and that is the page, not a message moving.
+const running=(page:Page)=>page.evaluate(()=>document.getAnimations().filter(animation=>animation.playState==='running')
+ .filter(animation=>!(animation instanceof CSSAnimation&&animation.animationName==='gw-fade-in'&&((animation.effect as KeyframeEffect|null)?.target as Element|null)
+  ?.matches('.app-content > :not(.convo-page), .app-content > .convo-page .convo > :not(.details, .dp-scrim)')))
+ .map(animation=>(animation as CSSAnimation).animationName??'transition'));
 
 test('in a Conversation the sent message, the reply and the card for the Agent Lead made rise once, the working line breathes, and a reload moves nothing',async({page})=>{
  test.setTimeout(120000);

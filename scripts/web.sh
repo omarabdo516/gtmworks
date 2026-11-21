@@ -12,8 +12,6 @@ status=$(npx supabase status -o env)
 export NEXT_PUBLIC_SUPABASE_URL=$(printf '%s\n' "$status" | sed -n 's/^API_URL="\(.*\)"$/\1/p')
 export NEXT_PUBLIC_SUPABASE_ANON_KEY=$(printf '%s\n' "$status" | sed -n 's/^ANON_KEY="\(.*\)"$/\1/p')
 export SUPABASE_SERVICE_ROLE_KEY=$(printf '%s\n' "$status" | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')
-local_jwt_secret=$(printf '%s\n' "$status" | sed -n 's/^JWT_SECRET="\(.*\)"$/\1/p')
-export SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-${local_jwt_secret:-super-secret-jwt-token-with-at-least-32-characters-long}}
 export WEBHOOK_ENCRYPTION_KEY=${WEBHOOK_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
 export APP_ORIGIN=${APP_ORIGIN:-http://127.0.0.1:$port}
 # First run opens only with the setup code (issue #50); a local run without one gets a fresh code and its link.

@@ -223,32 +223,49 @@ case "${1:-check}" in
   # The update area updates an install from HEAD's source, which an update downloads from GitHub: HEAD must be pushed to some branch.
   git fetch -q origin "$(git rev-parse HEAD)" 2> /dev/null \
     || { echo "Push HEAD to a branch on GitHub first: the install job downloads it ($(git rev-parse --short HEAD))." >&2; exit 2; }
-  work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-lane; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
+  work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
+  # The machine, its checkout and the work folder go however the run ends (scripts/install-lane-machine.sh, #416): the
+  # EXIT trap after a pass, a failure or SIGINT, SIGTERM or SIGHUP, which first stops this shell's own commands (a signal
+  # to this shell alone would leave the proof's areas running on), and a guard outside the lane's process tree after a
+  # kill that runs no trap, or for what the trap could not remove. Both are in place before anything is made. `set -e`
+  # holds inside the trap too, so nothing in it may fail before the removal.
+  lane="$here/scripts/install-lane-machine.sh"
+  trap 'bash "$lane" remove "$work" $$ || true' EXIT
+  bash "$lane" guard $$ "$work"
   git worktree add -q --detach "$work/src" HEAD
-  trap 'docker rm -fv "$dind" > /dev/null 2>&1 || true; git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true; rm -rf "$work" 2> /dev/null || true' EXIT
-  # One install lane at a time on this machine: a machine an interrupted run left behind is removed first.
-  docker rm -fv "$dind" > /dev/null 2>&1 || true
-  docker run -d --privileged --name "$dind" -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$port:2375" -v "$work/src:$work/src" docker:28.5.1-dind > /dev/null
-  host_docker=${DOCKER_HOST:-}
-  export DOCKER_HOST=tcp://127.0.0.1:$port RUNNER_TEMP=$work/tmp INSTALL_REF
+  bash "$lane" start "$work" "$port"
+  # This shell's Docker stays the host's, so the trap removes the machine there; only the commands meant for the machine
+  # are pointed at it (#416).
+  machine=tcp://127.0.0.1:$port
+  export RUNNER_TEMP=$work/tmp INSTALL_REF
   INSTALL_REF=$(git rev-parse HEAD)
   mkdir -p "$RUNNER_TEMP"
-  for attempt in $(seq 1 60); do docker info > /dev/null 2>&1 && break; sleep 1; done
-  docker info > /dev/null
+  for attempt in $(seq 1 60); do DOCKER_HOST=$machine docker info > /dev/null 2>&1 && break; sleep 1; done
+  DOCKER_HOST=$machine docker info > /dev/null
   # Pulls inside this machine stall here (the nested network behind rootless Docker), so every image the job runs comes
   # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
   images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local' | grep -v '\$'
     awk '/^FROM/ && $2 ~ /[:@]/ {print $2}' Dockerfile
-    grep -o -h -E '(alpine:[0-9.]+|node:[0-9][0-9a-z.-]*|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/install.sh scripts/get.sh; } | sort -u)
+    grep -o -h -E '(alpine:[0-9.]+|node:[0-9][0-9a-z.-]*|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/ci-install-lib.sh scripts/install.sh scripts/get.sh; } | sort -u)
   # The work sandbox image every Company's sandbox runs (#392, #393): CI builds it in the run's image job and loads that
   # build; here it is built on this host from the committed checkout's sandbox/Dockerfile on every run (Docker reuses the
   # layers that did not change), so the lane runs HEAD's image, never an earlier commit's tag or uncommitted files.
   # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's.
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
-  DOCKER_HOST=$host_docker docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
-  images="$images $sandbox_tag"
-  for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
-  DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null
+  docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
+  # The app image the same way, as CI's install jobs load the image job's build under the compose file's tag and set
+  # GTMWORKS_IMAGE_PREBUILT (#411): built here through scripts/docker-build.sh, so a cloud session's CA reaches its npm
+  # steps (#562), and never inside the machine, whose nested network stalls.
+  web_tag=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' "$work/src/docker-compose.install.yml" | head -n 1)
+  bash scripts/docker-build.sh -q -t "$web_tag" "$work/src" > /dev/null
+  images="$images $sandbox_tag $web_tag"
+  export GTMWORKS_IMAGE_PREBUILT=true
+  # Behind an HTTPS proxy (a cloud session) Node reaches GitHub through it, as curl and git do.
+  [[ -z ${HTTPS_PROXY:-}${https_proxy:-} ]] || export NODE_USE_ENV_PROXY=1
+  # The release-update area installs the latest published release with that release's own install.sh, which pulls the
+  # images it pins itself (#483): this machine must reach their registries, as CI's does, or the area stops there.
+  for image in $images; do docker image inspect "$image" > /dev/null 2>&1 || docker pull -q "$image" > /dev/null; done
+  docker save $images | DOCKER_HOST=$machine docker load > /dev/null
   # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it
   # (CI installs them there with npm ci).
   cp -al "$(readlink -f "$here/node_modules")" "$work/src/node_modules"
@@ -257,7 +274,7 @@ case "${1:-check}" in
   # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
   umask 0000
   export INSTALL_LANE_FOREIGN_OWNER=1
-  bash scripts/ci-install-check.sh "$@"
+  DOCKER_HOST=$machine bash scripts/ci-install-check.sh "$@"
   ;;
-  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

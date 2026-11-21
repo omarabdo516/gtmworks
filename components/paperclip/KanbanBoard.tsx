@@ -10,9 +10,11 @@ import '@/app/board.css';
 // Where a carried Card would land (#174): the column under it, and the Card it would sit above (null at the column's end).
 type DropPlace={column:string|null,before:number|null};
 const nowhere:DropPlace={column:null,before:null};
+// Within this many pixels of either edge of the board, a carried Card scrolls the columns (design-reference: dragMove).
+const edge=72;
 // The board tells its columns and Cards where the carried Card would land, so the line shows before that Card or at the
 // column's end (design-reference: dragMove, .is-drop-before, .is-drop-end).
-const DropMark=createContext<{place:DropPlace,carrying:boolean}>({place:nowhere,carrying:false});
+const DropMark=createContext<{place:DropPlace,carrying:boolean,returning:number|null}>({place:nowhere,carrying:false,returning:null});
 
 // The approved design's board (design-reference: #board-cols, .col, .kcard). A card is carried anywhere with the mouse or
 // a finger, and lands above the Card it is dropped on, or at the column's end; the keyboard places it with Shift and the
@@ -30,13 +32,13 @@ export function KanbanColumn({column,name,count,waiting=false,head,children,...p
 
 export function KanbanCard({children,id,column,isOverlay=false,disabled=false,blocked,className='',...props}:Omit<ComponentProps<'div'>,'id'>&{id:number,column:string,isOverlay?:boolean,disabled?:boolean,blocked?:(to:string)=>boolean}) {
  const {attributes,listeners,setNodeRef,isDragging}=useDraggable({id,disabled:disabled||isOverlay,data:{column,blocked}});
- const {place,carrying}=useContext(DropMark);
+ const {place,carrying,returning}=useContext(DropMark);
  // The card's link is the one stop for the keyboard; the draggable box itself is not a second one.
  const {role:_role,tabIndex:_tab,'aria-describedby':_hint,'aria-roledescription':_kind,...rest}=attributes;
  void _role; void _tab; void _hint; void _kind;
  const before=carrying&&!isOverlay&&place.before===id;
  return <div {...props} ref={isOverlay?undefined:setNodeRef} {...(isOverlay?{}:rest)} {...(isOverlay?{}:listeners)} data-card-id={isOverlay?undefined:id} aria-hidden={isOverlay||undefined}
-  className={`kcard card ${className}${isDragging&&!isOverlay?' is-drag-src':''}${before?' is-drop-before':''}${isOverlay?' kcard--ghost':''}`}>{children}</div>;
+  className={`kcard card ${className}${(isDragging||returning===id)&&!isOverlay?' is-drag-src':''}${before?' is-drop-before':''}${isOverlay?' kcard--ghost':''}`}>{children}</div>;
 }
 
 // The Card lands where it was put (design-reference: land): it springs from where it was carried into its place and is
@@ -53,10 +55,16 @@ export function land(el:HTMLElement|null,from:{left:number,top:number}|null=null
  window.setTimeout(()=>{ el.style.transition=''; el.classList.remove('is-landing'); },380);
 }
 
-export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,children}:{label:string,busy:boolean,cards:{id:number,title:string,column:string}[],columnName:(column:string)=>string,onMove:(card:number,column:string,before:number|null)=>Promise<boolean>|boolean,renderOverlay:(id:number)=>ReactNode,children:ReactNode}) {
+export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,children}:{label:string,busy:boolean,cards:{id:number,title:string,column:string}[],columnName:(column:string)=>string,onMove:(card:number,column:string,before:number|null,from:{left:number,top:number}|true)=>Promise<boolean>|boolean,renderOverlay:(id:number)=>ReactNode,children:ReactNode}) {
  const {t}=useI18n();
  const [activeId,setActiveId]=useState<number|null>(null);
  const [place,setPlace]=useState<DropPlace>(nowhere);
+ // The Card flying back to its place: it stays dimmed there until the carried copy arrives (design-reference: dragEnd).
+ const [returning,setReturning]=useState<number|null>(null);
+ const flyBack=useRef<number|null>(null);
+ // The bars grow in when the board opens; the class that does it is gone 900ms later (design-reference: boardEnter).
+ const [entering,setEntering]=useState(true);
+ useEffect(()=>{ const timer=window.setTimeout(()=>setEntering(false),900); return ()=>clearTimeout(timer); },[]);
  // The pointer's own place, read on every move of the mouse or the finger rather than once per droppable, so the line
  // stands before the Card the carried one is really over (design-reference: dragMove's card under the pointer).
  const carrying=useRef<number|null>(null); const dropped=useRef<DropPlace>(nowhere); const shown=useRef<DropPlace>(nowhere);
@@ -76,6 +84,14 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   const next=under.find(card=>{ const box=card.getBoundingClientRect(); return box.top+box.height/2>y; });
   return {column:column.getAttribute('data-column'),before:next?Number(next.dataset.cardId):null};
  };
+ // After a drag, the release must not open the Card (design-reference: MOT.swallow): a click on a Card within 60ms of a
+ // drag's end is swallowed.
+ const swallowUntil=useRef(0);
+ useEffect(()=>{
+  const swallow=(event:MouseEvent)=>{ if(performance.now()>swallowUntil.current||!(event.target as Element|null)?.closest?.('.kcard')) return; swallowUntil.current=0; event.preventDefault(); event.stopPropagation(); };
+  window.addEventListener('click',swallow,true);
+  return ()=>window.removeEventListener('click',swallow,true);
+ },[]);
  useEffect(()=>{
   // The place under the pointer, read again on every move of the mouse or the finger, and when the board or a column
   // scrolls under a resting pointer: the Cards move without a pointer move, and the line and the drop follow them.
@@ -89,7 +105,28 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   window.addEventListener('touchstart',follow,options); window.addEventListener('touchmove',follow,options); window.addEventListener('mousedown',follow,options); window.addEventListener('mousemove',follow,options); window.addEventListener('scroll',read,options);
   return ()=>{ window.removeEventListener('touchstart',follow,options); window.removeEventListener('touchmove',follow,options); window.removeEventListener('mousedown',follow,options); window.removeEventListener('mousemove',follow,options); window.removeEventListener('scroll',read,options); };
  },[]);
+ // While a Card is carried, each frame leans it with the pointer's speed and scrolls the columns near an edge of the
+ // board (design-reference: dragMove's tilt, dragScroll). Read per frame, so a pointer that stands still lets the lean
+ // settle back to 2deg.
+ useEffect(()=>{
+  if(activeId===null) return;
+  let tilt=0,lastX=finger.current?.x??null,frame=0;
+  const step=()=>{
+   const at=finger.current; const reduced=prefersReducedMotion();
+   if(at) {
+    tilt=reduced||lastX===null?0:Math.max(-6,Math.min(6,tilt*0.6+(at.x-lastX)*0.45)); lastX=at.x;
+    document.querySelector<HTMLElement>('.kcard--ghost')?.style.setProperty('--gw-tilt',`${tilt.toFixed(2)}deg`);
+    const scroller=document.getElementById('board-cols');
+    if(scroller) { const box=scroller.getBoundingClientRect(); const by=at.y<box.top||at.y>box.bottom?0:at.x<box.left+edge?-12:at.x>box.right-edge?12:0; if(by) scroller.scrollLeft+=by; }
+   }
+   frame=requestAnimationFrame(step);
+  };
+  frame=requestAnimationFrame(step);
+  return ()=>cancelAnimationFrame(frame);
+ },[activeId]);
  const canScroll=(element:Element)=>{
+  // The board's own columns scroll sideways by the frame loop above, 12px a frame, as the reference's do.
+  if(element.id==='board-cols') return false;
   if(!finger.current) return true;
   const box=element===document.scrollingElement?{left:0,top:0,right:innerWidth,bottom:innerHeight,width:innerWidth,height:innerHeight}:element.getBoundingClientRect();
   // A box scrolls by itself on the axis it has the most room to scroll: the board runs sideways even when a runner lays
@@ -98,23 +135,38 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   return inEdgeBand(box,finger.current,axes);
  };
  const columnFor=(id:string|number|undefined)=>id===undefined?undefined:String(id).startsWith('column:')?String(id).slice(7):cards.find(card=>card.id===Number(id))?.column;
- const putAway=()=>{ carrying.current=null; dropped.current=nowhere; shown.current=nowhere; setActiveId(null); setPlace(nowhere); };
- return <DndContext id="work-board" sensors={sensors} autoScroll={{canScroll}} onDragStart={({active})=>{ carrying.current=Number(active.id); setActiveId(Number(active.id)); }} onDragCancel={putAway} onDragEnd={({active,over})=>{
+ const putAway=()=>{ swallowUntil.current=performance.now()+60; carrying.current=null; dropped.current=nowhere; shown.current=nowhere; setActiveId(null); setPlace(nowhere); };
+ // A Card let go over nothing, over its own place, or cancelled with Escape flies back to its place over 220ms and is
+ // removed when it arrives; with reduced motion it is gone at once. A Card that moves is removed at once and lands.
+ // dnd-kit skips the drop animation when it cannot measure the Card's place (a refresh drew it away), so the dimmed
+ // place is also cleared after the flight's own time.
+ const returnHome=(id:number)=>{ if(prefersReducedMotion()) return; flyBack.current=id; setReturning(id); window.setTimeout(()=>{ if(flyBack.current===id) flyBack.current=null; setReturning(current=>current===id?null:current); },300); };
+ const dropAnimation=({active,dragOverlay}:{active:{rect:{left:number,top:number}},dragOverlay:{node:HTMLElement}})=>{
+  const id=flyBack.current; flyBack.current=null;
+  const ghost=dragOverlay.node.querySelector<HTMLElement>('.kcard--ghost');
+  if(id===null||!ghost) { setReturning(null); return; }
+  const from=dragOverlay.node.getBoundingClientRect();
+  ghost.style.transition='transform 220ms var(--gw-ease-out)';
+  ghost.style.transform=`translate(${active.rect.left-from.left}px, ${active.rect.top-from.top}px)`;
+  return new Promise<void>(done=>window.setTimeout(()=>{ setReturning(current=>current===id?null:current); done(); },230));
+ };
+ return <DndContext id="work-board" sensors={sensors} autoScroll={{canScroll}} onDragStart={({active})=>{ flyBack.current=null; setReturning(null); carrying.current=Number(active.id); setActiveId(Number(active.id)); }} onDragCancel={({active})=>{ returnHome(Number(active.id)); putAway(); }} onDragEnd={({active,over})=>{
   const id=Number(active.id); const card=cards.find(item=>item.id===id); const was=active.rect.current.translated;
   // The place under the pointer now, not the one the last pointer move named: a column or the board may have scrolled
   // since, moving the Cards under a resting finger (design-reference: dragEnd's card under the pointer).
   const at=finger.current?placeAt(finger.current.x,finger.current.y,id):dropped.current;
   putAway();
-  if(!card||!over||!at.column) return;
+  if(!card||!over||!at.column) { returnHome(id); return; }
   // A drop on the Card's own place changes nothing (design-reference: dragEnd's sameSpot).
-  if(!placeChanges(cards.filter(item=>item.column===at.column).map(item=>item.id),id,at.before)) return;
-  // The Card lands only once the server took the place: a refused move stays where it is, with no motion to say it went.
-  void Promise.resolve(onMove(id,at.column,at.before)).then(ok=>{ if(ok) land(document.querySelector<HTMLElement>(`#board-cols .kcard[data-card-id="${id}"]`),was?{left:was.left,top:was.top}:null); });
+  if(!placeChanges(cards.filter(item=>item.column===at.column).map(item=>item.id),id,at.before)) { returnHome(id); return; }
+  // The page lands the Card from where it was let go once the server took the place and the Card is drawn there: a
+  // refused move stays where it is, with no motion to say it went.
+  void onMove(id,at.column,at.before,was?{left:was.left,top:was.top}:true);
  }} accessibility={{screenReaderInstructions:{draggable:t('boardDragHint')},announcements:{onDragStart:({active})=>t('dragStarted',cards.find(card=>card.id===Number(active.id))?.title),onDragOver:({over})=>over?t('dragOver',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragEnd:({over})=>over?t('dragEnded',columnName(columnFor(over.id)||'')):t('dragCancelled'),onDragCancel:()=>t('dragCancelled')}}}>
-  <DropMark.Provider value={{place,carrying:activeId!==null}}>
-   <div className="board board-cols" id="board-cols" aria-label={label} aria-busy={busy}>{children}</div>
+  <DropMark.Provider value={{place,carrying:activeId!==null,returning}}>
+   <div className={`board board-cols${entering?' board--enter':''}`} id="board-cols" aria-label={label} aria-busy={busy}>{children}</div>
    {/* The carried Card follows the pointer and never catches it, so the Card under the pointer is the one read (#174). */}
-   <DragOverlay dropAnimation={null} style={{pointerEvents:'none'}}>{activeId!==null?renderOverlay(activeId):null}</DragOverlay>
+   <DragOverlay dropAnimation={dropAnimation} style={{pointerEvents:'none'}}>{activeId!==null?renderOverlay(activeId):null}</DragOverlay>
   </DropMark.Provider>
  </DndContext>;
 }

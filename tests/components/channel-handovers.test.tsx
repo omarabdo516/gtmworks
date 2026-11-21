@@ -109,3 +109,65 @@ test('in Arabic the row and the sender line read in the interface\'s own words',
  expect(turns.querySelector('.sender__to')?.textContent).toBe('لـ Lead');
  expect(turns.querySelector('[data-handover] .gw-icon path')?.getAttribute('d')).toBe('M19 12H5');
 });
+
+// #375: a handover that did not finish says so on the channel's handoff row, after the job, in the interface's language,
+// and Lead's reply after it still follows. One that finished says nothing of it.
+for (const [language, line] of [['en', 'The job didn’t finish'], ['ar', 'الشغل ماخلصش']] as const) test(`in ${language} a handover that did not finish says so on its row`, async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const messages: ChannelMessage[] = [
+  { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Lead plan the March ads', at: '2026-06-10T09:05:00Z', files: [], mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } },
+  { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Plan the Meta ads', at: '2026-06-10T09:06:00Z', failed: true },
+  { id: 'handover-7-reply', author: 'agent', name: 'Lead', face: 'c-1', body: 'Ads could not finish the plan.', at: '2026-06-10T09:30:00Z' },
+  { id: 'handover-8', author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Write the launch email', at: '2026-06-10T09:31:00Z' },
+ ];
+ const screen = await view(record(messages), language);
+ const rows = Array.from(screen.container.querySelectorAll('.turns [data-handover]'));
+ expect(rows.map(row => row.hasAttribute('data-failed'))).toEqual([true, false]);
+ expect([...rows[0].children].map(part => part.className)).toEqual(['handed__faces', 'handed__t', 'handed__d', 'handed__failed']);
+ expect(rows[0].querySelector('.handed__failed')?.textContent).toBe(line);
+ expect(rows[0].querySelector('.handed__d')?.textContent).toBe('Plan the Meta ads');
+ expect(rows[1].querySelector('.handed__failed')).toBeNull();
+ expect(rows[0].nextElementSibling?.querySelector('.bubble')?.textContent).toBe('Ads could not finish the plan.');
+});
+
+// #375: the details' Handoffs list marks a handover that did not finish too, before its time.
+test('the details mark a handover that did not finish, and leave a finished one as it was', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await view(record([], [{ ...handoff(9, 'Plan the Meta ads', '08'), failed: true }, handoff(8, 'Write the launch email', '04')]), 'ar');
+ const rows = Array.from(screen.container.querySelectorAll('#ch-h-h ~ .panel-card .panel-row'));
+ expect(rows.map(row => row.hasAttribute('data-failed'))).toEqual([true, false]);
+ expect(rows[0].querySelector('.panel-row__d')?.textContent).toBe(`Plan the Meta ads · الشغل ماخلصش · ${timeOf('2026-06-10T09:08:00Z', 'ar')}`);
+ expect(rows[1].querySelector('.handed__failed')).toBeNull();
+});
+
+// #428: a handover that ended with no reply because the Company has no model at all says so under its row, in the words
+// a Conversation uses (#422): the Owner gets the way to Subscription and models, a Member is told to ask the Owner. A
+// handover that ended otherwise draws no such line.
+const noModelWords = {
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Subscription and models', ask: 'Ask the company’s Owner to connect one in Settings.' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من الاشتراك والموديلات', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.' },
+} as const;
+for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a handover that ended for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'} under its row`, async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const said = noModelWords[language];
+ const asked: ChannelMessage = { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Lead plan the ads', at, files: [], mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } };
+ const answered: ChannelMessage = { id: 2, author: 'agent', name: 'Lead', face: 'c-1', body: 'Handing it to Ads.', at };
+ const row = (id: number, noModel: boolean): ChannelMessage => ({ id: `handover-${id}`, author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: `Job ${id}`, at, ...(noModel ? { noModel: true as const } : {}) });
+ const screen = await view(record([asked, answered, row(7, true), row(8, false)], [], { noModel: { owner } }), language);
+ const turns = Array.from(screen.container.querySelectorAll('.turns > li'));
+ const handed = turns.findIndex(turn => turn.textContent?.includes('Job 7'));
+ const line = turns[handed + 1];
+ expect(line.getAttribute('role')).toBe('alert');
+ expect(line.getAttribute('data-outcome')).toBe('no-model');
+ expect(line.textContent).toContain(said.line);
+ expect(turns[handed + 2].textContent).toContain('Job 8');
+ expect(screen.container.querySelectorAll('[data-outcome="no-model"]').length).toBe(1);
+ if (owner) {
+  expect(line.querySelector('a')?.textContent).toBe(said.connect);
+  expect(line.querySelector('a')?.getAttribute('href')).toBe('/c/rs-learning/settings?section=models');
+  expect(line.textContent).not.toContain(said.ask);
+ } else {
+  expect(line.textContent).toContain(said.ask);
+  expect(line.querySelector('a')).toBeNull();
+ }
+});

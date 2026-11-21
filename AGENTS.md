@@ -20,7 +20,7 @@ Deleting code or files inside your pull request or your own worktree is normal w
 
 `./ci.sh check` runs everything CI runs; `./ci.sh fast` is the quick loop (static checks, node tests, component tests).
 `./ci.sh install` runs the CI install job (`scripts/ci-install-check.sh`) on an isolated Docker machine here; it runs `HEAD`, so commit first.
-In a cloud session, before every push, bring the app up with `npm run cloud:up`, walk `npm run cloud:verify`, and use your change as a person would: `docs/agents/cloud-verify.md`.
+In a cloud session, before every push, bring the app up with `npm run cloud:up`, walk `npm run cloud:verify`, and use your change as a person would: `docs/agents/cloud-verify.md`, which also says how the image and integration jobs run there (`scripts/docker-build.sh`).
 
 ## Read when
 

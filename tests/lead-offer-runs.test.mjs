@@ -30,6 +30,7 @@ function database({brief,main=true,tools=null}={}) {
   calls.push([name,args]);
   if(name==='conversation_agent') return ok(null);
   if(name==='reserve_conversation_turn') return ok({state:'reserved',connection:'f9000000-0000-0000-0000-000000000001',profile:'writer',note:null});
+  if(name==='conversation_handover_agents') return ok([{name:'Ads',job:'Meta ads'}]);
   if(name==='pin_run') return ok({tools:tools?JSON.stringify(tools.map(tool=>JSON.parse(args.specs[tool]))):null});
   if(name==='pin_run_history'||name==='pin_run_model') return ok(null);
   if(name==='pin_lead_brief') return ok(main?brief??null:null);

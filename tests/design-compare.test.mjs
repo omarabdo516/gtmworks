@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture } from '../scripts/design-compare-lib.mjs';
+import { parseArgs, screens, outputPaths, resolveStaticPath, startStaticServer, anonymousCaptureUrl, fixture, referenceProblems } from '../scripts/design-compare-lib.mjs';
+import { createHash } from 'node:crypto';
 
 const valid = ['--screen', 'home', '--width', '1440', '--lang', 'ar', '--theme', 'dark'];
 
@@ -122,7 +123,7 @@ test('every screen says how to reach it in the reference and which built page it
     for (const step of steps) {
       assert.equal(Object.keys(step).length, 1, `${name}: one action per step`);
       const [[action, value]] = Object.entries(step);
-      assert.ok(['click', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press', 'goto', 'finish'].includes(action), `${name}: known action ${action}`);
+      assert.ok(['click', 'clickIf', 'waitFor', 'waitGone', 'scrollTo', 'fill', 'press', 'goto', 'finish'].includes(action), `${name}: known action ${action}`);
       if (action === 'goto') { assert.match(value, /^\/c\/rs-(learning|consultations)\/[a-z/]+(\/[0-9a-f-]{36})?$/, `${name}: a built page`); continue; }
       // A press names one key as Playwright does (a letter, or a name such as ArrowDown or KeyN), not a selector.
       if (action === 'press') { assert.match(value, /^([a-z]|[A-Z][A-Za-z]+)$/, `${name}: a key`); continue; }
@@ -288,5 +289,47 @@ test('the static server serves the reference and answers 404 for traversal', asy
   } finally {
     await new Promise(resolve => server.close(resolve));
     rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+// The tool checks the reference it draws from against its SHA256SUMS before it captures (#285, #271), on a copy made
+// here: no CI test reads the frozen reference itself.
+test('the tool accepts a reference that is its SHA256SUMS, file for file, and names every difference otherwise', () => {
+  const root = mkdtempSync(join(tmpdir(), 'design-reference-'));
+  const sum = text => createHash('sha256').update(text).digest('hex');
+  try {
+    mkdirSync(join(root, '.assets'));
+    writeFileSync(join(root, 'index.html'), '<p>reference</p>');
+    writeFileSync(join(root, '.assets', 'face.svg'), '<svg/>');
+    writeFileSync(join(root, 'SHA256SUMS'), `${sum('<p>reference</p>')}  ./index.html\n${sum('<svg/>')} *.assets/face.svg\n`);
+    assert.deepEqual(referenceProblems(root), []);
+    writeFileSync(join(root, 'index.html'), '<p>edited</p>');
+    writeFileSync(join(root, 'extra.js'), 'x');
+    rmSync(join(root, '.assets', 'face.svg'));
+    writeFileSync(join(root, 'SHA256SUMS'), `${readFileSync(join(root, 'SHA256SUMS'), 'utf8')}not a line\n`);
+    assert.deepEqual(referenceProblems(root).sort(), [
+      'SHA256SUMS line is not "<sha256>  <path>": not a line', 'changed: index.html', 'listed file is missing: .assets/face.svg', 'not in SHA256SUMS: extra.js',
+    ].sort());
+    rmSync(join(root, 'SHA256SUMS'));
+    assert.deepEqual(referenceProblems(root), [`${join(root, 'SHA256SUMS')} is missing`]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the tool stops before it captures when the reference is not its SHA256SUMS, and writes no image', () => {
+  const root = mkdtempSync(join(tmpdir(), 'design-reference-'));
+  const out = join(root, 'out', 'home.png');
+  try {
+    writeFileSync(join(root, 'index.html'), '<p>edited</p>');
+    writeFileSync(join(root, 'SHA256SUMS'), `${createHash('sha256').update('<p>reference</p>').digest('hex')}  ./index.html\n`);
+    const run = spawnSync(process.execPath, ['scripts/design-compare.mjs', '--screen', 'home', '--width', '1440', '--lang', 'ar', '--theme', 'dark', '--reference-only', '--out', out], {
+      encoding: 'utf8', env: { ...process.env, GTMWORKS_DESIGN_REFERENCE: root },
+    });
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /design-reference\/ is not the approved copy[\s\S]*changed: index\.html/);
+    assert.equal(existsSync(join(root, 'out')), false, 'no capture was written');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

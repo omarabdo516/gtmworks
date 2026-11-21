@@ -23,13 +23,13 @@ const cases = [...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, comma
 
 test('the proof is one job with one matrix entry per area, every entry left to its end', () => {
   assert.equal(job.name, 'install-${{ matrix.area }}', 'the name says which area failed');
-  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous-archive', 'sandbox-update', 'staged-update', 'sizes', 'engines-update', 'one-line', 'updater'] } });
+  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sizes', 'engines-update', 'one-line', 'updater'] } });
   assert.equal(job.permissions.contents, 'read');
   // Its time limit is tests/ci-budgets.test.mjs's, one table for every job of the full check (#410).
 });
 
-const areaFns = ['first_install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous_archive', 'sandbox_update', 'staged_update', 'sizes', 'engines_update', 'one_line', 'updater'];
-// The proof's fourteen areas (#389's rollback, previous-archive, engines-update and staged-update, #397's sandbox-update, #400's sizes, #443's updater the last) in the order it has always run them, then the measurement: all of them in subshells when no
+const areaFns = ['first_install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous_archive', 'release_update', 'sandbox_update', 'staged_update', 'sizes', 'engines_update', 'one_line', 'updater'];
+// The proof's fifteen areas (#389's rollback, previous-archive, engines-update and staged-update, #483's release-update, #397's sandbox-update, #400's sizes, #443's updater the last) in the order it has always run them, then the measurement: all of them in subshells when no
 // area is named, one area when one is (#406, #411).
 const allAreas = [...areaFns, 'measure'];
 
@@ -53,6 +53,7 @@ test('the dispatch names every area once, in the matrix, the measurement and all
   assert.equal(dispatches.rollback, 'rollback');
   assert.equal(dispatches.update, 'update');
   assert.equal(dispatches['previous-archive'], 'previous_archive');
+  assert.equal(dispatches['release-update'], 'release_update');
   assert.equal(dispatches['sandbox-update'], 'sandbox_update');
   assert.equal(dispatches['staged-update'], 'staged_update');
   assert.equal(dispatches.sizes, 'sizes');
@@ -217,7 +218,7 @@ test('every ./ci.sh install area the checks document names is a case of the disp
   const doc = readFileSync('docs/agents/checks.md', 'utf8');
   const dispatches = new Set([...script.matchAll(/^ ([\w-]+)\)/gm)].map(([, name]) => name));
   const areas = new Set([...doc.matchAll(/\.\/ci\.sh install ([a-z][a-z-]*)/g)].map(([, area]) => area));
-  assert.deepEqual([...areas].sort(), ['agents', 'backup', 'companies', 'engines-update', 'first-install', 'measure', 'one-line', 'previous-archive', 'proxy', 'rollback', 'sandbox-update', 'sizes', 'staged-update', 'update', 'updater']);
+  assert.deepEqual([...areas].sort(), ['agents', 'backup', 'companies', 'engines-update', 'first-install', 'measure', 'one-line', 'previous-archive', 'proxy', 'release-update', 'rollback', 'sandbox-update', 'sizes', 'staged-update', 'update', 'updater']);
   for (const area of areas) assert.ok(dispatches.has(area), `./ci.sh install ${area}`);
 });
 
@@ -228,5 +229,93 @@ test('backup and restore is an area of its own and the first-install job no long
   assert.doesNotMatch(first, /backup/, 'the first-install area runs no backup check');
   assert.match(script, /^ backup\) backup;;$/m, 'the proof has a backup area of its own');
   // The area is one command of the repo, and its sentence names it on a failure.
-  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| backup \| proxy \| rollback \| update \| previous-archive \| sandbox-update \| staged-update \| sizes \| engines-update \| one-line \| updater \| measure\]/);
+  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| backup \| proxy \| rollback \| update \| previous-archive \| release-update \| sandbox-update \| staged-update \| sizes \| engines-update \| one-line \| updater \| measure\]/);
+});
+
+// #483: the update a stable install really takes. The release-update area installs the latest published release from
+// its own two files, read from the releases list on every run (never a fixed commit or tag), and updates it to this one.
+test('the release-update area installs the latest published release from its two files and updates it to this one', () => {
+  const area = script.slice(script.indexOf('\nrelease_update() {'), script.indexOf('\n}\n', script.indexOf('\nrelease_update() {')));
+  assert.match(area, /stable=\$\(node scripts\/latest-release\.mjs "\$dir"\)/, 'the release is read from the releases list');
+  assert.doesNotMatch(area, /git (worktree|fetch|cat-file)|[0-9a-f]{40}|v\d+\.\d+\.\d+/, 'no fixed commit or tag');
+  assert.match(area, /sh "\$dir\/install\.sh" \|\| fail/, 'installed from its own install.sh');
+  assert.match(area, /cp "\$root\/release-first\/docker-compose\.install\.yml" "\$root\/release-first\/install\.sh" \. .*\n\s*sh install\.sh update \|\| fail/, 'updated to this release with its two files');
+  assert.match(readFileSync(resolve('scripts/ci-install-lib.sh'), 'utf8'), /for fixture in [^;]*\bstable-release-install\b/, 'a later area takes its install down');
+});
+
+// #423: the four areas that update from a fixed commit of main (update and previous-archive from the release before the
+// Engines, sandbox-update and staged-update from the release before the work sandbox) spent about three minutes each
+// building that commit's image. A fixed commit's image is the same on every run, so CI keeps it, keyed by the commit,
+// and an area loads it instead of building it again; the proof itself is unchanged.
+const lib = readFileSync(proof[1], 'utf8');
+const fixedAreas = { update: 'previous', 'previous-archive': 'previous', 'sandbox-update': 'before_sandbox', 'staged-update': 'before_sandbox' };
+const commitOf = area => spawnSync('bash', ['-c', '. scripts/ci-install-lib.sh; area_release_commit "$1"', '_', area], { encoding: 'utf8' });
+
+test('each area that updates from a fixed release names its commit once, in the lib, and builds it only through release_image', () => {
+  const commits = Object.fromEntries([...lib.matchAll(/^(previous|before_sandbox)_release_commit=([0-9a-f]{40})$/gm)].map(([, name, sha]) => [name, sha]));
+  assert.deepEqual(Object.keys(commits).sort(), ['before_sandbox', 'previous']);
+  for (const [area, name] of Object.entries(fixedAreas)) {
+    const out = commitOf(area);
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(out.stdout, commits[name], `${area} updates from its fixed commit`);
+  }
+  for (const area of matrix.filter(area => !fixedAreas[area])) assert.equal(commitOf(area).stdout, '', `${area} builds no earlier release`);
+  // No area builds a fixed commit's image itself, and no commit is written a second time in the proof.
+  assert.doesNotMatch(script, /docker build[^\n]*"\$RUNNER_TEMP\/(previous-release|sandbox-previous-release|staged-previous-release)"/);
+  for (const sha of Object.values(commits)) assert.equal(script.includes(sha), false, `${sha} is written in the lib only`);
+  assert.equal(script.match(/^\s*release_image "\$\w+" localhost:5000\/gtmworks:0\.0\.0-\w+ "\$RUNNER_TEMP\/[\w-]+"/gm).length, 3, 'the three builds of a fixed commit go through release_image');
+});
+
+test('the install job keeps a fixed release image keyed by its commit, for the areas that update from one only', () => {
+  const release = job.steps.find(step => step.id === 'release');
+  assert.ok(release, 'a step reads the fixed commit of the area');
+  assert.match(release.run, /area_release_commit "\$\{\{ matrix\.area \}\}"/);
+  const cache = job.steps.find(step => (step.uses ?? '').startsWith('actions/cache@'));
+  assert.ok(cache, 'the job keeps the image in the Actions cache');
+  assert.equal(cache.if, "${{ steps.release.outputs.commit != '' }}", 'only an area with a fixed release keeps one');
+  assert.equal(cache.with.key, 'install-release-image-${{ steps.release.outputs.commit }}', 'keyed by the commit alone: the image is that commit\'s');
+  const proofStep = job.steps.find(step => step.name === 'the install proof');
+  assert.equal(proofStep.env.GTMWORKS_RELEASE_IMAGES, cache.with.path, 'the proof reads and writes the kept images where the cache keeps them');
+  assert.ok(job.steps.indexOf(cache) < job.steps.indexOf(proofStep), 'restored before the proof runs');
+});
+
+// release_image with a stand-in `docker` that logs its calls: without GTMWORKS_RELEASE_IMAGES it builds as before; with
+// it, the first run builds and saves, and the next run loads the saved image and builds nothing.
+test('release_image builds a fixed commit once, then loads what it saved', async () => {
+  const { mkdtempSync, writeFileSync, chmodSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(`${tmpdir()}/release-image-`);
+  try {
+    writeFileSync(`${dir}/docker`, '#!/bin/sh\necho "$*" >> "$DOCKER_LOG"\nif [ "$1" = save ]; then : > "$3"; fi\nif [ "$1" = "${DOCKER_FAILS:-}" ]; then exit 1; fi\n');
+    chmodSync(`${dir}/docker`, 0o755);
+    const run = (env, status = 0) => {
+      const out = spawnSync('bash', ['-c', '. scripts/ci-install-lib.sh; release_image abc123 localhost:5000/gtmworks:0.0.0-main /src --build-arg X=1'], {
+        encoding: 'utf8', env: { ...process.env, NODE_EXTRA_CA_CERTS: '', PATH: `${dir}:${process.env.PATH}`, DOCKER_LOG: `${dir}/log`, ...env },
+      });
+      assert.equal(out.status, status, out.stderr);
+      const log = readFileSync(`${dir}/log`, 'utf8').trim().split('\n');
+      rmSync(`${dir}/log`);
+      return log;
+    };
+    assert.deepEqual(run({ GTMWORKS_RELEASE_IMAGES: '' }), ['build -q --build-arg X=1 -t gtmworks-release:abc123 /src', 'tag gtmworks-release:abc123 localhost:5000/gtmworks:0.0.0-main']);
+    const kept = { GTMWORKS_RELEASE_IMAGES: `${dir}/kept` };
+    assert.deepEqual(run(kept), ['build -q --build-arg X=1 -t gtmworks-release:abc123 /src', `save -o ${dir}/kept/abc123.tar gtmworks-release:abc123`, 'tag gtmworks-release:abc123 localhost:5000/gtmworks:0.0.0-main']);
+    assert.deepEqual(run(kept), [`load -q -i ${dir}/kept/abc123.tar`, 'tag gtmworks-release:abc123 localhost:5000/gtmworks:0.0.0-main']);
+    // A kept archive that does not load (a cut-off save) is built and saved again, then tagged.
+    assert.deepEqual(run({ ...kept, DOCKER_FAILS: 'load' }), [`load -q -i ${dir}/kept/abc123.tar`, 'build -q --build-arg X=1 -t gtmworks-release:abc123 /src', `save -o ${dir}/kept/abc123.tar gtmworks-release:abc123`, 'tag gtmworks-release:abc123 localhost:5000/gtmworks:0.0.0-main']);
+    // A failed build saves and tags nothing, and the area's own sentence names it.
+    rmSync(`${dir}/kept`, { recursive: true });
+    assert.deepEqual(run({ ...kept, DOCKER_FAILS: 'build' }, 1), ['build -q --build-arg X=1 -t gtmworks-release:abc123 /src']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// #423: `./ci.sh install` loads every image the proof runs from the host, found by name in the proof's files; the local
+// registry's image is named in the lib (start_registry), so the lib is one of the files it reads.
+test('./ci.sh install loads the images the lib names too', () => {
+  const lane = readFileSync(resolve('ci.sh'), 'utf8').split('\n').find(line => line.includes('registry:[0-9.]+'));
+  assert.ok(lane, 'the lane finds the images by name');
+  assert.match(lane, /scripts\/ci-install-check\.sh scripts\/ci-install-lib\.sh/);
+  assert.match(lib, /registry:2\.8\.3/, 'the registry image is named in the lib');
 });

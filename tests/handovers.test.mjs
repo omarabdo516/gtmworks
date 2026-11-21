@@ -16,7 +16,7 @@ const targetSession='d1000000-0000-0000-0000-000000000001';
 /** The one handover as the database keeps it, and what the driver asked of it. */
 function handover(overrides = {}) {
  const row={id:7,state:'waiting',conversation,goal:'Plan the Meta ads for the March intake',context:'EGP 9,000 for 30 days.',target:'Ads',
-  target_attempts:0,return_attempts:0,target_run:null,follow_up_run:null,target_outcome:null,summary:null,follow_up_outcome:null,...overrides};
+  asker_profile:leadProfile,target_attempts:0,return_attempts:0,target_run:null,follow_up_run:null,target_outcome:null,summary:null,follow_up_outcome:null,...overrides};
  const calls=/** @type {[string,any][]} */([]); const messages=/** @type {{author:string,body:string,run:string}[]} */([]); const ends=/** @type {{run:string,outcome:string}[]} */([]);
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  const input=()=>{
@@ -28,11 +28,11 @@ function handover(overrides = {}) {
   rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
    if(name==='handovers_due') return ok(row.state==='done'||row.state==='failed'||row.id<=args.after?[]:[{id:row.id,state:row.state,
     conversation:row.conversation,run:row.state==='target'?row.target_run:row.state==='follow_up'?row.follow_up_run:null,
-    profile:row.state==='waiting'||row.state==='target'?targetProfile:leadProfile,
+    profile:row.state==='waiting'||row.state==='target'?targetProfile:row.asker_profile,
     attempt:row.state==='returning'?row.return_attempts:row.target_attempts}]);
    if(name==='begin_handover') {
     if(row.state==='waiting') { row.target_attempts+=1; return ok([{state:'waiting',attempt:row.target_attempts,company:'10000000-0000-0000-0000-000000000001',profile:targetProfile,session:targetSession,input:input(),instructions:'Run the Meta ads.'}]); }
-    if(row.state==='returning') { row.return_attempts+=1; return ok([{state:'returning',attempt:row.return_attempts,company:'10000000-0000-0000-0000-000000000001',profile:leadProfile,session:conversation,input:input(),instructions:'Lead the team.'}]); }
+    if(row.state==='returning') { row.return_attempts+=1; return ok([{state:'returning',attempt:row.return_attempts,company:'10000000-0000-0000-0000-000000000001',profile:row.asker_profile,session:conversation,input:input(),instructions:row.asker_profile===leadProfile?'Lead the team.':null}]); }
     return ok([]);
    }
    if(name==='answer_handover') {
@@ -100,6 +100,27 @@ test('Lead\'s handover runs the job on the target\'s own profile with no tools, 
   [['close_handover_target','h,run,run_outcome,words'],['close_handover_follow_up','h,reply,run,run_outcome']]);
 });
 
+// #475: any Agent asks, not only Lead. Writer, on a profile of its own, hands Ads a job from the Writer's own chat: Ads
+// runs on its own profile in its own session, and Writer's follow-up runs on Writer's profile in the Conversation's.
+test('an Agent that is not the main one hands a job over: the target runs on its own profile, then the asking Agent replies on its own',async()=>{
+ const writerProfile='ag-01000000000000000000000000000002';
+ const {row,service,messages}=handover({asker_profile:writerProfile});
+ const {lead:writer,target,used,engineFor}=engines();
+ target.settings.reply=()=>'Last campaign: 1,240 leads at EGP 7.30 each.';
+ writer.settings.reply=()=>'Ads says last campaign brought 1,240 leads at EGP 7.30 each; the copy leads with that.';
+ await drive(service,engineFor,row);
+ assert.equal(row.state,'done');
+ assert.deepEqual([...new Set(used)],[targetProfile,writerProfile],'Ads on its own profile first, then the Writer on its own');
+ const asked=target.runs.filter(run=>run.key===`handover:${row.id}:target`);
+ assert.equal(asked.length,1); assert.equal(asked[0].conversation,targetSession,'Ads works in its own session of this chat');
+ const followUp=writer.runs.filter(run=>run.key===`handover:${row.id}:return`);
+ assert.equal(followUp.length,1,'the Writer gets one follow-up Run');
+ assert.equal(followUp[0].conversation,conversation,'in the Conversation\'s own session');
+ assert.equal(followUp[0].instructions,null,'an Agent on its own profile has its instructions as its soul');
+ assert.match(followUp[0].input,/1,240 leads at EGP 7\.30 each\./);
+ assert.deepEqual(messages.map(message=>message.body),['Ads says last campaign brought 1,240 leads at EGP 7.30 each; the copy leads with that.']);
+});
+
 test('a Target Run that fails still brings Lead back to say the job did not finish, and the handover keeps no summary',async()=>{
  const {row,service,messages}=handover();
  const {lead,target,engineFor}=engines();
@@ -113,6 +134,23 @@ test('a Target Run that fails still brings Lead back to say the job did not fini
  assert.ok(followUp,'Lead still answers');
  assert.match(followUp.input,/did not finish/);
  assert.deepEqual(messages.map(message=>message.body),['Ads could not finish the campaign plan; I can try again with the budget.']);
+});
+
+// #428: a leg the Engine failed for want of any model provider (`noModel`, #422) ends as no_model, and Lead's follow-up
+// that ends so closes the person's Run as no_model, which the chat reads to say the Company has no model connected.
+test('a Target and a follow-up that fail for want of any model end as no_model, so the chat says no model is connected',async()=>{
+ const {row,service,messages,ends}=handover();
+ const {lead,target,engineFor}=engines();
+ target.settings.ending='noModel'; lead.settings.ending='noModel';
+ await drive(service,engineFor,row);
+ assert.equal(row.state,'done');
+ assert.equal(row.target_outcome,'no_model');
+ assert.equal(row.summary,null);
+ assert.equal(row.follow_up_outcome,'no_model');
+ const followUp=lead.runs.find(run=>run.key===`handover:${row.id}:return`);
+ assert.ok(followUp,'Lead is still asked to report it');
+ assert.deepEqual(ends,[{run:followUp.id,outcome:'no_model'}]);
+ assert.deepEqual(messages,[]);
 });
 
 test('a start whose answer was lost is asked again with the same key, never failed, and nothing is reported to Lead yet',async()=>{

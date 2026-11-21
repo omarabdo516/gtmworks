@@ -12,6 +12,78 @@
   "ar": { "title": "صباح الخير بقى ممكن يتفتح", "body": "في صفحة الوكيل الرئيسي، المالك والمديرين يقدروا يفتحوا ملخص الصبح كل يوم ويختاروا ميعاده؛ مش بيبعت حاجة لو مفيش جديد، وبيتنقل مع الوكيل الرئيسي." }
  },
  {
+  "issue": 166,
+  "date": "2026-11-21",
+  "en": { "title": "See and revoke what an Agent may do without asking", "body": "An Agent’s settings and the end of its Activity tab now list its standing permissions, every action someone answered with Always allow, with who allowed it and when; an Owner or a Manager can revoke one, and the Agent asks again next time." },
+  "ar": { "title": "شوف والغي اللي الوكيل يقدر يعمله من غير ما يستأذن", "body": "إعدادات الوكيل وآخر تبويب النشاط بقوا بيعرضوا صلاحياته الدايمة، كل حاجة حد رد عليها بـ«اسمح دايماً»، ومين سمح بيها وإمتى؛ والمالك أو المدير يقدر يلغي أي واحدة، والوكيل هيستأذن تاني المرة الجاية." }
+ },
+ {
+  "issue": 428,
+  "date": "2026-11-21",
+  "en": { "title": "Channels say when no model is connected", "body": "When an agent called in a channel, or a job Lead hands to another agent, can’t answer because the company has no AI subscription or model key yet, the channel or chat now says so, with the link to Subscription and models for the Owner, instead of only saying the reply failed." },
+  "ar": { "title": "القنوات بتقولك لو مفيش موديل متوصّل", "body": "لما وكيل ناديته في قناة، أو شغلانة Lead سلّمها لوكيل تاني، ميقدرش يرد عشان الشركة لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل، القناة أو المحادثة بقت بتقول كده، ومعاها لينك الاشتراك والموديلات للمالك، بدل ما تقول بس إن الرد فشل." }
+ },
+ {
+  "issue": 479,
+  "date": "2026-11-21",
+  "en": { "title": "A failed update leaves no half-made sandbox", "body": "When an update stops because a Company’s work sandbox does not start, the previous release keeps serving and every sandbox, work folder and network the update made for it is removed while what was there before stays, so running it again starts clean." },
+  "ar": { "title": "التحديث اللي يفشل مش بيسيب صندوق شغل متعمل نصه", "body": "لما التحديث يقف عشان صندوق الشغل بتاع شركة مااشتغلش، النسخة اللي قبله بتفضل شغالة، وكل صندوق شغل وفولدر شغل وشبكة التحديث عملهم بيتشالوا واللي كان موجود قبله بيفضل زي ما هو، فلما تشغّله تاني يبدأ على نضافة." }
+ },
+ {
+  "issue": 475,
+  "date": "2026-11-21",
+  "en": { "title": "Every agent asks the team", "body": "Any agent you talk to, not only the main one, can now ask another agent of your company for a job it needs, even one you don’t work with: the chat shows who asked whom, the answer under that agent’s name, then your agent’s reply." },
+  "ar": { "title": "كل وكيل بيطلب من الفريق", "body": "أي وكيل بتكلمه، مش الرئيسي بس، بقى يقدر يطلب من وكيل تاني في شركتك شغل محتاجه، حتى لو وكيل مش بتشتغل معاه: المحادثة بتوريك مين طلب من مين، والرد باسم الوكيل ده، وبعدين رد وكيلك." }
+ },
+ {
+  "issue": 205,
+  "date": "2026-11-21",
+  "en": { "title": "Routines in an agent's details", "body": "An agent's details now list its routines with when each runs next; the Owner and Managers add one by writing one sentence, such as “leads summary every day at 8 in the morning”, and a sentence with no time asks for one first." },
+  "ar": { "title": "الروتينات في تفاصيل الوكيل", "body": "تفاصيل الوكيل بقت بتعرض روتيناته وإمتى كل واحد هيشتغل المرة الجاية؛ والمالك والمديرين يضيفوا روتين بجملة واحدة، زي «ملخص الليدز كل يوم 8 الصبح»، ولو الجملة مفيهاش ميعاد بيتسألوا عنه الأول." }
+ },
+ {
+  "issue": 484,
+  "date": "2026-11-21",
+  "en": { "title": "Edit a proposed change before you approve it", "body": "A change an agent proposes to its settings now shows what the agent has now beside what it would have, and you can edit the model, instructions or setting before you approve it; in Waiting on you it is a card that opens the whole proposal." },
+  "ar": { "title": "عدّل التغيير المقترح قبل ما توافق عليه", "body": "التغيير اللي الوكيل بيقترحه في إعداداته بقى بيوريك الوكيل عنده إيه دلوقتي جنب اللي هيبقى عنده، وتقدر تعدّل الموديل أو التعليمات أو الإعداد قبل ما توافق؛ وفي «مستنيك» بقى بطاقة بتفتح الاقتراح كله." }
+ },
+ {
+  "issue": 446,
+  "date": "2026-11-21",
+  "en": { "title": "The app keeps fewer keys", "body": "The app and the background worker now get only the settings they use, so neither holds the database password or the key that signs sign-ins, and a break-in into the app cannot use them." },
+  "ar": { "title": "التطبيق بقى شايل مفاتيح أقل", "body": "التطبيق والشغّال اللي في الخلفية بقوا بياخدوا الإعدادات اللي بيستخدموها بس، فمحدش فيهم معاه باسورد قاعدة البيانات ولا المفتاح اللي بيوقّع تسجيل الدخول، ولو حد اخترق التطبيق مش هيقدر يستخدمهم." }
+ },
+ {
+  "issue": 375,
+  "date": "2026-11-21",
+  "en": { "title": "A handed job that didn't finish says so", "body": "When Lead hands a job to another Agent and it doesn't finish, the \"Handed to\" row in the chat and in the channel now says so after the job." },
+  "ar": { "title": "الشغل اللي اتسلّم وماخلصش بيقولك", "body": "لما Lead يسلّم شغلانة لوكيل تاني وماتخلصش، السطر بتاع «سلّم الشغل لـ» في المحادثة وفي القناة بقى بيقول كده بعد الشغلانة." }
+ },
+ {
+  "issue": 413,
+  "date": "2026-11-21",
+  "en": { "title": "A stopped Engine no longer fails a channel or note mention", "body": "When you call an Agent in a channel or a card note while its Company's Engine is not running, the Run waits up to ten minutes for the Engine and starts once it is back, instead of failing at once." },
+  "ar": { "title": "المحرك الواقف مبقاش بيفشّل المنشن في القناة أو الملاحظة", "body": "لما تنادي وكيل في قناة أو في ملاحظة على بطاقة ومحرك الشركة مش شغال، التشغيل بيستنى المحرك لحد عشر دقايق ويبدأ أول ما يرجع، بدل ما يفشل على طول." }
+ },
+ {
+  "issue": 135,
+  "date": "2026-11-21",
+  "en": { "title": "Pages fade in when they open", "body": "Every page beside the sidebar now fades in when it opens, and the sidebar row you open fades to its new fill, as in the approved design; with reduced motion on, both change at once." },
+  "ar": { "title": "الصفحات بتظهر بهدوء وهي بتفتح", "body": "كل صفحة جنب القايمة الجانبية بقت بتظهر بهدوء وهي بتفتح، والسطر اللي بتفتحه في القايمة بيتلوّن بهدوء، زي التصميم المعتمد؛ ولو مشغّل تقليل الحركة، الاتنين بيتغيّروا على طول." }
+ },
+ {
+  "issue": 131,
+  "date": "2026-11-21",
+  "en": { "title": "The board moves as you carry a Card", "body": "A carried Card leans with your pointer, flies back when you let it go where it was, lands with a short ring in its new column, progress bars grow in, and a Card newly waiting on you nudges its badge and the sidebar count." },
+  "ar": { "title": "البورد بيتحرّك وانت شايل البطاقة", "body": "البطاقة وانت شايلها بتميل مع حركة الماوس، ولو سبتها مكانها بترجع لوحدها، ولما تنزّلها في عمود جديد بتنزل بإطار صغير، وشرايط التقدّم بتكبر، والبطاقة اللي لسه بقت مستنياك بتهزّ علامتها وعدّاد القايمة الجانبية." }
+ },
+ {
+  "issue": 370,
+  "date": "2026-11-21",
+  "en": { "title": "Memory and skill changes always reach the log", "body": "When you edit, forget or reset an agent's memory, or change a skill, and the agent already holds the change, it is saved and shown as saved even if its log line is late, and the log gets exactly one line for it." },
+  "ar": { "title": "تغييرات الذاكرة والمهارات دايمًا بتوصل للسجل", "body": "لما تعدّل أو تمسح أو تصفّر ذاكرة وكيل، أو تغيّر مهارة، والوكيل خلاص شايل التغيير، بيتحفظ ويظهر إنه اتحفظ حتى لو سطره في السجل اتأخر، والسجل بياخد سطر واحد بس ليه." }
+ },
+ {
   "issue": 167,
   "date": "2026-11-21",
   "en": { "title": "Ask for an agent you don’t have yet", "body": "When you ask the main agent for work that belongs to an agent you don’t work with, it says so without naming it and offers to ask the Manager or Owner who chooses your agents. Once they open it for you, it shows in your sidebar and your chat says so." },
@@ -88,6 +160,12 @@
   "date": "2026-11-21",
   "en": { "title": "Update ready offers only what is published", "body": "On an install that follows main, Update ready now offers a version only when the published main image carries it, so Update now installs it instead of coming back unchanged; when there is nothing newer, it says you already run the newest gtmworks." },
   "ar": { "title": "تحديث جاهز بيعرض اللي اتنشر بس", "body": "على تثبيت ماشي على main، تحديث جاهز بقى بيعرض نسخة بس لما تكون موجودة في صورة main المنشورة، فزر حدّث دلوقتي بيثبّتها بدل ما يرجع من غير حاجة؛ ولما مايكونش في أحدث، بيقولك إنك أصلاً على أحدث gtmworks." }
+ },
+ {
+  "issue": 459,
+  "date": "2026-11-21",
+  "en": { "title": "Add a tool that runs as a command", "body": "Your own tool in Apps now takes a command and its arguments as well as an address: it runs in your company’s work sandbox, never in the engine, and you turn it on for the agents you choose." },
+  "ar": { "title": "ضيف أداة بتشتغل كأمر", "body": "«أداة بتاعتك» في التطبيقات بقت بتاخد أمر وخياراته كمان، مش عنوان بس: بيشتغل في صندوق الشغل بتاع شركتك، عمره ما بيشتغل في المحرك، وانت بتشغّله للوكلاء اللي تختارهم." }
  },
  {
   "issue": 358,

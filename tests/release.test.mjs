@@ -248,8 +248,9 @@ test('a release install refuses a compose file from another release and an updat
  assert.match(update.stderr,/next release/);
  const updated=release.run('update');
  assert.equal(updated.status,0,updated.stderr);
- // The install's Companies are read from the running database before the update changes anything (#385).
- assert.match(release.commands(),/^compose .*exec -T db psql .*count\(\*\) from public\.companies;\n/);
+ // The install's Companies are read from the running database before the update changes anything (#385); before them
+ // only the work sandboxes' volumes and networks are listed, which changes nothing (#479).
+ assert.match(release.commands().replace(/^(volume ls -q|network ls --format \{\{\.Name\}\})\n/gm,''),/^compose .*exec -T db psql .*count\(\*\) from public\.companies;\n/);
  assert.match(release.commands(),/^pull /m);
  // A release pins every service by digest: update lets compose recreate whatever the new release changed (a database,
  // gateway or mail digest, not only the app), and the gateway reloads the configuration the extraction replaced.
@@ -416,9 +417,10 @@ test('CI updates a release install on a real database, applying a new migration 
   // The previous release is the last one before the Engines, a fixed commit rather than this pull request's base or
   // origin/main (#378, C1), built and installed from its own two release files; the next release carries one migration
   // more, which the update must read through the running db's /migrations.
-  /previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6/,
+  /previous_release_commit=8f47abe1761548a45de72937fac443a4bdea3eb6/,
+  /previous_release=\$previous_release_commit/,
   /git worktree add "\$RUNNER_TEMP\/previous-release" "\$previous_release"/,
-  /docker build -q -t localhost:5000\/gtmworks:0\.0\.0-main "\$RUNNER_TEMP\/previous-release"/,
+  /release_image "\$previous_release" localhost:5000\/gtmworks:0\.0\.0-main "\$RUNNER_TEMP\/previous-release"/,
   /node scripts\/release-assets\.mjs "\$previous" "\$root\/release-previous"/,
   /FROM localhost:5000\/gtmworks:0\.0\.0-ci\nRUN echo .*> \/app\/install\/supabase\/migrations\/99999999999998_release_update_probe\.sql/,
   /node scripts\/release-assets\.mjs "\$first" release-first "\$sandbox" \|\|/,

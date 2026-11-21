@@ -204,3 +204,41 @@ test('what an Agent learned is read beside its mode: its rules including a remov
   assert.equal(unread.rules.length,3,'the rules are the database\'s, readable without the Engine');
  } finally { await fake.close(); }
 });
+
+// #436: a Company-wide mode reads which Agents chose their own, then writes every other profile. One Agent's own mode made
+// while that write waits on the Engine used to be overwritten there while the database kept it; the two writes now run one
+// after the other for the Company, so after both the Engine holds what the record says.
+test('an Agent\'s own mode made during a Company-wide mode ends with the Engine holding that Agent\'s choice', async () => {
+ const fake=await fakeHermes();
+ try {
+  setup(fake);
+  const alone=rows.filter(row=>row.agent!==helper);
+  for(const row of alone) profileOn(fake,row.profile);
+  profileOn(fake,space);
+  const modes=new Map();
+  const {db}=database({agents:alone,modes});
+  const hermes={address:fake.address,key:fake.settings.key};
+  // Settled once the Agent's own choice has ended; made before the Company-wide write starts, so the hold below waits on it.
+  let agentFinished=()=>{};
+  const agentEnded=new Promise(resolve=>{ agentFinished=resolve; });
+  let released=null;
+  // The Company-wide write waits on the Engine until the Agent's own choice has finished, or a while when that choice
+  // waits on the Company-wide write itself.
+  const held={...settingsDriver(fake),write:async(target,config)=>{
+   released??=Promise.race([agentEnded,new Promise(resolve=>setTimeout(resolve,300))]);
+   await released;
+   return settingsDriver(fake).write(target,config);
+  }};
+  const companyWide=changeLearningMode(db,{company,mode:'ask',hermes,driver:held});
+  // The Agent's choice starts once the Company-wide write has read which Agents chose their own.
+  while(!released) await new Promise(resolve=>setTimeout(resolve,5));
+  const agentDone=changeLearningMode(db,{company,agent:writer,mode:'auto',hermes,driver:settingsDriver(fake)}).finally(agentFinished);
+  const [wide,own]=await Promise.all([companyWide,agentDone]);
+  assert.equal(wide.state,'written',JSON.stringify(wide));
+  assert.equal(own.state,'written',JSON.stringify(own));
+  assert.equal(modes.get(writer),'auto','the database keeps the Writer\'s own by itself');
+  const config=fake.settings.profiles.get(agentProfile(writer)).config;
+  assert.deepEqual([at(config,'memory.write_approval'),at(config,'skills.write_approval')],[false,false],'the Engine holds the Writer\'s by itself too');
+  for(const name of [companyProfile(company),space]) assert.deepEqual([at(fake.settings.profiles.get(name).config,'memory.write_approval'),at(fake.settings.profiles.get(name).config,'skills.write_approval')],[true,true],`${name} follows the Company's ask first`);
+ } finally { await fake.close(); }
+});

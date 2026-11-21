@@ -3,7 +3,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { chromium } from '@playwright/test';
-import { anonymousCaptureUrl, defaultSignIn, outputPaths, parseArgs, referenceRoot, screens, startStaticServer } from './design-compare-lib.mjs';
+import { anonymousCaptureUrl, defaultSignIn, outputPaths, parseArgs, referenceProblems, referenceRoot, screens, startStaticServer } from './design-compare-lib.mjs';
 
 const height = 900;
 
@@ -25,6 +25,8 @@ async function runStep(page, step) {
   if (action === 'waitGone') return page.locator(selector).waitFor({ state: 'hidden' });
   if (action === 'scrollTo') return target.scrollIntoViewIfNeeded();
   if (action === 'press') return page.keyboard.press(value);
+  // A click only where its target is drawn: the details panel's pill below 1024 px, which a wide window has open already.
+  if (action === 'clickIf') return await target.isVisible() ? target.click() : undefined;
   if (action === 'finish') {
     await target.waitFor({ state: 'attached' });
     return target.evaluate(element => element.getAnimations().forEach(animation => animation.finish()));
@@ -143,6 +145,12 @@ async function main() {
   } catch (error) {
     console.error(error.message);
     process.exit(error.exitCode ?? 1);
+  }
+  // The reference is the approved copy, byte for byte, or nothing is compared with it.
+  const problems = referenceProblems(referenceRoot);
+  if (problems.length) {
+    console.error(`design-reference/ is not the approved copy (design/COMPARE.md):\n${problems.join('\n')}`);
+    process.exit(1);
   }
   const paths = outputPaths(options);
   const browser = await chromium.launch();

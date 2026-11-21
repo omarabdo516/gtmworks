@@ -1,14 +1,16 @@
 // Pure helpers for scripts/design-compare.mjs (#285): argument checks, the screen table, output names and a
 // static server over design-reference/ that never answers outside it.
 import { createServer } from 'node:http';
-import { createReadStream, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, resolve, sep } from 'node:path';
 
 // A named screen says how to reach it in the reference and which built page it is compared with (null: none yet).
 // The prototype has no URL routes: its sidebar switches views by `data-view` (chat, board, dashboard, log) and the
 // account menu opens the settings overlay (`#sov`) with its sections. Each step is one `click`, `waitFor`, `waitGone`, `fill` ([selector, text]) or
 // `scrollTo` with a CSS selector, or one `press` with a key as Playwright names it (`{ press: 'ArrowDown' }`), pressed
-// where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A screen's `builtSteps` run the same way on the built page after it opens.
+// where the focus is; a click on a sidebar item hidden behind the narrow-screen menu opens the menu first. A `clickIf`
+// clicks its target only where it is drawn (the details pill a narrow window shows). A screen's `builtSteps` run the same way on the built page after it opens.
 // The built steps also take `goto` (a built page opened as a document, captured while it still streams) and `finish` (a
 // selector whose own animations are ended at once); `builtSettle: false` captures right after the steps, without waiting
 // for the network to go quiet.
@@ -93,6 +95,16 @@ export const screens = {
    builtPath: null, builtSteps: [{ waitFor: '.dp-tools .panel-row' }, { scrollTo: '.dp-tools' }] },
   'agent-tools-manage': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { click: '[data-action="manage-tools"]' }, { waitFor: '[data-action="disconnect"]' }, { scrollTo: '[data-action="manage-tools"]' }] },
    builtPath: null, builtSteps: [{ click: '.dp-tools .dp-label .link-btn' }, { waitFor: '.dp-tools .panel-row .link-btn' }, { scrollTo: '.dp-tools' }] },
+  // #205. Ads's details, Activity: "Routines" with its rows, then Add pressed (its one-line field). Built: the fixture's
+  // Ads on a profile of its own whose Engine holds Routines (pass --built-path for another Agent).
+  'agent-routines': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { waitFor: '#dp-routines .rt-row' }, { scrollTo: '#dp-routines' }] },
+   builtPath: `/c/rs-learning/chat/${fixture.agent}`, builtSteps: [{ waitFor: '#dp-routines .rt-row' }, { scrollTo: '#dp-routines' }] },
+  'agent-routines-add': { reference: { steps: [{ click: '#sb-agents [data-action="open-agent"][data-agent="ads"]' }, { waitFor: '#dp-routines .rt-row' }, { click: '[data-action="add-routine"]' }, { waitFor: '#rt-new' }, { scrollTo: '#rt-new' }] },
+   builtPath: `/c/rs-learning/chat/${fixture.agent}`, builtSteps: [{ waitFor: '#dp-routines .rt-row' }, { click: '#dp-routines .dp-label .link-btn' }, { waitFor: '#dp-rt-new' }, { scrollTo: '#dp-rt-new' }] },
+  // A new Agent's details with no Routine: the empty line and "Try writing". Built: the fixture's SEO & Content, on a
+  // profile of its own with no Routine.
+  'agent-routines-empty': { reference: { steps: [{ click: '#sb-agents [data-action="new-agent"]' }, { waitFor: '.new-hint' }, { click: '[data-action="open-gallery-alt"]' }, { waitFor: '#modal[open] .tpl' }, { click: '[data-action="tpl-add"][data-tpl="writer"]' }, { waitFor: '.card__actions [data-action="ac-open"]' }, { click: '.card__actions [data-action="ac-open"]' }, { waitFor: '#dp-routines .rt-try' }, { scrollTo: '#dp-routines' }] },
+   builtPath: `/c/rs-learning/chat/${fixture.newAgent}`, builtSteps: [{ waitFor: '#dp-routines .rt-try' }, { scrollTo: '#dp-routines' }] },
   // The settings overlay opens on its Company section. The built overlay is route-backed (app/settings-overlay.tsx):
   // ?section= opens a section and ?agent=<id> one Agent's page.
   settings: { reference: { steps: settings }, builtPath: '/c/rs-learning/settings' },
@@ -159,6 +171,15 @@ export const screens = {
   // th-seo card as permission-card's. Built: a channel whose Agent's Run waits on the signed-in Member (pass --built-path).
   'permission-channel': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { waitFor: '[data-action="approve"]' }, { scrollTo: '.card__actions' }] }, builtPath: null,
    builtSteps: [{ waitFor: '[id^="permission-"] .card__actions' }, { scrollTo: '[id^="permission-"] .card__actions' }] },
+  // #166. An Agent's standing permissions: on the reference, Always allow on the SEO article chat's approval (th-seo)
+  // gives SEO its one standing permission, then SEO's details on Activity end with it, and its settings page shows it
+  // after Tools. Built: an Agent whose own profile keeps an entry an Always allow put there (pass --built-path).
+  'standing-activity': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { click: '[data-action="approve"][data-decision="always"]' },
+   { click: '#sb-agents [data-action="open-agent"][data-agent="seo"]' }, { clickIf: '#btn-details[aria-expanded="false"]' }, { waitFor: '#details [data-action="revoke"]' }, { scrollTo: '#details [data-action="revoke"]' }] }, builtPath: null,
+   builtSteps: [{ clickIf: '#btn-details[aria-expanded="false"]' }, { waitFor: '.details .sp' }, { scrollTo: '.details .sp' }] },
+  'standing-settings': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-seo"]' }, { click: '[data-action="approve"][data-decision="always"]' },
+   ...settingsSection('agents'), { click: '#sov-ag-seo' }, { waitFor: '#sov [data-action="revoke"]' }, { scrollTo: '#sov [data-action="revoke"]' }] }, builtPath: null,
+   builtSteps: [{ waitFor: '#sov-agent-panel .sp' }, { scrollTo: '#sov-agent-panel .sp' }] },
   // #203. The weekly report chat (th-report): Analyst's reply with the card asking to connect an app, open. Built: the
   // fixture's connectConversation (pass --built-path).
   'connect-card': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-report"]' }, { waitFor: '[data-action="connect"]' }, { scrollTo: '.card__actions' }] }, builtPath: null },
@@ -187,6 +208,12 @@ export const screens = {
   // Conversation and Approvals.
   'change-proposed': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }] }, builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000010' },
   'change-waiting': { reference: { steps: [...board, { waitFor: '.kcard[data-card="c-chg-analyst"]' }, { scrollTo: '.kcard[data-card="c-chg-analyst"]' }] }, builtPath: '/c/rs-learning/approvals' },
+  // #484. The same proposal opened from its board card in Waiting on you (the reference opens it in the chat), with its
+  // "Now" row, and its "Edit, then approve" form with the models. Built: Approvals, the board card, then Edit.
+  'change-opened': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }] }, builtPath: '/c/rs-learning/approvals',
+   builtSteps: [{ click: '.chg-kcard .kcard__title' }, { waitFor: '[role="dialog"] [data-row="now"]' }] },
+  'change-edit': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }, { click: '[data-action="chg-edit"]' }, { waitFor: '[data-action="chg-model"]' }] }, builtPath: '/c/rs-learning/approvals',
+   builtSteps: [{ click: '.chg-kcard .kcard__title' }, { waitFor: '[role="dialog"] [data-row="now"]' }, { click: '[role="dialog"] .card__actions button:nth-of-type(2)' }, { waitFor: '.chg-models' }] },
   // #167. Lead's card asking whether to request an Agent hidden from the first Contributor (SEO & Content, as the
   // reference hides it from Youssef): offered, then after "Ask", then after "No, never mind". Built: the fixture's three
   // Conversations of the first Contributor with Lead, captured with --sign-in reviewer@example.com.
@@ -335,4 +362,33 @@ export function startStaticServer(root) {
   });
 }
 
-export const referenceRoot = join(import.meta.dirname, '..', 'design-reference');
+// GTMWORKS_DESIGN_REFERENCE points the tool at another copy of the reference: a test gives it a broken one (#271).
+export const referenceRoot = process.env.GTMWORKS_DESIGN_REFERENCE || join(import.meta.dirname, '..', 'design-reference');
+
+/**
+ * What differs between a reference folder and its SHA256SUMS: a listed file changed or missing, a file the list does not
+ * name, a malformed line. Empty when the folder is the approved copy. The comparison tool is the one reader of the frozen
+ * reference, so it checks the folder before it draws a screen from it (#285, #271). @param {string} root @returns {string[]}
+ */
+export function referenceProblems(root) {
+  const sums = join(root, 'SHA256SUMS');
+  if (!existsSync(sums)) return [`${sums} is missing`];
+  const problems = [];
+  const listed = new Set();
+  for (const line of readFileSync(sums, 'utf8').split('\n').filter(Boolean)) {
+    const match = line.match(/^([0-9a-f]{64}) [ *](.+)$/);
+    if (!match) { problems.push(`SHA256SUMS line is not "<sha256>  <path>": ${line}`); continue; }
+    const path = match[2].replace(/^\.\//, '');
+    listed.add(path);
+    const file = join(root, path);
+    if (!existsSync(file)) problems.push(`listed file is missing: ${path}`);
+    else if (createHash('sha256').update(readFileSync(file)).digest('hex') !== match[1]) problems.push(`changed: ${path}`);
+  }
+  if (!listed.has('index.html')) problems.push('SHA256SUMS does not list index.html');
+  const files = (directory, prefix = '') => readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    return entry.isDirectory() ? files(join(directory, entry.name), path) : [path];
+  });
+  for (const path of files(root)) if (path !== 'SHA256SUMS' && !listed.has(path)) problems.push(`not in SHA256SUMS: ${path}`);
+  return problems;
+}
