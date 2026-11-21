@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
+import { driveChannelRuns, driveNoteRuns, postChannelMessage } from '../lib/channel-runs.mjs';
 import { toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -76,4 +76,28 @@ test('a channel Run shows its draft and review cards once, ignores a call that d
  closed.delete(run);
  assert.deepEqual(await drive(),{started:0,closed:1});
  assert.equal(cards.length,2,'the same message, run and call keep one card');
+});
+
+// #428: a channel Run the Engine failed for want of any model provider (the contract's `noModel`, #422) ends as
+// no_model, so the channel says the Company has no model connected, as a Conversation does. Any other failure, and a
+// note's Run, still ends as failed.
+test('a channel Run that failed for want of any model ends as no_model, any other failure and a note\'s Run as failed',async()=>{
+ /** @param {'channel'|'note'} kind @param {object} read */
+ const closedAs=async(kind,read)=>{
+  const closed=[];
+  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
+   if(name===`${kind}_runs_due`) return {data:closed.length?[]:[{message:9,run:'run-9',profile:'ag-faye',company:'10000000-0000-0000-0000-000000000001'}],error:null};
+   if(name==='track_channel_permission') return {data:[],error:null};
+   if(name===`close_${kind}_run`) { closed.push(args.run_outcome); return {data:true,error:null}; }
+   return {data:null,error:{message:`unexpected ${name}`}};
+  }};
+  const engine={read:async()=>({reply:null,session:null,usage:null,toolCalls:[],...read})};
+  const drive=kind==='channel'?driveChannelRuns:driveNoteRuns;
+  assert.deepEqual(await drive(/** @type {any} */(service),{hermes,engineFor:()=>/** @type {any} */(engine)}),{started:0,closed:1});
+  return closed;
+ };
+ assert.deepEqual(await closedAs('channel',{state:'failed',noModel:true}),['no_model']);
+ assert.deepEqual(await closedAs('channel',{state:'failed'}),['failed']);
+ assert.deepEqual(await closedAs('channel',{state:'stopped',noModel:true}),['stopped'],'only a failure is read for its cause');
+ assert.deepEqual(await closedAs('note',{state:'failed',noModel:true}),['failed'],'a note keeps a plain failure');
 });

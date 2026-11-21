@@ -24,6 +24,7 @@ import type { MarkHandDone } from '@/app/hand-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
 import { offeredChoices } from '@/lib/conversations';
 import { useArrivals, type Arrival } from '@/lib/arrivals';
+import { overlayHref } from '@/lib/settings-overlay.mjs';
 
 type Say=(key:string,...values:unknown[])=>string;
 type Choices=NonNullable<Awaited<ReturnType<typeof channelChoices>>>;
@@ -172,7 +173,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} rise={rise(`${message.author}:${message.id}`)} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined}/>
+    <Turn message={message} rise={rise(`${message.author}:${message.id}`)} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.noModel?.owner===true}/>
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {mention.questions.map(card=><ReplyCard key={`question${card.id}`} card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
@@ -195,7 +196,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} time={time} refresh={refresh}/></div>;
 }
 
-function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done}:{message:ChannelMessage,rise:string,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone}) {
+function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done,owner}:{message:ChannelMessage,rise:string,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,owner:boolean}) {
  const {t,language}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
@@ -206,11 +207,15 @@ function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done}:{me
  </li>;
  // A job the main Agent handed another Agent of the channel (#150; design-reference: the handoff row, `.handoff`): both
  // faces with the arrow between them, the Agent it went to, and the job. It has nothing to press.
- if(message.author==='handoff') return <li className={`handed${rise}`} role="note" data-handover>
-  <span className="handed__faces"><CompanyAgentFace agent={{connection_id:message.from.face,name:message.from.name}} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:message.to.face,name:message.to.name}} size={18}/></span>
-  <span className="handed__t">{named(c,'channelHandedTo',message.to.name)}</span>
-  {message.goal&&<span className="handed__d"><bdi>{message.goal}</bdi></span>}
- </li>;
+ // A handover that ended with no reply because the Company has no model connected (#428) says so under its row.
+ if(message.author==='handoff') {
+  const row=<li className={`handed${rise}`} role="note" data-handover>
+   <span className="handed__faces"><CompanyAgentFace agent={{connection_id:message.from.face,name:message.from.name}} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:message.to.face,name:message.to.name}} size={18}/></span>
+   <span className="handed__t">{named(c,'channelHandedTo',message.to.name)}</span>
+   {message.goal&&<span className="handed__d"><bdi>{message.goal}</bdi></span>}
+  </li>;
+  return message.noModel?<>{row}<li className="note" role="alert" data-outcome="no-model"><NoModelLine slug={slug} owner={owner}/></li></>:row;
+ }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
   <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
@@ -221,7 +226,10 @@ function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done}:{me
  // not reply gets its own line (#152).
  const called=mentionsOf(message);
  const body=withMention(message.body,[...called.map(mention=>mention.agent),...memberNames]).map((part,index)=>part.mention?<bdi key={index} className="mention">{part.text}</bdi>:<Fragment key={index}>{part.text}</Fragment>);
- const failed=called.filter(mention=>mention.state==='unanswered').map(mention=><p key={mention.agent} className="note" role="alert">{c('channelCouldNotReply',mention.agent)}</p>);
+ // A Run that failed because the Company has no model connected (#428) says that once under the message, however many of
+ // the Agents it called it stopped, in place of each one's "couldn't reply".
+ const failed=[...called.filter(mention=>mention.state==='unanswered').map(mention=><p key={mention.agent} className="note" role="alert">{c('channelCouldNotReply',mention.agent)}</p>),
+  ...(called.some(mention=>mention.state==='noModel')?[<p key="no-model" className="note" role="alert" data-outcome="no-model"><NoModelLine slug={slug} owner={owner}/></p>]:[])];
  // The images the message carries (#156), under its bubble on the writer's side for the writer and on the start side for
  // every other Member (design-reference: filesHTML; `.turn--user` and `.turn--peer` put them on their own side).
  const files=!!message.files.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>;
@@ -236,6 +244,13 @@ function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done}:{me
   {files}
   {failed}
  </li>;
+}
+
+// The Company has no model at all (#422, #428): sending again cannot work, so the line says where one is connected, the
+// words a Conversation uses.
+function NoModelLine({slug,owner}:{slug:string,owner:boolean}) {
+ const {t}=useI18n();
+ return <>{t('noModelLine')} {owner?<Link className="note__link" href={overlayHref(slug,'models')}>{t('noModelConnect')}</Link>:t('noModelAskOwner')}</>;
 }
 
 const Initial=({name,size}:{name:string,size:number})=><span className="me__av lg-av" style={{'--av':`${size}px`} as CSSProperties} aria-hidden="true">{Array.from(name.trim())[0]||'?'}</span>;
