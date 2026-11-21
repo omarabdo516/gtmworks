@@ -19,6 +19,8 @@ import PasswordSettings from './password-settings';
 import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
 import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
+import { engineOf } from '@/lib/company-engine.mjs';
+import { readWorkSandbox } from '@/lib/hermes.mjs';
 import { readCompanyModels } from '@/lib/engine-settings.mjs';
 import { readCompanyKeys } from '@/lib/provider-keys.mjs';
 import { readCompanySpeech } from '@/lib/company-speech.mjs';
@@ -30,7 +32,7 @@ import { LearningSection } from './settings-learning';
 import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { AgentLevel, CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
+import { CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -76,8 +78,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The Company's model sign-in, read from the root profile of its own Engine (#384, ADR 0018), with that Engine's key,
  // after the database said the person is a member (company_engine_target).
  const subscriptions=section==='models'?await (async()=>{ try { return await readCompanySignIns(db,{company:company.id}); } catch { return {profile:null,profiles:null,signIns:null}; } })():null;
- // The Company's Agent level.
- const agentLevel=section==='company'?Number((await db.from('companies').select('agent_level').eq('id',company.id).maybeSingle()).data?.agent_level)||1:1;
+ // Whether the Company's work sandbox answers (#398), read once from its own Engine's ssh backend for the section that
+ // says what every Agent can use. The Engine itself not answering leaves this unread; the models section names that.
+ const workSandbox=section==='company'?await (async()=>{ try { return await readWorkSandbox(await engineOf(company.id)); } catch { return {state:'unreachable' as const}; } })():null;
  // The Company's default model, each Agent's own and the Owner's model choices (#29), and the providers the Engine takes a
  // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
  const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;
@@ -121,7 +124,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} agentLevel={agentLevel} roleNames={roleNames} ro={ro}/>
+ const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro} sandbox={workSandbox?.state==='notRunning'}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} permissions={permissions?.permissions??[]} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
@@ -143,7 +146,7 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,agentLevel,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,agentLevel:number,roleNames:Record<string,string>,ro:ReactNode}) {
+function CompanySection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,roleNames,ro,sandbox}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,roleNames:Record<string,string>,ro:ReactNode,sandbox:boolean}) {
  const count=members.length;
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
@@ -153,6 +156,13 @@ function CompanySection({t,company,solo,members,invitations,agents,allowed,invit
  const mode=<section className="dp-sec" aria-labelledby="co-h-mode"><Label id="co-h-mode">{t('settingsMode')}</Label>
   <div className="panel-card"><div className="panel-row"><span className="panel-row__icon"><SettingsIcon name={solo?'user':'team'}/></span><span className="panel-row__text">
    <span className="panel-row__t">{solo?t('settingsModeAlone'):t('settingsModeTeam',count)}</span><span className="panel-row__d">{solo?t('settingsModeAloneD'):t('settingsModeTeamD')}</span></span></div></div></section>;
+ // Every Agent gets one fixed set of tools (ADR 0018): a read-only line where the level choice was, in the section and
+ // hint styles the other Company settings use.
+ const tools=<section className="dp-sec" aria-labelledby="co-h-tools"><Label id="co-h-tools">{t('agentToolsTitle')}</Label>
+  <p className="set-hint">{t('agentToolsHint')}</p>
+  {/* The Company's work sandbox not answering (#398): one plain state in the existing notice style, and no control. */}
+  {sandbox&&<p className="ro-note sov-warn" role="note" id="co-sandbox"><SettingsIcon name="shield"/><span>{t('workSandboxNotRunning')}</span></p>}
+ </section>;
  const inviteRoles=teamInviteRoles(t);
  const table=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('settingsMembersAgents')}</Label><div className="ta sov-ta">
   <SettingsTeamTable company={company.id} slug={slug} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner}/>
@@ -163,7 +173,7 @@ function CompanySection({t,company,solo,members,invitations,agents,allowed,invit
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}
-  {name}{mode}<AgentLevel company={company.id} level={agentLevel} owner={owner}/>{solo?invite:canManage?table:list}</>;
+  {name}{mode}{tools}{solo?invite:canManage?table:list}</>;
 }
 
 // What a face needs of an Agent: the client component is handed no more of the row than it draws.

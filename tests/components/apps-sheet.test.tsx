@@ -59,9 +59,19 @@ const shell = (owner = true, company = `c-${++companies}`, language: 'en' | 'ar'
 </LanguageProvider></div>;
 const dialog = () => document.querySelector<HTMLDialogElement>('dialog.apps-sheet')!;
 const appsButton = () => document.querySelector<HTMLButtonElement>('#btn-apps')!;
-const closedBack = async (opener: HTMLElement) => {
- expect(dialog().classList.contains('is-closing'), 'the leave is drawn first').toBe(true);
- await expect.poll(() => document.querySelector('dialog.apps-sheet')).toBeNull();
+// The sheet's leave is watched from before the press that closes it (#480): a press that takes longer than the leave
+// itself on a slow machine still sees `is-closing` put on the sheet before the sheet goes.
+const closedBack = async (opener: HTMLElement, close: () => Promise<unknown>) => {
+ let left = false;
+ const watch = new MutationObserver(records => {
+  if (records.some(record => record.target instanceof HTMLDialogElement && record.target.matches('.apps-sheet') && record.target.classList.contains('is-closing'))) left = true;
+ });
+ watch.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+ try {
+  await close();
+  await expect.poll(() => document.querySelector('dialog.apps-sheet')).toBeNull();
+ } finally { watch.disconnect(); }
+ expect(left, 'the leave is drawn first').toBe(true);
  await expect.element(opener).toHaveFocus();
 };
 
@@ -76,15 +86,12 @@ test('the sidebar button opens the sheet with the keyboard in the search field, 
   await expect.element(screen.getByRole('searchbox', { name: 'Search apps' })).toHaveFocus();
  };
  await open();
- await screen.getByRole('button', { name: 'Close', exact: true }).click();
- await closedBack(appsButton());
+ await closedBack(appsButton(), () => screen.getByRole('button', { name: 'Close', exact: true }).click());
  await open();
- await userEvent.keyboard('{Escape}');
- await closedBack(appsButton());
+ await closedBack(appsButton(), () => userEvent.keyboard('{Escape}'));
  await open();
  // The backdrop is the part of the window the sheet does not cover, at the inline start.
- await page.elementLocator(dialog()).click({ position: { x: -20, y: 20 } });
- await closedBack(appsButton());
+ await closedBack(appsButton(), () => page.elementLocator(dialog()).click({ position: { x: -20, y: 20 } }));
 });
 
 test('the account menu item carries the count, closes the menu and opens the sheet, which closes back to the account button', async () => {
@@ -97,8 +104,7 @@ test('the account menu item carries the count, closes the menu and opens the she
  (item.element() as HTMLButtonElement).click();
  await expect.element(screen.getByRole('menu')).not.toBeInTheDocument();
  await expect.element(screen.getByRole('searchbox', { name: 'Search apps' })).toHaveFocus();
- await userEvent.keyboard('{Escape}');
- await closedBack(document.querySelector<HTMLElement>('#btn-me')!);
+ await closedBack(document.querySelector<HTMLElement>('#btn-me')!, () => userEvent.keyboard('{Escape}'));
 });
 
 test('the count on the button and on the menu item is the sheet\'s badge, read once after the page is drawn and again when the sheet opens', async () => {

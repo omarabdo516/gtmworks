@@ -11,5 +11,5 @@ export function agentFileDownload(db:SupabaseClient,request:{company:string,agen
 // for the kinds drawn as text.
 export type PreviewKind='image'|'text'|'table'|'none';
 export type LibraryPreviewBody={name:string,kind:PreviewKind,type:string,byteSize:number,truncated:boolean,text:string|null};
-export type PreviewView={state:'found',preview:LibraryPreviewBody}|{state:'missing'|'refused'|'unreachable'|'invalid'|'tooLarge'|'failed',preview:null};
+export type PreviewView={state:'found',preview:LibraryPreviewBody}|{state:'missing'|'refused'|'unreachable'|'invalid'|'tooLarge'|'failed'|'sandboxStopped',preview:null};
 export function agentFilePreview(db:SupabaseClient,request:{company:string,agent:string,folder?:unknown,name:unknown,root?:unknown,hermes?:{address:string,key:string}|null,driver?:object}):Promise<PreviewView>;

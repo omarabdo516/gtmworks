@@ -20,8 +20,8 @@ test('a conversation, a Card note and a channel message each start their Run on 
  const lead=randomUUID();
  query(`do $$ begin
   insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${lead}','${company}','Lead','General',true,'${profile}');
-  insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) select id,'${profile}',agent_level,public.engine_tool_policy(),true from public.companies where id='${company}'
-   on conflict (company_id) do update set tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false,skills_shared=true;
+  insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) select id,'${profile}',true,true from public.companies where id='${company}'
+   on conflict (company_id) do update set tools_confirmed=true,tools_pending=false,skills_shared=true;
  end $$;`);
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');

@@ -169,11 +169,11 @@ test('the image job runs when the browser suite or the install proof is asked fo
   assert.equal(started({ event: 'push', files: documentFiles }).includes('image'), false);
 });
 
-test('a pull request that changes install files starts the install proof as one job of seven areas, each on its own', () => {
+test('a pull request that changes install files starts the install proof as one job of nine areas, each on its own', () => {
   const run = started({ event: 'pull_request', draft: false, files: ['scripts/install.sh'] });
   for (const job of installJobs) assert.ok(run.includes(job), job);
   // One matrix job: each entry's name is the area that failed, and one area's fault leaves the rest running.
-  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'update', 'one-line', 'updater'] } });
+  assert.deepEqual(ci.jobs.install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'backup', 'proxy', 'rollback', 'update', 'previous-archive', 'sandbox-update', 'staged-update', 'sizes', 'engines-update', 'one-line', 'updater'] } });
   assert.equal(ci.jobs.install.name, 'install-${{ matrix.area }}');
 });
 

@@ -23,7 +23,7 @@ insert into public.conversation_queued_turns(conversation_id,send_key,company_id
  ('d1000000-0000-0000-0000-000000000001','d3000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000502','Ready now');
 
 set local role service_role;
-select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002',1,public.engine_tool_policy());
+select public.record_company_profile('10000000-0000-0000-0000-000000000002','co-10000000000000000000000000000002');
 reset role;
 
 select ok(public.company_profile_ready('10000000-0000-0000-0000-000000000002'),'the ready Company''s profile is ready');

@@ -6,7 +6,7 @@ select plan(20);
 -- version left in one of them and no other Company's. RS Learning (1): a Company profile, and the profile record of one
 -- Agent; R&S Consultations (2): a Company with an Agent profile and no Company profile yet. Only the Owner records a
 -- subscription's connect and disconnect, each once, in the Company's log by its provider.
-insert into public.company_profiles(company_id,profile,tools_level,tools_policy) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',1,public.engine_tool_policy());
+insert into public.company_profiles(company_id,profile,tools_confirmed) values ('10000000-0000-0000-0000-000000000001','co-10000000000000000000000000000001',true);
 -- The profile records alone, without their Agents: the target reads only which profile is whose.
 set local session_replication_role=replica;
 insert into public.agent_profiles(agent_id,company_id) values

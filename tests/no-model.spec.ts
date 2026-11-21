@@ -28,8 +28,8 @@ test.beforeAll(async({},testInfo)=>{
   update public.hermes_agents set is_default=false where company_id='${company}' and is_default;
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
    ('e4220000-0000-0000-0000-000000000001','${company}','e4220000-0000-0000-0000-000000000011','Lead','General',true,'${co}');
-  insert into public.company_profiles(company_id,profile,tools_level,tools_policy,skills_shared) values ('${company}','${co}',1,public.engine_tool_policy(),true)
-   on conflict (company_id) do update set profile=excluded.profile,tools_level=excluded.tools_level,tools_policy=excluded.tools_policy,tools_pending=false;
+  insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) values ('${company}','${co}',true,true)
+   on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
   insert into public.company_shared_spaces(company_id,folder) values ('${company}','/opt/data/profiles/${space}/skills') on conflict do nothing;
   update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002');
  end $$;`);
