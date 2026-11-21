@@ -1,1 +1,1 @@
-| `design-reference.test.mjs` | The design reference matches its approved checksums, file for file. | 0.3 s | design-reference.spec.ts | keep |
+| `design-reference.test.mjs` | The design reference matches its approved checksums file for file, holds no file they do not list, and nothing in the product serves or points at it. | 0.3 s | design-reference.spec.ts (the production build answers 404 for the reference; no other test checks the checksums) | keep |
