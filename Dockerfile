@@ -1,19 +1,21 @@
 FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS dependencies
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# The npm steps trust the build machine's extra CA, when scripts/docker-build.sh hands one over as the secret build-ca
+# (a cloud session's network, #562), for that step only: no layer keeps it, and a build without it sets nothing.
+RUN --mount=type=secret,id=build-ca if [ -f /run/secrets/build-ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build-ca; fi; npm ci
 
 FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS production-dependencies
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN --mount=type=secret,id=build-ca if [ -f /run/secrets/build-ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build-ca; fi; npm ci --omit=dev
 
 FROM dependencies AS build
 # The CI image build passes NEXT_SKIP_CHECKS=true: the fast job already linted and type-checked this change, so `next
 # build` does neither (#403). Its default keeps both in a release image or a local build.
 ARG NEXT_SKIP_CHECKS=false
 COPY . .
-RUN npm run build
+RUN --mount=type=secret,id=build-ca if [ -f /run/secrets/build-ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build-ca; fi; npm run build
 
 FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS runner
 WORKDIR /app
