@@ -5,7 +5,7 @@
 ## The reference is frozen
 
 - Nobody edits it. Its source of truth is the frozen approval `d893-approved-2026-11-12`, kept outside this repository, and its `SHA256SUMS` ships with it. Everything in that folder is copied into the repo unchanged, dot-folders included.
-- The comparison tool recomputes every checksum before it captures (`referenceProblems` in `scripts/design-compare-lib.mjs`). It stops when a file changes, goes missing, or is added without a line in `SHA256SUMS`, and the `Design compare` workflow runs it on every pull request that changes `design-reference/`. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The comparison tool recomputes every checksum before it captures (`referenceProblems` in `scripts/design-compare-lib.mjs`). It stops when a file changes, goes missing, or is added without a line in `SHA256SUMS`, and the `Design compare` workflow runs it on every pull request that changes `design-reference/`. `GTMWORKS_DESIGN_REFERENCE` points the tool at another copy; its test gives it a broken one. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
 - The tool is the reference's one reader. No CI suite compares the product with it (#271): matching it is a delivery check, done once per screen (below).
 - The product never serves it. Next serves only its routes, and the runtime image copies only the build output. `tests/design-reference.spec.ts` asks the production build for `/design-reference/...` and expects 404.
 

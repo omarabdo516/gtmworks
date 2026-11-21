@@ -140,9 +140,16 @@ const moving = () => [...document.querySelectorAll('.gw, .gw *')].flatMap(elemen
 }));
 
 // A transition or an animation longer than 1ms on the part itself (or the pseudo-element its row names).
+// A transition counts only where its property is not `none`, an animation only where its name is not `none`; a shorter
+// list repeats to the length of the property or name list, as the browser reads it.
 const movesItself = (part: Element, pseudo: string | null) => {
  const style = getComputedStyle(part, pseudo);
- return [style.transitionDuration, style.animationDuration].some(times => times.split(',').some(time => parseFloat(time) * 1000 > 1));
+ const list = (value: string) => value.split(',').map(item => item.trim());
+ const runs = (names: string, times: string) => {
+  const durations = list(times);
+  return list(names).some((name, index) => name !== 'none' && parseFloat(durations[index % durations.length]) * 1000 > 1);
+ };
+ return runs(style.transitionProperty, style.transitionDuration) || runs(style.animationName, style.animationDuration);
 };
 
 // Each part moves on its own rule; with reduced motion on, nothing under .gw moves (#127).

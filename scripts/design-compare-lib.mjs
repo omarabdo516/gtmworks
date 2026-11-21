@@ -337,7 +337,8 @@ export function startStaticServer(root) {
   });
 }
 
-export const referenceRoot = join(import.meta.dirname, '..', 'design-reference');
+// GTMWORKS_DESIGN_REFERENCE points the tool at another copy of the reference: a test gives it a broken one (#271).
+export const referenceRoot = process.env.GTMWORKS_DESIGN_REFERENCE || join(import.meta.dirname, '..', 'design-reference');
 
 /**
  * What differs between a reference folder and its SHA256SUMS: a listed file changed or missing, a file the list does not

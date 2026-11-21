@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
@@ -317,7 +317,19 @@ test('the tool accepts a reference that is its SHA256SUMS, file for file, and na
   }
 });
 
-test('the tool checks the reference before it captures, and stops on a difference', () => {
-  const tool = readFileSync('scripts/design-compare.mjs', 'utf8');
-  assert.ok(tool.indexOf('referenceProblems(referenceRoot)') > 0 && tool.indexOf('referenceProblems(referenceRoot)') < tool.indexOf('chromium.launch()'));
+test('the tool stops before it captures when the reference is not its SHA256SUMS, and writes no image', () => {
+  const root = mkdtempSync(join(tmpdir(), 'design-reference-'));
+  const out = join(root, 'out', 'home.png');
+  try {
+    writeFileSync(join(root, 'index.html'), '<p>edited</p>');
+    writeFileSync(join(root, 'SHA256SUMS'), `${createHash('sha256').update('<p>reference</p>').digest('hex')}  ./index.html\n`);
+    const run = spawnSync(process.execPath, ['scripts/design-compare.mjs', '--screen', 'home', '--width', '1440', '--lang', 'ar', '--theme', 'dark', '--reference-only', '--out', out], {
+      encoding: 'utf8', env: { ...process.env, GTMWORKS_DESIGN_REFERENCE: root },
+    });
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /design-reference\/ is not the approved copy[\s\S]*changed: index\.html/);
+    assert.equal(existsSync(join(root, 'out')), false, 'no capture was written');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
