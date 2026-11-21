@@ -3,7 +3,7 @@ import { withActionLog, logActionFailure } from '@/lib/diagnostics.mjs';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
 import { inviteError } from '@/lib/invite.mjs';
-import { inviteMember } from './invite-actions';
+import { sendInvite } from '@/lib/invite-member';
 import type { FirstRunState } from '@/lib/first-run-choice';
 
 type Row={id:number,email:string,role:string};
@@ -64,10 +64,11 @@ export const chooseWorkMode=withActionLog('chooseWorkMode',async function choose
   if(error) { rowErrors[row.id]=refusals.has(error.message)?error.message:'inviteFailed'; firstError??=row.id; }
  }
  if(firstError!==undefined) return {rowErrors,firstError,sent:[...already]};
- // Each invitation is the Team table's own: the same record, the same email and the same log row. One that cannot be
+ // Each invitation is the Team table's own (lib/invite-member.ts), sent without refreshing the page so the question stays
+ // until it has left (#130): the same record, the same email and the same log row. One that cannot be
  // sent keeps the step open with its reason, and the ones that went are remembered so a second press sends only the rest.
  for(const row of pending) {
-  const {error}=await inviteMember(company,slug,row.email,row.role);
+  const {error}=await sendInvite(db,company,slug,row.email,row.role);
   if(error) { rowErrors[row.id]=refusals.has(error)?error:'inviteFailed'; firstError??=row.id; }
   else already.add(row.email.toLowerCase());
  }

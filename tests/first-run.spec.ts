@@ -358,7 +358,7 @@ for(const motion of ['no-preference','reduce'] as const) test(`the saved answer 
   :[['gw-rise','0s','0.28s','cubic-bezier(0.2, 0, 0, 1)','both'],['gw-rise','0.04s','0.28s','cubic-bezier(0.2, 0, 0, 1)','both'],['gw-rise','0.08s','0.28s','cubic-bezier(0.2, 0, 0, 1)','both']]);
 
  // The answer cannot be saved (it was given elsewhere meanwhile): the question stays with its error and does not leave.
- localQuery(`update public.companies set work_mode='alone' where slug='${slug}'`,baseURL);
+ localQuery(`update public.companies set work_mode='alone' where slug='${slug}' returning id`,baseURL);
  await recordLeave(page);
  await dialog.getByRole('radio',{name:'Alone'}).check();
  await dialog.getByRole('button',{name:'Open the workspace'}).click();
@@ -368,7 +368,7 @@ for(const motion of ['no-preference','reduce'] as const) test(`the saved answer 
  expect(await recorded(page)).toEqual([]);
  await expect(page).toHaveURL(new RegExp(`/c/${slug}/home$`));
 
- localQuery(`update public.companies set work_mode=null where slug='${slug}'`,baseURL);
+ localQuery(`update public.companies set work_mode=null where slug='${slug}' returning id`,baseURL);
  await dialog.getByRole('button',{name:'Open the workspace'}).click();
  await expect(page).toHaveURL(new RegExp(`/c/${slug}/conversations/[0-9a-f-]{36}`));
  await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();

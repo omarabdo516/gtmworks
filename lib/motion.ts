@@ -22,7 +22,7 @@ export function leave(ms:number,start:()=>void,gone:()=>void):()=>void {
 }
 
 // The design's dialog leave (#130; design-reference: closeModal, closeDlg, sovClose): 190ms on the leave curve.
-export const dialogLeaveMs=190;
+const dialogLeaveMs=190;
 
 // A part that leaves before what closing leads to (design-reference: closeModal and closeDlg add is-closing, wait, then
 // close; openSheet cancels a leave still running). `close(then)` marks it closing, keeps it in the page while its leave
