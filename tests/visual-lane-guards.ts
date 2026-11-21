@@ -47,8 +47,6 @@ export async function fixClockText(page: Page) {
       if (element.children.length || skipped.has(element.tagName)) continue;
       // A Routine's times are fixed hours of a fixed day before and after the server's own (visual-lane.spec.ts, #31).
       if (element.closest('.rt-row')) continue;
-      // Good morning's time is the fixture's own 9:00 in its own zone (visual-lane.spec.ts, #182), never today's clock.
-      if (element.closest('.ck-time')) continue;
       const text = (element.textContent ?? '').trim();
       if (element.matches('.lg-day__h')) element.textContent = 'Day';
       else if (element.closest('.chart-bars') && /\d/.test(text) && monthName.test(text)) element.textContent = 'Month 00';

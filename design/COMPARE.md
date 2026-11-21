@@ -69,6 +69,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `invite` | Settings, Company: "Invite a member", one invitation sent (its row marked Invite sent and the toast), then the form opened again (#185). The same steps run on the built page | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
 | `agent` | Settings, Agents, Lead: one Agent's page | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000001` (the fixture's Lead) |
+| `agent-proposal` | Settings, Agents, Analyst: the note under its tabs while Lead's proposed model for it waits for the Owner (#178) | `/c/rs-learning/settings?agent=61000000-0000-0000-0000-000000000004` (the fixture's Analyst and its proposal) |
 | `apps` | Settings, Apps: the app catalogue (#30) | `/c/rs-learning/settings?section=apps` (needs a Company profile in the Engine) |
 | `account` | Settings, Your account | `/c/rs-learning/settings?section=account` |
 | `knowledge` | Settings, Company knowledge, on its first part, Brand voice (#27) | `/c/rs-learning/settings?section=knowledge` |
