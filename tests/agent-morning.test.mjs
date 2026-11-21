@@ -307,3 +307,37 @@ test('overlapping main-Agent changes leave the daily message on the Agent that i
   assert.equal(jobs(fake,adsProfile).filter(job=>job.prompt.startsWith(morningMarker)).length,0,'none left on the Agent that stopped being main');
  } finally { await fake.close(); }
 });
+
+test('the settle carries how the message is now: a stale paused copy never wins, a removed Agent racing a save is seen, and an unreadable profile still leaves nothing sending', async () => {
+ // A → B could not delete A's job (left paused); then B → A: A takes B's switched-on job, not its stale paused copy.
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'7:30',zone:'Africa/Cairo',hermes:install(fake)});
+  const stuck={delete:async(connection,{id})=>connection.profile===leadProfile?{state:'busy'}:(await import('../lib/hermes.mjs')).deleteRoutine(connection,{id})};
+  await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:stuck});
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused']);
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>job.state),['scheduled']);
+  assert.equal((await moveAgentMorning(session({agents:agentRows(lead)}).db,{company,agents:agentRows(ads),hermes:install(fake)})).state,'moved');
+  const back=jobs(fake,leadProfile).filter(job=>job.prompt.startsWith(morningMarker));
+  assert.deepEqual(back.map(job=>[job.state,job.schedule.expr]),[['scheduled','30 7 * * *']],'the message stays on, as it was set');
+  assert.equal(jobs(fake,adsProfile).length,0);
+ } finally { await fake.close(); }
+ // The main Agent removed (the last one) while a first save waits on the Engine: the save's own pre-read names its profile.
+ const second=await engine();
+ try {
+  let rows=agentRows(lead);
+  const db={...session().db,rpc:async(name,args)=>name==='company_app_agents'?{data:rows,error:null}:session().db.rpc(name,args)};
+  const removing={read:async connection=>{ const listed=await readRoutines(connection); rows=[]; return listed; }};
+  assert.equal((await changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(second),driver:removing})).state,'notMain');
+  assert.ok(jobs(second,leadProfile).filter(job=>job.prompt.startsWith(morningMarker)).every(job=>job.state==='paused'),'nothing sends from the removed Agent');
+ } finally { await second.close(); }
+ // The new main Agent's profile cannot be read: the old copy is paused all the same, and the read's failure is the answer.
+ const third=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(third)});
+  third.settings.profiles.delete(adsProfile);
+  const answer=await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(third)});
+  assert.notEqual(answer.state,'moved');
+  assert.deepEqual(jobs(third,leadProfile).map(job=>job.state),['paused']);
+ } finally { await third.close(); }
+});
