@@ -918,15 +918,11 @@ status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null 
 [[ $status == 200 ]] || fail_update 'old version healthy after failed update'
 }
 
-# update: the update between releases, from the last release before the Engines to this one and the next. Its summary
-# does not print, and it runs without pipefail, as the release checks always did.
-update() {
-cd "$root"
-reset_install
-trap - EXIT
-set +o pipefail
-fail_prefix='release install check failed: '
-start_registry
+# The previous release installed in release-install/ from its own two files, its first run made, a memory written in
+# the Company's profile and a sign-in on its Engine, and the archive its own installer makes of it: what the update area
+# updates and the previous-archive area restores. It leaves the shell in that folder with key, company, profile, marker
+# and previous_backup set.
+previous_release_install() {
 # The previous release is the last one before each Company got its own Engine (spec #378): its own schema (no Engine
 # record, no companies.engine_id), its own one `hermes` service, and its own key in .env.install. It is a fixed commit,
 # not this pull request's base or origin/main: after this release merges, main has the Engines, and the update proof would
@@ -984,6 +980,18 @@ previous_backup=$(sed -n 's/^Backup: //p' "$RUNNER_TEMP/previous-release-backup.
 tar -tzf "$previous_backup" > "$RUNNER_TEMP/previous-release.list" || fail 'list the previous release backup'
 grep -Eq '^opt/data(/|$)' "$RUNNER_TEMP/previous-release.list" || fail 'the previous release backup holds the Agents data at opt/data'
 if grep -Eq '^\.?engines' "$RUNNER_TEMP/previous-release.list"; then fail 'the previous release backup holds no Engine folders'; fi
+}
+
+# update: the update between releases, from the last release before the Engines to this one and the next. Its summary
+# does not print, and it runs without pipefail, as the release checks always did.
+update() {
+cd "$root"
+reset_install
+trap - EXIT
+set +o pipefail
+fail_prefix='release install check failed: '
+start_registry
+previous_release_install
 # Two Companies on the previous release's schema (#378, S2): the update is refused before it migrates, replaces
 # or restarts anything, and the release it runs keeps serving.
 db -c "insert into public.companies (id,slug,name) values ('00000000-0000-4000-8000-000000000239','release-probe','Release probe');" \
@@ -1090,12 +1098,26 @@ cmp .env.install .env.install.before || fail 'the install command again leaves .
 [[ $(first_engine_key) == "$key" ]] || fail 'the install command again keeps the adopted Engine key'
 [[ $(first_engine_id) == "$engine" ]] || fail 'the install command again leaves the adopted Engine running'
 [[ $(docker ps -q --filter 'name=^gtmworks-sandbox-first$') == "$adopted_sandbox" ]] || fail 'the install command again leaves the sandbox running'
+}
+
+# previous-archive: the archive the previous release's own installer made, restored onto a fresh install of this release
+# (#378, C3). Its own area since the work sandbox (#389) took the update area past its 12 minutes; it makes the same
+# previous release install the update area does, from the same fixed commit.
+previous_archive() {
+cd "$root"
+reset_install
+trap - EXIT
+set +o pipefail
+fail_prefix='release install check failed: '
+start_registry
+previous_release_install
 # The archive the previous release's own installer made, restored onto a fresh install of this release (#378, C3): the one
 # Company it holds reaches its own Engine, and its Agent remembers what it was told and its sign-in still serves, all of it
 # from data written before the Engines existed.
-compose down -v || fail 'remove the updated install before the previous release archive'
+compose down -v || fail 'remove the previous release install before its archive'
 remove_engine
 rm -f .env.install
+cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh || fail 'fresh install before the previous release archive'
 sh install.sh restore "$previous_backup" || fail 'restore the archive the previous release made'
 [[ $(ls -d .engines/*/ | wc -l) == 1 ]] || fail 'the previous release archive restores its one Engine'
@@ -1487,7 +1509,7 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
@@ -1495,9 +1517,10 @@ case "${1:-all}" in
  proxy) proxy;;
  rollback) rollback;;
  update) update;;
+ previous-archive) previous_archive;;
  engines-update) engines_update;;
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac
