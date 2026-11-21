@@ -55,6 +55,8 @@ test.afterAll(async()=>{ await fake?.close(); });
 const overlay=(page:Page)=>page.getByRole('dialog',{name:'Settings'});
 const agentPage=(agent:string)=>`/c/rs-learning/settings?section=agents&agent=${agent}`;
 const morning=(page:Page)=>overlay(page).locator('#set-checkin');
+// The zone line is drawn in the browser only (the server knows no zone), so once it reads, the page answers presses.
+const hydrated=(page:Page)=>expect(morning(page).locator('#set-ck-zone')).toHaveText('Cairo time');
 
 test('the Owner switches the daily message on and changes its time with the save bar; the Engine holds one job, and each change is logged',async({page})=>{
  await signIn(page,'omar@example.com',agentPage(lead));
@@ -64,7 +66,7 @@ test('the Owner switches the daily message on and changes its time with the save
  const time=section.getByRole('combobox',{name:'Time'});
  await expect(toggle).toHaveAttribute('aria-checked','false');
  await expect(time).toBeDisabled();
- await expect(section.locator('#set-ck-zone')).toHaveText('Cairo time');
+ await hydrated(page);
  await expect(section.locator('#set-ck-hint')).toHaveText('If there’s nothing new, it won’t send anything.');
  expect(morningJobs(profile)).toHaveLength(0);
 
@@ -80,6 +82,7 @@ test('the Owner switches the daily message on and changes its time with the save
 
  // The page reads what the Engine holds.
  await page.reload();
+ await hydrated(page);
  await expect(toggle).toHaveAttribute('aria-checked','true');
  await expect(time).toHaveValue('8:30');
 
@@ -128,6 +131,7 @@ test('below Agent level 3 the switch cannot be turned on, the line says why, and
  try {
   await signIn(page,'omar@example.com',agentPage(lead));
   const section=morning(page);
+  await hydrated(page);
   await expect(section.locator('#set-ck-level')).toHaveText('Scheduled work is off for this company. The Owner turns it on in Settings, Company, “What the agents may do”.');
   const toggle=section.getByRole('switch',{name:'Send me a morning summary every day'});
   await expect(toggle).toHaveAttribute('aria-disabled','true');
@@ -145,6 +149,7 @@ test('below Agent level 3 the switch cannot be turned on, the line says why, and
 test('making another Agent the main one moves the daily message to its profile with the same time and state, and leaves none behind',async({page})=>{
  await signIn(page,'omar@example.com',agentPage(lead));
  const section=morning(page);
+ await hydrated(page);
  await section.getByRole('switch',{name:'Send me a morning summary every day'}).click();
  await section.getByRole('combobox',{name:'Time'}).selectOption('7:30');
  await page.locator('#set-save').click();
@@ -152,6 +157,7 @@ test('making another Agent the main one moves the daily message to its profile w
  await expect.poll(()=>morningJobs(profile).length).toBe(1);
 
  await page.goto(agentPage(ads));
+ await expect(overlay(page).locator('#set-make-main')).toBeEnabled();
  await overlay(page).locator('#set-make-main').click();
  await expect.poll(()=>morningJobs(own(ads)).length).toBe(1);
  expect(morningJobs(profile)).toHaveLength(0);
