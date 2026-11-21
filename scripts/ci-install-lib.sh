@@ -217,6 +217,19 @@ DOCKERFILE
   next=$(publish 0.0.1-ci) || fail 'push the next release image'
   node scripts/release-assets.mjs "$next" release-next "$sandbox" || fail 'next release files'
 }
+# A release whose Engine does not start, as release-broken-engine files: this release with an Engine image that holds no
+# Hermes. The staged-update area updates the release before the work sandbox to it, and the update area the release
+# before the Engines (#502); publish_releases runs first.
+publish_broken_engine_release() {
+  docker image inspect alpine:3.21 > /dev/null 2>&1 || docker pull -q alpine:3.21 > /dev/null || fail 'pull the image the Engine that does not start is made of'
+  docker tag alpine:3.21 gtmworks-engine-broken:0.0.4 || fail 'tag an Engine image that does not start'
+  docker build -q -t localhost:5000/gtmworks:0.0.4-broken-engine - > /dev/null <<'DOCKERFILE' || fail 'build the release whose Engine does not start'
+FROM localhost:5000/gtmworks:0.0.0-ci
+RUN sed -i '0,/^\( *image:\).*/s//\1 gtmworks-engine-broken:0.0.4/' /app/install/scripts/engine-template.yml
+DOCKERFILE
+  broken_engine=$(publish 0.0.4-broken-engine) || fail 'push the release whose Engine does not start'
+  ( cd "$root" && node scripts/release-assets.mjs "$broken_engine" release-broken-engine "$sandbox" ) || fail 'the release files whose Engine does not start'
+}
 # Every file of an install belongs to the user who ran it. Only a Docker whose `--user $(id -u)` is that same user can show
 # it: ./ci.sh install, whose Docker machine sits inside rootless Docker, sets INSTALL_LANE_FOREIGN_OWNER and the check is
 # left to CI.
