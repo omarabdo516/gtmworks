@@ -1084,6 +1084,8 @@ install_source source-install.log || fail 'source install before the failed upda
 old_web=$(compose ps -q web)
 cp scripts/install-failing-migration.sql supabase/migrations/99999999999999_failure.sql
 if sh scripts/install.sh update "$INSTALL_REF" > update.log 2>&1; then fail_update 'update must fail'; fi
+# The failing migration leaves the checkout as soon as the update tried it, so no later area in it meets the fixture.
+rm -f supabase/migrations/99999999999999_failure.sql
 grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_update 'failed migration name'
 [[ $(compose ps -q web) == "$old_web" ]] || fail_update 'old web container still serving'
 [[ $(db -c "select to_regclass('public.update_should_rollback') is null") == t ]] || fail_update 'migration transaction rolled back'
@@ -1104,6 +1106,8 @@ previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6
 git cat-file -e "$previous_release^{commit}" 2> /dev/null || git fetch --no-tags origin "$previous_release" || fail 'the previous release commit'
 # The update and previous-archive areas each make this install in the same places: one that ran before this one in
 # the same checkout (./ci.sh install, all of them) leaves its worktree and folder, which go first.
+# An install an earlier area left running there is taken down first, from its own folder, with its volumes.
+if [ -f "$root/release-install/.env.install" ]; then (cd "$root/release-install" && remove_install) || fail 'remove the earlier previous-release install'; fi
 git worktree remove --force "$RUNNER_TEMP/previous-release" > /dev/null 2>&1 || true
 docker run --rm -v "$RUNNER_TEMP:/temp" -v "$root:/root-folder" alpine:3.21 rm -rf /temp/previous-release /root-folder/release-install /root-folder/release-previous
 git worktree prune

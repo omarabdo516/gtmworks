@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, readFileSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 
@@ -14,7 +14,7 @@ const fakeDocker=`#!/bin/sh
 printf '%s\\n' "$*" >> "$COMMANDS"
 case "$*" in
   *'.State.Health.Status'*) echo healthy;;
-  *'exec -u hermes '*' ssh '*) exit "\${SSH_EXIT:-0}";;
+  *'exec -u hermes '*' ssh '*) if [ -n "\${SSH_EXIT_FILE:-}" ] && [ -f "$SSH_EXIT_FILE" ]; then exit 1; fi; exit "\${SSH_EXIT:-0}";;
   *'/data/ssh/id_ed25519'*) printf 'client ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIclient\nhost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIhost\n';;
  *'company-add.mjs check'*) printf '%s\\n' "\${SLUG:-second-company-0000abcd}"; exit "\${CHECK_EXIT:-0}";;
  *'company-add.mjs add'*)
@@ -418,15 +418,28 @@ test('company limits that the sandbox cannot start with puts the earlier limits 
  assert.ok(installDir.lines().includes('limits memory=2g cpus=1.5'),'the sandbox is started again with its earlier limits');
 });
 
-test('company limits whose sandbox does not start again with the earlier limits says it is not running', t => {
+test('company limits whose sandbox does not come back with the earlier limits says it is stopped or unreachable', t => {
  const installDir=withCompany(t,{SANDBOX_UP_EXIT:'1'});
  const result=installDir.run('company','limits','Second Company','--cpus','512');
  assert.notEqual(result.status,0);
  assert.doesNotMatch(result.stdout,/runs with its earlier limits/);
- assert.match(result.stderr,/The limits of Company "Second Company" were not changed, and its work sandbox did not start again with its earlier limits either: it is not running\./);
+ assert.match(result.stderr,/The limits of Company "Second Company" were not changed, and its work sandbox did not come back with its earlier limits either: it is stopped or its Engine cannot reach it\./);
  const env=readFileSync(installDir.envFile('second-company-0000abcd'),'utf8');
  assert.match(env,/^SANDBOX_CPUS=1\.5$/m,'the earlier limits are kept for its next start');
  assert.ok(installDir.lines().includes('limits memory=2g cpus=1.5'),'a start with its earlier limits was tried');
+});
+
+test('company limits whose sandbox starts with the earlier limits but cannot be reached does not say it runs with them', t => {
+ // The Engine reaches the sandbox while the Company is made, and no more once its limits change (SSH_EXIT_FILE).
+ const unreachable=join(mkdtempSync(join(tmpdir(),'gtmworks-unreachable-')),'ssh-fails');
+ t.after(()=>rmSync(dirname(unreachable),{recursive:true,force:true}));
+ const installDir=withCompany(t,{SANDBOX_UP_FAIL_CPUS:'512',SSH_EXIT_FILE:unreachable});
+ writeFileSync(unreachable,'');
+ const result=installDir.run('company','limits','Second Company','--cpus','512');
+ assert.notEqual(result.status,0);
+ assert.doesNotMatch(result.stdout,/runs with its earlier limits/);
+ assert.match(result.stderr,/it is stopped or its Engine cannot reach it\./);
+ assert.ok(installDir.lines().includes('limits memory=2g cpus=1.5'),'the sandbox started again with its earlier limits');
 });
 
 test('company limits needs a known Company and a limit', t => {
