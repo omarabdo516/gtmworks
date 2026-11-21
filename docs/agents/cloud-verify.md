@@ -78,7 +78,8 @@ Nothing of it reaches the image, and where the variable names no file (CI, a rel
 build you type yourself does the same with `bash scripts/docker-build.sh -t gtmworks:ci .`. `./ci.sh install <area>`
 builds the app image on the VM the same way and loads it into its isolated machine, as CI's install jobs load the image
 job's build, and that machine's Docker trusts the same CA for the pulls it makes; the areas that update from a fixed older commit (`update`, `previous-archive`, `sandbox-update`,
-`staged-update`) build that commit's own Dockerfile, which takes the CA only once the commit is one made after #562. Docker needs no proxy setting
+`staged-update`) build that commit's own Dockerfile, which takes the CA only once the commit is one made after #562. The work sandbox check needs `ssh-keygen`, which CI's runner has
+and a cloud VM may not: `apt-get install -y openssh-client` first. Docker needs no proxy setting
 here: the network reaches containers directly (plain HTTP, such as the sandbox image's `apt-get`, works as it is), and
 the session proxy at `127.0.0.1` would be the container's own loopback.
 
