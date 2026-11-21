@@ -8,6 +8,7 @@ import { engineFor } from '../lib/engine.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, checkAgentTools, abandonConversationReservations, keepLeadSouls } from '../lib/company-profiles.mjs';
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
+import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 checkSettings();
 // The worker's elevated database client; lib/conversation-runs.mjs and lib/channel-runs.mjs use it.
 const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});
@@ -37,4 +38,6 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  selfHosted&&loop('Hermes',async()=>{ await keepCompanyProfiles(db,{waiting}); await keepLeadSouls(db,{}); },2000),
  selfHosted&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{}); await keepSharedSkills(db,{}); await keepAgentRules(db,{}); await moveAgentProfiles(db,{waiting:moving,driverFor:connection=>engineFor(connection)}); },2000),
  selfHosted&&loop('Agent tools',()=>checkAgentTools(db,{}),300000),
- loop('Reserved runs',()=>abandonConversationReservations(db),60000)]);
+ loop('Reserved runs',()=>abandonConversationReservations(db),60000),
+ // A memory or skill change whose log the app could not write is logged once by this pass (#370).
+ loop('Held changes',()=>logHeldAgentChanges(db),60000)]);

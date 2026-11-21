@@ -115,3 +115,33 @@ trademarks.
 Source: https://github.com/simple-icons/simple-icons (npm `simple-icons` 16.38.0). The apps' logos in `public/logos/simple/`
 are copied with each brand's colour from the set's data set as their fill; CC0 1.0, `public/logos/simple/LICENSE.md`. The
 logos remain their owners' trademarks.
+
+## Matt Pocock skills
+
+Source: https://github.com/mattpocock/skills
+
+Pinned commit: `abeeaf95660ba9e8b7c753eb38f441ca707a8823`. Copied unchanged into `.claude/skills/` by
+`scripts/vendor-matt-skills.sh`, which lists the skills it copies; refresh steps are in `docs/agents/matt-pocock-skills.md`
+(#473). Keep this notice while any copied skill remains.
+
+MIT License
+
+Copyright (c) 2026 Matt Pocock
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

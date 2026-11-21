@@ -41,10 +41,10 @@ export type ProviderKeys={state:'found',keys:import('./hermes.mjs').ProviderKey[
 // An Agent's memory (#350), read from its own profile: its notes, each with the Engine's id and its text, never a skill.
 export type MemoryNote={id:string,text:string};
 export type MemoryNotes={state:'found',notes:MemoryNote[]}|{state:'refused'|'unreachable'|'failed',notes:null};
-export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed'};
+export type MemoryReset={state:'reset'|'refused'|'unreachable'|'failed',unsent?:true};
 // One note rewritten or removed by the Engine's own id (#191); a note that changed since it was read is `stale`.
-export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed'};
-export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed'};
+export type MemoryEdit={state:'edited'|'stale'|'refused'|'unreachable'|'failed',unsent?:true};
+export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'failed',unsent?:true};
 // An Agent's Routine (#31): one cron job of its own Engine profile, as the contract reads it.
 export type RoutineSchedule={kind:string,expr:string|null,minutes:number|null,display:string|null};
 export type Routine={id:string,name:string,prompt:string,schedule:RoutineSchedule,timezone:string|null,on:boolean,state:'scheduled'|'paused'|'running'|'completed'|'error',nextRunAt:string|null,lastRunAt:string|null,lastStatus:'ok'|'failed'|null,lastError:string|null};
