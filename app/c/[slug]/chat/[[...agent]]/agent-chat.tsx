@@ -91,7 +91,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     return new Promise<never>(()=>{});
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{current.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>
   </div>
-  {current&&shown.details&&<AgentDetails key={current.id} panel={panel} agent={current} details={shown.details} slug={slug}/>}
+  {current&&shown.details&&<AgentDetails key={current.id} panel={panel} agent={current} details={shown.details} slug={slug} suggest={writer?text=>box.current?.fill(text):undefined}/>}
   {agent&&isNew&&<OpenedMark company={company} agent={agent.id}/>}
  </div>;
 }
