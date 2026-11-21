@@ -20,7 +20,9 @@ export function useShowCard(show:number|undefined,{hides,showAll,board}:{hides:b
   if(shown) {
    shown.scrollIntoView({block:'nearest',inline:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
    shown.classList.add('is-flash');
-   shown.addEventListener('animationend',()=>shown.classList.remove('is-flash'),{once:true});
+   // Only the flash's own end: a progress bar growing in when the board opens (#131) ends inside the Card too.
+   const flashed=(event:AnimationEvent)=>{ if(event.target!==shown) return; shown.classList.remove('is-flash'); shown.removeEventListener('animationend',flashed); };
+   shown.addEventListener('animationend',flashed);
    shown.querySelector<HTMLElement>('a')?.focus({preventScroll:true});
   }
   // Shown once: a reload does not show it again. Only the address changes, so the board keeps the Card the server read

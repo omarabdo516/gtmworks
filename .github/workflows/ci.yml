@@ -664,19 +664,32 @@ jobs:
       fail-fast: false
       matrix:
         area: [first-install, companies, agents, backup, proxy, rollback, update, previous-archive, release-update, sandbox-update, staged-update, sizes, engines-update, one-line, updater]
-    # 10.7 min measured for its slowest area, update, on run 44726291691 (#389): 12 min is 1.5 times it, capped at 12 (#410).
+    # 11.3 min measured for its slowest area, backup, on run 44897434186, once update kept its fixed release image (7.0 min,
+    # #423): 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
         with:
-          # Only the update and previous-archive areas build and install the last release before the Engines, a fixed commit
+          # Only the update and previous-archive areas install the last release before the Engines, a fixed commit
           # (#378, C1), and the sandbox-update area the last release before the work sandbox, another fixed commit (#397).
           fetch-depth: ${{ (matrix.area == 'update' || matrix.area == 'previous-archive' || matrix.area == 'sandbox-update' || matrix.area == 'staged-update') && '0' || '1' }}
       # The isolated Docker machine and the image the run built once, as one action the measurement also uses (#403,
       # #411): the area of scripts/ci-install-check.sh the matrix names runs on it, and the last step removes it, also
       # after a failure, on a runner that is reused.
+      # The fixed commit of main the area updates from, if any (area_release_commit, scripts/ci-install-lib.sh), and that
+      # commit's image kept in the Actions cache under it (#423): the image of a fixed commit is the same on every run, so
+      # the area loads it instead of spending about three minutes building it again; on a miss it builds and saves it.
+      - name: the fixed release this area updates from
+        id: release
+        run: bash -c '. scripts/ci-install-lib.sh; printf "commit=%s\n" "$(area_release_commit "${{ matrix.area }}")"' >> "$GITHUB_OUTPUT"
+      - name: the fixed release image
+        if: ${{ steps.release.outputs.commit != '' }}
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/release-images
+          key: install-release-image-${{ steps.release.outputs.commit }}
       - uses: ./.github/actions/install-machine
       # Only the browser check of the sign-in rate limit, in the proxy area, uses these, inside the Playwright image; the
       # install itself is Docker only. No install scripts: the image already has the browsers.
@@ -693,6 +706,7 @@ jobs:
           INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
           GTMWORKS_IMAGE_PREBUILT: "true"
+          GTMWORKS_RELEASE_IMAGES: ${{ runner.temp }}/release-images
         run: bash scripts/ci-install-check.sh ${{ matrix.area }}
       - name: remove the isolated Docker machine
         if: ${{ always() && runner.environment != 'github-hosted' }}

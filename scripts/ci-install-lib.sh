@@ -158,6 +158,35 @@ publish() { docker push -q "localhost:5000/gtmworks:$1" > /dev/null && docker im
 # The work sandbox image the source install built (or CI loaded), pushed beside the app image so a release file pins it
 # as the app image is pinned (#392, ADR 0020).
 publish_sandbox() { docker push -q "localhost:5000/gtmworks-sandbox:$1" > /dev/null && docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "localhost:5000/gtmworks-sandbox:$1" | grep -m 1 '^localhost:5000/gtmworks-sandbox@'; }
+# The fixed commits of main the release areas update from, each named once (#423). The release before the Engines (spec
+# #378, C1): the update and previous-archive areas. The release before the work sandbox, the commit spec #389's branch
+# last merged (#472): the sandbox-update and staged-update areas. Not origin/main or a pull request's base: once a spec
+# merges, main has its shape, and the proof would update this release's own shape to itself.
+previous_release_commit=8f47abe1761548a45de72937fac443a4bdea3eb6
+before_sandbox_release_commit=a404785204c76ddf27ae8ea97c7c9b5b4ae73304
+# The fixed commit an area updates from, or nothing for an area that builds no earlier release: CI keys the image it
+# keeps on it (.github/workflows/ci.yml, the install job).
+area_release_commit() {
+  case "$1" in
+    update | previous-archive) printf '%s' "$previous_release_commit";;
+    sandbox-update | staged-update) printf '%s' "$before_sandbox_release_commit";;
+  esac
+}
+# A fixed commit's image, built from its checkout ($3, with any build arguments after it) and tagged $2. Its image is the
+# same on every run, so with GTMWORKS_RELEASE_IMAGES set (CI, a folder the Actions cache keeps per commit) the first build
+# is saved there and every later run loads it instead of building it again (#423); `./ci.sh install` sets nothing and
+# builds it.
+release_image() {
+  local commit=$1 tag=$2 source=$3 kept=''
+  shift 3
+  [[ -n ${GTMWORKS_RELEASE_IMAGES:-} ]] && kept="$GTMWORKS_RELEASE_IMAGES/$commit.tar"
+  # A kept archive that does not load (a cut-off save) is built again, as if none were kept.
+  if ! { [[ -n $kept && -f $kept ]] && docker load -q -i "$kept" > /dev/null; }; then
+    docker build -q "$@" -t "gtmworks-release:$commit" "$source" > /dev/null || return 1
+    if [[ -n $kept ]]; then mkdir -p "$GTMWORKS_RELEASE_IMAGES" && docker save -o "$kept" "gtmworks-release:$commit" || return 1; fi
+  fi
+  docker tag "gtmworks-release:$commit" "$tag"
+}
 # The local registry a release area serves its test releases from: each area that needs one starts its own (#406).
 start_registry() {
   docker rm -f install-registry > /dev/null 2>&1 || true

@@ -223,18 +223,25 @@ case "${1:-check}" in
   # The update area updates an install from HEAD's source, which an update downloads from GitHub: HEAD must be pushed to some branch.
   git fetch -q origin "$(git rev-parse HEAD)" 2> /dev/null \
     || { echo "Push HEAD to a branch on GitHub first: the install job downloads it ($(git rev-parse --short HEAD))." >&2; exit 2; }
-  work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); dind=gtmworks-install-lane; port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
+  work=$(mktemp -d "$(git rev-parse --absolute-git-dir)/install-lane.XXXXXX"); port=${INSTALL_DOCKER_PORT:-2375}; here=$PWD
+  # The machine, its checkout and the work folder go however the run ends (scripts/install-lane-machine.sh, #416): the
+  # EXIT trap after a pass, a failure or SIGINT, SIGTERM or SIGHUP, which first stops this shell's own commands (a signal
+  # to this shell alone would leave the proof's areas running on), and a guard outside the lane's process tree after a
+  # kill that runs no trap, or for what the trap could not remove. Both are in place before anything is made. `set -e`
+  # holds inside the trap too, so nothing in it may fail before the removal.
+  lane="$here/scripts/install-lane-machine.sh"
+  trap 'bash "$lane" remove "$work" $$ || true' EXIT
+  bash "$lane" guard $$ "$work"
   git worktree add -q --detach "$work/src" HEAD
-  trap 'docker rm -fv "$dind" > /dev/null 2>&1 || true; git -C "$here" worktree remove --force "$work/src" > /dev/null 2>&1 || true; rm -rf "$work" 2> /dev/null || true' EXIT
-  # One install lane at a time on this machine: a machine an interrupted run left behind is removed first.
-  docker rm -fv "$dind" > /dev/null 2>&1 || true
-  docker run -d --privileged --name "$dind" -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$port:2375" -v "$work/src:$work/src" docker:28.5.1-dind > /dev/null
-  host_docker=${DOCKER_HOST:-}
-  export DOCKER_HOST=tcp://127.0.0.1:$port RUNNER_TEMP=$work/tmp INSTALL_REF
+  bash "$lane" start "$work" "$port"
+  # This shell's Docker stays the host's, so the trap removes the machine there; only the commands meant for the machine
+  # are pointed at it (#416).
+  machine=tcp://127.0.0.1:$port
+  export RUNNER_TEMP=$work/tmp INSTALL_REF
   INSTALL_REF=$(git rev-parse HEAD)
   mkdir -p "$RUNNER_TEMP"
-  for attempt in $(seq 1 60); do docker info > /dev/null 2>&1 && break; sleep 1; done
-  docker info > /dev/null
+  for attempt in $(seq 1 60); do DOCKER_HOST=$machine docker info > /dev/null 2>&1 && break; sleep 1; done
+  DOCKER_HOST=$machine docker info > /dev/null
   # Pulls inside this machine stall here (the nested network behind rootless Docker), so every image the job runs comes
   # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
   images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local' | grep -v '\$'
@@ -245,13 +252,13 @@ case "${1:-check}" in
   # layers that did not change), so the lane runs HEAD's image, never an earlier commit's tag or uncommitted files.
   # The exit runs the same image (#394), so the template names it twice: the first is the sandbox's.
   sandbox_tag=$(sed -n 's/^ *image: ${SANDBOX_IMAGE:-\(.*\)}$/\1/p' scripts/engine-template.yml | head -n 1)
-  DOCKER_HOST=$host_docker docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
+  docker build -q -t "$sandbox_tag" "$work/src/sandbox" > /dev/null
   images="$images $sandbox_tag"
   # The app image, as CI's image job builds it once and every area loads it (#403, GTMWORKS_IMAGE_PREBUILT): built here on
   # this host from the committed checkout, under the tag the source install's compose file names, because a build inside
   # the machine cannot pull its base images. The release areas make their test releases from it.
   web_tag=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1)
-  DOCKER_HOST=$host_docker docker build -q --build-arg NEXT_SKIP_CHECKS=true -t "$web_tag" "$work/src" > /dev/null
+  docker build -q --build-arg NEXT_SKIP_CHECKS=true -t "$web_tag" "$work/src" > /dev/null
   images="$images $web_tag"
   export GTMWORKS_IMAGE_PREBUILT=true
   # Behind an HTTPS proxy (a cloud session) Node reaches GitHub through it, as curl and git do.
@@ -263,8 +270,8 @@ case "${1:-check}" in
     images="$images $( { grep -h -E '^[[:space:]]*image:' "$work/latest-release/docker-compose.install.yml" | awk '{print $2}' | grep -v '\$'
       sed -n 's/^sandbox_image=//p' "$work/latest-release/install.sh"; } | sort -u | tr '\n' ' ')"
   fi
-  for image in $images; do DOCKER_HOST=$host_docker docker image inspect "$image" > /dev/null 2>&1 || DOCKER_HOST=$host_docker docker pull -q "$image" > /dev/null; done
-  DOCKER_HOST=$host_docker docker save $images | docker load > /dev/null
+  for image in $images; do docker image inspect "$image" > /dev/null 2>&1 || docker pull -q "$image" > /dev/null; done
+  docker save $images | DOCKER_HOST=$machine docker load > /dev/null
   # The job's containers see only the checkout, so the test packages are a hard-linked copy in it, not a link out of it
   # (CI installs them there with npm ci).
   cp -al "$(readlink -f "$here/node_modules")" "$work/src/node_modules"
@@ -273,7 +280,7 @@ case "${1:-check}" in
   # runner or a server: files the job makes are left writable to every user, so a container run as the user can write them.
   umask 0000
   export INSTALL_LANE_FOREIGN_OWNER=1
-  bash scripts/ci-install-check.sh "$@"
+  DOCKER_HOST=$machine bash scripts/ci-install-check.sh "$@"
   ;;
   *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac
