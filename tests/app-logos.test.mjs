@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { logoOf } from '../components/logos.ts';
+import { logoOf, logoWaiting as waiting } from '../components/logos.ts';
 import { apps, customApp, knownApp } from '../lib/app-catalogue.mjs';
 import { markOf } from '../lib/app-mark.mjs';
 import en from '../lib/messages/apps.en.json' with { type: 'json' };
@@ -9,8 +9,6 @@ import en from '../lib/messages/apps.en.json' with { type: 'json' };
 // #577: every connectable app shows its company's own logo, a file of this install. The catalogue's apps are the
 // `use.<key>` entries of its messages; `command`, `custom` and `own` name no company and keep their letter.
 const noCompany = new Set(['command', 'custom', 'own']);
-// DeepWiki's site refuses every request from outside a browser, so its official mark is still to be taken (#580).
-const waiting = new Set(['deepwiki']);
 const keys = Object.keys(en).filter(key => key.startsWith('use.')).map(key => key.slice(4)).filter(key => !noCompany.has(key) && !waiting.has(key));
 
 test('every app of the catalogue maps to a logo file in public/', () => {
@@ -35,8 +33,11 @@ test('a shared name takes the right company\'s mark', () => {
   assert.match(logoOf('kiwi') ?? '', /^\/logos\/brand\/kiwi\.(svg|png)$/, 'Kiwi.com');
 });
 
-// A logo ships inside the install and draws nothing from outside: no script, no handler, no address of another site.
+// A logo ships inside the install and draws nothing from outside: no script, no handler, no address of another site;
+// a PNG is a real one.
 test('every logo file is a static image of the install', () => {
+  for (const set of ['simple', 'lobe', 'brand']) for (const name of readdirSync(`public/logos/${set}`).filter(name => /\.png$/.test(name)))
+    assert.ok(readFileSync(`public/logos/${set}/${name}`).subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), `${set}/${name} is a PNG`);
   for (const set of ['simple', 'lobe', 'brand']) for (const name of readdirSync(`public/logos/${set}`).filter(name => /\.svg$/.test(name))) {
     const svg = readFileSync(`public/logos/${set}/${name}`, 'utf8');
     assert.match(svg, /^<svg[\s>]/, `${set}/${name} is an SVG`);

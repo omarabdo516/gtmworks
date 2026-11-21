@@ -45,8 +45,7 @@ const files:Record<string,string>={
  xai:'lobe/xai.svg',
  xiaomi:'lobe/xiaomimimo.svg',
  zai:'lobe/zai.svg',
- // The apps (#577), A to Z by key. DeepWiki is not here yet: deepwiki.com refuses every request from outside a browser
- // (#580), so no official file of its mark could be taken, and it keeps its letter until one is.
+ // The apps (#577), A to Z by key; an app of logoWaiting is not here yet.
  ahrefs:'brand/ahrefs.svg',
  airtable:'simple/airtable.svg',
  algolia:'simple/algolia.svg',
@@ -133,6 +132,10 @@ const files:Record<string,string>={
  x:'simple/x.svg',
  zapier:'simple/zapier.svg',
 };
+
+/** Apps whose official mark is still to be taken, so they keep their letter: deepwiki.com refuses every request from
+ *  outside a browser (#580). An app leaves the list in the change that adds its file. */
+export const logoWaiting:ReadonlySet<string>=new Set(['deepwiki']);
 
 /** The address of the logo for a provider id or app key, or null when it has none. */
 export const logoOf=(id:string)=>Object.hasOwn(files,id)?`/logos/${files[id]}`:null;

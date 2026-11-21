@@ -1,7 +1,8 @@
 # Company logos: where each file came from
 
 Each file here is the company's own logo, taken from the page named beside it and cut to the mark where the file held a
-wordmark too (#577). Scripts, links, comments and metadata were taken out, so each is a plain static SVG of this install.
+wordmark too (#577). Each is an SVG with its scripts, links, comments and metadata taken out, so it is a plain static image of this install,
+or a PNG where the company publishes its mark in no other form (Canva).
 The logos remain their owners' trademarks and are shown only to name the app they belong to. Simple Icons
 (`../simple/`, CC0) and Lobe Icons (`../lobe/`, MIT) keep their licences beside their own files.
 
