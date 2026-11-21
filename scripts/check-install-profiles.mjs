@@ -29,7 +29,10 @@
 //     job checks that none of it, the credential file included, reaches the Engine or the sandbox, and that the Run
 //     still works.
 //   library <marker>: one Agent writes a text file and a picture in its own folder of the Company's work folder (#395),
-//     and the Owner's Library of it lists, previews and downloads both with the bytes the Agent wrote.
+//     and the Owner's Library of it lists, previews and downloads both with the bytes the Agent wrote. In the same Run it
+//     plants a link to the Company's second Agent's memory on the Engine's disk (the job wrote `<marker>-leak` in it), a
+//     link up into that Agent's folder, a link to a folder and a hidden file: none is listed or read, and no byte of the
+//     memory comes back.
 // The companies and their Owner's sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -583,9 +586,16 @@ const text=`# ${marker}\n\nمسودة الحملة: Arabic and English in one fi
 const picture=[137,80,78,71,13,10,26,10,0,1,2,3,254,255];
 const textName=`${marker}-brief.md`; const pictureName=`${marker}-shot.png`;
 const octal=picture.map(byte=>`\\${byte.toString(8).padStart(3,'0')}`).join('');
+// The links an Agent could flip in the work folder: on the Engine's read-only mount, an absolute one resolves on the
+// Engine's own disk, where the other profile's memory is.
+const mine=`/work/${first.profile}`; const theirs=first.secondProfile; const memory=`/opt/data/profiles/${theirs}/memories`;
+const planted={leak:`${marker}-leak.md`,up:`${marker}-up`,folder:`${marker}-mem`,hidden:`.${marker}-hidden`};
 const calls=[
- {name:'write_file',arguments:{path:`/work/${first.profile}/${textName}`,content:text}},
- {name:'terminal',arguments:{command:`printf '${octal}' > /work/${first.profile}/${pictureName}`}},
+ {name:'write_file',arguments:{path:`${mine}/${textName}`,content:text}},
+ {name:'terminal',arguments:{command:`printf '${octal}' > ${mine}/${pictureName}`}},
+ {name:'terminal',arguments:{command:[`mkdir -p /work/${theirs}`,`printf theirs > /work/${theirs}/${marker}-x`,
+  `ln -s ${memory}/MEMORY.md ${mine}/${planted.leak}`,`ln -s ../${theirs}/${marker}-x ${mine}/${planted.up}`,
+  `ln -s ${memory} ${mine}/${planted.folder}`,`printf hidden > ${mine}/${planted.hidden}`].join(' && ')}},
 ];
 const plan=messages=>{
  const said=messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
@@ -605,7 +615,7 @@ try {
  assert.deepEqual(sent,{conversation});
  const answer=await until('reply on the library check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);
- assert.equal(results.length,2,JSON.stringify(results));
+ assert.equal(results.length,3,JSON.stringify(results));
  // The Owner's Library of that Agent, read as the app reads it: the signed-in person's own session, the Company's Engine.
  const request={company:first.company,agent:first.agent,hermes:firstEngine};
  const library=await agentLibrary(person,request);
@@ -626,6 +636,22 @@ try {
  const image=await agentFileDownload(person,{...request,name:pictureName});
  assert.equal(image.state,'found',JSON.stringify({state:image.state}));
  assert.deepEqual([...image.body],picture,'the picture downloads with the same bytes');
+ // What the Agent planted is neither listed nor read, and nothing of the other profile's memory comes back.
+ for(const name of Object.values(planted)) assert.ok(!listed.has(name),`${name} is not listed`);
+ const answers=[];
+ for(const name of [planted.leak,planted.up,planted.hidden]) {
+  const got=await agentFileDownload(person,{...request,name}); const seen=await agentFilePreview(person,{...request,name});
+  assert.ok(['missing','invalid'].includes(got.state),`${name} does not download: ${got.state}`);
+  assert.ok(['missing','invalid'].includes(seen.state),`${name} does not preview: ${seen.state}`);
+  answers.push(got,seen);
+ }
+ const inside=await agentLibrary(person,{...request,folder:planted.folder});
+ assert.equal(inside.state,'missing','a link to a folder is not a folder of the Library');
+ const behind=await agentFileDownload(person,{...request,folder:planted.folder,name:'MEMORY.md'});
+ assert.equal(behind.state,'missing','nothing behind a link to a folder downloads');
+ answers.push(inside,behind,await agentFilePreview(person,{...request,folder:planted.folder,name:'MEMORY.md'}));
+ const said=JSON.stringify(answers,(key,value)=>value instanceof Uint8Array?Buffer.from(value).toString('utf8'):value);
+ assert.ok(!said.includes(`${marker}-leak`)&&!said.includes('theirs'),'no byte of the other profile comes back');
  writeProof({step:'library',marker,profile:first.profile,count:library.entries.length,kind:preview.preview.kind,file:textName});
 } finally { model.close(); model.closeAllConnections(); }
 } else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker>');

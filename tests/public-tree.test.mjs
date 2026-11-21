@@ -107,15 +107,18 @@ test('no link to a private place', () => {
 
 test('no build-host detail outside the design reference', () => {
  // The Hermes address tests document private-range and tailnet literals on purpose: they prove such addresses are refused or allowed.
- // So do the sandbox exit's rules, its test and the install proof's probes, which prove the exit refuses shared addresses (#394).
- const fixtures = new Set(['lib/hermes.mjs', 'tests/hermes-address.test.mjs', 'tests/fake-hermes.mjs', 'sandbox/exit.py', 'tests/sandbox-exit.test.mjs', 'scripts/ci-install-check.sh']);
+ const fixtures = new Set(['lib/hermes.mjs', 'tests/hermes-address.test.mjs', 'tests/fake-hermes.mjs']);
  const keep = path => outsideReference(path) && !fixtures.has(path);
  for (const pattern of [
   new RegExp(piece('/home/', 'omar')),
-  /\b100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b/,
   /[\w-]+\.ts\.net\b/,
   /\bsrv\d{4,}\b/,
  ]) assert.deepEqual(offenders(pattern, keep), [], String(pattern));
+ // The sandbox exit's rules, its test and the install proof's probes name shared addresses on purpose: they prove the exit
+ // refuses them (#394). They are exempt from this one pattern alone.
+ const sharedRange = /\b100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b/;
+ const exitProofs = new Set(['sandbox/exit.py', 'tests/sandbox-exit.test.mjs', 'scripts/ci-install-check.sh']);
+ assert.deepEqual(offenders(sharedRange, path => keep(path) && !exitProofs.has(path)), [], String(sharedRange));
 });
 
 test('the old evidence directory is gone with every reference to it', () => {

@@ -245,5 +245,15 @@ test('the read route answers an Owner and a Manager, and a Contributor, a Viewer
   // No answer carries an Engine address or a path on its disk.
   const answer=JSON.stringify(await (await ask(route(database().db),{company,agent,name:'brief.md'})).json());
   assert.ok(!answer.includes(fake.address)&&!answer.includes('/opt/'),'no address and no path');
+  // A stopped work sandbox is named as such, apart from an Engine whose folder cannot be read at all (#395).
+  await withFile(fake,'brief.md',text,'text/markdown');
+  fake.settings.sandboxDown=true;
+  const stopped=await ask(route(database().db),{company,agent,name:'brief.md'});
+  assert.equal(stopped.status,503);
+  assert.deepEqual(await stopped.json(),{error:'workSandboxNotRunning'});
+  fake.settings.filesUnreadable.add(work);
+  const unread=await ask(route(database().db),{company,agent,name:'brief.md'});
+  assert.equal(unread.status,503);
+  assert.deepEqual(await unread.json(),{error:'agentLibraryUnreadable'});
  } finally { await fake.close(); }
 });

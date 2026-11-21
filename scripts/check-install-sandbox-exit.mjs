@@ -4,8 +4,9 @@
 //   - directly, nothing: no install service, no Engine listener, no other Company's sandbox or Engine, no public host on
 //     any port, and no name of the internet resolves (the sandbox's network routes nowhere);
 //   - through its Company's exit, only HTTP and HTTPS to a public address: a private, shared, link-local, loopback or
-//     cloud metadata address is refused by the exit itself, by number and by a name that resolves to it; a port that is
-//     not HTTP's or HTTPS's is refused; a tunnel whose first bytes are not TLS is closed before anything leaves;
+//     cloud metadata address is refused by the exit itself, by number and by a name that resolves to it; every port but
+//     80 for HTTP and 443 for HTTPS is refused, high ones too; a tunnel whose first bytes are not a TLS ClientHello is
+//     closed before anything leaves, even when they start as TLS does;
 //   - a stand-in public host outside the install's networks answers through the exit over HTTP and HTTPS, from the
 //     shell (Python, and curl where the image has it) and from Chromium, which reach the exit by the environment every
 //     session gets.
@@ -165,21 +166,25 @@ if(standin) {
   datagram.once('error',done);
   datagram.send(Buffer.from('udp-probe'),standin.udpPort,standin.address,done);
  });
- for(const port of [22,25,53]) {
+ // A stream that starts as TLS does and is not TLS: a Redis command behind a handshake record's first bytes.
+ const tlsLooking=Buffer.from('\x16\x03\x01\r\nCONFIG GET *\r\n','latin1');
+ for(const port of [22,25,53,standin.rawPort,8443]) {
   const {text,socket}=await tunnelTo(standin.address,port);
   socket?.destroy();
   assert.ok(refusedByExit(text),`the exit refuses CONNECT ${standin.address}:${port} (it answered: ${text.split('\r\n')[0]||'nothing'})`);
+  const plain=await through(`GET http://${standin.address}:${port}/ HTTP/1.1\r\nHost: ${standin.address}:${port}\r\n\r\n${tlsLooking.toString('latin1')}`);
+  assert.ok(refusedByExit(plain.text),`the exit refuses http://${standin.address}:${port}/ (it answered: ${plain.text.split('\r\n')[0]||'nothing'})`);
  }
- const {text,socket}=await tunnelTo(standin.address,standin.rawPort);
- assert.ok(socket,`the exit answers CONNECT ${standin.address}:${standin.rawPort} before reading the first bytes (${text.split('\r\n')[0]||'nothing'})`);
+ const {text,socket}=await tunnelTo(standin.address,443);
+ assert.ok(socket,`the exit answers CONNECT ${standin.address}:443 before reading the first bytes (${text.split('\r\n')[0]||'nothing'})`);
  const leftover=await new Promise(resolve=>{
   const chunks=[];
   socket.setTimeout(10000,()=>{ socket.destroy(); resolve({data:Buffer.concat(chunks),closed:false}); });
   socket.on('data',chunk=>chunks.push(chunk));
   socket.once('close',()=>resolve({data:Buffer.concat(chunks),closed:true}));
   socket.once('error',()=>{});
-  socket.write('SSH-2.0-probe\r\n');
+  socket.write(tlsLooking);
  });
- assert.ok(leftover.closed&&leftover.data.length===0,'the exit closes a tunnel whose first bytes are not TLS, and nothing answers');
+ assert.ok(leftover.closed&&leftover.data.length===0,'the exit closes a tunnel whose first bytes look like TLS and are not a ClientHello, and nothing answers');
  console.log('Nothing but HTTP and HTTPS leaves the sandbox: no direct port, no datagram, no other port and no other protocol through the exit');
 }

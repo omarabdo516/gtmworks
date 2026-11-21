@@ -235,6 +235,9 @@ sandbox_exit_probe "$engine_id" "$probe_config" | tee sandbox-exit.log || { dock
 # Read once: grep -q ending a pipe early would fail it under pipefail.
 exit_log=$(docker logs "$exit_id" 2>&1) || fail "read the exit's log"
 grep -qx 'exit: refused (cloud metadata) 169.254.169.254:443' <<< "$exit_log" || fail "the exit's log names what it refused"
+for line in "refused (port) $standin:2525" "refused (port) $standin:8443" "refused (not TLS) $standin:443"; do
+  grep -qxF "exit: $line" <<< "$exit_log" || fail "the exit's log names what it refused: $line"
+done
 if grep -qF "$standin_token" <<< "$exit_log"; then fail "the exit's log holds no page it carried"; fi
 docker rm -f exit-standin > /dev/null || true
 # The repeat install leaves the settings file as it was, so keep a copy to compare after it. The data a restore must
@@ -599,10 +602,17 @@ fi
 # and downloaded with the same bytes through gtmworks; the Engine reads that folder and cannot write to it, as root or as
 # its own user, and nothing it tried reaches the sandbox.
 library_marker="library-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+# The second Agent's memory on the Engine's disk, which a link the first Agent plants in its folder points at: the
+# Library must never read it (#395).
+docker exec -i "$engine_id" sh -ec 'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The leak word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' sh "$second_pwd" "$library_marker-leak" \
+  || fail "write a memory in the second Agent's profile"
 engine_node "$engine_key" - library "$library_marker" < scripts/check-install-profiles.mjs | tee library-proof.log \
   || fail "an Agent's file is in its Library, previews and downloads with the same bytes"
 [[ $(docker exec "$sandbox" head -n 1 "/work/$first/$library_marker-brief.md") == "# $library_marker" ]] || fail "the Library's file is in the Agent's own folder of the work folder"
 [[ $(docker exec "$engine_id" head -n 1 "/opt/data/work/$first/$library_marker-brief.md") == "# $library_marker" ]] || fail 'the Engine reads the work folder'
+# The planted link is real: on the Engine's mount it reaches the second Agent's memory, which the Library did not read.
+docker exec "$engine_id" grep -q "$library_marker-leak" "/opt/data/work/$first/$library_marker-leak.md" || fail "the planted link reaches the second Agent's memory on the Engine"
+docker exec "$sandbox" test -L "/work/$first/$library_marker-up" -a -L "/work/$first/$library_marker-mem" -a -f "/work/$first/.$library_marker-hidden" || fail 'the Agent planted its links and its hidden file'
 for user in 0 hermes; do
   if docker exec --user "$user" "$engine_id" sh -c 'printf x > "/opt/data/work/$1-engine.txt"' sh "$library_marker" 2> /dev/null; then fail "the Engine cannot write to the work folder (user $user)"; fi
   if docker exec --user "$user" "$engine_id" sh -c 'printf x > "/opt/data/work/$1/$2-engine.txt"' sh "$first" "$library_marker" 2> /dev/null; then fail "the Engine cannot write to an Agent's folder (user $user)"; fi

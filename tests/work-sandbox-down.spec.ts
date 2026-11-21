@@ -33,7 +33,7 @@ test.beforeAll(async({},testInfo)=>{
 test.afterAll(async()=>{ await fake?.close(); });
 
 test('Settings names a work sandbox that is not running in English and Arabic, and stops when it answers again',async({page})=>{
- fake.settings.sandboxRunning=false;
+ fake.settings.sandboxDown=true;
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/home');
   await page.goto('/c/rs-learning/settings?section=company');
@@ -43,7 +43,7 @@ test('Settings names a work sandbox that is not running in English and Arabic, a
   await expect(page.locator('html')).toHaveAttribute('lang','ar');
   await expect(page.locator('#co-sandbox')).toHaveText(arabic);
   // The sandbox answers again: the same read says nothing, with no restart and nothing else changed.
-  fake.settings.sandboxRunning=true;
+  fake.settings.sandboxDown=false;
   query(`update public.people set language='en' where id='${omar}'`);
   await page.reload();
   await expect(page.locator('#co-sandbox')).toHaveCount(0);
