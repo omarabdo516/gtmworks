@@ -306,8 +306,11 @@ test('an answer that does not say what the Engine did keeps the change held, and
  assert.deepEqual(await madeAndLogged(db,await hold(),'edited',async()=>({state:'unreachable',unsent:true})),{state:'unreachable'});
  assert.deepEqual(await madeAndLogged(db,await hold(),'edited',async()=>({state:'stale'})),{state:'stale'});
  assert.equal(changes.held.size,3);
+ // A write the Engine acknowledged whose read-back failed: the Engine holds it, so its row is confirmed now.
+ assert.deepEqual(await madeAndLogged(db,await hold(),'written',async()=>({state:'failed',acknowledged:true})),{state:'failed'});
+ assert.deepEqual(changes.logged.map(row=>row.unconfirmed),[undefined]);
  assert.deepEqual(await logHeldAgentChanges(db),{logged:3});
- assert.deepEqual(changes.logged.map(row=>row.unconfirmed),[true,true,true],'the pass never says one was made');
+ assert.deepEqual(changes.logged.map(row=>row.unconfirmed),[undefined,true,true,true],'the pass never says one was made');
 });
 
 test('a change the Engine refused is dropped even when the database takes the drop only after the answer, so no pass logs it', async () => {
