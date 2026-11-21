@@ -91,28 +91,71 @@ test('an Agent\'s library is the folders and files in its own folder of the Comp
  } finally { await fake.close(); }
 });
 
-test('the work root is the Agent\'s own folder of the Company\'s work folder: empty before its first command, and never its profile\'s old workspace', async () => {
+test('an Agent\'s work root is the empty folder it is before its first command, not a missing one', async () => {
  const {fake,at}=await engine();
  try {
-  // The sandbox makes the Agent's folder at its first command: until then the Engine has none, and the Library is the
-  // empty folder it is, not a missing one. A folder inside it is not made for it.
+  // The sandbox makes the Agent's folder at its first command: until then the Engine has none (404).
   fake.settings.files.delete(work);
   assert.deepEqual(await listAgentFiles(at),{state:'found',entries:[]});
   assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files?path=${encodeURIComponent(work)}`),'the Engine was asked, and answered 404');
+  // A folder inside it is not made for it: only the root itself is empty rather than missing.
   assert.deepEqual(await listAgentFiles(at,'reports'),{state:'missing',entries:null});
+ } finally { await fake.close(); }
+});
+
+test('the work root never shows the profile\'s old workspace on the Engine\'s disk', async () => {
+ const {fake,at}=await engine();
+ try {
   // The folder in the profile's own home that the Library showed until now is never read: nothing could write to it.
   fake.settings.files.set(`${home}/workspace`,[{name:'old.md',size:2,mtime}]);
   fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
   assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['made.md']);
   assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).includes(encodeURIComponent(`${home}/workspace`))),'the old workspace is never asked about');
-  // Another Agent's folder of the same work folder is that Agent's Library, not this one's.
+ } finally { await fake.close(); }
+});
+
+test('another Agent\'s folder of the same work folder is that Agent\'s Library, not this one\'s', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
   fake.settings.files.set(`/opt/data/work/${otherProfile}`,[{name:'theirs.md',size:1,mtime}]);
   assert.deepEqual((await listAgentFiles({...at,profile:otherProfile})).entries?.map(entry=>entry.name),['theirs.md']);
   assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['made.md']);
-  // A file's text is read in the sandbox too, by the path the sandbox holds it at.
+ } finally { await fake.close(); }
+});
+
+test('a work file\'s text is read in the sandbox, by the path the sandbox holds it at', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'made.md',size:4,mtime}]);
   fake.settings.fileBytes.set(`${work}/made.md`,{body:'Made',type:'text/markdown'});
   assert.deepEqual(await readAgentFile(at,{name:'made.md'}),{state:'found',name:'made.md',type:'text/markdown',byteSize:4,truncated:false,text:'Made'});
   assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/read-text?path=${encodeURIComponent(`${sandbox}/made.md`)}&profile=${profile}`));
+ } finally { await fake.close(); }
+});
+
+test('a stopped work sandbox still lists the work folder, and its files read as unreachable, not missing', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'brief.md',size:4,mtime}]);
+  fake.settings.sandboxDown=true;
+  assert.deepEqual(await listAgentFiles(at),{state:'found',entries:[{name:'brief.md',isFolder:false,size:4,time:clock}]});
+  assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'unreachable'});
+  assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'unreachable'});
+ } finally { await fake.close(); }
+});
+
+test('a listed file the Engine refuses to read (403) is missing, in both roots; only a refused key (401) is refused', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'brief.md',size:4,mtime}]);
+  fake.settings.images.set(profile,[{name:'promo.txt',size:4,mtime}]);
+  fake.settings.filesRefused.add(`${sandbox}/brief.md`).add(`${images}/promo.txt`);
+  assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  assert.deepEqual(await readAgentFile(at,{root:'images',name:'promo.txt'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile(at,{root:'images',name:'promo.txt'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile({...at,key:'another-key'},{name:'brief.md'}),{state:'refused'});
  } finally { await fake.close(); }
 });
 
@@ -220,6 +263,35 @@ test('the generated images folder is the Library\'s second root, listed, downloa
   // The two roots are read apart: the work folder never carries the generated image.
   fake.settings.files.set(work,[{name:'brief.md',size:2,mtime}]);
   assert.deepEqual((await listAgentFiles(at)).entries?.map(entry=>entry.name),['brief.md']);
+ } finally { await fake.close(); }
+});
+
+test('a long text in the generated images folder is previewed from its first 512 KB, asked for as a range, with its whole size', async () => {
+ const {fake,at}=await engine();
+ try {
+  const long='a'.repeat(600*1024);
+  fake.settings.images.set(profile,[{name:'caption.txt',size:long.length,mtime}]);
+  fake.settings.fileBytes.set(`${images}/caption.txt`,{body:long,type:'text/plain'});
+  const read=await readAgentFile(at,{root:'images',name:'caption.txt'});
+  assert.equal(read.state,'found');
+  if(read.state!=='found') return;
+  assert.equal(read.byteSize,long.length);
+  assert.equal(read.truncated,true);
+  assert.equal(read.text?.length,512*1024);
+  assert.ok(fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/files/download')&&request.range===`bytes=0-${512*1024-1}`),'only the first 512 KB is asked for');
+ } finally { await fake.close(); }
+});
+
+test('a file in the generated images folder reads as binary by the Engine\'s rule: a NUL, or more than 12% control bytes', async () => {
+ const {fake,at}=await engine();
+ try {
+  const noisy=new Uint8Array(100).fill(97); for(let at=0;at<13;at++) noisy[at*7]=1;
+  const plain=new Uint8Array(100).fill(97); for(let at=0;at<12;at++) plain[at*7]=1;
+  fake.settings.images.set(profile,[{name:'noisy.txt',size:100,mtime},{name:'plain.txt',size:100,mtime}]);
+  fake.settings.fileBytes.set(`${images}/noisy.txt`,{body:noisy,type:'text/plain'});
+  fake.settings.fileBytes.set(`${images}/plain.txt`,{body:plain,type:'text/plain'});
+  assert.equal((await readAgentFile(at,{root:'images',name:'noisy.txt'})).text,null);
+  assert.equal(typeof (await readAgentFile(at,{root:'images',name:'plain.txt'})).text,'string');
  } finally { await fake.close(); }
 });
 
@@ -379,6 +451,9 @@ test('the download route serves the bytes as an attachment to an Owner and a Man
   const before=downloaded(fake).length;
   assert.equal((await ask(route(database().db),{name:'../../etc/passwd'})).status,404);
   assert.equal(downloaded(fake).length,before);
+  // A stopped work sandbox is a service that is down, not a file that is gone.
+  fake.settings.sandboxDown=true;
+  assert.equal((await ask(route(database().db),{name:'brief.md'})).status,503);
  } finally { await fake.close(); }
 });
 

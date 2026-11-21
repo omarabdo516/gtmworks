@@ -2,8 +2,8 @@
  {
   "issue": 389,
   "date": "2026-11-20",
-  "en": { "title": "Agents work in a work sandbox", "body": "Every Company's Agents get a terminal, files and code execution that run in the Company's own work sandbox, not on the Engine's machine." },
-  "ar": { "title": "الوكلاء بيشتغلوا في صندوق الشغل", "body": "وكلاء كل شركة بقى ليهم أوامر وملفات وتنفيذ كود في صندوق الشغل بتاع الشركة، مش على جهاز المحرك." }
+  "en": { "title": "Agents work in a work sandbox", "body": "Every Company's Agents get a terminal, files and code execution that run in the Company's own work sandbox, not on the Engine's machine. The Library shows the files each Agent made there, and every Agent of the Company can read and change them." },
+  "ar": { "title": "الوكلاء بيشتغلوا في صندوق الشغل", "body": "وكلاء كل شركة بقى ليهم أوامر وملفات وتنفيذ كود في صندوق الشغل بتاع الشركة، مش على جهاز المحرك. والمكتبة بتعرض الملفات اللي كل وكيل عملها هناك، وأي وكيل في الشركة يقدر يقراها ويغيّرها." }
  },
  {
   "issue": 358,

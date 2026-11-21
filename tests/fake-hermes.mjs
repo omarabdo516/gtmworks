@@ -57,7 +57,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // The management listener (Hermes's dashboard, a second port): its profiles, and the status it answers with when
   // not 200. A profile made through it has its own Run API key, none until /api/env sets it, as in the pinned release.
   managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>,display_name?:string|null,description?:string,description_auto?:boolean,bot_title?:string|null,env?:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),
-  managementRequests:/** @type {{method?:string,path?:string,authorization?:string,body:any}[]} */([]),
+  managementRequests:/** @type {{method?:string,path?:string,authorization?:string,range?:string,body:any}[]} */([]),
   // The default profile's config and model sign-ins (a profile made through the listener keeps its own), and the
   // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser. The Engine's own
   // config defaults and schema are what its config routes serve (#125); configWriteFail is a profile whose next config
@@ -138,6 +138,12 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   images:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
   fileBytes:/** @type {Map<string,{body:string|Uint8Array,type?:string}>} */(new Map()),
   filesUnreadable:/** @type {Set<string>} */(new Set()),
+  // The work sandbox is stopped (#395): the profile's ssh workspace cannot be reached, so `/api/fs/*` answers 503 while
+  // the Engine's own read-only mount still lists the work folder.
+  sandboxDown:false,
+  // Files the Engine refuses to read (403) by the path asked, as its guard refuses a sensitive file or one that resolves
+  // outside the root it reads under (hermes_cli/web_routers/files.py).
+  filesRefused:/** @type {Set<string>} */(new Set()),
   // The path `/api/files?path=` and `/api/fs/read-text?path=` answer with, when it is not the one asked for: a folder or
   // a file that is a link somewhere else, which the Engine resolves and reports as its own `path` (by the path asked).
   resolved:/** @type {Map<string,string>} */(new Map()),
@@ -299,7 +305,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  const management=createServer((request,response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    let body=null; try { body=raw?JSON.parse(raw):null; } catch { body=null; }
-   settings.managementRequests.push({method:request.method,path:request.url,authorization:request.headers.authorization,body});
+   settings.managementRequests.push({method:request.method,path:request.url,authorization:request.headers.authorization,range:request.headers.range,body});
    const url=new URL(request.url,'http://management');
    // The vendor's redirect reaches Hermes's OAuth callback with no session token; it answers with its own page.
    const callback=url.pathname.match(/^\/api\/mcp\/oauth\/callback\/([^/]+)$/);
@@ -320,6 +326,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    // path outside it (403), and `/api/files/download?path=` serves one file of it (files.py 813). `/api/fs/read-text` and
    // `/api/fs/download` with a profile read that profile's ssh workspace, the work sandbox (files.py 1032 and 1356 through
    // _remote_fs_backend): a /work path is the work folder, and any other path is not a file the sandbox holds (404).
+   if(url.pathname.startsWith('/api/fs/')&&settings.sandboxDown) return send(response,503,{detail:'SSH workspace unavailable'});
+   if(/^\/api\/(fs\/(read-text|download)|files\/download)$/.test(url.pathname)&&settings.filesRefused.has(url.searchParams.get('path')||'')) return send(response,403,{detail:'Access denied'});
    if(url.pathname==='/api/files'&&request.method==='GET') {
     const path=(url.searchParams.get('path')||'').replace(/\/+$/,'');
     if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
@@ -351,7 +359,13 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const path=url.searchParams.get('path')||'';
     if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
     const found=fileAt(path,path); if(!found) return;
-    return attachment(found.entry.name,mimeOf(found.entry.name),Buffer.from(found.file.body));
+    // A `Range: bytes=0-<n>` is answered with that first part (206) and the whole size in Content-Range, as Starlette's
+    // FileResponse does.
+    const whole=Buffer.from(found.file.body); const range=/^bytes=0-(\d+)$/.exec(String(request.headers.range||''));
+    if(!range) return attachment(found.entry.name,mimeOf(found.entry.name),whole);
+    const part=whole.subarray(0,Number(range[1])+1);
+    response.writeHead(206,{'Content-Type':mimeOf(found.entry.name),'Content-Range':`bytes 0-${Math.max(part.length-1,0)}/${whole.length}`,'Content-Length':part.length});
+    return response.end(part);
    }
    // A text file's first part (#195): `/api/fs/read-text` answers the bytes up to 512 KB decoded as UTF-8, the whole
    // size, the type, whether more follows and whether it reads as binary (hermes_cli/web_routers/files.py 1032-1079).
