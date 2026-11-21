@@ -6,6 +6,12 @@
   "ar": { "title": "صباح الخير بقى ممكن يتفتح", "body": "في صفحة الوكيل الرئيسي، المالك والمديرين يقدروا يفتحوا ملخص الصبح كل يوم ويختاروا ميعاده؛ مش بيبعت حاجة لو مفيش جديد، وبيتنقل مع الوكيل الرئيسي." }
  },
  {
+  "issue": 131,
+  "date": "2026-11-21",
+  "en": { "title": "The board moves as you carry a Card", "body": "A carried Card leans with your pointer, flies back when you let it go where it was, lands with a short ring in its new column, progress bars grow in, and a Card newly waiting on you nudges its badge and the sidebar count." },
+  "ar": { "title": "البورد بيتحرّك وانت شايل البطاقة", "body": "البطاقة وانت شايلها بتميل مع حركة الماوس، ولو سبتها مكانها بترجع لوحدها، ولما تنزّلها في عمود جديد بتنزل بإطار صغير، وشرايط التقدّم بتكبر، والبطاقة اللي لسه بقت مستنياك بتهزّ علامتها وعدّاد القايمة الجانبية." }
+ },
+ {
   "issue": 370,
   "date": "2026-11-21",
   "en": { "title": "Memory and skill changes always reach the log", "body": "When you edit, forget or reset an agent's memory, or change a skill, and the agent already holds the change, it is saved and shown as saved even if its log line is late, and the log gets exactly one line for it." },
