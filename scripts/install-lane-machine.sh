@@ -90,7 +90,8 @@ case "${1:-}" in
   # cloud session's network re-signs every TLS connection, a pull of a pinned digest's among them (#562).
   ca=()
   if [[ -n ${NODE_EXTRA_CA_CERTS:-} && -f $NODE_EXTRA_CA_CERTS ]]; then
-    ca=(-v "$NODE_EXTRA_CA_CERTS:/etc/gtmworks-extra-ca/extra.crt:ro" -e SSL_CERT_DIR=/etc/ssl/certs:/etc/gtmworks-extra-ca)
+    # By its absolute path: Docker reads a bare name such as ca.pem as a named volume, not this file.
+    ca=(-v "$(realpath "$NODE_EXTRA_CA_CERTS"):/etc/gtmworks-extra-ca/extra.crt:ro" -e SSL_CERT_DIR=/etc/ssl/certs:/etc/gtmworks-extra-ca)
   fi
   docker run -d --privileged --name "$name" --label "$(label "$work")" -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$port:2375" \
     ${ca[@]+"${ca[@]}"} -v "$work/src:$work/src" docker:28.5.1-dind > /dev/null

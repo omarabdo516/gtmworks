@@ -69,7 +69,7 @@ from. Any email goes to the local inbox; a test that must name an outside addres
 
 ## The image and integration jobs
 
-`./ci.sh integration` (the browser suite; `-- --shard=1/6` for one of CI's shards) and `bash scripts/ci-image.sh` (the
+`./ci.sh integration` (the browser suite; `--shard=1/6` for one of CI's shards) and `bash scripts/ci-image.sh` (the
 `image` job's build and health check) run in a cloud session as they do on CI's runner, with the stack from step 1 up.
 Every app image build goes through `scripts/docker-build.sh` (#562): the session's network re-signs every TLS connection
 with its own CA, which the VM's Node trusts through `NODE_EXTRA_CA_CERTS` and a container does not, so the helper hands

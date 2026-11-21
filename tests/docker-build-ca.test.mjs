@@ -100,6 +100,6 @@ test('the install lane machine trusts the machine extra CA beside its own roots,
  const start=read('scripts/install-lane-machine.sh').split('\n start)')[1].split('\n  ;;')[0];
  assert.match(start,/if \[\[ -n \$\{NODE_EXTRA_CA_CERTS:-\} && -f \$NODE_EXTRA_CA_CERTS \]\]; then/);
  // SSL_CERT_DIR adds a folder to the default one, so the machine's own roots stay.
- assert.match(start,/-v "\$NODE_EXTRA_CA_CERTS:\/etc\/gtmworks-extra-ca\/extra\.crt:ro" -e SSL_CERT_DIR=\/etc\/ssl\/certs:\/etc\/gtmworks-extra-ca/);
+ assert.match(start,/-v "\$\(realpath "\$NODE_EXTRA_CA_CERTS"\):\/etc\/gtmworks-extra-ca\/extra\.crt:ro" -e SSL_CERT_DIR=\/etc\/ssl\/certs:\/etc\/gtmworks-extra-ca/);
  assert.match(start,/docker run -d --privileged [^\n]*\\\n\s+\$\{ca\[@\]\+"\$\{ca\[@\]\}"\} -v "\$work\/src:\$work\/src" docker:/);
 });
