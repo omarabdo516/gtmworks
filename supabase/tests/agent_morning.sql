@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(20);
 -- #182: the main Agent's daily message is changed by an active Owner or Manager of its Company only (check_agent_setting,
 -- asked before the Engine), and each change is one row of the Company log on the Agent naming who did it and the old and
 -- the new value (log_agent_morning: "off" or the time). RS Learning: 1 Owner, 2 Manager, 3 Contributor,
@@ -30,6 +30,20 @@ select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-0000
 select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','9:00','9:00')$$,'22023','agentSettingInvalid','so is a change that changes nothing');
 select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000184','off','9:00')$$,'22023','agentSettingInvalid','and another Agent than the main one has no daily message');
 select throws_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000183')$$,'42501','agentSettingNotAllowed','an Agent of another Company is never changed from this one');
+-- The Company's lease (agent_morning_leases): one holder at a time, given back by that holder; Owners and Managers only.
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001'),true,'the Owner takes the lease');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is(public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'),false,'a second holder waits while it is held');
+select public.drop_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002');
+select is(public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'),false,'and cannot give back a lease it does not hold');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select public.drop_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is(public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002'),true,'once given back, a Manager takes it');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.take_morning_lease('10000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000003')$$,'42501','agentSettingNotAllowed','a Contributor takes none');
+select throws_ok($$select * from public.agent_morning_leases$$,'42501',null,'and nobody reads the table itself');
 reset role;
 -- Read as the database, past the log's own row-level security.
 select is((select jsonb_build_array(actor_id,actor_kind,subject,agent_id,action,details) from public.company_log

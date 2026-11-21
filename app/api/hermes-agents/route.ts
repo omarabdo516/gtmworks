@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { moveAgentMorning } from '@/lib/agent-morning.mjs';
+import { moveAgentMorning, withMorningLease } from '@/lib/agent-morning.mjs';
 
 const columns='id,company_id,connection_id,name,speciality,is_default';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,25 +21,30 @@ async function respond(request:NextRequest) {
   if(!await routeAllowed(db,'app/api/hermes-agents/route.ts',request.method,body.company,user.id)) return reply({error:'hermesNotAllowed'},403);
   if(writing) {
    if(!['default','remove'].includes(body.intent)||!body.agent||['agent','replacement'].some(key=>body[key]!==undefined&&(typeof body[key]!=='string'||!uuid.test(body[key])))) return reply({error:'hermesAgentFailed'},400);
-   // The Agents before the change, with their Engine profiles: the main Agent's daily message (#182) moves to the new main
-   // Agent once the database made it so, by Make it main or by removing the main Agent with a replacement. Read first, so a
-   // removed Agent's profile is still known.
-   const {data:listing,error:listingError}=await db.rpc('company_app_agents',{c:body.company});
-   // Without that list the message could be left on an Agent that is no longer the main one: nothing is changed.
-   if(listingError||!Array.isArray(listing)) return reply({error:'hermesAgentFailed'},503);
-   const listed=listing as {agent:string,main:boolean}[];
-   const before=listed.find(row=>row.main)?.agent;
-   const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,a:body.agent,replacement:body.replacement??null});
-   if(error) {
-    const key=['hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
-    return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesNextDefault'?409:400);
-   }
-   // Good morning follows the main Agent, with the same time and switch, and none is left on another one; with no Agent
-   // left to take it, it is paused. The change itself stands whatever the Engine answers; a failure is said in the log.
-   if(before&&(body.intent==='default'?body.agent!==before:body.agent===before)) {
-    const moved=await moveAgentMorning(db,{company:body.company,agents:listed}).catch(()=>({state:'failed'}));
-    if(!['moved','paused','none'].includes(moved.state)) console.error('Good morning not settled on the main Agent:',body.company,moved.state);
-   }
+   // The change and Good morning's move (#182) run under the Company's lease, as a save of the message does, so neither
+   // runs between the other's steps. The Agents are read first, with their Engine profiles, so a removed Agent's profile
+   // is still known; without that list nothing is changed.
+   const changed=await withMorningLease(db,body.company,async()=>{
+    const {data:listing,error:listingError}=await db.rpc('company_app_agents',{c:body.company});
+    if(listingError||!Array.isArray(listing)) return reply({error:'hermesAgentFailed'},503);
+    const listed=listing as {agent:string,main:boolean}[];
+    const before=listed.find(row=>row.main)?.agent;
+    const {error}=await db.rpc('manage_hermes_agent',{c:body.company,intent:body.intent,a:body.agent,replacement:body.replacement??null});
+    if(error) {
+     const key=['hermesNextDefault','hermesAgentNotFound','hermesNotAllowed'].includes(error.message)?error.message:'hermesAgentFailed';
+     return reply({error:key},error.code==='42501'?403:error.code==='P0002'?404:key==='hermesNextDefault'?409:400);
+    }
+    // Good morning follows the main Agent with the same time and switch, and none is left on another one; with no Agent
+    // left to take it, it is paused. It is settled after every Make it main and every removal of the main Agent. The
+    // change itself stands whatever the Engine answers; a failure is said in the server log.
+    if(body.intent==='default'||body.agent===before) {
+     const moved=await moveAgentMorning(db,{company:body.company,agents:listed}).catch(()=>({state:'failed'}));
+     if(!['moved','paused','none'].includes(moved.state)) console.error('Good morning not settled on the main Agent:',body.company,moved.state);
+    }
+    return null;
+   });
+   if(changed&&'state' in changed) return reply({error:changed.state==='notAllowed'?'hermesNotAllowed':'hermesAgentFailed'},changed.state==='notAllowed'?403:changed.state==='busy'?409:500);
+   if(changed) return changed;
   }
   const {data:agents,error}=await db.from('hermes_agents').select(columns).eq('company_id',body.company).order('name');
   return error?reply({error:'hermesAgentFailed'},500):reply({agents});
