@@ -77,7 +77,9 @@ export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>
 // A change an Agent proposed to its own settings, or Lead to another Agent's (#19): waiting on the Owners (`owners` names
 // whom), approved or declined by one of them, or refused at once as not on the list of what can be proposed.
 type ChangeFace={id:string,connection_id:string,name:string};
-export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
+// `approved` is the value the Owner approved instead, when they edited the proposal before approving it (#484); on a
+// waiting one, the value an approval whose Engine write was never confirmed is writing, which approving again finishes.
+export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,approved?:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
  &({state:'waiting',owners:string[]}|{state:'approved',answeredBy:string,at:string}|{state:'declined',answeredBy:string,at:string,answer:string|null,maybeApplied?:boolean}|{state:'refused'});
 // A handover did not finish (#375) when its target's leg ended without a report (failed, stopped or lost: it ran out of
 // time, could not start or was never answered), or when the handover itself ended failed (Lead's follow-up did). A

@@ -259,7 +259,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
        which the Conversation still gave. */}
    {message.steps?.list.some(step=>step.sandbox)&&<p className="note" role="alert" data-outcome="sandbox">{t('workSandboxNotRunning')}</p>}
    {message.cards?.map(card=>card.kind==='made'?<Fragment key={card.agent.id}><MadeCard slug={slug} agent={card.agent} fresh={rises(madeArrival(message,card.agent.id))}/>{card.agent.fresh&&<AgentMadeToast company={company} slug={slug} agent={card.agent}/>}</Fragment>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
-    :card.kind==='change'?<ChangeCard key={`change${card.change.id}`} change={card.change} owner={record.changeOwner===true}
+    :card.kind==='change'?<ChangeCard key={`change${card.change.id}`} change={card.change} company={company} owner={record.changeOwner===true}
      answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
     :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
     :card.kind==='handed'?<HandedRow key={`handed${message.id}`} as="p" from={{connection_id:conversation.face,name:conversation.agent_name}} to={{connection_id:card.face,name:card.name}}

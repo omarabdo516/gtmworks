@@ -1,5 +1,11 @@
 [
  {
+  "issue": 484,
+  "date": "2026-11-21",
+  "en": { "title": "Edit a proposed change before you approve it", "body": "A change an agent proposes to its settings now shows what the agent has now beside what it would have, and you can edit the model, instructions or setting before you approve it; in Waiting on you it is a card that opens the whole proposal." },
+  "ar": { "title": "عدّل التغيير المقترح قبل ما توافق عليه", "body": "التغيير اللي الوكيل بيقترحه في إعداداته بقى بيوريك الوكيل عنده إيه دلوقتي جنب اللي هيبقى عنده، وتقدر تعدّل الموديل أو التعليمات أو الإعداد قبل ما توافق؛ وفي «مستنيك» بقى بطاقة بتفتح الاقتراح كله." }
+ },
+ {
   "issue": 205,
   "date": "2026-11-21",
   "en": { "title": "Routines in an agent's details", "body": "An agent's details now list its routines with when each runs next; the Owner and Managers add one by writing one sentence, such as “leads summary every day at 8 in the morning”, and a sentence with no time asks for one first." },
