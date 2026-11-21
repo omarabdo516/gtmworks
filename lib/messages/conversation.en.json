@@ -27,5 +27,6 @@
   "stepLine": "{0} · {1}",
   "stepsSecondsMany": "{0} sec",
   "stepsMinutesMany": "{0} min",
-  "handedTo": "Handed to {0}"
+  "handedTo": "Handed to {0}",
+  "handedFailed": "The job didn’t finish"
 }

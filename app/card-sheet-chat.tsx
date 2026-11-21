@@ -6,6 +6,7 @@ import channelEn from '@/lib/messages/channel.en.json';
 import channelAr from '@/lib/messages/channel.ar.json';
 import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
+import { HandedRow } from '@/app/handed-row';
 import { MessageBox, newId, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { ConversationComposer, ConversationTurns, useConversationRecord } from '@/app/conversation-thread';
 import { firstName, type ChannelRecord } from '@/lib/channels';
@@ -124,7 +125,7 @@ function SheetChannel({slug,channel,company,shown}:{slug:string,channel:ChannelR
     {messages.map(message=>message.author==='note'
      ? <li key={message.id} className="note note--icon" data-kind={message.kind}><ShellIcon name={message.kind==='card'?'board':'team'} className="note__icon"/><span>{message.kind==='card'?c('channelCardNote',t('boardColProgress')):c('channelInviteNote',firstName(message.actor),message.name,name)}</span></li>
      : message.author==='handoff'
-     ? <li key={message.id} className="handed" role="note" data-handover><span className="handed__faces"><CompanyAgentFace agent={{connection_id:message.from.face,name:message.from.name}} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:message.to.face,name:message.to.name}} size={18}/></span><span className="handed__t">{named(c,'channelHandedTo',message.to.name)}</span>{message.goal&&<span className="handed__d"><bdi>{message.goal}</bdi></span>}</li>
+     ? <HandedRow key={message.id} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}} title={named(c,'channelHandedTo',message.to.name)} goal={message.goal} failed={message.failed?c('channelHandedFailed'):null}/>
      : message.author==='agent'
      ? <li key={message.id} className="turn turn--agent msg" data-author="agent"><div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}</div><div className="bubble bubble--agent" dir="auto">{message.body}</div></li>
      : <li key={message.id} className={`turn ${message.mine?'turn--user':'turn--peer'} msg`} data-author="person">

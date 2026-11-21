@@ -182,7 +182,7 @@ test('a message that called two Agents draws each one\'s card under that Agent\'
 const handover = (overrides = {}) => ({
  id: 7, message: 2, from_agent: 'a-1', from_name: 'Lead', from_connection: 'c-a-1', to_agent: 'a-2', to_name: 'Ads', to_connection: 'c-a-2',
  goal: 'Plan the Meta ads for the March intake', summary: 'Three ad sets, 30 days, EGP 9,000.', reply: 'Ads planned the March intake.',
- state: 'done', created_at: '2026-06-10T10:01:00Z', answered_at: '2026-06-10T10:03:00Z', closed_at: '2026-06-10T10:04:00Z', ...overrides,
+ state: 'done', target_outcome: 'completed', created_at: '2026-06-10T10:01:00Z', answered_at: '2026-06-10T10:03:00Z', closed_at: '2026-06-10T10:04:00Z', ...overrides,
 });
 
 test('a channel handover is drawn as the row, the other Agent\'s answer marked with the Agent that handed it over, then that Agent\'s reply', async () => {
@@ -221,6 +221,29 @@ test('a channel handover still moving keeps the channel asking, and a target tha
  assert.equal(record?.handover, true);
  assert.deepEqual(record?.messages.map(message => message.author), ['person', 'handoff']);
  assert.equal(record?.handoffs.length, 1);
+});
+
+// #375: a handover that did not finish says so on its row: its target's leg ended without a report (it ran out of time,
+// could not start or was never answered) though Lead's follow-up came, or the handover itself ended failed. One that
+// finished, or is still moving, says nothing of it.
+test('a channel handover that did not finish marks its row, whichever leg ended it, and one that finished or still moves does not', async () => {
+ const rows = [
+  handover({ id: 11, state: 'done', target_outcome: 'completed' }),
+  handover({ id: 12, state: 'done', target_outcome: 'failed', summary: null, answered_at: null, reply: 'Ads could not finish the plan.' }),
+  handover({ id: 13, state: 'done', target_outcome: 'lost', summary: null, answered_at: null }),
+  handover({ id: 14, state: 'failed', target_outcome: 'completed', reply: null, closed_at: '2026-06-10T10:20:00Z' }),
+  handover({ id: 15, state: 'failed', target_outcome: 'failed', summary: null, answered_at: null, reply: null, closed_at: '2026-06-10T10:20:00Z' }),
+  handover({ id: 16, state: 'target', target_outcome: null, summary: null, answered_at: null, reply: null, closed_at: null }),
+ ];
+ const record = await channelRecord(database({
+  agents: [agent('a-1', 'Lead'), agent('a-2', 'Ads')],
+  messages: [{ id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: '@Lead plan the March ads', reply_to: null, reply_ordinal: null, created_at: '2026-06-10T10:00:00Z' }],
+  handovers: rows,
+ }), 'p-1', 'co-1', 'ch-1');
+ const drawn = Object.fromEntries((record?.messages ?? []).filter(message => message.author === 'handoff').map(message => [message.id, message.failed === true]));
+ assert.deepEqual(drawn, { 'handover-11': false, 'handover-12': true, 'handover-13': true, 'handover-14': true, 'handover-15': true, 'handover-16': false });
+ const finished = record?.messages.find(message => message.id === 'handover-11');
+ assert.ok(finished && !('failed' in finished), 'a finished handover carries no failed mark at all');
 });
 
 test('a channel with no handover draws none, and one whose handover belongs to a message not shown draws no row of it', async () => {

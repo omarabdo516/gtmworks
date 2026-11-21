@@ -27,5 +27,6 @@
   "stepLine": "{0} · {1}",
   "stepsSecondsMany": "{0} ثواني",
   "stepsMinutesMany": "{0} دقايق",
-  "handedTo": "سلّم الشغل لـ {0}"
+  "handedTo": "سلّم الشغل لـ {0}",
+  "handedFailed": "الشغل ماخلصش"
 }

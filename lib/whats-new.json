@@ -1,5 +1,11 @@
 [
  {
+  "issue": 375,
+  "date": "2026-11-21",
+  "en": { "title": "A handed job that didn't finish says so", "body": "When Lead hands a job to another Agent and it doesn't finish, the \"Handed to\" row in the chat and in the channel now says so after the job." },
+  "ar": { "title": "الشغل اللي اتسلّم وماخلصش بيقولك", "body": "لما Lead يسلّم شغلانة لوكيل تاني وماتخلصش، السطر بتاع «سلّم الشغل لـ» في المحادثة وفي القناة بقى بيقول كده بعد الشغلانة." }
+ },
+ {
   "issue": 399,
   "date": "2026-11-21",
   "en": { "title": "Backups keep your Agents' files", "body": "A backup now holds every Company's work folder, the files its Agents made, without the tool caches, and a restore puts them back in each Company's own work sandbox." },
