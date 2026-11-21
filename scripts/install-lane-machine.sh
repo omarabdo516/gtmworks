@@ -2,7 +2,7 @@
 # The install lane's Docker machine (`./ci.sh install`, #388, #416): one `gtmworks-install-lane` container on this host's
 # Docker, with its throwaway checkout and work folder, and its removal however the run ends.
 #
-#   start WORK PORT       removes a machine an earlier run left behind, then starts this run's, labelled with WORK
+#   start WORK PORT       removes what an earlier run left behind, then starts this run's machine, labelled with WORK
 #   remove WORK LANE_PID  the lane's EXIT trap: stops the lane's own commands, then removes this run's machine, its
 #                         checkout and WORK
 #   guard LANE_PID WORK   detaches from the lane and, once LANE_PID has ended, finishes what the trap could not: the
@@ -73,8 +73,15 @@ remove_files() {
 case "${1:-}" in
  start)
   work=$2 port=$3
-  # One install lane at a time on this machine: a machine an interrupted run left behind is removed first.
+  # One install lane at a time on this machine: a machine an interrupted run left behind is removed first, and so is
+  # every earlier run's work folder with its checkout and labelled machine, also one a guard gave up on.
   docker rm -fv "$name" > /dev/null 2>&1 || true
+  this=$work
+  for work in "$(dirname "$this")"/install-lane.*; do
+    [[ -d $work && $work != "$this" ]] || continue
+    machine_gone && remove_files
+  done
+  work=$this
   docker run -d --privileged --name "$name" --label "$(label "$work")" -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$port:2375" \
     -v "$work/src:$work/src" docker:28.5.1-dind > /dev/null
   ;;
@@ -90,8 +97,8 @@ case "${1:-}" in
   ;;
  sweep)
   # The guard's part, once the lane has ended: nothing to do when the trap removed WORK; otherwise wait for a machine
-  # still starting, then try every few seconds until Docker lists none, for at most an hour (a later run's start
-  # removes a leftover machine too).
+  # still starting, then try every few seconds until Docker lists none, for at most an hour; after that the next run's
+  # start removes what is left.
   work=$2
   [[ -d $work ]] || exit 0
   start_done 3600

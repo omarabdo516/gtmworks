@@ -70,8 +70,9 @@ const worktrees = () => execFileSync('git', ['-C', repo, 'worktree', 'list', '--
 const workFolders = () => readdirSync(join(repo, '.git')).filter(name => name.startsWith('install-lane.'));
 
 // Runs `./ci.sh install` in its own process group, as a terminal or an agent's tool would, and resolves with how it ended.
-function lane(t, { proof: mode = 'pass', env = {}, leftover = false } = {}) {
+function lane(t, { proof: mode = 'pass', env = {}, leftover = false, setup = () => {} } = {}) {
   const state = mkdtempSync(join(root, 'state-'));
+  setup(state);
   if (leftover) { mkdirSync(join(state, 'local')); writeFileSync(join(state, 'local', 'f00d'), 'gtmworks-install-lane gtmworks.install-lane=/an/earlier/run\n'); }
   const { DOCKER_HOST, ...inherited } = process.env;
   const child = spawn('bash', ['ci.sh', 'install'], {
@@ -106,6 +107,17 @@ test('after a pass the machine, the checkout and the work folder are gone, and o
 test('a machine an earlier run left behind is removed before this run starts its own', async t => {
   const run = lane(t, { leftover: true });
   assert.equal((await run.ended).code, 0);
+  cleanedUp(run.state);
+});
+
+test('what an earlier run left after its guard gave up, a work folder and its labelled machine, goes when the next run starts', async t => {
+  const earlier = mkdtempSync(join(repo, '.git', 'install-lane.'));
+  const run = lane(t, { setup: state => {
+    mkdirSync(join(state, 'local'), { recursive: true });
+    writeFileSync(join(state, 'local', 'beef'), `gtmworks-install-lane-old gtmworks.install-lane=${earlier}\n`);
+  } });
+  assert.equal((await run.ended).code, 0);
+  assert.equal(existsSync(earlier), false, "the earlier run's work folder is removed");
   cleanedUp(run.state);
 });
 
