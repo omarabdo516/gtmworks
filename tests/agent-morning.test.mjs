@@ -21,13 +21,14 @@ const agentRows=(main=lead)=>[
 // The signed-in person's database as the lib uses it: the Agents they see, the Role check and the log.
 // The Company's lease, shared by every session of a test as the database shares it (take_morning_lease).
 const leases=new Map();
-function session({agents=agentRows(),refuse=null}={}) {
+function session({agents=agentRows(),refuse=null,keyProfiles=[]}={}) {
  const logged=[];
  const db={
   rpc:async(name,args)=>{
    if(name==='take_morning_lease') { const held=leases.get(args.c); if(held&&held!==args.holder) return {data:false,error:null}; leases.set(args.c,args.holder); return {data:true,error:null}; }
    if(name==='drop_morning_lease') { if(leases.get(args.c)===args.holder) leases.delete(args.c); return {data:null,error:null}; }
    if(name==='company_app_agents') return {data:agents,error:null};
+   if(name==='company_key_profiles') return {data:keyProfiles,error:null};
    if(name==='check_agent_setting') return refuse?{data:null,error:{message:refuse}}:{data:null,error:null};
    if(name==='log_agent_morning') { if(refuse) return {data:null,error:{message:refuse}}; logged.push(args); return {data:null,error:null}; }
    throw new Error(`unexpected rpc ${name}`);
@@ -431,4 +432,35 @@ test('a holder whose lease ran out and was taken stops before its next Engine wr
   assert.deepEqual(jobs(second,adsProfile).map(job=>[job.schedule.kind,job.schedule.minutes,job.state]),[['interval',720,'scheduled']]);
   assert.equal(jobs(second,leadProfile).length,0);
  } finally { await second.close(); }
+});
+
+test('a move the new main Agent cannot take keeps the source, paused, and answers failed; a removed Agent\'s copy is reached later through the Company\'s profiles', async () => {
+ // The copy cannot be made on Ads: Lead's job is paused, not deleted, and the settle says failed.
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const noCreate={create:async()=>({state:'refused'})};
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:noCreate})).state,'failed');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused'],'kept, never deleted, and sending from nowhere');
+  assert.equal(jobs(fake,adsProfile).length,0);
+ } finally { await fake.close(); }
+ // The copy is made but cannot follow a new time saved on Lead meanwhile: it is paused, Lead's is kept paused, failed.
+ const second=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(second)});
+  const retimed={create:async(connection,routine)=>{ const made=await createRoutine(connection,routine); Object.assign(jobs(second,leadProfile)[0],{schedule:{kind:'cron',expr:'0 7 * * *',display:'0 7 * * *'}}); return made; },change:async()=>({state:'unreachable'})};
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(second),driver:retimed})).state,'failed');
+  assert.deepEqual(jobs(second,adsProfile).map(job=>job.state),['paused']);
+  assert.deepEqual(jobs(second,leadProfile).map(job=>[job.state,job.schedule.expr]),[['paused','0 7 * * *']],'the source keeps how it was set');
+ } finally { await second.close(); }
+ // Lead was removed and its settle failed; Lead is in no list now but the Company's profiles still name it, so the next
+ // settle brings its copy to Ads.
+ const third=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(third)});
+  const onlyAds=[{...agentRows(ads)[1]}];
+  assert.equal((await moveAgentMorning(session({agents:onlyAds,keyProfiles:[{profile:leadProfile,kind:'removed'},{profile:adsProfile,kind:'agent'}]}).db,{company,hermes:install(third)})).state,'moved');
+  assert.deepEqual(jobs(third,adsProfile).map(job=>[job.state,job.schedule.expr]),[['scheduled','0 9 * * *']]);
+  assert.equal(jobs(third,leadProfile).length,0);
+ } finally { await third.close(); }
 });
