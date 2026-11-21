@@ -31,6 +31,7 @@ It ends by printing:
   password: `manager@`, `reviewer@`, `viewer@`, `multi@example.com`);
 - the local database: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`;
 - the local inbox, where sign-in and invite emails land: `http://127.0.0.1:54324`;
+- the sign-in screenshot: `$TMPDIR/gtmworks-cloud/screens/cloud-verify-signed-in.png`;
 - the logs: `$TMPDIR/gtmworks-cloud/web.log` and `hermes.log` (`/tmp/gtmworks-cloud/` when `TMPDIR` is unset).
 
 `npm run cloud:up -- --fresh` does the same on an empty install (no people, no Company) and prints the first-run setup
@@ -54,9 +55,9 @@ page and in the local database:
    Ideas to Planned, then checks the Card's stage in `public.work_cards` (a new Company has only Lead, and a Card needs
    another Agent).
 
-Screenshots of every step go to `$TMPDIR/gtmworks-cloud/screens` (`--out DIR` puts them elsewhere); attach the ones
-that show your change to the pull request. The journey always ends with the seed back, also when a step fails, and its
-failure leaves a `NN-failed.png` beside the others. It refuses any app or database but the local stack's.
+Screenshots of every step (`cloud-verify-NN-<step>.png`) go to `$TMPDIR/gtmworks-cloud/screens` (`--out DIR` puts them elsewhere); attach the ones
+that show your change to the pull request. The journey always ends with the seed back, its own Card gone too, also when a step
+fails; a failure leaves a `cloud-verify-NN-failed.png` beside the others. It refuses any app or database but the local stack's.
 
 ## 3. Walk your own change
 

@@ -74,6 +74,7 @@ echo "Starting the app at $origin (scripts/web.sh; log $state/web.log)…"
 for _ in $(seq 1 240); do
  if curl -fsS -o /dev/null "$origin/sign-in" 2> /dev/null; then break; fi
  if ! kill -0 "$(cat "$state/web.pid")" 2> /dev/null; then echo 'the app stopped while starting:' >&2; tail -30 "$state/web.log" >&2; exit 1; fi
+ if ! kill -0 "$(cat "$state/hermes.pid")" 2> /dev/null; then echo 'the fake Engine stopped while starting:' >&2; tail -30 "$state/hermes.log" >&2; exit 1; fi
  sleep 1
 done
 curl -fsS -o /dev/null "$origin/sign-in" || { echo "the app did not answer at $origin/sign-in within 4 minutes" >&2; tail -30 "$state/web.log" >&2; exit 1; }

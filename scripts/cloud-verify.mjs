@@ -29,13 +29,13 @@ const mode=flags.length?'sign-in':'journey';
 // The checks run against the stack's own address only: the app and its API are the local ones.
 assertLocalTarget(origin);
 mkdirSync(out,{recursive:true});
-// A journey's screenshots (NN-step.png) replace the last journey's; nothing else in the folder is touched.
-if(mode!=='sign-in') for(const file of readdirSync(out)) if(/^\d{2}-[a-z-]+\.png$/.test(file)) rmSync(join(out,file));
+// A journey's screenshots (cloud-verify-NN-step.png) replace the last journey's; nothing else in the folder is touched.
+if(mode!=='sign-in') for(const file of readdirSync(out)) if(/^cloud-verify-\d{2}-[a-z-]+\.png$/.test(file)) rmSync(join(out,file));
 
 const quote=value=>`'${String(value).replaceAll("'","''")}'`;
 const query=sql=>localQuery(sql,origin);
-let shot=0,seedBack=false;
-const screenshot=async(page,name)=>{ const file=join(out,`${String(++shot).padStart(2,'0')}-${name}.png`); await page.screenshot({path:file}); return file; };
+let shot=0;
+const screenshot=async(page,name)=>{ const file=join(out,`cloud-verify-${String(++shot).padStart(2,'0')}-${name}.png`); await page.screenshot({path:file}); return file; };
 const step=text=>console.log(`✓ ${text}`);
 // The seeded Owner of RS Learning (supabase/seed.sql); every seeded person has this password.
 const seeded={email:'omar@example.com',password:'local-seed-password',company:'rs-learning'};
@@ -62,16 +62,16 @@ async function signIn(page,email,password) {
  }
 }
 
-// The seeded data back as local-db.sh saved it (tests/fresh-seed.ts does the same before each browser spec file).
+// The seeded data back as local-db.sh saved it, on this machine's own Docker (as resetFirstRun pins it) (tests/fresh-seed.ts does the same before each browser spec file).
 function putSeedBack() {
- execFileSync('docker',['exec','-i','-e','PGOPTIONS=-c client_min_messages=warning',dbContainerOf(0),'psql','-X','-q','-U','supabase_admin','-d','postgres','-v','ON_ERROR_STOP=1'],
+ execFileSync('docker',['--host','unix:///var/run/docker.sock','exec','-i','-e','PGOPTIONS=-c client_min_messages=warning',dbContainerOf(0),'psql','-X','-q','-U','supabase_admin','-d','postgres','-v','ON_ERROR_STOP=1'],
   {input:readFileSync(seedSnapshotOf(0)),stdio:['pipe','ignore','inherit']});
 }
 
 async function signInOnly(page) {
  await signIn(page,seeded.email,seeded.password);
  await expect(page.locator('.sidebar')).toBeVisible({timeout:60000});
- const file=join(out,'signed-in.png'); await page.screenshot({path:file});
+ const file=join(out,'cloud-verify-signed-in.png'); await page.screenshot({path:file});
  return `Signed in as ${seeded.email} at ${page.url()} (screenshot ${file})`;
 }
 
@@ -137,7 +137,7 @@ async function journey(page) {
  step('opened Numbers from the sidebar');
  // 5. The board, on the seed put back: a Card needs an Agent beside Lead, which a new Company does not have yet. The
  // seeded Owner makes a Card in RS Learning and carries it by mouse from Ideas to Planned; the move is in the database.
- putSeedBack(); seedBack=true;
+ putSeedBack();
  step('the seeded data is back');
  await page.context().clearCookies();
  await signIn(page,seeded.email,seeded.password);
@@ -177,12 +177,9 @@ try {
  if(mode==='sign-in') console.log(await signInOnly(page));
  else {
   try { await journey(page); }
-  catch(error) {
-   await screenshot(page,'failed').catch(()=>{});
-   // A journey that stopped before the seed came back puts it back, so the seeded people sign in again.
-   if(!seedBack) putSeedBack();
-   throw error;
-  }
+  catch(error) { await screenshot(page,'failed').catch(()=>{}); throw error; }
+  // Passed or not, the journey ends on the seed as local-db.sh left it: no journey Owner, Company or Card stays behind.
+  finally { putSeedBack(); }
   console.log(`Journey passed; screenshots in ${out}`);
  }
 } finally { await browser.close(); }
