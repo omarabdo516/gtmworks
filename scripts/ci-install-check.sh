@@ -90,6 +90,17 @@ engine_key=$(first_engine_key)
 # The Engine's key is in the Engine's own file, owner-only, and never in the install's environment file (#385).
 [[ $engine_key =~ ^[a-f0-9]{64}$ && $(stat -c %a .engines/first/.env) == 600 ]] || fail 'the Engine key is in .engines/first/.env'
 if grep -q '^HERMES_API_KEY=' .env.install; then fail '.env.install holds no Engine key'; fi
+# The app and the worker hold only the values they read (#446): neither the database password, pgsodium's root key nor
+# the JWT secret is in their environment, by name or by value, while they still answer.
+for service in web worker; do
+  environment=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(compose ps -q "$service")") || fail "inspect the $service container"
+  for name in POSTGRES_PASSWORD PGSODIUM_ROOT_KEY SUPABASE_JWT_SECRET; do
+    value=$(sed -n "s/^$name=//p" .env.install)
+    [[ $value =~ ^[a-f0-9]{64}$ ]] || fail ".env.install holds $name"
+    if grep -q "^$name=" <<< "$environment" || grep -qF "$value" <<< "$environment"; then fail "the $service container holds no $name"; fi
+  done
+  grep -q '^SUPABASE_SERVICE_ROLE_KEY=' <<< "$environment" || fail "the $service container holds the service-role key it reads"
+done
 [[ $(db -c "select key_encrypted from public.company_engines where id=(select engine_id from public.companies where id='$company_id')") != "$engine_key" ]] || fail 'the Engine key is stored in plaintext'
 compose exec -T -e EXPECTED_KEY="$engine_key" web \
   node --input-type=module -e "const {engineOf}=await import('/app/lib/company-engine.mjs'); const at=await engineOf('$company_id'); console.log(at?.address==='$engine_address'&&at?.key===process.env.EXPECTED_KEY?'record':'no');" \
