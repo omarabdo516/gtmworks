@@ -244,6 +244,7 @@ test('a channel handover that did not finish marks its row, whichever leg ended 
  assert.deepEqual(drawn, { 'handover-11': false, 'handover-12': true, 'handover-13': true, 'handover-14': true, 'handover-15': true, 'handover-16': false });
  const finished = record?.messages.find(message => message.id === 'handover-11');
  assert.ok(finished && !('failed' in finished), 'a finished handover carries no failed mark at all');
+ assert.deepEqual(record?.handoffs.map(handoff => [handoff.id, handoff.failed === true]), [[11, false], [12, true], [13, true], [14, true], [15, true], [16, false]], 'the details list marks the same handovers');
 });
 
 test('a channel with no handover draws none, and one whose handover belongs to a message not shown draws no row of it', async () => {

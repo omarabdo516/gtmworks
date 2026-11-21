@@ -33,8 +33,9 @@ export type ChannelMessage=
  | {id:number,author:'note',kind:'invite',actor:string,name:string,at:string}
  | {id:number,author:'note',kind:'card',at:string}
  | {id:string,author:'handoff',from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true};
-// One handover of a channel, as its details draw it: both faces, the Agent handed the work, and the job, newest first.
-export type ChannelHandoff={id:number,from:ChannelFace,to:ChannelFace,goal:string,at:string};
+// One handover of a channel, as its details draw it: both faces, the Agent handed the work, and the job, newest first,
+// and that it did not finish when so (#375).
+export type ChannelHandoff={id:number,from:ChannelFace,to:ChannelFace,goal:string,at:string,failed?:true};
 export type ChannelName={kind:'general'}|{kind:'team',name:string};
 export type ChannelSummary=ChannelName&{id:string,unread:number};
 // One row of a channel's members. An invited person who has not joined is a row too (#207): no person yet, their name made
@@ -227,7 +228,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   manage:!!manager&&name.kind==='team',
   managers,
   messages,
-  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at})),
+  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
+  ...(handoverUnfinished(row)?{failed:true as const}:{})})),
   open:((openRuns||[]) as {agent_id:string|null}[]).length>0,
   handover:((handed||[]) as StoredHandover[]).some(row=>row.state!=='done'&&row.state!=='failed'),
   may:(may||[]) as PermissionChoice[],

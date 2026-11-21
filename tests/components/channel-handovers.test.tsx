@@ -129,3 +129,13 @@ for (const [language, line] of [['en', 'The job didn’t finish'], ['ar', 'ال�
  expect(rows[1].querySelector('.handed__failed')).toBeNull();
  expect(rows[0].nextElementSibling?.querySelector('.bubble')?.textContent).toBe('Ads could not finish the plan.');
 });
+
+// #375: the details' Handoffs list marks a handover that did not finish too, before its time.
+test('the details mark a handover that did not finish, and leave a finished one as it was', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await view(record([], [{ ...handoff(9, 'Plan the Meta ads', '08'), failed: true }, handoff(8, 'Write the launch email', '04')]), 'ar');
+ const rows = Array.from(screen.container.querySelectorAll('#ch-h-h ~ .panel-card .panel-row'));
+ expect(rows.map(row => row.hasAttribute('data-failed'))).toEqual([true, false]);
+ expect(rows[0].querySelector('.panel-row__d')?.textContent).toBe(`Plan the Meta ads · الشغل ماخلصش · ${timeOf('2026-06-10T09:08:00Z', 'ar')}`);
+ expect(rows[1].querySelector('.handed__failed')).toBeNull();
+});

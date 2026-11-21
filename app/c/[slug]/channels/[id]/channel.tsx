@@ -317,10 +317,10 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
    {handoffs.length>0&&<section className="dp-sec" aria-labelledby="ch-h-h">
     <h3 className="dp-label" id="ch-h-h"><span>{c('channelHandoffs')} <span className="muted num">{count(handoffs.length)}</span></span></h3>
     <ul className="panel-card">
-     {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row">
+     {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.failed?{'data-failed':''}:{})}>
       <span className="handed__faces"><CompanyAgentFace agent={{connection_id:handoff.from.face,name:handoff.from.name}} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:handoff.to.face,name:handoff.to.name}} size={20}/></span>
       <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandedTo',handoff.to.name)}</span>
-       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{time(handoff.at)}</span></span>
+       <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}{time(handoff.at)}</span></span>
      </li>)}
     </ul>
    </section>}

@@ -28,7 +28,7 @@ test('a migration before the cutover takes no column, table or function away tha
  }
 });
 
-test('the first step of the levels removal keeps the level, and the cutover removes it after every other migration', () => {
+test('the first step of the levels removal keeps the level, the cutover removes it after that step, and no later migration reads what it removed', () => {
  const first=read(firstStep);
  for(const kept of [/companies drop column agent_level/,/drop column tools_level/,/drop column tools_policy/,/drop function[^;]*set_agent_level/,/drop function[^;]*engine_tool_policy/])
   assert.doesNotMatch(first,kept);
