@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# The machine a Claude Code cloud session builds on (#485). `.claude/settings.json` runs this at every session start
+# (https://code.claude.com/docs/en/cloud-environments, "Install dependencies with a SessionStart hook"): outside a cloud
+# session (CLAUDE_CODE_REMOTE is not true) it exits at once; inside one it starts dockerd in the background, so the
+# local Supabase stack can start later, and installs the dependencies when the lockfile changed since the last install.
+# `npm run cloud:up` (scripts/cloud-up.sh) runs the same steps by name on any machine:
+#   deps     install the dependencies when package-lock.json changed or node_modules is missing
+#   docker   start dockerd if no daemon answers, and wait until one does
+set -euo pipefail
+cd "$(dirname "$0")/.."
+stamp=node_modules/.gtmworks-lock-hash
+log_dir=${TMPDIR:-/tmp}
+
+deps() {
+ local hash
+ hash=$(sha256sum package-lock.json | cut -d' ' -f1)
+ if [[ -d node_modules && -f $stamp && $(cat "$stamp") == "$hash" ]]; then return 0; fi
+ echo 'Installing dependencies (package-lock.json changed)…'
+ npm ci --no-audit --no-fund > "$log_dir/gtmworks-npm-ci.log" 2>&1 || { tail -20 "$log_dir/gtmworks-npm-ci.log" >&2; return 1; }
+ mkdir -p node_modules
+ echo "$hash" > "$stamp"
+}
+
+# Starts dockerd detached when no daemon answers and none is running. With `wait`, waits up to 90 seconds for it.
+docker_up() {
+ docker info > /dev/null 2>&1 && return 0
+ if ! pgrep -x dockerd > /dev/null 2>&1; then
+  command -v dockerd > /dev/null 2>&1 || { echo 'no Docker daemon answers and dockerd is not installed' >&2; return 1; }
+  local sudo=()
+  if [[ $(id -u) != 0 ]] && command -v sudo > /dev/null 2>&1; then sudo=(sudo -n); fi
+  setsid nohup "${sudo[@]}" dockerd > "$log_dir/gtmworks-dockerd.log" 2>&1 < /dev/null &
+ fi
+ [[ ${1:-} == wait ]] || return 0
+ for _ in $(seq 1 90); do docker info > /dev/null 2>&1 && return 0; sleep 1; done
+ echo "the Docker daemon did not answer within 90 seconds (log: $log_dir/gtmworks-dockerd.log)" >&2
+ return 1
+}
+
+case ${1:-hook} in
+ hook)
+  [[ ${CLAUDE_CODE_REMOTE:-} == true ]] || exit 0
+  docker_up
+  deps
+  echo 'Cloud session ready: run `npm run cloud:up` to start the local app (docs/agents/cloud-verify.md).'
+  ;;
+ deps) deps ;;
+ docker) docker_up wait ;;
+ *) echo 'usage: scripts/cloud-session-setup.sh [hook|deps|docker]' >&2; exit 2 ;;
+esac
