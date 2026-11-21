@@ -1,6 +1,7 @@
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { render } from 'vitest-browser-react';
+import { userEvent } from 'vitest/browser';
 import { ChangeCard } from '@/app/change-card';
 import { ChangeBoardCard, OwnerChangeCard } from '@/app/c/[slug]/[[...section]]/agent-change-card';
 import { LanguageProvider } from '@/lib/i18n-client';
@@ -278,6 +279,10 @@ test('"Waiting on you" draws the proposal as a board card that opens it, in Engl
  const dialog = screen.getByRole('dialog', { name: 'Proposed change to the settings of Analyst' });
  await expect.element(dialog.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
  await expect.element(dialog.getByText('Now', { exact: true })).toBeVisible();
+ // Escape closes it and the keyboard is back on the card that opened it.
+ await userEvent.keyboard('{Escape}');
+ await expect.element(board).toHaveFocus();
+ await board.click();
  await dialog.getByRole('button', { name: 'Approve', exact: true }).click();
  await expect.poll(() => answered.mock.calls.length).toBe(1);
  expect(['proposal', 'intent', 'edited'].map(name => answered.mock.calls[0][0].get(name))).toEqual(['7', 'approve', null]);

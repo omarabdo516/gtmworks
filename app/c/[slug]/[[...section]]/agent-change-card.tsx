@@ -142,6 +142,7 @@ export function OwnerChangeCard({slug,company,item,alone}:{slug:string,company:s
 const onHash=(changed:()=>void)=>{ window.addEventListener('hashchange',changed); return ()=>window.removeEventListener('hashchange',changed); };
 export function ChangeBoardCard({slug,company,item,alone}:{slug:string,company:string,item:WaitingItem,alone?:boolean}) {
  const {c,cb}=useCardText(); const {question}=useChangeWords();
+ const opener=useRef<HTMLButtonElement>(null);
  const named=useSyncExternalStore(onHash,()=>window.location.hash===`#change-${item.id}`,()=>false);
  const [chosen,setChosen]=useState<boolean|null>(null);
  const open=chosen??named;
@@ -150,12 +151,12 @@ export function ChangeBoardCard({slug,company,item,alone}:{slug:string,company:s
  const self=view.by.id===view.agent.id;
  const title=question({...view,agent:view.agent.name},!read);
  return <div className="kcard card chg-kcard" data-kind="agent_change" data-change-id={item.id}>
-  <button type="button" className="kcard__title authored-title" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(true)}><strong>{title}</strong></button>
+  <button ref={opener} type="button" className="kcard__title authored-title" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(true)}><strong>{title}</strong></button>
   <span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{c('changeBadgeYou')}</span>
   <span className="kcard__t">{self?c('changeBoardSelf'):cb('changeBoardFor',view.by.name,view.agent.name)}</span>
   <span className="kcard__foot"><span className="kcard__agent card-avatars">{read&&<span aria-hidden="true"><CompanyAgentFace agent={view.by} size={18}/></span>}<bdi className="od-truncate">{view.by.name}</bdi></span><span>· {c('changeBoardPlace')}</span></span>
   <Dialog open={open} onOpenChange={setOpen}>
-   <DialogContent aria-describedby={undefined} className="gw modal chg-dialog">
+   <DialogContent aria-describedby={undefined} className="gw modal chg-dialog" onCloseAutoFocus={event=>{ event.preventDefault(); opener.current?.focus(); }}>
     <DialogTitle className="sr-only">{c('changeTitle',view.agent.name)}</DialogTitle>
     <OwnerChangeCard slug={slug} company={company} item={item} alone={alone}/>
    </DialogContent>
