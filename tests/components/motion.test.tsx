@@ -5,7 +5,6 @@ import { cdp, commands, page } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 import { BoardPager } from '@/components/paperclip/KanbanBoard';
 import { LanguageProvider } from '@/lib/i18n-client';
-import { useState } from 'react';
 import { later, prefersReducedMotion, useLeave } from '@/lib/motion';
 import { motionTable, type MotionRow } from '../motion-table.mjs';
 import type { ComputedMotion, ComputedStyle } from '../motion-css.mjs';
@@ -53,10 +52,9 @@ test.each([['on', 120], ['off', 1000]] as const)('with reduced motion %s a wait 
 // overlay and first run each do.
 function Leaving({ after }: { after: () => void }) {
  const leaving = useLeave(190);
- const [shown, setShown] = useState(true);
  return <>
-  {shown && <div data-testid="part" className={leaving.closing ? 'is-closing' : undefined}/>}
-  <button type="button" onClick={() => leaving.close(() => { setShown(false); after(); })}>Close</button>
+  {!leaving.gone && <div data-testid="part" className={leaving.closing ? 'is-closing' : undefined}/>}
+  <button type="button" onClick={() => leaving.close(after)}>Close</button>
   <button type="button" onClick={leaving.cancel}>Open</button>
  </>;
 }

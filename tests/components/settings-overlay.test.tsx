@@ -109,6 +109,8 @@ test('closing keeps the overlay in the page with its exit running, then takes it
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
  const overlay = document.querySelector<HTMLElement>('.sov')!;
  expect(overlay).toHaveClass('is-closing');
+ // A section link pressed during the leave cannot move the page the leave is about to leave.
+ expect(overlay.inert).toBe(true);
  expect(getComputedStyle(overlay).animationName).toBe('gw-modal-out');
  expect(push).not.toHaveBeenCalled();
  await userEvent.keyboard('{Escape}');

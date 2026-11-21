@@ -43,7 +43,8 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
  // "Add it" for the Owner and "Ask for it" for a Member send the same message; Lead makes the Agent or prepares the
  // request, by the role the database gives the sender (lib/agent-tools.mjs, run_tools).
  async function add(role:ReadyRole) {
-  if(sending) return;
+  // Nothing is asked once the gallery is leaving: what comes back could open nothing (the page is moving on).
+  if(sending||!active.current) return;
   setSending(true); setFailure('');
   const pick=picks.current[role.id]??={conversation:newId(),sendKey:newId()};
   const failed=await postMessage({company,conversation:pick.conversation,agent,message:role.ask,sendKey:pick.sendKey});
@@ -56,7 +57,7 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
  const needle=query.trim().toLowerCase();
  const shown=roles.filter(role=>(category==='all'||role.category===category)&&role.search.includes(needle));
  return <Dialog open onOpenChange={next=>{if(!next) leave();}}>
-  <DialogContent showCloseButton={false} className={`gw modal${leaving.closing?' is-closing':''}`} overlayClassName="gw-scrim-still" onOpenAutoFocus={event=>{event.preventDefault();search.current?.focus();}} onCloseAutoFocus={event=>event.preventDefault()}>
+  <DialogContent showCloseButton={false} className={`gw modal${leaving.closing?' is-closing':''}`} inert={leaving.closing||undefined} overlayClassName="gw-scrim-still" onOpenAutoFocus={event=>{event.preventDefault();search.current?.focus();}} onCloseAutoFocus={event=>event.preventDefault()}>
    <div className="modal__inner">
     <header className="modal__head">
      <div className="modal__titles"><DialogTitle className="modal__title">{t('title')} <bdi>{companyName}</bdi></DialogTitle>

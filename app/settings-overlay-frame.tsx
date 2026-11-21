@@ -41,8 +41,9 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
   document.addEventListener('keydown',keys);
   return ()=>document.removeEventListener('keydown',keys);
  },[close]);
- // Once the leave has run the overlay is taken out, so the page behind shows while the address moves back to it.
- return <CloseOverlay.Provider value={close}><div className="gw sov-root" hidden={leaving.gone}><div ref={box} className={`sov${leaving.closing?' is-closing':''}`} role="dialog" aria-modal="true" aria-labelledby="sov-title" tabIndex={-1}>{children}</div></div></CloseOverlay.Provider>;
+ // While it leaves nothing in it can be pressed (a section link would move the page the leave is about to leave); once the
+ // leave has run it is taken out, so the page behind shows while the address moves back to it.
+ return <CloseOverlay.Provider value={close}><div className="gw sov-root" hidden={leaving.gone}><div ref={box} className={`sov${leaving.closing?' is-closing':''}`} inert={leaving.closing||undefined} role="dialog" aria-modal="true" aria-labelledby="sov-title" tabIndex={-1}>{children}</div></div></CloseOverlay.Provider>;
 }
 
 export function CloseButton() {

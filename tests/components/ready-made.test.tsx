@@ -125,6 +125,8 @@ test('closing keeps the gallery and its scrim in the page while its leave runs, 
  await expect.element(dialog).toBeVisible();
  await screen.getByRole('button', { name: 'Close' }).click();
  expect(dialog.element()).toHaveClass('is-closing');
+ // Nothing in it can be pressed while it leaves: an Add then would ask for a role nobody sees opened.
+ expect((dialog.element() as HTMLElement).inert).toBe(true);
  expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
  expect(replace).not.toHaveBeenCalled();
  // A second way out during the leave adds nothing.
