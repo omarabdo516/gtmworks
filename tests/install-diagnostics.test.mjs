@@ -29,6 +29,7 @@ const webLog=[
  `{"code":"PGRST301","message":"JWT ${long}","hint":"${short}"}`,
  `code: 'E${short.toUpperCase()}'`,
  `SUPABASE_JWT_SECRET must be an install-generated secret`,
+ `POSTGRES_PASSWORD belongs to the installer and the database, not the web container`,
  `${short.toUpperCase()}_TOKEN must be an install-generated secret`,
  `Authorization: Bearer ${short} apikey=${long} ${encodeURIComponent(`${short}/+=`)} ${Buffer.from(long).toString('hex')}`,
  ''
@@ -86,10 +87,10 @@ test('the summary prints only fixed fields, enough to place an HTTP 500, and no 
  }
  for(const line of ['web ready x1','web error TypeError x1','web at .next/server/app/sign-in/page.js:1:2345 x1','web at .next/server/chunks/948.js:12:40 x1',
   'web at node_modules/@supabase/supabase-js x1','web at node-internal x1','web at other x4','web error other x1','web code ECONNREFUSED x1','web code PGRST301 x1',
-  'web install-env SUPABASE_JWT_SECRET x1','web install-env other x1']) assert.ok(web.stdout.split('\n').includes(line),`missing: ${line}\n${web.stdout}`);
+  'web install-env SUPABASE_JWT_SECRET x1','web install-env POSTGRES_PASSWORD x1','web install-env other x1']) assert.ok(web.stdout.split('\n').includes(line),`missing: ${line}\n${web.stdout}`);
  for(const line of ['gateway request GET sign-in 500 x1','gateway request POST c 502 x1','gateway request other other 400 x1','gateway gateway upstream-refused x1','gateway gateway upstream-timeout x1'])
   assert.ok(gateway.stdout.split('\n').includes(line),`missing: ${line}\n${gateway.stdout}`);
- assert.match(web.stdout,/^web lines 18 recognised \d+ x1$/m);
+ assert.match(web.stdout,/^web lines 19 recognised \d+ x1$/m);
 });
 
 test('the summary prints nothing when it cannot read what it checks against', t => {

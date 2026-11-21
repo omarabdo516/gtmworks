@@ -17,7 +17,8 @@ jwt_secret=$(printf '%s\n' "$status" | sed -n 's/^JWT_SECRET="\(.*\)"$/\1/p')
 jwt_secret=${jwt_secret:-super-secret-jwt-token-with-at-least-32-characters-long}
 anon_key=$(JWT_SECRET="$jwt_secret" node -e 'const c=require("crypto"); const b=x=>Buffer.from(JSON.stringify(x)).toString("base64url"); const p=b({alg:"HS256",typ:"JWT"})+"."+b({role:"anon",iss:"supabase-demo",exp:4102444800}); process.stdout.write(p+"."+c.createHmac("sha256",process.env.JWT_SECRET).update(p).digest("base64url"))')
 export NEXT_PUBLIC_SUPABASE_URL="$api_url" NEXT_PUBLIC_SUPABASE_ANON_KEY="$anon_key"
-export SUPABASE_SERVICE_ROLE_KEY="$service_key" SUPABASE_JWT_SECRET="$jwt_secret"
+# The JWT secret only signs the anonymous key above; the app is never given it (#446).
+export SUPABASE_SERVICE_ROLE_KEY="$service_key"
 export WEBHOOK_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= APP_ORIGIN="https://$host"
 cat > "$work/Caddyfile" <<CADDY
 {
@@ -39,7 +40,7 @@ chmod 644 "$work/root.crt"
 # The server trusts the proxy's certificate authority the way the production server trusts a public one,
 # and resolves the public name to this machine.
 docker run -d --name gtmworks-proxy-app --network host --add-host "$host:127.0.0.1" -v "$work/root.crt:/ca/root.crt:ro" -e NODE_EXTRA_CA_CERTS=/ca/root.crt \
-  -e NEXT_PUBLIC_SUPABASE_URL -e NEXT_PUBLIC_SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY -e SUPABASE_JWT_SECRET -e WEBHOOK_ENCRYPTION_KEY -e APP_ORIGIN gtmworks:ci >/dev/null
+  -e NEXT_PUBLIC_SUPABASE_URL -e NEXT_PUBLIC_SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY -e WEBHOOK_ENCRYPTION_KEY -e APP_ORIGIN gtmworks:ci >/dev/null
 for attempt in $(seq 1 60); do
   curl -fsS --cacert "$work/root.crt" --resolve "$host:443:127.0.0.1" "https://$host/api/health" >/dev/null 2>&1 && break
   sleep 1
