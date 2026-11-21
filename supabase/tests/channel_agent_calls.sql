@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(79);
+select plan(97);
 -- #152. RS Learning's seeded Members: the Owner (1), the Manager (2), a Contributor (3) and the Viewer (4). Lead is the
 -- main Agent, seen by everyone; Faye is shown to the Manager and the Contributor, and SEO, Reach and Lead Writer to the
 -- Contributor only; Secret is shown to nobody but the Owner. The general channel is 69000000-0000-0000-0000-000000000001.
@@ -182,6 +182,43 @@ select is(public.answer_channel_start((select id from sent where label='bind'),1
 select is(public.answer_channel_start((select id from sent where label='bind'),2,'run-bind-later',1::smallint),false,'and one from a later attempt of that place records nothing');
 select ok(public.close_channel_run((select id from sent where label='bind'),'run-bind-1','completed','Bound reply.',null,null),'the first Run ends');
 select is(public.answer_channel_start((select id from sent where label='bind'),1,null,1::smallint),false,'a refusal for a Run that already closed changes nothing');
+
+-- #375: the previous app version answers a start without its place. Once an earlier Run of the message could have made
+-- the same attempt, that answer cannot be told apart from the next Run's, so it changes nothing: a late refusal of the
+-- first Run's first attempt never fails the second Run, and a late run id of a first Run given up is never recorded on
+-- the second. With no such earlier attempt the call still answers the Run it reaches.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+insert into sent values ('late refusal',public.post_channel_message('69000000-0000-0000-0000-000000000001',gen_random_uuid(),'@Faye @SEO refuse late'));
+insert into sent values ('late run',public.post_channel_message('69000000-0000-0000-0000-000000000001',gen_random_uuid(),'@Faye @SEO start late'));
+insert into sent values ('no earlier attempt',public.post_channel_message('69000000-0000-0000-0000-000000000001',gen_random_uuid(),'@Faye @SEO nobody tried'));
+reset role;
+set local role service_role;
+select is((select attempt from public.begin_channel_start((select id from sent where label='late refusal'))),1,'the first Run''s first attempt is sent, and its refusal is delayed');
+select is((select attempt from public.begin_channel_start((select id from sent where label='late refusal'))),2,'a retry of the first Run is sent');
+select ok(public.answer_channel_start((select id from sent where label='late refusal'),2,'run-late-refusal-1',1::smallint),'and the retry started it');
+select ok(public.close_channel_run((select id from sent where label='late refusal'),'run-late-refusal-1','completed','First reply.',null,null),'the first Run ends');
+select is((select attempt from public.begin_channel_start((select id from sent where label='late refusal'))),1,'the second Run''s first attempt begins');
+select is(public.answer_channel_start((select id from sent where label='late refusal'),1,null),false,'the first Run''s late refusal, sent without a place, changes nothing');
+reset role;
+select is((select outcome from public.channel_runs where message_id=(select id from sent where label='late refusal') and ordinal=2),null::text,'so the second Run is still open, never failed by it');
+select is((select count(*)::int from public.channel_messages where reply_to=(select id from sent where label='late refusal') and reply_ordinal=2),0,'and no reply of the second Run was written for it');
+set local role service_role;
+select ok(public.answer_channel_start((select id from sent where label='late refusal'),1,'run-late-refusal-2',2::smallint),'the second Run''s own answer, naming its place, still lands');
+select is((select attempt from public.begin_channel_start((select id from sent where label='late run'))),1,'a first Run''s start is sent, and its answer is lost');
+select ok(public.close_channel_run((select id from sent where label='late run'),null,'lost',null,null,null),'that Run is given up as a lost start');
+select is((select attempt from public.begin_channel_start((select id from sent where label='late run'))),1,'the second Run''s first attempt begins');
+select is(public.answer_channel_start((select id from sent where label='late run'),1,'run-late-first'),false,'the given-up Run''s late run id, sent without a place, records nothing');
+reset role;
+select is((select array_agg(coalesce(run_id,'none') order by ordinal) from public.channel_runs where message_id=(select id from sent where label='late run')),
+ array['none','none'],'neither Run takes the run id the call could not place');
+set local role service_role;
+select ok(public.close_channel_run((select id from sent where label='no earlier attempt'),null,'failed',null,null,null),'a first Run that never attempted a start fails');
+select is((select attempt from public.begin_channel_start((select id from sent where label='no earlier attempt'))),1,'the second Run''s first attempt begins');
+select ok(public.answer_channel_start((select id from sent where label='no earlier attempt'),1,null),'and its refusal, sent without a place, still ends it: no earlier Run could have made that attempt');
+reset role;
+select is((select array_agg(outcome order by ordinal) from public.channel_runs where message_id=(select id from sent where label='no earlier attempt')),
+ array['failed','failed'],'so the second Run is failed by its own refusal');
 
 -- #354: a later Agent's ten minutes begin when the Agent before it ended, not at the message's own time, and its day of
 -- attempts begins at its own first attempt.

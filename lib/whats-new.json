@@ -6,6 +6,12 @@
   "ar": { "title": "شوف والغي اللي الوكيل يقدر يعمله من غير ما يستأذن", "body": "إعدادات الوكيل وآخر تبويب النشاط بقوا بيعرضوا صلاحياته الدايمة، كل حاجة حد رد عليها بـ«اسمح دايماً»، ومين سمح بيها وإمتى؛ والمالك أو المدير يقدر يلغي أي واحدة، والوكيل هيستأذن تاني المرة الجاية." }
  },
  {
+  "issue": 375,
+  "date": "2026-11-21",
+  "en": { "title": "A handed job that didn't finish says so", "body": "When Lead hands a job to another Agent and it doesn't finish, the \"Handed to\" row in the chat and in the channel now says so after the job." },
+  "ar": { "title": "الشغل اللي اتسلّم وماخلصش بيقولك", "body": "لما Lead يسلّم شغلانة لوكيل تاني وماتخلصش، السطر بتاع «سلّم الشغل لـ» في المحادثة وفي القناة بقى بيقول كده بعد الشغلانة." }
+ },
+ {
   "issue": 413,
   "date": "2026-11-21",
   "en": { "title": "A stopped Engine no longer fails a channel or note mention", "body": "When you call an Agent in a channel or a card note while its Company's Engine is not running, the Run waits up to ten minutes for the Engine and starts once it is back, instead of failing at once." },
