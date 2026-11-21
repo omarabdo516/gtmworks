@@ -68,6 +68,21 @@ test('a Member sees the same notice and line, telling them to ask the Owner, wit
  await expect(failed.getByRole('link')).toHaveCount(0);
 });
 
+// #428: a channel Run its Engine fails for the same cause says so in the channel, in the same words, and is kept as
+// no_model, instead of "Lead couldn't reply".
+test('a channel Run the Engine fails for want of a model says so in the channel, with the way to Subscription and models',async({page})=>{
+ const general='69000000-0000-0000-0000-000000000001';
+ await signIn(page,'omar@example.com',`/c/rs-learning/channels/${general}`);
+ await page.getByRole('textbox',{name:'Write your message in the channel'}).fill('@Lead plan the channel week');
+ await page.getByRole('button',{name:'Send',exact:true}).click();
+ const failed=page.locator('[data-outcome=no-model]');
+ await expect(failed).toContainText(line);
+ await expect(failed.getByRole('link',{name:connect})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
+ await expect(page.getByText('Lead couldn’t reply to this message.')).toHaveCount(0);
+ expect(JSON.parse(query(`select r.outcome from public.channel_runs r join public.channel_messages m on m.id=r.message_id
+  where m.channel_id='${general}' and m.body='@Lead plan the channel week'`))).toEqual([{outcome:'no_model'}]);
+});
+
 // #457: a model error a retry cannot fix is closed with its own outcome and says so, and the Owner gets the way to the
 // Agent's model in Subscription and models.
 const refusedFix='Check the agent’s model in Subscription and models';

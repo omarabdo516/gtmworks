@@ -6,6 +6,12 @@
   "ar": { "title": "شوف والغي اللي الوكيل يقدر يعمله من غير ما يستأذن", "body": "إعدادات الوكيل وآخر تبويب النشاط بقوا بيعرضوا صلاحياته الدايمة، كل حاجة حد رد عليها بـ«اسمح دايماً»، ومين سمح بيها وإمتى؛ والمالك أو المدير يقدر يلغي أي واحدة، والوكيل هيستأذن تاني المرة الجاية." }
  },
  {
+  "issue": 428,
+  "date": "2026-11-21",
+  "en": { "title": "Channels say when no model is connected", "body": "When an agent called in a channel, or a job Lead hands to another agent, can’t answer because the company has no AI subscription or model key yet, the channel or chat now says so, with the link to Subscription and models for the Owner, instead of only saying the reply failed." },
+  "ar": { "title": "القنوات بتقولك لو مفيش موديل متوصّل", "body": "لما وكيل ناديته في قناة، أو شغلانة Lead سلّمها لوكيل تاني، ميقدرش يرد عشان الشركة لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل، القناة أو المحادثة بقت بتقول كده، ومعاها لينك الاشتراك والموديلات للمالك، بدل ما تقول بس إن الرد فشل." }
+ },
+ {
   "issue": 479,
   "date": "2026-11-21",
   "en": { "title": "A failed update leaves no half-made sandbox", "body": "When an update stops because a Company’s work sandbox does not start, the previous release keeps serving and every sandbox, work folder and network the update made for it is removed while what was there before stays, so running it again starts clean." },
@@ -142,6 +148,12 @@
   "date": "2026-11-21",
   "en": { "title": "Update ready offers only what is published", "body": "On an install that follows main, Update ready now offers a version only when the published main image carries it, so Update now installs it instead of coming back unchanged; when there is nothing newer, it says you already run the newest gtmworks." },
   "ar": { "title": "تحديث جاهز بيعرض اللي اتنشر بس", "body": "على تثبيت ماشي على main، تحديث جاهز بقى بيعرض نسخة بس لما تكون موجودة في صورة main المنشورة، فزر حدّث دلوقتي بيثبّتها بدل ما يرجع من غير حاجة؛ ولما مايكونش في أحدث، بيقولك إنك أصلاً على أحدث gtmworks." }
+ },
+ {
+  "issue": 459,
+  "date": "2026-11-21",
+  "en": { "title": "Add a tool that runs as a command", "body": "Your own tool in Apps now takes a command and its arguments as well as an address: it runs in your company’s work sandbox, never in the engine, and you turn it on for the agents you choose." },
+  "ar": { "title": "ضيف أداة بتشتغل كأمر", "body": "«أداة بتاعتك» في التطبيقات بقت بتاخد أمر وخياراته كمان، مش عنوان بس: بيشتغل في صندوق الشغل بتاع شركتك، عمره ما بيشتغل في المحرك، وانت بتشغّله للوكلاء اللي تختارهم." }
  },
  {
   "issue": 358,

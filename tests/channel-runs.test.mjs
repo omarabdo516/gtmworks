@@ -78,6 +78,30 @@ test('a channel Run shows its draft and review cards once, ignores a call that d
  assert.equal(cards.length,2,'the same message, run and call keep one card');
 });
 
+// #428: a channel Run the Engine failed for want of any model provider (the contract's `noModel`, #422) ends as
+// no_model, so the channel says the Company has no model connected, as a Conversation does. Any other failure, and a
+// note's Run, still ends as failed.
+test('a channel Run that failed for want of any model ends as no_model, any other failure and a note\'s Run as failed',async()=>{
+ /** @param {'channel'|'note'} kind @param {object} read */
+ const closedAs=async(kind,read)=>{
+  const closed=[];
+  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
+   if(name===`${kind}_runs_due`) return {data:closed.length?[]:[{message:9,run:'run-9',profile:'ag-faye',company:'10000000-0000-0000-0000-000000000001'}],error:null};
+   if(name==='track_channel_permission') return {data:[],error:null};
+   if(name===`close_${kind}_run`) { closed.push(args.run_outcome); return {data:true,error:null}; }
+   return {data:null,error:{message:`unexpected ${name}`}};
+  }};
+  const engine={read:async()=>({reply:null,session:null,usage:null,toolCalls:[],...read})};
+  const drive=kind==='channel'?driveChannelRuns:driveNoteRuns;
+  assert.deepEqual(await drive(/** @type {any} */(service),{hermes,engineFor:()=>/** @type {any} */(engine)}),{started:0,closed:1});
+  return closed;
+ };
+ assert.deepEqual(await closedAs('channel',{state:'failed',noModel:true}),['no_model']);
+ assert.deepEqual(await closedAs('channel',{state:'failed'}),['failed']);
+ assert.deepEqual(await closedAs('channel',{state:'stopped',noModel:true}),['stopped'],'only a failure is read for its cause');
+ assert.deepEqual(await closedAs('note',{state:'failed',noModel:true}),['failed'],'a note keeps a plain failure');
+});
+
 // #413: a start that never reached an Engine (the Company has no Engine record yet, or its Engine is not running) is no
 // attempt: the driver hands it back, so the Run stays due and its next start is a first one, which a refusal then fails.
 // A start that may have reached the Engine keeps its attempt, so its retry keeps the same idempotency key. The database

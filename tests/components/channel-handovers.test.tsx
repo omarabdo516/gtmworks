@@ -139,3 +139,35 @@ test('the details mark a handover that did not finish, and leave a finished one 
  expect(rows[0].querySelector('.panel-row__d')?.textContent).toBe(`Plan the Meta ads · الشغل ماخلصش · ${timeOf('2026-06-10T09:08:00Z', 'ar')}`);
  expect(rows[1].querySelector('.handed__failed')).toBeNull();
 });
+
+// #428: a handover that ended with no reply because the Company has no model at all says so under its row, in the words
+// a Conversation uses (#422): the Owner gets the way to Subscription and models, a Member is told to ask the Owner. A
+// handover that ended otherwise draws no such line.
+const noModelWords = {
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Subscription and models', ask: 'Ask the company’s Owner to connect one in Settings.' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من الاشتراك والموديلات', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.' },
+} as const;
+for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a handover that ended for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'} under its row`, async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const said = noModelWords[language];
+ const asked: ChannelMessage = { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Lead plan the ads', at, files: [], mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } };
+ const answered: ChannelMessage = { id: 2, author: 'agent', name: 'Lead', face: 'c-1', body: 'Handing it to Ads.', at };
+ const row = (id: number, noModel: boolean): ChannelMessage => ({ id: `handover-${id}`, author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: `Job ${id}`, at, ...(noModel ? { noModel: true as const } : {}) });
+ const screen = await view(record([asked, answered, row(7, true), row(8, false)], [], { noModel: { owner } }), language);
+ const turns = Array.from(screen.container.querySelectorAll('.turns > li'));
+ const handed = turns.findIndex(turn => turn.textContent?.includes('Job 7'));
+ const line = turns[handed + 1];
+ expect(line.getAttribute('role')).toBe('alert');
+ expect(line.getAttribute('data-outcome')).toBe('no-model');
+ expect(line.textContent).toContain(said.line);
+ expect(turns[handed + 2].textContent).toContain('Job 8');
+ expect(screen.container.querySelectorAll('[data-outcome="no-model"]').length).toBe(1);
+ if (owner) {
+  expect(line.querySelector('a')?.textContent).toBe(said.connect);
+  expect(line.querySelector('a')?.getAttribute('href')).toBe('/c/rs-learning/settings?section=models');
+  expect(line.textContent).not.toContain(said.ask);
+ } else {
+  expect(line.textContent).toContain(said.ask);
+  expect(line.querySelector('a')).toBeNull();
+ }
+});

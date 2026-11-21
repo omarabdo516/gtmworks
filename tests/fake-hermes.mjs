@@ -721,10 +721,17 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      keepServers(body.servers); return send(response,200,{ok:true});
     }
     const name=(body?.name||'').trim();
-    if(!name||body?.command) return send(response,400,{detail:'Provide exactly one of URL or command'});
+    // hermes_cli/web_server_mcp.py _normalize_mcp_server_create: exactly one of an address or a command (stdio), and a
+    // stdio server takes no HTTP sign-in.
+    if(!name||Boolean((body?.url||'').trim())===Boolean((body?.command||'').trim())) return send(response,400,{detail:'Provide exactly one of URL or command'});
     if(Object.hasOwn(servers,name)) return send(response,409,{detail:`Server '${name}' already exists`});
     const auth=(body.auth||'none').toLowerCase();
     if(!['none','oauth','header'].includes(auth)) return send(response,400,{detail:'Unsupported auth mode'});
+    if(body.command) {
+     if(auth!=='none'||body.bearer_token!==undefined) return send(response,400,{detail:'HTTP authentication is not supported for stdio MCP servers'});
+     keepServers({...servers,[name]:{command:body.command,...(Array.isArray(body.args)&&body.args.length?{args:[...body.args]}:{})}});
+     return send(response,200,{name,transport:'stdio',url:null,command:body.command,args:body.args||[],auth:null,enabled:true,tools:null,source:'config',plugin:null});
+    }
     if(auth==='header'&&!body.bearer_token) return send(response,400,{detail:'Bearer token is required'});
     const cfg={url:body.url,...(auth==='oauth'?{auth:'oauth'}:{}),...(auth==='header'?{headers:{Authorization:'Bearer MCP_BEARER_TOKEN'}}:{})};
     if(auth==='header') settings.serverTokens.set(`${scoped}:${name}`,String(body.bearer_token));

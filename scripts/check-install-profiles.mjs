@@ -20,6 +20,10 @@
 //     starts in a folder of its own inside the Company's work folder, and neither a profile write nor a settings write
 //     moves where a command runs. The job reads the host's Docker for where each marker landed, which a tool's own answer
 //     cannot fake.
+//   sandbox-mcp-add <marker>, then sandbox-mcp <marker>: a command server the Owner adds (#459) runs in the Company's
+//     work sandbox: the Engine holds ssh into the sandbox and never the command, and Test lists its tool; after the job
+//     restarts the Engine, an Agent calls it from a Conversation. The call holds until the job, which lists both
+//     containers' processes meanwhile, releases it; the job reads where it ran.
 //   sandbox-key <marker> <refused|runs>: one Agent's command, when the install job has replaced the sandbox's host key
 //     (refused) or put it back (runs): the Engine's ssh client trusts a host it has not seen but refuses a changed key, and
 //     the install pre-seeds known_hosts with the sandbox's, so a swapped sandbox is refused.
@@ -106,7 +110,7 @@ const fakeModel=async(requests,results=[],plan=skillPlan)=>{
    const body=JSON.parse(raw||'{}'); requests.push(raw);
    const last=body.messages?.at(-1);
    if(last?.role==='tool') results.push(String(last.content));
-   const call=plan(body.messages||[]);
+   const call=plan(body.messages||[],body);
    const finish=call?'tool_calls':'stop';
    const usage={prompt_tokens:20,completion_tokens:8,total_tokens:28};
    if(!body.stream) { response.writeHead(200,{'Content-Type':'application/json'}); return response.end(JSON.stringify({id:'fake',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message:call?{role:'assistant',content:null,tool_calls:[call]}:{role:'assistant',content:reply},finish_reason:finish}],usage})); }
@@ -516,6 +520,86 @@ try {
  assert.equal(restored.state,'configured');
  writeProof({step:'sandbox',marker,sandbox_host:host,user:userName,profile:first.profile,cwd,pwd:secondPwd,file:written?.resolved_path,code:code?.status});
 } finally { model.close(); model.closeAllConnections(); }
+} else if(step==='sandbox-mcp-add'||step==='sandbox-mcp') {
+// A command server the Owner adds runs in the Company's work sandbox (#459, ADR 0024), in two steps around an Engine
+// restart the install job makes. `sandbox-mcp-add`: added through gtmworks's driver as the Owner's form adds it, the
+// Engine holds ssh into the sandbox and never the command itself, Test lists its tool and its card reads the command
+// back as typed. The job then restarts the Engine, which connects every configured server when it starts, so the call
+// does not wait on the Engine's MCP reconcile tick (gateway/run_profile_reconcile.py, measured at 23 s to over 4 min in
+// CI). `sandbox-mcp`: an Agent calls the tool from a Conversation; the tool holds until the install job, which reads
+// the processes of both containers from the host's Docker while the call runs, creates its release file in the
+// sandbox. A tool's own answer cannot fake where it ran.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const pair=JSON.parse(readFileSync(state,'utf8'));
+const first=pair[0];
+const firstEngine=await engineFor(first.company);
+const {prepareCommandServer,testServer,readApps,disconnectApp}=await import(`${process.cwd()}/lib/hermes.mjs`);
+const target={...firstEngine,profile:first.profile};
+const key='sandbox-proof';
+const command={command:'node',args:['/work/tools/sandbox-proof-mcp.mjs']};
+if(step==='sandbox-mcp-add') {
+ await pointAtFakeModel(firstEngine,first.profile);
+ // A failed add leaves nothing behind; a good one stays for the call.
+ let added=false;
+ try {
+  assert.equal(await prepareCommandServer(target,{key,...command}),null,'the command server is added and on');
+  const config=await (await manage(firstEngine,`/api/config?profile=${encodeURIComponent(first.profile)}`)).json();
+  assert.equal(config.mcp_servers?.[key]?.command,'ssh','the Engine starts ssh into the sandbox, never the command');
+  assert.ok(config.mcp_servers[key].args.includes('pn@sandbox'),'over the terminal backend\'s own route');
+  assert.deepEqual(await testServer(target,key),{state:'connected',tools:['prove']},'Test lists the tool of the server in the sandbox');
+  const card=(await readApps(target)).apps?.find(app=>app.key===key);
+  assert.deepEqual([card?.source,card?.auth,card?.command,card?.args,card?.state],['custom','command',command.command,command.args,'connected']);
+  added=true;
+  writeProof({step:'sandbox-mcp-add',marker,profile:first.profile,state:'added'});
+ } finally { if(!added) await disconnectApp(target,key).catch(()=>{}); }
+} else {
+// The pinned Engine offers an MCP server's tools to a Run through its tool search: `tool_search` lists each deferred tool
+// by name (mcp__<server>__<tool>) and `tool_call` invokes it (model_tools.py, get_tool_definitions). A tool the Run lists
+// directly is called directly.
+const textOf=messages=>messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+let offered=null;
+const plan=(messages,body)=>{
+ if(!textOf(messages).includes(`SANDBOX-MCP ${marker}`)||messages.some(message=>message.role==='tool')) return null;
+ const tools=(body?.tools||[]).map(tool=>tool?.function).filter(Boolean);
+ const direct=tools.find(tool=>typeof tool.name==='string'&&tool.name.endsWith('__prove'))?.name;
+ const deferred=tools.find(tool=>tool.name==='tool_search')?.description?.match(/mcp__\w+__prove/)?.[0];
+ // The Engine asks the model again after the tool's answer, and for its own auxiliary calls with no tools, so the tool
+ // once offered stays offered.
+ offered=offered??direct??deferred??null;
+ if(direct) return {id:'call_sandbox_mcp',type:'function',function:{name:direct,arguments:JSON.stringify({marker})}};
+ return deferred&&tools.some(tool=>tool.name==='tool_call')
+  ?{id:'call_sandbox_mcp',type:'function',function:{name:'tool_call',arguments:JSON.stringify({calls:[{name:deferred,arguments:{marker}}]})}}:null;
+};
+const asked=[]; const results=[];
+let model=null;
+try {
+ const started=await fakeModel(asked,results,plan);
+ model=started.model; const {reply}=started;
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ // The restarted Engine connected the server when it started; a Run that still does not offer it is asked again in a
+ // new Conversation, three times at most.
+ let answered=null;
+ for(let attempt=0;attempt<3&&!offered;attempt++) {
+  if(attempt) await new Promise(resolve=>setTimeout(resolve,15000));
+  const conversation=randomUUID();
+  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-MCP ${marker}: call your design tool.`};
+  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+  assert.deepEqual(sent,{conversation});
+  answered=await until('the reply',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300);
+ }
+ assert.ok(answered?.body.includes(reply),answered?.body);
+ assert.ok(offered,'a Run offers the server\'s tool once the Engine has started with it');
+ assert.ok(results.length>=1,'the tool\'s answer reached the model');
+ // The answer comes back as the Engine wraps a tool's result ({"result": "<host> <folder> <pid>"} inside its
+ // untrusted-result block): only the host name and the /work path are read out of it.
+ const [,host,cwd]=String(results[0]).match(/([a-z0-9][a-z0-9.-]*) (\/work\/[a-z0-9_-]+) \d+/)??[];
+ assert.equal(cwd,`/work/${first.profile}`,'the server starts in the Agent\'s own folder of the Company\'s work folder');
+ assert.equal((await disconnectApp(target,key)).state,'disconnected','Remove takes the server out of the profile');
+ writeProof({step:'sandbox-mcp',marker,sandbox_host:host,profile:first.profile,cwd});
+} finally { if(model) { model.close(); model.closeAllConnections(); } await disconnectApp(target,key).catch(()=>{}); }
+}
 } else if(step==='sandbox-key') {
 // The Engine's pinned ssh client is hard-coded `StrictHostKeyChecking=accept-new`, which trusts a host it has not seen
 // but refuses one whose key changed (tools/environments/ssh.py). The install pre-seeds the Engine's known_hosts with its
@@ -689,4 +773,4 @@ try {
  assert.ok(!said.includes(`${marker}-leak`)&&!said.includes('theirs'),'no byte of the other profile comes back');
  writeProof({step:'library',marker,profile:first.profile,count:library.entries.length,kind:preview.preview.kind,file:textName});
 } finally { model.close(); model.closeAllConnections(); }
-} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker>');
+} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-mcp-add <marker> | sandbox-mcp <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker>');

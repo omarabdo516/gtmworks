@@ -136,6 +136,23 @@ test('a Target Run that fails still brings Lead back to say the job did not fini
  assert.deepEqual(messages.map(message=>message.body),['Ads could not finish the campaign plan; I can try again with the budget.']);
 });
 
+// #428: a leg the Engine failed for want of any model provider (`noModel`, #422) ends as no_model, and Lead's follow-up
+// that ends so closes the person's Run as no_model, which the chat reads to say the Company has no model connected.
+test('a Target and a follow-up that fail for want of any model end as no_model, so the chat says no model is connected',async()=>{
+ const {row,service,messages,ends}=handover();
+ const {lead,target,engineFor}=engines();
+ target.settings.ending='noModel'; lead.settings.ending='noModel';
+ await drive(service,engineFor,row);
+ assert.equal(row.state,'done');
+ assert.equal(row.target_outcome,'no_model');
+ assert.equal(row.summary,null);
+ assert.equal(row.follow_up_outcome,'no_model');
+ const followUp=lead.runs.find(run=>run.key===`handover:${row.id}:return`);
+ assert.ok(followUp,'Lead is still asked to report it');
+ assert.deepEqual(ends,[{run:followUp.id,outcome:'no_model'}]);
+ assert.deepEqual(messages,[]);
+});
+
 test('a start whose answer was lost is asked again with the same key, never failed, and nothing is reported to Lead yet',async()=>{
  const {row,service,calls}=handover();
  const fake=fakeEngine(); const asked=/** @type {{idempotencyKey:string,input:string}[]} */([]);

@@ -261,11 +261,56 @@ test('the own-tool card tests a server and adds it with no sign-in', async () =>
   await expect.element(screen.getByText('get_records')).toBeVisible();
   await expect.element(screen.getByText('create_record')).toBeVisible();
   expect(sent[0]).toMatchObject({ company: 'c-1', agent: lead, action: 'test', name: 'My CRM', url: 'https://crm.example/mcp', kind: 'oauth' });
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sign-in' }).element() as HTMLSelectElement, 'none');
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How it connects' }).element() as HTMLSelectElement, 'none');
   await screen.getByRole('button', { name: 'Add' }).click();
   await expect.poll(() => sent.at(-1)).toMatchObject({ company: 'c-1', agent: lead, action: 'add', name: 'My CRM', url: 'https://crm.example/mcp', kind: 'none' });
   await expect.poll(() => replace.mock.calls.map(([href]) => href)).toEqual(['/c/rs-learning/settings?section=apps']);
   expect(toast.mock.calls).toEqual([['My CRM added']]);
+});
+
+// #459: a command server has no address: the Owner types its command and its arguments, one per line, and the card says
+// it runs in the work sandbox. Its own page shows the command as typed.
+test('the own-tool card adds a command that runs in the work sandbox, with its arguments one per line', async () => {
+  const sent: Record<string, unknown>[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/company-servers') {
+      const body = JSON.parse(String(init?.body)); sent.push(body);
+      return Promise.resolve(new Response(JSON.stringify(body.action === 'test' ? { key: 'design-tool', state: 'connected', tools: ['make_design'] } : { key: 'design-tool', state: 'connected' }), { status: 200 }));
+    }
+    reads++; return Promise.resolve(new Response(JSON.stringify({ apps: items }), { status: 200 }));
+  });
+  const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
+  await screen.getByRole('textbox', { name: /Name/ }).fill('Design tool');
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How it connects' }).element() as HTMLSelectElement, 'command');
+  await expect.element(screen.getByRole('textbox', { name: /Address/ })).not.toBeInTheDocument();
+  await expect.element(screen.getByText(text.commandNote)).toBeVisible();
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.element(screen.getByText(text.commandRequired)).toBeVisible();
+  expect(sent).toEqual([]);
+  await screen.getByRole('textbox', { name: /^Command/ }).fill('od');
+  await screen.getByRole('textbox', { name: /Arguments/ }).fill('mcp\n\n--daemon-url\nhttp://127.0.0.1:7456\n\n');
+  await screen.getByRole('button', { name: 'Test' }).click();
+  await expect.element(screen.getByText('make_design')).toBeVisible();
+  expect(sent[0]).toEqual({ company: 'c-1', agent: lead, action: 'test', name: 'Design tool', kind: 'command', command: 'od', args: ['mcp', '--daemon-url', 'http://127.0.0.1:7456'] });
+  await screen.getByRole('button', { name: 'Add' }).click();
+  await expect.poll(() => sent.at(-1)).toMatchObject({ action: 'add', kind: 'command', command: 'od' });
+  await expect.poll(() => replace.mock.calls.map(([href]) => href)).toEqual(['/c/rs-learning/settings?section=apps']);
+  expect(toast.mock.calls).toEqual([['Design tool added']]);
+  await screen.unmount();
+  const made: AppItem = { key: 'design-tool', name: 'design-tool', mark: 'DE', category: 'more', source: 'custom', auth: 'command', command: 'od', args: ['mcp', '--daemon-url', 'http://127.0.0.1:7456'], state: 'connected',
+    use: text['use.command'], can: text['can.command'], words: 'design-tool', agents: [agent(lead, 'Lead', true, 'connected'), agent(writer, 'Writer', true, 'off')] };
+  const page = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={made} text={text} failed={false}/>);
+  await expect.element(page.getByText(text.kindCommand)).toBeVisible();
+  await expect.element(page.getByText('od mcp --daemon-url http://127.0.0.1:7456')).toBeVisible();
+  await page.unmount();
+  // A word with a space, or an empty one, is shown quoted, so two different commands never read the same.
+  const spaced = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={{ ...made, args: ['--name', 'my tool', ''] }} text={text} failed={false}/>);
+  await expect.element(spaced.getByText("od --name 'my tool' ''")).toBeVisible();
+  await spaced.unmount();
+  // A Member's view carries no command (lib/company-app-items.ts keeps it for the Owner): no row is drawn.
+  const member = await render(<AppDetail place={settings} company="c-1" owner={false} rtl={false} item={{ ...made, command: undefined, args: undefined }} text={text} failed={false}/>);
+  await expect.element(member.getByText(text.kindCommand)).toBeVisible();
+  await expect.element(member.getByText('od mcp')).not.toBeInTheDocument();
 });
 
 // #458: a server added but not reached (an address that does not answer, a refused token) keeps the form, with the reason.
@@ -277,7 +322,7 @@ test('the own-tool card keeps its form when the engine cannot reach the server i
   const screen = await render(<AppDetail place={settings} company="c-1" owner rtl={false} item={item('own')} text={text} failed={false}/>);
   await screen.getByRole('textbox', { name: /Name/ }).fill('My CRM');
   await screen.getByRole('textbox', { name: /Address/ }).fill('https://crm.example/mcp');
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sign-in' }).element() as HTMLSelectElement, 'none');
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How it connects' }).element() as HTMLSelectElement, 'none');
   await screen.getByRole('button', { name: 'Add' }).click();
   await expect.element(screen.getByText(text.connectAttention)).toBeVisible();
   expect(toast).not.toHaveBeenCalled();
