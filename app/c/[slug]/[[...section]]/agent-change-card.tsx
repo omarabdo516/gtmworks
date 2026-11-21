@@ -91,7 +91,7 @@ export function ChangeAnswer({slug,company,change,alone=false,back}:{slug:string
  if(editing&&field) return <form action={answerAgentChange} noValidate onSubmit={event=>{ if(!editProblem(field,draft)) return; event.preventDefault(); setInvalid(true); }}>
   {fields}<input type="hidden" name="intent" value="approve"/><input type="hidden" name="edited" value={JSON.stringify(draft)}/><Held>{sending=><>
   <fieldset className="pp-form" disabled={sending}><ChangeEditor change={change} field={field} draft={draft} setDraft={value=>{ setDraft(value); setInvalid(false); }} invalid={invalid} ids={{label:ids.edit,error:ids.editError}}/>
-   <span className="set-err" id={ids.editError} role="alert" hidden={!invalid}>{c('changeEditMissing')}</span></fieldset>
+   <span className="set-err" id={ids.editError} role="alert" hidden={!invalid}>{c(field.kind==='setting'&&field.type==='number'?'changeEditNumberInvalid':'changeEditMissing')}</span></fieldset>
   <div className="card__actions"><button type="button" className="btn btn--secondary" disabled={sending} onClick={()=>{ setEditing(false); setDraft(change.value); setInvalid(false); leave(()=>edit.current); }}>{c('changeCancel')}</button>
    <button className="btn btn--primary" disabled={sending} aria-busy={sending||undefined}>{c('changeApproveEdited')}</button></div>
  </>}</Held></form>;

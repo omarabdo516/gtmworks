@@ -209,7 +209,7 @@ test('the instructions, the sub-agents switch and each listed setting are edited
  await expect.element(limit.getByText('A whole number from 1.')).toBeVisible();
  await number.fill('0');
  await limit.getByRole('button', { name: 'Approve with changes' }).click();
- await expect.element(limit.getByText('Write a value, so there is something to approve.')).toBeVisible();
+ await expect.element(limit.getByText('This setting doesn’t take that number.')).toBeVisible();
  await expect.element(number).toHaveAttribute('aria-invalid', 'true');
  expect(answered).not.toHaveBeenCalled();
  await number.fill('3000');
@@ -287,4 +287,43 @@ test('"Waiting on you" draws the proposal as a board card that opens it, in Engl
  onTestFinished(() => arabic.unmount());
  const ar = arabic.getByRole('button', { name: 'Analyst على gemini-7؟' });
  expect(ar.element().closest('.kcard')!.textContent).toContain('Lead اقترحه لـ Analyst · مستني موافقتك');
+});
+
+test('a listed setting that is a switch, text, or the sub-agents\' model from the Engine\'s list is edited in that field', async () => {
+ const memory = owned(1, { body: 'setting', setting: 'memory.memory_enabled', value: false });
+ const personality = owned(2, { body: 'setting', setting: 'display.personality', value: 'concise' });
+ const submodel = owned(3, { body: 'setting', setting: 'delegation.model', value: 'gpt-5.5' });
+ const fields: Record<string, unknown> = {
+  '1': { now: true, edit: { kind: 'setting', type: 'boolean', choices: null, limits: null, default: true } },
+  '2': { now: 'kawaii', edit: { kind: 'setting', type: 'string', choices: null, limits: null, default: '' } },
+  '3': { now: '', edit: { kind: 'setting', type: 'select', choices: ['gpt-5.5', 'gemini-7', 'claude-opus-5-5'], limits: null, default: '' } },
+ };
+ reads.mockImplementation(async url => new Response(JSON.stringify({ state: 'found', ...(fields[new URL(url, 'http://x').searchParams.get('proposal')!] as object) }), { status: 200 }));
+ const screen = await render(<LanguageProvider language="en">{[submodel, personality, memory].map(entry => <OwnerChangeCard key={entry.id} slug="rs-learning" company="co-1"
+  item={{ ...entry, title: `Agent ${entry.id}`, change: { ...entry.change, agent: { ...analyst, name: `Agent ${entry.id}` } } }}/>)}</LanguageProvider>);
+ onTestFinished(() => screen.unmount());
+ const open = async (id: number) => { const edit = screen.getByRole('group', { name: `Proposed change: Agent ${id}` }).getByRole('button', { name: 'Edit, then approve' });
+  await expect.element(edit).not.toHaveAttribute('aria-disabled'); await edit.click(); return screen.getByRole('group', { name: `Edit the proposal for Agent ${id}` }); };
+
+ const sub = await open(3);
+ await sub.getByRole('combobox', { name: 'Sub-agent model' }).selectOptions('gemini-7');
+ await sub.getByRole('button', { name: 'Approve with changes' }).click();
+ await expect.poll(() => answered.mock.calls.length).toBe(1);
+ expect(sentEdit(0)).toEqual({ intent: 'approve', proposal: '3', edited: 'gemini-7' });
+
+ const text = await open(2);
+ const box = text.getByRole('textbox', { name: 'Personality' });
+ await expect.element(box).toHaveValue('concise');
+ await box.fill('teacher');
+ await text.getByRole('button', { name: 'Approve with changes' }).click();
+ await expect.poll(() => answered.mock.calls.length).toBe(2);
+ expect(sentEdit(1)).toEqual({ intent: 'approve', proposal: '2', edited: 'teacher' });
+
+ const on = await open(1);
+ const toggle = on.getByRole('switch', { name: 'Memory' });
+ await expect.element(toggle).toHaveAttribute('aria-checked', 'false');
+ await toggle.click();
+ await on.getByRole('button', { name: 'Approve with changes' }).click();
+ await expect.poll(() => answered.mock.calls.length).toBe(3);
+ expect(sentEdit(2)).toEqual({ intent: 'approve', proposal: '1', edited: true });
 });

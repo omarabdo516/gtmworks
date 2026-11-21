@@ -89,5 +89,6 @@
   "changeBoardAny": "A change to the settings of {0}",
   "changeBoardSelf": "A change to its settings · waiting for your OK",
   "changeBoardFor": "{0} proposed it for {1} · waiting for your OK",
-  "changeBoardPlace": "Settings"
+  "changeBoardPlace": "Settings",
+  "changeEditNumberInvalid": "This setting doesn’t take that number."
 }

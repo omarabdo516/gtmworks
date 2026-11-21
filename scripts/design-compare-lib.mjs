@@ -178,6 +178,12 @@ export const screens = {
   // Conversation and Approvals.
   'change-proposed': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }] }, builtPath: '/c/rs-learning/conversations/62000000-0000-0000-0000-000000000010' },
   'change-waiting': { reference: { steps: [...board, { waitFor: '.kcard[data-card="c-chg-analyst"]' }, { scrollTo: '.kcard[data-card="c-chg-analyst"]' }] }, builtPath: '/c/rs-learning/approvals' },
+  // #484. The same proposal opened from its board card in Waiting on you (the reference opens it in the chat), with its
+  // "Now" row, and its "Edit, then approve" form with the models. Built: Approvals, the board card, then Edit.
+  'change-opened': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }] }, builtPath: '/c/rs-learning/approvals',
+   builtSteps: [{ click: '.chg-kcard .kcard__title' }, { waitFor: '[role="dialog"] [data-row="now"]' }] },
+  'change-edit': { reference: { steps: [{ click: '#sb-threads [data-action="open-thread"][data-thread="th-lead-model"]' }, { waitFor: '.chg-card' }, { click: '[data-action="chg-edit"]' }, { waitFor: '[data-action="chg-model"]' }] }, builtPath: '/c/rs-learning/approvals',
+   builtSteps: [{ click: '.chg-kcard .kcard__title' }, { waitFor: '[role="dialog"] [data-row="now"]' }, { click: '[role="dialog"] .card__actions button:nth-of-type(2)' }, { waitFor: '.chg-models' }] },
   // #167. Lead's card asking whether to request an Agent hidden from the first Contributor (SEO & Content, as the
   // reference hides it from Youssef): offered, then after "Ask", then after "No, never mind". Built: the fixture's three
   // Conversations of the first Contributor with Lead, captured with --sign-in reviewer@example.com.

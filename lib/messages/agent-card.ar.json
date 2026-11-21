@@ -89,5 +89,6 @@
   "changeBoardAny": "تغيير في إعدادات {0}",
   "changeBoardSelf": "اقتراح تغيير في إعداداته · مستني موافقتك",
   "changeBoardFor": "{0} اقترحه لـ {1} · مستني موافقتك",
-  "changeBoardPlace": "إعدادات"
+  "changeBoardPlace": "إعدادات",
+  "changeEditNumberInvalid": "الإعداد ده مش بياخد الرقم ده."
 }

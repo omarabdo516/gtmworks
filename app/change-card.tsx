@@ -44,6 +44,9 @@ function useChangeRead(company:string|undefined,change:ChangeProposalView,unread
  return !key?null:got?.key===key?got.read:'loading';
 }
 
+// A provider whose models carry another brand's mark: Google's models are Gemini (design-reference: MODELS' logos).
+const providerMarks:Record<string,string>={google:'gemini'};
+
 export function ChangeCard({change,company,owner=false,unread=false,answer}:{change:ChangeProposalView,company?:string,owner?:boolean,unread?:boolean,answer?:ReactNode}) {
  const {language}=useI18n(); const zone=useZone(); const {c,cb}=useCardText();
  const read=useChangeRead(company,change,unread);
@@ -64,7 +67,7 @@ export function ChangeCard({change,company,owner=false,unread=false,answer}:{cha
  const now=change.state==='waiting'&&read&&read!=='loading'&&read.now!==null&&read.now!==undefined?read.now:undefined;
  // A model's mark is its provider's logo, as Settings draws it (#424); every other change keeps the Agent's face.
  const model=change.change==='model'&&!unread?modelParts(after):null;
- const mark=model?<AppTile app={{key:model.provider,mark:Array.from(model.provider)[0]?.toUpperCase()||'·'}} size="lg"/>:<CompanyAgentFace agent={change.agent} size={44}/>;
+ const mark=model?<AppTile app={{key:providerMarks[model.provider]??model.provider,mark:Array.from(model.provider)[0]?.toUpperCase()||'·'}} size="lg"/>:<CompanyAgentFace agent={change.agent} size={44}/>;
  const badge=change.state==='waiting'?(owner?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{c('changeBadgeYou')}</span>
    :<span className="badge"><ShellIcon name="clock"/>{change.owners.length?cb('changeBadgeOwner',owners):c('changeBadgeAnyOwner')}</span>)
   :<span className="badge"><ShellIcon name={change.state==='approved'?'check':'x'}/>{c(change.state==='approved'?'changeBadgeApproved':change.state==='declined'?'changeBadgeDeclined':'changeBadgeRefused')}</span>;
