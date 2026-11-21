@@ -94,3 +94,18 @@ test('a build file whose browser step knows no folder for a platform, or takes a
   assert.throws(() => chromiumFolders('RUN chrome=$(find /opt/playwright -path "*/chrome-linux64/chrome")\n'), /names the Chromium folder of each platform/);
   assert.throws(() => chromiumFolders('RUN case "$arch" in amd64) folder=chrome-linux64 ;; esac\n'), /refuses a platform it does not know/);
 });
+
+// Pull requests build the work sandbox for amd64 alone, so CI also builds its browser stage for every platform the
+// release builds (#572): a platform whose Chromium is not where the step looks fails a pull request, not a release.
+test('CI builds the work sandbox\'s browser stage for every platform the release builds it for', () => {
+  const release = load(readFileSync('.github/workflows/release.yml', 'utf8')).jobs.image.steps.find(step => step.id === 'sandbox');
+  const steps = load(readFileSync('.github/workflows/ci.yml', 'utf8')).jobs.image.steps;
+  const browser = steps.find(step => step.uses?.startsWith('docker/build-push-action@') && step.with?.target === 'browser');
+  assert.ok(browser, 'the image job builds the browser stage');
+  assert.equal(browser.with.context, 'sandbox');
+  assert.equal(browser.with.platforms, release.with.platforms);
+  assert.match(readFileSync(dockerfile, 'utf8'), /^FROM \S+ AS browser$/m);
+  // The emulator is set up before the build that needs it.
+  const qemu = steps.findIndex(step => step.uses?.startsWith('docker/setup-qemu-action@'));
+  assert.ok(qemu >= 0 && qemu < steps.indexOf(browser), 'arm64 is emulated before the browser stage builds');
+});

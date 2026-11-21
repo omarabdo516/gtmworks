@@ -4,19 +4,13 @@
 # The base is the image the pinned Engine uses for its sandboxed terminal and screen (v0.23.0). The pin is here and
 # nowhere else: the tag names the reviewed release and the digest the reviewed bytes, so a re-pushed tag cannot change
 # what an install runs. `lib/work-sandbox-image.mjs` reads this line and fails when it is not tag@sha256.
-FROM nousresearch/hermes-sandbox:desktop@sha256:df6768a595eaa09a9549237533421bf0557221ec0c13a825c9c202a13ddd37bb
+#
+# The browser stage comes first and alone, so CI builds just it for every platform the release builds (#572): that
+# needs no package download under emulation, and a platform whose browser is not where this step looks fails there,
+# before a release does.
+FROM nousresearch/hermes-sandbox:desktop@sha256:df6768a595eaa09a9549237533421bf0557221ec0c13a825c9c202a13ddd37bb AS browser
 
 USER root
-
-# The work tools a marketer's job needs, the Arabic fonts a rendered image or video is drawn in, and what the `ssh`
-# backend needs to reach this container: sshd, and `ss` so an install owner can see what listens.
-RUN apt-get update \
- && apt-get install --yes --no-install-recommends \
-      ffmpeg \
-      fonts-noto-core \
-      iproute2 \
-      openssh-server \
- && rm -rf /var/lib/apt/lists/*
 
 # Chromium is the browser the base image already ships for Playwright, which is the one the Engine's screen drives. One
 # browser, not two, so a page an Agent renders is the page the screen shows. A container cannot make Chromium's own
@@ -35,6 +29,18 @@ RUN set -eux; \
     printf '%s\n' '#!/bin/sh' \
       'exec '"$chrome"' --no-sandbox --disable-dev-shm-usage "$@"' > /usr/local/bin/chromium; \
     chmod 0755 /usr/local/bin/chromium
+
+FROM browser
+
+# The work tools a marketer's job needs, the Arabic fonts a rendered image or video is drawn in, and what the `ssh`
+# backend needs to reach this container: sshd, and `ss` so an install owner can see what listens.
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends \
+      ffmpeg \
+      fonts-noto-core \
+      iproute2 \
+      openssh-server \
+ && rm -rf /var/lib/apt/lists/*
 
 # The package makes host keys when it installs; no key is baked into an image every install runs, so the entrypoint makes
 # them when a container starts. No authorized key is here either: the public key arrives at run time.
