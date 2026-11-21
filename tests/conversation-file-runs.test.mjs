@@ -17,8 +17,8 @@ const jpeg=Buffer.from('a jpeg, not really').toString('base64');
 const files=[{content_type:'image/png',base64:png},{content_type:'image/jpeg',base64:jpeg}];
 const imagePart=(type,base64)=>({type:'image_url',image_url:{url:`data:${type};base64,${base64}`}});
 
-/** @param {{has_files?:boolean,retry?:boolean,files?:{content_type:string,path:string,bytes:string}[],refuse?:string|null,download?:'not found'|'fails once'|null}} [options] */
-function databases({has_files=false,retry=false,files=[],refuse=null,download=null}={}) {
+/** @param {{has_files?:boolean,retry?:boolean,begin?:'fails'|'none'|null,files?:{content_type:string,path:string,bytes:string}[],refuse?:string|null,download?:'not found'|'fails once'|null}} [options] */
+function databases({has_files=false,retry=false,begin=null,files=[],refuse=null,download=null}={}) {
  const calls=/** @type {[string,any][]} */([]);
  const downloads=/** @type {string[]} */([]);
  // The Conversation's waiting turns, oldest first: the first until a turn is failed, then the next, then nothing.
@@ -37,7 +37,8 @@ function databases({has_files=false,retry=false,files=[],refuse=null,download=nu
    return ok(turn?[{company:'co',agent:'a',person:'p',send_key:turn.send_key,message:turn.message,connection,profile:'writer',note:null,retry:retried(),has_files:turn.has_files}]:[]); }
   if(name==='conversation_handover_agents') return ok([]);
   if(['pin_run','pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return ok(null);
-  if(name==='begin_start') return ok(retried()?2:1);
+  if(name==='begin_start') return begin==='fails'?{data:null,error:{code:'40001',message:'could not serialize access'}}:begin==='none'?ok(null):ok(retried()?2:1);
+  if(name==='release_conversation_run') return ok(true);
   // The three-argument form fails a turn nobody attempted yet (attempt 0): it leaves the queue, so the next claim gets
   // the next turn. A retried turn's attempt is above 0, or its start was attempted before this claim, and the database
   // leaves it alone: it may hold a Run.
@@ -114,6 +115,16 @@ test('a queued turn whose stored image is gone fails for its sender, and the nex
  assert.equal(fake.runs.length,1);
  assert.equal(fake.runs[0].input,'And this too','the Conversation’s next turn starts');
  assert.equal(failed().length,1,'the next turn is not failed');
+});
+
+// #465: a send whose start could not be begun gives its reservation back before the route gives its images back: a held
+// reservation keeps them (discard_conversation_files), and nothing else would release it before the worker's ten minutes.
+for(const begin of /** @type {const} */(['fails','none'])) test(`a send whose start ${begin==='fails'?'fails to begin':'is not begun'} releases its reservation, so its images can go`,async()=>{
+ const fake=fakeEngine(); const stand=databases({begin});
+ const sent=await send(stand,fake,{images:files});
+ assert.ok('code' in sent||'error' in sent,'the send is refused');
+ assert.deepEqual(stand.calls.filter(([name])=>name==='release_conversation_run').map(([,args])=>args),[{conversation,c:'co',message_key:'k',attempt:0}]);
+ assert.equal(fake.runs.length,0);
 });
 
 // #465: the images of a turn whose start was attempted or marked unknown are kept while it may need them
