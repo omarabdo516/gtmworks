@@ -17,8 +17,8 @@ import { changeCompanySkillEnabled } from '@/lib/company-skills.mjs';
 // team's rules section, written by the Owner alone (check_agent_owner_setting); `voice` is the Voice section's values,
 // its speaking language, speed and voice (check_agent_setting / log_agent_setting); `effort` is the thinking level, the
 // Owner's alone (check_agent_owner_setting / log_engine_setting, with old and new); and `skill:<name>` is one Skill's
-// switch, "on" or "off" (check_skill_write / log_skill_change, one row per Skill); `morning` is the main Agent's daily
-// message (#182), `{on, time, zone}`, a job of its own Engine profile (check_agent_setting / log_agent_setting). Later fields join with their own
+// switch, "on" or "off" (hold_agent_change, one row per Skill); `morning` is the main Agent's daily message (#182),
+// `{on, time, zone}`, a job of its own Engine profile (check_agent_setting / log_agent_morning). Later fields join with their own
 // checks. Nothing in this body reaches a log, and the Engine's answer is what the page shows.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const skillName=/^[a-z0-9][a-z0-9_-]{0,63}$/;
