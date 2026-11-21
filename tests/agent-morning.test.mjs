@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readRoutines, createRoutine, triggerRoutine, isSilentReply, readRoutineReplies } from '../lib/hermes.mjs';
 import { readAgentMorning, changeAgentMorning, moveAgentMorning, withMorningLease, morningName } from '../lib/agent-morning.mjs';
+import { changeAgentRoutine } from '../lib/agent-routines.mjs';
 import { morningTime, morningCron, morningMarker } from '../lib/morning-schedule.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -32,6 +33,8 @@ function session({agents=agentRows(),refuse=null,keyProfiles=[]}={}) {
    if(name==='company_app_agents') return {data:agents,error:null};
    if(name==='company_key_profiles') return {data:keyProfiles,error:null};
    if(name==='check_agent_setting') return refuse?{data:null,error:{message:refuse}}:{data:null,error:null};
+   if(name==='check_routine_change') return refuse?{data:null,error:{message:'routineNotAllowed'}}:{data:null,error:null};
+   if(name==='log_routine_change') return {data:null,error:null};
    if(name==='log_agent_morning') { if(refuse) return {data:null,error:{message:refuse}}; logged.push(args); return {data:null,error:null}; }
    throw new Error(`unexpected rpc ${name}`);
   },
@@ -759,5 +762,28 @@ test('a save first settles the profiles a failed move left, and changes nothing 
   assert.equal(jobs(fake,leadProfile).length,0);
   assert.deepEqual(jobs(fake,adsProfile).map(job=>job.state),['paused']);
   assert.deepEqual(leases.get(company).profiles,[]);
+ } finally { await fake.close(); leases.clear(); }
+});
+
+test('a change to Good morning from Recurring tasks takes the Company lease, so it waits for a move instead of being undone by it', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const [job]=jobs(fake,leadProfile);
+  const {db}=session();
+  // A move holds the lease: the pause from Recurring tasks waits, and once its wait is over answers busy, changing nothing.
+  leases.set(company,{holder:'a move',live:true,profiles:[]});
+  assert.equal((await changeAgentRoutine(db,{company,agent:lead,action:'pause',routine:job.id,hermes:install(fake),leaseWait:300})).state,'busy');
+  assert.equal(jobs(fake,leadProfile)[0].state,'scheduled');
+  // With the lease free it is paused, and gives the lease back.
+  leases.clear();
+  assert.equal((await changeAgentRoutine(db,{company,agent:lead,action:'pause',routine:job.id,hermes:install(fake)})).state,'done');
+  assert.equal(jobs(fake,leadProfile)[0].state,'paused');
+  assert.ok([...leases.values()].every(held=>!held.live));
+  // Any other Routine is changed without the lease, as before.
+  await createRoutine(at(fake,leadProfile),{name:'Weekly report',prompt:'Write the weekly report',schedule:'0 9 * * 1'});
+  const other=jobs(fake,leadProfile).find(each=>each.name==='Weekly report');
+  leases.set(company,{holder:'a move',live:true,profiles:[]});
+  assert.equal((await changeAgentRoutine(db,{company,agent:lead,action:'pause',routine:other.id,hermes:install(fake),leaseWait:300})).state,'done');
  } finally { await fake.close(); leases.clear(); }
 });

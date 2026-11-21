@@ -6,4 +6,4 @@ export function readAgentMorning(db: unknown, request: { company: string, agent:
 export function changeAgentMorning(db: unknown, request: { company: string, agent: unknown, on: unknown, time: unknown, zone?: unknown, hermes?: { address: string, key: string } | null, driver?: object }): Promise<{ state: 'written', morning: { on: boolean, time: string } } | { state: string, morning?: undefined }>;
 export function moveAgentMorning(db: unknown, request: { company: string, agents?: unknown[] | null, hermes?: { address: string, key: string } | null, driver?: object, fence?: (() => Promise<boolean>) | null }): Promise<{ state: string }>;
 export type MorningFence = (() => Promise<boolean>) & { holder?: string; profiles?: (adding: string[], settled?: string[]) => Promise<string[] | null> };
-export function withMorningLease<T>(db: unknown, company: string, work: (fence: MorningFence) => Promise<T>): Promise<T | { state: 'busy' | 'notAllowed' | 'failed' }>;
+export function withMorningLease<T>(db: unknown, company: string, work: (fence: MorningFence) => Promise<T>, options?: { wait?: number }): Promise<T | { state: 'busy' | 'notAllowed' | 'failed' }>;
