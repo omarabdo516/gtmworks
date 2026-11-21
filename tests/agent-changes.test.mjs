@@ -376,7 +376,10 @@ test('the card reads the Agent\'s current value from its own profile, and an Own
   assert.ok(model.edit.options.length>0&&model.edit.options.every(option=>typeof option.provider==='string'&&typeof option.providerName==='string'&&typeof option.model==='string'),'the Engine\'s model list for that profile');
   const soul=await readChangeContext(reader(rows),{...options,proposal:2});
   assert.deepEqual({state:soul.state,now:soul.now,edit:soul.edit},{state:'found',now:'You write long ads.',edit:{kind:'instructions',limit:soul.edit.limit}});
-  assert.ok(soul.edit.limit>0);
+  assert.ok(soul.edit.limit>0&&soul.edit.limit<=20000);
+  // An Engine that takes longer instructions still edits them only within what the database takes for a proposal.
+  fake.settings.profiles.get(own(ads)).config.context_file_max_chars=30000;
+  assert.equal((await readChangeContext(reader(rows),{...options,proposal:2})).edit?.limit,20000);
   assert.deepEqual(await readChangeContext(reader(rows),{...options,proposal:3}),{state:'found',now:false,edit:{kind:'switch'}});
   const limit=await readChangeContext(reader(rows),{...options,proposal:4});
   assert.equal(limit.state,'found');
