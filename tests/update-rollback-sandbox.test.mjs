@@ -18,13 +18,14 @@ const fn = name => {
   return install.slice(start + 1, install.indexOf('\n}\n', start) + 3);
 };
 const helpers = ['engine_folder', 'sandbox_container', 'exit_container', 'exit_network', 'work_volume', 'work_network', 'host_key_volume',
-  'engine_names', 'keep_previous_engine', 'remove_new_sandbox_parts'].map(fn).join('');
+  'engine_names', 'work_sandbox_ref', 'keep_previous_engine', 'keep_sandbox_parts', 'remove_new_sandbox_parts'].map(fn).join('');
 
 // The stand-in: `volume ls`, `network ls`, `inspect`, `rm` over two files, every call written to a log on one line, and a failing
-// listing when LIST_FAILS is set. `run` is only the key removal, logged with its volume.
+// listing when LIST_FAILS is set, a refused removal when RM_FAILS is. `run` is only the key removal, logged with its volume.
 const fakeDocker = `
 docker() {
   { printf '%s' "$*" | tr '\\n' ' '; printf '\\n'; } >> "$state/log"
+  case "$1 $2" in 'volume rm'|'network rm') [ -z "\${RM_FAILS:-}" ] || return 1;; esac
   case "$1 $2" in
     'volume ls') [ -z "\${LIST_FAILS:-}" ] || return 1; cat "$state/volumes";;
     'network ls') cat "$state/networks";;
@@ -41,6 +42,7 @@ function installFolder(t, { volumes, networks, engines }) {
   const dir = mkdtempSync(join(tmpdir(), 'gtmworks-rollback-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   mkdirSync(join(dir, 'state'));
+  mkdirSync(join(dir, '.install-lock'));
   mkdirSync(join(dir, 'scripts'));
   writeFileSync(join(dir, 'scripts/engine-template.yml'), 'services: {}\n');
   writeFileSync(join(dir, 'state/volumes'), volumes.map(line => `${line}\n`).join(''));
@@ -50,14 +52,16 @@ function installFolder(t, { volumes, networks, engines }) {
     mkdirSync(join(dir, '.engines', slug), { recursive: true });
     writeFileSync(join(dir, '.engines', slug, '.env'), `ENGINE_VOLUME=${volume}\n`);
   }
-  const run = (body, env = {}) => spawnSync('sh', ['-c', `state="$PWD/state"\n${fakeDocker}${helpers}${body}`],
+  const run = (body, env = {}) => spawnSync('sh', ['-c', `state="$PWD/state"\nnode_image=node:test\n${fakeDocker}${helpers}${body}`],
     { cwd: dir, encoding: 'utf8', env: { ...process.env, ...env } });
   const read = file => readFileSync(join(dir, 'state', file), 'utf8').split('\n').filter(Boolean);
   const make = (volumesMade, networksMade) => {
     writeFileSync(join(dir, 'state/volumes'), [...read('volumes'), ...volumesMade].map(line => `${line}\n`).join(''));
     writeFileSync(join(dir, 'state/networks'), [...read('networks'), ...networksMade].map(line => `${line}\n`).join(''));
   };
-  return { dir, run, read, make };
+  // sandbox_keys names each Engine whose key this run made.
+  const keysMade = slugs => writeFileSync(join(dir, '.install-lock/sandbox-keys-made'), slugs.map(slug => `${slug}\n`).join(''));
+  return { dir, run, read, make, keysMade };
 }
 
 const madeFor = slug => [[`gtmworks-work-${slug}`, `gtmworks-sandbox-hostkey-${slug}`], [`gtmworks-work-${slug}`, `gtmworks-exit-${slug}`]];
@@ -72,6 +76,7 @@ test('an update from a release before the work sandbox removes every sandbox vol
   assert.equal(kept.status, 0, kept.stderr);
   // The update made the first Company's sandbox whole and began the second's before its sandbox did not start.
   install.make([...madeFor('first')[0], ...madeFor('acme')[0]], [...madeFor('first')[1], ...madeFor('acme')[1]]);
+  install.keysMade(['first', 'acme']);
   const removed = install.run('remove_new_sandbox_parts');
   assert.equal(removed.status, 0, removed.stderr);
   assert.equal(removed.stderr, '');
@@ -89,23 +94,57 @@ test('an update from a release before the work sandbox removes every sandbox vol
   }
 });
 
-test('what the install had before the update stays: only the parts this update made go', t => {
-  // A release with the work sandbox already made the first Company's; this update made the second's.
+test('what the install had before the update stays, and a key this update made goes even beside an old work folder', t => {
+  // An earlier failed update left the first Company's work folder and networks; this update made the second's, and a key
+  // in each Engine's volume.
   const install = installFolder(t, {
-    volumes: ['gtmworks-install_hermes', ...madeFor('first')[0]],
-    networks: ['gtmworks-engine-first', ...madeFor('first')[1]],
+    volumes: ['gtmworks-install_hermes', 'gtmworks-engine-acme', ...madeFor('first')[0]],
+    networks: ['gtmworks-engine-first', 'gtmworks-engine-acme', ...madeFor('first')[1]],
     engines: { first: 'gtmworks-install_hermes', acme: 'gtmworks-engine-acme' },
   });
   assert.equal(install.run('keep_previous_engine').status, 0);
-  install.make(['gtmworks-engine-acme', ...madeFor('acme')[0]], ['gtmworks-engine-acme', ...madeFor('acme')[1]]);
+  install.make(madeFor('acme')[0], madeFor('acme')[1]);
+  install.keysMade(['first', 'acme']);
   const removed = install.run('remove_new_sandbox_parts');
   assert.equal(removed.status, 0, removed.stderr);
-  assert.deepEqual(install.read('volumes'), ['gtmworks-install_hermes', ...madeFor('first')[0], 'gtmworks-engine-acme']);
-  assert.deepEqual(install.read('networks'), ['gtmworks-engine-first', ...madeFor('first')[1], 'gtmworks-engine-acme']);
+  assert.deepEqual(install.read('volumes'), ['gtmworks-install_hermes', 'gtmworks-engine-acme', ...madeFor('first')[0]]);
+  assert.deepEqual(install.read('networks'), ['gtmworks-engine-first', 'gtmworks-engine-acme', ...madeFor('first')[1]]);
   const log = install.read('log');
-  assert.ok(!log.some(line => line.includes('gtmworks-install_hermes:/data')), 'the first Engine keeps its sandbox key');
-  assert.ok(!log.some(line => line.includes('rm -f gtmworks-sandbox-first')), 'the first Company keeps its sandbox');
-  assert.ok(log.some(line => line.includes('gtmworks-engine-acme:/data')), "the second Engine's new key goes");
+  for (const volume of ['gtmworks-install_hermes', 'gtmworks-engine-acme']) {
+    assert.ok(log.some(line => line.startsWith('run ') && line.includes(`-v ${volume}:/data node:test `)), `the key this update made in ${volume} goes, with the node image`);
+  }
+});
+
+test('a key the Engine had before the update stays', t => {
+  const install = installFolder(t, { volumes: ['gtmworks-install_hermes'], networks: [], engines: { first: 'gtmworks-install_hermes' } });
+  assert.equal(install.run('keep_previous_engine').status, 0);
+  install.make(madeFor('first')[0], madeFor('first')[1]);
+  install.keysMade([]);
+  assert.equal(install.run('remove_new_sandbox_parts').status, 0);
+  assert.deepEqual(install.read('volumes'), ['gtmworks-install_hermes']);
+  assert.ok(!install.read('log').some(line => line.startsWith('run ')), 'no key is taken out');
+});
+
+test('a previous release that runs sandboxes keeps every part it has just started its own from', t => {
+  const install = installFolder(t, { volumes: ['gtmworks-install_hermes'], networks: [], engines: { first: 'gtmworks-install_hermes' } });
+  writeFileSync(join(install.dir, '.work-sandbox-image'), 'gtmworks-work-sandbox:local\n');
+  assert.equal(install.run('keep_previous_engine').status, 0);
+  install.make(madeFor('first')[0], madeFor('first')[1]);
+  install.keysMade(['first']);
+  assert.equal(install.run('remove_new_sandbox_parts').status, 0);
+  assert.deepEqual(install.read('volumes'), ['gtmworks-install_hermes', ...madeFor('first')[0]]);
+  assert.deepEqual(install.read('networks'), madeFor('first')[1]);
+  assert.ok(!install.read('log').some(line => /^(rm|run|volume rm|network rm) /.test(line)), install.read('log').join('\n'));
+});
+
+test('what Docker will not remove is named, with how to remove it', t => {
+  const install = installFolder(t, { volumes: ['gtmworks-install_hermes'], networks: [], engines: { first: 'gtmworks-install_hermes' } });
+  assert.equal(install.run('keep_previous_engine').status, 0);
+  install.make(madeFor('first')[0], madeFor('first')[1]);
+  const removed = install.run('remove_new_sandbox_parts', { RM_FAILS: '1' });
+  assert.equal(removed.status, 0);
+  assert.match(removed.stderr, /could not all be removed, and an update run again keeps it as it is: remove the volume gtmworks-work-first \(docker volume rm gtmworks-work-first\),/);
+  assert.match(removed.stderr, /the network gtmworks-exit-first \(docker network rm gtmworks-exit-first\); then run the update again\./);
 });
 
 test('a work folder and its work network share a name, and each is told apart', t => {

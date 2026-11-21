@@ -1472,7 +1472,7 @@ probe 'after the update whose sandbox image cannot be pulled'
 # the sandbox's start. The previous release keeps serving with its own Engines, and nothing of a sandbox is left: no
 # container, volume or network of either Company, no key in an Engine's volume, and no image recorded.
 second_slug=$(ls .engines | grep -vx first)
-[[ -n $second_slug ]] || fail "read the second Company's Engine folder"
+[[ -n $second_slug && $second_slug != *$'\n'* ]] || fail "read the second Company's one Engine folder"
 printf 'SANDBOX_CPUS=100000\n' >> ".engines/$second_slug/.env"
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place for the failed sandbox start'
 if GTMWORKS_ENGINE_WAIT=60 sh install.sh update > update.log 2>&1; then fail_update "the update whose second Company's sandbox does not start must fail"; fi
