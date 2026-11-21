@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
-import { changeAgentRoutine } from '@/lib/agent-routines.mjs';
+import { changeAgentRoutine, readAgentRoutines } from '@/lib/agent-routines.mjs';
 
 // One change to one Routine (#31): made, rescheduled, paused, resumed, run now or deleted, on the Agent's own Engine
 // profile. The request runs as the signed-in person: company_app_agents lists only the Agents they see, and the database
@@ -18,6 +18,19 @@ function refused(state:string) {
  if(state==='refused') return reply({error:'routineRefused'},400);
  return reply({error:'routineFailed'},state==='unreachable'||state==='noEngine'?503:502);
 }
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// One Agent's Routines for its details (#205): any Member reads them for an Agent they are shown.
+export async function GET(request:NextRequest) {
+ try {
+  const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+  if(!user) return reply({error:'routineNotAllowed'},401);
+  const company=request.nextUrl.searchParams.get('company'); const agent=request.nextUrl.searchParams.get('agent');
+  if(!company||!uuid.test(company)||!agent||!uuid.test(agent)) return reply({error:'routineInvalid'},400);
+  if(!await routeAllowed(db,'app/api/agent-routines/route.ts','GET',company,user.id)) return reply({error:'routineNotAllowed'},403);
+  const read=await readAgentRoutines(db,{company,agent});
+  return read.state==='found'?reply({routines:read.routines}):refused(read.state);
+ } catch { return reply({error:'routineFailed'},500); }
+}
 export async function POST(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -27,7 +40,7 @@ export async function POST(request:NextRequest) {
   let body:Record<string,unknown>|null=null;
   try { const parsed=JSON.parse(raw); body=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:null; } catch { body=null; }
   if(!body||typeof body.company!=='string') return reply({error:'routineInvalid'},400);
-  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.company)) return reply({error:'routineInvalid'},400);
+  if(!uuid.test(body.company)) return reply({error:'routineInvalid'},400);
   if(!await routeAllowed(db,'app/api/agent-routines/route.ts','POST',body.company,user.id)) return reply({error:'routineNotAllowed'},403);
   const changed=await changeAgentRoutine(db,{company:body.company,agent:body.agent,action:body.action,routine:body.routine,name:body.name,prompt:body.prompt,schedule:body.schedule,timezone:body.timezone});
   return changed.state==='done'?reply({routine:changed.routine,logged:changed.logged}):refused(changed.state);

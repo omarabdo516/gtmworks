@@ -5,7 +5,8 @@
 ## The reference is frozen
 
 - Nobody edits it. Its source of truth is the frozen approval `d893-approved-2026-11-12`, kept outside this repository, and its `SHA256SUMS` ships with it. Everything in that folder is copied into the repo unchanged, dot-folders included.
-- `tests/design-reference.test.mjs` recomputes every checksum. It fails when a file changes, goes missing, or is added without a line in `SHA256SUMS`. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The comparison tool recomputes every checksum before it captures (`referenceProblems` in `scripts/design-compare-lib.mjs`). It stops when a file changes, goes missing, or is added without a line in `SHA256SUMS`, and the `Design compare` workflow runs it on every pull request that changes `design-reference/`. `GTMWORKS_DESIGN_REFERENCE` points the tool at another copy; its test gives it a broken one. A change to the reference needs a new approval and a new `SHA256SUMS`, copied in as a whole.
+- The tool is the reference's one reader. No CI suite compares the product with it (#271): matching it is a delivery check, done once per screen (below).
 - The product never serves it. Next serves only its routes, and the runtime image copies only the build output. `tests/design-reference.spec.ts` asks the production build for `/design-reference/...` and expects 404.
 
 ## Opening the reference by hand
@@ -65,6 +66,9 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `agent-screen` | The SEO Agent's chat, details on Activity: its screen card, asleep (#21). The product always shows the empty frame: the pinned Engine shows no Agent's screen | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002` (the fixture's Ads) |
 | `agent-tools` | The Ads Agent's details, Activity: "Connected tools", Meta Ads and Google Ads connected and GA4 not (#204) | none (needs an Agent with apps in its own Engine profile; pass `--built-path /c/rs-learning/chat/<its id>`) |
 | `agent-tools-manage` | The same, with Manage pressed: each connected row ends in Disconnect and the heading reads Done (#204) | none (as `agent-tools`) |
+| `agent-routines` | The Ads Agent's details, Activity: "Routines" with its count and rows, each with its schedule, next run, Run now and the switch (#205) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000002` (needs the fixture's Ads on a profile of its own whose Engine holds Routines) |
+| `agent-routines-add` | The same, with Add pressed: the one-line field under the rows (#205) | as `agent-routines` |
+| `agent-routines-empty` | A newly made Agent's details, Activity: "No routines yet" and Try writing (#205) | `/c/rs-learning/chat/61000000-0000-0000-0000-000000000003` (the fixture's SEO & Content on a profile of its own with no Routine) |
 | `settings` | Account menu, Settings: the overlay's Company section | `/c/rs-learning/settings` |
 | `invite` | Settings, Company: "Invite a member", one invitation sent (its row marked Invite sent and the toast), then the form opened again (#185). The same steps run on the built page | `/c/rs-learning/settings` |
 | `agents` | Settings, Agents | `/c/rs-learning/settings?section=agents` |
@@ -165,6 +169,21 @@ gh workflow run design-compare.yml --ref <branch> -f screen=connect-card -f fixt
 ```
 
 Add `-f lang=en`, `-f theme=light` and `-f width=390` for the other variants; both sides always use the same width, language and theme.
+
+## The delivery record
+
+A screen, or a part's motion, is matched with the reference once, in the pull request that delivers it. That pull request's body carries its delivery record, under a `## Delivery record` heading:
+
+```md
+## Delivery record
+
+- Screen: `NAME` (`scripts/design-compare-lib.mjs`), or the motion issue it ships.
+- Captures: the side-by-side image for each width, language and theme the issue names (at least 1440 and 390 wide, Arabic and English), made by `npm run design:compare` or the `Design compare` workflow.
+- Motion: what moves, its time and curve as the reference has it, and the test that holds the behaviour (reduced motion, a timer, a press).
+- Differences kept on purpose: each one with its reason, or "none".
+```
+
+The same pull request adds its row to [DELIVERY.md](DELIVERY.md), which lists every delivered screen with the pull request that holds its record. After delivery the screen's look is our own: the visual lane compares it with our last approved screenshots (`docs/agents/visual-comparison.md`), not with the reference.
 
 ## Demo-only parts of the reference (do not build)
 

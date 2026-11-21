@@ -6,6 +6,18 @@
   "ar": { "title": "القنوات بتقولك لو مفيش موديل متوصّل", "body": "لما وكيل ناديته في قناة، أو شغلانة Lead سلّمها لوكيل تاني، ميقدرش يرد عشان الشركة لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل، القناة أو المحادثة بقت بتقول كده، ومعاها لينك الاشتراك والموديلات للمالك، بدل ما تقول بس إن الرد فشل." }
  },
  {
+  "issue": 475,
+  "date": "2026-11-21",
+  "en": { "title": "Every agent asks the team", "body": "Any agent you talk to, not only the main one, can now ask another agent of your company for a job it needs, even one you don’t work with: the chat shows who asked whom, the answer under that agent’s name, then your agent’s reply." },
+  "ar": { "title": "كل وكيل بيطلب من الفريق", "body": "أي وكيل بتكلمه، مش الرئيسي بس، بقى يقدر يطلب من وكيل تاني في شركتك شغل محتاجه، حتى لو وكيل مش بتشتغل معاه: المحادثة بتوريك مين طلب من مين، والرد باسم الوكيل ده، وبعدين رد وكيلك." }
+ },
+ {
+  "issue": 205,
+  "date": "2026-11-21",
+  "en": { "title": "Routines in an agent's details", "body": "An agent's details now list its routines with when each runs next; the Owner and Managers add one by writing one sentence, such as “leads summary every day at 8 in the morning”, and a sentence with no time asks for one first." },
+  "ar": { "title": "الروتينات في تفاصيل الوكيل", "body": "تفاصيل الوكيل بقت بتعرض روتيناته وإمتى كل واحد هيشتغل المرة الجاية؛ والمالك والمديرين يضيفوا روتين بجملة واحدة، زي «ملخص الليدز كل يوم 8 الصبح»، ولو الجملة مفيهاش ميعاد بيتسألوا عنه الأول." }
+ },
+ {
   "issue": 446,
   "date": "2026-11-21",
   "en": { "title": "The app keeps fewer keys", "body": "The app and the background worker now get only the settings they use, so neither holds the database password or the key that signs sign-ins, and a break-in into the app cannot use them." },
@@ -22,6 +34,12 @@
   "date": "2026-11-21",
   "en": { "title": "A stopped Engine no longer fails a channel or note mention", "body": "When you call an Agent in a channel or a card note while its Company's Engine is not running, the Run waits up to ten minutes for the Engine and starts once it is back, instead of failing at once." },
   "ar": { "title": "المحرك الواقف مبقاش بيفشّل المنشن في القناة أو الملاحظة", "body": "لما تنادي وكيل في قناة أو في ملاحظة على بطاقة ومحرك الشركة مش شغال، التشغيل بيستنى المحرك لحد عشر دقايق ويبدأ أول ما يرجع، بدل ما يفشل على طول." }
+ },
+ {
+  "issue": 135,
+  "date": "2026-11-21",
+  "en": { "title": "Pages fade in when they open", "body": "Every page beside the sidebar now fades in when it opens, and the sidebar row you open fades to its new fill, as in the approved design; with reduced motion on, both change at once." },
+  "ar": { "title": "الصفحات بتظهر بهدوء وهي بتفتح", "body": "كل صفحة جنب القايمة الجانبية بقت بتظهر بهدوء وهي بتفتح، والسطر اللي بتفتحه في القايمة بيتلوّن بهدوء، زي التصميم المعتمد؛ ولو مشغّل تقليل الحركة، الاتنين بيتغيّروا على طول." }
  },
  {
   "issue": 131,
