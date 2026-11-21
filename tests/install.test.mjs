@@ -46,8 +46,12 @@ ${lines.slice(start,end).join('\n')}`;
  ]) {
   // This fixture tests CI's log forwarding; it does not run the installer or simulate psql.
   writeFileSync(fixture,`update diagnostic marker\n${failure.MISSING_LABEL ? '' : 'Applying migration: 99999999999999_failure.sql\n'}`);
+  // The failing migration the area put in the checkout, which leaves it on every path, an update that passed included.
+  mkdirSync(join(directory,'supabase/migrations'),{recursive:true});
+  writeFileSync(join(directory,'supabase/migrations/99999999999999_failure.sql'),'select 1/0;');
   const failed=spawnSync('bash',['-e','-o','pipefail','-c',script],{cwd:directory,env:{...env,...failure},encoding:'utf8'});
   assert.equal(failed.status,1,failed.stderr);
+  assert.equal(existsSync(join(directory,'supabase/migrations/99999999999999_failure.sql')),false,`the fixture stays after: ${reason}`);
   assert.ok(failed.stderr.includes(readFileSync(fixture,'utf8')));
   assert.ok(failed.stderr.includes(`install check failed: ${reason}`));
  }
@@ -559,7 +563,8 @@ test('the install job leaves the successful update to issue 52 and keeps the fai
  const run=installJob().steps.find(step=>step.env?.INSTALL_REF).run;
  assert.doesNotMatch(run,/update-gateway\.log|old_gateway|sed -i '\/X-Real-IP\/d'/);
  assert.equal([...run.matchAll(/sh scripts\/install\.sh update /g)].length,1,'only the failed update runs');
- for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then fail_update 'update must fail'; fi",
+ for(const text of ["if sh scripts/install.sh update \"$INSTALL_REF\" > update.log 2>&1; then rm -f supabase/migrations/99999999999999_failure.sql; fail_update 'update must fail'; fi",
+  "fi\nrm -f supabase/migrations/99999999999999_failure.sql\n",
   "grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log","[[ $(compose ps -q web) == \"$old_web\" ]] || fail_update 'old web container still serving'",
   "to_regclass('public.update_should_rollback') is null","fail_update 'old version healthy after failed update'"]) assert.ok(run.includes(text),text);
 });

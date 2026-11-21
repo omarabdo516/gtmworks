@@ -1083,8 +1083,9 @@ reset_install
 install_source source-install.log || fail 'source install before the failed update'
 old_web=$(compose ps -q web)
 cp scripts/install-failing-migration.sql supabase/migrations/99999999999999_failure.sql
-if sh scripts/install.sh update "$INSTALL_REF" > update.log 2>&1; then fail_update 'update must fail'; fi
-# The failing migration leaves the checkout as soon as the update tried it, so no later area in it meets the fixture.
+# The failing migration leaves the checkout as soon as the update tried it, failed or not, so no later area in it meets
+# the fixture.
+if sh scripts/install.sh update "$INSTALL_REF" > update.log 2>&1; then rm -f supabase/migrations/99999999999999_failure.sql; fail_update 'update must fail'; fi
 rm -f supabase/migrations/99999999999999_failure.sql
 grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_update 'failed migration name'
 [[ $(compose ps -q web) == "$old_web" ]] || fail_update 'old web container still serving'
