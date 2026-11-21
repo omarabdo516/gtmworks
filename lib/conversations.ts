@@ -77,7 +77,8 @@ export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>
 // A change an Agent proposed to its own settings, or Lead to another Agent's (#19): waiting on the Owners (`owners` names
 // whom), approved or declined by one of them, or refused at once as not on the list of what can be proposed.
 type ChangeFace={id:string,connection_id:string,name:string};
-export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
+// `approved` is the value the Owner approved instead, when they edited the proposal before approving it (#484).
+export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,approved?:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
  &({state:'waiting',owners:string[]}|{state:'approved',answeredBy:string,at:string}|{state:'declined',answeredBy:string,at:string,answer:string|null,maybeApplied?:boolean}|{state:'refused'});
 // #167: the main Agent asks whether to request an Agent hidden from its person, naming who opens Agents for them
 // (`named`: their first name, whole name and Role). Its Agent is never part of the card. Offered, the card has its two

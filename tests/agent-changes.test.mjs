@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { readProfileModels, writeProfileModel, readModels, readConfig, readSavedConfig, readConfigSchema, readConfigDefaults, writeConfig,
  readAgentInstructions as readInstructions, writeAgentInstructions as writeInstructions } from '../lib/hermes.mjs';
 import { runToolCall, toolSpecTexts } from '../lib/agent-tools.mjs';
-import { answerChange } from '../lib/agent-changes.mjs';
+import { answerChange, readChangeContext } from '../lib/agent-changes.mjs';
 import { engineSettings, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeEngine } from './fake-engine.mjs';
@@ -110,8 +110,11 @@ function owner(proposals,{isOwner=true,answer=null,busy=false,lost=false}={}) {
     if(!row) return {data:null,error:{code:'P0002',message:'agentChangeNotFound'}};
     if(row.state!=='waiting'&&row.state!=='applying') return {data:{state:row.state},error:null};
     if(busy||row.state==='applying'&&row.lease!=='over') return {data:{state:'busy'},error:null};
+    if(args.edited!==undefined&&(typeof args.edited!==typeof row.value||args.edited===null)) return {data:null,error:{code:'22023',message:'agentChangeEditInvalid'}};
     const retry=row.state==='applying'; row.state='applying'; row.token=`token-${++tokens}`; row.lease='held';
-    return {data:{state:'claimed',token:row.token,retry,agent:row.agent_id,change:row.change,setting:row.setting,value:row.value},error:null};
+    row.approved=args.edited!==undefined&&args.edited!==row.value?args.edited:undefined;
+    return {data:{state:'claimed',token:row.token,retry,agent:row.agent_id,change:row.change,setting:row.setting,value:row.approved??row.value,
+     ...(args.edited!==undefined?{edited:row.approved!==undefined}:{})},error:null};
    }
    if(name==='renew_agent_change') { const row=proposals.find(found=>found.id===args.proposal); return {data:!lost&&row?.token===args.claim&&row.lease==='held',error:null}; }
    if(name==='release_agent_change') {
@@ -304,4 +307,89 @@ test('only an Owner answers, an unknown proposal is not found, and an answered o
  assert.deepEqual(await answerChange(busy.db,{...engineless,proposal:1,approve:true}),{state:'busy'});
  assert.equal(busy.calls.some(call=>call.name==='answer_agent_change'),false,'another Owner\'s approval is being written');
  assert.deepEqual(await answerChange(owner([{...model,state:'declined'}]).db,{...engineless,proposal:1,approve:true}),{state:'answered'});
+});
+
+// #484: "Edit, then approve". The Owner's value goes with the claim, which the database checks and answers as the value
+// to write; the writer then writes that value, not the proposed one, to the Agent's own profile.
+test('approving with an edit claims the Owner\'s value and writes it, not the proposed one, to the Agent\'s own profile',async()=>{
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
+  profileOn(fake,own(writer),{soul:`You write long posts.\n${section}\n`});
+  const {model,soul}=proposalsOf();
+  const {db,calls}=owner([model,soul]);
+  const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
+  assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:true,edited:'openai/gpt-5'}),{state:'approved'});
+  assert.deepEqual(await answerChange(db,{...options,proposal:2,approve:true,edited:'You write posts of three lines.'}),{state:'approved'});
+  assert.deepEqual(calls.filter(call=>call.name==='claim_agent_change').map(call=>call.args),
+   [{c:company,proposal:1,edited:'openai/gpt-5'},{c:company,proposal:2,edited:'You write posts of three lines.'}]);
+  assert.equal(fake.settings.profiles.get(own(ads)).provider,'openai');
+  assert.equal(fake.settings.profiles.get(own(ads)).model,'gpt-5');
+  assert.equal(fake.settings.profiles.get(own(writer)).soul,`You write posts of three lines.\n${section}\n`);
+  // Approving as proposed sends no edit at all, as the previous app's claim does.
+  const plain=owner([proposalsOf().model]);
+  assert.deepEqual(await answerChange(plain.db,{...options,proposal:1,approve:true}),{state:'approved'});
+  assert.deepEqual(plain.calls.find(call=>call.name==='claim_agent_change')?.args,{c:company,proposal:1});
+ } finally { await fake.close(); }
+});
+
+test('an edit the database refuses writes nothing, and an edit sent with a decline is never sent',async()=>{
+ const fake=await fakeHermes();
+ try {
+  profileOn(fake,own(ads));
+  const {db,calls}=owner([proposalsOf().model]);
+  const options={company,hermes:install(fake),settingDriver:settingDriver(fake)};
+  assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:true,edited:7}),{state:'editInvalid'});
+  assert.deepEqual(fake.settings.managementRequests.filter(request=>request.method==='PUT'),[]);
+  assert.deepEqual(await answerChange(db,{...options,proposal:1,approve:false,reason:'No',edited:'openai/gpt-5'}),{state:'declined'});
+  assert.equal(calls.filter(call=>call.name==='claim_agent_change').length,1,'a decline claims nothing');
+ } finally { await fake.close(); }
+});
+
+// #484: what the card reads when it is drawn: the value the Agent has now, read from its Engine profile as Settings reads
+// it, and, for an Owner, the field to edit the proposed value in: the models the profile's Engine lists, the instructions
+// with the Engine's limit, the sub-agents switch, or the listed setting's own type, choices and limits.
+function reader(proposals,{isOwner=true}={}) {
+ const base=owner([],{isOwner});
+ const db={...base.db,from:table=>{
+  assert.equal(table,'agent_change_proposals');
+  const filters={};
+  const query={select:()=>query,eq:(key,value)=>{ filters[key]=value; return query; },
+   maybeSingle:async()=>({data:proposals.find(row=>row.id===filters.id&&filters.company_id===company)??null,error:null})};
+  return query;
+ }};
+ return db;
+}
+test('the card reads the Agent\'s current value from its own profile, and an Owner gets the field to edit the proposal in',async()=>{
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),own(writer)]) profileOn(fake,name);
+  profileOn(fake,own(ads),{soul:`You write long ads.\n${section}\n`,provider:'anthropic',model:'claude-sonnet-5-5',credentials:{anthropic:{}},config:{memory:{memory_char_limit:2200}}});
+  const rows=[{id:1,agent_id:ads,change:'model',setting:null,state:'waiting'},{id:2,agent_id:ads,change:'instructions',setting:null,state:'waiting'},
+   {id:3,agent_id:ads,change:'toolset',setting:'delegation',state:'waiting'},{id:4,agent_id:ads,change:'setting',setting:'memory.memory_char_limit',state:'waiting'},
+   {id:5,agent_id:ads,change:'model',setting:null,state:'approved'}];
+  const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
+  const model=await readChangeContext(reader(rows),{...options,proposal:1});
+  assert.equal(model.state,'found');
+  assert.equal(model.now,'anthropic/claude-sonnet-5-5');
+  assert.equal(model.edit?.kind,'model');
+  assert.ok(model.edit.options.length>0&&model.edit.options.every(option=>typeof option.provider==='string'&&typeof option.providerName==='string'&&typeof option.model==='string'),'the Engine\'s model list for that profile');
+  const soul=await readChangeContext(reader(rows),{...options,proposal:2});
+  assert.deepEqual({state:soul.state,now:soul.now,edit:soul.edit},{state:'found',now:'You write long ads.',edit:{kind:'instructions',limit:soul.edit.limit}});
+  assert.ok(soul.edit.limit>0);
+  assert.deepEqual(await readChangeContext(reader(rows),{...options,proposal:3}),{state:'found',now:false,edit:{kind:'switch'}});
+  const limit=await readChangeContext(reader(rows),{...options,proposal:4});
+  assert.equal(limit.state,'found');
+  assert.equal(limit.edit.kind,'setting');
+  assert.equal(limit.edit.type,'number');
+  assert.deepEqual(limit.edit.limits,{integer:true},'its limits, without the Engine source line beside them');
+  assert.equal(limit.now,2200);
+  assert.deepEqual(await readChangeContext(reader(rows),{...options,proposal:5}),{state:'answered'},'an answered proposal has no "Now": the value then is gone');
+  assert.deepEqual(await readChangeContext(reader(rows),{...options,proposal:9}),{state:'notFound'});
+  // Anyone else who reads the card reads the value now, and no field to edit it in.
+  const member=await readChangeContext(reader(rows,{isOwner:false}),{...options,proposal:1});
+  assert.deepEqual({state:member.state,now:member.now,edit:member.edit},{state:'found',now:'anthropic/claude-sonnet-5-5',edit:null});
+  // An Engine that cannot be read draws the card without its "Now" row.
+  assert.deepEqual(await readChangeContext(reader(rows),{company,hermes:null,proposal:1}),{state:'found',now:null,edit:null});
+ } finally { await fake.close(); }
 });
