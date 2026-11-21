@@ -143,6 +143,22 @@ test('a hand card\'s turn draws no bubble of the person, keeps its run\'s cards 
  assert.deepEqual(order(shown(record.map(({hand_card,...message})=>message),[],cards,'Ads')),[1,2,3,'asked','made'],'a message that names no card is an ordinary one');
 });
 
+// #358: a job command in the main Agent's Conversation. The person's message carries the command's own Run, the quiet
+// "Handed to" row is drawn under it as Lead's turn, and the Agent handed the job answers in the same chat with its own
+// words — its message says which Agent it is, so the page draws that Agent's face. The chat never waits on the command's
+// Run as the Lead's: the handover's own answer closes it.
+test('a command\'s handover row follows the person\'s message and the Agent handed the job answers in the same chat',()=>{
+ const inChat=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'/campaign Launch the December ads',run_id:'command:k1',created_at:at(1)},
+  {id:2,author:/** @type {const} */('agent'),author_name:'Reach',agent_id:'a-meta',body:'Three ad sets, 30 days, EGP 9,000.',run_id:'run-target',created_at:at(3)}];
+ const cards=[{run_id:'command:k1',at:at(2),card:{kind:/** @type {const} */('handed'),name:'Reach',face:'c-meta',goal:'Launch the December ads'}}];
+ const drawn=shown(inChat,[],cards,'Lead');
+ assert.deepEqual(order(drawn),[1,'made',2],'the row under the message that asked, then that Agent\'s answer');
+ assert.deepEqual(drawn[1].cards,[cards[0].card]);
+ assert.deepEqual([drawn[2].author_name,drawn[2].agent_id,drawn[2].body],['Reach','a-meta','Three ad sets, 30 days, EGP 9,000.']);
+ assert.deepEqual(waiting(inChat,[],new Set(['command:k1'])),[],'the chat does not wait on the Lead for it');
+ assert.deepEqual(waiting([inChat[0]],[]).map(message=>message.id),[1],'and without its handover its Run waits as any other');
+});
+
 // #138: an Agent's question, read from its row in each state; a claimed answer still on its way to the Engine is drawn
 // answered. A Run's questions follow its person's message, each with its answer as that person's turn, before its reply.
 const angles=['من خريج لمحاسب شغال','Excel وOdoo في كورس واحد'];

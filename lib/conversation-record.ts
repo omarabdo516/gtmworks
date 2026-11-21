@@ -34,14 +34,14 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // with its reply shows both or neither, and an Owner's yes, which writes the request's state and the made Agent in one
  // transaction, is never seen in half.
  type RequestRow={id:number,run_id:string,call_id:string,agent_name:string,job:string,apps:string[],asked_with:string,state:AgentRequestView['state'],answered_at:string|null,reason:string|null,created_at:string,answerer:{name:string}|null,asker:{name:string}|null};
- type Message={id:number,author:'person'|'agent',author_name:string,body:string,run_id:string,hand_card:number|null,created_at:string};
+ type Message={id:number,author:'person'|'agent',author_name:string,agent_id:string|null,body:string,run_id:string,hand_card:number|null,created_at:string};
  type MadeRow={run_id:string,call_id:string,created_at:string,hermes_agents:{id:string,connection_id:string,name:string,speciality:string,apps:string[]|null,is_default:boolean,requested_by:string|null,requester_opened_at:string|null}|null};
- type HandedRow={run_id:string,goal:string,state:string,created_at:string,to_agent:{name:string,connection_id:string}|null};
+ type HandedRow={run_id:string,goal:string,state:string,answers_person:boolean,created_at:string,to_agent:{id:string,name:string,connection_id:string}|null};
  const [{ends,messages,queued,requestRows,madeRows,handedRows},notes,replyRows,rows,files,{data:working},{data:me},card]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
    +'lead_made_agents(run_id,call_id,created_at,hermes_agents(id,connection_id,name,speciality,apps,is_default,requested_by,requester_opened_at)),'
-   +'agent_handovers(run_id,goal,state,created_at,to_agent:hermes_agents!to_agent(name,connection_id))')
+   +'agent_handovers(run_id,goal,state,answers_person,created_at,to_agent:hermes_agents!to_agent(id,name,connection_id))')
    .eq('id',conversation).order('id',{referencedTable:'conversation_messages'}).order('queued_at',{referencedTable:'conversation_queued_turns'})
    .order('id',{referencedTable:'lead_agent_requests'}).order('created_at',{referencedTable:'lead_made_agents'})
    .order('created_at',{referencedTable:'agent_handovers'}).maybeSingle()
@@ -75,6 +75,10 @@ export async function conversationRecord(db:Database,person:string,company:strin
  };
  const requested=new Set(requestRows.map(row=>`${row.run_id}:${row.call_id}`));
  const handed=handedRows.flatMap(row=>row.to_agent?[{run_id:row.run_id,at:row.created_at,card:{kind:'handed',name:row.to_agent.name,face:row.to_agent.connection_id,goal:row.goal} satisfies LeadCard}]:[]);
+ // A job command's handover (#358) is the chat's own Run: the target Agent answers the person, so its reply is drawn
+ // with that Agent's face, and the chat never waits on that Run as if the Conversation's Agent worked on it.
+ const commandRuns=new Set(handedRows.filter(row=>row.answers_person).map(row=>row.run_id));
+ const faces=new Map(handedRows.flatMap(row=>row.to_agent?[[row.to_agent.id,row.to_agent.connection_id] as const]:[]));
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...handed,
@@ -94,18 +98,20 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const {data:ownsIt}=ended==='no_model'||reason?await db.rpc('is_company_owner',{c:company}):{data:false};
  // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
  // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
- // of a Run no message of the person started.
+ // of a Run no message of the person started. A job command's answer (#358) is a message from an Agent the chat handed
+ // work to, never the chat's Agent's, so it is never taken for that answer.
  const first=messages.find(message=>message.author==='person');
  const firstReply=card&&first&&card.created_at>first.created_at
   ?(lead
-   ?messages.find(message=>message.author==='agent'&&!messages.some(own=>own.author==='person'&&own.run_id===message.run_id))
+   ?messages.find(message=>message.author==='agent'&&!(message.agent_id&&faces.has(message.agent_id))&&!messages.some(own=>own.author==='person'&&own.run_id===message.run_id))
    :messages.find(message=>message.author==='agent'&&message.run_id===first.run_id))?.id
   :undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
-  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),notes,queued,me?.name||'',files),firstReply),
+  messages:withBoardNote(withTeamWork(withDecisions(shown(messages,ends,cards,found.agent_name,saved,stepsOfReplies(messages,(await read)?.turns??null),files),decisions,found.agent_name),notes,queued,me?.name||'',files),firstReply)
+   .map(message=>message.agent_id&&faces.has(message.agent_id)?{...message,face:faces.get(message.agent_id)}:message),
   usage:(await read)?.usage??null,
-  pending:waiting(messages,ends).length>0||queuedWaiting(queued),
+  pending:waiting(messages,ends,commandRuns).length>0||queuedWaiting(queued),
   ...(handedRows.some(row=>row.state!=='done'&&row.state!=='failed')?{handover:true as const}:{}),
   ...(lead?{lead:true as const}:{}),
   ...(replyRows.some(row=>row.kind==='question'&&row.state==='open')?{asking:true as const}:{}),

@@ -6,6 +6,12 @@
   "ar": { "title": "الوكلاء بيشتغلوا في صندوق الشغل", "body": "وكلاء كل شركة بقى ليهم أوامر وملفات وتنفيذ كود في صندوق الشغل بتاع الشركة، مش على جهاز المحرك." }
  },
  {
+  "issue": 358,
+  "date": "2026-11-20",
+  "en": { "title": "A job command hands the work over", "body": "Typing /campaign, /report, /review or /article in Lead’s chat hands the job to the Agent made for that role, in the same chat, and the reply you read comes from that Agent." },
+  "ar": { "title": "أمر الشغل بيتسلّم للوكيل بتاعه", "body": "لما تكتب /campaign أو /report أو /review أو /article في شات Lead، الشغل بيتسلّم للوكيل اللي اتعمل للدور ده في نفس الشات، والرد اللي بتقراه بييجي منه هو." }
+ },
+ {
   "issue": 458,
   "date": "2026-11-20",
   "en": { "title": "Any tool that speaks MCP", "body": "The apps list now has every app the engine ships and gtmworks's ready-made marketing tools, and an Owner can add any MCP server by its address with no sign-in, a token, or a sign-in. Every app gives an Agent all its tools." },
