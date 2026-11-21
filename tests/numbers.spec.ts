@@ -34,6 +34,9 @@ test('the Numbers page lists what waits on its reader from their own list',async
  await expect(page).toHaveURL(/\/c\/rs-learning\/numbers\?period=30$/);
  await expect(last30).toHaveAttribute('aria-current','true');
  await expect(tiles).toHaveCount(4);
+ // No app reports a figure, so none counts (#134): each stays unavailable through the change of period.
+ await expect(page.locator('.kpis .kpi__val--none')).toHaveText(['—','—','—','—']);
+ await expect(page.locator('.kpis .kpi__count')).toHaveCount(0);
  await expect.poll(placeholders.waiting).toBe(0);
  expect(placeholders.seen()).toEqual([]);
 });

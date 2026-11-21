@@ -1,5 +1,11 @@
 [
  {
+  "issue": 134,
+  "date": "2026-11-21",
+  "en": { "title": "Numbers count up, and a new Agent’s tile flashes", "body": "On Numbers each figure counts up to its value when the page opens or the period changes, and when Lead makes an Agent its new tile in the sidebar flashes once." },
+  "ar": { "title": "الأرقام بتعدّ لحد قيمتها، وخانة الوكيل الجديد بتلمع", "body": "في الأرقام كل رقم بيعدّ لحد قيمته لما الصفحة تفتح أو الفترة تتغيّر، ولما Lead يعمل وكيل خانته الجديدة في الشريط الجانبي بتلمع مرة واحدة." }
+ },
+ {
   "issue": 130,
   "date": "2026-11-21",
   "en": { "title": "Dialogs fade out before they close", "body": "The ready-made gallery, Settings and first run’s question now fade out and sink a little before the page moves on, as the design does; with reduced motion they close at once." },

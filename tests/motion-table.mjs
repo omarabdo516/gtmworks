@@ -79,6 +79,9 @@ export const motionTable = [
   { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-item" href="#">Board</a></div></aside></div>', held: 0.985 },
   { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-foot"><button type="button" class="sb-item sb-apps" aria-disabled="true">Connect apps</button></div></aside></div>', held: 1 },
   { ref: '.agent-tile', built: '.gw .agent-tile', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><ul class="agent-grid"><li><a class="agent-tile" href="#">Lead</a></li></ul></aside></div>', held: 0.96 },
+  // A tile that arrives in the grid during a visit flashes a ring once (#134). The reference's rule is read alone, without
+  // the tile's press above it, so the flash is held to it in tests/components/agent-grid.test.tsx (its computed animation)
+  // and by sharedKeyframes below (its frames, tileFlash's).
   { ref: '.sb-add', built: '.gw .sb-add', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-label-row"><button type="button" class="sb-add" aria-label="New channel"></button></div></aside></div>' },
   { ref: '.me', built: '.gw .me', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-foot"><button type="button" class="me" aria-expanded="false">Omar</button></div></aside></div>' },
   { ref: '.menu__item', built: '.gw .menu__item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><nav class="sb-scroll"></nav><div class="sb-foot"><div class="menu" role="menu"><button type="button" class="menu__item" role="menuitemradio" aria-checked="false">Dark</button></div></div></aside></div>', held: 0.985 },
@@ -168,7 +171,7 @@ export const motionTable = [
 export const motionTokens = ['--dur-fast', '--dur', '--dur-slow', '--ease-out', '--ease-in', '--ease-spring'];
 
 // The reference's keyframes the product shares, each written once in app/shell.css under its gw- name.
-export const sharedKeyframes = { fadeIn: 'gw-fade-in', rise: 'gw-rise', breathe: 'gw-breathe', modalOut: 'gw-modal-out', settle: 'gw-settle', ckPop: 'gw-ck-pop', drawCheck: 'gw-draw-check', nudge: 'gw-nudge' };
+export const sharedKeyframes = { fadeIn: 'gw-fade-in', rise: 'gw-rise', breathe: 'gw-breathe', modalOut: 'gw-modal-out', settle: 'gw-settle', ckPop: 'gw-ck-pop', drawCheck: 'gw-draw-check', nudge: 'gw-nudge', barFlash: 'gw-ring-flash', tileFlash: 'gw-ring-flash' };
 
 /** @param {string} token */
 export const builtToken = token => `--gw-${token.slice(2)}`;
