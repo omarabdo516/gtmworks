@@ -16,9 +16,10 @@ const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 // hops that was not drawn again, and none twice for one press.
 type Hop={
  face:string, pressed:number, until:number, passed:WeakSet<Element>,
- // A press that follows a link: the address it was made on, and the first address after it, while the page it opened
- // has drawn none of the Agent's faces yet. Null when the press opens no page, or once that page drew one.
- opening:{from:string,to:string|null}|null,
+ // A press that follows a link: the address it was made on, the first address after it (the page it opened, the only
+ // one whose faces take the hop), and whether that page has drawn one of the Agent's faces yet. Null when the press
+ // opens no page.
+ opening:{from:string,to:string|null,drawn:boolean}|null,
 };
 let hop:Hop|null=null;
 const address=()=>location.pathname+location.search;
@@ -78,13 +79,12 @@ export function FaceMotion() {
    if(opening) {
     const at=address();
     // Still the page the press was made on: its copies redrawn now hop as any press's do, within 450ms.
-    if(at===opening.from) { if(now-hop.pressed>=hopCarries) return; }
+    if(opening.to===null&&at===opening.from) { if(now-hop.pressed>=hopCarries) return; }
     else {
      opening.to??=at;
-     // Gone on from the opened page before it drew the Agent: no later page takes the hop.
+     // Gone on from the opened page: no later page takes the hop.
      if(at!==opening.to) return end();
-     if(!fresh.length) return;
-     hop.opening=null; hop.until=now+hopCarries; endAt();
+     if(!opening.drawn) { if(!fresh.length) return; opening.drawn=true; hop.until=now+hopCarries; endAt(); }
     }
    }
    for(const face of fresh) jump(face);
@@ -107,7 +107,7 @@ export function FaceMotion() {
    const face=target?.closest('.face--look[data-face]')??host?.querySelector('.face--look[data-face]');
    if(!face) return;
    const agent=face.getAttribute('data-face')!, now=Date.now(), opens=followsLink(host,event);
-   hop={face:agent,pressed:now,until:now+(opens?hopWaits:hopCarries),passed:new WeakSet(facesOf(agent)),opening:opens?{from:address(),to:null}:null};
+   hop={face:agent,pressed:now,until:now+(opens?hopWaits:hopCarries),passed:new WeakSet(facesOf(agent)),opening:opens?{from:address(),to:null,drawn:false}:null};
    jump(face);
    watch();
   };

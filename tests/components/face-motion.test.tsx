@@ -149,6 +149,17 @@ test('a press whose opened page never draws the Agent carries no hop to the page
  expect(document.querySelector('section .face')!.classList.contains('is-happy')).toBe(false);
 });
 
+test('once the opened page drew the Agent, a page after it within 450ms takes no hop', async () => {
+ const screen = await render(<div className="gw"><FaceMotion/><a href="/next-page" onClick={follow}><CompanyAgentFace agent={agent('a')} size={32}/>Open</a></div>);
+ document.querySelector('a')!.click();
+ await screen.rerender(<div className="gw"><FaceMotion key="next page"/><section><CompanyAgentFace agent={agent('a')} size={64}/></section></div>);
+ await expect.poll(() => document.querySelector('section .face')?.classList.contains('is-happy')).toBe(true);
+ history.pushState(null, '', '/another-page');
+ await screen.rerender(<div className="gw"><FaceMotion key="another page"/><aside><CompanyAgentFace agent={agent('a')} size={64}/></aside></div>);
+ await new Promise(resolve => setTimeout(resolve, 50));
+ expect(document.querySelector('aside .face')!.classList.contains('is-happy')).toBe(false);
+});
+
 test('with reduced motion no face looks, blinks or hops', async () => {
  await reducedMotion(true);
  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
