@@ -1460,6 +1460,7 @@
   "routineEvery6": "سبت",
   "routineWeekday6": "السبت",
   "routineNotLogged": "اتعمل، بس ماتسجّلش في السجل. قول للمالك.",
+  "waitingChangeEditInvalid": "القيمة دي مينفعش تتوافق عليها للتغيير ده. مفيش حاجة اتغيّرت: راجعها ووافق تاني.",
   "routineEveryMonth": "أول كل شهر {0}",
   "routineMonthly": "كل شهر",
   "agentRoutines": "الروتينات",

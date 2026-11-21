@@ -40,7 +40,7 @@ A Manager's or Contributor's ask to work with an Agent hidden from them. When th
 _Avoid_: access ticket, permission request
 
 **Change proposal / اقتراح تغيير**:
-An Agent's ask to change its own settings, or Lead's on another Agent's behalf: its model, its core instructions, its sub-agents or one of the Engine settings gtmworks lists, with the reason. It waits in every Owner's "Waiting on you" and changes nothing until an Owner approves it; approved, it is written to that Agent's own Engine profile and read back; declined, nothing changes. Anything off that list is refused at once and waits on nobody. An app is asked for with the connect card, not proposed; the Agent's own memory and Skills follow its learning mode (#19).
+An Agent's ask to change its own settings, or Lead's on another Agent's behalf: its model, its core instructions, its sub-agents or one of the Engine settings gtmworks lists, with the reason. It waits in every Owner's "Waiting on you" and changes nothing until an Owner approves it; approved, it is written to that Agent's own Engine profile and read back; declined, nothing changes. Anything off that list is refused at once and waits on nobody. An app is asked for with the connect card, not proposed; the Agent's own memory and Skills follow its learning mode (#19). The Owner may edit the proposed value before approving it ("Edit, then approve"); the proposal keeps both the value proposed and the value approved (#484).
 _Avoid_: settings request, config change
 
 **Handover / تسليم**:
