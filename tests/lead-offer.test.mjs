@@ -57,3 +57,24 @@ test('the Run of the Conversation Lead opened carries its opening and the first 
  // Only the Owner the opening was written for is asked to make Agents from it.
  assert.doesNotMatch(leadInstructions({role:'manager',owner:'Omar',agents:[],opening}),/You opened this conversation/);
 });
+
+// #167: the jobs of the Agents hidden from a Manager or a Contributor, never their names, each with the reference's words
+// naming who opens one for them, and the tool that shows the card.
+const hidden=[{job:'Campaigns and ads',asks:'Sara',role:'manager'},{job:'Articles',asks:'Omar',role:'owner'}];
+test('a Contributor is told the hidden jobs with the words naming who opens each, in both languages, and never offered to make one',()=>{
+ const text=leadInstructions({role:'contributor',owner:'Omar',agents,hidden});
+ assert.match(text,/- "Campaigns and ads": say "That job belongs to another agent in the company, and that agent isn't available to you\. Should I ask Sara \(Manager\) to open it for you\?"/);
+ assert.match(text,/«الشغلانة دي عند وكيل تاني في الشركة، والوكيل ده مش متاح ليك\. تحب أبعت لـSara \(مدير\) طلب إنه يتفتح ليك؟»/);
+ assert.match(text,/- "Articles": say ".*Should I ask Omar \(Owner\) to open it for you\?" \(in Arabic: «.*لـOmar \(مالك\).*»\)/);
+ assert.match(text,/call ask_to_open_agent in the same run with the job exactly as written above/);
+ assert.match(text,/Never name those agents/);
+ assert.match(text,/none of those agents does and that is none of the jobs listed above/,'the offer to make one is for other work only');
+});
+
+test('with no hidden Agent, and for an Owner or a Viewer, no hidden job and no ask_to_open_agent is said',()=>{
+ for(const brief of [{role:'contributor',owner:'Omar',agents},{role:'contributor',owner:'Omar',agents,hidden:[]},{role:'owner',owner:'Omar',agents,hidden},{role:'viewer',owner:'Omar',agents,hidden}]) {
+  const text=leadInstructions(/** @type {any} */(brief));
+  for(const word of ['ask_to_open_agent','Campaigns and ads','isn\'t available to you']) assert.ok(!text.includes(word),`${brief.role} ${brief.hidden?.length??'none'}: ${word}`);
+ }
+ assert.match(leadInstructions({role:'contributor',owner:'Omar',agents}),/that none of those agents does, ask them/);
+});

@@ -20,7 +20,7 @@ import { useAgentIdentities } from '@/lib/agent-identities-client';
 const NewCard=lazy(()=>import('./new-card'));
 import AddIdea from './add-idea';
 import { ChatCardFoot, useShowCard, type CardAgent } from './board-show';
-import { decideAgentRule } from './skill-actions';
+import { answerAgentAccess, decideAgentRule } from './skill-actions';
 import { OwnerRequestCard } from './agent-request-card';
 import { OwnerChangeCard } from './agent-change-card';
 import { AgentKeyWaitCard } from './agent-key-wait-card';
@@ -196,6 +196,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // A learning suggestion (#25; design-reference: lnRowHTML) is decided where it waits: the rule, its Agent, who told it,
  // and Decline or Make it team-wide.
  const named=(key:string,name:string)=>{ const [before,after]=t(key,'\u0000').split('\u0000'); return <>{before}<bdi>{name}</bdi>{after}</>; };
+ // The same with two names, each in its own direction.
+ const named2=(key:string,first:string,second:string)=>{ const [before,middle,after]=t(key,'\u0000','\u0001').split(/[\u0000\u0001]/); return <>{before}<bdi>{first}</bdi>{middle}<bdi>{second}</bdi>{after}</>; };
  const ruleView=(item:WaitingItem)=><div key={`${item.kind}:${item.id}`} className="mcard mcard--rule" data-kind={item.kind} role="group" aria-label={t('waitingRuleLabel',item.body,item.asked_by)}>
   <span className="mcard__top"><span className="od-fill mcard__who"><b>{t('waitingRuleKind')}</b></span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
   <span className="mcard__q" dir="auto">{item.suggestion?.rule??item.title}</span>
@@ -204,11 +206,23 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    <button className="btn btn--secondary btn--sm" name="intent" value="reject">{t('waitingRuleDecline')}</button>
    <button className="btn btn--primary btn--sm" name="intent" value="approve">{t('waitingRuleApprove')}</button></form>
  </div>;
+ // A Member's request for an Agent hidden from them (#167; the reference draws no such item): who asks for which Agent,
+ // with its face and job, and No or Open it for them. Opening is #15's switch for that Member and that Agent.
+ const accessView=(item:WaitingItem)=>{ const first=item.asked_by.trim().split(/\s+/)[0]||item.asked_by;
+  return <div key={`${item.kind}:${item.id}`} className="mcard mcard--rule" data-kind={item.kind} role="group" aria-label={t('waitingAccessLabel',item.asked_by,item.title)}>
+  <span className="mcard__top"><span className="od-fill mcard__who"><b>{t('waitingAccessKind')}</b></span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
+  <span className="mcard__q" dir="auto">{named2('waitingAccessAsks',item.asked_by,item.title)}</span>
+  <span className="ln-meta"><span className="ln-who">{item.agent&&<span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={16}/></span>}<bdi>{item.title}</bdi></span>{item.body&&<><span aria-hidden="true">·</span><bdi>{item.body}</bdi></>}<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t('boardWaitingYou')}</span></span>
+  <form action={answerAgentAccess} className="ln-acts"><input type="hidden" name="company" value={p.company}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="request" value={item.id}/>
+   <button className="btn btn--secondary btn--sm" name="intent" value="no">{t('waitingAccessNo')}</button>
+   <button className="btn btn--primary btn--sm" name="intent" value="open">{named('waitingAccessOpen',first)}</button></form>
+ </div>; };
  const lead=identities.find(a=>a.role==='account_manager')?.name||'Lead';
  const decidedHere:Record<string,(item:WaitingItem)=>ReactNode>={
   rule_suggestion:ruleView,
   agent_request:item=><OwnerRequestCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} lead={lead} item={item}/>,
   agent_key:item=><AgentKeyWaitCard key={`${item.kind}:${item.id}`} item={item}/>,
+  agent_access:accessView,
   agent_change:item=><OwnerChangeCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} item={item} alone={!!p.alone}/>,
  };
  const answeredHere=(item:WaitingItem)=>Object.hasOwn(decidedHere,item.kind);
