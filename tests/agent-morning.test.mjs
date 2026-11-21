@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readRoutines, createRoutine, triggerRoutine, isSilentReply, readRoutineReplies } from '../lib/hermes.mjs';
-import { readAgentMorning, changeAgentMorning, moveAgentMorning, morningName } from '../lib/agent-morning.mjs';
+import { readAgentMorning, changeAgentMorning, moveAgentMorning, stopAgentMorning, morningName } from '../lib/agent-morning.mjs';
 import { morningTime, morningCron, morningMarker } from '../lib/morning-schedule.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
@@ -268,5 +268,24 @@ test('two people switching it on at the same moment leave one daily message, not
   fake.settings.cron.get(leadProfile).push({...kept,id:'abcdefabcdef'});
   await changeAgentMorning(session().db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake)});
   assert.deepEqual(jobs(fake,leadProfile).map(job=>[job.id,job.state]),[[kept.id,'paused']]);
+ } finally { await fake.close(); }
+});
+
+test('a save that lands just after the main Agent changed leaves no job sending from the old one, and removing the last Agent pauses it', async () => {
+ const fake=await engine();
+ try {
+  // The Owner makes Ads main while the Manager's save waits on the Engine: the move finds nothing, the save makes a job.
+  let rows=agentRows(lead);
+  const db={...session().db,rpc:async(name,args)=>name==='company_app_agents'?{data:rows,error:null}:session().db.rpc(name,args)};
+  const slowRead={read:async connection=>{ const listed=await readRoutines(connection); rows=agentRows(ads); return listed; }};
+  const answer=await changeAgentMorning(db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake),driver:slowRead});
+  assert.equal(answer.state,'notMain','the save is refused');
+  assert.ok(jobs(fake,leadProfile).every(job=>!job.prompt.startsWith(morningMarker)||job.state==='paused'),'nothing sends from the old main Agent');
+  // The last Agent removed: its message is paused where it is.
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'8:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const on=jobs(fake,leadProfile).filter(job=>job.prompt.startsWith(morningMarker)&&job.state!=='paused');
+  assert.equal(on.length,1);
+  assert.equal((await stopAgentMorning(session().db,{company,agent:lead,agents:agentRows(lead),hermes:install(fake)})).state,'paused');
+  assert.ok(jobs(fake,leadProfile).filter(job=>job.prompt.startsWith(morningMarker)).every(job=>job.state==='paused'));
  } finally { await fake.close(); }
 });
