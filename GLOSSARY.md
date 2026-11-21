@@ -66,6 +66,14 @@ _Avoid_: room, group chat, thread
 The agent program that runs a Conversation's replies, today the Hermes that ships inside the install (ADR 0010). gtmworks talks to every engine through one engine contract (start a run with an idempotency key, read its state, usage and steps, stop it); a driver is the code that speaks the contract for one engine. gtmworks writes no model loop of its own. Each Company has its own Engine, kept apart from every other Company's.
 _Avoid_: model, provider, backend
 
+**Provider / مزوّد**:
+One way a Company's Engine reaches models: a subscription the Company signed in to, such as Claude or ChatGPT, or an API key, with the name the Owner gives it, such as "Claude · Said". A Company may hold several, of one kind or of different kinds. They belong to the whole Company, never to one Agent: an Agent chooses a model, and the Engine chooses the Provider it reaches that model through, moving to the next one of the same kind, in the Owner's order, when one runs out. Only the Owner adds, orders or switches off a Provider. Each Provider lists the models it offers, and only the ones switched on are offered when a model is chosen.
+_Avoid_: account, subscription, key, connection
+
+**Fallback model / الموديل البديل**:
+The model a Company's Agents move to when every Provider of the model they chose has run out. There is none until the Owner picks one, and with none an Agent never moves to another kind of Provider.
+_Avoid_: backup model, failover
+
 **Work sandbox / صندوق الشغل**:
 A Company's own machine for its Agents' work: commands, files, code, a Screen with a browser, and video rendering. Every Agent of the Company works in the same one, so anything in it can be seen by any Member who talks to any of the Company's Agents. It holds no key of any kind. From inside it nothing of another Company, of the Engine or of the install can be reached; it reaches the internet only.
 _Avoid_: container, VM, workspace, environment
