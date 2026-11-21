@@ -327,14 +327,16 @@ test('the install job updates a real previous-release install with one Company, 
  // The release step names no base commit: the previous release is a fixed commit (#378, C1), so the proof still builds a
  // release before the Engines after this one has merged to main.
  assert.equal(step.env.BASE_SHA,undefined,'the release step names no pull request base');
- const pinned=at('previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6');
+ const pinned=at('previous_release_commit=8f47abe1761548a45de72937fac443a4bdea3eb6');
  assert.ok(pinned>=0,run);
+ assert.ok(at('previous_release=$previous_release_commit')>pinned,'the update reads the commit the lib names once (#423)');
  assert.ok(!run.includes('BASE_SHA'),'the job reads no base commit');
  assert.equal(run.includes('git rev-parse origin/main'),false,'the previous release is not origin/main');
  // The previous release is the pinned commit, installed from its own two files.
  const checkout=at('git worktree add "$RUNNER_TEMP/previous-release" "$previous_release"');
  assert.ok(checkout>pinned,run);
- const built=at('docker build -q -t localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release"');
+ // Built from that checkout, or loaded from the image CI kept for the commit (#423).
+ const built=at('release_image "$previous_release" localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release"');
  const installed=at("sh \"$dir/install.sh\" || fail 'the previous release install'");
  for(const [index,name] of [[built,'the previous release image'],[installed,'the previous release install']]) assert.ok(index>=0,`${name}: ${run}`);
  assert.ok(built>checkout&&installed>built,'the previous release is built and installed before the update');
