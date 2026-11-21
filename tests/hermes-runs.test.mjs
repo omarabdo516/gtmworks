@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeHermes, noProviderError, creditExhaustedError, apiKeyRefusedError, signInRefusedError, modelMissingError, failedRunText } from './fake-hermes.mjs';
-import { startRun, readRun, startUnknown } from '../lib/hermes.mjs';
+import { startRun, readRun, startNotReached, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 
 const connection=fake=>({address:fake.address,profile:'writer',key:'test-only-key'});
@@ -69,12 +69,12 @@ test('after a lost answer every failure is unknown, and a gateway error is never
   answers([failing('UND_ERR_SOCKET'),failing('ECONNREFUSED')]); assert.equal(await startRun(start),startUnknown);
   answers([failing('UND_ERR_SOCKET'),400]); assert.equal(await startRun(start),startUnknown);
   for(const status of [502,503,504]) { answers([status,status]); assert.equal(await startRun(start),startUnknown,String(status)); }
-  answers([failing('ECONNREFUSED')]); assert.equal(await startRun(start),null);
+  answers([failing('ECONNREFUSED')]); assert.equal(await startRun(start),startNotReached,'a first start nothing connected to never reached Hermes');
   answers([409]); assert.equal(await startRun(start),null);
  } finally { globalThis.fetch=real; }
 });
 
-test('a refused or unreachable Hermes starts no run',async()=>{
+test('a refused Hermes starts no run, and one nothing connects to is never reached',async()=>{
  const fake=await fakeHermes(); const input={...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'};
  try {
   assert.equal(await startRun({...input,key:'wrong'}),null);
@@ -85,7 +85,9 @@ test('a refused or unreachable Hermes starts no run',async()=>{
  // A Hermes nothing can connect to starts no run. (A request on a socket the closed fake dropped after an earlier answer
  // is unknown instead: whether it reached Hermes cannot be told.)
  const gone=await fakeHermes(); const address=gone.address; await gone.close();
- assert.equal(await startRun({...input,address}),null);
+ assert.equal(await startRun({...input,address}),startNotReached);
+ // The same Hermes on a retry proves nothing: an earlier attempt may have reached it.
+ assert.equal(await startRun({...input,address,retry:true}),startUnknown);
 });
 
 test('a key is never sent to Hermes over plain HTTP on a public address',async()=>{
