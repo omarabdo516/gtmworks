@@ -126,6 +126,9 @@
   background: var(--gw-wait-bg); color: var(--gw-wait-text); font-size: var(--gw-fs-xs); font-weight: 600;
   display: inline-flex; align-items: center; justify-content: center;
 }
+/* The count pops when more waits on the reader than before during a visit (#131; design-reference: .sb-count.is-pop). */
+.gw .sb-count.is-pop { animation: gw-count-pop 360ms var(--gw-ease-spring); }
+@keyframes gw-count-pop { from { transform: scale(.6); } }
 .gw .sb-count--none .sb-count__n { background: var(--gw-bg-tertiary); color: var(--gw-text-2); font-weight: 400; }
 .gw .sb-sec { margin-top: 24px; }
 .gw .sb-label { margin: 0; padding: 0 12px 8px; font-size: var(--gw-fs-sm); font-weight: 400; line-height: 1.6; color: var(--gw-text-3); letter-spacing: normal; text-transform: none; font-family: var(--gw-font); }
