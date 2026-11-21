@@ -115,13 +115,30 @@ test('"New agent" opens Lead\'s chat with the composer focused and a hint line, 
  await expect(page.locator('.new-hint[role="note"]')).toBeVisible();
 });
 
-test('an Agent Lead makes while the Conversation is open shows in the sidebar, marked new, without a reload',async({page})=>{
+// Every tile that takes the flash mark, with the motion it computes at that moment (#134). Set up before the grid changes,
+// so a flash is seen however quickly it ends.
+const watchFlashes=(page:import('@playwright/test').Page)=>page.evaluate(()=>{
+ const seen:{agent:string|null,name:string,duration:string,easing:string}[]=[];
+ (window as unknown as {flashes:typeof seen}).flashes=seen;
+ new MutationObserver(records=>{ for(const record of records) { const tile=record.target as HTMLElement;
+  if(record.attributeName==='class'&&tile.classList?.contains('agent-tile')&&tile.classList.contains('is-flash')&&!(record.oldValue||'').includes('is-flash')) {
+   const style=getComputedStyle(tile); seen.push({agent:tile.dataset.agent??null,name:style.animationName,duration:style.animationDuration,easing:style.animationTimingFunction});
+  } } }).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class'],attributeOldValue:true});
+});
+const flashes=(page:import('@playwright/test').Page)=>page.evaluate(()=>(window as unknown as {flashes:unknown[]}).flashes);
+const tileMotion=(page:import('@playwright/test').Page)=>page.locator('.sidebar .agent-tile[data-agent]').evaluateAll(tiles=>tiles.map(tile=>getComputedStyle(tile).animationName));
+
+test('an Agent Lead makes while the Conversation is open shows in the sidebar, marked new, without a reload, and its tile flashes once',async({page})=>{
  const [analystConnection,analyst]=[10,11].map(id);
  query(`insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id) values ('${company}','${conversation}','person','${omar}','Omar','And someone for the numbers','${id(12)}','made-run-3')`);
  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
  await openNavigation(page);
  const tile=page.locator('.sidebar .agent-tile').filter({hasText:'Analyst'});
  await expect(tile).toHaveCount(0);
+ // Nothing flashed as the page loaded.
+ expect(await page.locator('.sidebar .agent-tile.is-flash').count()).toBe(0);
+ expect(new Set(await tileMotion(page))).toEqual(new Set(['none']));
+ await watchFlashes(page);
  // Lead's Connection never answers here, so the page keeps asking for the open run while Lead's call lands.
  query(`do $$ begin
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,apps,profile) values ('${analyst}','${company}','${analystConnection}','Analyst','Reads the numbers.',false,now(),'${omar}','{}','made-analyst');
@@ -129,4 +146,16 @@ test('an Agent Lead makes while the Conversation is open shows in the sidebar, m
  end $$;`);
  await expect(page.getByRole('group',{name:'Agent made: Analyst'})).toBeVisible();
  await expect(tile.locator('.agent-tile__new')).toHaveText('New');
+ // Its tile, new to the grid during the visit, flashes once (design-reference: tileFlash); no other tile does, and the
+ // mark goes after 1500ms, the "New" mark staying.
+ await expect.poll(()=>flashes(page)).toEqual([{agent:analyst,name:'gw-ring-flash',duration:'1.4s',easing:'cubic-bezier(0.2, 0, 0, 1)'}]);
+ await expect(tile).not.toHaveClass(/is-flash/,{timeout:3000});
+ await expect(tile.locator('.agent-tile__new')).toHaveText('New');
+ expect(new Set(await tileMotion(page))).toEqual(new Set(['none']));
+ // After a reload nothing flashes.
+ await page.reload();
+ await openNavigation(page);
+ await expect(tile.locator('.agent-tile__new')).toHaveText('New');
+ expect(await page.locator('.sidebar .agent-tile.is-flash').count()).toBe(0);
+ expect(new Set(await tileMotion(page))).toEqual(new Set(['none']));
 });

@@ -123,7 +123,7 @@ test('the Owner sees each Agent\'s Routines and pauses, resumes, runs now, resch
  // Every change is one row of the Company log, naming the Owner, Ads and the Routine.
  const omar='20000000-0000-0000-0000-000000000001';
  for(const [act,routine,schedule] of [['routine_paused','Ads summary',undefined],['routine_resumed','Ads summary',undefined],['routine_run','Ads summary',undefined],['routine_changed','Ads summary','30 16 * * 4'],['routine_created','Send me the cost per lead','15 8 * * *'],['routine_deleted','Send me the cost per lead',undefined]] as const)
-  expect(logRows(act),act).toEqual([{actor_id:omar,agent_id:ads,details:{agent_name:'Ads',routine,...(schedule?{schedule}:{})}}]);
+  expect(logRows(act),act).toEqual([{actor_id:omar,agent_id:ads,details:{agent_name:'Ads',routine,...(schedule?{schedule}:{}),change:expect.stringMatching(/^[0-9a-f-]{36}$/)}}]);
  // The log reads them in words, the Routine as the object.
  await page.goto('/c/rs-learning/log');
  await expect(page.getByText('paused a recurring task of Ads').first()).toBeVisible();

@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import { act, createRef, StrictMode, useState, type ComponentProps, type Ref } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
@@ -735,4 +735,70 @@ test('sending a message while recording ends the recording and sends the typed t
  expect(send.mock.calls[0][0]).toBe('Send this now');
  await expect.element(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
  await expect.element(screen.getByRole('button', { name: 'Voice dictation: hold and talk, or click once to start' })).toBeVisible();
+});
+
+// #132 (design-reference: flySend, syncComposer's is-morph): on send a copy of the arrow leaves the button upward and is
+// gone about 420ms later, never with reduced motion; the button's new icon pops in when it turns between send and stop.
+const reducedMotion = (on: boolean) => cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }] });
+const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const flying = () => [...document.querySelectorAll<HTMLElement>('.send-fly')];
+
+test.each([['sent', null], ['refused', 'conversationFailed']] as const)('a %s message sends a copy of the arrow off over the button, gone 500ms later', async (_, answer) => {
+ const screen = await gwBox({ send: vi.fn<Send>(async () => answer) });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'hello');
+ const button = screen.getByRole('button', { name: 'Send' }).element();
+ const at = button.getBoundingClientRect();
+ await userEvent.keyboard('{Enter}');
+ await expect.poll(() => flying().length).toBe(1);
+ const [fly] = flying();
+ expect(fly.getAttribute('aria-hidden')).toBe('true');
+ const style = getComputedStyle(fly);
+ expect([style.position, style.left, style.top, style.width, style.height, style.pointerEvents]).toEqual(['fixed', `${at.left}px`, `${at.top}px`, `${at.width}px`, `${at.height}px`, 'none']);
+ expect([style.animationName, style.animationDuration, style.animationTimingFunction, style.animationFillMode]).toEqual(['gw-send-fly', '0.38s', 'cubic-bezier(0.4, 0, 1, 1)', 'forwards']);
+ expect(fly.contains(document.activeElement)).toBe(false);
+ await pause(500);
+ expect(flying()).toEqual([]);
+});
+
+test('with reduced motion no copy of the arrow is ever added', async () => {
+ await reducedMotion(true);
+ onTestFinished(async () => { await reducedMotion(false); });
+ const added: string[] = [];
+ const watch = new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => { if (node instanceof Element && (node.matches('.send-fly') || node.querySelector('.send-fly'))) added.push(node.outerHTML); })));
+ watch.observe(document.body, { subtree: true, childList: true });
+ onTestFinished(() => watch.disconnect());
+ const send = vi.fn<Send>(async () => null);
+ const screen = await gwBox({ send });
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'hello{Enter}');
+ await expect.poll(() => send.mock.calls.length).toBe(1);
+ await pause(500);
+ expect(added).toEqual([]);
+});
+
+test('the button\'s new icon pops in once when it turns between send and stop, not on the first draw or on typing', async () => {
+ const stop = { label: 'Stop', run: vi.fn(async () => null) };
+ const send = vi.fn<Send>(async () => null);
+ const view = (working: boolean) => <div className="gw"><div className="composer-area"><LanguageProvider language="en"><MessageBox placeholder="Write" send={send} stop={working ? stop : undefined}/></LanguageProvider></div></div>;
+ const screen = await render(view(false));
+ const icon = () => document.querySelector<SVGElement>('.composer__send .gw-icon')!;
+ const motion = () => { const style = getComputedStyle(icon()); return [style.animationName, style.animationDuration, style.animationTimingFunction, style.animationIterationCount]; };
+ const pops = ['gw-icon-in', '0.24s', 'cubic-bezier(0.34, 1.45, 0.64, 1)', '1'];
+ const ended = async () => { await expect.poll(() => getComputedStyle(icon()).animationName).toBe('none'); };
+ expect(motion()[0]).toBe('none');
+ await screen.rerender(view(true));
+ await expect.element(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+ expect(motion()).toEqual(pops);
+ await ended();
+ await screen.rerender(view(false));
+ await expect.element(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+ expect(motion()).toEqual(pops);
+ await ended();
+ const started: string[] = [];
+ const button = screen.getByRole('button', { name: 'Send' }).element();
+ button.addEventListener('animationstart', event => started.push((event as AnimationEvent).animationName));
+ await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'h');
+ await expect.element(button).toBeEnabled();
+ await pause(300);
+ expect(motion()[0]).toBe('none');
+ expect(started).toEqual([]);
 });

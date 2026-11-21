@@ -45,14 +45,16 @@ export function RoutinesSection({company,state,agents,canManage,now}:{company:st
   </>}</>;
 }
 
-async function send(t:T,company:string,agent:string,action:RoutineAction,fields:Record<string,unknown>={}) {
+// One change sent: no error, or the message key of the one to show. A change done but not written in the Company log
+// answers `unlogged`, so the caller shows that warning last, over its own message (one toast shows at a time).
+async function send(company:string,agent:string,action:RoutineAction,fields:Record<string,unknown>={}):Promise<{error:string|null,unlogged:boolean}> {
  const response=await fetch('/api/agent-routines',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,action,...fields})}).catch(()=>null);
- if(!response) return 'routineFailed';
- // Done, but its row is not in the Company log: the change stands, and the person is told so.
- if(response.ok) { const body=await response.json().catch(()=>null) as {logged?:boolean}|null; if(body?.logged===false) toast(t('routineNotLogged'),{icon:'shield'}); return null; }
- const body=await response.json().catch(()=>null) as {error?:string}|null;
- return body?.error==='routineBusy'?'routineBusy':'routineFailed';
+ if(!response) return {error:'routineFailed',unlogged:false};
+ const body=await response.json().catch(()=>null) as {error?:string,logged?:boolean}|null;
+ if(response.ok) return {error:null,unlogged:body?.logged===false};
+ return {error:body?.error==='routineBusy'?'routineBusy':'routineFailed',unlogged:false};
 }
+const warnUnlogged=(t:T,unlogged:boolean)=>{ if(unlogged) toast(t('routineNotLogged'),{icon:'shield'}); };
 
 function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,agent:string,routine:Routine,canManage:boolean,now:string}) {
  const {locale}=useI18n(); const router=useRouter();
@@ -66,10 +68,11 @@ function RoutineRow({t,company,agent,routine,canManage,now}:{t:T,company:string,
  const act=(action:RoutineAction,fields:Record<string,unknown>={},done?:()=>void)=>startTransition(async()=>{
   setFailed(null);
   if(action==='run') setRunning(true);
-  const error=await send(t,company,agent,action,fields);
+  const {error,unlogged}=await send(company,agent,action,fields);
   setRunning(false);
   if(error) { setFailed(error); return; }
   done?.();
+  warnUnlogged(t,unlogged);
   router.refresh();
  });
  const next=!routine.on?t('routinePausedNext'):routine.nextRunAt?t('routineNext',whenOf(t,locale,routine.nextRunAt,routine.timezone,at)):'';
@@ -136,9 +139,10 @@ function NewRoutine({t,company,agents,agent,onClose}:{t:T,company:string,agents:
   check={()=>{ const ok=what.trim().length>0; setEmpty(!ok); if(!ok) document.getElementById('rt-new')?.focus(); return ok; }}
   onSubmit={form=>startTransition(async()=>{
    setFailed(null);
-   const error=await send(t,company,who,'create',{prompt:what.trim(),schedule:cronOf(form),timezone:browserZone()});
+   const {error,unlogged}=await send(company,who,'create',{prompt:what.trim(),schedule:cronOf(form),timezone:browserZone()});
    if(error) { setFailed(error); return; }
    toast(t('routineAdded',what.trim().length>40?`${what.trim().slice(0,40)}…`:what.trim()));
+   warnUnlogged(t,unlogged);
    close(); router.refresh();
   })}>
   {agents.length>1&&<div className="rt-field"><label className="rt-field__l" htmlFor="rt-n-agent">{t('routineAgent')}</label>
