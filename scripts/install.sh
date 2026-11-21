@@ -112,9 +112,24 @@ sandbox_keys() {
   test -n "$image" || { echo "The work sandbox image is not recorded: run sh scripts/install.sh." >&2; return 1; }
   docker volume create "$volume" > /dev/null || return 1
   docker volume create "$(host_key_volume "$slug")" > /dev/null || return 1
+  docker volume create "$(work_volume "$slug")" > /dev/null || return 1
   keys=$(docker run --rm --user 0 --entrypoint sh -v "$volume:/data" -v "$(host_key_volume "$slug"):/keys" \
-    "$image" -ec '
+    -v "$(work_volume "$slug"):/work" "$image" -ec '
       set -e
+      # An Engine with no sandbox key yet is one made before the work sandbox (#397): the files each of its Agents made in
+      # the old Library root of its profile (`workspace`, on the disk of the Engine) are copied once into the own folder
+      # of that Agent in the work folder of the Company, before the key is made, so a run that fails here copies again. A
+      # file already there is never replaced, a link is copied as a link and never followed, every copy is readable by
+      # the Library of the Engine, the originals stay as they are, and nothing goes into the folder of another Agent.
+      if [ ! -s /data/ssh/id_ed25519 ]; then
+        for old in /data/profiles/*/workspace; do
+          [ -d "$old" ] && [ ! -L "$old" ] || continue
+          profile=${old#/data/profiles/}; profile=${profile%/workspace}
+          [ ! -L "/data/profiles/$profile" ] || continue
+          install -d -m 755 -o 1000 -g 1000 "/work/$profile"
+          tar -C "$old" --owner=1000 --group=1000 --numeric-owner --mode=u+rwX,go+rX -cf - . | tar -C "/work/$profile" --skip-old-files -xf -
+        done
+      fi
       install -d -m 700 -o 10000 -g 10000 /data/ssh
       if [ ! -s /data/ssh/id_ed25519 ]; then
         ssh-keygen -q -t ed25519 -N "" -C "gtmworks-work-sandbox" -f /data/ssh/id_ed25519
@@ -914,6 +929,10 @@ docker run --rm --env-file .env.install -v "$PWD/lib:/code:ro" "$node_image" nod
 echo 'Checking gateway configuration...'
 compose run --rm --no-deps gateway nginx -t
 if [ "$operation" = install ]; then compose up -d --wait db auth rest storage mail; fi
+# The image every Company's work sandbox runs (#392, ADR 0020): pulled from the release's pin or built from this
+# checkout, and recorded before anything can make a Company's sandbox. It comes before the migrations (#397), so an
+# update whose image cannot be pulled stops with the schema as it was and the release it runs still serving.
+work_sandbox_image || exit 1
 apply_migrations
 if [ -z "$release_image" ]; then
   # Tests only (#406): CI's install jobs load the one image the `image` job built, under this compose file's own tag,
@@ -945,9 +964,6 @@ if [ -z "$release_image" ]; then
     mv .install-lock/gateway .install-gateway
   fi
 fi
-# The image every Company's work sandbox runs (#392, ADR 0020): pulled from the release's pin or built from this
-# checkout, and recorded before anything can make a Company's sandbox.
-work_sandbox_image || exit 1
 # Every Engine is made from the template before the app and the worker start, recreated when the release pins a new
 # image, and left running otherwise.
 engines_up
