@@ -7,6 +7,8 @@ import ts from 'typescript';
 import { editMemoryNote, forgetMemoryNote, readMemoryNotes, resetMemory } from '../lib/hermes.mjs';
 import { editAgentMemory, forgetAgentMemory, readAgentMemory, resetAgentMemory } from '../lib/agent-memory.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+import { heldChanges } from './held-changes.mjs';
+import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 
 // An Agent's memory (#350) belongs to its own Hermes profile (ADR 0016, ADR 0017) and gtmworks keeps no copy: the
 // contract lists that profile's notes through the learning routes, which also hold skills, so no skill is ever listed
@@ -27,21 +29,18 @@ async function twoAgents() {
  fake.settings.skills.set(adsProfile,new Map([['weekly-ads-recap','---\nname: weekly-ads-recap\ndescription: Recaps the week.\n---\nWrite the recap.\n']]));
  return fake;
 }
-// The signed-in person's own session: company_app_agents lists the Agents they see, and the memory functions answer
-// their Role (`refuse`, `refuseEdit` and `refuseForget` name the refusal). Every log call is kept.
-function session({agents,refuse=null,refuseEdit=null,refuseForget=null}={}) {
- const logged=[],edited=[],forgotten=[];
+// The signed-in person's own session: company_app_agents lists the Agents they see, and the database holds each change
+// as their Role allows (`refuse`, `refuseEdit` and `refuseForget` name the refusal, tests/held-changes.mjs). Every log
+// row is kept, by act; `failLogs` fails that many log calls first.
+function session({agents,refuse=null,refuseEdit=null,refuseForget=null,failLogs=0}={}) {
+ const refusals={memory_reset:refuse,memory_edit:refuseEdit,memory_forget:refuseForget};
+ const changes=heldChanges({refuse:args=>args.act in refusals?refusals[args.act]:`unexpected ${args.act}`,failLogs});
+ const rowsOf=act=>changes.logged.filter(row=>row.act===act).map(({c,agent})=>({c,agent}));
  const db={rpc:async(name,args)=>{
   if(name==='company_app_agents') return {data:agents,error:null};
-  if(name==='check_memory_reset') return {data:null,error:refuse?{message:refuse}:null};
-  if(name==='log_memory_reset') { logged.push(args); return {data:null,error:null}; }
-  if(name==='check_memory_edit') return {data:null,error:refuseEdit?{message:refuseEdit}:null};
-  if(name==='log_memory_edit') { edited.push(args); return {data:null,error:null}; }
-  if(name==='check_memory_forget') return {data:null,error:refuseForget?{message:refuseForget}:null};
-  if(name==='log_memory_forget') { forgotten.push(args); return {data:null,error:null}; }
-  return {data:null,error:{message:`unexpected ${name}`}};
+  return changes.rpc(name,args)||{data:null,error:{message:`unexpected ${name}`}};
  }};
- return {db,logged,edited,forgotten};
+ return {db,changes,get logged() { return rowsOf('memory_reset'); },get edited() { return rowsOf('memory_edit'); },get forgotten() { return rowsOf('memory_forget'); }};
 }
 const rows=[
  {agent:ads,name:'Meta Ads',connection:'f0000000-0000-0000-0000-000000000011',profile:adsProfile,main:false,own:true},
@@ -256,7 +255,41 @@ test('a note a refused Engine call left alone is not logged, and a hidden Agent 
   fake.settings.memory.set(adsProfile,{memory:['Changed under the reader.'],profile:[]});
   assert.deepEqual(await editAgentMemory(owner.db,{company,agent:ads,note:notes[0].id,text:'New.',hermes:install(fake)}),{state:'stale'});
   assert.deepEqual(owner.edited,[],'a stale note is not logged as edited');
+  assert.equal(owner.changes.held.size,0,'and its held record is dropped, so no later pass logs it');
   assert.deepEqual((await readMemoryNotes(at(fake,adsProfile))).notes.map(note=>note.text),['Changed under the reader.']);
+ } finally { await fake.close(); }
+});
+
+// #370: a change the Engine holds always gets its one log row. A log the database does not take is retried, and one it
+// still does not take is left held for the worker's pass; the person is told the change was made either way, the pass
+// and a late retry never make a second row, and no call carries a note's text.
+test('a reset, an edit and a forget whose log fails are still made, and each ends with exactly one log row', async () => {
+ const fake=await twoAgents();
+ try {
+  const notes=(await readMemoryNotes(at(fake,adsProfile))).notes;
+  const retried=session({agents:rows,failLogs:1});
+  assert.deepEqual(await resetAgentMemory(retried.db,{company,agent:seo,hermes:install(fake)}),{state:'reset'},'a log taken on its retry');
+  assert.deepEqual(retried.logged,[{c:company,agent:seo}]);
+  assert.deepEqual((await readMemoryNotes(at(fake,seoProfile))).notes,[]);
+
+  const late=session({agents:rows,failLogs:3});
+  assert.deepEqual(await editAgentMemory(late.db,{company,agent:ads,note:notes[0].id,text:'Only short subject lines.',hermes:install(fake)}),
+   {state:'edited',logPending:true},'the Engine holds the edit, so it is never told as failed');
+  assert.deepEqual(late.edited,[],'its log is not written yet');
+  assert.equal(late.changes.held.size,1,'it is held for the pass');
+  late.changes.fail(3);
+  const second=(await readMemoryNotes(at(fake,adsProfile))).notes[1];
+  assert.deepEqual(await forgetAgentMemory(late.db,{company,agent:ads,note:second.id,hermes:install(fake)}),{state:'forgotten',logPending:true});
+  assert.deepEqual((await readMemoryNotes(at(fake,adsProfile))).notes.map(note=>note.text),['Only short subject lines.','Omar works in Cairo.']);
+  // The worker's pass logs both, once; a log retried after it finds nothing left to write.
+  assert.deepEqual(await logHeldAgentChanges(late.db),{logged:2});
+  for(const {args} of late.changes.calls.filter(call=>call.name==='finish_agent_change').slice(-1)) await late.db.rpc('finish_agent_change',args);
+  assert.deepEqual(late.edited,[{c:company,agent:ads}]);
+  assert.deepEqual(late.forgotten,[{c:company,agent:ads}]);
+  assert.deepEqual(await logHeldAgentChanges(late.db),{logged:0});
+  assert.equal(late.changes.logged.length,2,'never two rows for one change');
+  const sent=JSON.stringify(late.changes.calls);
+  for(const text of ['Only short subject lines.','Never mention prices before the offer.','Prefers short subject lines.']) assert.equal(sent.includes(text),false,'no log call carries a note');
  } finally { await fake.close(); }
 });
 

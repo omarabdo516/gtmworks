@@ -1,5 +1,11 @@
 [
  {
+  "issue": 370,
+  "date": "2026-11-21",
+  "en": { "title": "Memory and skill changes always reach the log", "body": "When you edit, forget or reset an agent's memory, or change a skill, and the agent already holds the change, it is saved and shown as saved even if its log line is late, and the log gets exactly one line for it." },
+  "ar": { "title": "تغييرات الذاكرة والمهارات دايمًا بتوصل للسجل", "body": "لما تعدّل أو تمسح أو تصفّر ذاكرة وكيل، أو تغيّر مهارة، والوكيل خلاص شايل التغيير، بيتحفظ ويظهر إنه اتحفظ حتى لو سطره في السجل اتأخر، والسجل بياخد سطر واحد بس ليه." }
+ },
+ {
   "issue": 31,
   "date": "2026-11-21",
   "en": { "title": "Recurring tasks in Settings", "body": "Settings now lists every recurring task of every agent with when it runs next and how its last run went; the Owner and Managers can switch one off or on, run it now, change when it runs, add one or delete one, and each change is in the log." },
