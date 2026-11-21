@@ -48,7 +48,7 @@ export function summarise(service,text,{appDirectory,packages,envNames}) {
   const thrown=line.match(/(?:^|\s)([A-Z][A-Za-z0-9]*Error)(?=:)/);
   if(thrown) fields.add(`error ${errorClasses.has(thrown[1])?thrown[1]:'other'}`);
   for(const word of line.match(/\b[A-Z0-9_]{4,40}\b/g) || []) if(codes.has(word)||/^PGRST\d{3}$/.test(word)) fields.add(`code ${word}`);
-  const env=line.match(/^\s*([A-Z0-9_]+) must (be|equal)\b/);
+  const env=line.match(/^\s*([A-Z0-9_]+) (must (be|equal)|belongs to)\b/);
   if(env) fields.add(`install-env ${envNames.has(env[1])?env[1]:'other'}`);
   if(/✓ Ready in \d+/.test(line)) fields.add('ready');
   if(fields.size) recognised++;
