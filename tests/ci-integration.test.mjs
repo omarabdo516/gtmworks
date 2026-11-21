@@ -97,8 +97,25 @@ test('ci.sh installs no system package for the CI integration run, and the visua
   // that would install one.
   assert.doesNotMatch(arm('integration'), /install_chromium|--with-deps|\bapt(?:-get)?\b/);
   // The visual lane on main still installs the browser with its system packages (#257, #359).
-  assert.match(text, /npx playwright install --with-deps chromium/);
+  assert.match(text, /npx --yes "playwright@\$version" install --with-deps chromium/);
   assert.match(arm('visual'), /install_chromium/);
+});
+
+// #359: the browser installs beside start_lane's npm ci, not in series after the lane, and is waited for only before
+// the navigation budgets. It runs the locked Playwright from outside the checkout, so it never reads the node_modules
+// npm ci is rewriting.
+test('ci.sh visual installs Chromium beside the lane and waits for it before the budgets (#359)', () => {
+  const text = readFileSync('ci.sh', 'utf8');
+  const start = text.indexOf('\n visual)');
+  const visual = text.slice(start, text.indexOf('\n  ;;', start));
+  const at = pattern => { const index = visual.search(pattern); assert.ok(index >= 0, `the visual arm has ${pattern}`); return index; };
+  assert.ok(at(/install_chromium/) < at(/\n  start_lane\n/), 'the install starts before the lane');
+  assert.ok(at(/lane_test/) < at(/chromium_installed/), 'the lane does not wait for the browser');
+  assert.ok(at(/chromium_installed/) < at(/--project=measured/), 'the budgets wait for the browser');
+  const helper = text.slice(text.indexOf('install_chromium() {'), text.indexOf('\n}\n', text.indexOf('install_chromium() {')));
+  assert.match(helper, /packages\['node_modules\/playwright'\]\.version/, 'the locked Playwright, not whatever npx finds');
+  assert.match(helper, /cd "\$\(mktemp -d\)"/, 'run outside the checkout npm ci is writing');
+  assert.match(helper, /&\n\s+chromium=\$!/, 'in the background');
 });
 
 // #421: the chat's open time (project `alone`, #346) runs in a job of its own with a machine to itself, on the pull

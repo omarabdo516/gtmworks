@@ -72,6 +72,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `apps` | Settings, Apps: the app catalogue (#30) | `/c/rs-learning/settings?section=apps` (needs a Company profile in the Engine) |
 | `account` | Settings, Your account | `/c/rs-learning/settings?section=account` |
 | `knowledge` | Settings, Company knowledge, on its first part, Brand voice (#27) | `/c/rs-learning/settings?section=knowledge` |
+| `routines` | Settings, Recurring tasks: every Agent's Routines with schedule, next run, Run now and the switch (#31) | `/c/rs-learning/settings?section=routines` (needs an Engine holding Routines: the visual lane's `routines` state and its fake Engine) |
 | `new-agent` | Sidebar, New agent: Lead's chat with the hint line (#13) | `/c/rs-learning/chat?new=agent` |
 | `ready-roles` | New agent, then the hint line's "or pick a ready-made one": the ready-made gallery (#14) | `/c/rs-learning/chat?new=ready` (needs the fixture's Lead) |
 | `main-empty` | New chat: the main Agent's empty chat with its paragraph and suggestions (#170) | `/c/rs-learning/chat` (needs the fixture's Agents) |
