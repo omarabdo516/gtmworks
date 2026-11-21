@@ -785,8 +785,7 @@ updates() {
     ignore) sql="update public.install_updates set state='idle', changed_at=now() where state='requested';";;
     updating) sql="update public.install_updates set state='updating', changed_at=now(), auto_checked_at=now();";;
     checked) sql="update public.install_updates set auto_checked_at=now();";;
-    idle) sql="update public.install_updates set state='idle', changed_at=now() where state in ('requested','updating');";;
-    updated|failed) sql="update public.install_updates set state='$1', version=nullif(:'version',''), changed_at=now(), auto_checked_at=now();";;
+    updated|failed|current) sql="update public.install_updates set state='$1', version=nullif(:'version',''), changed_at=now(), auto_checked_at=now();";;
     *) echo "gtmworks knows no updater step $1." >&2; return 2;;
   esac
   # step names the statement in psql's own log (and to the tests' stand-in for the database); no statement reads it.
@@ -831,7 +830,9 @@ ROW
   say "The updater runs gtmworks update ($why), from gtmworks ${back:-(unrecorded)}; its output is in $log."
   if sh "$dir/gtmworks.sh" --command --dir "$dir" update >> "$log" 2>&1; then
     if [ "$(cat .install-release 2> /dev/null || true)" = "$before" ]; then
-      [ "$why" = auto ] || updates idle > /dev/null
+      # A request that finds nothing newer is recorded as `current`, with the version still running, so the Owner is told
+      # they are already on the newest instead of the offer coming back (#468).
+      [ "$why" = auto ] || updates current "$back" > /dev/null
       say "gtmworks ${back:-(unrecorded)} is the newest of its channel: nothing to update."
     else
       updates updated "$(running_version)" > /dev/null

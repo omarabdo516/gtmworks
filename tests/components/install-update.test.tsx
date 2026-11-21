@@ -59,3 +59,19 @@ test('a request the server refuses says why, in the conversation\'s error style'
  await screen.getByRole('group').getByRole('button', { name: 'Update now' }).click();
  await expect.poll(textOf(screen.getByRole('alert'))).toContain('Update now is turned off on this server.');
 });
+
+// #468: the updater found nothing newer after the Owner's request, so the Owner is told and Update now waits until they
+// close it, rather than the same offer coming straight back.
+test('a request that finds nothing to update says the install is already the newest, with no Update now', async () => {
+ const current: InstallUpdateState = { ...idle, state: 'current', version: 'v1.2.3', changedAt: '2026-11-20T10:05:00Z' };
+ const english = await render(shown('en', { offer: true, initial: current }));
+ await expect.poll(textOf(english.getByRole('status'))).toContain('You already run the newest gtmworks.');
+ await expect.element(english.getByRole('button', { name: 'Update now' })).not.toBeInTheDocument();
+ await english.getByRole('button', { name: 'Close' }).click();
+ await expect.element(english.getByRole('status')).not.toBeInTheDocument();
+ await english.unmount();
+ // A browser where the line was not closed yet reads it in Arabic too.
+ localStorage.clear();
+ const arabic = await render(shown('ar', { offer: true, initial: current }));
+ await expect.poll(textOf(arabic.getByRole('status'))).toContain('إنت أصلاً على أحدث نسخة من gtmworks.');
+});

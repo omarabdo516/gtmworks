@@ -137,7 +137,7 @@ case "$*" in
   case "$step" in
    read) if [ -n "\${READ_ROW:-}" ]; then printf '%s\n' "$READ_ROW"; else echo "$button|$auto|$state|$due"; fi;;
    button-on) button=t;; button-off) button=f;; auto-on) auto=t;; auto-off) auto=f;;
-   ignore|idle) state=idle;; updating) state=updating due=f;; checked) due=f;; updated|failed) state=$step due=f;;
+   ignore) state=idle;; updating) state=updating due=f;; checked) due=f;; updated|failed|current) state=$step due=f;;
   esac
   printf 'button=%s auto=%s state=%s due=%s\n' "$button" "$auto" "$state" "$due" > "$UPDATES_FILE";;
  *'exec -T db psql'*) [ ! -f "$DB_FILE" ] || cat "$DB_FILE";;
@@ -1307,11 +1307,11 @@ test('gtmworks updater: an Owner\'s request runs gtmworks update to the newest o
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
  assert.deepEqual(m.installer(),[]);
- // Asked while already on the newest: nothing to update, and the state goes back to idle.
+ // Asked while already on the newest: nothing to update, and the Owner is told so (#468).
  m.setRow('button=t auto=f state=requested due=f');
  m.clear(); m.clearUpdates();
  ok(m.gtmworks(['updater']));
- assert.deepEqual(m.updates(),['read ','updating ','idle ']);
+ assert.deepEqual(m.updates(),['read ','updating ','current v1.10.0']);
  assert.deepEqual(m.installer(),[]);
 });
 
