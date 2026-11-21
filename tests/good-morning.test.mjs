@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { driveGoodMornings, dayIn } from '../lib/good-morning-runs.mjs';
-import { createRoutine, triggerRoutine, readRoutineRuns, readRunReply, pauseRoutine } from '../lib/hermes.mjs';
+import { createRoutine, triggerRoutine, readRoutineRuns, readRunReply, pauseRoutine, resumeRoutine } from '../lib/hermes.mjs';
 import { morningMarker } from '../lib/morning-schedule.mjs';
 import { morningTitle } from '../lib/good-morning-title.mjs';
 import { i18n } from '../lib/i18n.mjs';
@@ -79,13 +79,18 @@ test('each finished run of the job is recorded once with its greeting and the ni
   await triggerRoutine(at(fake,leadProfile),{id:morning.id});
   assert.equal(await driveGoodMornings(db,options),1);
   assert.deepEqual([recorded.at(-1).greeting,recorded.at(-1).results],[null,[]]);
-  // Switched off: a run made meanwhile is never recorded.
+  // Switched off: a run made meanwhile opens nothing (it is kept as sent nothing), and switching it on again does not
+  // deliver it later.
   fake.settings.cronReply='Good morning again.';
   await new Promise(resolve=>setTimeout(resolve,5));
   await triggerRoutine(at(fake,leadProfile),{id:morning.id});
   await pauseRoutine(at(fake,leadProfile),{id:morning.id});
-  assert.equal(await driveGoodMornings(db,options),0);
-  assert.equal(recorded.length,2);
+  await driveGoodMornings(db,options);
+  assert.equal(recorded.length,3);
+  assert.deepEqual([recorded.at(-1).greeting,recorded.at(-1).results],[null,[]]);
+  await resumeRoutine(at(fake,leadProfile),{id:morning.id});
+  assert.equal(await driveGoodMornings(db,options),0,'switched on again, the run from while it was off is never delivered');
+  assert.equal(recorded.length,3);
  } finally { await fake.close(); }
 });
 

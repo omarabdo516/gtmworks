@@ -151,12 +151,14 @@ test('switched off, no morning is recorded, and the card says it will not arrive
  await page.locator('#set-save').click();
  await expect(page.locator('#dp-savebar')).toBeHidden({timeout:30000});
  await expect.poll(()=>job()?.state).toBe('paused');
- const mornings=rows(`select count(*)::int as n from public.good_mornings where company_id='${company}'`)[0].n;
+ const sent=()=>rows(`select (select count(*) from public.good_mornings where company_id='${company}' and greeting is not null)::int as mornings,(select count(*) from public.conversations where good_morning is not null)::int as opened`)[0];
+ const before=sent();
  // A run made while it is off (a run now) is never recorded.
  await engine(`/api/cron/jobs/${job()!.id}/trigger?profile=${profile}`);
  await engine(`/api/cron/jobs/${job()!.id}/pause?profile=${profile}`);
  await page.waitForTimeout(15000);
- expect(rows(`select count(*)::int as n from public.good_mornings where company_id='${company}'`)[0].n).toBe(mornings);
+ // It is kept as sent nothing: no greeting and no Conversation.
+ expect(sent()).toEqual(before);
  await page.goto(`/c/rs-learning/conversations/${morningOf(1)}`);
  await expect(page.locator('.ck-foot')).toContainText('Good morning is off, so it won’t arrive tomorrow.');
 });
