@@ -274,13 +274,13 @@ test('release_image builds a fixed commit once, then loads what it saved', async
   const { tmpdir } = await import('node:os');
   const dir = mkdtempSync(`${tmpdir()}/release-image-`);
   try {
-    writeFileSync(`${dir}/docker`, '#!/bin/sh\necho "$*" >> "$DOCKER_LOG"\nif [ "$1" = save ]; then : > "$3"; fi\n');
+    writeFileSync(`${dir}/docker`, '#!/bin/sh\necho "$*" >> "$DOCKER_LOG"\nif [ "$1" = save ]; then : > "$3"; fi\nif [ "$1" = "${DOCKER_FAILS:-}" ]; then exit 1; fi\n');
     chmodSync(`${dir}/docker`, 0o755);
-    const run = env => {
+    const run = (env, status = 0) => {
       const out = spawnSync('bash', ['-c', '. scripts/ci-install-lib.sh; release_image abc123 localhost:5000/gtmworks:0.0.0-main /src --build-arg X=1'], {
         encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, DOCKER_LOG: `${dir}/log`, ...env },
       });
-      assert.equal(out.status, 0, out.stderr);
+      assert.equal(out.status, status, out.stderr);
       const log = readFileSync(`${dir}/log`, 'utf8').trim().split('\n');
       rmSync(`${dir}/log`);
       return log;
@@ -289,6 +289,11 @@ test('release_image builds a fixed commit once, then loads what it saved', async
     const kept = { GTMWORKS_RELEASE_IMAGES: `${dir}/kept` };
     assert.deepEqual(run(kept), ['build -q --build-arg X=1 -t gtmworks-release:abc123 /src', `save -o ${dir}/kept/abc123.tar gtmworks-release:abc123`, 'tag gtmworks-release:abc123 localhost:5000/gtmworks:0.0.0-main']);
     assert.deepEqual(run(kept), [`load -q -i ${dir}/kept/abc123.tar`, 'tag gtmworks-release:abc123 localhost:5000/gtmworks:0.0.0-main']);
+    // A kept archive that does not load (a cut-off save) is built and saved again, then tagged.
+    assert.deepEqual(run({ ...kept, DOCKER_FAILS: 'load' }), [`load -q -i ${dir}/kept/abc123.tar`, 'build -q --build-arg X=1 -t gtmworks-release:abc123 /src', `save -o ${dir}/kept/abc123.tar gtmworks-release:abc123`, 'tag gtmworks-release:abc123 localhost:5000/gtmworks:0.0.0-main']);
+    // A failed build saves and tags nothing, and the area's own sentence names it.
+    rmSync(`${dir}/kept`, { recursive: true });
+    assert.deepEqual(run({ ...kept, DOCKER_FAILS: 'build' }, 1), ['build -q --build-arg X=1 -t gtmworks-release:abc123 /src']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
