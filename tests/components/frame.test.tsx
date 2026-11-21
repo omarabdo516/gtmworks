@@ -151,3 +151,24 @@ test('a new chat going on as its Conversation does not fade again, in its frame 
  await screen.rerender(frame('conversation'));
  await expect.poll(() => starts).toEqual(['gw-fade-in', 'gw-fade-in']);
 });
+
+// On a chat page the chat fades and the details panel beside it does not, as the reference's #details sits outside the
+// view that fades (#135); the panel's scrim, over the chat on a narrow screen, does not fade either.
+const chatPage = (segment: string) => <LanguageProvider language="en"><Frame key={segment} title="Chats" chat sidebar={<nav aria-label="Navigation"><a href="#chats" onClick={stay}>Chats</a></nav>}>
+ <main className="convo-page"><div className="convo"><div className="chat">A chat</div><div className="dp-scrim"/><aside id="details" className="details">Lead</aside></div></main>
+</Frame></LanguageProvider>;
+test('on a chat page the chat fades in and the details panel and its scrim do not', async () => {
+ route.pathname = '/c/rs-learning/chat/lead'; await page.viewport(1440, 900);
+ const screen = await render(chatPage('chat'));
+ const starts = watchStarts(event => `${(event.target as Element).className} ${event.animationName}`);
+ await settle();
+ starts.length = 0;
+ for (const path of ['/c/rs-learning/chat/nour', '/c/rs-learning/chat/mona']) {
+  route.pathname = path;
+  await screen.rerender(chatPage('chat'));
+  await expect.poll(() => starts, { message: path }).toEqual(['chat gw-fade-in']);
+  for (const part of [content(), document.querySelector('.details')!, document.querySelector('.dp-scrim')!]) expect(getComputedStyle(part).animationName).toBe('none');
+  await settle();
+  starts.length = 0;
+ }
+});

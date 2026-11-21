@@ -17,7 +17,9 @@ export const widths = [1440, 390];
 /** @type {MotionRow[]} */
 export const motionTable = [
   // Every page beside the sidebar fades in when it opens (#135), as the reference's view does (setView); the sidebar does not.
-  { ref: '.view-enter', built: '.gw .app-content.view-enter', file: 'app/shell.css', html: '<div class="gw"><div class="shell"><div class="app-content view-enter"></div></div></div>' },
+  { ref: '.view-enter', built: '.gw .app-content.view-enter:not(:has(.convo))', file: 'app/shell.css', html: '<div class="gw"><div class="shell"><div class="app-content view-enter"><main class="log-page"></main></div></div></div>' },
+  // On a chat page the chat fades and the details panel beside it does not (#135): the reference's #details sits outside the view.
+  { ref: '.view-enter', built: '.gw .app-content.view-enter .convo > :not(.details, .dp-scrim)', file: 'app/shell.css', html: '<div class="gw"><div class="app-content view-enter"><main class="convo-page"><div class="convo"><div class="chat"></div><aside class="details"></aside></div></main></div></div>' },
   // The Conversation: message times show on hover; the drawer and the details panel slide.
   { ref: '.sender__time', built: '.gw .sender__time', file: 'app/shell.css', html: '<div class="gw"><time class="sender__time"></time></div>' },
   { ref: '.bubble__time', built: '.gw .bubble__time', file: 'app/shell.css', html: '<div class="gw"><time class="bubble__time"></time></div>' },

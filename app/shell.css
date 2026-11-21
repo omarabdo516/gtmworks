@@ -59,8 +59,10 @@
 .gw.app-layout { display: grid; grid-template-columns: var(--gw-sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
 .gw .shell { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* The page beside the sidebar fades in each time a page opens (design-reference: .view-enter, setView); app/frame.tsx
-   replays it when the pathname changes. The sidebar, the top bar and the details panel stay put. */
-.gw .app-content.view-enter { animation: gw-fade-in var(--gw-dur) var(--gw-ease-out); }
+   replays it when the pathname changes. The sidebar, the top bar and the details panel stay put: on a chat page (.convo)
+   the chat fades and the panel beside it, drawn inside the page, does not, as the reference's #details sits outside the
+   view that fades. */
+.gw .app-content.view-enter:not(:has(.convo)), .gw .app-content.view-enter .convo > :not(.details, .dp-scrim) { animation: gw-fade-in var(--gw-dur) var(--gw-ease-out); }
 .gw .gw-icon { width: 18px; height: 18px; flex: none; display: inline-block; }
 .gw :focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
 .gw .scrim { display: none; }
@@ -173,7 +175,7 @@
 @keyframes gw-draw-check { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .gw .face-wrap .face__f { transform: none !important; }
-  .gw .app-content.view-enter { animation: none; }
+  .gw .app-content.view-enter:not(:has(.convo)), .gw .app-content.view-enter .convo > :not(.details, .dp-scrim) { animation: none; }
   .gw .face-wrap.is-thinking .face__f, .gw .face-wrap .think i, .gw .face-wrap.is-thinking > .dot::after { animation: none !important; }
 }
 .gw .agent-tile__plus {
