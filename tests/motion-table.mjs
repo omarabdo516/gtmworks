@@ -16,6 +16,8 @@ export const widths = [1440, 390];
 
 /** @type {MotionRow[]} */
 export const motionTable = [
+  // Every page beside the sidebar fades in when it opens (#135), as the reference's view does (setView); the sidebar does not.
+  { ref: '.view-enter', built: '.gw .app-content.view-enter', file: 'app/shell.css', html: '<div class="gw"><div class="shell"><div class="app-content view-enter"></div></div></div>' },
   // The Conversation: message times show on hover; the drawer and the details panel slide.
   { ref: '.sender__time', built: '.gw .sender__time', file: 'app/shell.css', html: '<div class="gw"><time class="sender__time"></time></div>' },
   { ref: '.bubble__time', built: '.gw .bubble__time', file: 'app/shell.css', html: '<div class="gw"><time class="bubble__time"></time></div>' },
@@ -77,6 +79,10 @@ export const motionTable = [
   { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-item" href="#">Board</a></div></aside></div>', held: 0.985 },
   { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-foot"><button type="button" class="sb-item sb-apps" aria-disabled="true">Connect apps</button></div></aside></div>', held: 1 },
   { ref: '.agent-tile', built: '.gw .agent-tile', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><ul class="agent-grid"><li><a class="agent-tile" href="#">Lead</a></li></ul></aside></div>', held: 0.96 },
+  // The row and the tile that are current, and a link being opened, fade to their fill as any other row does (#135).
+  { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-item" href="#" aria-current="page">Board</a></div></aside></div>', held: 0.985 },
+  { ref: '.agent-tile', built: '.gw .agent-tile', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><ul class="agent-grid"><li><a class="agent-tile" href="#" aria-current="true">Lead</a></li></ul></aside></div>', held: 0.96 },
+  { ref: '.sb-item', built: '.gw .sb-item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-row"><a class="sb-item" href="#">Numbers<span class="link-pending"></span></a></div></aside></div>', held: 0.985 },
   { ref: '.sb-add', built: '.gw .sb-add', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-label-row"><button type="button" class="sb-add" aria-label="New channel"></button></div></aside></div>' },
   { ref: '.me', built: '.gw .me', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><div class="sb-foot"><button type="button" class="me" aria-expanded="false">Omar</button></div></aside></div>' },
   { ref: '.menu__item', built: '.gw .menu__item', file: 'app/shell.css', html: '<div class="gw"><aside class="sidebar"><nav class="sb-scroll"></nav><div class="sb-foot"><div class="menu" role="menu"><button type="button" class="menu__item" role="menuitemradio" aria-checked="false">Dark</button></div></div></aside></div>', held: 0.985 },

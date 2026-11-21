@@ -54,6 +54,9 @@
 /* ---------- frame ---------- */
 .gw.app-layout { display: grid; grid-template-columns: var(--gw-sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
 .gw .shell { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* The page beside the sidebar fades in each time a page opens (design-reference: .view-enter, setView); app/frame.tsx
+   replays it when the pathname changes. The sidebar, the top bar and the details panel stay put. */
+.gw .app-content.view-enter { animation: gw-fade-in var(--gw-dur) var(--gw-ease-out); }
 .gw .gw-icon { width: 18px; height: 18px; flex: none; display: inline-block; }
 .gw :focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
 .gw .scrim { display: none; }
@@ -103,10 +106,6 @@
 }
 .gw .sb-item .gw-icon { color: var(--gw-text-2); }
 .gw .sb-item[aria-current="page"], .gw .sb-item[aria-current="true"] { background: var(--gw-bg-active); }
-/* A link that is opening its page answers at once (lib/link.tsx, app/globals.css a:has(.link-pending)), without a fade.
-   The same goes for the entry that becomes current when its page arrives: the fade is for hover, and a 150ms fade
-   from the hover tint to the current tint would hold the opened page from settling (tests/navigation.spec.ts). */
-.gw a:has(.link-pending), .gw .sb-item[aria-current], .gw .agent-tile[aria-current] { transition: none; }
 .gw .sb-item .od-fill { flex: 1 1 0; min-width: 0; }
 /* The approvals entry: its own link to the Inbox, drawn as the reference's count pill. It stays at zero, quieter,
    so the Inbox is always reachable. */
@@ -167,6 +166,7 @@
 @keyframes gw-draw-check { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .gw .face-wrap .face__f { transform: none !important; }
+  .gw .app-content.view-enter { animation: none; }
   .gw .face-wrap.is-thinking .face__f, .gw .face-wrap .think i, .gw .face-wrap.is-thinking > .dot::after { animation: none !important; }
 }
 .gw .agent-tile__plus {

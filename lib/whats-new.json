@@ -1,5 +1,11 @@
 [
  {
+  "issue": 135,
+  "date": "2026-11-21",
+  "en": { "title": "Pages fade in when they open", "body": "Every page beside the sidebar now fades in when it opens, and the sidebar row you open fades to its new fill, as in the approved design; with reduced motion on, both change at once." },
+  "ar": { "title": "الصفحات بتظهر بهدوء وهي بتفتح", "body": "كل صفحة جنب القايمة الجانبية بقت بتظهر بهدوء وهي بتفتح، والسطر اللي بتفتحه في القايمة بيتلوّن بهدوء، زي التصميم المعتمد؛ ولو مشغّل تقليل الحركة، الاتنين بيتغيّروا على طول." }
+ },
+ {
   "issue": 19,
   "date": "2026-11-21",
   "en": { "title": "Agents propose changes to their settings", "body": "An Agent, or Lead for another Agent, can propose a new model, new core instructions, sub-agents or one of its settings, with the reason. It waits in the Owner’s Waiting on you, and nothing changes until the Owner approves it." },
