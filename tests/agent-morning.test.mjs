@@ -569,3 +569,41 @@ test('a create the Engine finishes late, after the next move, lands paused and n
   assert.deepEqual(jobs(fake,leadProfile).map(job=>[job.state,job.schedule.expr]),[['scheduled','0 9 * * *']]);
  } finally { await fake.close(); leases.clear(); }
 });
+
+test('a move carries a zone changed on the source meanwhile, and a source switched on meanwhile is paused when the move fails', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  const rezoned={create:async(connection,routine)=>{ const made=await createRoutine(connection,routine); jobs(fake,leadProfile)[0].timezone='Europe/London'; return made; }};
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(fake),driver:rezoned})).state,'moved');
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>[job.schedule.expr,job.timezone,job.state]),[['0 9 * * *','Europe/London','scheduled']],'the zone set meanwhile is kept');
+  assert.equal(jobs(fake,leadProfile).length,0);
+ } finally { await fake.close(); }
+ const second=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:false,time:'9:00',zone:'Africa/Cairo',hermes:install(second)});
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(second)});
+  await changeAgentMorning(session().db,{company,agent:lead,on:false,time:'9:00',hermes:install(second)});
+  // Read paused; Recurring tasks switches it on while the copy is made; the copy cannot be switched on.
+  const resumedMeanwhile={
+   create:async(connection,routine)=>{ const made=await createRoutine(connection,routine); Object.assign(jobs(second,leadProfile)[0],{enabled:true,state:'scheduled'}); return made; },
+   resume:async()=>({state:'unreachable'}),
+  };
+  assert.equal((await moveAgentMorning(session({agents:agentRows(ads)}).db,{company,agents:agentRows(lead),hermes:install(second),driver:resumedMeanwhile})).state,'failed');
+  assert.deepEqual(jobs(second,leadProfile).map(job=>job.state),['paused'],'the source is paused whatever it was read as, so it sends from no other Agent');
+  assert.ok(jobs(second,adsProfile).every(job=>job.state==='paused'));
+ } finally { await second.close(); }
+});
+
+test('a log write tried again after a lost answer sends the same change key, so the database writes one row', async () => {
+ const fake=await engine();
+ try {
+  const {db}=session();
+  const sent=[];
+  const flaky={...db,rpc:async(name,args)=>{ if(name!=='log_agent_morning') return db.rpc(name,args); sent.push(args.change); return sent.length===1?{data:null,error:{message:'lost'}}:db.rpc(name,args); }};
+  assert.equal((await changeAgentMorning(flaky,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)})).state,'written');
+  assert.equal(sent.length,2);
+  assert.match(sent[0],/^[0-9a-f-]{36}$/);
+  assert.equal(sent[1],sent[0]);
+ } finally { await fake.close(); leases.clear(); }
+});

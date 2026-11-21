@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(33);
 -- #182: the main Agent's daily message is changed by an active Owner or Manager of its Company only (check_agent_setting,
 -- asked before the Engine), and each change is one row of the Company log on the Agent naming who did it and the old and
 -- the new value (log_agent_morning: "off" or the time). RS Learning: 1 Owner, 2 Manager, 3 Contributor,
@@ -15,20 +15,21 @@ set local session_replication_role=origin;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select lives_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182')$$,'the Owner may change good morning');
-select lives_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','off','9:00')$$,'and the change is logged');
+select lives_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','off','9:00','c0000000-0000-0000-0000-000000000001')$$,'and the change is logged');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select lives_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182')$$,'a Manager may change it');
-select lives_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','9:00','off')$$,'and switching it off is logged as theirs');
+select lives_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','9:00','off','c0000000-0000-0000-0000-000000000002')$$,'and switching it off is logged as theirs');
 
+select lives_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','9:00','off','c0000000-0000-0000-0000-000000000002')$$,'the same change written again after a lost answer');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select throws_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182')$$,'42501','agentSettingNotAllowed','a Contributor is refused before the Engine is asked');
-select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','off','9:00')$$,'42501','agentSettingNotAllowed','and logs nothing');
+select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','off','9:00','c0000000-0000-0000-0000-000000000003')$$,'42501','agentSettingNotAllowed','and logs nothing');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182')$$,'42501','agentSettingNotAllowed','so is a Viewer');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','off','rm -rf /')$$,'22023','agentSettingInvalid','a value that is not off, a time or a schedule is refused');
-select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','9:00','9:00')$$,'22023','agentSettingInvalid','so is a change that changes nothing');
-select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000184','off','9:00')$$,'22023','agentSettingInvalid','and another Agent than the main one has no daily message');
+select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','off','rm -rf /','c0000000-0000-0000-0000-000000000004')$$,'22023','agentSettingInvalid','a value that is not off, a time or a schedule is refused');
+select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000182','9:00','9:00','c0000000-0000-0000-0000-000000000005')$$,'22023','agentSettingInvalid','so is a change that changes nothing');
+select throws_ok($$select public.log_agent_morning('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000184','off','9:00','c0000000-0000-0000-0000-000000000006')$$,'22023','agentSettingInvalid','and another Agent than the main one has no daily message');
 select throws_ok($$select public.check_agent_setting('10000000-0000-0000-0000-000000000001','e1000000-0000-0000-0000-000000000183')$$,'42501','agentSettingNotAllowed','an Agent of another Company is never changed from this one');
 -- The Company's lease (agent_morning_leases): one holder at a time, given back by that holder; Owners and Managers only.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
@@ -73,7 +74,7 @@ reset role;
 select is((select jsonb_build_array(actor_id,actor_kind,subject,agent_id,action,details) from public.company_log
   where action='agent_setting_changed' and details->>'field'='morning' order by id limit 1),
  jsonb_build_array('20000000-0000-0000-0000-000000000001','person','agent','e1000000-0000-0000-0000-000000000182','agent_setting_changed',
-  jsonb_build_object('agent_name','Lead','field','morning','old','off','new','9:00')),
+  jsonb_build_object('agent_name','Lead','field','morning','old','off','new','9:00','change','c0000000-0000-0000-0000-000000000001')),
  'switching on is one row on the Agent naming who, the old value and the new time');
 select is((select jsonb_build_array(actor_id,details->>'old',details->>'new') from public.company_log
   where action='agent_setting_changed' and details->>'field'='morning' order by id desc limit 1),
