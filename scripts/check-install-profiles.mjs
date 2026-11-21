@@ -635,8 +635,10 @@ if(step==='open-design-add') {
   const runs=async(/** @type {string} */ profile,/** @type {string} */ bearer)=>(await fetch(`${firstEngine.address}/p/${encodeURIComponent(profile)}/v1/capabilities`,{headers:{Authorization:`Bearer ${bearer}`}})).status;
   assert.equal(await runs(design,designKey),200,'the design key runs the design profile');
   assert.equal(await runs(first.profile,designKey),401,'and no other profile');
-  // The design profile is never given a model or a credential of its own: it draws with the Engine's root model access
-  // (ADR 0018), where a Company's subscription sign-in lives; here the root holds the fake model the proof stands in with.
+  // The design profile draws with its Agent's model access, copied inside the Engine (a provider key, a provider and a
+  // model; a subscription sign-in is the root's, ADR 0018). Here the Agent runs on the fake model, a custom endpoint, which
+  // is the one kind of access the driver does not copy (ADR 0025), so the proof gives the design profile the same stand-in.
+  await pointAtFakeModel(firstEngine,design);
   const tested=await testServer(target,key);
   assert.equal(tested.state,'connected','Test reaches Open Design in the sandbox');
   for(const tool of ['create_project','start_run','get_run']) assert.ok(tested.tools?.includes(tool),`Test lists ${tool}`);
@@ -692,8 +694,7 @@ try {
  const started=await fakeModel(asked,results,plan);
  model=started.model; const {reply}=started;
  await pointAtFakeModel(firstEngine,first.profile);
- const designConfig=await (await manage(firstEngine,`/api/config?profile=${encodeURIComponent(design)}`)).json();
- assert.ok(!designConfig.model?.api_key&&!designConfig.model?.base_url,'the design profile holds no model address or key of its own');
+ await pointAtFakeModel(firstEngine,design);
  const person=await signedIn();
  const {data:{user}}=await person.auth.getUser();
  assert.ok(user,'the first-run Owner signs in');
