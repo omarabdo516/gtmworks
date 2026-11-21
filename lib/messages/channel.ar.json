@@ -53,6 +53,7 @@
   "channelInviteNote": "{0} عزم {1}، ودخل «{2}» على طول",
   "channelHandoffs": "التسليمات",
   "channelHandedTo": "سلّم الشغل لـ {0}",
+  "channelHandedFailed": "الشغل ماخلصش",
   "channelSenderTo": "لـ {0}",
   "channelOnTheBoard": "على اللوحة:",
   "channelOnTheBoardSection": "على اللوحة",
