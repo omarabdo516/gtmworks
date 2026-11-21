@@ -32,18 +32,20 @@ const stored = {
 };
 const replied = '2026-06-10T09:42:00Z';
 type TiedCard = { id: number, column: string, made?: string, wait?: { person: string, kind: 'question' | 'hand', title: string } };
-type StoredHandover = { run_id: string, goal: string, state: string, target_outcome: string | null, answers_person: boolean, created_at: string, to_agent: { id: string, name: string, connection_id: string } };
+// A handover as conversation_handovers answers it (#475): both Agents named, the job, how far it got and its answer.
+type StoredHandover = { id: number, run: string, from_name: string, from_connection: string, to_agent: string, to_name: string, to_connection: string, goal: string, answer: string | null,
+ state: string, target_outcome: string | null, answers_person: boolean, created_at: string, answered_at: string | null };
 function database(card: TiedCard | null, messages: typeof stored = stored, agent_handovers: StoredHandover[] = []) {
  // The messages and how their runs ended are read through the Conversation, in one statement (lib/conversation-record.ts).
  const { conversation_run_ends, conversation_messages, ...rest } = messages;
- const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [], agent_handovers }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
+ const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [] }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
  const table = (name: string) => {
   const found = rows[name] ?? [];
   const query: Record<string, unknown> = { then: (resolve: (value: unknown) => unknown) => resolve({ data: found, error: null }), maybeSingle: async () => ({ data: found[0] ?? null, error: null }) };
   for (const method of ['select', 'eq', 'is', 'not', 'in', 'order']) query[method] = () => query;
   return query;
  };
- return { from: table, rpc: async () => ({ data: null, error: null }) } as unknown as Parameters<typeof conversationRecord>[0];
+ return { from: table, rpc: async (name: string) => ({ data: name === 'conversation_handovers' ? agent_handovers : null, error: null }) } as unknown as Parameters<typeof conversationRecord>[0];
 }
 const recordWith = (card: TiedCard | null) => conversationRecord(database(card), 'p-3', 'co-1', { id: 'cv-1', agent_id: null, agent_name: 'Ads', hermes_agents: { connection_id: 'c-1' } });
 // #147: a chat with Lead, whose Card only a handover makes. The person's message comes first, the Card when Lead's reply
@@ -105,14 +107,14 @@ test('a chat with Lead whose Card a handover made says so once, under the handov
 // #375: the record says a handover did not finish when its target's leg ended without a report, though Lead followed it
 // up, or when the handover itself ended failed; one that finished says nothing of it, and none of them keeps the chat
 // asking. The row under Lead's reply then says the job did not finish.
-const handedTo = (state: string, target_outcome: string | null): StoredHandover => ({ run_id: 'r1', goal: 'Plan the Meta ads for the March intake', state, target_outcome,
- answers_person: false, created_at: '2026-06-10T09:41:03Z', to_agent: { id: 'a-ads', name: 'Ads', connection_id: 'c-3' } });
+const handedTo = (state: string, target_outcome: string | null): StoredHandover => ({ id: 1, run: 'r1', from_name: 'Lead', from_connection: 'c-0', to_agent: 'a-ads', to_name: 'Ads', to_connection: 'c-3',
+ goal: 'Plan the Meta ads for the March intake', answer: null, state, target_outcome, answers_person: false, created_at: '2026-06-10T09:41:03Z', answered_at: null });
 const handedRecord = (handover: StoredHandover) => conversationRecord(database(null, leadStored, [handover]), 'p-3', 'co-1', { id: 'cv-9', agent_id: 'a-lead', agent_name: 'Lead', hermes_agents: { connection_id: 'c-0', is_default: true } });
 const handedCard = (record: ConversationRecord) => record.messages.flatMap(message => message.cards ?? []).find(card => card.kind === 'handed');
 test('the record marks a handover that did not finish, whichever leg ended it, and leaves a finished one unmarked', async () => {
  for (const [state, outcome, failed] of [['done', 'completed', false], ['done', 'failed', true], ['done', 'stopped', true], ['done', 'lost', true], ['failed', 'completed', true], ['failed', 'failed', true]] as const) {
   const record = await handedRecord(handedTo(state, outcome));
-  expect(handedCard(record), `${state}/${outcome}`).toEqual({ kind: 'handed', name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake', ...(failed ? { failed: true } : {}) });
+  expect(handedCard(record), `${state}/${outcome}`).toEqual({ kind: 'handed', from: { name: 'Lead', face: 'c-0' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake', ...(failed ? { failed: true } : {}) });
   expect(record.handover, `${state}/${outcome}`).toBeUndefined();
  }
  const moving = await handedRecord(handedTo('target', null));
