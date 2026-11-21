@@ -49,7 +49,7 @@ async function engine() {
  fake.settings.files.set(work,[]);
  return {fake,at:{address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'}};
 }
-const downloaded=fake=>fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/fs/download'));
+const downloaded=fake=>fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/files/download'));
 
 // The database as the signed-in person reaches it: their Role in the Company, and the Agents they see there.
 function database({role='owner',agents=[{agent,name:'Lead',connection:'c',profile,main:true,own:true}],signedIn=person,companyRow={id:company}}={}) {
@@ -157,7 +157,7 @@ test('a folder that the Engine resolves outside the work folder is missing, for 
   assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'missing'});
   assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'missing'});
   assert.equal(downloaded(fake).length,0,'no bytes were asked for');
-  assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/fs/read-text')),'no text was asked for');
+  assert.deepEqual(fake.settings.workspaceReads,[],'nothing was read from the sandbox\'s workspace routes');
   // A folder inside it that is a link somewhere else is refused the same way, and its entries are never used.
   fake.settings.resolved.delete(work);
   fake.settings.files.set(`${work}/reports`,[{name:'q3.csv',size:12,mtime}]);
@@ -182,7 +182,7 @@ test('one file of the work folder is fetched through gtmworks, with its type and
   assert.equal(file.type,'text/markdown');
   assert.equal(file.size,Buffer.byteLength(text));
   assert.equal(Buffer.from(file.body).toString(),text);
-  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/download?path=${encodeURIComponent(`${work}/brief.md`)}&profile=${profile}`));
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files/download?path=${encodeURIComponent(`${work}/brief.md`)}`));
   assert.deepEqual(await downloadAgentFile(at,{name:'reports'}),{state:'invalid'},'a folder is not a file');
   assert.deepEqual(await downloadAgentFile(at,{name:'nothing.md'}),{state:'missing'});
   // A file the Engine no longer has, in a folder that still lists it, is missing rather than a failure.
@@ -210,7 +210,7 @@ test('the generated images folder is the Library\'s second root, listed, downloa
   assert.equal(file.type,'image/png');
   assert.equal(file.size,png.length);
   assert.deepEqual([...file.body], [...png]);
-  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/download?path=${encodeURIComponent(`${images}/promo.png`)}&profile=${profile}`));
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files/download?path=${encodeURIComponent(`${images}/promo.png`)}`));
   // A picture has no text to preview: its bytes are the Engine's and its answer carries none of them as text.
   assert.deepEqual(await readAgentFile(at,{root:'images',name:'promo.png'}),{state:'found',name:'promo.png',type:'image/png',byteSize:png.length,truncated:false,text:null});
   // The two roots are read apart: the work folder never carries the generated image.
@@ -264,7 +264,7 @@ test('a generated images folder that is a link somewhere else is missing for the
   assert.deepEqual(await downloadAgentFile(at,{root:'images',name:'promo.png'}),{state:'missing'});
   assert.deepEqual(await readAgentFile(at,{root:'images',name:'promo.png'}),{state:'missing'});
   assert.equal(downloaded(fake).length,0,'no bytes were asked for');
-  assert.ok(!fake.settings.managementRequests.some(request=>String(request.path).startsWith('/api/fs/read-text')),'no text was asked for');
+  assert.deepEqual(fake.settings.workspaceReads,[],'nothing was read from the sandbox\'s workspace routes');
   // A folder the Engine does not have is still empty rather than missing once the link is gone, and not before.
   fake.settings.resolved.delete(images);
   assert.deepEqual(await listAgentFiles(at,'','images'),{state:'found',entries:[{name:'promo.png',isFolder:false,size:8,time:clock}]});

@@ -10,9 +10,9 @@ import { csvRows, filePreviewKind } from '../lib/file-preview.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // A file of an Agent's Library opens in a read-only preview (#195): a raster picture, text or Markdown as plain text, a
-// CSV as its first rows, or its icon and a download. The text comes from the Engine's own preview (`/api/fs/read-text`,
-// 512 KB with its whole size and whether more follows) through the same path guard and the same Roles as #194, and a
-// vector or page is never handed any inline content.
+// CSV as its first rows, or its icon and a download. The text is the file's first 512 KB, read from the Engine's managed
+// files (`/api/files/download`, never the sandbox's `/api/fs/*` routes) with its whole size and whether more follows,
+// through the same path guard and the same Roles as #194, and a vector or page is never handed any inline content.
 const company='10000000-0000-0000-0000-000000000001';
 const otherCompany='10000000-0000-0000-0000-000000000002';
 const agent='3a000000-0000-0000-0000-000000000021';
@@ -45,7 +45,7 @@ async function engine() {
  fake.settings.files.set(work,[]);
  return {fake,at:{address:fake.address,managementAddress:fake.managementAddress,profile,key:'test-only-key'}};
 }
-const texts=fake=>fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/fs/read-text'));
+const texts=fake=>fake.settings.managementRequests.filter(request=>String(request.path).startsWith('/api/files/download'));
 
 function database({role='owner',agents=[{agent,name:'Lead',connection:'c',profile,main:true,own:true}],signedIn=person,companyRow={id:company}}={}) {
  const asked=[];
@@ -89,7 +89,8 @@ test('a file\'s first part is read through the Engine, with its type, its whole 
   const text='# Brief\n\nSell more.\n';
   await withFile(fake,'brief.md',text,'text/markdown');
   assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'found',name:'brief.md',type:'text/markdown',byteSize:Buffer.byteLength(text),truncated:false,text});
-  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/fs/read-text?path=${encodeURIComponent(`${work}/brief.md`)}&profile=${profile}`));
+  assert.ok(fake.settings.managementRequests.some(request=>request.path===`/api/files/download?path=${encodeURIComponent(`${work}/brief.md`)}`));
+  assert.deepEqual(fake.settings.workspaceReads,[],'the text is never asked of the sandbox\'s workspace routes');
   // A folder inside the work folder is read by its relative name.
   fake.settings.files.set(`${work}/reports`,[{name:'q3.csv',size:9,mtime}]);
   fake.settings.fileBytes.set(`${work}/reports/q3.csv`,{body:'a,b\n1,2\n',type:'text/csv'});
@@ -114,12 +115,12 @@ test('a file\'s first part is read through the Engine, with its type, its whole 
  } finally { await fake.close(); }
 });
 
-test('a file the Engine read from a path other than the one asked for is missing, and its text is never handed on', async () => {
+test('a file that became a link out of the Engine\'s files after the listing is missing, and its text is never handed on', async () => {
  const {fake,at}=await engine();
  try {
   const text='# Brief\n\nSell more.\n';
   await withFile(fake,'brief.md',text,'text/markdown');
-  // The link was swapped between the folder's listing and the read: the Engine says which file it actually read.
+  // The link was swapped between the folder's listing and the read: the Engine refuses a path outside its root.
   fake.settings.resolved.set(`${work}/brief.md`,'/etc/passwd');
   assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'missing'});
   fake.settings.resolved.delete(`${work}/brief.md`);
@@ -156,12 +157,12 @@ test('the preview service reads one Agent\'s file for the Company that sees it, 
   assert.equal((await agentFilePreview(database().db,{company,agent,hermes:at,name:'q3.csv'})).preview?.kind,'table');
   await withFile(fake,'shot.png',new Uint8Array([137,80,78,71,0,1]),'image/png');
   assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'shot.png'})).preview,{name:'shot.png',kind:'image',type:'image/png',byteSize:6,truncated:false,text:null});
-  // A raster over the Engine's read ceiling is still drawn: its listed size answers, and no read-text is asked for it.
+  // A raster over the Engine's read ceiling is still drawn: its listed size answers, and no read is asked for it.
   fake.settings.files.set(work,[{name:'big.png',size:700*1024,mtime}]);
   const before=texts(fake).length;
   assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'big.png'})).preview,{name:'big.png',kind:'image',type:'image/png',byteSize:700*1024,truncated:false,text:null});
-  assert.equal(texts(fake).length,before,'a picture is answered from the listing, with no read-text');
-  // A vector image and a page are never handed content; their answer is the listing's too, so no read-text is asked.
+  assert.equal(texts(fake).length,before,'a picture is answered from the listing, with no read');
+  // A vector image and a page are never handed content; their answer is the listing's too, so no read is asked.
   await withFile(fake,'logo.svg','<svg onload="alert(1)"></svg>','image/svg+xml');
   assert.deepEqual((await agentFilePreview(database().db,{company,agent,hermes:at,name:'logo.svg'})).preview,{name:'logo.svg',kind:'none',type:'application/octet-stream',byteSize:29,truncated:false,text:null});
   await withFile(fake,'page.html','<script>alert(1)</script>','text/html');

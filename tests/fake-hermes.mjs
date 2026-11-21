@@ -118,7 +118,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // An Agent's work folder (#194), as the dashboard's file routes read it: each entry is the folder's absolute path to
   // the entries `/api/files?path=` reports (a name, whether it is a folder, its size, its mtime, and `resolves`: the
   // path a link points at, which is the entry itself unless it leaves the folder), and `fileBytes` holds the bytes
-  // `/api/fs/download?path=` serves, by absolute file path. A folder not in `files` is not found.
+  // `/api/files/download?path=` serves, by absolute file path. A folder not in `files` is not found.
   files:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
   // The pictures a profile generated (#353), as the Engine's own folder `<profile home>/cache/generated/images`
   // (agent/provider_media.py, GENERATED_SUBDIR, cache_dir) holds them. The Engine makes that folder when the first
@@ -126,7 +126,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   images:/** @type {Map<string,{name:string,isFolder?:boolean,size?:number,mtime?:number,resolves?:string,broken?:boolean}[]>} */(new Map()),
   fileBytes:/** @type {Map<string,{body:string|Uint8Array,type?:string}>} */(new Map()),
   filesUnreadable:/** @type {Set<string>} */(new Set()),
-  // The path `/api/files?path=` and `/api/fs/read-text?path=` answer with, when it is not the one asked for: a folder or
+  // Each `/api/fs/*` route asked (the sandbox's, never the Engine's disk): gtmworks reads no Library file there.
+  workspaceReads:/** @type {string[]} */([]),
+  // The path `/api/files?path=` answers with (and `/api/files/download` refuses outside /opt/data), when it is not the one asked for: a folder or
   // a file that is a link somewhere else, which the Engine resolves and reports as its own `path`.
   resolved:/** @type {Map<string,string>} */(new Map()),
   // One recording as text (#160): the profile it was sent for, the MIME type and how many bytes, and the words the
@@ -305,7 +307,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(settings.managementStatus!==200) return send(response,settings.managementStatus,{detail:request.headers.authorization});
    // An Agent's work folder (#194). `/api/files?path=` lists a folder under the managed root with each entry's size,
    // time and resolved path (hermes_cli/web_routers/files.py 616, web_server_files.py _managed_file_entry), refusing a
-   // path outside it (403); `/api/fs/download?path=` serves one file as an attachment (files.py 1356).
+   // path outside it (403).
    if(url.pathname==='/api/files'&&request.method==='GET') {
     const path=(url.searchParams.get('path')||'').replace(/\/+$/,'');
     if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
@@ -319,31 +321,28 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
       mime_type:folder||entry.broken?null:mimeOf(entry.name),...(entry.broken?{broken_link:true}:{})};
     })});
    }
-   // A text file's first part (#195): `/api/fs/read-text` answers the bytes up to 512 KB decoded as UTF-8, the whole
-   // size, the type, whether more follows and whether it reads as binary (hermes_cli/web_routers/files.py 1032-1079).
-   if(url.pathname==='/api/fs/read-text'&&request.method==='GET') {
+   // One file under the managed root, as an attachment (hermes_cli/web_routers/files.py 813-832, _managed_file_response):
+   // the Engine resolves the path and refuses one outside /opt/data (403), and it answers a `Range: bytes=0-<n>` with
+   // that first part (206) and the whole size in Content-Range, as Starlette's FileResponse does.
+   if(url.pathname==='/api/files/download'&&['GET','HEAD'].includes(request.method)) {
     const path=url.searchParams.get('path')||'';
-    if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
+    if(!(settings.resolved.get(path)??path).startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
     const cut=path.lastIndexOf('/');
     const entry=(entriesAt(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
     if(!entry||entry.broken) return send(response,404,{detail:'File not found'});
-    if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
+    if(entry.isFolder===true) return send(response,400,{detail:'Path is not a file'});
     const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};
-    const data=Buffer.from(file.body);
-    return send(response,200,{binary:data.includes(0),byteSize:data.length,language:'text',mimeType:file.type??mimeOf(entry.name),path:settings.resolved.get(path)??path,
-     text:data.subarray(0,512*1024).toString('utf8'),truncated:data.length>512*1024});
-   }
-   if(url.pathname==='/api/fs/download'&&['GET','HEAD'].includes(request.method)) {
-    const path=url.searchParams.get('path')||'';
-    const cut=path.lastIndexOf('/');
-    const entry=(entriesAt(path.slice(0,cut))||[]).find(item=>item.name===path.slice(cut+1));
-    if(!entry||entry.broken) return send(response,404,{detail:'File not found'});
-    if(entry.isFolder===true) return send(response,400,{detail:'Path points to a directory'});
-    const file=settings.fileBytes.get(path)||{body:`the bytes of ${entry.name}`,type:mimeOf(entry.name)};
-    const body=Buffer.from(file.body);
-    response.writeHead(200,{'Content-Type':file.type??mimeOf(entry.name),'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(entry.name)}`,'Content-Length':body.length});
+    const whole=Buffer.from(file.body);
+    const range=/^bytes=0-(\d+)$/.exec(String(request.headers.range||''));
+    const body=range?whole.subarray(0,Number(range[1])+1):whole;
+    response.writeHead(range?206:200,{'Content-Type':file.type??mimeOf(entry.name),'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(entry.name)}`,'Content-Length':body.length,
+     ...(range?{'Content-Range':`bytes 0-${Math.max(body.length-1,0)}/${whole.length}`}:{})});
     return response.end(request.method==='HEAD'?undefined:body);
    }
+   // The `/api/fs/*` file routes answer from a profile's ssh workspace when it has one (files.py 303-376), and every
+   // profile is pinned to the work sandbox (#393): none of them reads the Engine's own disk, so nothing gtmworks lists
+   // under /opt/data is there.
+   if(url.pathname.startsWith('/api/fs/')) { settings.workspaceReads.push(url.pathname); return send(response,404,{detail:'File not found'}); }
    // A session answers only under its own profile; a page holds at most 500 messages, from `offset`.
    // One recording as text (#160; hermes_cli/web_routers/audio.py 89-149): the body is a data URL and its MIME type,
    // the answer the transcript and the provider. Only its size and type are kept here, never the recording.
