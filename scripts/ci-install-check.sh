@@ -2102,13 +2102,7 @@ release_image "$before_sandbox" localhost:5000/gtmworks:0.0.0-staged "$RUNNER_TE
 before=$(publish 0.0.0-staged) || fail 'push the release before the staged removal'
 ( cd "$RUNNER_TEMP/staged-previous-release" && node scripts/release-assets.mjs "$before" "$root/release-before-staged" ) || fail 'the release before the staged removal files'
 publish_releases
-# A release whose work sandbox does not start: this release with a sandbox image that exits at once.
-docker build -q -t localhost:5000/gtmworks-sandbox:0.0.3-broken - > /dev/null <<DOCKERFILE || fail 'build a work sandbox image that does not start'
-FROM $sandbox
-ENTRYPOINT ["sh","-c","echo this work sandbox does not start >&2; exit 1"]
-DOCKERFILE
-broken_sandbox=$(publish_sandbox 0.0.3-broken) || fail 'push the work sandbox image that does not start'
-node scripts/release-assets.mjs "$first" release-broken-sandbox "$broken_sandbox" || fail 'the release files whose work sandbox does not start'
+publish_broken_sandbox_release
 publish_broken_engine_release
 dir="$PWD/staged-release-install"
 mkdir "$dir" && cp release-before-staged/docker-compose.install.yml release-before-staged/install.sh "$dir/" || fail 'the release before the staged removal folder'
@@ -2214,22 +2208,10 @@ set +o pipefail
 fail_prefix='release install check failed: '
 start_registry
 publish_releases
-# A release whose work sandbox does not start, and one whose Engine does not start, both made from this one, as the
-# staged-update area makes them.
-docker build -q -t localhost:5000/gtmworks-sandbox:0.0.3-broken - > /dev/null <<DOCKERFILE || fail 'build a work sandbox image that does not start'
-FROM $sandbox
-ENTRYPOINT ["sh","-c","echo this work sandbox does not start >&2; exit 1"]
-DOCKERFILE
-broken_sandbox=$(publish_sandbox 0.0.3-broken) || fail 'push the work sandbox image that does not start'
-node scripts/release-assets.mjs "$first" release-broken-sandbox "$broken_sandbox" || fail 'the release files whose work sandbox does not start'
-docker image inspect alpine:3.21 > /dev/null 2>&1 || docker pull -q alpine:3.21 > /dev/null || fail 'pull the image the Engine that does not start is made of'
-docker tag alpine:3.21 gtmworks-engine-broken:0.0.4 || fail 'tag an Engine image that does not start'
-docker build -q -t localhost:5000/gtmworks:0.0.4-broken-engine - > /dev/null <<'DOCKERFILE' || fail 'build the release whose Engine does not start'
-FROM localhost:5000/gtmworks:0.0.0-ci
-RUN sed -i '0,/^\( *image:\).*/s//\1 gtmworks-engine-broken:0.0.4/' /app/install/scripts/engine-template.yml
-DOCKERFILE
-broken_engine=$(publish 0.0.4-broken-engine) || fail 'push the release whose Engine does not start'
-node scripts/release-assets.mjs "$broken_engine" release-broken-engine "$sandbox" || fail 'the release files whose Engine does not start'
+# A release whose work sandbox does not start, and one whose Engine does not start, both made from this one. Only the first
+# pins another sandbox image, so it is the failure that proves the image recorded before comes back; the second keeps it.
+publish_broken_sandbox_release
+publish_broken_engine_release
 echo "this release: $first; its sandbox image: $sandbox; broken sandbox: $broken_sandbox; broken Engine: $broken_engine"
 dir="$PWD/rollback-release-install"
 docker run --rm -v "$PWD:/work" alpine:3.21 rm -rf /work/rollback-release-install || fail 'remove an earlier rollback install folder'

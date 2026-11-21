@@ -217,6 +217,17 @@ DOCKERFILE
   next=$(publish 0.0.1-ci) || fail 'push the next release image'
   node scripts/release-assets.mjs "$next" release-next "$sandbox" || fail 'next release files'
 }
+# A release whose work sandbox does not start, as release-broken-sandbox files: this release with a sandbox image that
+# exits at once (broken_sandbox). The staged-update and sandbox-rollback areas update to it (#504); publish_releases runs
+# first.
+publish_broken_sandbox_release() {
+  docker build -q -t localhost:5000/gtmworks-sandbox:0.0.3-broken - > /dev/null <<DOCKERFILE || fail 'build a work sandbox image that does not start'
+FROM $sandbox
+ENTRYPOINT ["sh","-c","echo this work sandbox does not start >&2; exit 1"]
+DOCKERFILE
+  broken_sandbox=$(publish_sandbox 0.0.3-broken) || fail 'push the work sandbox image that does not start'
+  ( cd "$root" && node scripts/release-assets.mjs "$first" release-broken-sandbox "$broken_sandbox" ) || fail 'the release files whose work sandbox does not start'
+}
 # A release whose Engine does not start, as release-broken-engine files: this release with an Engine image that holds no
 # Hermes. The staged-update area updates the release before the work sandbox to it, and the update area the release
 # before the Engines (#502); publish_releases runs first.
