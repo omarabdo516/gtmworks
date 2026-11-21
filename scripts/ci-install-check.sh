@@ -727,6 +727,53 @@ mcp_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' sandbox-mcp-proof.log 
 docker exec "$sandbox" grep -q "^$mcp_host /work/$first " "/work/$first/$mcp_marker-mcp.txt" \
   || fail "the command server wrote in the Agent's own folder of the Company's work folder"
 if docker exec "$engine_id" test -e "/work/$first/$mcp_marker-mcp.txt"; then fail 'nothing the command server wrote is on the Engine'; fi
+# The Open Design app (#544, ADR 0025): turned on for the Agent through the driver, then, after an Engine restart that
+# connects it, the Agent is asked for a design from a Conversation. Open Design's daemon in the sandbox draws it through
+# its `hermes` runtime, a Run on the Agent's design profile on the Engine over the socket the Engine's ssh session
+# forwards. While the call holds, the host's Docker lists both containers' processes: Open Design's MCP command and its
+# daemon are processes of the sandbox, and the Engine holds only the ssh client. The design's file is in the Agent's own
+# folder of the Company's work folder, and the sandbox holds no provider credential: the fake model's key, which is the
+# Engine's model access here, is in no process environment and no file of the sandbox.
+od_marker="open-design-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - open-design-add "$od_marker" < scripts/check-install-profiles.mjs \
+  || { docker exec "$sandbox" sh -c 'tail -n 40 /home/pn/.gtmworks/open-design/*.log' >&2 || true; fail 'Open Design is turned on for an Agent and Test lists its tools'; }
+docker restart "$engine_id" > /dev/null || fail 'restart the Engine'
+engine_healthy "$engine_id" 60 || fail 'the Engine is healthy after its restart'
+engine_node "$engine_key" - open-design "$od_marker" < scripts/check-install-profiles.mjs > open-design-proof.log 2>&1 &
+od_check=$!
+od_file="/work/$first/open-design/projects/$od_marker/index.html"
+od_drawn=''
+for attempt in $(seq 1 600); do
+  docker exec "$sandbox" test -f "$od_file" 2> /dev/null && { od_drawn=yes; break; }
+  kill -0 "$od_check" 2> /dev/null || break
+  sleep 1
+done
+if [[ $od_drawn != yes ]]; then
+  wait "$od_check" || true
+  cat open-design-proof.log >&2
+  docker exec "$sandbox" sh -c 'tail -n 60 /home/pn/.gtmworks/open-design/*.log; ls -la /home/pn/.gtmworks' >&2 || true
+  fail 'an Agent makes a design with Open Design from a Conversation'
+fi
+sandbox_ps=$(docker exec "$sandbox" ps -eo comm=,args=) || fail 'list the work sandbox processes'
+engine_ps=$(docker exec "$engine_id" ps -eo comm=,args=) || fail 'list the Engine processes'
+grep -q '/opt/open-design/app/dist/cli\.js mcp --daemon-url' <<< "$sandbox_ps" \
+  || { printf '%s\n' "$sandbox_ps" >&2; fail "Open Design's MCP command is a process of the work sandbox"; }
+grep -q '/opt/open-design/app/dist/cli\.js --no-open' <<< "$sandbox_ps" \
+  || { printf '%s\n' "$sandbox_ps" >&2; fail "Open Design's daemon is a process of the work sandbox"; }
+if grep -q 'open-design/app\|dist/cli\.js' <<< "$engine_ps"; then printf '%s\n' "$engine_ps" >&2; fail 'no process of the Engine runs Open Design'; fi
+awk '$1 == "ssh" && /pn@sandbox/ && /open-design-mcp/ {found=1} END {exit !found}' <<< "$engine_ps" \
+  || { printf '%s\n' "$engine_ps" >&2; fail 'the Engine reaches Open Design over ssh into the sandbox'; }
+wait "$od_check" || { cat open-design-proof.log >&2; fail 'an Agent makes a design with Open Design and returns its file'; }
+cat open-design-proof.log
+docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's file is in the Agent's own folder of the Company's work folder"
+# No provider credential in the sandbox: the Engine's model key is in no process environment and no file there, and no
+# provider key variable is set for any process.
+if docker exec --user 0 "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"' | grep -E -q 'fake-model-key|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN='; then
+  fail 'no process of the sandbox holds a provider credential'
+fi
+if docker exec --user 0 "$sandbox" grep -rIl --exclude-dir=proc fake-model-key /home /work /tmp /run 2> /dev/null | grep -q .; then
+  fail 'no file of the sandbox holds a provider credential'
+fi
 # The Library shows the Company's work folder (#395): an Agent's file and picture in its own folder are listed, previewed
 # and downloaded with the same bytes through gtmworks; the Engine reads that folder and cannot write to it, as root or as
 # its own user, and nothing it tried reaches the sandbox.

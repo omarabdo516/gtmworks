@@ -1,5 +1,11 @@
 [
  {
+  "issue": 544,
+  "date": "2026-11-21",
+  "en": { "title": "Open Design is a ready-made app", "body": "Turn Open Design on for an agent in Apps, and the agent makes designs from a conversation in your company’s work folder, drawn with your company’s own model, a subscription sign-in or an API key alike." },
+  "ar": { "title": "Open Design بقى تطبيق جاهز", "body": "فعّل Open Design لوكيل من التطبيقات، والوكيل هيعمل تصميمات من المحادثة في فولدر شغل شركتك، بموديل شركتك نفسه، سواء تسجيل دخول باشتراك أو مفتاح API." }
+ },
+ {
   "issue": 477,
   "date": "2026-11-21",
   "en": { "title": "An asked agent can ask another", "body": "An agent you asked for a job can now ask any other agent of your company in turn, as far as the job needs: each step shows in the chat or channel with its answer, and the agent you talk to replies once every answer came back." },

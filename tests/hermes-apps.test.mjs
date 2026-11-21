@@ -4,6 +4,7 @@ import { provideProfile, readApps, prepareApp, prepareServer, startAppSignIn, po
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { apps } from '../lib/app-catalogue.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+import { designProfileOf, designProfileConfig, openDesignServer } from '../lib/open-design.mjs';
 
 // The app driver (#30, #458) against a fake of the pinned release's MCP routes: the catalogued apps, a ready-made remote
 // server, a server the Owner added, the three sign-in kinds and removal. No config it writes carries a tool filter, and
@@ -269,5 +270,51 @@ test('a server installed for a sign-in is removed again when its config cannot b
   fake.settings.failStep='';
   assert.equal(await prepareApp(target,'airtable',back('airtable')),null);
   assert.equal('tools' in servers().airtable,false);
+ } finally { await fake.close(); }
+});
+
+// The Open Design app (#544, ADR 0025): a design profile of the Agent's own with a Run API key no other profile holds,
+// and a server entry that runs Open Design's MCP command in the work sandbox with that key, never the install's.
+test('Open Design gives the Agent a design profile with a key of its own, and runs its MCP command in the sandbox with it', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  const design=fake.settings.profiles.get(designProfileOf(target.profile));
+  assert.ok(design,'the design profile is made');
+  assert.match(design.key,/^[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(design.key,target.key,'never the install\'s key');
+  assert.deepEqual(design.config.terminal,{cwd:`/work/${target.profile}`},'it works in the Agent\'s own folder');
+  assert.deepEqual(design.config.platform_toolsets,designProfileConfig(target.profile).platform_toolsets);
+  const entry=servers()['open-design'];
+  assert.deepEqual({command:entry.command,args:entry.args},openDesignServer({profile:target.profile,engine:new URL(fake.address).hostname,key:design.key}));
+  assert.equal(entry.enabled,true);
+  assert.equal(JSON.stringify(servers()).includes(target.key),false,'the install\'s key is in no server entry');
+  const read=await readApps(target);
+  const app=read.apps.find(one=>one.key==='open-design');
+  assert.equal(app?.source,'sandbox');
+  assert.equal(app?.state,'connected');
+  // Turning it on again keeps the key the design profile takes, so the Agent's connected session stays as it is.
+  fake.settings.managementRequests.length=0;
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  assert.equal(fake.settings.profiles.get(designProfileOf(target.profile)).key,design.key);
+  assert.ok(!fake.settings.managementRequests.some(request=>request.method==='DELETE'||request.path?.startsWith('/api/mcp/servers?')),'the entry is not added again');
+ } finally { await fake.close(); }
+});
+
+test('a design profile that no longer takes the entry\'s key gets a new one, and off removes the entry and the design profile', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  const name=designProfileOf(target.profile);
+  const before=fake.settings.profiles.get(name).key;
+  fake.settings.profiles.get(name).key='changed-elsewhere-changed-elsewhere-1234';
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  const after=fake.settings.profiles.get(name).key;
+  assert.notEqual(after,before);
+  assert.ok(servers()['open-design'].args.at(-1).endsWith(`'${after}'`));
+  assert.deepEqual(await disconnectApp(target,'open-design'),{state:'disconnected'});
+  assert.equal(servers()['open-design'],undefined);
+  assert.equal(fake.settings.profiles.has(name),false,'the design profile is removed');
+  assert.deepEqual(await disconnectApp(target,'open-design'),{state:'disconnected'},'again: nothing left, nothing refused');
  } finally { await fake.close(); }
 });

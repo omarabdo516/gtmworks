@@ -4,7 +4,35 @@
 # The base is the image the pinned Engine uses for its sandboxed terminal and screen (v0.23.0). The pin is here and
 # nowhere else: the tag names the reviewed release and the digest the reviewed bytes, so a re-pushed tag cannot change
 # what an install runs. `lib/work-sandbox-image.mjs` reads this line and fails when it is not tag@sha256.
-FROM nousresearch/hermes-sandbox:desktop@sha256:df6768a595eaa09a9549237533421bf0557221ec0c13a825c9c202a13ddd37bb
+FROM nousresearch/hermes-sandbox:desktop@sha256:df6768a595eaa09a9549237533421bf0557221ec0c13a825c9c202a13ddd37bb AS base
+
+# Open Design (#544, ADR 0025), built from its source on the same base, so its daemon and its native modules run on the
+# sandbox's own Node. Its `od` command (apps/daemon/dist/cli.js), which holds the MCP server, is published in no package,
+# so the release is fetched by commit: the 0.27.1 tag, open-design-v0.27.1, is this commit, and a commit cannot be
+# pushed again. The whole workspace is installed from its lockfile, as Open Design's own postinstall builds its packages,
+# and only the daemon with its production dependencies is kept. Nothing of this stage but that folder reaches the image.
+FROM base AS open-design
+USER root
+ARG OPEN_DESIGN_COMMIT=b83646f4afb9b21b415d98c4d073477d077d7943
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends ca-certificates git g++ make python3 \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+# The build machine's extra CA, when scripts/docker-build.sh hands one over as the secret build-ca (a cloud session's
+# network re-signs TLS, #562), is trusted only while these steps run; nothing of it reaches a layer.
+RUN --mount=type=secret,id=build-ca set -eu; \
+    if [ -f /run/secrets/build-ca ]; then export GIT_SSL_CAINFO=/run/secrets/build-ca NODE_EXTRA_CA_CERTS=/run/secrets/build-ca; fi; \
+    git init --quiet . && git fetch --quiet --depth 1 https://github.com/nexu-io/open-design.git "$OPEN_DESIGN_COMMIT" \
+ && git checkout --quiet FETCH_HEAD && test "$(git rev-parse HEAD)" = "$OPEN_DESIGN_COMMIT"
+RUN --mount=type=secret,id=build-ca set -eu; \
+    if [ -f /run/secrets/build-ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build-ca; fi; \
+    export CI=true ONNXRUNTIME_NODE_INSTALL_CUDA=skip ELECTRON_SKIP_BINARY_DOWNLOAD=1 PUPPETEER_SKIP_DOWNLOAD=1 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1; \
+    npm install --prefix /opt/pnpm --no-fund --no-audit pnpm@10.33.2 && export PATH="/opt/pnpm/node_modules/.bin:$PATH" \
+ && pnpm install --frozen-lockfile \
+ && pnpm --filter @open-design/daemon deploy --prod --legacy /opt/open-design/app \
+ && test -f /opt/open-design/app/dist/cli.js
+
+FROM base
 
 USER root
 
@@ -38,6 +66,17 @@ RUN set -eux; \
     install -d -o pn -g pn -m 700 /home/pn/.ssh /home/pn/.ssh-host; \
     install -d -o pn -g pn -m 755 /work
 
+# Open Design's daemon and its `od` command, built above; the MCP command the Engine runs for an Agent, the daemon it
+# starts for that Agent, and the `hermes` runtime the daemon draws a design with, which is the Company's own Engine
+# (sandbox/open-design). The route to the Engine arrives when the Engine connects, in the work user's home; none is here.
+COPY --from=open-design /opt/open-design/app /opt/open-design/app
+COPY open-design/open-design-mcp /usr/local/bin/open-design-mcp
+COPY open-design/daemon.mjs open-design/hermes-engine.mjs /usr/local/lib/gtmworks/open-design/
+RUN set -eux; \
+    ln -s "$(command -v node)" /opt/open-design/node; \
+    chmod 0755 /usr/local/bin/open-design-mcp /usr/local/lib/gtmworks/open-design/hermes-engine.mjs; \
+    chmod 0644 /usr/local/lib/gtmworks/open-design/daemon.mjs; \
+    install -d -o pn -g pn -m 700 /home/pn/.gtmworks
 COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/work-sandbox-entrypoint
 COPY work-shell /usr/local/bin/work-shell
