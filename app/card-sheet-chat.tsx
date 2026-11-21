@@ -89,12 +89,12 @@ function Between({person,agent}:{person:string,agent:string}) {
 }
 
 // The reader's own chat on the Card, kept on its newest message while they are there.
-function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:string,initial:ConversationRecord,writer:boolean,shown:boolean}) { const {record,asked}=useConversationRecord({company,initial});
+function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:string,initial:ConversationRecord,writer:boolean,shown:boolean}) { const {record,asked,reread}=useConversationRecord({company,initial});
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[record.messages.length,record.pending,shown]);
  return <>
   <div {...panel} ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>
-   <div className="transcript__col"><ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked}/></div>
+   <div className="transcript__col"><ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread}/></div>
   </div>
   <div className="composer-area"><ConversationComposer company={company} conversation={record.conversation} record={record} writer={writer} asked={asked} usage={false}/></div>
  </>;

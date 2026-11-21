@@ -96,6 +96,9 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 | `request-sent` | Viewing as Youssef, his chat with Lead (`th-wa`) holding his request, not made yet (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
 | `request-waiting` | Omar's chat with Lead (`th-wa-req`): Youssef's request with No and Make it. The product decides it where it waits (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
 | `request-made` | Omar presses Make it, then viewing as Youssef, his chat with the made request (#17) | none (no built fixture: its set-up was a state of the compared screens removed by #257; set it up by hand before comparing) |
+| `access-ask` | Viewing as Youssef, a new chat with Lead asking for an SEO article, the job of an agent hidden from him: Lead's sentence and the card "Ask Sara for it?" with its two buttons (#167) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000020` (needs the fixture; with `--sign-in reviewer@example.com`) |
+| `access-sent` | The same, after "Ask Sara": the card reads "Sent to Sara · time" (#167) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000021` (needs the fixture; with `--sign-in reviewer@example.com`) |
+| `access-no` | The same, after "No, never mind": the card reads that no request was sent (#167) | `/c/rs-learning/conversations/62000000-0000-0000-0000-000000000022` (needs the fixture; with `--sign-in reviewer@example.com`) |
 | `plus-menu` | The Conversation with Lead, the composer's "+" pressed: "Call an agent" and "Commands" (#153) | `/c/rs-learning/chat`, its "+" pressed |
 | `plus-menu-channel` | Sidebar, Channels, عام (`ch-general`), the composer's "+" pressed: "Call someone in the channel" before "Call an agent" (#153) | `/c/rs-learning/channels/69000000-0000-0000-0000-000000000001`, its "+" pressed |
 | `plus-menu-model` | The Conversation with Lead, the composer's "+" pressed and scrolled to its end: "Connect apps" with its count and the Owner's "Model" with the one in use checked (#158) | none (a uuid path; pass `--built-path /c/rs-learning/conversations/<id>` of the Owner's Conversation, its Agent on an Engine that lists models) |
@@ -106,7 +109,7 @@ The prototype has no URL routes. Its sidebar switches between four views (`data-
 
 The built settings overlay is route-backed: `/c/<slug>/settings` opens it, `?section=<name>` opens a section and `?agent=<id>` one Agent's page, so each state has one address. The `agent`, `made-card`, `made-agent`, `ready-roles`, `rule-saved` and `learning` rows need the comparison fixture (below); on the seed alone the overlay shows the Agents list. "none" means the product has no equivalent page yet. Pass `--built-path` once a ticket builds one, and add it to the table in the same change.
 
-Every screen starts from the prototype's default state. The "viewing as" switcher is touched only by the alone screens and by `ask-agent`, `request-sent` and `request-made`, which show Youssef, a Contributor (#17). To add a screen, add a row in `scripts/design-compare-lib.mjs` with its steps (`click`, `waitFor` or `scrollTo`, each with a CSS selector) and its built path.
+Every screen starts from the prototype's default state. The "viewing as" switcher is touched only by the alone screens and by `ask-agent`, `request-sent`, `request-made` and the `access-` screens, which show Youssef, a Contributor (#17, #167). To add a screen, add a row in `scripts/design-compare-lib.mjs` with its steps (`click`, `waitFor` or `scrollTo`, each with a CSS selector) and its built path.
 
 #### Built steps for a page still loading
 

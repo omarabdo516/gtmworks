@@ -61,7 +61,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const invitedId=section==='settings/members'&&manage&&/^[0-9a-f-]{36}$/i.test(query.invited||'')?String(query.invited):null;
  const {data:invitation}=invitedId?await db.from('member_invitations').select('id,email').eq('company_id',company.id).eq('id',invitedId).maybeSingle():{data:null};
  const invitedEmail=typeof invitation?.email==='string'?invitation.email:undefined;
- const waitingFailures:Record<string,string>={rule:'waitingRuleFailed','request-engineNotReady':'waitingRequestNotReady','request-engineUnreachable':'waitingRequestUnreachable',
+ const waitingFailures:Record<string,string>={rule:'waitingRuleFailed',access:'waitingAccessFailed','request-engineNotReady':'waitingRequestNotReady','request-engineUnreachable':'waitingRequestUnreachable',
   'request-notMade':'waitingRequestNotMade','request-answered':'waitingRequestAnswered','request-notFound':'waitingRequestAnswered','request-reasonMissing':'waitingRequestReasonMissing',
   'change-notApplied':'waitingChangeNotApplied','change-answered':'waitingChangeAnswered','change-notFound':'waitingChangeAnswered','change-reasonLong':'waitingChangeReasonLong',
   'change-cannotApply':'waitingChangeCannotApply','change-applying':'waitingChangeApplying','change-busy':'waitingChangeBusy','change-writtenLate':'waitingChangeWrittenLate','change-reasonMissing':'waitingChangeReasonMissing'};

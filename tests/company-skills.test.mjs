@@ -4,6 +4,8 @@ import { readSkills, writeSkill, setSkillEnabled, readLearningGraph } from '../l
 import { readCompanySkills, readAgentSkills, changeCompanySkill, changeCompanySkillEnabled } from '../lib/company-skills.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
+import { heldChanges } from './held-changes.mjs';
+import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
 
 // The service behind the skills screen (#343, ADR 0011, ADR 0016): skills live only in Hermes. Each Agent's skills are
 // read from its own profile, the Company's shared ones (team-lessons) beside them; a member who may change skills
@@ -18,20 +20,18 @@ const rows=[
  {agent:writer,name:'Writer',connection:'f0000000-0000-0000-0000-000000000021',profile:agentProfile(writer),main:false,own:true},
  {agent:helper,name:'Helper',connection:'f0000000-0000-0000-0000-000000000011',profile:companyProfile(company),main:false,own:false},
 ];
-// The database as the signed-in person reaches it: check_skill_write answers the Role and secret check (`refuse` names
-// its refusal), and every log_skill_change call is kept.
-function sessions(fake,{refuse=null,agents=rows,target=true}={}) {
- const logged=[];
+// The database as the signed-in person reaches it: hold_agent_change answers the Role and secret check (`refuse` names
+// its refusal, tests/held-changes.mjs), and every log row is kept; `failLogs` fails that many log calls first.
+function sessions(fake,{refuse=null,agents=rows,target=true,failLogs=0}={}) {
+ const changes=heldChanges({refuse:args=>args.act.startsWith('skill_')?refuse:`unexpected ${args.act}`,failLogs});
  const db={rpc:async(name,args)=>{
   if(name==='company_engine_target') return {data:target?[{profile:companyProfile(args.c)}]:[],error:null};
   if(name==='company_app_agents') return {data:agents,error:null};
-  if(name==='check_skill_write') return {data:null,error:refuse?{message:refuse}:null};
-  if(name==='log_skill_change') { logged.push(args); return {data:null,error:null}; }
-  return {data:null,error:{message:'unexpected'}};
+  return changes.rpc(name,args)||{data:null,error:{message:'unexpected'}};
  }};
  // The install's Hermes is the fake (#342): the code reaches it as it reaches the bundled one.
  process.env.BUNDLED_HERMES_URL=fake.address; process.env.HERMES_API_KEY='test-only-key';
- return {db,logged};
+ return {db,changes,get logged() { return changes.logged.map(({c,agent,act,skill})=>({c,agent,skill,act:act.replace(/^skill_/,'')})); }};
 }
 const driverAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress}); return {read:target=>readSkills(at(target)),write:(target,skill)=>writeSkill(at(target),skill),enable:(target,skill)=>setSkillEnabled(at(target),skill),learned:target=>readLearningGraph(at(target))}; };
 const driverTarget=(fake,profile)=>({address:fake.address,managementAddress:fake.managementAddress,profile,key:fake.settings.key});
@@ -101,11 +101,11 @@ test('a write is checked and logged by the database, keeps Unix line endings, an
   profileOn(fake,agentProfile(writer)); profileOn(fake,companyProfile(company));
   const driver=driverAt(fake);
   const hermes={address:fake.address,key:'test-only-key'};
-  const {db,logged}=sessions(fake);
+  const session=sessions(fake); const {db}=session;
   // A browser sends a form's textarea with CRLF line endings; the Engine reads a SKILL.md back with LF ones.
   assert.deepEqual(await changeCompanySkill(db,{company,agent:writer,content:skillMd('weekly-recap').replaceAll('\n','\r\n'),driver,hermes}),{state:'written',name:'weekly-recap'});
   assert.equal(fake.settings.skills.get(agentProfile(writer))?.get('weekly-recap'),skillMd('weekly-recap'));
-  assert.deepEqual(logged,[{c:company,agent:writer,skill:'weekly-recap',act:'written'}],'the write is in the Company log');
+  assert.deepEqual(session.logged,[{c:company,agent:writer,skill:'weekly-recap',act:'written'}],'the write is in the Company log');
   // The two shared skills' names are reserved, even before the shared folder holds them.
   for(const name of ['company-knowledge','team-lessons']) {
    assert.deepEqual(await changeCompanySkill(db,{company,agent:lead,content:skillMd(name),driver,hermes}),{state:'shared',name});
@@ -130,14 +130,14 @@ test('a skill is switched off and on for one Agent\'s own profile, checked and l
   fake.settings.skills.set(agentProfile(writer),new Map([['weekly-recap',skillMd('weekly-recap')]]));
   const driver=driverAt(fake);
   const hermes={address:fake.address,key:'test-only-key'};
-  const {db,logged}=sessions(fake);
+  const session=sessions(fake); const {db}=session;
   const toggle=(agent,name,enabled,on=db)=>changeCompanySkillEnabled(on,{company,agent,name,enabled,driver,hermes});
   assert.deepEqual(await toggle(writer,'weekly-recap',false),{state:'changed',name:'weekly-recap'});
   const writerSkills=async()=>(await readCompanySkills(db,{company,driver,hermes}))?.find(agent=>agent.id===writer)?.skills;
   assert.deepEqual((await writerSkills())?.map(({name,enabled})=>({name,enabled})),[{name:'weekly-recap',enabled:false},{name:'team-lessons',enabled:true}]);
   assert.deepEqual(await toggle(writer,'weekly-recap',true),{state:'changed',name:'weekly-recap'});
   assert.equal((await writerSkills())?.[0].enabled,true);
-  assert.deepEqual(logged.map(row=>row.act),['disabled','enabled']);
+  assert.deepEqual(session.logged.map(row=>row.act),['disabled','enabled']);
   // Every switch named the Writer's own profile and no other.
   const toggles=fake.settings.managementRequests.filter(request=>request.path.startsWith('/api/skills/toggle'));
   assert.equal(toggles.length,2);
@@ -156,7 +156,35 @@ test('a skill is switched off and on for one Agent\'s own profile, checked and l
   const refused=sessions(fake,{refuse:'skillNotAllowed'});
   assert.deepEqual(await toggle(writer,'weekly-recap',false,refused.db),{state:'notAllowed',name:'weekly-recap'});
   assert.equal((await writerSkills())?.[0].enabled,true);
-  assert.equal(logged.length,2);
+  assert.equal(session.logged.length,2);
+ } finally { await fake.close(); }
+});
+
+// #370: a skill change the Engine holds always gets its one log row. A log the database does not take is retried, then
+// left held for the worker's pass; the person is told the change was made, and the pass never logs it twice.
+test('a skill write and a switch whose log fails are still made, and each ends with exactly one log row', async () => {
+ const fake=await fakeHermes();
+ try {
+  profileOn(fake,agentProfile(writer));
+  const driver=driverAt(fake);
+  const hermes={address:fake.address,key:'test-only-key'};
+  const retried=sessions(fake,{failLogs:1});
+  assert.deepEqual(await changeCompanySkill(retried.db,{company,agent:writer,content:skillMd('weekly-recap'),driver,hermes}),{state:'written',name:'weekly-recap'});
+  assert.deepEqual(retried.logged,[{c:company,agent:writer,skill:'weekly-recap',act:'written'}],'a log taken on its retry is one row');
+  const late=sessions(fake,{failLogs:3});
+  assert.deepEqual(await changeCompanySkillEnabled(late.db,{company,agent:writer,name:'weekly-recap',enabled:false,driver,hermes}),
+   {state:'changed',name:'weekly-recap',logPending:true},'the Engine holds the switch, so it is never told as failed');
+  assert.equal((await readSkills(driverTarget(fake,agentProfile(writer)))).skills.find(skill=>skill.name==='weekly-recap')?.enabled,false);
+  assert.deepEqual(late.logged,[]);
+  assert.deepEqual(await logHeldAgentChanges(late.db),{logged:1});
+  assert.deepEqual(await logHeldAgentChanges(late.db),{logged:0});
+  assert.deepEqual(late.logged,[{c:company,agent:writer,skill:'weekly-recap',act:'disabled'}],'one row, never two');
+  assert.deepEqual(late.changes.logged.map(row=>row.unconfirmed),[true],'the pass says nobody confirmed it');
+  // A switch the Engine refuses is dropped, so no pass ever logs it.
+  const refused=sessions(fake);
+  assert.deepEqual(await changeCompanySkillEnabled(refused.db,{company,agent:writer,name:'missing',enabled:false,driver,hermes}),{state:'failed',name:'missing'});
+  assert.equal(refused.changes.held.size,0);
+  assert.deepEqual(await logHeldAgentChanges(refused.db),{logged:0});
  } finally { await fake.close(); }
 });
 

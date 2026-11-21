@@ -5,14 +5,14 @@ create extension if not exists pgtap with schema extensions;
 -- the first test red until it is added here.
 create temp table isolation_matrix(name text primary key, fixed jsonb not null default '{}');
 insert into isolation_matrix(name) values
- ('agent_change_proposals'),('agent_grants'),('agent_handovers'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
+ ('agent_access_requests'),('agent_change_proposals'),('agent_grants'),('agent_handovers'),('agent_key_waits'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
  ('channel_agents'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
- ('hermes_agents'),
+ ('held_agent_changes'),('hermes_agents'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('reply_cards'),('role_permissions'),
@@ -32,6 +32,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('channel_attachments', $${"channel_id": "'e3370000-0000-0000-0000-00000000000d'",
    "path": "'10000000-0000-0000-0000-000000000001/channels/e3370000-0000-0000-0000-00000000000d/isolation'"}$$),
  ('channel_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
+ -- A held memory or skill change (#370) names its act; a memory one names no skill.
+ ('held_agent_changes', $${"act": "'memory_reset'"}$$),
  -- A channel's quiet line names its invited person or its Card (#207, #151); this row is an invitation's.
  ('channel_notes', $${"kind": "'invite'", "invitee_name": "'Mona'"}$$),
  ('channel_permissions', $${"state": "'open'",
