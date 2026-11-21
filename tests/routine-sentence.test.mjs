@@ -102,3 +102,9 @@ test('more than one day of the week asks rather than keeping only the first', ()
  assert.equal(read('ابعتلي تقرير كل اتنين وخميس 9 الصبح')?.cron,null);
  assert.equal(read('Send me a report every Monday at 9am')?.cron,'0 9 * * 1','one day still makes it');
 });
+
+test('a clock with minutes is a time, and the "when" is cut out where it was said, not where the same text first appears', () => {
+ assert.equal(read('Send me the report every month on 9:30')?.cron,'30 9 1 * *');
+ assert.equal(readRoutineSentence('Review campaign 123 every day 23')?.prompt,'Review campaign 123');
+ assert.equal(readRoutineSentence('Send me the top 9 ads every day 9')?.prompt,'Send me the top 9 ads');
+});
