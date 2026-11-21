@@ -39,7 +39,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199), S
 - 🟡 **Backup and restore.** A backup holds every Company's database rows, Engine and work folder, and restores into an empty install. Merged; waiting for the release (#572). [#33, #357, #349, #386, #399]
 - 🟡 **Fewer keys in the app.** The app and the worker get only the values they read. Merged; waiting for the release (#572). [#446, #539]
 - 🟡 **Server sizes measured.** The README states two sizes (with and without video) from the install job's numbers. Merged; waiting for the release (#572). [#400]
-- 🟡 **Safer failed updates.** An update from the single-Engine layout whose new Engine does not start can leave the old app without its Engine; a failed migration leaves new Engine files on disk. [#502, #554]
+- 🟡 **Safer failed updates.** A failed migration leaves new Engine files on disk. [#554]
 - 🟡 **A disk limit for each work sandbox.** Today one Company can fill the install's disk. [#507]
 
 ## 2. Team and Agents
