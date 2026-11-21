@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(41);
 -- #478 (spec #474): Stop ends the whole Handover chain. RS Learning has Lead, Writer, Ads and Critic, each on its own
 -- profile. The Owner (1) talks to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the
 -- Viewer (4) work with Writer, and the Manager (2) made the channel but is not in it.
@@ -64,7 +64,17 @@ select is((select string_agg(state||':'||coalesce(target_outcome,'-')||':'||coal
 select is((select count(*)::int from public.handovers_due('c4780000-0000-0000-0000-000000000001')),0,'the worker has nothing more to move');
 select is((select count(*)::int from public.begin_handover(current_setting('test.p')::bigint)),0,'Ads''s answer never starts');
 select is(public.answer_handover(current_setting('test.q')::bigint,1,'run-critic-late','waiting'),false,'a Run id that comes back late is kept nowhere');
-select is(public.handover_stopped(current_setting('test.q')::bigint),true,'and the worker hears that the handover was stopped');
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal) values
+ ('10000000-0000-0000-0000-000000000001','c4780000-0000-0000-0000-000000000001','run-writer','call-open','a4780000-0000-0000-0000-000000000013','a4780000-0000-0000-0000-000000000012','Later');
+select set_config('test.p2pending',(select id::text from public.agent_handovers where call_id='call-open'),true);
+select is(public.stop_late_handover_run(current_setting('test.q')::bigint,'run-critic-late'),true,'the worker hears the handover was stopped, and keeps that Run to stop');
+select is(public.stop_late_handover_run(current_setting('test.p2pending')::bigint,'run-x'),false,'a leg that was not stopped keeps no Run to stop');
+select is((select string_agg(id::text||':'||run||'@'||coalesce(profile,'-'),' | ' order by id) from public.handover_runs_stopping()),
+ current_setting('test.q')||':run-critic@ag-a4780000000000000000000000000014',
+ 'the worker keeps stopping Critic''s Run, the one Stop ended its Handover on, until its Engine says it ended');
+select is(public.handover_run_stopped(current_setting('test.q')::bigint,'run-critic'),true,'its Engine says it ended');
+select is((select count(*)::int from public.handover_runs_stopping()),0,'and nothing is left to stop');
+delete from public.agent_handovers where call_id='call-open';
 select is(public.close_handover_target(current_setting('test.q')::bigint,'run-critic','stopped',null),false,'Critic''s Run ending later changes nothing');
 select is(public.handover_hand_to_agent(current_setting('test.q')::bigint,'run-critic','call-1','Lead','x',null),'{"state":"refused"}'::jsonb,'and its calls hand nothing on');
 
@@ -88,6 +98,8 @@ select is((select run||'@'||profile from public.stop_conversation_handovers('c47
 reset role;
 select is((select state||':'||target_outcome||':'||follow_up_outcome||':'||summary from public.agent_handovers where id=current_setting('test.r')::bigint),'done:completed:stopped:120 leads.',
  'Ads''s answer stays, and the follow-up ended as stopped');
+select is((select run||'@'||profile from public.handover_runs_stopping() where id=current_setting('test.r')::bigint),'run-writer-2@ag-a4780000000000000000000000000013',
+ 'the follow-up''s Run is kept to stop on the Writer''s profile');
 
 -- In a channel: two messages of the Contributor, each with a handover open; Stop on the first ends only its own.
 insert into public.channels(id,company_id,kind,name,created_by,create_key) values

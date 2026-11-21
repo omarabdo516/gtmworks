@@ -23,7 +23,7 @@ export const others=(/** @type {string} */ agent)=>Object.entries(team).filter((
  * @param {'conversation'|'channel'} place @param {...{from:string,to:string,goal:string}} tops */
 export function record(place,...tops) {
  const where=place==='conversation'?'c4770000-0000-0000-0000-000000000001':'d4770000-0000-0000-0000-000000000001';
- const fresh={state:'waiting',target_attempts:0,answer_attempts:0,return_attempts:0,target_run:null,answer_run:null,follow_up_run:null,target_outcome:null,follow_up_outcome:null,summary:null,tools:null};
+ const fresh={state:'waiting',target_attempts:0,answer_attempts:0,return_attempts:0,target_run:null,answer_run:null,follow_up_run:null,target_outcome:null,follow_up_outcome:null,summary:null,tools:null,stopping_run:null};
  /** @type {any[]} */
  const rows=tops.map((top,index)=>({...fresh,id:index+1,parent:null,message:place==='channel'?index+1:null,from:top.from,to:top.to,goal:top.goal,run_id:`run-chat-${index+1}`,call_id:'call-1'}));
  const replies=/** @type {{agent:string,body:string}[]} */([]);
@@ -41,6 +41,7 @@ export function record(place,...tops) {
   row.state='done';
   const run=was==='target'?{run:row.target_run,profile:team[row.to].profile}:was==='answering'?{run:row.answer_run,profile:team[row.to].profile}
    :was==='follow_up'?{run:row.follow_up_run,profile:team[row.from].profile}:null;
+  row.stopping_run=run?.run??null;
   return [run??{run:null,profile:null}];
  });
  // The chat's own Run still open, when a test starts one (its Agent is the first handover's asking Agent).
@@ -74,7 +75,10 @@ export function record(place,...tops) {
    else Object.assign(row,{follow_up_run:args.run,state:'follow_up'});
    return ok(true);
   }
-  if(name==='handover_stopped') return ok(!!row&&row.state==='done'&&(row.target_outcome==='stopped'||row.follow_up_outcome==='stopped'));
+  if(name==='stop_late_handover_run') { const stopped=!!row&&row.state==='done'&&(row.target_outcome==='stopped'||row.follow_up_outcome==='stopped'); if(stopped) row.stopping_run??=args.run; return ok(stopped); }
+  if(name==='handover_runs_stopping') return ok(rows.filter(entry=>entry.stopping_run&&entry.id>args.after).map(entry=>({id:entry.id,run:entry.stopping_run,company,
+   profile:team[entry.follow_up_outcome==='stopped'?entry.from:entry.to].profile})));
+  if(name==='handover_run_stopped') { const cleared=row?.stopping_run===args.run; if(cleared) row.stopping_run=null; return ok(cleared); }
   if(name==='handover_hand_to_agent') {
    if(row.state!=='target'||row.target_run!==args.run||!row.tools) return ok({state:'refused'});
    const target=Object.keys(team).find(agent=>agent.toLowerCase()===args.agent_name.trim().toLowerCase()&&agent!==row.to);
@@ -107,8 +111,10 @@ export function record(place,...tops) {
 }
 
 /** One fake Engine per Agent, routed by profile, with every start logged in order. `ends` names the runs (by key) the
- * Engine ends otherwise than completed: failed, stopped or lost. @param {Record<string,'failed'|'stopped'|'lost'>} [ends] */
-export function engines(ends={}) {
+ * Engine ends otherwise than completed: failed, stopped or lost. `missedStops` is how many stop requests the Engines
+ * miss (unreachable at the press) before they take one. @param {Record<string,'failed'|'stopped'|'lost'>} [ends] */
+export function engines(ends={},{missedStops=0}={}) {
+ let missing=missedStops;
  const fakes=Object.fromEntries(Object.keys(team).map(agent=>[agent,fakeEngine()]));
  const started=/** @type {{agent:string,key:string,session:string,input:string,tools:any[]}[]} */([]);
  const stops=/** @type {{agent:string,run:string}[]} */([]);
@@ -117,7 +123,7 @@ export function engines(ends={}) {
   const fake=fakes[agent]; const engine=fake.engineFor(connection);
   return {...engine,
    start:async(/** @type {any} */ args)=>{ const run=await engine.start(args); if(!started.some(entry=>entry.key===args.idempotencyKey)) started.push({agent,key:args.idempotencyKey,session:args.conversation,input:typeof args.input==='string'?args.input:'',tools:args.tools??[]}); return run; },
-   stop:async(/** @type {string} */ id)=>{ stops.push({agent,run:id}); return engine.stop(id); },
+   stop:async(/** @type {string} */ id)=>{ stops.push({agent,run:id}); if(missing>0) { missing--; throw new Error('Engine unreachable'); } return engine.stop(id); },
    read:async(/** @type {string} */ id)=>{ const result=await engine.read(id); const run=fake.runs.find(entry=>entry.id===id);
     return run&&ends[run.key]&&result.state==='completed'?{...result,state:ends[run.key],reply:null,toolCalls:[]}:result; }};
  };

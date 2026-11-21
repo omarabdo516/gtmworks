@@ -28,6 +28,8 @@ function handover(overrides = {}) {
  };
  const service={
   rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
+   // No Run Stop ended a handover on is left to stop (#478).
+   if(name==='handover_runs_stopping') return {data:[],error:null};
    if(name==='handovers_due') return ok(row.state==='done'||row.state==='failed'||row.id<=args.after?[]:[{id:row.id,state:row.state,
     conversation:row.conversation,run:row.state==='target'?row.target_run:row.state==='follow_up'?row.follow_up_run:null,
     profile:row.state==='waiting'||row.state==='target'?targetProfile:leadProfile,

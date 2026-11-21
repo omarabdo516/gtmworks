@@ -175,6 +175,8 @@ function handedDatabases() {
    kept.handover = { id: 7, state: 'waiting', conversation: args.conversation, run_id: kept.message.run_id, from: args.agent, to: reach, goal: args.goal, target_run: null };
    return { data: true, error: null };
   }
+  // No Run Stop ended a handover on is left to stop (#478).
+  if (name === 'handover_runs_stopping') return { data: [], error: null };
   if (name === 'handovers_due') return { data: kept.handover && kept.handover.state !== 'done' ? [{ id: 7, state: kept.handover.state, conversation, run: kept.handover.state === 'target' ? kept.handover.target_run : null, profile: targetProfile, attempt: 0, company }] : [], error: null };
   if (name === 'begin_handover') return { data: [{ state: 'waiting', attempt: 1, company, profile: targetProfile, session: targetSession, input: `The job:\n${kept.handover.goal}`, instructions: 'Run the ads.' }], error: null };
   if (name === 'answer_handover') { kept.handover.target_run = args.run; kept.handover.state = 'target'; return { data: true, error: null }; }

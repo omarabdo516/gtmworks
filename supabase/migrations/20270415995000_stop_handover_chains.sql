@@ -6,9 +6,18 @@
 --
 -- A stopped Handover's row says so (`stopped`), in place of "the job didn't finish".
 --
--- Additive only, for the previous app version: no column is added or changed, every replaced function keeps its
+-- A Run Stop ended a Handover on is kept (`stopping_run`) until its Engine says it ended: the app stops it at once, and
+-- the worker asks again on each pass while it still runs, so an Engine that could not be reached at the press still
+-- stops it (lib/handovers.mjs).
+--
+-- Additive only, for the previous app version: one nullable column is added, every replaced function keeps its
 -- signature but conversation_handovers and channel_handovers, whose answers gain one last column and are read by column
 -- name; that version's Stop still stops the chat's own Run as before.
+
+-- The Run a Handover was on when Stop ended it, until its Engine says that Run ended: on the asking Agent's profile when
+-- the follow-up was stopped, else on the asked Agent's.
+alter table public.agent_handovers add column stopping_run text;
+create index agent_handovers_stopping on public.agent_handovers(id) where stopping_run is not null;
 
 -- Every open Handover of a Conversation, or of one channel message, ends as stopped, in one statement: the leg it was on
 -- is the one stopped (the asked Agent's job, its wait for its children or its answer; or, once it answered, the asking
@@ -36,7 +45,8 @@ begin
   update public.agent_handovers h set state='done', closed_at=now(), attempted_at=null,
    target_outcome=case when o.was in ('waiting','target','handing','answering') then 'stopped' else h.target_outcome end,
    target_closed_at=case when o.was in ('waiting','target','handing','answering') then now() else h.target_closed_at end,
-   follow_up_outcome=case when o.was in ('returning','follow_up') and o.parent_id is null and not o.answers_person then 'stopped' else h.follow_up_outcome end
+   follow_up_outcome=case when o.was in ('returning','follow_up') and o.parent_id is null and not o.answers_person then 'stopped' else h.follow_up_outcome end,
+   stopping_run=o.going
   from open o where h.id=o.id
   returning h.id, o.going, o.on_profile, o.answers_person, o.company_id, o.conversation_id, o.run_id
  ), told as (
@@ -48,15 +58,43 @@ begin
 end $$;
 revoke all on function public.stop_open_handovers(uuid,bigint) from public,anon,authenticated,service_role;
 
--- Whether a Handover ended because its person pressed Stop (or the Engine stopped the Run it was on): the worker asks
--- when a Run id came back for a leg that had already ended, and stops that Run (lib/handovers.mjs).
-create function public.handover_stopped(h bigint) returns boolean
+-- A Run id came back for a leg Stop had already ended (its start was on its way at the press): kept as the Run to stop,
+-- once, and answered true, so the worker stops it (lib/handovers.mjs). False for any other leg that refused the id.
+create function public.stop_late_handover_run(h bigint, run text) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare kept bigint;
+begin
+ update public.agent_handovers x set stopping_run=coalesce(x.stopping_run,stop_late_handover_run.run)
+  where x.id=h and x.state='done' and (x.target_outcome='stopped' or x.follow_up_outcome='stopped') and coalesce(btrim(stop_late_handover_run.run),'')<>''
+  returning x.id into kept;
+ return kept is not null;
+end $$;
+revoke all on function public.stop_late_handover_run(bigint,text) from public,anon,authenticated;
+grant execute on function public.stop_late_handover_run(bigint,text) to service_role;
+
+-- The worker's list of Runs Stop ended a Handover on that their Engine has not yet said ended, a page of 500 at a time,
+-- each on its Agent's profile. A removed Agent's Run has no profile, and nothing more can be asked of it.
+create function public.handover_runs_stopping(after bigint default 0)
+returns table(id bigint, run text, profile text, company uuid)
 language sql stable security definer set search_path='' as $$
- select exists(select 1 from public.agent_handovers x where x.id=h and x.state='done'
-  and (x.target_outcome='stopped' or x.follow_up_outcome='stopped'));
+ select x.id, x.stopping_run, a.profile, x.company_id from public.agent_handovers x
+  left join public.hermes_agents a on a.id=case when x.follow_up_outcome='stopped' then x.from_agent else x.to_agent end
+ where x.stopping_run is not null and x.id>coalesce(after,0)
+ order by x.id limit 500;
 $$;
-revoke all on function public.handover_stopped(bigint) from public,anon,authenticated;
-grant execute on function public.handover_stopped(bigint) to service_role;
+revoke all on function public.handover_runs_stopping(bigint) from public,anon,authenticated;
+grant execute on function public.handover_runs_stopping(bigint) to service_role;
+
+-- That Run's Engine says it ended (or its Agent is gone): nothing is left to stop.
+create function public.handover_run_stopped(h bigint, run text) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare cleared bigint;
+begin
+ update public.agent_handovers x set stopping_run=null where x.id=h and x.stopping_run=handover_run_stopped.run returning x.id into cleared;
+ return cleared is not null;
+end $$;
+revoke all on function public.handover_run_stopped(bigint,text) from public,anon,authenticated;
+grant execute on function public.handover_run_stopped(bigint,text) to service_role;
 
 -- Stop in a Conversation (lib/conversation-runs.mjs, beside conversation_stop_target for the chat's own Run): its open
 -- Handovers end as stopped, on the rule that Run's Stop keeps: the Conversation's person, or a Manager or Owner of the

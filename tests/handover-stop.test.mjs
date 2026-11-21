@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stopConversationRun } from '../lib/conversation-runs.mjs';
 import { stopChannelMessage } from '../lib/channel-runs.mjs';
+import { driveHandovers } from '../lib/handovers.mjs';
 import { company, drive, engines, handOn, hermes, record } from './handover-record.mjs';
 
 // #478 on the fake engine: the person's Stop ends the whole Handover chain started from their chat, or from one channel
@@ -75,6 +76,22 @@ test('a leg whose start is on its way to the Engine when Stop is pressed has its
  assert.equal(fakes.Ads.runs.length,1);
  assert.deepEqual(stops.map(stop=>`${stop.agent}:${stop.run}`),[`Ads:${fakes.Ads.runs[0].id}`],'the Run that started after the Stop is stopped');
  assert.equal(fakes.Ads.runs[0].stopped,true);
+});
+
+test('a Run whose Engine missed the stop at the press is stopped by the worker\'s next pass, then left alone',async()=>{
+ const {rows,service,where}=record('conversation',job);
+ const {fakes,stops,engineFor}=engines({},{missedStops:1});
+ fakes.Ads.settings.pendingReads=1000;
+ await drive(service,engineFor,rows,{until:()=>rows[0].state==='target'});
+ assert.deepEqual(await stopConversationRun(service,{company,conversation:where,hermes,engineFor}),{stopped:true});
+ assert.equal(fakes.Ads.runs[0].stopped,false,'the Engine could not be reached at the press');
+ assert.equal(rows[0].stopping_run,fakes.Ads.runs[0].id,'the Run is kept as the one to stop');
+ await driveHandovers(service,{hermes,engineFor});
+ assert.equal(fakes.Ads.runs[0].stopped,true,'the worker stops it');
+ await driveHandovers(service,{hermes,engineFor});
+ assert.equal(rows[0].stopping_run,null,'once its Engine says it ended, nothing is left to stop');
+ await driveHandovers(service,{hermes,engineFor});
+ assert.equal(stops.length,2,'and it is never asked again');
 });
 
 test('Stop with nothing open in the chat says there is nothing to stop',async()=>{
