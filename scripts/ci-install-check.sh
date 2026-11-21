@@ -1390,6 +1390,11 @@ probe "after the update from $stable"
 compose exec -T db ls /migrations | sort > "$RUNNER_TEMP/stable-seen" || fail 'list the migrations the database sees'
 ls "$root/supabase/migrations" | sort > "$RUNNER_TEMP/stable-expected"
 diff -u "$RUNNER_TEMP/stable-expected" "$RUNNER_TEMP/stable-seen" || fail "the updated database sees this release's migrations"
+# Every one of them is applied, not only mounted: the names the installer records once a migration ran, its cutovers
+# included, every file but the .verify.sql checks (scripts/install.sh apply_migrations).
+grep -v '\.verify\.sql$' "$RUNNER_TEMP/stable-expected" > "$RUNNER_TEMP/stable-to-apply"
+migrations | sort > "$RUNNER_TEMP/stable-applied" || fail 'read the applied migrations'
+diff -u "$RUNNER_TEMP/stable-to-apply" "$RUNNER_TEMP/stable-applied" || fail "the update from $stable applies every migration of this release"
 key=$(first_engine_key)
 engine=$(first_engine_id)
 [[ -n $key && -n $engine ]] || fail "the updated install runs the Company's Engine from its own folder"
