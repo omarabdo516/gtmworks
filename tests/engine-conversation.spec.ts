@@ -947,7 +947,7 @@ test('integration: Lead\'s call makes the Agent one profile of its own, also whe
   expect(agent).toEqual({id:agent.id,instructions:instructionsOf('writer').replaceAll('{company}','RS Learning'),profile:own,derived:true,tools_confirmed:true,tools_pending:false});
   expect([...hermes.settings.profiles.keys()].filter(name=>name.startsWith('ag-'))).toEqual([own]);
   const kept=hermes.settings.profiles.get(own)!;
-  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',toolConfig()]);
+  expect([kept.soul,kept.key,kept.config]).toEqual([agent.instructions,'fake-engine-key',toolConfig({profile:own})]);
   const asked=managed(hermes);
   for(const step of ['POST /api/profiles',`PUT /api/env`,`PUT /api/config`,'GET /api/model/options']) expect([1,2]).toContain(asked.filter(request=>request===step).length);
   expect(asked.filter(request=>request.startsWith('DELETE'))).toEqual([]);
