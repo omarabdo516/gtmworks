@@ -35,6 +35,10 @@ _Avoid_: default bot, assistant, orchestrator
 A Manager's or Contributor's ask for a new Agent, which the main Agent prepares in their Conversation and which waits in every Owner's "Waiting on you". An Owner makes it, exactly as when the Owner asks the main Agent, or says no with a reason that goes back to the Member's Conversation. Only an Owner makes Agents.
 _Avoid_: proposal, ticket
 
+**Request to open an Agent / طلب فتح وكيل**:
+A Manager's or Contributor's ask to work with an Agent hidden from them. When they ask the main Agent for work that belongs to such an Agent, the main Agent says that job belongs to an Agent they do not have, without naming it, and its card asks whether to request it from the person who chooses which Agents they work with. Their "Ask" puts it in the "Waiting on you" of the Owner and of every Manager who sees that Agent; one of them opens it for them (that Member's switch for that Agent) or says no, and the answer comes back to the Member's Conversation.
+_Avoid_: access ticket, permission request
+
 **Change proposal / اقتراح تغيير**:
 An Agent's ask to change its own settings, or Lead's on another Agent's behalf: its model, its core instructions, its sub-agents or one of the Engine settings gtmworks lists, with the reason. It waits in every Owner's "Waiting on you" and changes nothing until an Owner approves it; approved, it is written to that Agent's own Engine profile and read back; declined, nothing changes. Anything off that list is refused at once and waits on nobody. An app is asked for with the connect card, not proposed; the Agent's own memory and Skills follow its learning mode (#19).
 _Avoid_: settings request, config change
