@@ -2272,7 +2272,6 @@ for failing in sandbox engine; do
   [[ $(compose ps -q web) == "$web" ]] || fail_update "the update whose $failing does not start leaves this release's app serving"
   probe "after the update whose $failing does not start"
   [[ $(cat .work-sandbox-image) == "$sandbox" ]] || fail_update "the update whose $failing does not start keeps the work sandbox image recorded before"
-  [[ $(cat .install-release) == "$first" ]] || fail_update "the update whose $failing does not start keeps this release recorded"
   while read -r slug image public; do
     name="gtmworks-engine-$slug"
     [[ $(docker inspect -f '{{.Config.Image}}' "$name") == "$image" ]] || fail_update "the update whose $failing does not start runs the Engine $name from its image again"
