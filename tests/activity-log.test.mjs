@@ -152,6 +152,16 @@ test('a person decided what an Agent asked to do: allowed or refused, what was a
  assert.deepEqual([unknown.act, unknown.obj, unknown.to], [['logActAgentChanged'], 'Ads', undefined], 'a choice with no words is never read as allowed');
 });
 
+// #166: a standing permission revoked reads as the reference's line: who revoked, the permission, Standing to Will ask again.
+test('a revoked standing permission names the permission, from Standing to Will ask again, in both languages', () => {
+ const line = describeEntry({ subject: 'agent', action: 'agent_permission_revoked', agent_id: lead, details: { agent_name: 'Ads', permission: { text: 'Meta Ads · create_campaign' } } }, { agentName: () => 'Ads' });
+ assert.deepEqual([line.act, line.obj, line.from, line.to], [['logActPermissionRevoked', { text: 'Ads' }], 'Meta Ads · create_campaign', { key: 'logPermissionStanding' }, { key: 'logPermissionAsksAgain' }]);
+ assert.deepEqual(['en', 'ar'].map(language => { const { t } = i18n(language); return [t('logActPermissionRevoked', 'Ads'), t('logPermissionStanding'), t('logPermissionAsksAgain')]; }),
+  [['revoked a permission of Ads', 'Standing', 'Will ask again'], ['لغى صلاحية من صلاحيات Ads', 'دايمة', 'هيستأذن تاني']]);
+ const bare = describeEntry({ subject: 'agent', action: 'agent_permission_revoked', agent_id: lead, details: { permission: { text: 7 } } }, { agentName: () => 'Ads' });
+ assert.deepEqual([bare.act, bare.obj], [['logActPermissionRevoked', { text: 'Ads' }], undefined]);
+});
+
 // #146: a chat with a Card writes these rows on the Card, with no teller; each reads as its row on the Agent does.
 test('a draft, a review, an answer and a Done it written on the chat\'s Card read as they do on its Agent', () => {
  const names = { agentName: () => 'Ads' };
