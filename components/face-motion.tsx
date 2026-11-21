@@ -15,25 +15,28 @@ let hop:{face:string,until:number,hopped:WeakSet<Element>}|null=null;
 export function FaceMotion() {
  useEffect(()=>{
   let pointer:{x:number,y:number}|null=null, frame=0, ends=0;
+  // Every face's place is read first, then every face's shift written, so one frame lays the page out once.
   const look=()=>{
    frame=0;
-   const height=window.innerHeight;
-   for(const face of faces()) {
-    if(!pointer) { face.style.removeProperty('--fx'); face.style.removeProperty('--fy'); continue; }
+   const height=window.innerHeight, list=faces();
+   if(!pointer) { for(const face of list) { face.style.removeProperty('--fx'); face.style.removeProperty('--fy'); } return; }
+   const at=pointer;
+   const shifts=list.map(face=>{
     const box=face.getBoundingClientRect();
-    if(!box.width||box.bottom<0||box.top>height) continue;
-    const dx=pointer.x-(box.left+box.width/2), dy=pointer.y-(box.top+box.height/2);
+    if(!box.width||box.bottom<0||box.top>height) return null;
+    const dx=at.x-(box.left+box.width/2), dy=at.y-(box.top+box.height/2);
     const distance=Math.hypot(dx,dy)||1, k=Math.min(1,distance/220);
-    face.style.setProperty('--fx',`${(dx/distance*1.6*k).toFixed(2)}px`);
-    face.style.setProperty('--fy',`${(dy/distance*1.3*k).toFixed(2)}px`);
-   }
+    return [`${(dx/distance*1.6*k).toFixed(2)}px`,`${(dy/distance*1.3*k).toFixed(2)}px`];
+   });
+   list.forEach((face,index)=>{ const shift=shifts[index]; if(shift) { face.style.setProperty('--fx',shift[0]); face.style.setProperty('--fy',shift[1]); } });
   };
   const schedule=()=>{ if(!frame) frame=requestAnimationFrame(look); };
   const move=(event:PointerEvent)=>{ if(event.pointerType==='touch'||reduced()) return; pointer={x:event.clientX,y:event.clientY}; schedule(); };
   const reset=()=>{ pointer=null; schedule(); };
   const blink=window.setInterval(()=>{
    if(reduced()||document.hidden) return;
-   const list=faces().filter(face=>!face.classList.contains('is-thinking')&&face.querySelector('.face__eye')&&face.getBoundingClientRect().width);
+   const height=window.innerHeight;
+   const list=faces().filter(face=>{ if(face.classList.contains('is-thinking')||!face.querySelector('.face__eye')) return false; const box=face.getBoundingClientRect(); return box.width>0&&box.bottom>=0&&box.top<=height; });
    if(!list.length) return;
    const face=list[Math.floor(Math.random()*list.length)];
    face.classList.add('is-blink'); window.setTimeout(()=>face.classList.remove('is-blink'),blinkFor);

@@ -10,20 +10,15 @@ import type { CompanyAgent } from '@/lib/sidebar.mjs';
 // working motion while a Run is open in the Conversation the person reads, and a check for a moment when it ends
 // (design-reference: applyLive). The dot keeps its state's class; while the Agent thinks the stylesheet paints it the accent.
 export function AgentFaceDot({agent,size,status,lg=false,live=false}:{agent:Pick<CompanyAgent,'id'|'connection_id'|'name'>,size:number,status:AgentStatus,lg?:boolean,live?:boolean}) {
- const run=useLiveRun(live?agent.id:undefined);
- const thinking=run==='thinking';
- return <span className={`face-wrap${lg?' face-wrap--lg':''}${thinking?' is-thinking':''}`} aria-hidden="true">
-  <CompanyAgentFace agent={agent} size={size} thinking={thinking}/><span className={`dot dot--${status}`}/>
-  {thinking&&<span className="think"><i/><i/><i/></span>}
-  {run==='done'&&<span className="done-ck"><ShellIcon name="check"/></span>}
- </span>;
+ return <LiveFaceWrap agent={agent} size={size} lg={lg} live={live}><span className={`dot dot--${status}`}/></LiveFaceWrap>;
 }
 
-// The marks of an Agent at work around a face whose dot is drawn elsewhere (the details panel's, read from the server):
-// the dots think beside it, the dot sends a ring, and a check shows for a moment once the Run ends. Hidden from assistive
-// technology: the status words beside the face say the same.
-export function LiveFaceWrap({agent,size,lg=false,children}:{agent:Pick<CompanyAgent,'id'|'connection_id'|'name'>,size:number,lg?:boolean,children?:ReactNode}) {
- const run=useLiveRun(agent.id);
+// The marks of an Agent at work around its face and the dot given as children (a tile's, or the details panel's read
+// from the server): the face scans, the dots think beside it, the dot sends a ring, and a check shows for a moment once
+// the Run ends. Hidden from assistive technology: the status words beside the face say the same. A face that is not
+// `live` (Settings, a channel's members) shows its dot and never the working motion.
+export function LiveFaceWrap({agent,size,lg=false,live=true,children}:{agent:Pick<CompanyAgent,'id'|'connection_id'|'name'>,size:number,lg?:boolean,live?:boolean,children?:ReactNode}) {
+ const run=useLiveRun(live?agent.id:undefined);
  const thinking=run==='thinking';
  return <span className={`face-wrap${lg?' face-wrap--lg':''}${thinking?' is-thinking':''}`} aria-hidden="true">
   <CompanyAgentFace agent={agent} size={size} thinking={thinking}/>{children}

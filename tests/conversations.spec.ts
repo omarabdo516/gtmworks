@@ -431,15 +431,17 @@ test('An Agent face hops when its tile is pressed, lifts on hover, and shows its
   expect(await timing('.think i')).toBe('gw-think-dot 1.2s 0s infinite');
   expect(await timing('.dot','::after')).toBe('gw-dot-ping 1.6s 0s infinite');
   expect(await page.locator('#details .dp-id__state').textContent()).toBeTruthy();
-  // The Run ends: a check pops in and draws itself for 1600ms, then goes.
+  // The Run ends: a check pops in and draws itself for 1600ms, then goes, timed in the page as it is added and removed.
+  await page.evaluate(()=>{ const times:number[]=[]; (window as unknown as {check:number[]}).check=times; const wrap=document.querySelector('#details .face-wrap--lg')!;
+   new MutationObserver(()=>{ const shown=!!wrap.querySelector('.done-ck'); if(shown!==(times.length%2===1)) times.push(performance.now()); }).observe(wrap,{childList:true}); });
   fake.settings.pendingReads=0;
   await expect(wrap.locator('.done-ck')).toBeVisible({timeout:20000});
-  const shownAt=Date.now();
   expect(await timing('.done-ck')).toBe('gw-ck-pop 0.32s 0s 1');
   expect(await timing('.done-ck path')).toBe('gw-draw-check 0.36s 0.14s 1');
   await expect(wrap).not.toHaveClass(/\bis-thinking\b/);
   await expect(wrap.locator('.done-ck')).toHaveCount(0);
-  expect(Date.now()-shownAt).toBeLessThan(2500);
+  const [added,removed]=await page.evaluate(()=>(window as unknown as {check:number[]}).check);
+  expect(removed-added).toBeGreaterThanOrEqual(1550); expect(removed-added).toBeLessThan(1800);
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);
  } finally { fake.settings.pendingReads=0; detach(agents as Record<string,{id:string,connection:string}>); await fake.close(); }
 });
