@@ -33,10 +33,10 @@ function record(place,top) {
  const unfinished=(/** @type {any} */ row)=>`${row.to} did not finish`;
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
   const row=rows.find(entry=>entry.id===args.h);
-  if(name==='handovers_due') return ok(rows.filter(entry=>open(entry)&&entry.id>args.after).map(entry=>({id:entry.id,state:entry.state,conversation:place==='conversation'?where:null,company,
+  if(name==='handovers_due') return ok(rows.filter(entry=>open(entry)&&entry.id>args.after&&!(entry.state==='handing'&&rows.some(child=>child.parent===entry.id&&open(child)))).map(entry=>({id:entry.id,state:entry.state,conversation:place==='conversation'?where:null,company,
    run:{target:entry.target_run,answering:entry.answer_run,follow_up:entry.follow_up_run}[/** @type {string} */ (entry.state)]??null,
    profile:entry.state==='target'||entry.state==='answering'?team[entry.to].profile:entry.state==='follow_up'?team[entry.from].profile:null,
-   attempt:entry.state==='handing'?entry.answer_attempts:entry.state==='returning'?entry.return_attempts:entry.target_attempts})));
+   attempt:entry.state==='handing'||entry.state==='answering'?entry.answer_attempts:entry.state==='returning'?entry.return_attempts:entry.target_attempts})));
   if(name==='begin_handover') {
    if(row.state==='returning'&&row.parent) { row.state='done'; return ok([]); }
    if(row.state==='waiting') { row.target_attempts+=1;
@@ -61,7 +61,7 @@ function record(place,top) {
    return ok(true);
   }
   if(name==='handover_hand_to_agent') {
-   if(row.state!=='target'||row.target_run!==args.run) return ok({state:'refused'});
+   if(row.state!=='target'||row.target_run!==args.run||!row.tools) return ok({state:'refused'});
    const target=Object.keys(team).find(agent=>agent.toLowerCase()===args.agent_name.trim().toLowerCase()&&agent!==row.to);
    if(!target) return ok({state:'ignored'});
    if(!rows.some(child=>child.run_id===args.run&&child.call_id===args.call))
@@ -148,8 +148,8 @@ for(const place of /** @type {const} */(['conversation','channel'])) {
  });
 }
 
-test('a loop (Writer to Ads to Writer) completes, the Writer asked back working in its own handover session, never the Conversation\'s',async()=>{
- const {rows,replies,service,session,where}=record('conversation',{from:'Writer',to:'Ads',goal:'Last campaign\'s numbers'});
+for(const place of /** @type {const} */(['conversation','channel'])) test(`a loop (Writer to Ads to Writer) completes in a ${place}, the Writer asked back working in its own handover session, never the chat's`,async()=>{
+ const {rows,replies,service,session,where}=record(place,{from:'Writer',to:'Ads',goal:'Last campaign\'s numbers'});
  const {fakes,started,engineFor}=engines();
  fakes.Ads.settings.toolCalls=input=>input.startsWith('Writer asks you')?handOn('Writer','Say which month the post is for'):[];
  fakes.Ads.settings.reply=input=>input.startsWith('Answers')?'February: 120 leads.':'I asked the Writer which month.';
@@ -157,8 +157,9 @@ test('a loop (Writer to Ads to Writer) completes, the Writer asked back working 
  await drive(service,engineFor,rows);
  assert.deepEqual(rows.map(row=>`${row.from}>${row.to}:${row.state}`),['Writer>Ads:done','Ads>Writer:done']);
  const writerRuns=started.filter(run=>run.agent==='Writer');
- assert.deepEqual(writerRuns.map(run=>`${run.key}:${run.session}`),[`handover:2:target:${session('Writer')}`,`handover:1:return:${where}`],
-  'the Writer asked back works in its own handover session, and replies to the person in the Conversation\'s');
+ // In a channel an Agent has one session there (#150), its follow-up's too; in a Conversation the follow-up is the chat's.
+ assert.deepEqual(writerRuns.map(run=>`${run.key}:${run.session}`),[`handover:2:target:${session('Writer')}`,`handover:1:return:${place==='conversation'?where:session('Writer')}`],
+  'the Writer asked back works in its own handover session, then replies');
  assert.match(started.find(run=>run.key==='handover:1:answer')?.input??'',/Writer answered: February\./);
  assert.deepEqual(replies.map(reply=>reply.body),['The post leads with February\'s 120 leads.']);
 });

@@ -25,8 +25,8 @@ create index agent_handovers_parent on public.agent_handovers(parent_id) where p
 -- The tool text the asked Agent's Run is offered, pinned at its first start so a retry sends the same request: the
 -- hand_to_agent spec, or '' for none.
 alter table public.agent_handovers add column tools text;
--- The asked Agent's answer Run, once its children ended: its start's attempts and when its leg began (its start is
--- retried within a day of this, then given up as failed, as a follow-up's is).
+-- The asked Agent's answer Run, once its children ended: its start's attempts and when its leg could begin, once every
+-- child ended (its start is retried within a day of this, then given up as failed, as a follow-up's is).
 alter table public.agent_handovers add column answer_run text;
 alter table public.agent_handovers add column answer_attempts integer not null default 0 constraint agent_handovers_answer_attempts check (answer_attempts >= 0);
 alter table public.agent_handovers add column answer_started_at timestamptz;
@@ -97,8 +97,10 @@ create function public.handover_hand_to_agent(h bigint, run text, call text, age
 declare r public.agent_handovers; target public.hermes_agents; handed public.agent_handovers; asker text; card bigint; chan uuid;
 begin
  select * into r from public.agent_handovers where id=h;
+ -- Only a Run that was offered the tool hands on: one started with none pinned (a job command's, or one the previous app
+ -- version started) keeps nothing, whatever its reply holds.
  if r.id is null or r.answers_person or r.state<>'target' or r.target_run is distinct from run or coalesce(call,'')=''
-  or not public.handover_writer(h) then return jsonb_build_object('state','refused'); end if;
+  or coalesce(r.tools,'')='' or not public.handover_writer(h) then return jsonb_build_object('state','refused'); end if;
  if coalesce(agent_name,'')='' or coalesce(goal,'')='' then return jsonb_build_object('state','ignored'); end if;
  select * into target from public.hermes_agents a
   where a.company_id=r.company_id and a.id<>r.to_agent and a.profile is not null
@@ -129,8 +131,7 @@ revoke all on function public.handover_hand_to_agent(bigint,text,text,text,text,
 grant execute on function public.handover_hand_to_agent(bigint,text,text,text,text,text) to service_role;
 
 -- 20270401000000's handovers_due, with the asked Agent's answer leg: a handover waiting on its children (`handing`) is
--- listed as a leg to start, which begin_handover holds until they ended, and its answer Run (`answering`) is read on the
--- asked Agent's profile.
+-- listed as a leg to start once they all ended, and its answer Run (`answering`) is read on the asked Agent's profile.
 create or replace function public.handovers_due(just_conversation uuid default null, after bigint default 0, just_channel uuid default null)
  returns table(id bigint, state text, conversation uuid, run text, profile text, attempt integer, company uuid)
  language sql stable security definer set search_path='' as $$
@@ -141,13 +142,15 @@ create or replace function public.handovers_due(just_conversation uuid default n
    when 'answering' then (select a.profile from public.hermes_agents a where a.id=h.to_agent)
    when 'follow_up' then (select a.profile from public.hermes_agents a where a.id=h.from_agent)
    else null end,
-  case h.state when 'returning' then h.return_attempts when 'handing' then h.answer_attempts else h.target_attempts end,
+  case when h.state='returning' then h.return_attempts when h.state in ('handing','answering') then h.answer_attempts else h.target_attempts end,
   h.company_id
  from public.agent_handovers h
  where h.state not in ('done','failed') and h.id > coalesce(after,0)
   and (just_conversation is null or h.conversation_id=just_conversation)
   and (just_channel is null or exists(select 1 from public.channel_messages m where m.id=h.channel_message_id and m.channel_id=just_channel))
   and (h.state in ('target','answering','follow_up') or h.attempted_at is null or h.attempted_at < now()-interval '30 seconds')
+  -- A leg still waiting on a child is not due: nothing would move it, and begin_handover takes the Engine lock.
+  and not (h.state='handing' and exists(select 1 from public.agent_handovers c where c.parent_id=h.id and c.state not in ('done','failed')))
  order by h.id limit 500;
 $$;
 revoke all on function public.handovers_due(uuid,bigint,uuid) from public,anon,authenticated;
@@ -160,6 +163,7 @@ grant execute on function public.handovers_due(uuid,bigint,uuid) to service_role
 --  - Its answer leg (`handing`) starts once every child has ended, in the asked Agent's own handover session, with what
 --    each child answered or that it did not finish. It shares that session, so it waits as a job's start does, and its
 --    lost start holds the session in turn.
+--  - The follow-up's "What {Agent} reported:" ends in a real line break: since #317 it sent the two characters \n.
 --  - Whether the chain's person may still hand work over is handover_writer's, which reads a channel's rule from the
 --    chain's first asking Agent: an asked Agent further down may be outside the channel.
 --  - Its job's leg answers the Agents its Run may hand work to (`targets`), as the tool names them: every other Agent of
@@ -273,7 +277,8 @@ begin
  end if;
 
  if r.state='handing' then
-  -- The asked Agent's answer once every job it handed on ended (#477), given up a day after its leg began, and failed
+  -- The asked Agent's answer once every job it handed on ended (#477), given up a day after its leg could begin (the
+  -- first pass that found every child ended: a chain slower than a day still gets its answer), and failed
   -- when the asked Agent can no longer run or the chain's person may no longer hand work over: its leg ends as failed and
   -- the Agent that asked it hears so. A lost start given up keeps the session held until its window would have ended.
   if r.answer_started_at is null then
@@ -333,7 +338,7 @@ begin
  if r.target_outcome='completed' then
   asking := 'You handed this job to ' || target.name || case when r.conversation_id is null then ' in this channel' else ' in this conversation' end || ', and it has finished.'
    || E'\n\nThe job:\n' || r.goal
-   || E'\n\nWhat ' || target.name || ' reported:\n' || coalesce(r.summary,'')
+   || E'\n\nWhat ' || target.name || E' reported:\n' || coalesce(r.summary,'')
    || case when r.conversation_id is null
      then E'\n\nWrite your reply to the team now, in their language: what came of the job, and what they should know. Write only the reply.'
      else E'\n\nWrite your reply to the person now, in their language: what came of the job, and what they should know. Write only the reply.' end;
@@ -400,7 +405,7 @@ begin
  if position(was in def)=0 then raise exception 'close_handover_target changed: %',def; end if;
  execute replace(def,was,
   E' if run_outcome=''completed'' and exists(select 1 from public.agent_handovers c where c.parent_id=h and c.run_id=run) then\n'
-  || E'  update public.agent_handovers set state=''handing'', attempted_at=null, answer_started_at=now()\n'
+  || E'  update public.agent_handovers set state=''handing'', attempted_at=null, answer_started_at=null\n'
   || E'   where id=h and state=''target'' and target_run=run and target_outcome is null and not answers_person\n'
   || E'   returning * into r;\n'
   || E'  return r.id is not null;\n'

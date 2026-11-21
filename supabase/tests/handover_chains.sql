@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(59);
+select plan(63);
 -- #477 (decision 0057): an asked Agent hands on. RS Learning has Lead (the main one, on the Company's profile), Writer,
 -- Ads and Critic, each on its own profile; Aleem has an Ads of its own, which is never a target here. The Owner talks
 -- to Writer in a Conversation; in the "launch" team channel the Contributor (3) and the Viewer (4) work with Writer
@@ -27,6 +27,10 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
 select is(public.lead_hand_to_agent('c4770000-0000-0000-0000-000000000001','run-writer','call-1','Ads','Last campaign''s numbers','For the March post.'),
  '{"state":"created","agent":"Ads"}'::jsonb,'Writer hands the numbers to Ads');
 select set_config('test.p',(select id::text from public.agent_handovers where run_id='run-writer'),true);
+-- A handover whose asked Agent's Run started with no tool pinned (as the previous app version starts one).
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,state,target_run,target_attempts) values
+ ('10000000-0000-0000-0000-000000000001','c4770000-0000-0000-0000-000000000001','run-writer','call-unpinned','a4770000-0000-0000-0000-000000000013','a4770000-0000-0000-0000-000000000011','Unpinned','target','run-unpinned',1);
+select set_config('test.p2pin',(select id::text from public.agent_handovers where call_id='call-unpinned'),true);
 create temporary table begun on commit drop as select * from public.begin_handover(current_setting('test.p')::bigint);
 select is((select profile||':'||session from begun),'ag-a4770000000000000000000000000012:'||md5('c4770000-0000-0000-0000-000000000001:a4770000-0000-0000-0000-000000000012')::uuid,
  'Ads works on its own profile, in its own session for this chat');
@@ -56,6 +60,7 @@ select is(public.handover_hand_to_agent(current_setting('test.p')::bigint,'run-a
 select is(public.handover_hand_to_agent(current_setting('test.p')::bigint,'run-ads','call-3','Ads','Do it yourself',null),'{"state":"ignored"}'::jsonb,'never itself');
 select is(public.handover_hand_to_agent(current_setting('test.p')::bigint,'run-ads','call-4','Nobody','Plan',null),'{"state":"ignored"}'::jsonb,'a name no Agent of the Company has is ignored');
 select is(public.handover_hand_to_agent(current_setting('test.p')::bigint,'run-other','call-5','Critic','Plan',null),'{"state":"refused"}'::jsonb,'a call from no Run of the handover is refused');
+select is(public.handover_hand_to_agent(current_setting('test.p2pin')::bigint,'run-unpinned','call-1','Critic','Plan',null),'{"state":"refused"}'::jsonb,'and so is one from a Run that was offered no tool');
 select is((select count(*)::int from public.agent_handovers where parent_id=current_setting('test.p')::bigint),2,'two children in all');
 select is((select to_agent from public.agent_handovers where parent_id=current_setting('test.p')::bigint and call_id='call-2'),'a4770000-0000-0000-0000-000000000013'::uuid,
  'and the name picks the Company''s own Agent');
@@ -66,8 +71,9 @@ select set_config('test.q2',(select id::text from public.agent_handovers where p
 select is(public.close_handover_target(current_setting('test.p')::bigint,'run-ads','completed','I asked Critic and Writer.'),true,'Ads''s Run ended');
 select is((select state||':'||coalesce(target_outcome,'-')||':'||coalesce(summary,'-') from public.agent_handovers where id=current_setting('test.p')::bigint),'handing:-:-',
  'its leg waits for its children, with no answer yet');
+select is((select answer_started_at from public.agent_handovers where id=current_setting('test.p')::bigint),null,'and its answer''s day does not start while they work');
 select is((select count(*)::int from public.begin_handover(current_setting('test.p')::bigint)),0,'and its answer does not start while they are open');
-select is((select count(*)::int from public.handovers_due() d where d.id=current_setting('test.p')::bigint and d.run is null),1,'the worker lists it as a leg still to start');
+select is((select count(*)::int from public.handovers_due() d where d.id=current_setting('test.p')::bigint),0,'the worker does not list it while they work');
 
 -- Critic answers Ads.
 truncate begun; insert into begun select * from public.begin_handover(current_setting('test.q1')::bigint);
@@ -92,6 +98,7 @@ select is((select count(*)::int from public.begin_handover(current_setting('test
 select is((select state||':'||target_outcome from public.agent_handovers where id=current_setting('test.q2')::bigint),'done:failed','it is done as not finished');
 
 -- Every child ended: Ads answers in its own handover session with what came back.
+select is((select attempt from public.handovers_due() d where d.id=current_setting('test.p')::bigint and d.run is null),0,'once they ended, the worker lists its answer as a leg to start');
 truncate begun; insert into begun select * from public.begin_handover(current_setting('test.p')::bigint);
 select is((select state||':'||attempt||':'||profile||':'||session from begun),
  'handing:1:ag-a4770000000000000000000000000012:'||md5('c4770000-0000-0000-0000-000000000001:a4770000-0000-0000-0000-000000000012')::uuid,
@@ -116,7 +123,7 @@ select is((select state||':'||target_outcome||':'||summary from public.agent_han
 truncate begun; insert into begun select * from public.begin_handover(current_setting('test.p')::bigint);
 select is((select state||':'||profile||':'||session from begun),'returning:ag-a4770000000000000000000000000013:c4770000-0000-0000-0000-000000000001',
  'Writer, the Agent the person talks to, replies last, in the Conversation''s session');
-select ok((select input from begun) like '%February: 120 leads, EGP 9,000.%','with what Ads answered');
+select ok((select input from begun) like E'%What Ads reported:\nFebruary: 120 leads, EGP 9,000.%','with what Ads answered, on its own line');
 
 -- The Conversation's person reads every step of the chain, each with its parent.
 reset role;
@@ -124,7 +131,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is((select string_agg(from_name||'>'||to_name||':'||coalesce(answer,'-')||':'||case when parent is null then 'top' else 'child' end,' | ' order by id)
   from public.conversation_handovers('c4770000-0000-0000-0000-000000000001')),
- 'Writer>Ads:February: 120 leads, EGP 9,000. Writer did not say the month.:top | Ads>Critic:The figures check out: 120 leads.:child | Ads>Writer:-:child | Writer>Ads:-:top',
+ 'Writer>Ads:February: 120 leads, EGP 9,000. Writer did not say the month.:top | Writer>Lead:-:top | Ads>Critic:The figures check out: 120 leads.:child | Ads>Writer:-:child | Writer>Ads:-:top',
  'the Owner reads each step with its answer, and which ones were handed on');
 select is((select count(*)::int from public.agent_handovers where parent_id is not null),2,'and the children from the table');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
@@ -151,6 +158,7 @@ insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_i
 select is(public.channel_hand_to_agent(current_setting('test.message')::bigint,'run-channel-writer','call-1','Ads','The numbers',null),'{"state":"created","agent":"Ads"}'::jsonb,'Writer hands the numbers to Ads in the channel');
 select set_config('test.cp',(select id::text from public.agent_handovers where channel_message_id=current_setting('test.message')::bigint and parent_id is null),true);
 select is((select jsonb_array_length(targets) from public.begin_handover(current_setting('test.cp')::bigint)),3,'Ads, outside the channel, is offered the Company''s other three Agents');
+select is(public.pin_handover_tools(current_setting('test.cp')::bigint,'{"name":"hand_to_agent"}'),'{"name":"hand_to_agent"}','its tool is pinned');
 update public.agent_handovers set state='target', target_run='run-channel-ads' where id=current_setting('test.cp')::bigint;
 select is(public.handover_hand_to_agent(current_setting('test.cp')::bigint,'run-channel-ads','call-1','Critic','Check the figures',null),'{"state":"created","agent":"Critic"}'::jsonb,
  'and hands on to Critic, outside the channel too, as the channel''s writer asked of Writer');
