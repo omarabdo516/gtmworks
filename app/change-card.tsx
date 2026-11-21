@@ -32,7 +32,8 @@ export const useChangeShared=()=>useContext(Shared);
 
 // The "Now" row and the editor come from the Agent's own Engine profile, read when a waiting card is drawn (#484).
 function useChangeRead(company:string|undefined,change:ChangeProposalView,unread:boolean):ChangeRead {
- const key=company&&change.state==='waiting'&&!unread?`${company}:${change.id}`:null;
+ // A proposal whose approval is now being finished is read again: it no longer has a field to edit in.
+ const key=company&&change.state==='waiting'&&!unread?`${company}:${change.id}:${change.approved===undefined?'waiting':'finishing'}`:null;
  const [got,setGot]=useState<{key:string,read:ChangeRead}|null>(null);
  useEffect(()=>{
   if(!key||!company) return;
@@ -86,7 +87,7 @@ export function ChangeCard({change,company,owner=false,unread=false,answer}:{cha
   <div className="card__head"><span aria-hidden="true">{mark}</span>
    <div className="card__titles"><span className="card__title">{cb('changeTitle',change.agent.name)}</span>
     <span className="card__sub">{self?cb('changeSelf',change.agent.name):cb('changeFor',change.by.name,change.agent.name)}</span></div></div></>;
- const editingNow=editing&&owner&&change.state==='waiting';
+ const editingNow=editing&&owner&&change.state==='waiting'&&change.approved===undefined;
  return <Shared.Provider value={{read,editing:editingNow,setEditing}}>
   <div id={`change-${change.id}`} tabIndex={-1} className={`ac-card chg-card${change.state==='waiting'?'':' is-resolved'}`} role="group"
    aria-label={editingNow?c('changeEditLabel',change.agent.name):c('changeLabel',change.agent.name)} data-change={change.state} data-editing={editingNow||undefined}>

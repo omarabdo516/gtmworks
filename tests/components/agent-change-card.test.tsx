@@ -359,3 +359,20 @@ test('the value an unconfirmed approval is writing is on the card before, and wi
  await expect.poll(() => reads.mock.calls.length).toBeGreaterThan(0);
  expect([...failed.getByRole('group', { name: 'Proposed change: Analyst' }).element().querySelectorAll('.kv__row')].map(row => row.textContent)).toContain('After the OKclaude-opus-5-5');
 });
+
+test('a card left editing when its approval comes back unconfirmed drops the editor and reads the Agent again', async () => {
+ context('openai/gpt-5.5', models);
+ const view = (approved?: string) => <LanguageProvider language="en"><OwnerChangeCard slug="rs-learning" company="co-1" item={{ ...item(7), change: { ...item(7).change, ...(approved ? { approved_value: approved } : {}) } }}/></LanguageProvider>;
+ const screen = await render(view());
+ onTestFinished(() => screen.unmount());
+ const proposal = screen.getByRole('group', { name: 'Proposed change: Analyst' });
+ const edit = proposal.getByRole('button', { name: 'Edit, then approve' });
+ await expect.element(edit).not.toHaveAttribute('aria-disabled');
+ await edit.click();
+ await expect.element(screen.getByRole('radiogroup', { name: 'Model' })).toBeVisible();
+ const before = reads.mock.calls.length;
+ await screen.rerender(view('openai/gpt-5.5'));
+ await expect.element(screen.getByRole('group', { name: 'Proposed change: Analyst' }).getByText('After the OK')).toBeVisible();
+ expect(screen.container.querySelector('[role="radiogroup"]')).toBeNull();
+ await expect.poll(() => reads.mock.calls.length).toBe(before + 1);
+});

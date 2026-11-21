@@ -88,7 +88,7 @@ export function ChangeAnswer({slug,company,change,alone=false,back}:{slug:string
  const field=read&&read!=='loading'?read.edit:null;
  const fields=<><input type="hidden" name="company" value={company}/><input type="hidden" name="slug" value={slug}/><input type="hidden" name="proposal" value={change.id}/>{back&&<input type="hidden" name="back" value={back}/>}</>;
  const leave=(focus:()=>HTMLElement|null)=>requestAnimationFrame(()=>focus()?.focus());
- if(editing&&field) return <form action={answerAgentChange} noValidate onSubmit={event=>{ if(!editProblem(field,draft)) return; event.preventDefault(); setInvalid(true); }}>
+ if(editing&&field&&change.approved===undefined) return <form action={answerAgentChange} noValidate onSubmit={event=>{ if(!editProblem(field,draft)) return; event.preventDefault(); setInvalid(true); }}>
   {fields}<input type="hidden" name="intent" value="approve"/><input type="hidden" name="edited" value={JSON.stringify(draft)}/><Held>{sending=><>
   <fieldset className="pp-form" disabled={sending}><ChangeEditor change={change} field={field} draft={draft} setDraft={value=>{ setDraft(value); setInvalid(false); }} invalid={invalid} ids={{label:ids.edit,error:ids.editError}}/>
    <span className="set-err" id={ids.editError} role="alert" hidden={!invalid}>{c(field.kind==='setting'&&field.type==='number'?'changeEditNumberInvalid':'changeEditMissing')}</span></fieldset>
