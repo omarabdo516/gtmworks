@@ -4,9 +4,33 @@
 # The base is the image the pinned Engine uses for its sandboxed terminal and screen (v0.23.0). The pin is here and
 # nowhere else: the tag names the reviewed release and the digest the reviewed bytes, so a re-pushed tag cannot change
 # what an install runs. `lib/work-sandbox-image.mjs` reads this line and fails when it is not tag@sha256.
-FROM nousresearch/hermes-sandbox:desktop@sha256:df6768a595eaa09a9549237533421bf0557221ec0c13a825c9c202a13ddd37bb
+#
+# The browser stage comes first and alone, so CI builds just it for every platform the release builds (#572): that
+# needs no package download under emulation, and a platform whose browser is not where this step looks fails there,
+# before a release does.
+FROM nousresearch/hermes-sandbox:desktop@sha256:df6768a595eaa09a9549237533421bf0557221ec0c13a825c9c202a13ddd37bb AS browser
 
 USER root
+
+# Chromium is the browser the base image already ships for Playwright, which is the one the Engine's screen drives. One
+# browser, not two, so a page an Agent renders is the page the screen shows. A container cannot make Chromium's own
+# namespace sandbox (no capability, no new privilege), so it is off here: the container is the sandbox.
+# Playwright names Chromium's folder for the platform: chrome-linux64 on amd64, chrome-linux-arm64 on arm64 (#572). The
+# release builds both; any other platform stops here with its name, and so does a platform whose folder is missing.
+RUN set -eux; \
+    arch=$(dpkg --print-architecture); \
+    case "$arch" in \
+      amd64) folder=chrome-linux64 ;; \
+      arm64) folder=chrome-linux-arm64 ;; \
+      *) echo "no Chromium folder is known for $arch" >&2; exit 1 ;; \
+    esac; \
+    chrome=$(find /opt/playwright -maxdepth 3 -type f -path "*/$folder/chrome" | head -n 1); \
+    test -n "$chrome" || { echo "no Chromium at /opt/playwright/*/$folder/chrome on $arch" >&2; exit 1; }; \
+    printf '%s\n' '#!/bin/sh' \
+      'exec '"$chrome"' --no-sandbox --disable-dev-shm-usage "$@"' > /usr/local/bin/chromium; \
+    chmod 0755 /usr/local/bin/chromium
+
+FROM browser
 
 # The work tools a marketer's job needs, the Arabic fonts a rendered image or video is drawn in, and what the `ssh`
 # backend needs to reach this container: sshd, and `ss` so an install owner can see what listens.
@@ -17,16 +41,6 @@ RUN apt-get update \
       iproute2 \
       openssh-server \
  && rm -rf /var/lib/apt/lists/*
-
-# Chromium is the browser the base image already ships for Playwright, which is the one the Engine's screen drives. One
-# browser, not two, so a page an Agent renders is the page the screen shows. A container cannot make Chromium's own
-# namespace sandbox (no capability, no new privilege), so it is off here: the container is the sandbox.
-RUN set -eux; \
-    chrome=$(find /opt/playwright -maxdepth 3 -type f -path '*/chrome-linux64/chrome' | head -n 1); \
-    test -n "$chrome"; \
-    printf '%s\n' '#!/bin/sh' \
-      'exec '"$chrome"' --no-sandbox --disable-dev-shm-usage "$@"' > /usr/local/bin/chromium; \
-    chmod 0755 /usr/local/bin/chromium
 
 # The package makes host keys when it installs; no key is baked into an image every install runs, so the entrypoint makes
 # them when a container starts. No authorized key is here either: the public key arrives at run time.
