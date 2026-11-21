@@ -5,7 +5,7 @@ import { cdp, commands, page } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 import { BoardPager } from '@/components/paperclip/KanbanBoard';
 import { LanguageProvider } from '@/lib/i18n-client';
-import { later, prefersReducedMotion } from '@/lib/motion';
+import { later, prefersReducedMotion, useLeave } from '@/lib/motion';
 import { motionTable, type MotionRow } from '../motion-table.mjs';
 import type { ComputedMotion, ComputedStyle } from '../motion-css.mjs';
 
@@ -48,11 +48,83 @@ test.each([['on', 120], ['off', 1000]] as const)('with reduced motion %s a wait 
  expect(done).toHaveBeenCalledOnce();
 });
 
+// A part that leaves with the dialog's 190ms exit, then runs what closing leads to (#130): what the gallery, the settings
+// overlay and first run each do.
+function Leaving({ after }: { after: () => void }) {
+ const leaving = useLeave(190);
+ return <>
+  {!leaving.gone && <div data-testid="part" className={leaving.closing ? 'is-closing' : undefined}/>}
+  <button type="button" onClick={() => leaving.close(after)}>Close</button>
+  <button type="button" onClick={leaving.cancel}>Open</button>
+ </>;
+}
+const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+const leavingPart = async () => {
+ const after = vi.fn();
+ const screen = await render(<Leaving after={after}/>);
+ const press = (name: string) => (screen.getByRole('button', { name }).element() as HTMLButtonElement).click();
+ const part = () => document.querySelector('[data-testid="part"]');
+ return { after, press, part };
+};
+
+test('a part that leaves is marked closing and stays in the page while its 190ms leave runs, then is gone and what follows runs once', async () => {
+ const { after, press, part } = await leavingPart();
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ press('Close');
+ await frame();
+ expect(part()?.className).toBe('is-closing');
+ vi.advanceTimersByTime(150);
+ press('Close');
+ await frame();
+ expect(part()).not.toBeNull();
+ expect(after).not.toHaveBeenCalled();
+ vi.advanceTimersByTime(40);
+ await frame();
+ expect(part()).toBeNull();
+ expect(after).toHaveBeenCalledOnce();
+ vi.advanceTimersByTime(1000);
+ expect(after).toHaveBeenCalledOnce();
+});
+
+test('opening the part again while it leaves cancels the leave', async () => {
+ const { after, press, part } = await leavingPart();
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ press('Close');
+ vi.advanceTimersByTime(100);
+ press('Open');
+ await frame();
+ expect(part()?.className).toBe('');
+ vi.advanceTimersByTime(1000);
+ await frame();
+ expect(part()).not.toBeNull();
+ expect(after).not.toHaveBeenCalled();
+});
+
+test('with reduced motion a part that leaves is gone in the same tick, never marked closing, and what follows runs once', async () => {
+ await reducedMotion(true);
+ const { after, press, part } = await leavingPart();
+ const marked: string[] = [];
+ const watch = new MutationObserver(() => { const name = part()?.className; if (name) marked.push(name); });
+ watch.observe(document.body, { subtree: true, attributes: true, childList: true });
+ onTestFinished(() => watch.disconnect());
+ press('Close');
+ expect(after).toHaveBeenCalledOnce();
+ // React draws the update before the task ends.
+ await Promise.resolve();
+ expect(part()).toBeNull();
+ press('Close');
+ await frame();
+ expect(after).toHaveBeenCalledOnce();
+ expect(marked).toEqual([]);
+});
+
 const languages = inject('languages'), widths = inject('widths');
 
 // The part in its row's markup, styled by app/globals.css (with the reduced-motion rule), the tokens and keyframes in
 // app/tokens.css, app/shell.css and its own file, in the order the app loads them. Each is the stylesheet Vite builds for the app
 // (globals.css with Tailwind), taken as text so the next part starts without this one's file.
+// A row may name a part's ::before or ::after: the element is found without it and the pseudo-element is read.
+const pseudoOf = (row: MotionRow) => row.built.match(/::(?:before|after)$/)?.[0] ?? null;
 async function mount(row: MotionRow): Promise<Element> {
  const files = [...new Set(['app/globals.css', 'app/tokens.css', 'app/shell.css', row.file])];
  const sheets: string[] = await Promise.all(files.map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default));
@@ -62,7 +134,7 @@ async function mount(row: MotionRow): Promise<Element> {
  document.body.append(host);
  const { lang, dir } = document.documentElement;
  onTestFinished(() => { host.remove(); Object.assign(document.documentElement, { lang, dir }); });
- const parts = host.querySelectorAll(row.built);
+ const parts = host.querySelectorAll(row.built.replace(/::(?:before|after)$/, ''));
  expect(parts, `${row.built} matches one element of ${row.html}`).toHaveLength(1);
  return parts[0];
 }
@@ -70,8 +142,8 @@ async function mount(row: MotionRow): Promise<Element> {
 // As app/layout.tsx sets them.
 const speak = (language: string) => Object.assign(document.documentElement, { lang: language, dir: language === 'ar' ? 'rtl' : 'ltr' });
 
-const styleOf = (part: Element): ComputedStyle => {
- const { transitionProperty, transitionDuration, transitionDelay, transitionTimingFunction, animationName, animationDuration, animationTimingFunction } = getComputedStyle(part);
+const styleOf = (part: Element, pseudo: string | null = null): ComputedStyle => {
+ const { transitionProperty, transitionDuration, transitionDelay, transitionTimingFunction, animationName, animationDuration, animationTimingFunction } = getComputedStyle(part, pseudo);
  return { transitionProperty, transitionDuration, transitionDelay, transitionTimingFunction, animationName, animationDuration, animationTimingFunction };
 };
 
@@ -92,7 +164,7 @@ for (const row of motionTable) test(`${row.built} (${row.file}) moves as the ref
   const reference = await commands.referenceComputed(row.ref, width);
   for (const language of languages) {
    speak(language);
-   expect.soft(await commands.computedMotion(styleOf(part)), `${language} at ${width}px`).toEqual(reference);
+   expect.soft(await commands.computedMotion(styleOf(part, pseudoOf(row))), `${language} at ${width}px`).toEqual(reference);
   }
  }
  await reducedMotion(true);

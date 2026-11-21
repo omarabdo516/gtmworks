@@ -15,7 +15,7 @@ export function OverlayChrome({t,slug,companyName,role,readOnly,section,learning
    <svg className="ws__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--gw-accent)"/><path d="M21.5 11.5a7 7 0 1 0 1 7.5h-6.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
    <h2 className="sov__title" id="sov-title">{t('settings')}</h2><span className="sov__co"><bdi>{companyName}</bdi></span><span className="od-fill"/>
    {readOnly&&<span className="badge sov-ro"><SettingsIcon name="eye"/>{t('settingsReadOnly')}</span>}
-   <CloseButton slug={slug}/>
+   <CloseButton/>
   </header>
   <div className="sov__body">
    <nav className="sov-nav" aria-label={t('settingsSectionsLabel')}>
