@@ -207,10 +207,11 @@ export async function channelRecord(db:Database,person:string,company:string,cha
    ? {id:-note.id,author:'note',kind:'card',at:note.created_at}
    : {id:-note.id,author:'note',kind:'invite',actor:note.actor_name,name:note.invitee_name??'',at:note.created_at}),
  ];
- // #150: a handover is a quiet row under the reply that made it, then the other Agent's answer marked "to <Lead>", then
- // Lead's own reply, all from gtmworks's own record and never from the Engine's helper events (design-reference: the
- // handoff row, `to` on the sender line). Only handovers of the messages shown are drawn, and a completed target's
- // answer and Lead's reply appear as soon as each comes in.
+ // #150, #476: a handover is a quiet row "{asking Agent} asked {asked Agent}" under the reply that made it, then the
+ // asked Agent's answer marked "to {asking Agent}" (an Agent outside the channel too, with its own name and face), then
+ // the asking Agent's own reply, all from gtmworks's own record and never from the Engine's helper events
+ // (design-reference: the handoff row, `to` on the sender line). Only handovers of the messages shown are drawn, and a
+ // completed asked Agent's answer and the asking Agent's reply appear as soon as each comes in.
  const shownIds=new Set(ordered.map(message=>message.id));
  const handoverMessages=((handed||[]) as StoredHandover[]).filter(row=>shownIds.has(row.message)).flatMap((row):ChannelMessage[]=>[
   {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
