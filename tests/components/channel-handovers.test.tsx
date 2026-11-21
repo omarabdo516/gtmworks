@@ -110,6 +110,36 @@ test('in Arabic the row and the sender line read in the interface\'s own words',
  expect(turns.querySelector('[data-handover] .gw-icon path')?.getAttribute('d')).toBe('M19 12H5');
 });
 
+// #375: a handover that did not finish says so on the channel's handoff row, after the job, in the interface's language,
+// and Lead's reply after it still follows. One that finished says nothing of it.
+for (const [language, line] of [['en', 'The job didn’t finish'], ['ar', 'الشغل ماخلصش']] as const) test(`in ${language} a handover that did not finish says so on its row`, async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const messages: ChannelMessage[] = [
+  { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Lead plan the March ads', at: '2026-06-10T09:05:00Z', files: [], mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } },
+  { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Plan the Meta ads', at: '2026-06-10T09:06:00Z', failed: true },
+  { id: 'handover-7-reply', author: 'agent', name: 'Lead', face: 'c-1', body: 'Ads could not finish the plan.', at: '2026-06-10T09:30:00Z' },
+  { id: 'handover-8', author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Write the launch email', at: '2026-06-10T09:31:00Z' },
+ ];
+ const screen = await view(record(messages), language);
+ const rows = Array.from(screen.container.querySelectorAll('.turns [data-handover]'));
+ expect(rows.map(row => row.hasAttribute('data-failed'))).toEqual([true, false]);
+ expect([...rows[0].children].map(part => part.className)).toEqual(['handed__faces', 'handed__t', 'handed__d', 'handed__failed']);
+ expect(rows[0].querySelector('.handed__failed')?.textContent).toBe(line);
+ expect(rows[0].querySelector('.handed__d')?.textContent).toBe('Plan the Meta ads');
+ expect(rows[1].querySelector('.handed__failed')).toBeNull();
+ expect(rows[0].nextElementSibling?.querySelector('.bubble')?.textContent).toBe('Ads could not finish the plan.');
+});
+
+// #375: the details' Handoffs list marks a handover that did not finish too, before its time.
+test('the details mark a handover that did not finish, and leave a finished one as it was', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const screen = await view(record([], [{ ...handoff(9, 'Plan the Meta ads', '08'), failed: true }, handoff(8, 'Write the launch email', '04')]), 'ar');
+ const rows = Array.from(screen.container.querySelectorAll('#ch-h-h ~ .panel-card .panel-row'));
+ expect(rows.map(row => row.hasAttribute('data-failed'))).toEqual([true, false]);
+ expect(rows[0].querySelector('.panel-row__d')?.textContent).toBe(`Plan the Meta ads · الشغل ماخلصش · ${timeOf('2026-06-10T09:08:00Z', 'ar')}`);
+ expect(rows[1].querySelector('.handed__failed')).toBeNull();
+});
+
 // #428: a handover that ended with no reply because the Company has no model at all says so under its row, in the words
 // a Conversation uses (#422): the Owner gets the way to Subscription and models, a Member is told to ask the Owner. A
 // handover that ended otherwise draws no such line.

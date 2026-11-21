@@ -107,17 +107,17 @@ end $$;
 revoke all on function public.close_handover_follow_up(bigint,text,text,text) from public,anon,authenticated;
 grant execute on function public.close_handover_follow_up(bigint,text,text,text) to service_role;
 
--- 20270329000000's channel_handovers, with `no_model`: the handover ended with no reply from Lead, and the leg that ended
+-- 20270415600000's channel_handovers (with the target's outcome, #375), and `no_model` after its last column: the handover ended with no reply from Lead, and the leg that ended
 -- it (Lead's follow-up, or the target's when no follow-up ran) ended for want of any model provider, so the channel draws
 -- the no-model line under its row where that reply would be. Its return type changes, so it is made again.
 drop function public.channel_handovers(uuid);
 create function public.channel_handovers(ch uuid)
 returns table(id bigint, message bigint, from_agent uuid, from_name text, from_connection uuid, to_agent uuid, to_name text,
- to_connection uuid, goal text, summary text, reply text, state text, created_at timestamptz, answered_at timestamptz, closed_at timestamptz,
- no_model boolean)
+ to_connection uuid, goal text, summary text, reply text, state text, target_outcome text, created_at timestamptz, answered_at timestamptz,
+ closed_at timestamptz, no_model boolean)
 language sql stable security definer set search_path='' as $$
  select h.id,h.channel_message_id,h.from_agent,f.name,f.connection_id,h.to_agent,t.name,t.connection_id,h.goal,h.summary,h.reply,
-  h.state,h.created_at,h.target_closed_at,h.closed_at,
+  h.state,h.target_outcome,h.created_at,h.target_closed_at,h.closed_at,
   h.state in ('done','failed') and h.reply is null and coalesce(coalesce(h.follow_up_outcome,h.target_outcome)='no_model',false)
  from public.agent_handovers h
   join public.channel_messages m on m.id=h.channel_message_id
