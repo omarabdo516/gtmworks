@@ -320,6 +320,8 @@ test('an account menu opened while the next page is still arriving stays open wh
   const shell=await page.locator('.shell').elementHandle();
   await page.locator('.close-card').click();
   await asked;
+  // The menu rises once, as it opens; drawn again on the page that lands, it has risen already (#129).
+  await page.evaluate(()=>{ const counted=window as unknown as {rises:number}; counted.rises=0; document.addEventListener('animationstart',event=>{ if((event.target as Element).id==='me-menu') counted.rises++; },true); });
   await page.locator('.sidebar #btn-me').click();
   const menu=page.getByRole('menu');
   await expect(menu).toBeVisible();
@@ -329,10 +331,46 @@ test('an account menu opened while the next page is still arriving stays open wh
   // The page landed with a new shell, and the menu is still open on it.
   await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
   await expect(menu).toBeVisible();
+  await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,300)));
+  expect(await page.evaluate(()=>(window as unknown as {rises:number}).rises),'rises from opening to the page that landed').toBe(1);
+  await expect(menu).toHaveCSS('animation-name','none');
   await menu.locator('[role=group] a[role=menuitem][href$="/home"]').click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/home$/);
   await expect(menu).toHaveCount(0);
  } finally { release(); await page.unroute(board,hold); }
+});
+
+// #129 (design-reference: .menu, rise; openMeMenu, closeMeMenu; .me): the account menu rises 4px and fades in over
+// 120ms, and Escape, a press outside it and choosing an item remove it at once; the account row fades its background
+// over 150ms and nothing else. With reduced motion the menu is simply there.
+test('the account menu rises as it opens and is gone at once when it closes, and the account row fades its background alone',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await idle(page);
+ const button=page.locator('.sidebar #btn-me'), menu=page.locator('#me-menu');
+ await expect(button).toHaveCSS('transition','background-color 0.15s cubic-bezier(0.2, 0, 0, 1)');
+ const gone=()=>page.evaluate(()=>new Promise<boolean>(resolve=>requestAnimationFrame(()=>resolve(!document.getElementById('me-menu')))));
+ const closes:[string,()=>Promise<unknown>][]=[
+  ['Escape',()=>page.keyboard.press('Escape')],
+  ['a press outside it',()=>page.mouse.click(900,450)],
+  ['choosing an item',()=>menu.getByRole('menuitemradio',{name:/^English/}).click()],
+ ];
+ for(const [how,close] of closes) {
+  await button.click();
+  await expect(menu).toBeVisible();
+  expect(await menu.evaluate(element=>{ const style=getComputedStyle(element); return [style.animationName,style.animationDuration,style.animationTimingFunction]; }),'the menu as it opens').toEqual(['gw-rise','0.12s','cubic-bezier(0.2, 0, 0, 1)']);
+  // The rise starts from opacity 0, 4px down.
+  expect(await menu.evaluate(element=>{ const [rise]=element.getAnimations(); rise.pause(); rise.currentTime=0; const {opacity,transform}=getComputedStyle(element); rise.finish(); return [opacity,transform]; })).toEqual(['0','matrix(1, 0, 0, 1, 0, 4)']);
+  await close();
+  expect(await gone(),`${how} removes the menu by the next frame`).toBe(true);
+ }
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await button.click();
+ await expect(menu).toBeVisible();
+ expect(await menu.evaluate(element=>[getComputedStyle(element).animationDuration,getComputedStyle(element).opacity]),'with reduced motion the menu is simply there').toEqual(['0s','1']);
+ await expect(button).toHaveCSS('transition-duration','0s');
+ await page.keyboard.press('Escape');
+ expect(await gone()).toBe(true);
 });
 
 test('an open account menu closes when the keyboard takes the person to another company',async({page})=>{

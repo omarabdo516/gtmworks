@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import type { ComponentProps, MouseEvent } from 'react';
@@ -195,4 +195,48 @@ test('the sun/moon button shows the look shown now, Device following the system,
  system(false);
  await screen.rerender(toggle('device'));
  await expect.element(screen.getByRole('button', { name: 'Dark mode' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+// #129: the menu rises once as it opens (design-reference: .menu, rise) and is gone at once when it closes; drawn again
+// for the page it was kept open for, it has risen already.
+// The shell's stylesheets for these tests alone, so the tests above keep drawing the menu unstyled.
+const inShell = async (language: Language) => {
+ const css = await Promise.all(['app/tokens.css', 'app/shell.css'].map(async file => (await import(/* @vite-ignore */ `/${file}?inline`)).default as string));
+ const sheets = css.map(css => document.head.appendChild(Object.assign(document.createElement('style'), { textContent: css })));
+ onTestFinished(() => sheets.forEach(sheet => sheet.remove()));
+ return render(<LanguageProvider language={language}><div className="gw"><div className="sb-foot">
+  <AccountMenuView saveLanguage={saveLanguage} saveTheme={async () => ''} slug="rs-learning" personName="Omar" role="Owner" theme="light" companyName="RS Learning" settingsHref="/c/rs-learning/settings"/>
+ </div></div></LanguageProvider>);
+};
+const animationOf = (element: Element | null) => {
+ const { animationName, animationDuration, animationTimingFunction } = getComputedStyle(element!);
+ return { animationName, animationDuration, animationTimingFunction };
+};
+
+test('opening the menu plays the shared rise over 120ms on ease-out, and Escape removes it with no leave', async () => {
+ const screen = await inShell('en');
+ const starts: string[] = [];
+ const started = (event: AnimationEvent) => starts.push(event.animationName);
+ document.addEventListener('animationstart', started, { capture: true });
+ onTestFinished(() => document.removeEventListener('animationstart', started, { capture: true }));
+ await screen.getByRole('button', { name: 'Account menu' }).click();
+ await expect.element(screen.getByRole('menu')).toBeVisible();
+ expect(animationOf(document.getElementById('me-menu'))).toEqual({ animationName: 'gw-rise', animationDuration: '0.12s', animationTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)' });
+ await expect.poll(() => starts).toContain('gw-rise');
+ await userEvent.keyboard('{Escape}');
+ expect(document.getElementById('me-menu')).toBeNull();
+});
+
+test('a menu drawn again for the page it was kept open for does not rise a second time', async () => {
+ const first = await inShell('en');
+ await first.getByRole('button', { name: 'Account menu' }).click();
+ await expect.element(first.getByRole('menu')).toBeVisible();
+ await first.unmount();
+ const again = await inShell('en');
+ await expect.element(again.getByRole('menu')).toBeVisible();
+ expect(animationOf(document.getElementById('me-menu')).animationName).toBe('none');
+ await again.getByRole('button', { name: 'Account menu' }).click();
+ await expect.element(again.getByRole('menu')).not.toBeInTheDocument();
+ await again.getByRole('button', { name: 'Account menu' }).click();
+ expect(animationOf(document.getElementById('me-menu')).animationName).toBe('gw-rise');
 });
