@@ -740,3 +740,24 @@ test('a lost move cleans up only holding the lease again, so no change of the ma
   assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['paused']);
  } finally { await fake.close(); leases.clear(); }
 });
+
+test('a save first settles the profiles a failed move left, and changes nothing until the old copy is stopped', async () => {
+ const fake=await engine();
+ try {
+  await changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)});
+  // Lead → Ads fails: no copy can be made on Ads and Lead's will not pause, so it stays on.
+  const down={create:async()=>({state:'unreachable'}),pause:async()=>({state:'unreachable'}),delete:async()=>({state:'unreachable'})};
+  const db=session({agents:agentRows(ads)}).db;
+  assert.equal((await withMorningLease(db,company,fence=>moveAgentMorning(db,{company,agents:agentRows(lead),hermes:install(fake),driver:down,fence}))).state,'failed');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['scheduled']);
+  // While the Engine still refuses, a save on Ads fails and changes nothing.
+  assert.equal((await changeAgentMorning(db,{company,agent:ads,on:false,time:'9:00',hermes:install(fake),driver:down})).state,'failed');
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>job.state),['scheduled']);
+  // Once the Engine answers, the save brings the message to Ads first, then switches it off: nothing is left on Lead.
+  const saved=await changeAgentMorning(db,{company,agent:ads,on:false,time:'9:00',hermes:install(fake)});
+  assert.deepEqual(saved,{state:'written',morning:{on:false,time:'9:00'}});
+  assert.equal(jobs(fake,leadProfile).length,0);
+  assert.deepEqual(jobs(fake,adsProfile).map(job=>job.state),['paused']);
+  assert.deepEqual(leases.get(company).profiles,[]);
+ } finally { await fake.close(); leases.clear(); }
+});
