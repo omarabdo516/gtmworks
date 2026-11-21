@@ -12,6 +12,12 @@
   "ar": { "title": "المهام المتكررة في الإعدادات", "body": "الإعدادات بقت بتعرض كل المهام المتكررة لكل وكيل، وإمتى هتشتغل المرة الجاية وآخر مرة اشتغلت عملت إيه؛ والمالك والمديرين يقدروا يوقفوا مهمة أو يرجّعوها، يشغّلوها دلوقتي، يغيّروا ميعادها، يضيفوا مهمة أو يمسحوها، وكل تغيير بيتسجّل في السجل." }
  },
  {
+  "issue": 133,
+  "date": "2026-11-21",
+  "en": { "title": "Agent faces come alive", "body": "An Agent's face looks toward your pointer, blinks now and then, hops when you press it and lifts when you hover its tile; while the Agent works, its face in the chat's title and its details scans, three dots think beside it and its dot sends a ring, and a check shows when it is done." },
+  "ar": { "title": "وشوش الوكلاء بقت عايشة", "body": "وش الوكيل بقى بيبص ناحية الماوس، وبيرمش كل شوية، وبينط لما تدوس عليه، وبيترفع لما تقف على مربعه؛ ووقت ما الوكيل شغال، وشه في عنوان الشات وفي تفاصيله بيدوّر بعينيه، وتلات نقط بتفكر جنبه، ونقطته بتطلع دايرة، ولما يخلص بتظهر علامة صح." }
+ },
+ {
   "issue": 132,
   "date": "2026-11-21",
   "en": { "title": "The chat moves as it was designed", "body": "A message that arrives while the chat is open rises gently into place, the working line breathes while the Agent works, and the send arrow takes off when you send." },
