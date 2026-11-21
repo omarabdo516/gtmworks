@@ -74,7 +74,12 @@ const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow,apps:AppStates)=>
 export const offeredChoices=(card:Extract<ReplyCard,{kind:'permission'}>,may:readonly PermissionChoice[]):PermissionChoice[]=>
  (['deny','always','once'] as const).filter(choice=>card.choices.includes(choice)&&may.includes(choice));
 export const replyCardOf=(row:ReplyCardRow,apps:AppStates=null):ReplyCard|null=>Object.hasOwn(replyReaders,row.kind)?replyReaders[row.kind as ReplyCard['kind']](row,apps):null;
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
+// A change an Agent proposed to its own settings, or Lead to another Agent's (#19): waiting on the Owners (`owners` names
+// whom), approved or declined by one of them, or refused at once as not on the list of what can be proposed.
+type ChangeFace={id:string,connection_id:string,name:string};
+export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset'|'setting',setting:string|null,value:unknown,reason:string,agent:ChangeFace,by:ChangeFace}
+ &({state:'waiting',owners:string[]}|{state:'approved',answeredBy:string,at:string}|{state:'declined',answeredBy:string,at:string,answer:string|null,maybeApplied?:boolean}|{state:'refused'});
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'reply',card:ReplyCard}|{kind:'handed',name:string,face:string,goal:string};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};
 type RuleDecision={approved:boolean,by:string,rule:string,at:string};
 export type Decision=({kind:'rule'}&RuleDecision)|({kind:'request',by:string,name:string,at:string}&({made:true}|{made:false,reason:string}));

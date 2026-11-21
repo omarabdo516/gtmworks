@@ -4,8 +4,8 @@
 // (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
-import { Fragment, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import { useRouter } from 'next/navigation';
+import { Fragment, Suspense, lazy, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
@@ -14,6 +14,10 @@ import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } 
 import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
 import { StepsList } from '@/app/run-steps';
 import { MadeCard, RequestCard } from '@/app/agent-card';
+import { ChangeCard } from '@/app/change-card';
+// The Owner's answer posts through a server action: loaded only when a waiting proposal is drawn for an Owner, so the
+// chat's own bundle and its tests never load the server module.
+const ChangeAnswer=lazy(()=>import('@/app/c/[slug]/[[...section]]/agent-change-card').then(module=>({default:module.ChangeAnswer})));
 import { AgentMadeToast } from '@/app/agent-made';
 import { ReplyCard } from '@/app/reply-card';
 import type { DecidePermission, PermissionOutcome } from '@/app/permission-card';
@@ -127,6 +131,8 @@ export function ChatPlaceholder() {
 // line.
 export function ConversationTurns({slug,company,record,writer,asked}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void}) {
  const openSheet=useAppsSheet();
+ // An Owner's answer to a proposal from the chat comes back to this chat (#19).
+ const here=usePathname();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
  const answer=async(card:number,choice:number,answerKey:string)=>{
@@ -194,6 +200,8 @@ export function ConversationTurns({slug,company,record,writer,asked}:{slug:strin
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {message.cards?.map(card=>card.kind==='made'?<Fragment key={card.agent.id}><MadeCard slug={slug} agent={card.agent}/>{card.agent.fresh&&<AgentMadeToast company={company} slug={slug} agent={card.agent}/>}</Fragment>:card.kind==='request'?<RequestCard key={`request${card.request.id}`} slug={slug} request={card.request}/>
+    :card.kind==='change'?<ChangeCard key={`change${card.change.id}`} change={card.change} owner={record.changeOwner===true}
+     answer={card.change.state==='waiting'&&record.changeOwner?<Suspense fallback={null}><ChangeAnswer slug={slug} company={company} change={card.change} alone={record.alone===true} back={here}/></Suspense>:undefined}/>
     :card.kind==='handed'?<HandedRow key={`handed${message.id}`} from={{connection_id:conversation.face,name:conversation.agent_name}} to={card} cb={cb}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>)}</ol>

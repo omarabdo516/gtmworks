@@ -1,6 +1,6 @@
 # Visual comparison
 
-The visual lane (#257) compares 12 key screens, listed in `tests/visual-lane/screens.json` (capped at 15), each in
+The visual lane (#257) compares 13 key screens, listed in `tests/visual-lane/screens.json` (capped at 15), each in
 Arabic at 1440 and 390, light and dark, byte for byte with its images in `tests/visual-lane/images/`
 (`<screen>-ar-<width>-<light|dark>.png`, no platform suffix). One browser pinned by digest draws them, so every machine
 makes the same bytes. It runs on `main` only (`./ci.sh visual`); a failure there opens the `visual-regression` issue,
