@@ -85,15 +85,19 @@ export type ChangeProposalView={id:number,change:'model'|'instructions'|'toolset
 // A handover did not finish (#375) when its target's leg ended without a report (failed, stopped or lost: it ran out of
 // time, could not start or was never answered), or when the handover itself ended failed (Lead's follow-up did). A
 // Conversation's "Handed to" row and a channel's handoff row both say so, from this one rule.
-export const handoverUnfinished=(row:{state:string,target_outcome:string|null}):boolean=>
+const handoverUnfinished=(row:{state:string,target_outcome:string|null}):boolean=>
  row.state==='failed'||(row.target_outcome??'completed')!=='completed';
+// How a handover's row says it ended short (#375, #478): stopped by its person's Stop (or the Engine stopped the Run it
+// was on) says so in place of "the job didn't finish", in a Conversation and a channel alike.
+export const handoverEnding=(row:{state:string,target_outcome:string|null,stopped?:boolean|null}):{stopped?:true,failed?:true}=>
+ row.stopped?{stopped:true}:handoverUnfinished(row)?{failed:true}:{};
 // #167: the main Agent asks whether to request an Agent hidden from its person, naming who opens Agents for them
 // (`named`: their first name, whole name and Role). Its Agent is never part of the card. Offered, the card has its two
 // buttons; once pressed, it says what was sent and when (`at`), whatever answer came later. One its person sees the Agent
 // of by now, unanswered, says the Agent is open for them (`available`).
 // A sent request not answered yet `waits`, so the open chat keeps reading the record until its answer is in.
 export type AgentAccessView={id:number,named:{first:string,name:string,role:string}}&({state:'offered'|'available'}|{state:'dismissed',at:string}|{state:'asked',at:string,waits:boolean});
-export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',from:{name:string,face:string},name:string,face:string,goal:string,failed?:true}
+export type LeadCard={kind:'made',agent:MadeAgent}|{kind:'request',request:AgentRequestView}|{kind:'change',change:ChangeProposalView}|{kind:'access',access:AgentAccessView}|{kind:'reply',card:ReplyCard}|{kind:'handed',from:{name:string,face:string},name:string,face:string,goal:string,failed?:true,stopped?:true}
  // The morning's card (#183) sits under the main Agent's greeting in a Conversation the morning opened.
  |{kind:'morning',morning:import('./good-morning-card').MorningCard};
 export type SavedRule={id:string,agent:string|null,removed:boolean,said_at:string,sentTo?:string[]};

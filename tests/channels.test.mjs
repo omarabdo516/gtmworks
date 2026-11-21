@@ -17,7 +17,7 @@ const { channelRecord } = await import('../lib/channels.ts');
 // The channel's reads as the page makes them. `runs` are the channel's closed Runs, newest first; `open` are the Runs
 // still open, and `states` is the one agent_states call. `states` rows carry more than the record may keep: the state is
 // all a channel's reader gets. `notes` are the quiet lines the channel got, and `members` what channel_members answered.
-function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], cards = [], handovers = [], board = null, members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
+function database({ agents, runs = [], open = [], states = [], messages = [], notes = [], cards = [], handovers = [], board = null, stoppable = [], members = [{ person: 'p-1', name: 'Omar', role: 'owner', invitation: null, email: null }, { person: 'p-2', name: 'Sara Adel', role: 'viewer', invitation: null, email: null }] }) {
  const rows = select => select === 'message_id,ordinal,agent_id' ? open : String(select).includes('agent_name') ? runs : [];
  const chain = table => {
   const data = table === 'channels' ? { id: 'ch-1', company_id: 'co-1', kind: 'team', name: 'Launch week' }
@@ -43,6 +43,8 @@ function database({ agents, runs = [], open = [], states = [], messages = [], no
   if (name === 'agent_states') return { data: states, error: null };
   if (name === 'channel_handovers') return { data: handovers, error: null };
   if (name === 'channel_board_card') return { data: board, error: null };
+  // Nothing the reader may stop (#478).
+  if (name === 'channel_stoppable') return { data: stoppable, error: null };
   throw new Error(`unexpected ${name}`);
  };
  return {
@@ -245,6 +247,26 @@ test('a channel handover that did not finish marks its row, whichever leg ended 
  const finished = record?.messages.find(message => message.id === 'handover-11');
  assert.ok(finished && !('failed' in finished), 'a finished handover carries no failed mark at all');
  assert.deepEqual(record?.handoffs.map(handoff => [handoff.id, handoff.failed === true]), [[11, false], [12, true], [13, true], [14, true], [15, true], [16, false]], 'the details list marks the same handovers');
+});
+
+// #478: a step its person's Stop ended is marked stopped, in place of "did not finish", on its row and in the details; and
+// the record names the message the reader's Stop ends, with the Agent working on it, or none.
+test('a stopped channel handover is marked stopped, not failed, and the record names what the reader\'s Stop ends', async () => {
+ const rows = [
+  handover({ id: 21, state: 'done', target_outcome: 'stopped', summary: null, answered_at: null, reply: null, stopped: true }),
+  handover({ id: 22, state: 'done', target_outcome: 'failed', summary: null, answered_at: null, reply: null }),
+ ];
+ const read = more => channelRecord(database({
+  agents: [agent('a-1', 'Lead'), agent('a-2', 'Ads')],
+  messages: [{ id: 2, author: 'person', person_id: 'p-1', agent_id: null, author_name: 'Omar', body: '@Lead plan the March ads', reply_to: null, reply_ordinal: null, created_at: '2026-06-10T10:00:00Z' }],
+  handovers: rows, ...more,
+ }), 'p-1', 'co-1', 'ch-1');
+ const record = await read({ stoppable: [{ message: 2, agent_name: 'Lead' }] });
+ const drawn = (record?.messages ?? []).filter(message => message.author === 'handoff').map(message => [message.id, message.stopped === true, message.failed === true]);
+ assert.deepEqual(drawn, [['handover-21', true, false], ['handover-22', false, true]]);
+ assert.deepEqual(record?.handoffs.map(handoff => [handoff.id, handoff.stopped === true, handoff.failed === true]), [[21, true, false], [22, false, true]]);
+ assert.deepEqual(record?.stop, { message: 2, agent: 'Lead' });
+ assert.equal('stop' in (await read({}) ?? {}), false, 'nothing to stop carries no stop');
 });
 
 test('a channel with no handover draws none, and one whose handover belongs to a message not shown draws no row of it', async () => {
