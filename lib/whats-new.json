@@ -1,5 +1,11 @@
 [
  {
+  "issue": 502,
+  "date": "2026-11-21",
+  "en": { "title": "An update that cannot start keeps your old engine", "body": "When an update from an older install cannot start the new agent engine, your install now goes back to the engine it had, with all your agents' memory, so your company keeps working until you run the update again." },
+  "ar": { "title": "التحديث اللي مايقدرش يشتغل بيسيبلك المحرك القديم", "body": "لما تحديث من نسخة قديمة مايقدرش يشغّل محرك الوكلاء الجديد، النسخة بتاعتك دلوقتي بترجع للمحرك اللي كان عندها بكل ذاكرة وكلائك، فشركتك تفضل شغالة لحد ما تشغّل التحديث تاني." }
+ },
+ {
   "issue": 477,
   "date": "2026-11-21",
   "en": { "title": "An asked agent can ask another", "body": "An agent you asked for a job can now ask any other agent of your company in turn, as far as the job needs: each step shows in the chat or channel with its answer, and the agent you talk to replies once every answer came back." },

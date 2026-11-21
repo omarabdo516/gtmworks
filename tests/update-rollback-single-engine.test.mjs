@@ -33,7 +33,8 @@ docker() {
   case "$1" in
     ps)
       case "$*" in
-        *com.docker.compose.service=hermes*) sed -n 's/^\\([^ ]*\\) [^ ]*-hermes-1 .*/\\1/p' "$state/containers";;
+        *-aq*com.docker.compose.service=hermes*) sed -n 's/^\\([^ ]*\\) [^ ]*-hermes-1 .*/\\1/p' "$state/containers";;
+        *com.docker.compose.service=hermes*) sed -n 's/^\\([^ ]*\\) [^ ]*-hermes-1 running$/\\1/p' "$state/containers";;
         *name=*) name=$(printf '%s' "$*" | sed -n 's/.*name=^\\([^$]*\\)\\$.*/\\1/p'); sed -n "s/^\\([^ ]*\\) $name .*/\\1/p" "$state/containers";;
       esac;;
     stop) shift; for id in "$@"; do sed -i "s/^$id \\([^ ]*\\) .*/$id \\1 exited/" "$state/containers"; done;;
@@ -134,6 +135,22 @@ test('the old Engine does not start while a new one still runs on its data volum
   const restored = install.run('restore_previous_engine', { RM_FAILS: '1' });
   assert.notEqual(restored.status, 0);
   assert.ok(install.containers().includes('old-1 gtmworks-install-hermes-1 exited'), install.containers().join('\n'));
+});
+
+test('a stopped container an earlier update moved past is removed, and never brought back', t => {
+  // An update moved the Engine into its folder and could not remove the stopped old container.
+  const install = singleEngineInstall(t);
+  writeFileSync(join(install.dir, 'state/containers'), 'old-1 gtmworks-install-hermes-1 exited\nweb-1 gtmworks-install-web-1 running\n');
+  mkdirSync(join(install.dir, '.engines/first'), { recursive: true });
+  writeFileSync(join(install.dir, '.engines/first/.env'), `ENGINE_KEY=${key}\nENGINE_VOLUME=gtmworks-install_hermes\nENGINE_NETWORK=gtmworks-engine-first\n`);
+  writeFileSync(join(install.dir, '.env.install'), 'POSTGRES_PASSWORD=p\n');
+  assert.notEqual(install.run('first_engine_up', { ENGINE_FAILS: '1' }).status, 0);
+  assert.ok(!install.containers().some(line => line.startsWith('old-1 ')), install.containers().join('\n'));
+  assert.ok(!existsSync(join(install.dir, '.install-lock/old-engine')));
+  // Nothing marks it as the Engine to bring back: the Engine folder stays as it was.
+  install.run('restore_previous_engine');
+  assert.ok(existsSync(join(install.dir, '.engines/first/.env')));
+  assert.ok(!readFileSync(join(install.dir, '.env.install'), 'utf8').includes('HERMES_API_KEY='));
 });
 
 test('an install on the per-Company layout keeps no old Engine and restores from its kept template as before', t => {

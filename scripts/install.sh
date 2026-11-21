@@ -298,6 +298,16 @@ stop_old_engine() {
   old=$(docker ps -aq --filter 'label=com.docker.compose.project=gtmworks-install' \
     --filter 'label=com.docker.compose.service=hermes') || return 1
   [ -n "$old" ] || return 0
+  # An install that already had its Engine folder before this run, whose old container is stopped, is not that release:
+  # an earlier run moved its Engine and left the container it could not remove (remove_old_engine). That container goes
+  # now, and is never what a failed start brings back. One still running is that release's Engine, whatever the folder.
+  running=$(docker ps -q --filter 'label=com.docker.compose.project=gtmworks-install' \
+    --filter 'label=com.docker.compose.service=hermes') || return 1
+  if [ "$1" != yes ] && [ -z "$running" ]; then
+    docker rm -f $old > /dev/null \
+      || echo "The previous release's Engine container is stopped but could not be removed; the next install run removes it." >&2
+    return 0
+  fi
   [ -f .install-lock/previous-engine/sandbox-parts ] || { mkdir -p .install-lock/previous-engine && keep_sandbox_parts; } || return 1
   printf '%s\n' $old > .install-lock/old-engine || return 1
   docker stop $old > /dev/null || return 1
@@ -382,10 +392,13 @@ engine_destroy() {
   rm -rf "$(engine_folder "$slug")"
 }
 first_engine_up() {
+  # Whether the install is still the release before ADR 0018's own shape, read before its key moves into the folder.
+  single_engine=no
+  [ -f "$(engine_folder first)/.env" ] || single_engine=yes
   adopt_engine_key || return 1
   key=$(engine_key)
   test -n "$key" || { echo 'The install has no Engine key: run sh scripts/install.sh.' >&2; return 1; }
-  stop_old_engine || return 1
+  stop_old_engine "$single_engine" || return 1
   engine_start first || return 1
   join_engine_network gtmworks-engine-first || return 1
   remove_old_engine
