@@ -96,3 +96,9 @@ test('a date of the month said as a bare number after "on" asks too', () => {
  assert.equal(read('Send me the report every month on 15 at 9am')?.cron,null);
  assert.equal(read('Send me the report every month on 1 at 9am')?.cron,'0 9 1 * *');
 });
+
+test('more than one day of the week asks rather than keeping only the first', () => {
+ assert.equal(read('Send me a report every Monday and Friday at 9am')?.cron,null);
+ assert.equal(read('ابعتلي تقرير كل اتنين وخميس 9 الصبح')?.cron,null);
+ assert.equal(read('Send me a report every Monday at 9am')?.cron,'0 9 * * 1','one day still makes it');
+});
