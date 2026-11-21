@@ -49,6 +49,11 @@ export type MemoryForget={state:'forgotten'|'stale'|'refused'|'unreachable'|'fai
 // revoked (read back without it), gone (it was not there), or why it could not be done.
 export type StandingPermissions={state:'found',entries:string[]}|{state:'refused'|'unreachable'|'failed',entries:null};
 export type StandingRevoke={state:'revoked'|'gone'|'refused'|'unreachable'|'failed'};
+// An Agent's Routine (#31): one cron job of its own Engine profile, as the contract reads it.
+export type RoutineSchedule={kind:string,expr:string|null,minutes:number|null,display:string|null};
+export type Routine={id:string,name:string,prompt:string,schedule:RoutineSchedule,timezone:string|null,on:boolean,state:'scheduled'|'paused'|'running'|'completed'|'error',nextRunAt:string|null,lastRunAt:string|null,lastStatus:'ok'|'failed'|null,lastError:string|null};
+export type RoutineList={state:'found',routines:Routine[]}|{state:'refused'|'unreachable'|'failed',routines:null};
+export type RoutineChange={state:'done',routine:Routine}|{state:'missing'|'refused'|'busy'|'unreachable'|'failed'};
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={

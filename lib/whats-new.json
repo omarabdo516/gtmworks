@@ -6,6 +6,12 @@
   "ar": { "title": "شوف والغي اللي الوكيل يقدر يعمله من غير ما يستأذن", "body": "إعدادات الوكيل وآخر تبويب النشاط بقوا بيعرضوا صلاحياته الدايمة، كل حاجة حد رد عليها بـ«اسمح دايماً»، ومين سمح بيها وإمتى؛ والمالك أو المدير يقدر يلغي أي واحدة، والوكيل هيستأذن تاني المرة الجاية." }
  },
  {
+  "issue": 31,
+  "date": "2026-11-21",
+  "en": { "title": "Recurring tasks in Settings", "body": "Settings now lists every recurring task of every agent with when it runs next and how its last run went; the Owner and Managers can switch one off or on, run it now, change when it runs, add one or delete one, and each change is in the log." },
+  "ar": { "title": "المهام المتكررة في الإعدادات", "body": "الإعدادات بقت بتعرض كل المهام المتكررة لكل وكيل، وإمتى هتشتغل المرة الجاية وآخر مرة اشتغلت عملت إيه؛ والمالك والمديرين يقدروا يوقفوا مهمة أو يرجّعوها، يشغّلوها دلوقتي، يغيّروا ميعادها، يضيفوا مهمة أو يمسحوها، وكل تغيير بيتسجّل في السجل." }
+ },
+ {
   "issue": 399,
   "date": "2026-11-21",
   "en": { "title": "Backups keep your Agents' files", "body": "A backup now holds every Company's work folder, the files its Agents made, without the tool caches, and a restore puts them back in each Company's own work sandbox." },

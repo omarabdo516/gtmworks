@@ -101,6 +101,9 @@ export const screens = {
   apps: { reference: { steps: [...settingsSection('apps'), { waitFor: '#sov-apps .app-card' }] }, builtPath: '/c/rs-learning/settings?section=apps' },
   account: { reference: { steps: settingsSection('account') }, builtPath: '/c/rs-learning/settings?section=account' },
   knowledge: { reference: { steps: settingsSection('knowledge') }, builtPath: '/c/rs-learning/settings?section=knowledge' },
+  // Recurring tasks (#31): every Agent's Routines. Built: the Routines are the Engine's, so they need an Engine that holds
+  // some (the visual lane's `routines` state and its fake Engine).
+  routines: { reference: { steps: settingsSection('routines') }, builtPath: '/c/rs-learning/settings?section=routines' },
   'home-alone': { reference: { steps: alone }, builtPath: '/c/rs-consultations/chat' },
   'settings-alone': { reference: { steps: [...alone, ...settings] }, builtPath: '/c/rs-consultations/settings' },
   // #13. "New agent" opens Lead's chat ready to type, with one hint line.

@@ -45,6 +45,8 @@ export async function fixClockText(page: Page) {
     const skipped = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'TITLE']);
     for (const element of Array.from(document.querySelectorAll('body *'))) {
       if (element.children.length || skipped.has(element.tagName)) continue;
+      // A Routine's times are fixed hours of a fixed day before and after the server's own (visual-lane.spec.ts, #31).
+      if (element.closest('.rt-row')) continue;
       const text = (element.textContent ?? '').trim();
       if (element.matches('.lg-day__h')) element.textContent = 'Day';
       else if (element.closest('.chart-bars') && /\d/.test(text) && monthName.test(text)) element.textContent = 'Month 00';
@@ -61,7 +63,8 @@ export async function expectDeterministic(page: Page) {
     const faces = [...document.fonts];
     const declared = new Set(faces.map(face => unquote(face.family)));
     // A face whose every source is local() names a font the pinned image either has or lacks, the same on every run:
-    // next/font's metric-matched "<family> Fallback" faces point at Arial, which the image lacks.
+    // next/font's metric-matched "<family> Fallback" faces point at Arial, which the image lacks, and set size-adjust and
+    // ascent-override.
     // A family is exempt only when every face it declares is local(): one url() face keeps the whole family checked.
     const localOnly = new Set<string>();
     const fetched = new Set<string>();
@@ -72,8 +75,10 @@ export async function expectDeterministic(page: Page) {
         if (!(rule instanceof CSSFontFaceRule)) continue;
         const src = rule.style.getPropertyValue('src');
         const family = unquote(rule.style.getPropertyValue('font-family'));
-        // Only next/font's metric-matched "<family> Fallback" faces: any other local() face is checked like the rest.
-        (src && !/url\(/.test(src) && /fallback/i.test(family) ? localOnly : fetched).add(family);
+        // Only next/font's metric-matched "<family> Fallback" faces: any other local() face is checked like the rest. The
+        // name alone is not next/font's mark (#359): the face must also carry the metric overrides it writes on each one.
+        const matched = ['size-adjust', 'ascent-override'].every(name => rule.style.getPropertyValue(name));
+        (src && !/url\(/.test(src) && /fallback/i.test(family) && matched ? localOnly : fetched).add(family);
       }
     }
     for (const family of fetched) localOnly.delete(family);
