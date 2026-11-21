@@ -145,12 +145,19 @@
   position: relative; display: flex; flex-direction: column; gap: var(--s2); width: 100%; margin: 0; padding: 14px var(--s4); border: 0; border-radius: var(--gw-r-md);
   background: var(--gw-bg-pane); color: var(--gw-text-1); box-shadow: var(--b-shadow-card, #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px); text-align: start; cursor: grab;
   font-family: var(--gw-font); font-size: var(--gw-fs-msg); line-height: 1.6;
-  transition: box-shadow var(--gw-dur-fast) var(--gw-ease-out), transform var(--gw-dur-fast) var(--gw-ease-out);
+  /* design-reference: the shared press rule (#131): a Card eases its colours and its lift, and gives under the finger. */
+  transition-property: background-color, box-shadow, color, border-color, transform;
+  transition-duration: var(--gw-dur-fast); transition-timing-function: var(--gw-ease-out);
 }
 @media (hover: hover) { .gw .board-view .kcard:hover { box-shadow: var(--gw-border-2) 0 0 0 0.5px, var(--gw-shadow-popover); transform: translateY(-1px); } }
+.gw .board-view .kcard:active { transform: scale(0.985); }
 .gw .board-view .kcard:has(a:focus-visible) { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
 .gw .board-view .kcard.is-drag-src { opacity: .35; transform: none; background: transparent; box-shadow: inset 0 0 0 1px var(--gw-border-1); }
-.gw .kcard--ghost { box-shadow: var(--gw-border-2) 0 0 0 0.5px, var(--gw-shadow-modal); transform: rotate(2deg) scale(1.03); cursor: grabbing; }
+/* The carried Card leans with the pointer's speed (#131; design-reference: dragMove): the board sets --gw-tilt each frame. */
+.gw .kcard--ghost {
+  box-shadow: var(--gw-border-2) 0 0 0 0.5px, var(--gw-shadow-modal); transform: rotate(calc(2deg + var(--gw-tilt, 0deg))) scale(1.03); cursor: grabbing;
+  transform-origin: 50% 30%; will-change: transform;
+}
 /* The carried Card is drawn from the document's body, outside the shell, and follows the pointer: it never catches it, so
    the Card under the finger is the one read (#174). */
 .kcard--ghost { pointer-events: none; }
@@ -173,6 +180,10 @@
 .gw .kcard .bar { display: block; height: 3px; border-radius: var(--gw-r-full); background: var(--gw-bg-active); overflow: hidden; }
 .gw .kcard .bar__fill { display: block; height: 100%; width: 100%; background: var(--gw-text-1); transform-origin: right center; }
 [dir="ltr"] .gw .kcard .bar__fill { transform-origin: left center; }
+/* A bar slides when its figure changes, and grows in when the board opens (#131; design-reference: .bar__fill, boardEnter). */
+.gw .kcard .bar__fill { transition: transform var(--gw-dur-slow) var(--gw-ease-out); }
+.gw .board--enter .kcard .bar__fill { animation: gw-bar-grow 700ms var(--gw-ease-out) both; }
+@keyframes gw-bar-grow { from { transform: scaleX(0); } }
 .gw .kcard__foot { display: flex; align-items: center; gap: 6px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); padding-top: 2px; min-width: 0; float: none; }
 .gw .kcard__agent { display: inline-flex; align-items: center; gap: 6px; color: var(--gw-text-2); min-width: 0; float: none; }
 .gw .kcard__agent .agent-face, .gw .kcard__agent .avatar { width: 18px !important; height: 18px !important; font-size: 10px; }
@@ -229,6 +240,7 @@
   .gw .board-view .kcard, .gw .board-view .col, .gw .board-view .chip { transition: none; }
   .gw .board-view .kcard:hover { transform: none; }
   .gw .kcard--ghost { transform: none; }
+  .gw .board--enter .kcard .bar__fill { animation: none; }
 }
 @media (pointer: coarse) { .gw .kcard[data-card-id] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } .gw .kcard a { -webkit-user-drag: none; } }
 @media (max-width: 1023px) {

@@ -1131,10 +1131,10 @@ status=$(docker run --rm --network host curlimages/curl:8.12.1 -sS -o /dev/null 
 # and previous_backup set.
 previous_release_install() {
 # The previous release is the last one before each Company got its own Engine (spec #378): its own schema (no Engine
-# record, no companies.engine_id), its own one `hermes` service, and its own key in .env.install. It is a fixed commit,
-# not this pull request's base or origin/main: after this release merges, main has the Engines, and the update proof would
-# build this release's own shape twice and prove nothing (#378, C1).
-previous_release=8f47abe1761548a45de72937fac443a4bdea3eb6
+# record, no companies.engine_id), its own one `hermes` service, and its own key in .env.install. It is a fixed commit
+# (previous_release_commit, scripts/ci-install-lib.sh), not this pull request's base or origin/main: after this release
+# merges, main has the Engines, and the update proof would build this release's own shape twice and prove nothing (#378, C1).
+previous_release=$previous_release_commit
 git cat-file -e "$previous_release^{commit}" 2> /dev/null || git fetch --no-tags origin "$previous_release" || fail 'the previous release commit'
 # The update and previous-archive areas each make this install in the same places: one that ran before this one in
 # the same checkout (./ci.sh install, all of them) leaves its worktree and folder, which go first.
@@ -1143,7 +1143,7 @@ git worktree remove --force "$RUNNER_TEMP/previous-release" > /dev/null 2>&1 || 
 docker run --rm -v "$RUNNER_TEMP:/temp" -v "$root:/root-folder" alpine:3.21 rm -rf /temp/previous-release /root-folder/release-install /root-folder/release-previous
 git worktree prune
 git worktree add "$RUNNER_TEMP/previous-release" "$previous_release" || fail 'the previous release checkout'
-docker build -q -t localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release" > /dev/null || fail 'build the previous release image'
+release_image "$previous_release" localhost:5000/gtmworks:0.0.0-main "$RUNNER_TEMP/previous-release" || fail 'build the previous release image'
 previous=$(publish 0.0.0-main) || fail 'push the previous release image'
 ( cd "$RUNNER_TEMP/previous-release" && node scripts/release-assets.mjs "$previous" "$root/release-previous" ) || fail 'previous release files'
 publish_releases
@@ -1383,13 +1383,13 @@ set +o pipefail
 fail_prefix='release install check failed: '
 start_registry
 # The release an existing install runs before the work sandbox: a fixed commit of main, the one spec #389's branch last
-# merged (#472), with an Engine per Company made by `company add` (spec #378), no sandbox, no exit, and Agent levels still
-# stored. Not origin/main or this pull request's base: once spec #389 merges main has the sandbox, and the proof would
-# update this release's own shape to itself. Main's own CI already linted and type-checked it, so its build skips both.
-before_sandbox=a404785204c76ddf27ae8ea97c7c9b5b4ae73304
+# merged (#472, before_sandbox_release_commit in scripts/ci-install-lib.sh), with an Engine per Company made by `company
+# add` (spec #378), no sandbox, no exit, and Agent levels still stored. Main's own CI already linted and type-checked it,
+# so its build skips both.
+before_sandbox=$before_sandbox_release_commit
 git cat-file -e "$before_sandbox^{commit}" 2> /dev/null || git fetch --no-tags origin "$before_sandbox" || fail 'the release before the work sandbox commit'
 git worktree add "$RUNNER_TEMP/sandbox-previous-release" "$before_sandbox" || fail 'the release before the work sandbox checkout'
-docker build -q --build-arg NEXT_SKIP_CHECKS=true -t localhost:5000/gtmworks:0.0.0-engines "$RUNNER_TEMP/sandbox-previous-release" > /dev/null \
+release_image "$before_sandbox" localhost:5000/gtmworks:0.0.0-engines "$RUNNER_TEMP/sandbox-previous-release" --build-arg NEXT_SKIP_CHECKS=true \
   || fail 'build the release before the work sandbox'
 before=$(publish 0.0.0-engines) || fail 'push the release before the work sandbox'
 ( cd "$RUNNER_TEMP/sandbox-previous-release" && node scripts/release-assets.mjs "$before" "$root/release-before-sandbox" ) || fail 'the release before the work sandbox files'
@@ -1940,10 +1940,10 @@ trap - EXIT
 set +o pipefail
 fail_prefix='release install check failed: '
 start_registry
-before_sandbox=a404785204c76ddf27ae8ea97c7c9b5b4ae73304
+before_sandbox=$before_sandbox_release_commit
 git cat-file -e "$before_sandbox^{commit}" 2> /dev/null || git fetch --no-tags origin "$before_sandbox" || fail 'the release before the staged removal commit'
 git worktree add "$RUNNER_TEMP/staged-previous-release" "$before_sandbox" || fail 'the release before the staged removal checkout'
-docker build -q --build-arg NEXT_SKIP_CHECKS=true -t localhost:5000/gtmworks:0.0.0-staged "$RUNNER_TEMP/staged-previous-release" > /dev/null \
+release_image "$before_sandbox" localhost:5000/gtmworks:0.0.0-staged "$RUNNER_TEMP/staged-previous-release" --build-arg NEXT_SKIP_CHECKS=true \
   || fail 'build the release before the staged removal'
 before=$(publish 0.0.0-staged) || fail 'push the release before the staged removal'
 ( cd "$RUNNER_TEMP/staged-previous-release" && node scripts/release-assets.mjs "$before" "$root/release-before-staged" ) || fail 'the release before the staged removal files'
