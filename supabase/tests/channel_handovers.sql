@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(69);
 -- #150. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The "scripts" team
 -- channel holds the Owner (1), the Manager (2), the Contributor (3) and the Viewer (4), and only Lead and Ads: Writer is
 -- the Company's third Agent, outside it. Member 5 is in the Company but not in the channel; Karim belongs to Aleem only.
@@ -193,6 +193,25 @@ select is(has_function_privilege('authenticated','public.handover_in_channel(big
  and has_function_privilege('authenticated','public.handover_in_my_channel(bigint)','execute')
  and not has_function_privilege('anon','public.handover_in_my_channel(bigint)','execute'),true,'the log''s rules answer a signed-in reader');
 
+-- A channel's target works in one session of that channel, whatever message made the handover: a second job to it waits
+-- while the first may still be running, and the one whose start answer was lost still retries its own.
+insert into public.channel_agents(channel_id,company_id,agent_id,added_by) values
+ ('c1500000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','a1500000-0000-0000-0000-000000000013','20000000-0000-0000-0000-000000000003');
+insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values
+ ('10000000-0000-0000-0000-000000000001','c1500000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','عمر','@Lead write the August posts',gen_random_uuid()),
+ ('10000000-0000-0000-0000-000000000001','c1500000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','عمر','@Lead write the September posts',gen_random_uuid());
+insert into public.agent_handovers(company_id,channel_message_id,run_id,call_id,from_agent,to_agent,goal,state,target_attempts,attempted_at) values
+ ('10000000-0000-0000-0000-000000000001',(select id from public.channel_messages where body='@Lead write the August posts'),
+  'run-august','call-august','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000013','Write the August posts','waiting',1,now()-interval '1 minute'),
+ ('10000000-0000-0000-0000-000000000001',(select id from public.channel_messages where body='@Lead write the September posts'),
+  'run-september','call-september','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000013','Write the September posts','waiting',0,null);
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-september'))),0,
+ 'a second job to one Agent in one channel waits while the first may still be running');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-august'))),1,
+ 'while the handover whose start answer was lost retries its own');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-september'))),0,
+ 'and the job behind it still waits');
+
 -- #354: a queued channel handover re-checks that its target is still callable in the channel when its Run would start.
 -- One since removed from the channel starts no Run: the leg ends as failed, so Lead still tells the team.
 insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values
@@ -208,5 +227,28 @@ select is((select count(*)::int from public.begin_handover((select id from publi
  'an Agent since removed from the channel starts no Run');
 select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where run_id='run-removed'),'returning:failed:0',
  'the leg ends as failed, so Lead still reports it to the team');
+-- A start whose answer was lost, given up because its sender may no longer call the target, may still be running in the
+-- channel's session of that Agent: another member's job there waits until the lost start's window ends, then starts.
+update public.agent_handovers set state='failed', closed_at=now() where call_id in ('call-august','call-september');
+insert into public.channel_people(channel_id,company_id,person_id,added_by) values
+ ('c1500000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','20000000-0000-0000-0000-000000000003');
+insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values
+ ('10000000-0000-0000-0000-000000000001','c1500000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000005','Member','@Lead write the October posts',gen_random_uuid()),
+ ('10000000-0000-0000-0000-000000000001','c1500000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','عمر','@Lead write the November posts',gen_random_uuid());
+insert into public.agent_handovers(company_id,channel_message_id,run_id,call_id,from_agent,to_agent,goal,state,target_attempts,attempted_at) values
+ ('10000000-0000-0000-0000-000000000001',(select id from public.channel_messages where body='@Lead write the October posts'),
+  'run-october','call-october','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000013','Write the October posts','waiting',1,now()-interval '1 minute'),
+ ('10000000-0000-0000-0000-000000000001',(select id from public.channel_messages where body='@Lead write the November posts'),
+  'run-november','call-november','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000013','Write the November posts','waiting',0,null);
+delete from public.channel_people where channel_id='c1500000-0000-0000-0000-000000000001' and person_id='20000000-0000-0000-0000-000000000005';
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-october'))),0,
+ 'a lost start whose sender left the channel starts no Run');
+select is((select state||':'||target_outcome||':'||(session_held_until > now())::text from public.agent_handovers where call_id='call-october'),'returning:failed:true',
+ 'its leg goes on to Lead, and the session stays held while that start may still be running');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-november'))),0,
+ 'so another member''s job to that Agent in the channel waits');
+update public.agent_handovers set session_held_until=now()-interval '1 second' where call_id='call-october';
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-november'))),1,
+ 'and starts once the lost start''s window has ended');
 select * from finish();
 rollback;

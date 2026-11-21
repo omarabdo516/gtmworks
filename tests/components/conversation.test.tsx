@@ -219,6 +219,26 @@ for (const [language, line, arrow] of [['en', 'Handed to', 'M5 12h14'], ['ar', '
  expect(row?.querySelector('.gw-icon path')?.getAttribute('d')).toBe(arrow);
 });
 
+// #358: the Agent a job command hands the work to answers in the same chat, drawn from that Agent: its own name on the
+// reply and its own face, the one the row that handed the job over shows — never the Conversation's Agent's.
+test('a job command\'s answer in the main Agent\'s chat is drawn from the Agent handed the work, with its own face', async () => {
+ const record: ConversationRecord = talk([
+  { id: 1, author: 'person', author_name: 'Youssef', body: '/campaign Launch the December ads', created_at: at },
+  { id: 2, author: 'agent', author_name: 'Mona', body: '', created_at: at, cards: [{ kind: 'handed', name: 'Reach', face: 'c-3', goal: 'Launch the December ads' }] },
+  { id: 3, author: 'agent', author_name: 'Reach', agent_id: 'a-3', face: 'c-3', body: 'Three ad sets, 30 days, EGP 9,000.', created_at: at },
+ ]);
+ const screen = await render(view(record));
+ const turns = [...screen.container.querySelectorAll('.turn--agent')];
+ expect(turns.map(turn => turn.querySelector('.sender bdi')?.textContent)).toEqual(['Mona', 'Reach']);
+ const handedFaces = [...turns[0].querySelectorAll('.handed__faces .agent-face')];
+ expect(handedFaces.map(face => face.getAttribute('aria-label'))).toEqual(['Mona', 'Reach']);
+ const replyFace = turns[1].querySelector('.agent-face');
+ expect(replyFace?.getAttribute('aria-label')).toBe('Reach');
+ // The drawing is keyed by the Agent's connection, so the reply wears the same face the row shows for it.
+ expect(replyFace?.innerHTML).toBe(handedFaces[1].innerHTML);
+ expect(replyFace?.innerHTML).not.toBe(handedFaces[0].innerHTML);
+});
+
 // A handed job keeps the chat asking for Lead's follow-up reply, even though the Run that handed it over has ended.
 test('a handed job keeps the chat asking until Lead\'s follow-up reply is in the record', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
