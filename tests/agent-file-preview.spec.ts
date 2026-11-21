@@ -14,7 +14,8 @@ const company='10000000-0000-0000-0000-000000000001';
 const companyProfile=`co-${company.replaceAll('-','')}`;
 const agent=randomUUID();
 const profile=`ag-${agent.replaceAll('-','')}`;
-const work=`/opt/data/profiles/${profile}/workspace`;
+// The Agent's own folder of the Company's work folder, as the Engine's read-only mount of it lists it (#395).
+const work=`/opt/data/work/${profile}`;
 const at=Date.parse('2026-11-18T09:37:00Z')/1000;
 const brief='# Brief\n\nSell more.\n';
 const long='a'.repeat(600*1024);

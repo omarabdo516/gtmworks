@@ -66,6 +66,9 @@ test('the Library counts every file of the Agent, and each folder row says how m
  await expect.element(screen.getByRole('link', { name: 'Download brief.md' })).toHaveAttribute('href', '/c/rs-learning/agent-files/ag-1?name=brief.md');
  // The hint names the Agent and describes the Library, promising nothing the Engine does not do.
  expect(section.element().textContent).toContain('Files in Lead’s work folder, and the images it generated, show here.');
+ // The work folder is the Company's (#395): a line in the hint's own style says every Agent of it can read and change it.
+ const hints = [...section.element().querySelectorAll('.lib-hint')].map(hint => hint.textContent);
+ expect(hints).toEqual(['Files in Lead’s work folder, and the images it generated, show here. You can view and download them, and ask for edits in the chat.', 'Every agent of the company can read and change these files.']);
  expect(screen.container.textContent).not.toContain('/opt/');
  expect(asked).toEqual(['work:', 'images:']);
 });
@@ -156,7 +159,7 @@ test('a download is the reference\'s toast and its own file, and an empty folder
 
 test('an empty Library and a Library that cannot be read each say so', async () => {
  folders({ '': [] });
- await expect.element((await drawn()).getByText('Nothing here yet. Lead’s files and the images it makes will show here, and you can download them.')).toBeVisible();
+ await expect.element((await drawn()).getByText('Nothing here yet. Files Lead makes in its work folder, and the images it generates, will show here.')).toBeVisible();
  folders({ '': null });
  await expect.element((await drawn()).getByText('The Library can’t be read right now. Try again in a minute.')).toBeVisible();
 });
@@ -166,6 +169,7 @@ test('in Arabic the Library reads as the reference words it, and the folder chev
  const screen = await drawn('ar');
  await expect.element(screen.getByRole('region', { name: 'مكتبة Lead 4' })).toBeVisible();
  expect(screen.container.textContent).toContain('ملفات Lead اللي في فولدر شغله، والصور اللي عملها، بتظهر هنا.');
+ expect(screen.container.textContent).toContain('كل وكيل في الشركة يقدر يقرا الملفات دي ويغيّرها.');
  await expect.element(screen.getByRole('button', { name: /^reports/ })).toHaveAccessibleName(/^reports ملفين · آخر واحد/);
  await expect.element(screen.getByRole('button', { name: /^الصور اللي عملها/ })).toHaveAccessibleName(/^الصور اللي عملها فاضي$/);
  await expect.element(screen.getByRole('link', { name: 'نزّل brief.md' })).toBeVisible();

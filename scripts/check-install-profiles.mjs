@@ -28,6 +28,8 @@
 //     settings file there itself, and the profile names a credential file the job puts in the profile's home too. The
 //     job checks that none of it, the credential file included, reaches the Engine or the sandbox, and that the Run
 //     still works.
+//   library <marker>: one Agent writes a text file and a picture in its own folder of the Company's work folder (#395),
+//     and the Owner's Library of it lists, previews and downloads both with the bytes the Agent wrote.
 // The companies and their Owner's sign-in are kept between the steps in a file of this container only.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -566,4 +568,64 @@ try {
  assert.equal(uploaded,0,'the sandbox holds no file the Engine copied in');
  writeProof({step:'sandbox-sync',marker,count:uploaded});
 } finally { model.close(); model.closeAllConnections(); }
-} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker>');
+} else if(step==='library') {
+// The Library shows the Company's work folder (#395): an Agent writes a text file with its file tool and a picture with
+// its terminal, in its own folder of the work folder, and the Owner's Library of that Agent lists both, previews the
+// text and the picture, and downloads each with the same bytes the Agent wrote, all through gtmworks's own service and
+// the Engine contract. The job reads the sandbox and the Engine's mount for the same files, and tries a write from the
+// Engine's container, which must fail.
+assert.match(marker||'',/^[a-z0-9-]{8,64}$/);
+const {agentLibrary,agentFilePreview,agentFileDownload}=await import(`${process.cwd()}/lib/agent-files.mjs`);
+const first=JSON.parse(readFileSync(state,'utf8'))[0];
+const firstEngine=await engineFor(first.company);
+await pointAtFakeModel(firstEngine,first.profile);
+const text=`# ${marker}\n\nمسودة الحملة: Arabic and English in one file.\n`;
+const picture=[137,80,78,71,13,10,26,10,0,1,2,3,254,255];
+const textName=`${marker}-brief.md`; const pictureName=`${marker}-shot.png`;
+const octal=picture.map(byte=>`\\${byte.toString(8).padStart(3,'0')}`).join('');
+const calls=[
+ {name:'write_file',arguments:{path:`/work/${first.profile}/${textName}`,content:text}},
+ {name:'terminal',arguments:{command:`printf '${octal}' > /work/${first.profile}/${pictureName}`}},
+];
+const plan=messages=>{
+ const said=messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
+ const done=messages.filter(message=>message.role==='tool').length;
+ const call=said.includes(`LIBRARY-RUN ${marker}`)?calls[done]:null;
+ return call?{id:`call_library_${done}`,type:'function',function:{name:call.name,arguments:JSON.stringify(call.arguments)}}:null;
+};
+const asked=[]; const results=[];
+const {model,reply}=await fakeModel(asked,results,plan);
+try {
+ const person=await signedIn();
+ const {data:{user}}=await person.auth.getUser();
+ assert.ok(user,'the first-run Owner signs in');
+ const conversation=randomUUID();
+ const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`LIBRARY-RUN ${marker}: save the brief and the shot.`};
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ assert.deepEqual(sent,{conversation});
+ const answer=await until('reply on the library check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
+ assert.ok(answer.body.includes(reply),answer.body);
+ assert.equal(results.length,2,JSON.stringify(results));
+ // The Owner's Library of that Agent, read as the app reads it: the signed-in person's own session, the Company's Engine.
+ const request={company:first.company,agent:first.agent,hermes:firstEngine};
+ const library=await agentLibrary(person,request);
+ assert.equal(library.state,'found',JSON.stringify(library));
+ const listed=new Map(library.entries.map(entry=>[entry.name,entry]));
+ assert.equal(listed.get(textName)?.size,Buffer.byteLength(text),'the Library lists the file the Agent wrote, with its size');
+ assert.equal(listed.get(pictureName)?.size,picture.length,'the Library lists the picture the Agent made, with its size');
+ assert.ok(!JSON.stringify(library).includes('/opt/')&&!JSON.stringify(library).includes('/work/'),'no Engine or sandbox path in the answer');
+ const preview=await agentFilePreview(person,{...request,name:textName});
+ assert.equal(preview.state,'found',JSON.stringify(preview));
+ assert.equal(preview.preview.kind,'text');
+ assert.equal(preview.preview.text,text,'the preview is the text the Agent wrote');
+ const shot=await agentFilePreview(person,{...request,name:pictureName});
+ assert.equal(shot.preview?.kind,'image','the picture previews as a picture');
+ const download=await agentFileDownload(person,{...request,name:textName});
+ assert.equal(download.state,'found',JSON.stringify({state:download.state}));
+ assert.equal(Buffer.from(download.body).toString('utf8'),text,'the download is the bytes the Agent wrote');
+ const image=await agentFileDownload(person,{...request,name:pictureName});
+ assert.equal(image.state,'found',JSON.stringify({state:image.state}));
+ assert.deepEqual([...image.body],picture,'the picture downloads with the same bytes');
+ writeProof({step:'library',marker,profile:first.profile,count:library.entries.length,kind:preview.preview.kind,file:textName});
+} finally { model.close(); model.closeAllConnections(); }
+} else throw new Error('usage: prepare | verify <marker> | capacity <with-skills|no-skills> | sandbox <marker> | sandbox-key <marker> <refused|runs> | sandbox-sync <marker> | library <marker>');

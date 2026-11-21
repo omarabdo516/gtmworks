@@ -74,3 +74,16 @@ test('the script\'s printers write the proof\'s line and the bare name, and noth
  t.mock.restoreAll();
  assert.deepEqual(written,[proof({step:'capacity',seconds:1.5}),'co-c0000000000040008000000000000001\n']);
 });
+
+// The Library shows the Company's work folder (#395): the agents area has an Agent write a file and a picture in its own
+// folder, lists, previews and downloads them through gtmworks, and tries a write from the Engine's container as root and
+// as its own user, which must fail.
+test('the agents area proves an Agent\'s file reaches its Library, and a write from the Engine fails', () => {
+ const job=installJob().steps.map(step=>step.run||'').join('\n');
+ const sandbox=job.indexOf('- sandbox "$sandbox_marker" < scripts/check-install-profiles.mjs');
+ const library=job.indexOf('- library "$library_marker" < scripts/check-install-profiles.mjs');
+ assert.ok(sandbox>=0&&library>sandbox,'the Library step runs in the agents area, after the sandbox made the Agent\'s folder');
+ assert.match(job,/for user in 0 hermes; do\n\s+if docker exec --user "\$user" "\$engine_id" sh -c 'printf x > "\/opt\/data\/work\//);
+ assert.match(script,/step==='library'/);
+ for(const read of ['agentLibrary(person','agentFilePreview(person','agentFileDownload(person']) assert.ok(script.includes(read),`${read} is the app's own service`);
+});

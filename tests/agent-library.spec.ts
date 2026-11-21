@@ -4,10 +4,11 @@ import { randomUUID } from 'node:crypto';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { chooseLanguageInSettings } from './choose-language';
 import { fileSize } from '../lib/agent-details.mjs';
 
-// #194, #353: the Library of an Agent is its own Engine profile — the work folder and the images it generated — read
-// through the Engine and never copied into gtmworks. The Owner and Managers open it — the generated images folder
+// #194, #353, #395: the Library of an Agent is its own folder in the Company's work folder and the images it generated,
+// read through the Engine and never copied into gtmworks. The Owner and Managers open it — the generated images folder
 // leading the list, each folder with how many files it holds and when the newest was saved, a folder inside it, a file's
 // download and the reference's toast — and a Contributor and a Viewer have none and are refused by the server. No page
 // and no answer names the Engine or a path on its disk.
@@ -16,7 +17,11 @@ const company='10000000-0000-0000-0000-000000000001';
 const companyProfile=`co-${company.replaceAll('-','')}`;
 const agent=randomUUID();
 const profile=`ag-${agent.replaceAll('-','')}`;
-const work=`/opt/data/profiles/${profile}/workspace`;
+// The Agent's own folder of the Company's work folder, as the Engine's read-only mount of it lists it (#395).
+const work=`/opt/data/work/${profile}`;
+// A second Agent that has made nothing yet: the sandbox makes its folder at its first command, so the Engine has none.
+const idle=randomUUID();
+const idleProfile=`ag-${idle.replaceAll('-','')}`;
 // The folder the Engine writes a generated image into (#353; agent/provider_media.py, GENERATED_SUBDIR, cache_dir).
 const images=`/opt/data/profiles/${profile}/cache/generated/images`;
 const at=Date.parse('2026-11-18T09:37:00Z')/1000;
@@ -31,7 +36,7 @@ test.beforeAll(async({},testInfo)=>{
  // The fake Engine holds the Agent's profile and the work folder the Engine makes in every profile, with two folders —
  // one of them empty — a folder inside the first, and a file beside them.
  fake=await laneHermes();
- fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
+ for(const name of [profile,idleProfile]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.files.set(work,[{name:'reports',isFolder:true},{name:'empty',isFolder:true},{name:'brief.md',size:Buffer.byteLength(brief),mtime:at}]);
  fake.settings.files.set(`${work}/reports`,[{name:'2026',isFolder:true},{name:'q3.csv',size:12,mtime:at}]);
  fake.settings.files.set(`${work}/reports/2026`,[{name:'q3.csv',size:12,mtime:at}]);
@@ -42,7 +47,9 @@ test.beforeAll(async({},testInfo)=>{
  fake.settings.fileBytes.set(`${images}/promo.png`,{body:png,type:'image/png'});
  query(`do $$ begin
    insert into public.agent_profiles(agent_id,company_id) values ('${agent}','${company}');
-   insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${agent}','${company}','Librarian','Keeps the files.',false,'${profile}');
+   insert into public.agent_profiles(agent_id,company_id) values ('${idle}','${company}');
+   insert into public.hermes_agents(id,company_id,name,speciality,is_default,profile) values ('${agent}','${company}','Librarian','Keeps the files.',false,'${profile}'),
+    ('${idle}','${company}','Archivist','Has made nothing yet.',false,'${idleProfile}');
    insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${companyProfile}',true from public.companies where id='${company}'
     on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
    insert into public.member_agent_access(company_id,person_id,agent_id) values
@@ -52,10 +59,10 @@ test.beforeAll(async({},testInfo)=>{
 });
 test.afterAll(async()=>{ await fake?.close(); });
 
-async function openFiles(page:Page,email:string) {
+async function openFiles(page:Page,email:string,{id=agent,name='Librarian'}={}) {
  await page.setViewportSize({width:1440,height:900});
- await signIn(page,email,`/c/rs-learning/chat/${agent}`);
- const details=page.getByRole('complementary',{name:'Details: Librarian',exact:true});
+ await signIn(page,email,`/c/rs-learning/chat/${id}`);
+ const details=page.getByRole('complementary',{name:`Details: ${name}`,exact:true});
  await expect(details).toBeVisible();
  await details.getByRole('tab',{name:'Files',exact:true}).click();
  const panel=details.getByRole('tabpanel');
@@ -79,7 +86,9 @@ test('the Owner opens the Agent\'s Library above its files, its generated images
  const briefRow=library.locator('li.lib-file').filter({hasText:'brief.md'});
  await expect(briefRow.locator('.panel-row__d')).toContainText(fileSize(Buffer.byteLength(brief)));
  await expect(briefRow.locator('time')).toHaveAttribute('datetime',new Date(at*1000).toISOString());
- await expect(library.locator('.lib-hint')).toHaveText('Files in Librarian’s work folder, and the images it generated, show here. You can view and download them, and ask for edits in the chat.');
+ // The hint, and the line that says the work folder is the Company's: every Agent of it can read and change it (#395).
+ await expect(library.locator('.lib-hint')).toHaveText(['Files in Librarian’s work folder, and the images it generated, show here. You can view and download them, and ask for edits in the chat.',
+  'Every agent of the company can read and change these files.']);
 
  // A folder opens in place with its own count of files, the focus on the way back to the Library (the reference's
  // lib-open focuses #lib-root), and the way back puts the focus on that folder's row; a folder inside a folder opens
@@ -157,4 +166,31 @@ test('a Contributor and a Viewer have no Library, and the server refuses them',a
   const file=await page.request.get(`/c/rs-learning/agent-files/${agent}?name=brief.md`);
   expect(file.status(),email).toBe(403);
  }
+});
+
+// #395: an Agent that has made nothing yet has no folder in the work folder, and its Library is empty rather than
+// unreadable, promising only what the work folder and the generated images give it; the shared-folder line and the empty
+// state read in English and in Egyptian Arabic.
+test('the shared-folder line and an empty Library, in English and in Arabic',async({page})=>{
+ const {panel}=await openFiles(page,'omar@example.com',{id:idle,name:'Archivist'});
+ const library=panel.locator('.dp-library');
+ await expect(library.locator('.lib-empty')).toHaveText('Nothing here yet. Files Archivist makes in its work folder, and the images it generates, will show here.');
+ await expect(library.locator('.lib-hint').nth(1)).toHaveText('Every agent of the company can read and change these files.');
+ await expect(library).not.toContainText(/card/i);
+ await chooseLanguageInSettings(page,'ar');
+ try {
+  await page.goto(`/c/rs-learning/chat/${idle}`);
+  const details=page.getByRole('complementary',{name:'تفاصيل Archivist',exact:true});
+  await expect(details).toBeVisible();
+  await details.getByRole('tab',{name:'ملفات',exact:true}).click();
+  const arabic=details.getByRole('tabpanel').locator('.dp-library');
+  await expect(arabic.locator('.lib-empty')).toHaveText('مفيش حاجة هنا لسه. الملفات اللي Archivist هيعملها في فولدر شغله، والصور اللي هيطلّعها، هتظهر هنا.');
+  await expect(arabic.locator('.lib-hint')).toHaveText(['ملفات Archivist اللي في فولدر شغله، والصور اللي عملها، بتظهر هنا. تقدر تشوفها وتنزّلها، والتعديل اطلبه منه في الشات.',
+   'كل وكيل في الشركة يقدر يقرا الملفات دي ويغيّرها.']);
+  // The Agent with files reads the same line in Arabic beside its Library.
+  await page.goto(`/c/rs-learning/chat/${agent}`);
+  const librarian=page.getByRole('complementary',{name:'تفاصيل Librarian',exact:true});
+  await librarian.getByRole('tab',{name:'ملفات',exact:true}).click();
+  await expect(librarian.getByRole('tabpanel').locator('.dp-library .lib-hint').nth(1)).toHaveText('كل وكيل في الشركة يقدر يقرا الملفات دي ويغيّرها.');
+ } finally { await chooseLanguageInSettings(page,'en'); }
 });

@@ -452,6 +452,19 @@ second_pwd=$(sed -n 's/.*"pwd":"\/work\/\([^"]*\)".*/\1/p' sandbox-proof.log | t
 if docker exec "$engine_id" sh -ec "test -e /work/$sandbox_marker-terminal.txt -o -e /work/$sandbox_marker-file.txt -o -e /work/$sandbox_marker-code.txt"; then
   fail 'nothing an Agent wrote is on the Engine'
 fi
+# The Library shows the Company's work folder (#395): an Agent's file and picture in its own folder are listed, previewed
+# and downloaded with the same bytes through gtmworks; the Engine reads that folder and cannot write to it, as root or as
+# its own user, and nothing it tried reaches the sandbox.
+library_marker="library-check-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - library "$library_marker" < scripts/check-install-profiles.mjs | tee library-proof.log \
+  || fail "an Agent's file is in its Library, previews and downloads with the same bytes"
+[[ $(docker exec "$sandbox" head -n 1 "/work/$first/$library_marker-brief.md") == "# $library_marker" ]] || fail "the Library's file is in the Agent's own folder of the work folder"
+[[ $(docker exec "$engine_id" head -n 1 "/opt/data/work/$first/$library_marker-brief.md") == "# $library_marker" ]] || fail 'the Engine reads the work folder'
+for user in 0 hermes; do
+  if docker exec --user "$user" "$engine_id" sh -c 'printf x > "/opt/data/work/$1-engine.txt"' sh "$library_marker" 2> /dev/null; then fail "the Engine cannot write to the work folder (user $user)"; fi
+  if docker exec --user "$user" "$engine_id" sh -c 'printf x > "/opt/data/work/$1/$2-engine.txt"' sh "$first" "$library_marker" 2> /dev/null; then fail "the Engine cannot write to an Agent's folder (user $user)"; fi
+done
+[[ -z $(docker exec "$sandbox" find /work -name "$library_marker-engine.txt") ]] || fail 'nothing the Engine tried to write is in the work folder'
 # The Engine pins its sandbox's host key (#393): Hermes's ssh client is hard-coded `StrictHostKeyChecking=accept-new`,
 # which trusts an unseen host but refuses a changed one, so the install pre-seeds the Engine's known_hosts with the
 # sandbox host key and keeps the key in a volume. A sandbox recreated with another host key is refused on the Engine's
@@ -652,7 +665,7 @@ for folder in .engines/*/; do
   network=$(engine_value "$folder" NETWORK)
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine ]] || fail "the restored install runs the Engine $name"
-  [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume"
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only"
   # The lifecycle seed's two Companies (restore-one, restore-two) hold records of their own at the first Engine's address.
   [[ $(db -c "select count(*) from public.companies c join public.company_engines e on e.id=c.engine_id where e.address='http://$name:8642'") -ge 1 ]] || fail "a Company's record names the Engine $name"
@@ -895,7 +908,7 @@ sh install.sh update || fail 'release update'
 if grep -q '^HERMES_API_KEY=' .env.install; then fail 'the update left no Engine key in .env.install'; fi
 engine=$(first_engine_id)
 [[ -n $engine ]] || fail "the updated install runs the Company's Engine"
-[[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
+[[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
 hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
 [[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine") != *HostPort* ]] || fail 'the Engine publishes no host port'
@@ -1048,7 +1061,7 @@ for folder in .engines/*/; do
   engine=$(docker ps -q --filter "name=^${name}$")
   [[ -n $engine && $(docker inspect -f '{{.Id}}' "$engine") != "$before" ]] || fail "the update recreated the Engine $name"
   [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == gtmworks-engine-check:0.0.2 ]] || fail "the Engine $name runs the image the release pins"
-  [[ $(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume through the update"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only after the update"
 done
 # A Run on each Company answers on its own Engine, and the code word its own Engine kept reaches its own Run only.
