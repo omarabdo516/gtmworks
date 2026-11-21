@@ -253,3 +253,20 @@ test('a daily message that cannot move to the new main Agent is paused where it 
   } finally { await third.close(); }
  } finally { await fake.close(); }
 });
+
+test('two people switching it on at the same moment leave one daily message, not two', async () => {
+ const fake=await engine();
+ try {
+  const [one,two]=await Promise.all([
+   changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)}),
+   changeAgentMorning(session().db,{company,agent:lead,on:true,time:'9:00',zone:'Africa/Cairo',hermes:install(fake)}),
+  ]);
+  assert.deepEqual([one.state,two.state],['written','written']);
+  assert.equal(jobs(fake,leadProfile).filter(job=>job.prompt.startsWith(morningMarker)).length,1);
+  // One left by an earlier race is removed by the next save.
+  const [kept]=jobs(fake,leadProfile);
+  fake.settings.cron.get(leadProfile).push({...kept,id:'abcdefabcdef'});
+  await changeAgentMorning(session().db,{company,agent:lead,on:false,time:'9:00',hermes:install(fake)});
+  assert.deepEqual(jobs(fake,leadProfile).map(job=>[job.id,job.state]),[[kept.id,'paused']]);
+ } finally { await fake.close(); }
+});
