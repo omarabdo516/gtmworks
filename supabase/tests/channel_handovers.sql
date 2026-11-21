@@ -48,28 +48,31 @@ insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_i
   1,now(),null,null
  from public.channel_messages where channel_id='c1500000-0000-0000-0000-000000000001';
 
--- Who may hand work over there: a writer of the channel talking to its Lead, and no one else.
+-- Who may hand work over there: a writer of the channel talking to any Agent of it (#476).
 select is(public.channel_can_hand_over('c1500000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a1500000-0000-0000-0000-000000000011'),true,'the Owner hands work over to the Lead in the channel');
 select is(public.channel_can_hand_over('c1500000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a1500000-0000-0000-0000-000000000011'),true,'and so does the Manager');
 select is(public.channel_can_hand_over('c1500000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1500000-0000-0000-0000-000000000011'),true,'and the Contributor');
 select is(public.channel_can_hand_over('c1500000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000004','a1500000-0000-0000-0000-000000000011'),false,'a Viewer writes nothing, so hands nothing over');
 select is(public.channel_can_hand_over('c1500000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','a1500000-0000-0000-0000-000000000011'),false,'a Member outside the channel hands nothing over');
-select is(public.channel_can_hand_over('c1500000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a1500000-0000-0000-0000-000000000012'),false,'another Agent never hands work on');
+select is(public.channel_can_hand_over('c1500000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a1500000-0000-0000-0000-000000000012'),true,'and so does another Agent of the channel (#476)');
+select is(public.channel_can_hand_over('c1500000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','a1500000-0000-0000-0000-000000000013'),false,'an Agent outside the channel has no channel Run to hand over from');
 
--- The Agents the Run is told it may hand to: the channel's others, never the Company's third.
-select is(public.channel_handover_agents(current_setting('test.owner')::bigint),array['Ads'],'the Lead''s channel Run is told the channel''s other Agent alone');
-select is(public.channel_handover_agents(current_setting('test.writer')::bigint),array['Ads'],'a Contributor''s call is told the same');
+-- The Agents the Run is told it may hand to (#476): the Company's others, the third one outside the channel included.
+select is(public.channel_handover_agents(current_setting('test.owner')::bigint),array['Ads','Writer'],'the Lead''s channel Run is told the Company''s other Agents, in the channel or not');
+select is(public.channel_handover_agents(current_setting('test.writer')::bigint),array['Ads','Writer'],'a Contributor''s call is told the same');
 select is(public.channel_handover_agents(current_setting('test.viewer')::bigint),'{}'::text[],'a Viewer''s Run is told no Agent');
-select is(public.channel_handover_agents(current_setting('test.ads')::bigint),'{}'::text[],'and an Agent that may not hand over is told none');
+select is(public.channel_handover_agents(current_setting('test.ads')::bigint),array['Lead','Writer'],'and another Agent of the channel is told the Company''s others but itself');
 
--- The handover tool is pinned with the Run, and only for the Agent that may hand over.
+-- The handover tool is pinned with the Run of any Agent of the channel (#476).
 select set_config('test.specs','{"show_draft":"{\"name\":\"show_draft\"}","show_review":"{\"name\":\"show_review\"}","hand_over":"{\"name\":\"hand_over\"}","hand_to_agent":"{\"name\":\"hand_to_agent\"}"}',true);
 set local role service_role;
 select ok(public.pin_channel_run(current_setting('test.owner')::bigint,current_setting('test.specs')::jsonb)->>'tools' like '%"hand_to_agent"%','the Lead''s channel Run is offered the handover, pinned with it');
-select is(public.pin_channel_run(current_setting('test.ads')::bigint,current_setting('test.specs')::jsonb)->>'tools' like '%"hand_to_agent"%',false,'an Agent that may not hand over is offered none');
+select ok(public.pin_channel_run(current_setting('test.ads')::bigint,current_setting('test.specs')::jsonb)->>'tools' like '%"hand_to_agent"%','and another Agent''s channel Run is offered it too');
+select is(public.pin_channel_run(current_setting('test.viewer')::bigint,current_setting('test.specs')::jsonb)->>'tools',null,'a Viewer''s call is offered nothing');
 reset role;
 
--- The handover Lead''s call keeps: once per message, run and call, to an Agent of the channel alone.
+-- The handover Lead's call keeps: once per message, run and call. A target outside the channel and an asking Agent
+-- that is not the main one are proved in channel_any_agent_handovers.sql (#476).
 select is(public.channel_hand_to_agent(current_setting('test.owner')::bigint,'run-lead','call-1',' Ads ','Plan the Meta ads for the March intake','EGP 9,000 for 30 days.'),
  '{"state":"created","agent":"Ads"}'::jsonb,'the Lead keeps a handover to an Agent of its channel');
 select is((select from_agent||'>'||to_agent||':'||state||':'||goal||':'||context||':'||channel_message_id||':'||(conversation_id is null)::text
@@ -78,11 +81,9 @@ select is((select from_agent||'>'||to_agent||':'||state||':'||goal||':'||context
  ||current_setting('test.owner')||':true','from the Lead to Ads, waiting, linked to the channel message and no Conversation');
 select is(public.channel_hand_to_agent(current_setting('test.owner')::bigint,'run-lead','call-1','Ads','Plan it again',null),'{"state":"created","agent":"Ads"}'::jsonb,'the same call again answers the same');
 select is((select count(*)::int from public.agent_handovers),1,'and keeps one handover');
-select is(public.channel_hand_to_agent(current_setting('test.owner')::bigint,'run-lead','call-2','Writer','Plan',''),'{"state":"ignored"}'::jsonb,'an Agent outside the channel is no target');
 select is(public.channel_hand_to_agent(current_setting('test.owner')::bigint,'run-lead','call-3','Lead','Plan',''),'{"state":"ignored"}'::jsonb,'and the Lead never hands work to itself');
-select is(public.channel_hand_to_agent(current_setting('test.owner')::bigint,'run-lead','call-4','Nobody','Plan',''),'{"state":"ignored"}'::jsonb,'a name no Agent of the channel has is ignored');
+select is(public.channel_hand_to_agent(current_setting('test.owner')::bigint,'run-lead','call-4','Nobody','Plan',''),'{"state":"ignored"}'::jsonb,'a name no Agent of the Company has is ignored');
 select is(public.channel_hand_to_agent(current_setting('test.viewer')::bigint,'run-viewer','call-1','Ads','Plan',''),'{"state":"refused"}'::jsonb,'a Viewer''s message hands nothing over, and its Run still closes');
-select is(public.channel_hand_to_agent(current_setting('test.ads')::bigint,'run-ads','call-1','Lead','Plan',''),'{"state":"refused"}'::jsonb,'another Agent''s Run hands nothing over');
 select is(public.channel_hand_to_agent(current_setting('test.owner')::bigint,'run-elsewhere','call-1','Ads','Plan',''),'{"state":"refused"}'::jsonb,'a run that is not this message''s is refused');
 
 -- One row in the log, read by the channel's members alone.
@@ -212,8 +213,8 @@ select is((select count(*)::int from public.begin_handover((select id from publi
 select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where call_id='call-september'))),0,
  'and the job behind it still waits');
 
--- #354: a queued channel handover re-checks that its target is still callable in the channel when its Run would start.
--- One since removed from the channel starts no Run: the leg ends as failed, so Lead still tells the team.
+-- #354, #476: a queued channel handover re-checks its sender and the asking Agent when its Run would start, never the
+-- target's place: one since removed from the channel still starts, as an Agent outside the channel does.
 insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values
  ('10000000-0000-0000-0000-000000000001','c1500000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','عمر','@Lead plan the July ads',gen_random_uuid());
 select set_config('test.removed',(select max(id)::text from public.channel_messages where channel_id='c1500000-0000-0000-0000-000000000001'),true);
@@ -221,12 +222,12 @@ insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_i
  values (current_setting('test.removed')::bigint,1,'10000000-0000-0000-0000-000000000001','c1500000-0000-0000-0000-000000000001',
   'a1500000-0000-0000-0000-000000000011','Lead',gen_random_uuid(),'@Lead plan the July ads','run-removed','co-10000000000000000000000000000001',1,now());
 select is(public.channel_hand_to_agent(current_setting('test.removed')::bigint,'run-removed','call-1','Ads','Plan the July ads',null),
- '{"state":"created","agent":"Ads"}'::jsonb,'a job is kept for an Agent callable in the channel');
+ '{"state":"created","agent":"Ads"}'::jsonb,'a job is kept for an Agent of the channel');
 delete from public.channel_agents where channel_id='c1500000-0000-0000-0000-000000000001' and agent_id='a1500000-0000-0000-0000-000000000012';
-select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-removed'))),0,
- 'an Agent since removed from the channel starts no Run');
-select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where run_id='run-removed'),'returning:failed:0',
- 'the leg ends as failed, so Lead still reports it to the team');
+select is((select count(*)::int from public.begin_handover((select id from public.agent_handovers where run_id='run-removed'))),1,
+ 'an Agent since removed from the channel still starts its Run');
+select is((select state||':'||coalesce(target_outcome,'-')||':'||target_attempts from public.agent_handovers where run_id='run-removed'),'waiting:-:1',
+ 'in its own session of the channel, as an Agent outside it does');
 -- A start whose answer was lost, given up because its sender may no longer call the target, may still be running in the
 -- channel's session of that Agent: another member's job there waits until the lost start's window ends, then starts.
 update public.agent_handovers set state='failed', closed_at=now() where call_id in ('call-august','call-september');

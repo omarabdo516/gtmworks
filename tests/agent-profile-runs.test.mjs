@@ -28,7 +28,7 @@ function databases(fake,{profile}) {
   if(name==='conversation_handover_agents') return {data:[],error:null};
   if(name==='pin_run') return {data:{tools:null,rules:[rule]},error:null};
   if(name==='pin_channel_run') return {data:{tools:null},error:null};
-  if(name==='channel_handover_agents') return {data:[],error:null};
+  if(name==='channel_handover_targets') return {data:[],error:null};
   if(name==='pin_run_history') return {data:null,error:null};
   if(name==='pin_run_model') return {data:null,error:null};
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.

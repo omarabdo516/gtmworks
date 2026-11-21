@@ -52,7 +52,7 @@
   "channelChangeFailed": "معرفناش نغيّر مين في القناة. جرّب تاني.",
   "channelInviteNote": "{0} عزم {1}، ودخل «{2}» على طول",
   "channelHandoffs": "التسليمات",
-  "channelHandedTo": "سلّم الشغل لـ {0}",
+  "channelHandoverAsked": "{0} طلب من {1}",
   "channelHandedFailed": "الشغل ماخلصش",
   "channelSenderTo": "لـ {0}",
   "channelOnTheBoard": "على اللوحة:",
