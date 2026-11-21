@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -120,6 +120,24 @@ test('what an earlier run left after its guard gave up, a work folder and its la
   } });
   assert.equal((await run.ended).code, 0);
   assert.equal(existsSync(earlier), false, "the earlier run's work folder is removed");
+  cleanedUp(run.state);
+});
+
+test('without pgrep, which the cleanup needs, the lane starts no machine and says so in one line', async t => {
+  // A PATH of this machine's system tools with pgrep left out (a folder of wrappers that run the next tool of their name
+  // on PATH, as a sandbox can put first, is left out too: moved, a wrapper finds no next tool).
+  const tools = join(root, 'no-pgrep');
+  if (!existsSync(tools)) {
+    mkdirSync(tools);
+    for (const dir of process.env.PATH.split(':')) {
+      if (!existsSync(dir) || !/^\/(usr\/)?(local\/)?s?bin$/.test(dir)) continue;
+      for (const name of readdirSync(dir)) if (name !== 'pgrep' && !existsSync(join(tools, name))) symlinkSync(join(dir, name), join(tools, name));
+    }
+  }
+  const run = lane(t, { env: { PATH: `${bin}:${tools}` } });
+  const { code, stderr } = await run.ended;
+  assert.equal(code, 1);
+  assert.match(stderr, /the install lane needs pgrep \(procps\) to remove its Docker machine/);
   cleanedUp(run.state);
 });
 

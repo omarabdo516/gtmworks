@@ -22,7 +22,6 @@ label() { printf 'gtmworks.install-lane=%s' "$1"; }
 # pgrep reads a pattern, so the work path's own characters are escaped.
 start_done() {
   local limit=$1 waited=0 starting
-  command -v pgrep > /dev/null || return 0
   starting=$(printf -- '--label %s' "$(label "$work")" | sed 's/[][\.*^$+?(){}|]/\\&/g')
   while pgrep -f -- "$starting" > /dev/null; do
     if (( limit && waited >= limit )); then return 1; fi
@@ -75,6 +74,8 @@ remove_files() {
 case "${1:-}" in
  start)
   work=$2 port=$3
+  # The cleanup finds a start still in progress and the lane's own commands with pgrep: without it no machine starts.
+  command -v pgrep > /dev/null || { echo 'the install lane needs pgrep (procps) to remove its Docker machine: install it first' >&2; exit 1; }
   # One install lane at a time on this machine: a machine an interrupted run left behind is removed first, and so is
   # every earlier run's work folder with its checkout and labelled machine, also one a guard gave up on.
   docker rm -fv "$name" > /dev/null 2>&1 || true
