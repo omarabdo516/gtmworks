@@ -1,12 +1,14 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { page } from 'vitest/browser';
+import { cdp, page } from 'vitest/browser';
+// Gives cdp() Playwright's session type (its send), as the config's provider does at run time.
+import type {} from '@vitest/browser-playwright';
 import type { ComponentProps } from 'react';
 import { NoApp, NumbersFigures, NumbersHead, WaitingRow } from '@/app/c/[slug]/numbers/parts';
 import { LogFilters } from '@/app/c/[slug]/log/log-client';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n, localeFor, type Language } from '@/lib/i18n.mjs';
-import { numbersTiles, type Period } from '@/lib/numbers.mjs';
+import { numbersTiles, type AppReading, type Period } from '@/lib/numbers.mjs';
 import '@/app/globals.css';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -15,15 +17,18 @@ import '@/app/numbers.css';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
-afterEach(() => { document.documentElement.dir = ''; });
+const reducedMotion = (on: boolean) => cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }] });
+afterEach(async () => { document.documentElement.dir = ''; vi.restoreAllMocks(); await reducedMotion(false); });
 
 // The Numbers page of a Company with no app connected, as the page draws it.
-const numbers = (period: Period, language: Language = 'en') => {
+// With readings, the figures of the apps that report them; the figures are drawn again for each period, as the page's
+// Suspense (keyed by the period) draws them.
+const numbers = (period: Period, language: Language = 'en', readings: AppReading[] = []) => {
  const { t } = i18n(language);
  return <LanguageProvider language={language}><div className="gw"><main className="numbers-page"><div className="dash">
   <NumbersHead t={t} slug="rs-learning" period={period}/>
-  <div className="dash__inner">
-   <NumbersFigures t={t} language={language} locale={localeFor(language)} period={period} {...numbersTiles([], period)}/>
+  <div className="dash__inner" key={period}>
+   <NumbersFigures t={t} language={language} locale={localeFor(language)} period={period} {...numbersTiles(readings, period)}/>
    <div className="chart-empty"><NoApp t={t} slug="rs-learning"/></div>
   </div>
  </div></main></div></LanguageProvider>;
@@ -107,4 +112,82 @@ for (const language of ['en', 'ar'] as const) test(`in ${language} a permission 
  expect(channel.getAttribute('href')).toBe('/c/rs-learning/channels/ch-1#permission-6');
  await expect.element(screen.getByRole('link').first().getByText('delete the old exports', { exact: true })).toBeVisible();
  await expect.element(screen.getByRole('link').first().getByText('Ads', { exact: true })).toBeVisible();
+});
+
+// #134: the figures count to their value (design-reference: countUp). The clock is the test's: performance.now() reads
+// it and each animation frame runs when the test moves it, so a figure is read at exactly 0, 325 and 650ms.
+const clock = () => {
+ let now = 0, frames: FrameRequestCallback[] = [];
+ vi.spyOn(performance, 'now').mockImplementation(() => now);
+ vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { frames.push(callback); return frames.length; });
+ vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+ return { to: (ms: number) => { now = ms; const due = frames; frames = []; for (const frame of due) frame(now); } };
+};
+const ads = (period: Period, leads: number): AppReading => ({ app: 'Meta Ads', period, spend: 12400, leads, currency: 'EGP' });
+const figure = (name: string) => document.querySelector(`.kpi[data-figure="${name}"] .kpi__val`)!;
+// What the eye reads, and what a screen reader is given (the figure's text without what is hidden from it).
+// The eye skips what is not drawn: a part not displayed, or clipped away to a point as a screen reader's text is.
+const drawnText = (node: Node): string => {
+ if (!(node instanceof Element)) return node.textContent ?? '';
+ const style = getComputedStyle(node);
+ if (style.display === 'none' || style.clip === 'rect(0px, 0px, 0px, 0px)') return '';
+ return [...node.childNodes].map(drawnText).join('');
+};
+const seen = (name: string) => drawnText(figure(name));
+const heard = (name: string) => [...figure(name).childNodes].filter(node => !(node instanceof Element && node.getAttribute('aria-hidden') === 'true')).map(node => node.textContent).join('');
+
+test('each figure with a value counts from 0 to it in 650ms on the reference\'s curve, and an unavailable one does not count', async () => {
+ const time = clock();
+ await render(numbers('7', 'en', [ads('7', 400)]));
+ // Spend 12,400 EGP and 400 leads, so 31.0 a lead; no app reports revenue.
+ expect([seen('spend'), seen('leads'), seen('costPerLead'), seen('revenue')]).toEqual(['EGP0', '0', 'EGP0.0', '—']);
+ expect([heard('spend'), heard('leads'), heard('costPerLead')]).toEqual(['EGP12,400', '400', 'EGP31.0']);
+ time.to(325);
+ // Halfway through the time, 1 - 0.5^3 = 87.5% of the way.
+ await expect.poll(() => [seen('spend'), seen('leads'), seen('costPerLead'), seen('revenue')]).toEqual(['EGP10,850', '350', 'EGP27.1', '—']);
+ time.to(650);
+ await expect.poll(() => [seen('spend'), seen('leads'), seen('costPerLead'), seen('revenue')]).toEqual(['EGP12,400', '400', 'EGP31.0', '—']);
+ expect(figure('revenue').querySelector('.kpi__count')).toBeNull();
+ expect([heard('spend'), heard('leads'), heard('costPerLead')]).toEqual(['EGP12,400', '400', 'EGP31.0']);
+});
+
+test('in Arabic the count is written in the reader\'s digits with the currency after it', async () => {
+ const time = clock();
+ document.documentElement.dir = 'rtl';
+ await render(numbers('7', 'ar', [ads('7', 400)]));
+ expect(heard('leads')).toBe(new Intl.NumberFormat(localeFor('ar')).format(400));
+ time.to(325);
+ await expect.poll(() => seen('leads')).toBe(new Intl.NumberFormat(localeFor('ar')).format(350));
+ time.to(650);
+ await expect.poll(() => seen('spend')).toBe(`${new Intl.NumberFormat(localeFor('ar')).format(12400)}EGP`);
+});
+
+test('a period change counts each figure from the value it showed to the new one, and a figure that did not change does not move', async () => {
+ const time = clock();
+ const screen = await render(numbers('7', 'en', [ads('7', 400)]));
+ time.to(650);
+ await expect.poll(() => seen('leads')).toBe('400');
+ // The person picks the period (the page's link; the test stays on its page), and the page draws it.
+ const stay = (event: Event) => event.preventDefault();
+ document.addEventListener('click', stay, { once: true });
+ await screen.getByRole('link', { name: 'Last 30 days' }).click();
+ await screen.rerender(numbers('30', 'en', [ads('30', 1000)]));
+ // Drawn at 650ms: 600 more leads, 87.5% of the way halfway through; the spend is the same in both periods, so it holds.
+ expect([seen('leads'), seen('spend')]).toEqual(['400', 'EGP12,400']);
+ time.to(975);
+ await expect.poll(() => [seen('leads'), seen('spend')]).toEqual(['925', 'EGP12,400']);
+ time.to(1300);
+ await expect.poll(() => [seen('leads'), seen('costPerLead')]).toEqual(['1,000', 'EGP12.4']);
+ // Opened again, the page counts from zero.
+ await screen.rerender(<div key="opened-again">{numbers('30', 'en', [ads('30', 1000)])}</div>);
+ expect(seen('leads')).toBe('0');
+});
+
+test('with reduced motion the figures are drawn at their value at once', async () => {
+ await reducedMotion(true);
+ const frame = vi.spyOn(window, 'requestAnimationFrame');
+ await render(numbers('7', 'en', [ads('7', 400)]));
+ await expect.poll(() => [seen('spend'), seen('leads'), seen('costPerLead'), seen('revenue')]).toEqual(['EGP12,400', '400', 'EGP31.0', '—']);
+ expect([heard('spend'), heard('leads')]).toEqual(['EGP12,400', '400']);
+ expect(frame).not.toHaveBeenCalled();
 });
