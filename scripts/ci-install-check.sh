@@ -686,13 +686,18 @@ for attempt in $(seq 1 600); do
   sleep 1
 done
 [[ $mcp_calling == yes ]] || { cat sandbox-mcp-proof.log >&2; fail 'an Agent calls the tool of a command server in the work sandbox'; }
-docker exec "$sandbox" ps -eo comm=,args= | awk '$1 == "node" && /sandbox-proof-mcp[.]mjs/' | grep -q . \
-  || fail 'the command server is a process of the work sandbox during the call'
-if docker exec "$engine_id" ps -eo comm=,args= | awk '$1 != "ssh" && /sandbox-proof-mcp[.]mjs/' | grep -q .; then
-  fail 'no process of the Engine runs the command server'
+# Each container's process list is read whole first: under pipefail a `| grep -q` that stops reading early can fail the
+# pipe on a match. Each check prints the list it read when it fails. Node names its main thread, so the server's command
+# name reads `node-MainThread` once it runs.
+sandbox_ps=$(docker exec "$sandbox" ps -eo comm=,args=) || fail 'list the work sandbox processes'
+engine_ps=$(docker exec "$engine_id" ps -eo comm=,args=) || fail 'list the Engine processes'
+awk '$1 ~ /^node/ && /sandbox-proof-mcp[.]mjs/ {found=1} END {exit !found}' <<< "$sandbox_ps" \
+  || { printf '%s\n' "$sandbox_ps" >&2; fail 'the command server is a process of the work sandbox during the call'; }
+if awk '$1 != "ssh" && /sandbox-proof-mcp[.]mjs/ {found=1} END {exit !found}' <<< "$engine_ps"; then
+  printf '%s\n' "$engine_ps" >&2; fail 'no process of the Engine runs the command server'
 fi
-docker exec "$engine_id" ps -eo comm=,args= | awk '$1 == "ssh" && /pn@sandbox/ && /sandbox-proof-mcp[.]mjs/' | grep -q . \
-  || fail 'the Engine reaches the command server over ssh into the sandbox'
+awk '$1 == "ssh" && /pn@sandbox/ && /sandbox-proof-mcp[.]mjs/ {found=1} END {exit !found}' <<< "$engine_ps" \
+  || { printf '%s\n' "$engine_ps" >&2; fail 'the Engine reaches the command server over ssh into the sandbox'; }
 docker exec "$sandbox" touch "/work/$first/$mcp_marker.release" || fail 'release the call'
 wait "$mcp_check" || { cat sandbox-mcp-proof.log >&2; fail 'a command server the Owner adds runs in the work sandbox and an Agent calls its tool'; }
 cat sandbox-mcp-proof.log
