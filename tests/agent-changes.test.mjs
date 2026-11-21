@@ -393,3 +393,28 @@ test('the card reads the Agent\'s current value from its own profile, and an Own
   assert.deepEqual(await readChangeContext(reader(rows),{company,hermes:null,proposal:1}),{state:'found',now:null,edit:null});
  } finally { await fake.close(); }
 });
+
+// A proposed sub-agent model is written alone (delegation.model), so the Owner's choices are only the models of the
+// provider the sub-agents run on: their own provider, else the Agent's. A model of another provider would be approved
+// into a pair the Engine cannot run (Settings writes both keys together for that reason).
+test('the sub-agents\' model is edited among the models of the provider they run on, never another provider\'s',async()=>{
+ const fake=await fakeHermes();
+ try {
+  for(const name of [companyProfile(company),own(writer)]) profileOn(fake,name);
+  fake.settings.providerModels.openai=['gpt-5.5','gpt-5-mini'];
+  fake.settings.envRows.push({env:'OPENAI_API_KEY',provider:'openai',label:'OpenAI',primary:true,password:true,category:'provider'});
+  const base={soul:'',provider:'anthropic',model:'claude-sonnet-5-5',key:fake.settings.key,credentials:{anthropic:{}},env:{OPENAI_API_KEY:'test-only-key'}};
+  const rows=[{id:1,agent_id:ads,change:'setting',setting:'delegation.model',state:'waiting'}];
+  const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};
+  const subagents=agents.map(row=>row.agent===ads?{...row,subagents:true}:row);
+  const db=()=>{ const read=reader(rows); return {...read,rpc:(name,args)=>name==='company_agent_models'?Promise.resolve({data:subagents,error:null}):read.rpc(name,args)}; };
+  // Its own provider is OpenAI: only OpenAI's models.
+  fake.settings.profiles.set(own(ads),{...base,config:{delegation:{provider:'openai',model:'gpt-5.5'}}});
+  const openai=await readChangeContext(db(),{...options,proposal:1});
+  assert.deepEqual(openai.edit,{kind:'setting',type:'select',choices:['gpt-5.5','gpt-5-mini'],limits:null,default:openai.edit.default});
+  // No provider of its own: it runs on the Agent's, Anthropic.
+  fake.settings.profiles.set(own(ads),{...base,config:{delegation:{provider:'',model:''}}});
+  const anthropic=await readChangeContext(db(),{...options,proposal:1});
+  assert.deepEqual(anthropic.edit?.choices,['claude-sonnet-5-5']);
+ } finally { await fake.close(); }
+});
