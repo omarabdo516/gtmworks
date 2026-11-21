@@ -145,6 +145,20 @@ test('a stopped work sandbox still lists the work folder, and its files read as 
  } finally { await fake.close(); }
 });
 
+test('a listed file the Engine refuses to read (403) is missing, in both roots; only a refused key (401) is refused', async () => {
+ const {fake,at}=await engine();
+ try {
+  fake.settings.files.set(work,[{name:'brief.md',size:4,mtime}]);
+  fake.settings.images.set(profile,[{name:'promo.txt',size:4,mtime}]);
+  fake.settings.filesRefused.add(`${sandbox}/brief.md`).add(`${images}/promo.txt`);
+  assert.deepEqual(await readAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile(at,{name:'brief.md'}),{state:'missing'});
+  assert.deepEqual(await readAgentFile(at,{root:'images',name:'promo.txt'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile(at,{root:'images',name:'promo.txt'}),{state:'missing'});
+  assert.deepEqual(await downloadAgentFile({...at,key:'another-key'},{name:'brief.md'}),{state:'refused'});
+ } finally { await fake.close(); }
+});
+
 test('a name that could leave the work folder is refused in gtmworks before the Engine is asked', async () => {
  const {fake,at}=await engine();
  try {

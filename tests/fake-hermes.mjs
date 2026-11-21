@@ -141,6 +141,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // The work sandbox is stopped (#395): the profile's ssh workspace cannot be reached, so `/api/fs/*` answers 503 while
   // the Engine's own read-only mount still lists the work folder.
   sandboxDown:false,
+  // Files the Engine refuses to read (403) by the path asked, as its guard refuses a sensitive file or one that resolves
+  // outside the root it reads under (hermes_cli/web_routers/files.py).
+  filesRefused:/** @type {Set<string>} */(new Set()),
   // The path `/api/files?path=` and `/api/fs/read-text?path=` answer with, when it is not the one asked for: a folder or
   // a file that is a link somewhere else, which the Engine resolves and reports as its own `path` (by the path asked).
   resolved:/** @type {Map<string,string>} */(new Map()),
@@ -324,6 +327,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    // `/api/fs/download` with a profile read that profile's ssh workspace, the work sandbox (files.py 1032 and 1356 through
    // _remote_fs_backend): a /work path is the work folder, and any other path is not a file the sandbox holds (404).
    if(url.pathname.startsWith('/api/fs/')&&settings.sandboxDown) return send(response,503,{detail:'SSH workspace unavailable'});
+   if(/^\/api\/(fs\/(read-text|download)|files\/download)$/.test(url.pathname)&&settings.filesRefused.has(url.searchParams.get('path')||'')) return send(response,403,{detail:'Access denied'});
    if(url.pathname==='/api/files'&&request.method==='GET') {
     const path=(url.searchParams.get('path')||'').replace(/\/+$/,'');
     if(!path.startsWith('/opt/data/')) return send(response,403,{detail:'Path outside managed files root'});
