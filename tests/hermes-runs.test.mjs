@@ -125,11 +125,14 @@ test('a run that failed because the Engine has no model provider says so; any ot
  } finally { await fake.close(); }
 });
 
-test('a run that failed for no credit, a refused key or sign-in, or a missing model says which; any other failure does not',async()=>{
+test('a run that failed for no credit, a refused key or sign-in, a missing model or no account left says which; any other failure does not',async()=>{
  const fake=await fakeHermes(); fake.settings.ending='failed';
  try {
   const run=await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'});
-  for(const [sentence,reason] of [[creditExhaustedError,'credit'],[apiKeyRefusedError,'key'],[signInRefusedError,'key'],[modelMissingError,'model']]) {
+  for(const [sentence,reason] of [[creditExhaustedError,'credit'],[apiKeyRefusedError,'key'],[signInRefusedError,'key'],[modelMissingError,'model'],
+   // #622: every account of the model, and the Fallback model's when there is one, ran out (the pinned Engine's
+   // exhausted rate-limit copy, agent/turn_failure_copy.py), after one attempt or several.
+   [fake.settings.noAccountText,'access'],['Claude is rate-limiting requests right now — it looks temporarily unavailable.','access']]) {
    fake.settings.failure=sentence;
    assert.equal((await readRun({...connection(fake),run})).modelRefused,reason);
    assert.equal((await engineFor(connection(fake)).read(run)).modelRefused,reason);
@@ -172,6 +175,43 @@ test('a pick: the waiting Run reads as running with its question, the choice\'s 
   assert.deepEqual(await engine.read(run),{state:'completed',reply:'Reply to: Plan the ads (Students)',session:'s',usage:{input:14000,output:12},toolCalls:[]});
   assert.equal(fake.settings.runs.length,1,'no second Run');
   assert.equal(await engine.answer(run,/** @type {string} */(waiting.question?.id),'Parents'),'gone','an ended Run waits for nothing');
+ } finally { await fake.close(); }
+});
+
+// #647: an Agent that writes its answer so far in the same message that asks (or that calls a tool waiting for approval)
+// keeps those words only in its session until the Run completes, and the completed output holds only what came after
+// the pause. The driver reads them from the session while the Run waits, once, and the reply after the answer has none.
+test('words written before a question or an approval are read from the session while the Run waits, and the reply after it does not carry them',async()=>{
+ const fake=await fakeHermes();
+ const five='Five Agents I advise:\n1. Writer — drafts posts alone\n2. Analyst — reads the numbers';
+ fake.settings.questions=input=>input==='Which Agents?'?[{question:'Which of them do we make now?',choices:['Writer','Analyst'],multi_select:true,said:five},{question:'And which first?',choices:['Writer','Analyst']}]:input==='Plan the ads'?[{question:'Which audience first?',choices:['Parents','Students'],said:''}]:[];
+ fake.settings.approvals=input=>input==='Clean up'?[{description:'delete the old exports',command:'rm -r /srv/exports',said:'The exports folder is 4 GB of old files.'}]:[];
+ fake.settings.reply=input=>input==='Which Agents?'?'Making Writer and Analyst now.':`Reply to: ${input}`;
+ try {
+  const engine=engineFor({...connection(fake),managementAddress:fake.managementAddress});
+  const run=/** @type {string} */(await engine.start({conversation:'s1',input:'Which Agents?',idempotencyKey:'k1'}));
+  const waiting=await engine.read(run);
+  assert.equal(waiting.said,five);
+  assert.equal(waiting.question?.text,'Which of them do we make now?');
+  assert.equal((await engine.read(run)).said,five,'the same words on every read while it waits');
+  assert.equal(await engine.answer(run,/** @type {string} */(waiting.question?.id),'Writer, Analyst'),'answered');
+  // A second question of the same Run with no words of its own does not carry the first one's.
+  const next=await engine.read(run);
+  assert.equal(next.question?.text,'And which first?');
+  assert.ok(!('said' in next));
+  assert.equal(await engine.answer(run,/** @type {string} */(next.question?.id),'Writer'),'answered');
+  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Making Writer and Analyst now.',session:'s1',usage:{input:14000,output:12},toolCalls:[]});
+  // A message that asked with no words of its own has none; a request to allow an action carries its message's words.
+  const quiet=/** @type {string} */(await engine.start({conversation:'s2',input:'Plan the ads',idempotencyKey:'k2'}));
+  const asked=await engine.read(quiet);
+  assert.ok(asked.question&&!('said' in asked));
+  const cleaning=/** @type {string} */(await engine.start({conversation:'s3',input:'Clean up',idempotencyKey:'k3'}));
+  const allowing=await engine.read(cleaning);
+  assert.equal(allowing.permission?.description,'delete the old exports');
+  assert.equal(allowing.said,'The exports folder is 4 GB of old files.');
+  // A session the listener cannot read leaves the question as it is, with no words.
+  const unread=await engineFor({...connection(fake),managementAddress:'http://127.0.0.1:1'}).read(cleaning);
+  assert.ok(unread.permission&&!('said' in unread));
  } finally { await fake.close(); }
 });
 

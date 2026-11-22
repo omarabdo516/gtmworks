@@ -71,7 +71,7 @@ const madeArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages
 // An Agent made, or one opened for this person (#167), changes the sidebar: either is counted, so it is drawn again.
 const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0)+(message.decided?.kind==='access'&&message.decided.opened?1:0),0);
 // The cause of a model error a retry cannot fix (#457), as the record names it.
-const refusalCause={credit:'noCredit',key:'keyRefused',model:'modelMissing'} as const;
+const refusalCause={credit:'noCredit',key:'keyRefused',model:'modelMissing',access:'noAccess'} as const;
 
 export function useConversationText() {
  const {language}=useI18n(); const own:Record<string,string>=language==='ar'?conversationAr:conversationEn;

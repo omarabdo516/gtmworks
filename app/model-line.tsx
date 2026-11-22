@@ -8,11 +8,12 @@ import type { ModelCause } from '@/lib/model-causes';
 // the cause, and where it is fixed. An Owner gets the link to Providers (the Company's model for no model
 // at all, the Agent's model for a refusal); a Member is told to ask the Owner. `agent` names the Agent that could not
 // reply. The caller draws the line around it, with `data-outcome` set from modelOutcome (lib/model-causes.ts).
-const refusalWords={noCredit:'modelNoCredit',keyRefused:'modelKeyRefused',modelMissing:'modelMissing'} as const;
+const refusalWords={noCredit:'modelNoCredit',keyRefused:'modelKeyRefused',modelMissing:'modelMissing',noAccess:'modelNoAccess'} as const;
 
 export function ModelLine({cause,agent,slug,owner}:{cause:ModelCause,agent:string,slug:string,owner:boolean}) {
  const {t}=useI18n();
- const fix=<Link className="note__link" href={overlayHref(slug,'models')}>{t(cause==='noModel'?'noModelConnect':'modelRefusedFix')}</Link>;
+ // Every account ran out (#622): the Owner adds one, or picks the Company's Fallback model, in Providers.
+ const fix=<Link className="note__link" href={overlayHref(slug,'models')}>{t(cause==='noModel'?'noModelConnect':cause==='noAccess'?'modelNoAccessFix':'modelRefusedFix')}</Link>;
  if(cause==='noModel') return <>{t('noModelLine')} {owner?fix:t('noModelAskOwner')}</>;
  return <>{t(refusalWords[cause],agent)} {owner?fix:t('modelRefusedAskOwner')}</>;
 }
