@@ -16,8 +16,11 @@ So the run's reply is readable by gtmworks after it ends, and it is recorded as 
 Conversation of each Member (not the fallback of the card at the top of the first chat of the day):
 
 - the worker (`lib/good-morning-runs.mjs`, every 30 s) finds #182's job on the main Agent's own profile by its marker,
-  lists its finished runs, reads each new run's reply once by its session (`readRoutineRuns`, `readRunReply`), and reads the
-  night's results the same way from every Routine of the Company's Agents that ended since the previous message;
+  lists its finished runs, reads each new run's reply once by its session (`readRoutineRuns`, `readRunReply`), and draws the
+  night's results from every Routine run of the Company's Agents that ended since the previous message. The run list
+  answers at most the newest 100 runs and has no paging (`web_routers/cron.py` 485-538), so each pass keeps every
+  Routine's new finished runs as they end, with their Agent, Routine and first line (`keep_routine_results`), and the
+  morning reads its night from what was kept (`good_morning_night`, #535);
 - `record_good_morning` stores the morning once (by its session), and a reply of `[SILENT]` is kept with no greeting and
   opens no Conversation;
 - the card under the greeting is read from gtmworks's records when the Conversation is read (`lib/good-morning-card.ts`).

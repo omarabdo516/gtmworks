@@ -46,16 +46,22 @@ test('a run of the job is read back from its own profile: its session and its re
 });
 
 // The worker's database: each Company's main Agent, the runs it has recorded, and each record call.
+// Each Routine result kept as it ends (#535) is held in `kept`, as keep_routine_results keeps it: once a run, by profile
+// and session, and the night is the newest 200 with a line, as good_morning_night reads it.
 function service({agents=[{id:lead,profile:leadProfile,is_default:true,name:'Lead'},{id:ads,profile:adsProfile,is_default:false,name:'Ads'}]}={}) {
- const recorded=[];
+ const recorded=[]; const kept=[];
  const db={rpc:async(name,args)=>{
-  if(name==='good_morning_work') return {data:[{company_id:company,agent_id:lead,profile:leadProfile,last_ran_at:null}],error:null};
+  // As the database answers it: the latest morning that sent a greeting is where the next night starts.
+  if(name==='good_morning_work') return {data:[{company_id:company,agent_id:lead,profile:leadProfile,last_ran_at:recorded.filter(row=>row.greeting).map(row=>row.ran).sort().at(-1)??null}],error:null};
   if(name==='good_morning_agents') return {data:agents,error:null};
   if(name==='good_morning_seen') return {data:recorded.filter(row=>args.sessions.includes(row.session)).map(row=>row.session),error:null};
   if(name==='record_good_morning') { recorded.push(args); return {data:1,error:null}; }
+  if(name==='routine_results_seen') return {data:kept.filter(row=>row.profile===args.at_profile&&args.sessions.includes(row.session)).map(row=>row.session),error:null};
+  if(name==='keep_routine_results') { const added=args.results.filter(row=>!kept.some(each=>each.profile===row.profile&&each.session===row.session)); kept.push(...added); return {data:added.length,error:null}; }
+  if(name==='good_morning_night') return {data:kept.filter(row=>row.routine&&row.line&&row.at>args.since&&row.at<=args.until).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,200).map(row=>({agent:row.agent,routine:row.routine,line:row.line,at:row.at})),error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
- return {db,recorded};
+ return {db,recorded,kept};
 }
 
 test('each finished run of the job is recorded once with its greeting and the night\'s Routine results; a paused job records none', async () => {
@@ -147,6 +153,40 @@ test('the night holds every run that ended since the previous morning, also one 
   assert.equal(await driveGoodMornings(later,{engineOf:async()=>hermes,driver:{runs}}),1);
   assert.deepEqual(kept[0].results.map(result=>result.line),['Checked the leads']);
   assert.ok(asked.includes(100),'the whole list the Engine gives is read');
+ } finally { await fake.close(); }
+});
+
+test('a Routine that runs more often between two mornings than the Engine lists keeps every result, each read once (#535)', async () => {
+ const fake=await engine();
+ try {
+  const hermes=install(fake); const {db,recorded,kept}=service();
+  const {routine:morning}=await dailyJob(fake);
+  const {routine:often}=await createRoutine(at(fake,adsProfile),{name:'Every 15 minutes',prompt:'Check',schedule:'*/15 * * * *'});
+  let count=0;
+  fake.settings.cronReply=job=>job.name==='Every 15 minutes'?`Checked the leads ${++count}`:'Good morning.';
+  // An Engine that lists only the newest 2 runs stands for the pinned one's 100: the night holds 6.
+  const asked=[];
+  const runs=(connection,request)=>{ asked.push(request.id); return readRoutineRuns(connection,{...request,limit:Math.min(request.limit,2)}); };
+  const replies=[];
+  const reply=(connection,session)=>{ replies.push(session); return readRunReply(connection,session); };
+  const options={engineOf:async()=>hermes,driver:{runs,reply},marks:new Map()};
+  for(let round=0;round<3;round++) {
+   for(let each=0;each<2;each++) { await triggerRoutine(at(fake,adsProfile),{id:often.id}); await new Promise(resolve=>setTimeout(resolve,5)); }
+   assert.equal(await driveGoodMornings(db,options),0,'no morning yet');
+  }
+  assert.equal(kept.length,6,'each run is kept as it ends');
+  // A pass with no new run reads no list of that Routine again.
+  asked.length=0;
+  await driveGoodMornings(db,options);
+  assert.ok(!asked.includes(often.id),'a Routine with no new run is not listed again');
+  await new Promise(resolve=>setTimeout(resolve,20));
+  await triggerRoutine(at(fake,leadProfile),{id:morning.id});
+  assert.equal(await driveGoodMornings(db,options),1);
+  assert.deepEqual(recorded[0].results.map(result=>result.line).sort(),[1,2,3,4,5,6].map(n=>`Checked the leads ${n}`).sort(),'the whole night, not the newest 2');
+  assert.ok(recorded[0].results.every(result=>result.agent===ads&&result.routine==='Every 15 minutes'));
+  const ofRoutine=replies.filter(session=>kept.some(row=>row.session===session&&row.routine_id===often.id));
+  assert.equal(ofRoutine.length,new Set(ofRoutine).size,'each run\'s reply is read once');
+  assert.ok(!kept.some(row=>row.routine_id===morning.id),'the daily job\'s own runs are not Routine results');
  } finally { await fake.close(); }
 });
 
