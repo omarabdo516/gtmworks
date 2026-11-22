@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { effortDefault, effortHintKey, effortLabelKey } from '@/lib/engine-effort.mjs';
 import { toast } from './toast';
+import { Advanced } from './settings-info';
+import { Label } from './settings-overlay-parts';
 import { AppTile } from '@/components/app-tile';
 import { markOf } from '@/lib/app-mark.mjs';
 
@@ -72,7 +74,7 @@ export function SpeechToText({company,owner,data}:{company:string,owner:boolean,
   router.refresh();
  };
  const missing=data?.provider&&data.missing?.length?data.missing.map(item=>item.name||t('settingsModelsAnAgent')):[];
- return <section className="dp-sec" aria-labelledby="md-h-stt" id="md-stt"><h4 className="dp-label" id="md-h-stt"><span>{t('settingsSpeech')}</span></h4>
+ return <section className="dp-sec" aria-labelledby="md-h-stt" id="md-stt"><Label id="md-h-stt" info={t('settingsSpeechHint')}>{t('settingsSpeech')}</Label>
   {data?.missing?<div className="panel-card md-keys">{speechRows.map(([id,label,note])=>{ const on=data.provider===id; return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
    <div className="panel-row"><ProviderLogo provider={id} name={label} label={label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{label}</bdi></span>
     <span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):note?t(note):''}</span></span>
@@ -92,7 +94,6 @@ export function SpeechToText({company,owner,data}:{company:string,owner:boolean,
   {missed.length>0&&<p className="set-err" role="alert">{t('settingsSpeechNotReached',missed.join(', '))}</p>}
   {!owner&&<p className="set-hint">{t('settingsSpeechOwnerOnly')}</p>}
   {owner&&missing.length>0&&<ul className="set-hint md-waiting">{missing.map((name,at)=><li key={at}>{t('settingsSpeechMissing')} <bdi>{name}</bdi></li>)}</ul>}
-  <p className="set-hint">{t('settingsSpeechHint')}</p>
  </section>;
 }
 
@@ -130,7 +131,7 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
    ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
    : <div className="panel-row" key={choice} aria-current={on?'true':undefined}>{text}{meta}</div>;
  };
- return <section className="dp-sec" aria-labelledby="md-h-default"><h4 className="dp-label" id="md-h-default"><span>{t('settingsModelsDefault')}</span></h4>
+ return <section className="dp-sec" aria-labelledby="md-h-default"><Label id="md-h-default" info={t('settingsModelsDefaultHint')}>{t('settingsModelsDefault')}</Label>
   {models.options.length?<div className="panel-card" role={owner?'radiogroup':undefined} aria-labelledby="md-h-default">{models.options.map(row)}</div>
    :<div className="panel-card"><p className="panel-empty">{t('settingsModelsNoChoice')}</p></div>}
   {error&&<p className="set-err" role="alert">{t(reasonKey(error))}</p>}
@@ -139,7 +140,6 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
    <button type="button" className="btn btn--secondary btn--sm" disabled={busy} onClick={()=>choose(retry)}>{t('settingsModelsRetry')}</button>
   </div>}
   {!owner&&<p className="set-hint">{t('settingsModelsOwnerOnly')}</p>}
-  <p className="set-hint">{t('settingsModelsDefaultHint')}</p>
  </section>;
 }
 
@@ -197,10 +197,9 @@ export function AgentModel({company,agent,name,model,options,choosable,owner}:{c
 // below Owner reads the value and no control.
 export function EachAgent({company,owner,models}:{company:string,owner:boolean,models:ModelsData}) {
  const {t}=useI18n();
- return <section className="dp-sec" aria-labelledby="md-h-each"><h4 className="dp-label" id="md-h-each"><span>{t('settingsModelsEach')}</span></h4>
+ return <section className="dp-sec" aria-labelledby="md-h-each"><Label id="md-h-each" info={t('settingsModelsEachHint')}>{t('settingsModelsEach')}</Label>
   <div className="panel-card md-agents">{models.agents.map(agent=><AgentRow key={agent.id} company={company} owner={owner} agent={agent} defaultModel={models.default.model}/>)}</div>
   {!owner&&<p className="set-hint">{t('settingsModelsOwnerOnly')}</p>}
-  <p className="set-hint">{t('settingsModelsEachHint')}</p>
  </section>;
 }
 
@@ -235,7 +234,8 @@ function AgentRow({company,owner,agent,defaultModel}:{company:string,owner:boole
    {owner?<button type="button" className="switch" role="switch" id={`mdl-sub-${agent.id}`} aria-checked={agent.subagents} aria-labelledby={`mdl-sub-${agent.id}-t`} disabled={busy} onClick={()=>change({setting:'subagents',value:!agent.subagents},'settingsSubagentsSaved')}/>
     :<span className="panel-row__meta">{t(agent.subagents?'settingsSubagentsOn':'settingsSubagentsOff')}</span>}
   </div>}
-  {agent.subagents&&<SubagentFields company={company} owner={owner} agent={agent}/>}
+  {/* The sub-agents' own model, provider, limits and level are rarely changed (#614): under Advanced, closed at first. */}
+  {agent.subagents&&<Advanced id={`mdl-sub-${agent.id}-advanced`}><SubagentFields company={company} owner={owner} agent={agent}/></Advanced>}
   {error&&<p className="set-err" role="alert">{t(reasonKey(error))}</p>}
   {!agent.choosable&&<p className="set-hint">{t('settingsModelsShared')}</p>}
  </div>;

@@ -84,7 +84,6 @@
 .gw .sov-head__t { flex: 1 1 320px; min-width: 0; display: grid; gap: var(--s1); }
 .gw .sov-h { font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; }
 .gw .sov-h:focus { outline: none; }
-.gw .sov-sub { font-size: var(--gw-fs-base); line-height: 1.7; color: var(--gw-text-2); max-width: 64ch; }
 
 /* buttons */
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .btn {
@@ -190,9 +189,8 @@
 .gw :is(.sov, .apps-sheet) .sov-warn .sov-icon { color: inherit; }
 
 /* the Agents and one Agent */
-.gw .sov .talk-tip { display: flex; align-items: center; flex-wrap: wrap; gap: 4px var(--s2); margin: 0 0 var(--s4); padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); --od-icon-size: 16px; }
-.gw .sov .talk-tip > span { flex: 1 1 240px; }
-.gw .sov .talk-tip .link-btn { font-size: var(--gw-fs-sm); font-weight: 600; }
+.gw .sov .talk-tip { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--gw-text-3); --od-icon-size: 16px; }
+.gw .sov .talk-tip .link-btn { font-size: var(--gw-fs-sm); font-weight: 600; color: var(--gw-text-1); }
 .gw .sov .sov-ags .sov-ag { min-height: 64px; }
 .gw .sov .sov-badge { display: inline-flex; vertical-align: 1px; height: 20px; font-weight: 400; color: var(--gw-text-2); }
 .gw .sov .sov-chev { color: var(--gw-text-3); --od-icon-size: 16px; }
@@ -532,3 +530,42 @@
 .gw .sov .ab-older[open] .ab-older__chev { transform: rotate(90deg); }
 [dir="rtl"] .gw .sov .ab-older[open] .ab-older__chev { transform: rotate(-90deg); }
 .gw .sov .ab-version { font-size: var(--gw-fs-sm); color: var(--gw-text-2); font-variant-numeric: tabular-nums; }
+
+/* Optional help (#614; DESIGN.md "Settings copy"): a small "i" after a heading, a section label or a field's name, and
+   the text it shows on hover, keyboard focus or a tap. The text sits over the page and never runs off a phone's screen
+   (settings-info.tsx moves it back inside the gutter). */
+.gw :is(.sov, .modal.team-dlg) .info { position: relative; display: inline-flex; vertical-align: middle; margin-inline-start: 4px; }
+.gw :is(.sov, .modal.team-dlg) .info__btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--gw-r-full); color: var(--gw-text-3); cursor: help; }
+.gw :is(.sov, .modal.team-dlg) .info__btn[aria-expanded="true"] { color: var(--gw-text-1); background: var(--gw-bg-hover); }
+@media (hover: hover) { .gw :is(.sov, .modal.team-dlg) .info__btn:hover { color: var(--gw-text-1); background: var(--gw-bg-hover); } }
+.gw :is(.sov, .modal.team-dlg) .info__pop {
+  position: absolute; z-index: 30; top: calc(100% + 4px); inset-inline-start: -8px; display: block; width: max-content; max-width: min(320px, calc(100vw - 32px));
+  padding: var(--s2) var(--s3); border-radius: var(--gw-r-sm); background: var(--gw-bg-pane); box-shadow: var(--gw-shadow-popover);
+  font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.6; color: var(--gw-text-2); text-align: start; white-space: normal; text-wrap: pretty;
+}
+.gw :is(.sov, .modal.team-dlg) .info__pop[hidden] { display: none; }
+/* The 4px between the "i" and its text belongs to the text, so a mouse moving onto the text keeps it open. */
+.gw :is(.sov, .modal.team-dlg) .info__pop::before { content: ""; position: absolute; inset-inline: 0; bottom: 100%; height: 6px; }
+/* On a touch screen the "i" is pressed over 44px, though it is drawn at 24px. */
+@media (pointer: coarse) { .gw :is(.sov, .modal.team-dlg) .info__btn::after { content: ""; position: absolute; inset: -10px; } }
+.gw :is(.sov, .modal.team-dlg) .info__p { display: block; }
+.gw :is(.sov, .modal.team-dlg) .info__p + .info__p { margin-top: var(--s2); }
+.gw .sov-h-meta { font-size: var(--gw-fs-sm); color: var(--gw-text-3); }
+.gw .sov-head__row { display: flex; align-items: center; flex-wrap: wrap; gap: 0 var(--s2); min-width: 0; }
+.gw .sov-head__row .info { margin-inline-start: -4px; }
+.gw .sov .set-group__row { display: flex; align-items: center; gap: 2px; }
+
+/* Advanced (#614): closed at first; its summary is the section's one line, its controls below it once open. */
+.gw .sov .set-adv { border-radius: var(--gw-r-md); }
+.gw .sov .set-adv__sum { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--s2); font-size: var(--gw-fs-sm); color: var(--gw-text-2); cursor: pointer; list-style: none; border-radius: var(--gw-r-sm); }
+.gw .sov .set-adv__sum::-webkit-details-marker { display: none; }
+.gw .sov .set-adv__sum .sov-icon { width: 14px; height: 14px; flex: none; }
+.gw .sov .set-adv[open] > .set-adv__sum .sov-icon { rotate: 90deg; }
+.gw[dir="rtl"] .sov .set-adv[open] > .set-adv__sum .sov-icon, [dir="rtl"] .gw .sov .set-adv[open] > .set-adv__sum .sov-icon { rotate: -90deg; }
+@media (hover: hover) { .gw .sov .set-adv__sum:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); } }
+@media (max-width: 767px) { .gw .sov .set-adv__sum { min-height: 44px; } }
+.gw .sov .set-adv__body { display: grid; gap: var(--s3); padding-top: var(--s2); }
+/* A field's name with its "i" (#614), and a row of a field's counter alone at the end. */
+.gw :is(.sov, .modal.team-dlg) .set-label-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.gw :is(.sov, .modal.team-dlg) .set-label-row .info { margin-inline-start: 0; }
+.gw .sov .set-hint-row--end { justify-content: flex-end; }

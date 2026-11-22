@@ -59,7 +59,7 @@ test('the Owner picks a speech-to-text provider with its key, Deepgram first; a 
   await used.unmount();
   await renderNode(<SpeechToText company={company} owner={false} data={{ provider: 'deepgram', missing: [] }}/>, 'ar');
   expect(document.querySelector('#md-stt input')).toBeNull();
-  expect(document.querySelector('#md-stt button')).toBeNull();
+  expect(document.querySelector('#md-stt button:not(.info__btn)')).toBeNull();
   await expect.element(page.getByText(ar.settingsSpeechOwnerOnly)).toBeVisible();
   await expect.element(page.getByText(ar.settingsSpeechInUse)).toBeVisible();
 });
@@ -117,6 +117,9 @@ test('sub-agents are off until the Owner turns them on: the switch is sent, and 
     { key: 'delegation.max_spawn_depth', type: 'number' as const, choices: null, default: 1, value: 1, limits: { min: 1, integer: true }, label: 'settingSubagentDepth' },
   ];
   const on = await renderNode(<EachAgent company={company} owner models={{ default: { model: 'openrouter/openai/gpt-5.5', options }, agents: [agent({ subagents: true, settings })] }}/>, 'ar');
+  // The Engine's sub-agent settings are rarely changed: under Advanced, closed until opened (#614).
+  expect((document.getElementById('mdl-sub-a-1-advanced') as HTMLDetailsElement).open).toBe(false);
+  await on.getByText(ar.settingsAdvanced, { exact: true }).click();
   await expect.element(on.getByText(ar.settingSubagentEffort)).toBeVisible();
   expect((document.getElementById('mdl-sub-a-1-max_concurrent_children') as HTMLInputElement).value).toBe('10');
   await expect.element(on.getByText(ar.settingsSubagentsAtOnce.replace('{0}', '10'))).toBeVisible();
@@ -241,6 +244,7 @@ test('a sub-agent model is one choice that saves the provider and the bare model
   { key: 'delegation.provider', type: 'string' as const, choices: null, default: '', value: '', limits: null, label: 'settingSubagentProvider' },
  ];
  const screen = await renderNode(<EachAgent company={company} owner models={{ default: { model: 'openrouter/openai/gpt-5.5', options }, agents: [agent({ subagents: true, settings })] }}/>);
+ await screen.getByText(en.settingsAdvanced, { exact: true }).click();
  await screen.getByRole('combobox', { name: en.settingSubagentModel }).selectOptions('openrouter/openai/gpt-5.5');
  await expect.poll(() => sent.length).toBe(1);
  expect(sent[0]).toEqual({ url: '/api/agent-settings', body: { company, agent: 'a-1', settings: { 'delegation.provider': 'openrouter', 'delegation.model': 'openai/gpt-5.5' } } });

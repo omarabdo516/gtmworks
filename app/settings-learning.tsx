@@ -35,16 +35,16 @@ export function LearningSection({t,slug,company,canManage,owner,data}:{t:T,slug:
  const total=rules.length+learned.length;
  const agentName=(id:string)=>agents?.find(agent=>agent.id===id)?.name||null;
  return <>
-  <Head title={t('settingsLearning')} sub={t('settingsLearningSub')}/>
+  <Head title={t('settingsLearning')} info={t('settingsLearningSub')}/>
   {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>}
   {/* The Engine stages a note or Skill write in "Asks first", but its management listener has no route that lists
       them; the section says what the mode does and draws no list this version cannot read. */}
-  <section className="dp-sec ln-sugg" aria-labelledby="ln-h-sug"><Label id="ln-h-sug">{t('settingsLearnSuggestions')}</Label>
-   <p className="set-hint">{t('settingsLearnSuggestHint')}</p></section>
-  <section className="dp-sec" aria-labelledby="ln-h-co"><Label id="ln-h-co">{t('settingsLearnCompany')}</Label>
+  <section className="dp-sec ln-sugg" aria-labelledby="ln-h-sug"><Label id="ln-h-sug" info={t('settingsLearnSuggestHint')}>{t('settingsLearnSuggestions')}</Label></section>
+  <section className="dp-sec" aria-labelledby="ln-h-co"><Label id="ln-h-co" info={t('settingsLearnTapHint')}>{t('settingsLearnCompany')}</Label>
    {!agents?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>
     :<><CompanyLearningMode company={company} mode={companyMode} canChange={owner}/>
-     <p className="set-hint">{companyMode==='mixed'?t('settingsLearnMixed'):t('settingsLearnTapHint')}</p></>}</section>
+     {/* Each Agent on its own mode is new information, so it stays on the page (#614). */}
+     {companyMode==='mixed'&&<p className="set-hint">{t('settingsLearnMixed')}</p>}</>}</section>
   <section className="dp-sec" aria-labelledby="ln-h-per"><Label id="ln-h-per">{t('settingsLearnPerAgent')}</Label>
    {!agents?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>
     :agents.length===0?<div className="panel-card"><p className="panel-empty">{t('noAgentsYet')}</p></div>
@@ -84,14 +84,12 @@ export function LearningSection({t,slug,company,canManage,owner,data}:{t:T,slug:
       <div className="ln-body"><p className="ln-t" dir="auto">{lesson.body}</p>
        <p className="ln-meta"><span>{t('settingsLearnKindRule')}</span><span aria-hidden="true">·</span><span><bdi>{lesson.saidByName||t('member')}</bdi></span></p>
       </div></li>)}</ul>}</section>
-  <section className="dp-sec" aria-labelledby="ln-h-rules"><Label id="ln-h-rules">{t('settingsLearnRules')}</Label>
+  <section className="dp-sec" aria-labelledby="ln-h-rules"><Label id="ln-h-rules" info={<><span className="info__p">{t('settingsLearnAskHint')}</span><span className="info__p">{t('settingsLearnOwnerHint')}</span></>}>{t('settingsLearnRules')}</Label>
    <div className="ln-rules">
     <div className="panel-card ln-rule"><b><SettingsIcon name="bulb"/>{t('settingsLearnChangesAuto')}</b>
-     <ul><li>{t('settingsLearnNotes')}</li><li>{t('settingsLearnSkills')}</li></ul>
-     <p className="set-hint">{t('settingsLearnAskHint')}</p></div>
+     <ul><li>{t('settingsLearnNotes')}</li><li>{t('settingsLearnSkills')}</li></ul></div>
     <div className="panel-card ln-rule"><b><SettingsIcon name="shield"/>{t('settingsLearnChangesOwner')}</b>
-     <ul><li>{t('settingsLearnModel')}</li><li>{t('settingsLearnTools')}</li><li>{t('settingsLearnInstructions')}</li></ul>
-     <p className="set-hint">{t('settingsLearnOwnerHint')}</p></div>
+     <ul><li>{t('settingsLearnModel')}</li><li>{t('settingsLearnTools')}</li><li>{t('settingsLearnInstructions')}</li></ul></div>
    </div></section>
   <FocusReturn prefix="ln-see-"/>
  </>;

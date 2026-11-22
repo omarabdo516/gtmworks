@@ -6,6 +6,7 @@ import { localeFor } from '@/lib/i18n.mjs';
 import { dateFormatter, dayOf } from '@/lib/activity-log.mjs';
 import { madeDay, useZone } from './agent-made';
 import { SettingsIcon } from './settings-icons';
+import { InfoTip } from './settings-info';
 import { saveCompanyKnowledge } from './company-knowledge-actions';
 import { toast } from './toast';
 
@@ -51,11 +52,12 @@ export default function KnowledgeEditor({company,part,title,body,children}:{comp
  };
  return <article className="know-page" aria-labelledby={editing?'know-edit-l':'know-h'} aria-busy={pending||undefined} onKeyDown={editing?keys:undefined}>
   {editing?<>
-   <div className="set-field"><label className="set-label" htmlFor="know-edit" id="know-edit-l">{t('knowEditPart',title)}</label>
+   <div className="set-field"><span className="set-label-row"><label className="set-label" htmlFor="know-edit" id="know-edit-l">{t('knowEditPart',title)}</label>
+    <InfoTip about={title} id="know-edit-hint">{t('knowEditHint')}</InfoTip></span>
     <textarea ref={field} className="set-input set-textarea know-ta" id="know-edit" rows={12} dir="auto" aria-describedby="know-edit-hint know-edit-err" aria-invalid={!!error||undefined} readOnly={pending}
      value={draft} onChange={event=>{ setDraft(event.target.value); setError(''); }}/>
     {error&&<span className="set-err" id="know-edit-err" role="alert">{t(error)}</span>}
-    <span className="set-hint" id="know-edit-hint">{t('knowEditHint')}</span></div>
+   </div>
    <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--secondary btn--sm" onClick={close}>{t('cancel')}</button>
     <button type="button" className="btn btn--primary btn--sm" id="know-save" disabled={pending} onClick={save}>{t('save')}</button></div>
   </>:<>

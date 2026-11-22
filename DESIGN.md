@@ -367,6 +367,16 @@ One radius knob, `--radius: 0.5rem` (8px), drives a multiplicative ladder: `sm` 
 - **Panel:** `surface` fill, 1px hairline, `lg` radius, 24px padding (16px for the Home role tiles). Title 16px semibold, body in muted ink.
 - **Table:** full-width panel, header cells on `muted-fill` with muted-ink 500 text, 10px 12px cell padding, row hover on `accent`.
 
+### Settings copy
+
+Settings shows names and controls, not a manual above each one (#614, spec #610). Only Settings follows this rule for now; another screen adopts it when its own issue says so.
+
+- **Headings:** a page or a section has its name and nothing under it: no subtitle, no banner, no hint paragraph. One short muted fact may sit beside a page's name when it is new information, such as Recurring tasks' "2 on out of 2 · across 2 agents".
+- **Rows:** the name and its control face one another. A row carries at most one short grey line, and only for new information: the current state, a value, a consequence (Connected, In use, "Follows the default · gpt-5.5"). A line that explains what the setting is, or how it works, is help.
+- **Help:** a longer explanation goes behind an "i" after the name it explains, drawn at 24px and pressed over 44px on a touch screen, (`InfoTip`, `app/settings-info.tsx`; `Head`'s and `Label`'s `info`). A mouse resting on it or on its text, the keyboard landing on it, or a tap shows it in a small popover that stays inside the window's 16px gutter; moving away, a press outside, a second press or Escape hides it, and that Escape does not close Settings. Its button is named "More about <name>" and says whether it is open; its text stays in the page while hidden, so a field may still name it in `aria-describedby`. It never holds the only way to do something: a link it explains (Talk to an Agent) stays on the page.
+- **Not help:** what changes what a person can do stays visible: read-only notices, "Only the Owner…" lines, waiting and failure states, live results, errors, a warning before something leaves the install (Microsoft's voice sample), and a limit a command depends on (a restore needs an empty install).
+- **Advanced:** controls few people change are kept under "Advanced" (`Advanced`, a native disclosure), closed when the page opens.
+
 ### Board
 
 - **Column:** 260px wide; a column header (12px semibold uppercase, count at the inline end, tabular figures) over a tinted body at the stage tone. An empty column says so in muted caption text and keeps its Add card action.
@@ -403,6 +413,7 @@ Under `prefers-reduced-motion` every transition and animation is cut to zero and
 - **Do** keep targets at 44px or more on mobile and text at WCAG AA contrast.
 - **Do** put a new Paperclip-less screen (conversation, agent face, agent page) on the same tokens and radius ladder, with design freedom inside them (`PRODUCT.md`).
 - **Do** record any new departure from Paperclip under "Deviations and their reasons" with its reason.
+- **Do** keep a Settings row to its name, its control and at most one short line of new information; put the explanation behind its "i" (see "Settings copy").
 
 ### Don't:
 

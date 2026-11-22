@@ -3,6 +3,7 @@ import { useState, useTransition, type KeyboardEvent } from 'react';
 import { useI18n } from '@/lib/i18n-client';
 import { SettingsIcon } from './settings-icons';
 import { themeChoices } from '@/lib/sidebar.mjs';
+import { Label } from './settings-overlay-parts';
 
 // Arrow keys move between the choices of one radio group (WAI-ARIA radio pattern); the choice is made with Enter or Space.
 function arrows(event:KeyboardEvent<HTMLElement>) {
@@ -39,12 +40,11 @@ export default function AccountChoicesView({theme,saveTheme,saveLanguage}:{theme
     {themeChoices.map(key=>{const on=key===theme, look=themeLook[key]; return <button key={key} type="button" role="radio" id={`ac-th-${key}`} aria-checked={on} tabIndex={on?0:-1} disabled={pending} onClick={()=>{ if(!on) save('theme',key); }}>
      <SettingsIcon name={look.icon}/><span>{t(look.label)}</span></button>;})}
    </div></div></section>
-  <section className="dp-sec" aria-labelledby="ac-h-lang"><h4 className="dp-label" id="ac-h-lang"><span>{t('interfaceLanguage')}</span></h4>
+  <section className="dp-sec" aria-labelledby="ac-h-lang"><Label id="ac-h-lang" info={t('settingsChatsStayArabic')}>{t('interfaceLanguage')}</Label>
    <div className="panel-card" role="radiogroup" aria-labelledby="ac-h-lang" onKeyDown={arrows}>{languages.map(item=><button key={item.key} type="button" className="panel-row" role="radio" id={`ac-lang-${item.key}`} aria-checked={item.key===language} tabIndex={item.key===language?0:-1} disabled={pending} onClick={()=>{ if(item.key!==language) save('language',item.key); }}>
     <span className="panel-row__text"><span className="panel-row__t lang-native" lang={item.key} dir={item.key==='ar'?'rtl':'ltr'}>{t(item.name)}</span><span className="panel-row__d">{t(item.description)}</span></span>
     {item.key===language&&<span className="panel-row__meta"><SettingsIcon name="check"/></span>}
    </button>)}</div>
-   <p className="set-hint">{t('settingsChatsStayArabic')}</p>
    {error&&<p className="set-err" role="alert">{error}</p>}
   </section>
  </>;

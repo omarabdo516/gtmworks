@@ -700,6 +700,7 @@
   "settingsLearningSub": "Agents get better on their own: they save notes and write or improve their skills from the work. You choose whether they learn on their own or ask first.",
   "settingsModelsSub": "The subscription the agents run on, and the model and thinking level every new agent starts with.",
   "settingsRoutinesSub": "A new task is made with one sentence in the agent’s chat, like “ملخص الليدز كل يوم 8 الصبح”.",
+  "settingsInfoAbout": "More about {0}",
   "settingsUsageSub": "How many tokens each agent used, as the agent engine counted them. No prices: they depend on your model plan.",
   "settingsBackupSub": "A copy of everything in the workspace, so you can go back if something gets deleted or mixed up.",
   "settingsAccountSub": "Your name and role in the company, and the interface language and look.",

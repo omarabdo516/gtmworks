@@ -4,6 +4,7 @@ import { useI18n } from '@/lib/i18n-client';
 import type { AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
 import { seedDraft, setDraftValue, useDraftState, useDraftValue } from './settings-draft';
 import { SettingsIcon } from './settings-icons';
+import { InfoTip } from './settings-info';
 
 // An Agent's Voice in Settings (#162; design-reference: voiceSetHTML): the language the agent engine listens in, the voice
 // of the profile's provider with the reference's Listen, and the speed. Each control is one setting of the Agent's own
@@ -73,13 +74,13 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
   :t('settingsVoiceListenHint');
  // The page's Voice group carries the heading (#615); the speed is in its Advanced part (AgentVoiceSpeed below).
  return <div className="panel-card set-card">
-   <div className="set-field"><label className="set-label" htmlFor="set-voice-lang">{t('settingsVoiceLang')}</label>
+   <div className="set-field"><span className="set-label-row"><label className="set-label" htmlFor="set-voice-lang">{t('settingsVoiceLang')}</label><InfoTip about={t('settingsVoiceLang')} id="set-voice-lang-hint">{t('settingsVoiceLangHint')}</InfoTip></span>
     <select className="set-input vc-select" id="set-voice-lang" value={speaking} aria-describedby="set-voice-lang-hint"
      onChange={event=>{ stop(); setDraftValue('voice.language',event.target.value); }}>
      {voice.languages.map(value=><option key={value||'detect'} value={value}>{languageLabel(value)}</option>)}
      {!voice.languages.includes(speaking)&&<option value={speaking}>{languageLabel(speaking)}</option>}
     </select>
-    <span className="set-hint" id="set-voice-lang-hint">{t('settingsVoiceLangHint')}</span></div>
+   </div>
    <div className="set-field"><label className="set-label" htmlFor="set-voice">{t('settingsVoice')}</label>
     <div className="vc-row">
      {choices?<select className="set-input vc-select" id="set-voice" value={chosen} aria-describedby="set-voice-hint" aria-label={t('settingsVoice')}
@@ -118,11 +119,11 @@ export function AgentVoiceSpeed({agent,speed:saved,editable}:{agent:string,speed
   setDraftValue('voice.speed',String(voiceSteps[next]));
   document.getElementById(`set-speed-${next}`)?.focus();
  };
- return <div className="panel-card set-card"><div className="set-field"><span className="set-label" id="set-speed-l">{t('settingsVoiceSpeed')}</span>
+ return <div className="panel-card set-card"><div className="set-field"><span className="set-label-row"><span className="set-label" id="set-speed-l">{t('settingsVoiceSpeed')}</span><InfoTip about={t('settingsVoiceSpeed')} id="set-speed-hint">{t('settingsVoiceSpeedHint')}</InfoTip></span>
   <div className="segmented segmented--field" role="radiogroup" aria-labelledby="set-speed-l" aria-describedby="set-speed-hint">
    {voiceSteps.map((step,index)=><button type="button" role="radio" key={step} id={`set-speed-${index}`} className="num" dir="ltr"
      aria-checked={speed===String(step)} tabIndex={speed===String(step)?0:-1} onClick={()=>setDraftValue('voice.speed',String(step))}
      onKeyDown={event=>move(event,index)}>{step}×</button>)}
   </div>
-  <span className="set-hint" id="set-speed-hint">{t('settingsVoiceSpeedHint')}</span></div></div>;
+  </div></div>;
 }

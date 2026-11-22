@@ -49,11 +49,14 @@ test('the Conversation shows the saved line under the reply, and alone after a r
  }
  await turns.nth(2).getByRole('link',{name:'See it'}).click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/settings\\?agent=${ads}$`));
- await expect(page.locator('#rl-h')).toHaveText('Rules it was told 2');
+ await expect(page.locator('#rl-h-t')).toHaveText('Rules it was told 2');
  await expect(rows(page).locator('.panel-row__t')).toHaveText([later,rule]);
  await expect(rows(page).last().locator('.panel-row__t')).toHaveAttribute('dir','auto');
  await expect(rows(page).first().locator('.rl-said')).toHaveText(/^Said by you · Today · \d{1,2}:\d{2}/);
- await expect(page.locator('.talk-tip')).toContainText('It’s saved here and written in the log.');
+ // How to change Ads is the rules' optional help (#614), behind their "i".
+ await expect(page.locator('#rl-h-info')).toBeHidden();
+ await page.getByRole('button',{name:'More about Rules it was told'}).click();
+ await expect(page.locator('#rl-h-info')).toContainText('It’s saved here and written in the log.');
 });
 
 test('the Activity log says who told Ads each rule',async({page})=>{

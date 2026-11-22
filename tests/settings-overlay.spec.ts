@@ -429,8 +429,9 @@ test('Company settings say what every agent can use and offer no level choice, i
   await expect(line.locator('#co-h-tools')).toHaveText('What every agent can use');
   await expect(line).toContainText('Every agent of the company works in its work sandbox with a terminal, files and code.');
   await expect(line).toContainText('Anything published or spent through gtmworks still waits for a person’s approval.');
-  // One read-only line: no level, policy or switch of any kind is left where the level choice was.
-  await expect(line.locator('input,select,button,[role=radio],[role=combobox],[role=slider]')).toHaveCount(0);
+  // What they are is the section's help behind its "i" (#614); no level, policy or switch of any kind is left where the
+  // level choice was.
+  await expect(line.locator('input,select,button:not(.info__btn),[role=radio],[role=combobox],[role=slider]')).toHaveCount(0);
   await expect(overlay.getByLabel(/level/i)).toHaveCount(0);
 
   query(`update public.people set language='ar' where id='${owner}'`);
@@ -441,7 +442,7 @@ test('Company settings say what every agent can use and offer no level choice, i
   await expect(say.locator('#co-h-tools')).toHaveText('كل الوكلاء بيستخدموا إيه');
   await expect(say).toContainText('كل وكيل في الشركة بيشتغل في صندوق شغل الشركة، ومعاه تيرمنال وملفات وتشغيل كود.');
   await expect(say).toContainText('لسه بتستنى موافقة حد.');
-  await expect(say.locator('input,select,button,[role=radio],[role=combobox],[role=slider]')).toHaveCount(0);
+  await expect(say.locator('input,select,button:not(.info__btn),[role=radio],[role=combobox],[role=slider]')).toHaveCount(0);
  } finally { query(`update public.people set language='en' where id='${owner}'`); }
 });
 

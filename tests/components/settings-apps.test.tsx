@@ -60,7 +60,12 @@ test('the list groups connected and attention apps apart from the rest, and sear
 
 test('a Member who is not the Owner reads the states with no button', async () => {
   const screen = await render(<AppsList place={settings} owner={false} items={items} text={text}/>);
-  await expect.element(screen.getByText(text.subOther)).toBeVisible();
+  // In Settings the line is the title's help (#614), behind its "i".
+  const help = document.getElementById('apps-sub')!;
+  expect(help.textContent).toBe(text.subOther);
+  expect(help.checkVisibility()).toBe(false);
+  await screen.getByRole('button', { name: /^More about / }).click();
+  await expect.poll(() => help.checkVisibility()).toBe(true);
   expect(screen.getByRole('link').elements()).toHaveLength(0);
 });
 

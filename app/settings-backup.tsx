@@ -2,6 +2,7 @@ import type { I18n } from '@/lib/i18n.mjs';
 import { backupExcludes, backupIncludes, backupCommands } from '@/lib/backup.mjs';
 import { SettingsIcon } from './settings-icons';
 import { CopyCommand } from './settings-backup-copy';
+import { Head } from './settings-overlay-parts';
 
 // Settings › Backup, for the Owner alone (#33). The reference's "What a backup holds" section (design-reference/app.js,
 // sovBackupHTML), without its Back up now button, automatic-backup switch, backups list and restore buttons: this screen
@@ -10,7 +11,7 @@ import { CopyCommand } from './settings-backup-copy';
 export function BackupSection({t}:{t:I18n['t']}) {
  const label=(id:string,text:string)=><h4 className="dp-label" id={id}><span>{text}</span></h4>;
  return <>
-  <header className="sov-head"><div className="sov-head__t"><h3 className="sov-h" id="sov-h" tabIndex={-1}>{t('settingsBackup')}</h3><p className="sov-sub">{t('settingsBackupSub')}</p></div></header>
+  <Head title={t('settingsBackup')} info={t('settingsBackupSub')}/>
   <section className="dp-sec" aria-labelledby="bk-h-in">
    {label('bk-h-in',t('settingsBackupHolds'))}
    <div className="ln-rules">
@@ -28,6 +29,7 @@ export function BackupSection({t}:{t:I18n['t']}) {
      <CopyCommand command={command}/>
     </div>)}
    </div>
+   {/* What a restore needs is new information, not help, so it stays one short line under the commands (#614). */}
    <p className="set-hint">{t('settingsBackupRestoreEmpty')}</p>
   </section>
   <section className="dp-sec" aria-labelledby="bk-h-src">

@@ -57,6 +57,9 @@ test('a Manager fills an empty part, cancels and saves with the keyboard, then c
  await page.goto('/c/rs-learning/settings?section=knowledge&part=audience');
  const overlay=page.getByRole('dialog',{name:'Settings'});
  await expect(overlay.getByRole('heading',{name:'Company knowledge',exact:true})).toBeVisible();
+ // The page names itself with no paragraph under it; what the page is waits behind its "i" (#614).
+ await expect(overlay.locator('.sov-head p')).toHaveCount(0);
+ await expect(overlay.locator('#sov-h-info')).toHaveText('What every agent needs to know about the company, in one place. Any edit here reaches all of them.');
  await expect(overlay.locator('.know-tabs .chip')).toHaveText(['Brand voice','Audience','Products and prices','Banned claims','Decisions']);
  await expect(overlay.locator('#know-tab-audience')).toHaveAttribute('aria-pressed','true');
  const part=overlay.locator('.know-page');

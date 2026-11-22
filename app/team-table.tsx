@@ -43,7 +43,7 @@ function AgentSwitch({company,target,agent,agentName,personName,on,label,save}:{
  })}/>{error&&<span className="set-err" role="alert">{t(error)}</span>}</>;
 }
 
-export function TeamTable({company,members,invitations,agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send}:{company:string,members:TeamMember[],invitations:TeamInvitation[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite}) {
+export function TeamTable({company,members,invitations,agents,allowed,invitedAllowed,userId,owner,save,saveInvitation,send,hint=true}:{company:string,members:TeamMember[],invitations:TeamInvitation[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean,save:SaveSwitch,saveInvitation:SaveSwitch,send:SendInvite,hint?:boolean}) {
  const {t}=useI18n();
  const who=(member:TeamMember)=>{const label=member.people?.name||t('member'); return <span className="ta-who"><span className="me__av pp-av" aria-hidden="true">{initial(label)}</span><span className="od-field"><span className="ta-name"><bdi>{label}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="ta-role">{t(member.role)}</span></span></span>;};
  const others=agents.filter(agent=>!agent.is_default);
@@ -59,6 +59,6 @@ export function TeamTable({company,members,invitations,agents,allowed,invitedAll
    {agents.length>0&&<td><span className="ta-all">{t('settingsShownToAll')}</span></td>}
    {others.map(agent=><td key={agent.id}><AgentSwitch company={company} target={{invitation:invitation.id}} agent={agent.id} agentName={agent.name} personName={name} on={invitedAllowed.has(`${invitation.id}:${agent.id}`)} label={`${name} · ${agent.name}`} save={saveInvitation}/></td>)}
   </tr>;})}</tbody></table></div>
- <p className="set-hint ta-hint">{t('settingsTeamHint')}</p>
+ {hint&&<p className="set-hint ta-hint">{t('settingsTeamHint')}</p>}
  {owner&&<InviteSection mode="table" roles={inviteRoles(t)} send={send}/>}</>;
 }

@@ -60,7 +60,7 @@ test('the Owner sees each Agent\'s Routines and pauses, resumes, runs now, resch
  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=routines');
  const overlay=section(page);
  await expect(overlay.getByRole('heading',{name:'Recurring tasks',level:3})).toBeVisible();
- await expect(overlay.locator('.sov-sub')).toContainText('2 on out of 2 · across 2 agents.');
+ await expect(overlay.locator('.sov-h-meta')).toHaveText('2 on out of 2 · across 2 agents.');
  await expect(overlay.locator('.dp-sec .dp-label')).toHaveText([/Lead\s*1/,/Ads\s*1/]);
  await expect(row(page,'Morning brief').locator('.panel-row__d')).toHaveText(/^Every day · 8:00 AM · Last run (Today|Yesterday) /);
  await expect(row(page,'Ads summary').locator('.panel-row__d')).toHaveText('Every day · 9:00 AM');
@@ -105,7 +105,7 @@ test('the Owner sees each Agent\'s Routines and pauses, resumes, runs now, resch
  await overlay.locator('#rt-n-time').fill('08:15');
  await overlay.getByRole('button',{name:'Add',exact:true}).click();
  await expect(row(page,'Send me the cost per lead').locator('.panel-row__d')).toHaveText('Every day · 8:15 AM');
- await expect(overlay.locator('.sov-sub')).toContainText('3 on out of 3 · across 2 agents.');
+ await expect(overlay.locator('.sov-h-meta')).toHaveText('3 on out of 3 · across 2 agents.');
  expect(fake.settings.cron.get(own(ads))!.map(each=>each.schedule.expr)).toEqual(['30 16 * * 4','15 8 * * *']);
  expect(fake.settings.cron.get(profile)!.length,'the main Agent\'s profile got nothing').toBe(1);
 

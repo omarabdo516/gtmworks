@@ -9,6 +9,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { searchFold } from '@/lib/arabic-search.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { SettingsIcon } from './settings-icons';
+import { InfoTip } from './settings-info';
 import { toast } from './toast';
 import { appsChanged } from './company-apps-read';
 import { useAppsReader } from './apps-sheet-open';
@@ -74,9 +75,10 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
  const group=(title:string,list:AppItem[],id:string)=>list.length>0&&<section className="apps-sec" aria-labelledby={id}><h4 className="apps-sec__h" id={id}>{title} <span className="num muted">{list.length}</span></h4><div className="apps-grid">{list.map(card)}</div></section>;
  return <>
   <header className="apps-head">
-   <div className="sheet__top"><h3 {...titled(place)} tabIndex={-1}>{say('title')}</h3>
+   <div className="sheet__top"><h3 {...titled(place)} tabIndex={-1}>{say('title')}</h3>{place.kind!=='sheet'&&<InfoTip about={say('title')} id="apps-sub">{say(owner?'subOwner':'subOther')}</InfoTip>}
     {read!==undefined&&<span className="badge apps-count"><SettingsIcon name="check"/><span className="num">{connectedCount(items)}</span> {say('connected')}</span>}<Close place={place}/></div>
-   <p className="apps-sub">{say(owner?'subOwner':'subOther')}</p>
+   {/* In Settings the line is the title's optional help (#614); the Connect apps sheet keeps it under its title. */}
+   {place.kind==='sheet'&&<p className="apps-sub">{say(owner?'subOwner':'subOther')}</p>}
    <label className="tpl-search"><ShellIcon name="search"/><span className="sr-only">{say('search')}</span><input ref={search} id="apps-q" type="search" autoComplete="off" placeholder={say('searchHint')} value={query} onChange={event=>setQuery(event.target.value)}/></label>
    {read!==undefined&&<div className="tpl-cats" role="group" aria-label={say('categories')}>{(['all',...order.filter(kind=>items.some(item=>item.category===kind))] as const).map(kind=>
     <button key={kind} type="button" className="chip" id={`apps-cat-${kind}`} aria-pressed={category===kind} onClick={()=>setCategory(kind)}>{say(`category.${kind}`)}<span className="chip__n num">{items.filter(item=>kind==='all'||item.category===kind).length}</span></button>)}</div>}
@@ -395,8 +397,8 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
  return <>
   <header className="apps-head">
    <div className="sheet__top"><To place={place} step={{back:item.key}} stay={busy} className="circle-btn" id="apps-back" aria-label={say('back')}><SettingsIcon name="back" rtl={rtl}/></To>
-    <h3 {...titled(place)} tabIndex={-1}>{say('ownName')}</h3><Close place={place}/></div>
-   <p className="apps-sub">{say('ownIntro')}</p>
+    <h3 {...titled(place)} tabIndex={-1}>{say('ownName')}</h3>{place.kind!=='sheet'&&<InfoTip about={say('ownName')} id="apps-own-sub">{say('ownIntro')}</InfoTip>}<Close place={place}/></div>
+   {place.kind==='sheet'&&<p className="apps-sub">{say('ownIntro')}</p>}
   </header>
   <div className="apps-body apps-detail">
    <div className="panel-card own-form">

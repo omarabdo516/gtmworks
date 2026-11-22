@@ -26,12 +26,13 @@ export function RoutinesSection({company,state,agents,canManage,now}:{company:st
  const all=withAny.reduce((count,agent)=>count+(agent.routines?.length??0),0);
  const on=withAny.reduce((count,agent)=>count+(agent.routines?.filter(routine=>routine.on).length??0),0);
  const [adding,setAdding]=useState<string|null>(null);
- const sub=`${withAny.length?`${t('settingsRoutinesCount',on,all,withAny.length)} `:''}${t('settingsRoutinesSub')}`;
+ // How many run is new information beside the name; how to make one is the page's optional help (#614).
+ const count=withAny.length?t('settingsRoutinesCount',on,all,withAny.length):undefined;
  const addable=agents.filter(agent=>agent.state==='found');
  // The head's Add a task is for an Agent that has no Routine yet, so no section of its own to add from.
  const extra=canManage&&addable.some(agent=>!agent.routines?.length)&&adding===null?<button type="button" className="link-btn" id="rt-add" onClick={()=>setAdding(addable.find(agent=>!agent.routines?.length)!.agent)}>{t('routineAdd')}</button>:undefined;
  const unread=agents.filter(agent=>agent.state!=='found');
- return <><Head title={t('settingsRoutines')} sub={sub} extra={extra}/>
+ return <><Head title={t('settingsRoutines')} info={t('settingsRoutinesSub')} meta={count} extra={extra}/>
   {state!=='found'?<div className="panel-card"><p className="panel-empty" role="status">{t('routineNoEngine')}</p></div>:<>
    {adding!==null&&<NewRoutine t={t} company={company} agents={addable} agent={adding} onClose={()=>setAdding(null)}/>}
    {withAny.map(agent=><section key={agent.agent} className="dp-sec" aria-labelledby={`rt-h-${agent.agent}`}>
