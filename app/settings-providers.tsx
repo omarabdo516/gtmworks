@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from 'reac
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { AppTile } from '@/components/app-tile';
+import { markOf as letterOf } from '@/lib/app-mark.mjs';
 import { SettingsIcon } from './settings-icons';
 import { toast } from './toast';
 import type { CompanySignIns, SubscriptionState } from '@/lib/company-sign-in.mjs';
@@ -36,7 +37,7 @@ function entriesOf(t:(key:string)=>string,signIns:CompanySignIns['signIns'],keys
  const held=(keys??[]).filter(row=>row.set).map(row=>({id:`key-${row.provider}`,kind:'key' as const,provider:row.provider,name:row.label,state:'set' as const}));
  return [...signed,...held];
 }
-const markOf=(entry:{kind:Entry['kind'],provider:string,name:string}):{key:string,mark:string}=>({key:entry.kind==='subscription'?subscriptionLogo[entry.provider as SubscriptionProvider]:entry.provider,mark:entry.kind==='subscription'?'':Array.from(entry.name.trim())[0]?.toUpperCase()||'·'});
+const tileOf=(entry:{kind:Entry['kind'],provider:string,name:string}):{key:string,mark:string}=>({key:entry.kind==='subscription'?subscriptionLogo[entry.provider as SubscriptionProvider]:entry.provider,mark:entry.kind==='subscription'?'':letterOf(entry.name)});
 const partial=(state:Entry['state'])=>state==='mainAgentOnly'||state==='someAgentsOnly';
 
 export function CompanyProviders({company,companyName,owner,subscriptions:subs,keys}:{company:string,companyName:string,owner:boolean,subscriptions:ProvidersSubscriptions,keys:ProviderKeysData|null}) {
@@ -82,7 +83,7 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
   <div className="pv-split" data-open={selected?'':undefined}>
    <ul className="panel-card pv-list" ref={list} aria-labelledby="md-h-pv">
     {entries.map(entry=><li key={entry.id}><button type="button" className="panel-row pv-row" id={`pv-row-${entry.id}`} aria-current={entry.id===shown?'true':undefined} aria-controls={`pv-d-${entry.id}`} onClick={()=>open(entry.id)}>
-     <AppTile app={markOf(entry)}/>
+     <AppTile app={tileOf(entry)}/>
      <span className="panel-row__text"><span className="panel-row__t"><bdi>{entry.name}</bdi></span>
       <span className="panel-row__d"><span>{t(entry.kind==='key'?'providersKey':'providersSubscription')}</span><span aria-hidden="true"> · </span><span className={`pv-dot${partial(entry.state)?' pv-dot--part':''}`} aria-hidden="true"/><span>{status(entry)}</span></span></span>
      <span className="panel-row__icon sov-chev pv-chev"><SettingsIcon name="forward" rtl={rtl}/></span>
@@ -96,7 +97,7 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
    <div className="pv-details">
     {entries.map(entry=><div className="pv-detail" key={entry.id} id={`pv-d-${entry.id}`} role="region" aria-labelledby={`pv-d-${entry.id}-name`} hidden={entry.id!==shown}>
      {backButton}
-     <header className="pv-head"><AppTile app={markOf(entry)} size="lg" label={entry.name}/>
+     <header className="pv-head"><AppTile app={tileOf(entry)} size="lg" label={entry.name}/>
       <span className="pv-head__t"><h5 className="pv-name" id={`pv-d-${entry.id}-name`} tabIndex={-1}><bdi>{entry.name}</bdi></h5>
        <span className="pv-type">{t(entry.kind==='key'?'providersKey':'providersSubscription')}</span></span></header>
      {entry.kind==='subscription'
@@ -220,7 +221,7 @@ function SubscriptionActions({company,companyName,owner,provider,name,state,row=
  const disconnect=owner&&(state==='connected'||partial(state)); const connect=owner&&(state==='notConnected'||partial(state));
  const command=`gtmworks sign-in claude --company ${quoted(companyName)}`;
  return <>
-  <div className="panel-row">{row&&<AppTile app={markOf({kind:'subscription',provider,name})} label={name}/>}
+  <div className="panel-row">{row&&<AppTile app={tileOf({kind:'subscription',provider,name})} label={name}/>}
    <span className="panel-row__text"><span className={row?'panel-row__t':'panel-row__d'}>{row?<bdi>{name}</bdi>:t('providersStatus')}</span>
     <span className={row?'panel-row__d':'panel-row__t'} id={`sub-${provider}-state`}>{t(stateText[state])}</span></span>
    {disconnect&&<button type="button" className="btn btn--secondary btn--sm" disabled={pending||!!started} aria-label={t('signInDisconnectLabel',name)} onClick={()=>act('disconnect')}>{t('signInDisconnect')}</button>}
@@ -269,7 +270,7 @@ function KeyActions({company,owner,row,rowed=false}:{company:string,owner:boolea
  };
  const id=`mdl-key-${row.provider}`;
  return <>
-  <div className="panel-row">{rowed&&<AppTile app={markOf({kind:'key',provider:row.provider,name:row.label})} label={row.label}/>}
+  <div className="panel-row">{rowed&&<AppTile app={tileOf({kind:'key',provider:row.provider,name:row.label})} label={row.label}/>}
    <span className="panel-row__text"><span className={rowed?'panel-row__t':'panel-row__d'}>{rowed?<bdi>{row.label}</bdi>:t('providersStatus')}</span>
     <span className={rowed?'panel-row__d':'panel-row__t'} id={`${id}-state`}>{t(row.set?'settingsModelsKeySet':'settingsModelsKeyUnset')}</span></span>
    {owner&&row.set&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',row.label)} onClick={()=>act('remove')}>{t('settingsModelsKeyRemove')}</button>}
