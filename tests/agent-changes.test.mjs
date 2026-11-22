@@ -127,7 +127,7 @@ function owner(proposals,{isOwner=true,answer=null,busy=false,lost=false}={}) {
    return {data:null,error:{message:`unexpected ${name}`}};
   },
  };
- // No Provider has a model switched off (company_provider_models).
+ // No Provider has a model switched off (company_provider_models), and none is switched off (provider_order, #619).
  db.from=()=>({select:()=>({eq:async()=>({data:[],error:null})})});
  return {db,calls};
 }
@@ -363,7 +363,7 @@ test('an edit the database refuses writes nothing, and an edit sent with a decli
 function reader(proposals,{isOwner=true}={}) {
  const base=owner([],{isOwner});
  const db={...base.db,from:table=>{
-  if(table==='company_provider_models') return base.db.from(table);
+  if(table==='company_provider_models'||table==='provider_order') return base.db.from(table);
   assert.equal(table,'agent_change_proposals');
   const filters={};
   const query={select:()=>query,eq:(key,value)=>{ filters[key]=value; return query; },

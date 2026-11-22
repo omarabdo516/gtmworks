@@ -64,6 +64,14 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
  const entries=entriesOf(t,subs.signIns,subs.accounts,keys?.keys??null,names,order);
  // The Providers that take a place: each the Engine lists by its own id (an older sign-in it lists no account for has none).
  const placed=entries.filter(entry=>entry.account);
+ // A saved move waits for the page to read the new order before another is taken, from any Provider's details, so no
+ // move is made from the list as it was: `ordering` is the order the last move saved, cleared once the list reads it (or
+ // after a while, should the read never come).
+ const [ordering,setOrdering]=useState<string|null>(null);
+ const placedNow=placed.map(entry=>entry.id).join(' ');
+ if(ordering!==null&&ordering===placedNow) setOrdering(null);
+ useEffect(()=>{ if(ordering===null) return; const late=setTimeout(()=>setOrdering(null),10000); return ()=>clearTimeout(late); },[ordering]);
+ const gate={waiting:ordering!==null,saved:setOrdering};
  // What the Owner can connect: either subscription, a second account of one already connected included, and a provider
  // with no key.
  const unkeyed=(keys?.keys??[]).filter(row=>!row.set);
@@ -123,8 +131,8 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
       <span className="pv-head__t"><h5 className="pv-name" id={`pv-d-${entry.id}-name`} tabIndex={-1}><bdi>{entry.name}</bdi></h5>
        <span className="pv-type">{t(entry.kind==='key'?'providersKey':'providersSubscription')}</span></span></header>
      {entry.kind==='subscription'
-      ?<SubscriptionDetail company={company} companyName={companyName} owner={owner} entry={entry} placed={placed} keyed={(keys?.keys??[]).some(row=>row.set&&row.provider==='anthropic')}/>
-      :<KeyDetail company={company} owner={owner} entry={entry} placed={placed}/>}
+      ?<SubscriptionDetail company={company} companyName={companyName} owner={owner} entry={entry} placed={placed} gate={gate} keyed={(keys?.keys??[]).some(row=>row.set&&row.provider==='anthropic')}/>
+      :<KeyDetail company={company} owner={owner} entry={entry} placed={placed} gate={gate}/>}
      <ProviderModels company={company} owner={owner} entry={entryId(entry.kind,entry.provider)} panel={entry.id} name={entry.name} models={models?models[entryId(entry.kind,entry.provider)]??[]:null}/>
     </div>)}
     {owner&&<div className="pv-detail" id="pv-d-add" role="region" aria-labelledby="pv-d-add-name" hidden={shown!=='add'}>
@@ -163,7 +171,8 @@ function Advanced({id,provider,children}:{id:string,provider:string,children?:Re
  </details>;
 }
 
-function SubscriptionDetail({company,companyName,owner,entry,placed,keyed}:{company:string,companyName:string,owner:boolean,entry:Entry,placed:Entry[],keyed:boolean}) {
+type Gate={waiting:boolean,saved:(order:string)=>void};
+function SubscriptionDetail({company,companyName,owner,entry,placed,gate,keyed}:{company:string,companyName:string,owner:boolean,entry:Entry,placed:Entry[],gate:Gate,keyed:boolean}) {
  const {t}=useI18n();
  const provider=entry.provider as SubscriptionProvider; const state=entry.state as SubscriptionState;
  return <>
@@ -172,13 +181,13 @@ function SubscriptionDetail({company,companyName,owner,entry,placed,keyed}:{comp
    <Fact label={t('providersConnection')}>{t('providersSubscription')}</Fact>
    <div className="sub-row" id={`sub-${entry.account?`${provider}-${entry.account}`:provider}`}><SubscriptionActions company={company} companyName={companyName} owner={owner} provider={provider} name={entry.name} state={state} account={entry.account}/></div>
   </div>
-  <PlaceFacts company={company} owner={owner} entry={entry} placed={placed}/>
+  <PlaceFacts company={company} owner={owner} entry={entry} placed={placed} gate={gate}/>
   {provider==='anthropic'&&state==='connected'&&keyed&&<p className="set-hint" id="sub-anthropic-order">{t('signInKeyFallback')}</p>}
   <Advanced id={`pv-d-${entry.id}`} provider={provider}><p className="set-hint">{t('signInWhat')} {t('signInHint')} {t('signInOneAccount')}</p></Advanced>
  </>;
 }
 
-function KeyDetail({company,owner,entry,placed}:{company:string,owner:boolean,entry:Entry,placed:Entry[]}) {
+function KeyDetail({company,owner,entry,placed,gate}:{company:string,owner:boolean,entry:Entry,placed:Entry[],gate:Gate}) {
  const {t}=useI18n();
  const row={provider:entry.provider,label:entry.name,set:true};
  return <>
@@ -187,7 +196,7 @@ function KeyDetail({company,owner,entry,placed}:{company:string,owner:boolean,en
    <Fact label={t('providersConnection')}>{t('providersKey')}</Fact>
    <div className="md-key" id={`mdl-key-row-${row.provider}`}><KeyActions company={company} owner={owner} row={row}/></div>
   </div>
-  <PlaceFacts company={company} owner={owner} entry={entry} placed={placed}/>
+  <PlaceFacts company={company} owner={owner} entry={entry} placed={placed} gate={gate}/>
   <Advanced id={`pv-d-key-${row.provider}`} provider={row.provider}><p className="set-hint">{t('settingsModelsKeyWhat')} {t('settingsModelsProviderKeysHint')}</p></Advanced>
  </>;
 }
@@ -198,14 +207,15 @@ const orderReason=(code:string)=>code==='providerNotAllowed'?'providersOrderNotA
 // list then saved as it now reads, and switches it off or on again; its sign-in or key stays in the Engine either way.
 // Every other Member reads both. The switch shows its new state at once and goes back, with a line, when it was not kept.
 // A Provider with no place (an older sign-in the Engine lists no account for) has neither.
-function PlaceFacts({company,owner,entry,placed}:{company:string,owner:boolean,entry:Entry,placed:Entry[]}) {
+function PlaceFacts({company,owner,entry,placed,gate}:{company:string,owner:boolean,entry:Entry,placed:Entry[],gate:Gate}) {
  const {t,language}=useI18n(); const router=useRouter(); const rtl=language==='ar';
  const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [turned,setTurned]=useState<boolean|null>(null);
  const up=useRef<HTMLButtonElement>(null); const down=useRef<HTMLButtonElement>(null);
  // A switch the server now reads as asked is the server's again.
  if(turned!==null&&turned===entry.on&&!busy) setTurned(null);
  const at=placed.findIndex(found=>found.id===entry.id);
- // A move keeps the focus on the button pressed (a click while one is saved does nothing). A move to either end disables
+ // A move keeps the focus on the button pressed: while a move is saved and read back the buttons only say they wait
+ // (aria-disabled), so the focus stays. A move to either end disables
  // that button once the page reads the new order: the focus then goes to the other one, which only that read enables.
  const [refocus,setRefocus]=useState<'up'|'down'|null>(null);
  useEffect(()=>{
@@ -227,9 +237,10 @@ function PlaceFacts({company,owner,entry,placed}:{company:string,owner:boolean,e
   return ok;
  };
  const move=async(by:-1|1)=>{
-  if(busy) return;
+  if(busy||gate.waiting) return;
   const next=placed.filter(found=>found.id!==entry.id); next.splice(at+by,0,entry);
   if(!await save({intent:'order',entries:next.map(found=>({provider:found.provider,account:found.account}))})) return;
+  gate.saved(next.map(found=>found.id).join(' '));
   if(at+by===0) setRefocus('down'); else if(at+by===placed.length-1) setRefocus('up');
   toast(t('providersOrderSaved'));
   router.refresh();
@@ -247,8 +258,8 @@ function PlaceFacts({company,owner,entry,placed}:{company:string,owner:boolean,e
   <div className="panel-card" role="group" aria-labelledby={`${id}-h`}>
    <div className="panel-row pv-fact"><span className="panel-row__text"><span className="panel-row__d" id={`${id}-t`}>{t('providersPlaceLabel')}</span></span>
     <span className="pv-fact__v pv-place"><span id={id}>{place}</span>
-     {owner&&<><button ref={up} type="button" className="circle-btn pv-move" aria-label={t('providersMoveUpLabel',entry.name)} title={t('providersMoveUp')} aria-describedby={id} disabled={at===0} onClick={()=>move(-1)}><SettingsIcon name="up" rtl={rtl}/></button>
-      <button ref={down} type="button" className="circle-btn pv-move" aria-label={t('providersMoveDownLabel',entry.name)} title={t('providersMoveDown')} aria-describedby={id} disabled={at===placed.length-1} onClick={()=>move(1)}><SettingsIcon name="down" rtl={rtl}/></button></>}
+     {owner&&<><button ref={up} type="button" className="circle-btn pv-move" aria-label={t('providersMoveUpLabel',entry.name)} title={t('providersMoveUp')} aria-describedby={id} disabled={at===0} aria-disabled={busy||gate.waiting||undefined} onClick={()=>move(-1)}><SettingsIcon name="up" rtl={rtl}/></button>
+      <button ref={down} type="button" className="circle-btn pv-move" aria-label={t('providersMoveDownLabel',entry.name)} title={t('providersMoveDown')} aria-describedby={id} disabled={at===placed.length-1} aria-disabled={busy||gate.waiting||undefined} onClick={()=>move(1)}><SettingsIcon name="down" rtl={rtl}/></button></>}
     </span></div>
    <div className="panel-row pv-fact"><span className="panel-row__text"><span className="panel-row__t" id={`${id}-use`}>{t('providersUse')}</span></span>
     {owner?<button type="button" className="switch" role="switch" id={`${id}-switch`} aria-checked={on} aria-label={t('providersUseLabel',entry.name)} aria-disabled={busy} onClick={turn}/>

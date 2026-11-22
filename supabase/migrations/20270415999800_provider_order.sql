@@ -34,6 +34,9 @@ create function public.order_providers(c uuid, entries jsonb) returns void
 language plpgsql security definer set search_path='' as $$
 begin
  if not public.is_company_owner(c) then raise exception 'providerNotAllowed' using errcode='42501'; end if;
+ -- One order at a time per Company: a second call waits and applies its whole list to the first one's rows, so two
+ -- Providers never end in one place.
+ perform pg_advisory_xact_lock(hashtextextended('provider_order:'||c::text,0));
  if jsonb_typeof(entries) is distinct from 'array' or jsonb_array_length(entries) not between 1 and 64
   or exists(select 1 from jsonb_array_elements(entries) e where jsonb_typeof(e) is distinct from 'object'
    or coalesce(e->>'provider','') !~ '^[a-z0-9][a-z0-9._-]{0,63}$' or coalesce(e->>'account','') !~ '^[A-Za-z0-9_-]{1,64}$')

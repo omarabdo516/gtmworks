@@ -165,3 +165,20 @@ test('a Provider the Owner switched off offers nothing, and a subscription goes 
   assert.deepEqual(Object.keys(await readProviderModels(database({order:[off('anthropic','key')]}).db,{company,hermes:install(fake)})).sort(),['key-anthropic','key-openrouter','sub-anthropic']);
  } finally { await fake.close(); }
 });
+
+test('an order that could not be read offers nothing, and an unlisted subscription is offered only while none of its accounts is off (#619)', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake);
+  const broken=database(); const from=broken.db.from;
+  broken.db.from=table=>table==='provider_order'?{select:()=>({eq:async()=>({data:null,error:{message:'down'}})})}:from(table);
+  assert.equal(await access(broken.db,fake),null,'a switch that cannot be read never reads as on');
+  // The Engine answers whether Claude is signed in but does not list its accounts.
+  fake.settings.poolNamedFail=true;
+  const ids=async order=>(await access(database({order}).db,fake)).entries.map(entry=>entry.id).sort();
+  assert.deepEqual(await ids([]),['key-anthropic','key-openrouter','sub-anthropic'],'with nothing switched off it is offered');
+  assert.deepEqual(await ids([{provider:'anthropic',account:'c1aude',place:null,enabled:false}]),['key-anthropic','key-openrouter'],
+   'with an account of its kind off, which ones it holds is unknown: not offered');
+  assert.deepEqual(await ids([{provider:'anthropic',account:'key',place:null,enabled:false}]),['key-openrouter','sub-anthropic'],'a key switched off says nothing of the subscription');
+ } finally { await fake.close(); }
+});

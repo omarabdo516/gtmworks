@@ -42,12 +42,12 @@ test('the database\'s refusal is a code: a person who is not the Owner changes n
  assert.deepEqual(await switchProvider(db({error:{code:'XX000',message:'secret detail'}}),{company,provider:'anthropic',account:'key',enabled:true}),{status:502,body:{error:'providerOrderFailed'}});
 });
 
-test('the order reads by Provider; an unread one reads as none, so the Engine\'s own order stands', async () => {
+test('the order reads by Provider; an unread one is null, never every Provider on', async () => {
  const person=db({rows:[{provider:'openai-codex',account:'c0dex2',place:0,enabled:true},{provider:'anthropic',account:'key',place:null,enabled:false}]});
  assert.deepEqual(await readProviderOrder(person,company),{'openai-codex:c0dex2':{place:0,enabled:true},'anthropic:key':{place:null,enabled:false}});
  assert.deepEqual(person.asked,[{table:'provider_order',column:'company_id',value:company}]);
  const broken={from:()=>({select:()=>({eq:async()=>({data:null,error:{message:'down'}})})})};
- assert.deepEqual(await readProviderOrder(broken,company),{});
+ assert.equal(await readProviderOrder(broken,company),null);
 });
 
 test('placed Providers come first in their places, the rest after in the Engine\'s order', () => {

@@ -412,6 +412,12 @@ test('the list follows the Owner\'s order, a switched-off Provider says so, and 
   await expect.poll(() => refresh.mock.calls.length).toBe(1);
   expect(sent).toEqual([{ url: '/api/provider-order', body: { company, intent: 'order', entries: [
     { provider: 'openai-codex', account: '61b59d' }, { provider: 'anthropic', account: 'key' }, { provider: 'openai-codex', account: '86c091' }, { provider: 'anthropic', account: 'c1a2u3' }] } }]);
+  // Until the page reads that order back, a second move is not taken from the list as it was, here or in another's details.
+  const again = document.querySelector<HTMLButtonElement>('#pv-d-key-anthropic .pv-move[aria-label="Move Anthropic down"]');
+  expect(again?.getAttribute('aria-disabled')).toBe('true');
+  again?.click();
+  await new Promise(resolve => setTimeout(resolve, 200));
+  expect(sent.length).toBe(1);
   // The switched-off ChatGPT: its switch reads off and switching it on sends that one switch; nothing is signed in again.
   await screen.getByRole('button', { name: /^ChatGPT 2/ }).click();
   const use = screen.getByRole('switch', { name: 'Use ChatGPT 2' });

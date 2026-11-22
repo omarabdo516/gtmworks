@@ -459,8 +459,12 @@ test('only an Owner starts, follows or removes a company sign-in, checked on the
   assert.deepEqual(await poll(),{status:200,body:{status:'pending'}});
   fake.settings.approve(started.body.session);
   assert.deepEqual(await poll(),{status:200,body:{status:'approved'}});
+  const account=(await readCompanySignIns(owner.db,{company:two,driver,hermes:{address:fake.address,key:'test-only-key'}})).accounts?.[0]?.account;
+  assert.ok(account,'the Engine lists the one account');
   assert.deepEqual(await ask(owner,driver,{intent:'disconnect'}),{status:200,body:{status:'disconnected'}});
   assert.equal(fake.settings.defaultCredentials['openai-codex'],undefined);
+  // Its place and switch go with it (#619).
+  assert.deepEqual(owner.asked.filter(call=>call.name==='forget_provider_order').map(call=>call.args),[{c:two,provider:'openai-codex',account}]);
   assert.deepEqual(owner.logged,[{c:two,provider:'openai-codex',connected:true,session:started.body.session},{c:two,provider:'openai-codex',connected:false,session:null}],'one log row asked for per connect and disconnect');
   assert.deepEqual(await ask(owner,driver,{provider:'anthropic',intent:'start'}),{status:409,body:{error:'signInTerminalOnly'}});
   assert.deepEqual(await ask(owner,driver,{provider:'gemini',intent:'start'}),{status:400,body:{error:'signInInvalid'}});

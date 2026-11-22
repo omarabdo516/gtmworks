@@ -47,8 +47,8 @@ function database({owner=true,rowsFor=rows(),refuse={}}={}) {
   if(name==='log_engine_setting'||name==='set_agent_model'||name==='set_agent_subagents') return {data:null,error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
- // No Provider has a model switched off (#620, company_provider_models).
- db.from=table=>({select:()=>({eq:async()=>table==='company_provider_models'?{data:[],error:null}:{data:null,error:{message:`unexpected ${table}`}}})});
+ // No Provider has a model switched off (#620, company_provider_models), and none is switched off (#619, provider_order).
+ db.from=table=>({select:()=>({eq:async()=>['company_provider_models','provider_order'].includes(table)?{data:[],error:null}:{data:null,error:{message:`unexpected ${table}`}}})});
  return {db,calls,logged:()=>calls.filter(call=>call.name==='log_engine_setting').map(call=>call.args)};
 }
 const schema=(fake)=>{
