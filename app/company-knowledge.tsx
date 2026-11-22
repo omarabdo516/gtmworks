@@ -23,19 +23,20 @@ export async function CompanyKnowledge({slug,company,canManage,part:requested}:{
   db.from('company_log').select('actor_name,created_at').eq('company_id',company).eq('action','company_knowledge_changed').eq('details->>part',part).order('id',{ascending:false}).limit(1).maybeSingle(),
   db.from('hermes_agents').select('id,connection_id,name,is_default').eq('company_id',company).order('name')]);
  // An unread part is never shown as empty: saving over it would replace text the editor never saw. When the Engine does
- // not answer, or the last edit cannot be read, the part says it cannot be read, with no editor, and the rest of Settings
- // stays as it is (#630).
- const unread=!!error||!read.parts;
+ // not answer, the part says it cannot be read, with no editor, and the rest of Settings stays as it is (#630). A last
+ // edit that cannot be read leaves out only who made it.
+ const unread=!read.parts;
+ if(error) console.error('Company knowledge: last edit not read:',company,error.message);
  const body=read.parts?.[part]||'';
  // The Agents this reader sees (RLS): a Member is not told of an Agent hidden from them.
  const agents=agentsMainFirst(agentRows||[]);
  // "Open the memory of {Agent}" (#193): the first Agent the reader sees that is not the main one, else the main Agent.
  const memAgent=memoryAgent(agents);
  const editor=edit?.actor_name||t('member');
- const content=unread?<div className="panel-card"><p className="panel-empty know-unread" role="status">{t('knowUnread')}</p></div>:body?<>
-  <p className="know-meta"><span className="me__av" aria-hidden="true">{editor.trim().slice(0,1).toUpperCase()}</span>
-   <span>{t('knowLastEdited')} <bdi>{editor}</bdi>{edit&&<> · <KnowledgeEditedAt at={edit.created_at}/></>}</span>
-   {agents.length>0&&<><span aria-hidden="true">·</span><span className="fstack" aria-hidden="true">{agents.map(agent=><CompanyAgentFace key={agent.id} agent={agent} size={18}/>)}</span>
+ const content=unread?<div className="panel-card"><p className="panel-empty know-unread">{t('knowUnread')}</p></div>:body?<>
+  <p className="know-meta">{!error&&<><span className="me__av" aria-hidden="true">{editor.trim().slice(0,1).toUpperCase()}</span>
+   <span>{t('knowLastEdited')} <bdi>{editor}</bdi>{edit&&<> · <KnowledgeEditedAt at={edit.created_at}/></>}</span></>}
+   {agents.length>0&&<>{!error&&<span aria-hidden="true">·</span>}<span className="fstack" aria-hidden="true">{agents.map(agent=><CompanyAgentFace key={agent.id} agent={agent} size={18}/>)}</span>
     <span>{t('knowReadBy')} (<span className="num">{agents.length}</span>)</span></>}</p>
   <div className="know-body" dir="auto">{knowledgeBlocks(body).map((block,index)=>block.kind==='p'?<p key={index}>{block.text}</p>
    :<ul key={index} className="know-ul">{block.items.map((item,at)=><li key={at}>{item}</li>)}</ul>)}</div>
