@@ -431,6 +431,10 @@
 .gw .sov .pv-row .panel-row__d { display: flex; flex-wrap: wrap; align-items: center; gap: 0 2px; }
 .gw .sov .pv-dot { display: inline-block; width: 6px; height: 6px; margin-inline-end: 4px; border-radius: 50%; background: var(--gw-accent); }
 .gw .sov .pv-dot--part { background: var(--gw-wait); }
+.gw .sov .pv-dot--off { background: var(--gw-text-4); }
+/* a Provider's place in the list, with the Owner's one-place moves (#619) */
+.gw .sov .pv-place { display: inline-flex; align-items: center; gap: var(--s1); }
+.gw .sov .pv-move:disabled { opacity: .45; }
 .gw .sov .pv-row .pv-chev, .gw .sov .pv-detail > .pv-back { display: none; }
 .gw .sov .pv-details { min-width: 0; }
 .gw .sov .pv-detail { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
