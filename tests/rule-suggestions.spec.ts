@@ -41,23 +41,27 @@ const suggestion=(page:import('@playwright/test').Page,rule:string)=>page.getByR
 // address, and the toast is drawn only once that page is read again (#451), which on a loaded runner takes longer than
 // the default 5 s (#420). Wait for the action's own answer and the rule's saved decision, and give the toast the
 // re-read's time. The answer's body is not awaited: Next stops reading it once the page is drawn, which the browser
-// reports as an aborted request. The toast is watched from the click on, beside the answer and the saved decision, not
-// after them: it shows for 2.8 s from the frame it is drawn in, and each read of the database is a CLI call that on a
-// loaded runner takes seconds, so a toast looked for only once the poll ends has come and gone (#561). Its time starting
-// on that frame, not when it is raised, is what keeps it on the page while the board is still busy drawing the decided
-// list (app/toast.tsx, tests/components/toast.test.tsx).
+// reports as an aborted request.
+// The toast is recorded by the page itself, from the click on (#561): it shows for 2.8 s, and on a runner loaded by four
+// lanes the browser can go seconds without answering Playwright, so a toast looked for from outside (after the database
+// poll, or while the browser is not answering) has come and gone. Each toast's text is kept as it is put on the page,
+// in this document and in one a press before the page is ready would load.
 const reread={timeout:15000};
+const recordToasts=()=>{
+ const page=window as unknown as {toastsSaid?:string[]};
+ if(page.toastsSaid) return;
+ const said:string[]=page.toastsSaid=[];
+ new MutationObserver(()=>{ for(const toast of document.querySelectorAll('.toast')) { const text=toast.textContent||''; if(said.at(-1)!==text) said.push(text); } }).observe(document,{subtree:true,childList:true,characterData:true});
+};
 const decide=async(page:import('@playwright/test').Page,rule:string,button:string,saved:'approved'|'rejected',said:string)=>{
+ await page.addInitScript(recordToasts);
+ await page.evaluate(recordToasts);
  const answered=page.waitForResponse(response=>response.request().method()==='POST'&&!!response.request().headers()['next-action']);
  await suggestion(page,rule).getByRole('button',{name:button}).click();
+ expect((await answered).headers()['x-action-redirect']).toMatch(new RegExp(`\\?decided=${saved==='approved'?'approve':'reject'}&item=\\d+`));
  const decision=()=>(JSON.parse(query(`select suggestion from public.agent_rules where agent_id='${ads}' and body='${rule}'`)) as {suggestion:string}[])[0]?.suggestion;
- await Promise.all([
-  expect(page.locator('.toast')).toHaveText(said,reread),
-  (async()=>{
-   expect((await answered).headers()['x-action-redirect']).toMatch(new RegExp(`\\?decided=${saved==='approved'?'approve':'reject'}&item=\\d+`));
-   await expect.poll(decision).toBe(saved);
-  })(),
- ]);
+ await expect.poll(decision).toBe(saved);
+ await expect.poll(()=>page.evaluate(()=>(window as unknown as {toastsSaid?:string[]}).toastsSaid??[]),reread).toContain(said);
 };
 
 test('in a team a direct Conversation says it is private; worked alone it does not',async({page})=>{
