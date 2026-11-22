@@ -2161,10 +2161,14 @@ previous_release_serves() {
   engine_node "$(first_engine_key)" - < "$RUNNER_TEMP/staged-previous-release/scripts/check-install-conversation.mjs" \
     || fail_update "after the update $1 the previous release answers a Conversation"
 }
+# The previous release's own Engine files, as its install left them: each failed update leaves them so (#554), even while
+# an Engine of the release that does not start restarts on the files that release brought.
+staged_engine_files=$(cd scripts && cksum engine-*) || fail "read the previous release's Engine files"
 for failing in sandbox engine; do
   cp "$root/release-broken-$failing/docker-compose.install.yml" "$root/release-broken-$failing/install.sh" . || fail "the release files whose $failing does not start in place"
   if GTMWORKS_ENGINE_WAIT=40 sh install.sh update > update.log 2>&1; then fail_update "the update whose $failing does not start must fail"; fi
   grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update "the update whose $failing does not start says the previous release keeps serving"
+  [[ $(cd scripts && cksum engine-* 2>&1) == "$staged_engine_files" ]] || fail_update "the update whose $failing does not start leaves the previous release's own Engine files"
   # The release files of a failed update stay in the folder, as a real one leaves them: the previous release's own go
   # back with its command (scripts/get.sh); here they go back by hand.
   cp "$root/release-before-staged/docker-compose.install.yml" "$root/release-before-staged/install.sh" . || fail "the previous release files back after the $failing failure"

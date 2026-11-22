@@ -48,11 +48,14 @@ cleanup() {
   # A run that stopped the worker for a gateway change and failed before the app started leaves it running again.
   if [ "$worker_stopped" = yes ]; then compose start worker || status=1; fi
   # An update that failed before its Engines all started: the previous release keeps serving, so its own Engine files
-  # go back on disk in place of the ones the update copied, whichever step failed. After a rollback this repeats what it
-  # did, or finishes what it could not.
+  # go back on disk in place of the ones the update copied, whichever step failed. After a rollback this copies the kept
+  # ones again, in case the rollback stopped before it did.
+  # A rollback removes the files this release brought itself once no Engine of it can restart on them.
   if [ "$status" -ne 0 ] && [ -n "$engine_files" ]; then
-    if previous_engine_files_back; then
-      [ "$engine_files" = rollback ] || echo "This update stopped before its Engines started: the previous release's own Engine files are back." >&2
+    if [ "$engine_files" = rollback ]; then
+      previous_engine_files_kept_back || echo "The previous release's own Engine files could not be put back: run the install command again." >&2
+    elif previous_engine_files_back; then
+      echo "This update stopped before its Engines started: the previous release's own Engine files are back." >&2
     else
       echo "The previous release's own Engine files could not be put back: run the install command again." >&2
     fi
@@ -457,12 +460,9 @@ keep_previous_engine() {
 # restore and the next update's keep_previous_engine read its own template; an install whose previous release had none
 # is left with none. The work sandbox image this run made is dropped, and when this run rebuilt a source build's tag, the
 # previous image, kept under its own name, gets the tag back. Nothing changes when no update kept the files.
-previous_engine_files_back() {
+previous_engine_files_back() { previous_engine_files_kept_back && new_engine_files_removed; }
+previous_engine_files_kept_back() {
   [ -d .install-lock/previous-engine ] || return 0
-  for file in scripts/engine-*; do
-    [ -f "$file" ] || continue
-    [ -f ".install-lock/previous-engine/${file#scripts/}" ] || rm -f "$file" || return 1
-  done
   for file in .install-lock/previous-engine/engine-*; do
     [ -f "$file" ] || continue
     cp "$file" scripts/ || return 1
@@ -471,6 +471,17 @@ previous_engine_files_back() {
   if [ -f .install-lock/work-sandbox-rebuilt ] && [ "$(cat .work-sandbox-image 2> /dev/null)" = "$work_sandbox_tag" ]; then
     docker tag "$work_sandbox_tag-previous" "$work_sandbox_tag" || return 1
   fi
+}
+# The Engine files the update brought go only once no Engine of this release can start again on them: a container that
+# restarts with a bind source gone gets a folder Docker makes in its place, which the next update cannot copy over. That
+# empty folder goes too, as nothing of the previous release is ever a folder there.
+new_engine_files_removed() {
+  [ -d .install-lock/previous-engine ] || return 0
+  for file in scripts/engine-*; do
+    [ -e "$file" ] || continue
+    [ ! -f ".install-lock/previous-engine/${file#scripts/}" ] || continue
+    if [ -d "$file" ]; then rmdir "$file" || return 1; else rm -f "$file" || return 1; fi
+  done
 }
 # The work sandboxes' volumes and networks the install already has, listed beside the kept Engine files before the update
 # makes anything (#479), so an update that goes back removes only the ones it made itself. A list Docker could not give
@@ -539,6 +550,8 @@ restore_old_engine() {
     || { echo "Docker could not say whether the Engine $(engine_project first) is gone, so the previous release's Engine stays stopped." >&2; return 1; }
   [ -z "$left_engine" ] \
     || { echo "The Engine $(engine_project first) could not be removed, so the previous release's Engine stays stopped." >&2; return 1; }
+  # No Engine of this release is left to restart on the files it brought (#554); that release shipped none.
+  new_engine_files_removed || return 1
   first_network=$(engine_network_of first)
   for service in web worker; do
     id=$(compose ps -q "$service" 2> /dev/null || true)
@@ -573,8 +586,9 @@ restore_previous_engine() {
   if [ -f .install-lock/old-engine ]; then restore_old_engine; return; fi
   [ -f .install-lock/previous-engine/engine-template.yml ] || return 1
   # The sandboxes start again from the image the previous run recorded, never the one this run made: a release names it
-  # by digest, and a source build kept it under the -previous name before rebuilding the tag.
-  previous_engine_files_back || return 1
+  # by digest, and a source build kept it under the -previous name before rebuilding the tag. The files this release
+  # brought stay until every Engine runs from the previous ones, as an Engine of this release may restart meanwhile.
+  previous_engine_files_kept_back || return 1
   restored=0
   for name in $(engine_names); do
     # Each sandbox gets its own Engine's key again, as engine_start gives it: the key last read belongs to another Company.
@@ -585,6 +599,9 @@ restore_previous_engine() {
     # A restored sandbox counts only once its own Engine reaches it over SSH: its health check sees the port, not the key.
     if [ -n "$sandbox_key" ]; then sandbox_reachable "$name" > /dev/null 2>&1 || restored=1; fi
   done
+  # An Engine that did not start from the previous files may still be this release's: its files then stay for it, and
+  # the install command run again puts them back.
+  if [ "$restored" -eq 0 ]; then new_engine_files_removed || restored=1; fi
   remove_new_sandbox_parts
   return "$restored"
 }

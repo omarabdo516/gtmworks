@@ -14,8 +14,8 @@ const previous = { 'engine-template.yml': 'services: {} # previous\n', 'engine-m
 // The release the update brings: its template changed, one file the previous release had is gone, one is new.
 const next = { 'engine-template.yml': 'services: {} # next\n', 'engine-listener-address.sh': 'next listener\n' };
 
-const engineFiles = directory => Object.fromEntries(readdirSync(join(directory, 'scripts')).filter(name => name.startsWith('engine-'))
-  .map(name => [name, readFileSync(join(directory, 'scripts', name), 'utf8')]));
+const engineFiles = directory => Object.fromEntries(readdirSync(join(directory, 'scripts'), { withFileTypes: true }).filter(entry => entry.name.startsWith('engine-'))
+  .map(entry => [entry.name, entry.isDirectory() ? 'a folder' : readFileSync(join(directory, 'scripts', entry.name), 'utf8')]));
 
 // Each failure is one stand-in step that exits non-zero; every other Docker call answers as a healthy install does.
 const docker = `#!/bin/sh
@@ -32,7 +32,10 @@ case "$*" in
   *'count(*) from public.companies'*) echo 1;;
   *'exec -T db psql'*) cat > /dev/null; exit "\${MIGRATION_EXIT:-0}";;
   *'label=com.docker.compose.service=hermes'*) echo "\${OLD_HERMES:-}";;
-  *'engine-first'*' up '*) exit "\${ENGINE_EXIT:-0}";;
+  # The release's Engine that does not start restarts on its own, and Docker makes a bind source that is gone a folder.
+  *'engine-first'*' up '*) if [ -n "\${RESTARTS:-}" ] && [ ! -e scripts/engine-listener-address.sh ]; then mkdir scripts/engine-listener-address.sh; fi
+    # The release whose Engine does not start: the previous release's template starts its Engine again.
+    if grep -q '# next' scripts/engine-template.yml 2> /dev/null; then exit "\${ENGINE_EXIT:-0}"; fi;;
 esac
 `;
 
@@ -59,6 +62,8 @@ function installFolder(t, mode, { before = 'engines' } = {}) {
   // What the update copies in: the target release's Engine files over the previous release's.
   const bring = join(directory, 'bring-next.sh');
   writeFileSync(bring, Object.entries(next).map(([name, text]) => `printf '%s' '${text}' > scripts/${name}\n`).join(''));
+  // A folder Docker made at a bind source this release's Engine mounts: a stand-in for the restart the update cannot see.
+  writeFileSync(bring, readFileSync(bring, 'utf8') + 'if [ -n "${BRING_FOLDER:-}" ]; then mkdir -p scripts/engine-ssh-sync-files.sh; fi\n');
   const installer = readFileSync('scripts/install.sh', 'utf8');
   let command;
   if (mode === 'release') {
@@ -75,7 +80,7 @@ function installFolder(t, mode, { before = 'engines' } = {}) {
   const env = { ...process.env, PATH: `${directory}/bin:${process.env.PATH}`, COMMANDS: commands, BRING_NEXT: bring, GH_TOKEN: '' };
   const run = (extra = {}) => {
     writeFileSync(commands, '');
-    for (const name of Object.keys(engineFiles(directory))) rmSync(join(directory, 'scripts', name));
+    for (const name of Object.keys(engineFiles(directory))) rmSync(join(directory, 'scripts', name), { recursive: true });
     for (const [name, text] of Object.entries(kept)) writeFileSync(join(directory, 'scripts', name), text);
     const result = spawnSync('sh', command, { cwd: directory, env: { ...env, ...extra }, encoding: 'utf8' });
     return { ...result, commands: readFileSync(commands, 'utf8').split('\n'), files: engineFiles(directory) };
@@ -128,6 +133,23 @@ for (const mode of ['source', 'release']) {
     assert.deepEqual(failed.files, previous);
     // The rollback put them back before it started the Engines from them, so the exit handler has nothing to do.
     assert.doesNotMatch(failed.stderr, /stopped before its Engines started/);
+  });
+
+  test(`a ${mode} rollback keeps this release's Engine files until every Engine runs from the previous ones`, t => {
+    // The Engine this release's template made restarts while the rollback runs (CI's staged-update area): a file it
+    // mounts taken away before the previous template replaced it comes back as a folder Docker made.
+    const install = installFolder(t, mode);
+    const failed = install.run({ ENGINE_EXIT: '1', GTMWORKS_ENGINE_WAIT: '1', RESTARTS: '1' });
+    assert.notEqual(failed.status, 0);
+    assert.deepEqual(failed.files, previous);
+  });
+
+  test(`a ${mode} rollback removes a folder Docker made where a file this release brought was`, t => {
+    const install = installFolder(t, mode);
+    // Docker made it before the rollback ran, from a restart of an Engine of this release.
+    const failed = install.run({ ENGINE_EXIT: '1', GTMWORKS_ENGINE_WAIT: '1', BRING_FOLDER: '1' });
+    assert.notEqual(failed.status, 0);
+    assert.deepEqual(failed.files, previous);
   });
 
   test(`a ${mode} update of the release before one Engine per Company whose Engine does not start leaves it no Engine files`, t => {

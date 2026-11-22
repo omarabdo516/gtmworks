@@ -18,7 +18,7 @@ const fn = name => {
   return install.slice(start + 1, install.indexOf('\n}\n', start) + 3);
 };
 const helpers = ['engine_folder', 'sandbox_container', 'exit_container', 'exit_network', 'work_volume', 'work_network', 'host_key_volume',
-  'engine_names', 'work_sandbox_ref', 'keep_previous_engine', 'keep_sandbox_parts', 'previous_engine_files_back', 'remove_new_sandbox_parts'].map(fn).join('');
+  'engine_names', 'work_sandbox_ref', 'keep_previous_engine', 'keep_sandbox_parts', 'previous_engine_files_back', 'previous_engine_files_kept_back', 'new_engine_files_removed', 'remove_new_sandbox_parts'].map(fn).join('');
 
 // The stand-in: `volume ls`, `network ls`, `inspect`, `rm` over two files, every call written to a log on one line, and a failing
 // listing when LIST_FAILS is set, a refused removal when RM_FAILS is. `run` is only the key removal, logged with its volume.
