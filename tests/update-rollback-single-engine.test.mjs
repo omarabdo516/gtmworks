@@ -20,7 +20,7 @@ const fn = name => {
 };
 const helpers = ['engine_project', 'engine_folder', 'sandbox_container', 'exit_container', 'exit_network', 'work_volume', 'work_network',
   'host_key_volume', 'engine_names', 'engine_network_of', 'healthy_within', 'work_sandbox_ref', 'engine_key', 'adopt_engine_key', 'drop_install_env_key', 'write_engine_env',
-  'keep_previous_engine', 'keep_sandbox_parts', 'remove_new_sandbox_parts', 'stop_old_engine', 'remove_old_engine', 'restore_old_engine',
+  'keep_previous_engine', 'keep_sandbox_parts', 'previous_engine_files_back', 'previous_engine_files_kept_back', 'new_engine_files_removed', 'remove_new_sandbox_parts', 'stop_old_engine', 'remove_old_engine', 'restore_old_engine',
   'restore_previous_engine', 'first_engine_up'].map(fn).join('');
 
 // The stand-in. Containers are lines `<id> <name> <state>` in state/containers; the old `hermes` container is the one whose
