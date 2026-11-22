@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { overlaySections, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, companyKnowledgeHref, agentTab, agentTabFocus, memoryAgent } from '../lib/settings-overlay.mjs';
+import { overlaySections, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, companyKnowledgeHref, agentTab, agentTabFocus, memoryAgent, findSections } from '../lib/settings-overlay.mjs';
 import { messages } from '../lib/i18n.mjs';
 
 test('the overlay lists the reference’s ten sections in its order, Your account under “You”', () => {
@@ -136,4 +136,27 @@ test('the overlay shows no invented figures: no prices, no sample usage or backu
   assert.doesNotMatch(source, /EGP|جنيه|MB|Opus|GPT|Gemini/);
   // The Models section keeps one slot for the company's own subscription sign-in (#3).
   assert.match(source, /function ModelsSubscriptions/);
+});
+
+// Finding a setting by name (#613): only the sections the Role sees, by the name the interface language gives them.
+test('a search finds the sections the Role sees by their name in the interface language, and nothing else', () => {
+  const en = key => messages.en[key], ar = key => messages.ar[key];
+  assert.deepEqual(findSections('', 'owner', en).map(([key]) => key), visibleSections('owner').map(([key]) => key));
+  assert.deepEqual(findSections('  ', 'viewer', en).map(([key]) => key), ['agents', 'account']);
+  assert.deepEqual(findSections('back', 'owner', en).map(([key]) => key), ['backup']);
+  assert.deepEqual(findSections('  ACCOUNT ', 'owner', en).map(([key]) => key), ['account']);
+  // Every word of the name counts, not only its first: "Recurring tasks" for "tasks".
+  assert.deepEqual(findSections('tasks', 'owner', en).map(([key]) => key), ['routines']);
+  // Backup is the Owner's, Usage the Owner's and Managers': a Role that may not open them is never told they exist.
+  assert.deepEqual(findSections('back', 'manager', en), []);
+  assert.deepEqual(findSections('usage', 'contributor', en), []);
+  assert.deepEqual(findSections('company', 'viewer', en), []);
+  assert.deepEqual(findSections('zzz', 'owner', en), []);
+  // Arabic: a name typed without its marks, or with another form of alef, still finds it.
+  assert.deepEqual(findSections('التعلم', 'owner', ar).map(([key]) => key), ['learning']);
+  assert.deepEqual(findSections('النسخ', 'owner', ar).map(([key]) => key), ['backup']);
+  assert.deepEqual(findSections('الاستهلاك', 'viewer', ar), []);
+  assert.deepEqual(findSections('إستهلاك', 'manager', ar).map(([key]) => key), ['usage']);
+  // The search reads the interface language's names only: English words find nothing in Arabic.
+  assert.deepEqual(findSections('account', 'owner', ar), []);
 });

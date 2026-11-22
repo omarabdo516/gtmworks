@@ -2,6 +2,7 @@ export type OverlayIcon = 'building' | 'bot' | 'book' | 'bulb' | 'cpu' | 'plug' 
 export type OverlaySection = 'company' | 'agents' | 'knowledge' | 'learning' | 'models' | 'apps' | 'routines' | 'usage' | 'backup' | 'account';
 export const overlaySections: readonly (readonly [OverlaySection, string, OverlayIcon, boolean, boolean])[];
 export function visibleSections(role: string): (readonly [OverlaySection, string, OverlayIcon, boolean, boolean])[];
+export function findSections(query: unknown, role: string, t: (key: string) => string): (readonly [OverlaySection, string, OverlayIcon, boolean, boolean])[];
 export function pickSection(requested: unknown, role: string): OverlaySection;
 export function overlayHref(slug: string, section: OverlaySection, extra?: Record<string, string | undefined>): string;
 export function companyKnowledgeHref(slug: string, role: string): string | undefined;

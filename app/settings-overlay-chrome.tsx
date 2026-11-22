@@ -1,18 +1,13 @@
 import type { ReactNode } from 'react';
 import type { I18n } from '@/lib/i18n.mjs';
-import { visibleSections, overlayHref, type OverlaySection } from '@/lib/settings-overlay.mjs';
+import type { OverlaySection } from '@/lib/settings-overlay.mjs';
 import { OverlayFrame, CloseButton } from './settings-overlay-frame';
 import { SettingsIcon } from './settings-icons';
-import { GuardedSectionLink } from './settings-guard-link';
+import { SettingsNav } from './settings-nav';
 
-// The overlay's bar, its section list and the place of the open section (reference: dialog#sov), around the section the
-// server drew. It imports no server code, so a component test renders the overlay as the server does (#218).
+// The overlay's bar, its section list with its search (settings-nav.tsx) and the place of the open section (reference:
+// dialog#sov), around the section the server drew. It imports no server code, so a component test renders the overlay as the server does (#218).
 export function OverlayChrome({t,slug,companyName,role,readOnly,section,learningWaiting,agentsWaiting=0,initialFocus,children}:{t:I18n['t'],slug:string,companyName:string,role:string,readOnly:boolean,section:OverlaySection,learningWaiting:number,agentsWaiting?:number,initialFocus?:string,children:ReactNode}) {
- // The number beside a section: learning suggestions for an Owner or a Manager (#25), and the Agents' proposed changes
- // for an Owner (#178; design-reference: sovNavHTML's cnt), each read out as waiting for the reader's OK.
- const count=(n:number,said:string)=>n>0&&<span className="sov-count"><span aria-hidden="true">{n}</span><span className="sr-only">{t(said,n)}</span></span>;
- const item=([key,label,icon]:readonly [OverlaySection,string,Parameters<typeof SettingsIcon>[0]['name'],boolean,boolean])=><GuardedSectionLink key={key} className="sb-item sov-nav__i" id={`sov-nav-${key}`} href={overlayHref(slug,key)} current={key===section}><SettingsIcon name={icon}/><span className="od-fill">{t(label)}</span>{key==='learning'?count(learningWaiting,'settingsLearningWaiting'):key==='agents'?count(agentsWaiting,'settingsAgentsWaiting'):null}</GuardedSectionLink>;
- const list=visibleSections(role);
  return <OverlayFrame slug={slug} initialFocus={initialFocus}>
   <header className="sov__bar">
    <svg className="ws__mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--gw-accent)"/><path d="M21.5 11.5a7 7 0 1 0 1 7.5h-6.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -21,10 +16,7 @@ export function OverlayChrome({t,slug,companyName,role,readOnly,section,learning
    <CloseButton/>
   </header>
   <div className="sov__body">
-   <nav className="sov-nav" aria-label={t('settingsSectionsLabel')}>
-    <p className="sov-nav__l"><bdi>{companyName}</bdi></p>{list.filter(entry=>!entry[4]).map(item)}
-    <p className="sov-nav__l">{t('settingsYou')}</p>{list.filter(entry=>entry[4]).map(item)}
-   </nav>
+   <SettingsNav slug={slug} companyName={companyName} role={role} section={section} learningWaiting={learningWaiting} agentsWaiting={agentsWaiting}/>
    <div className="sov-main" id="sov-main"><div className={`sov-page sov-page--${section}`}>{children}</div></div>
   </div>
  </OverlayFrame>;

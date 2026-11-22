@@ -1,5 +1,11 @@
 [
  {
+  "issue": 613,
+  "date": "2026-11-22",
+  "en": { "title": "Find a setting by its name", "body": "In Settings, press / or use the search above the sections to type a setting's name, in English or Arabic, and open it with Enter; you only ever see the sections your role can open." },
+  "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد بالعربي أو بالإنجليزي، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
+ },
+ {
   "issue": 556,
   "date": "2026-11-22",
   "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
