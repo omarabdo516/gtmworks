@@ -34,20 +34,28 @@ function place() {
  if(liveRegion().parentElement!==home) home.append(liveRegion());
 }
 
-// A new toast replaces the one showing and stops its clock, whichever step it is in. Its own clock starts once it is drawn
-// (startClock): 2.8 seconds, or 6 with an action, before it leaves.
+// A new toast replaces the one showing and stops its clock, whichever step it is in. Its own clock starts once it is on
+// the page (startClock): 2.8 seconds, or 6 with an action, before it leaves.
+export const toastTime={plain:2800,action:6000};
 export function toast(text:string,{icon='check',action}:{icon?:ShellIconName,action?:ToastAction}={}) {
  place(); stop(); stop=()=>{};
  show({toast:{id:++count,text,icon,action},leaving:false});
 }
 
-// The clock runs from the frame the toast is first drawn in, not from the call (#561): a page busy drawing what an answer
-// brought back can go seconds without a frame, and a toast timed from the call would come and go in them unseen. A page
-// in a tab out of sight draws no frame either, so the toast waits there until the person comes back.
-function startClock(current:Toast) {
+// A toast's time runs from the first frame the page draws after it is put on the page, not from the call (#561): a page
+// busy drawing what an answer brought back can go seconds without a frame, and a toast timed from the call would come and
+// go in them unseen. A page in a tab out of sight draws no frame either, so the toast waits there until the person comes
+// back. What a toast's action can undo is timed the same way (afterDrawn), so the action never outlives what it undoes.
+export function afterDrawn(ms:number,run:()=>void):()=>void {
  let timer:ReturnType<typeof setTimeout>|undefined;
- const frame=requestAnimationFrame(()=>{ timer=setTimeout(()=>{ stop=leave(140,()=>show({toast:current,leaving:true}),()=>show(null)); },current.action?6000:2800); });
- stop=()=>{ cancelAnimationFrame(frame); clearTimeout(timer); };
+ const frame=requestAnimationFrame(()=>{ timer=setTimeout(run,ms); });
+ return ()=>{ cancelAnimationFrame(frame); clearTimeout(timer); };
+}
+// A clock it replaces is stopped first: a toast's effect can run after the next toast was raised (or twice, in
+// development), and a clock left running would bring the old toast back over the new one.
+function startClock(current:Toast) {
+ stop();
+ stop=afterDrawn(current.action?toastTime.action:toastTime.plain,()=>{ stop=leave(140,()=>show({toast:current,leaving:true}),()=>show(null)); });
 }
 
 // Take the toast away now, as an action on it does once it has taken the person where they were going.
@@ -59,7 +67,7 @@ export function dismissToast() {
 export function ToastHost() {
  const {language}=useI18n();
  const state=useSyncExternalStore(subscribe,()=>shown,()=>null);
- // Each toast's clock starts when the host has put it on the page; a toast that replaced it has already stopped the last.
+ // Each toast's clock starts when the host has put it on the page.
  const arrived=state&&!state.leaving?state.toast:null;
  useEffect(()=>{ if(arrived) startClock(arrived); },[arrived]);
  useEffect(()=>{
