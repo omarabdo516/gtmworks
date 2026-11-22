@@ -66,6 +66,18 @@ test('the list shows each connected subscription and held key with its type and 
   expect(document.activeElement?.id).toBe('pv-row-sub-anthropic');
 });
 
+test('a sign-in a stopped Disconnect left in an Agent\'s own profile reads partly connected, and keeps Disconnect and Connect again', async () => {
+  const screen = await providers({ signIns: signIns('someAgentsOnly', 'notConnected') });
+  expect(rows()[0]).toBe(`ChatGPT ${en.providersSubscription} · ${en.providersPartly}`);
+  expect(document.querySelector('#sub-openai-codex-state')?.textContent).toBe(en.signInSomeAgentsOnly);
+  expect(buttons('pv-d-sub-openai-codex')).toEqual([en.providers, 'Disconnect ChatGPT', 'Connect ChatGPT']);
+  // Its Advanced says what a subscription is, and that one account serves one Company, in both languages.
+  expect(document.querySelector('#pv-d-sub-openai-codex-adv .set-hint')?.textContent).toBe(`${en.signInWhat} ${en.signInHint} ${en.signInOneAccount}`);
+  await screen.unmount();
+  await providers({ signIns: signIns('connected', 'notConnected') }, 'ar');
+  expect(document.querySelector('#pv-d-sub-openai-codex-adv .set-hint')?.textContent).toBe(`${ar.signInWhat} ${ar.signInHint} ${ar.signInOneAccount}`);
+});
+
 test('a held key\'s details say it is a key, the Owner removes or replaces it, and the value typed is sent once and never drawn', async () => {
   const sent: object[] = [];
   vi.stubGlobal('fetch', (_: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); return Promise.resolve(new Response('{}')); });
@@ -80,7 +92,7 @@ test('a held key\'s details say it is a key, the Owner removes or replaces it, a
   await expect.poll(() => refresh.mock.calls.length).toBe(1);
   expect(sent).toEqual([{ company, provider: 'anthropic', intent: 'set', value: secret }]);
   await expect.poll(() => document.querySelector('#mdl-key-anthropic-value')).toBeNull();
-  expect(document.body.innerHTML).not.toContain(secret);
+  await expect.poll(() => document.body.innerHTML.includes(secret)).toBe(false);
   await detail.getByRole('button', { name: 'Remove the Anthropic key' }).click();
   await expect.poll(() => sent.length).toBe(2);
   expect(sent[1]).toEqual({ company, provider: 'anthropic', intent: 'remove' });
@@ -102,7 +114,7 @@ test('the Owner\'s last row connects what is not connected yet: a subscription b
   await add.getByRole('button', { name: en.settingsModelsKeySave }).click();
   await expect.poll(() => refresh.mock.calls.length).toBe(1);
   expect(sent).toEqual([{ company, provider: 'openrouter', intent: 'set', value: secret }]);
-  expect(document.body.innerHTML).not.toContain(secret);
+  await expect.poll(() => document.body.innerHTML.includes(secret)).toBe(false);
   // An Agent made since the last key waits for it, named under the list.
   await expect.element(screen.getByText(new RegExp(en.settingsModelsKeyWaiting))).toBeVisible();
 });

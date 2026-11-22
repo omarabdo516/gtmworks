@@ -36,7 +36,7 @@ function entriesOf(t:(key:string)=>string,signIns:CompanySignIns['signIns'],keys
  const held=(keys??[]).filter(row=>row.set).map(row=>({id:`key-${row.provider}`,kind:'key' as const,provider:row.provider,name:row.label,state:'set' as const}));
  return [...signed,...held];
 }
-const markOf=(entry:{kind:Entry['kind'],provider:string,name:string})=>({key:entry.kind==='subscription'?subscriptionLogo[entry.provider as SubscriptionProvider]:entry.provider,mark:entry.kind==='subscription'?'':Array.from(entry.name.trim())[0]?.toUpperCase()||'·'});
+const markOf=(entry:{kind:Entry['kind'],provider:string,name:string}):{key:string,mark:string}=>({key:entry.kind==='subscription'?subscriptionLogo[entry.provider as SubscriptionProvider]:entry.provider,mark:entry.kind==='subscription'?'':Array.from(entry.name.trim())[0]?.toUpperCase()||'·'});
 const partial=(state:Entry['state'])=>state==='mainAgentOnly'||state==='someAgentsOnly';
 
 export function CompanyProviders({company,companyName,owner,subscriptions:subs,keys}:{company:string,companyName:string,owner:boolean,subscriptions:ProvidersSubscriptions,keys:ProviderKeysData|null}) {
@@ -216,11 +216,10 @@ function SubscriptionActions({company,companyName,owner,provider,name,state,row=
   if(!answer.ok) { setNote({key:String(answer.body.error||'signInFailed'),alert:true}); return; }
   router.refresh();
  });
- const some=state==='mainAgentOnly'||state==='someAgentsOnly';
- const disconnect=owner&&(state==='connected'||some); const connect=owner&&(state==='notConnected'||some);
+ const disconnect=owner&&(state==='connected'||partial(state)); const connect=owner&&(state==='notConnected'||partial(state));
  const command=`gtmworks sign-in claude --company ${quoted(companyName)}`;
  return <>
-  <div className="panel-row">{row&&<AppTile app={{key:subscriptionLogo[provider],mark:''}} label={name}/>}
+  <div className="panel-row">{row&&<AppTile app={markOf({kind:'subscription',provider,name})} label={name}/>}
    <span className="panel-row__text"><span className={row?'panel-row__t':'panel-row__d'}>{row?<bdi>{name}</bdi>:t('providersStatus')}</span>
     <span className={row?'panel-row__d':'panel-row__t'} id={`sub-${provider}-state`}>{t(stateText[state])}</span></span>
    {disconnect&&<button type="button" className="btn btn--secondary btn--sm" disabled={pending||!!started} aria-label={t('signInDisconnectLabel',name)} onClick={()=>act('disconnect')}>{t('signInDisconnect')}</button>}
@@ -267,7 +266,7 @@ function KeyActions({company,owner,row,rowed=false}:{company:string,owner:boolea
  };
  const id=`mdl-key-${row.provider}`;
  return <>
-  <div className="panel-row">{rowed&&<AppTile app={{key:row.provider,mark:Array.from(row.label.trim())[0]?.toUpperCase()||'·'}} label={row.label}/>}
+  <div className="panel-row">{rowed&&<AppTile app={markOf({kind:'key',provider:row.provider,name:row.label})} label={row.label}/>}
    <span className="panel-row__text"><span className={rowed?'panel-row__t':'panel-row__d'}>{rowed?<bdi>{row.label}</bdi>:t('providersStatus')}</span>
     <span className={rowed?'panel-row__d':'panel-row__t'} id={`${id}-state`}>{t(row.set?'settingsModelsKeySet':'settingsModelsKeyUnset')}</span></span>
    {owner&&row.set&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',row.label)} onClick={()=>act('remove')}>{t('settingsModelsKeyRemove')}</button>}
