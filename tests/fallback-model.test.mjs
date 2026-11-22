@@ -27,7 +27,7 @@ function owner({error=null,agents=[{agent:'a1',name:'Lead',profile:'co-x'},{agen
  return {asked,rpc:async(name,args)=>{
   asked.push({name,args});
   if(name==='set_company_fallback_model') return error?{data:null,error}:{data:args.fallback_provider?`${args.fallback_provider}/${args.fallback_model}`:null,error:null};
-  if(name==='company_agent_models') return {data:agents,error:null};
+  if(name==='company_agent_models') return agents?{data:agents,error:null}:{data:null,error:{code:'XX000'}};
   if(name==='company_engine_target') return {data:[target],error:null};
   return {data:null,error:{code:'P0001'}};
  }};
@@ -46,12 +46,13 @@ test('the Owner\'s choice is kept, then every profile an Agent runs on takes it 
  const db=owner(); const {calls,held,driver}=engine();
  const answer=await changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6',hermes,driver,access:enabled(true)});
  assert.deepEqual(answer,{status:200,body:{model:'anthropic/claude-sonnet-4-6',failed:[]}});
- assert.deepEqual(db.asked[0],{name:'set_company_fallback_model',args:{c:company,fallback_provider:'anthropic',fallback_model:'claude-sonnet-4-6'}});
+ const kept=()=>db.asked.filter(call=>call.name==='set_company_fallback_model');
+ assert.deepEqual(kept()[0],{name:'set_company_fallback_model',args:{c:company,fallback_provider:'anthropic',fallback_model:'claude-sonnet-4-6'}});
  assert.deepEqual(Object.fromEntries(held),{'co-x':[claude],'ag-2':[claude]});
  // None empties every chain, so no Agent moves to another kind of Provider.
  calls.length=0;
  assert.deepEqual(await changeFallbackModel(db,{company,value:null,hermes,driver,access:enabled(true)}),{status:200,body:{model:null,failed:[]}});
- assert.deepEqual(db.asked.at(-3),{name:'set_company_fallback_model',args:{c:company,fallback_provider:null,fallback_model:null}});
+ assert.deepEqual(kept().at(-1),{name:'set_company_fallback_model',args:{c:company,fallback_provider:null,fallback_model:null}});
  assert.deepEqual(Object.fromEntries(held),{'co-x':[],'ag-2':[]});
  // A profile already holding the choice is read and not written again.
  calls.length=0;
@@ -64,6 +65,10 @@ test('a profile the Engine did not take the choice on is named by its Agents; th
  const {driver}=engine({},{refuse:new Set(['ag-2'])});
  const answer=await changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6',hermes,driver,access:enabled(true)});
  assert.deepEqual(answer,{status:200,body:{model:'anthropic/claude-sonnet-4-6',failed:[{agent:'a2',name:'Writer'},{agent:'a3',name:'Ads'}]}});
+ // An Agent list that cannot be read keeps nothing: the answer never says every Agent took it.
+ const unread=owner({agents:null});
+ assert.deepEqual(await changeFallbackModel(unread,{company,value:null,hermes,driver,access:enabled(true)}),{status:502,body:{error:'fallbackFailed'}});
+ assert.equal(unread.asked.some(call=>call.name==='set_company_fallback_model'),false);
  // No Engine for the Company: every Agent is named, and the worker gives it the choice later.
  const none=await changeFallbackModel(owner(),{company,value:null,hermes:null,driver,access:enabled(true)});
  assert.equal(none.status,200);
