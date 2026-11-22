@@ -142,7 +142,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const board=card&&{card:card.card,column:card.column};
  // A reply that failed for a cause a retry cannot fix (#422, #457) says so: the Owner fixes it, a Member asks the Owner.
  const ended=latestEnd(messages,ends);
- const reason: 'credit'|'key'|'model'|null=ended==='no_credit'?'credit':ended==='key_refused'?'key':ended==='model_missing'?'model':null;
+ const reason: 'credit'|'key'|'model'|'access'|null=ended==='no_credit'?'credit':ended==='key_refused'?'key':ended==='model_missing'?'model':ended==='no_access'?'access':null;
  const {data:ownsIt}=ended==='no_model'||reason?await db.rpc('is_company_owner',{c:company}):{data:false};
  // A job command's target answers the person (#358), so a refusal of its model call names that Agent, not the chat's (#530).
  const lastRun=messages.filter(message=>message.author==='person').at(-1)?.run_id;

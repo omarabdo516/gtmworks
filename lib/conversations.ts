@@ -206,8 +206,9 @@ const mergedByTime=(record:ConversationMessage[],lines:ConversationMessage[],tie
 export const withDecisions=(record:ConversationMessage[],decisions:Decision[],agentName=''):ConversationMessage[]=>
  mergedByTime(record,[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided})),'before');
 // How each ended run ended (conversation_run_ends); its token use is Hermes's own (#347).
-// A run that failed for a cause a retry cannot fix is no_model (#422), no_credit, key_refused or model_missing (#457).
-export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'};
+// A run that failed for a cause a retry cannot fix is no_model (#422), no_credit, key_refused or model_missing (#457), or
+// no_access when every account it could use ran out (#622).
+export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'|'no_access'};
 // A person's message whose run has no stored reply yet and has not been recorded as ended. A job command's Run (#358)
 // is the target Agent's, which the handover's own row closes: it is no Run of the chat's Agent and never waits here.
 export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[],handed:ReadonlySet<string>=new Set())=>messages.filter(message=>message.author==='person'&&!handed.has(message.run_id)&&!messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)&&!ends.some(run=>run.run_id===message.run_id));

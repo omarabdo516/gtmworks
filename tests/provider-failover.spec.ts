@@ -119,8 +119,8 @@ test('the next request runs on the account that answered and logs nothing; one w
  await page.waitForURL(/\/conversations\/[0-9a-f-]{36}$/);
  await expect.poll(()=>fake.settings.runs.length,{timeout:30000}).toBe(before+1);
  const failed=fake.settings.runs.at(-1)!.id;
- // The app closed the Run as failed, with no reply, before anything else is read.
- await expect.poll(()=>rows<{outcome:string}>(`select outcome from public.conversation_run_ends where run_id='${failed}'`),{timeout:30000}).toEqual([{outcome:'failed'}]);
+ // The app closed the Run as out of access (#622), with no reply, before anything else is read.
+ await expect.poll(()=>rows<{outcome:string}>(`select outcome from public.conversation_run_ends where run_id='${failed}'`),{timeout:30000}).toEqual([{outcome:'no_access'}]);
  expect(rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where author='agent' and run_id='${failed}'`)).toEqual([{n:0}]);
  expect(callsOf(failed)).toEqual(['c0dex3']);
  await expect(page.locator('.turn--agent').filter({hasText:'Reply to: Draft the email'})).toHaveCount(0);
