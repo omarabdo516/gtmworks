@@ -42,7 +42,7 @@ test('an account reads under the Owner\'s name, or its kind\'s with its place, a
 });
 
 test('a pass gives each Company\'s Engine its order once, and again only when it changed or a while later', async () => {
- const work=[{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex2',place:0,enabled:true,name:null},{provider:'openai-codex',account:'c0dex1',place:1,enabled:false,name:null}]}];
+ const work=[{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex2',ordered:true,place:0,enabled:true,name:null},{provider:'openai-codex',account:'c0dex1',ordered:true,place:1,enabled:false,name:null}]}];
  const {calls,driver}=engine(); const memory=new Map(); let now=1000;
  await keepProviderAccounts(worker(work),{memory,driver,engineFor:async()=>hermes,now:()=>now});
  assert.deepEqual(calls.filter(call=>call[0]==='order'),[
@@ -62,7 +62,7 @@ test('a pass gives each Company\'s Engine its order once, and again only when it
 });
 
 test('an order the Engine did not take, or an Engine without the patch, is sent the order again on the next pass', async () => {
- const work=[{company_id:company,accounts:[{provider:'anthropic',account:'c1aude',place:0,enabled:true,name:null}]}];
+ const work=[{company_id:company,accounts:[{provider:'anthropic',account:'c1aude',ordered:true,place:0,enabled:true,name:null}]}];
  for(const [orderState,sentTwice] of [['unreachable',true],['unsupported',true]]) {
   const {calls,driver}=engine({orderState}); const memory=new Map();
   await keepProviderAccounts(worker(work),{memory,driver,engineFor:async()=>hermes});
@@ -94,10 +94,14 @@ test('a move the database refused is sent again on the next pass', async () => {
  assert.equal(await keepProviderAccounts(kept,{memory,driver,engineFor:async()=>hermes}),1);
 });
 
-test('a Company whose Owner never placed or switched off a Provider keeps the Engine\'s own order', async () => {
+test('a Company whose Owner never placed or switched a Provider keeps the Engine\'s own order; one switched on again is sent', async () => {
  const {calls,driver}=engine();
- await keepProviderAccounts(worker([{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex2',place:null,enabled:true,name:'ChatGPT · Omar'}]}]),{driver,engineFor:async()=>hermes});
+ await keepProviderAccounts(worker([{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex2',ordered:false,place:null,enabled:true,name:'ChatGPT · Omar'}]}]),{driver,engineFor:async()=>hermes});
  assert.deepEqual(calls.map(call=>call[0]),['accounts','switches']);
+ // Switched off, then on again while the Engine could not be reached: on, with no place, it is still given to the Engine.
+ calls.length=0;
+ await keepProviderAccounts(worker([{company_id:company,accounts:[{provider:'openai-codex',account:'c0dex1',ordered:true,place:null,enabled:true,name:null}]}]),{driver,engineFor:async()=>hermes});
+ assert.deepEqual(calls.filter(call=>call[0]==='order').map(call=>call[3]),[[{account:'c0dex1',off:false},{account:'c0dex2',off:false},{account:'c0dex3',off:false}],[{account:'c1aude',off:false}]]);
 });
 
 test('a Company whose Engine is not made, does not list its accounts or keeps no record is skipped, and the others are kept', async () => {

@@ -14,7 +14,9 @@
 # - an account switched off: the pool has no such state. A row marked `gtmworks_off` is never selected, by a new
 #   request or by a rotation (_available_entries), and keeps its sign-in, so switching it on needs none;
 # - one route to set both, PUT /api/credentials/pool/<provider>/order?profile=<name>, body
-#   {"entries":[{"id":"<entry id>","off":false},...]} first to last; an entry it does not name loses its place and is on;
+#   {"entries":[{"id":"<entry id>","off":false},...]} first to last; an entry it does not name loses its place and is on.
+#   It writes the stored rows under the store's lock, and every other write of a row keeps the stored order and switch
+#   (hermes_cli/auth.py _merge_pool_row_generation), so a pool loaded before a change cannot write the old one back;
 # - what it moved: each rotation that swapped another account in appends one line, the provider and the two entry ids
 #   with an id of its own and the time, to gtmworks/credential-switches.jsonl in the Engine's root home (every profile
 #   borrows the root's accounts), the last 200 kept; GET /api/credentials/pool/switches lists the last 100. No token,
@@ -76,8 +78,8 @@ routes = '''import fastapi as _gtmworks_fastapi
 async def gtmworks_order_credential_pool(provider: str, body: Dict[str, Any] = _gtmworks_fastapi.Body(...),
                                          profile: Optional[str] = None):
     """gtmworks patch (#621, scripts/engine-pool-order.sh): the Owner's order of a provider's accounts, and which are off."""
-    from dataclasses import replace
     from agent.credential_pool import load_pool
+    from hermes_cli.auth import _auth_store_lock, _load_auth_store, _save_auth_store
 
     provider = (provider or "").strip().lower()
     listed = body.get("entries") if isinstance(body, dict) else None
@@ -89,20 +91,26 @@ async def gtmworks_order_credential_pool(provider: str, body: Dict[str, Any] = _
     wanted = {e["id"]: (place, e["off"]) for place, e in enumerate(listed)}
 
     def _run():
-        pool = load_pool(provider)
-        changed = False
-        for entry in pool.entries():
-            extra = {k: v for k, v in (entry.extra or {}).items() if k not in ("gtmworks_place", "gtmworks_off")}
-            priority = entry.priority
-            if entry.id in wanted:
-                place, off = wanted[entry.id]
-                extra.update(gtmworks_place=place, gtmworks_off=off)
-                priority = place
-            if extra != (entry.extra or {}) or priority != entry.priority:
-                pool._replace_entry(entry, replace(entry, extra=extra, priority=priority))
-                changed = True
-        if changed:
-            pool._persist()
+        # Loading the pool first stores every row it seeds; then the rows are changed in the store itself, under its
+        # lock. Every other write keeps what the store holds for these two keys (_merge_pool_row_generation below), so a
+        # pool loaded before this change can never write an older order or switch back.
+        load_pool(provider)
+        with _auth_store_lock():
+            store = _load_auth_store()
+            rows = (store.get("credential_pool") or {}).get(provider)
+            changed = False
+            for row in rows if isinstance(rows, list) else []:
+                if not isinstance(row, dict):
+                    continue
+                before = dict(row)
+                row.pop("gtmworks_place", None)
+                row.pop("gtmworks_off", None)
+                if row.get("id") in wanted:
+                    place, off = wanted[row["id"]]
+                    row.update(gtmworks_place=place, gtmworks_off=off, priority=place)
+                changed = changed or row != before
+            if changed:
+                _save_auth_store(store)
         ordered = load_pool(provider).entries()
         return {"ok": True, "provider": provider,
                 "entries": [{"id": e.id, "off": (e.extra or {}).get("gtmworks_off") is True} for e in ordered]}
@@ -137,7 +145,23 @@ async def gtmworks_credential_switches():
 
 @router.delete("/api/credentials/pool/{provider}/{index}")
 '''
+merge = '''def _merge_pool_row_generation(entry, disk_entry, provider_id, **kwargs):
+    """gtmworks patch (#621, scripts/engine-pool-order.sh): the stored order and switch win over any other write."""
+    merged = _gtmworks_merge_pool_row_generation(entry, disk_entry, provider_id, **kwargs)
+    if isinstance(disk_entry, dict):
+        merged = {k: v for k, v in merged.items() if k not in ("gtmworks_place", "gtmworks_off")}
+        merged.update({k: disk_entry[k] for k in ("gtmworks_place", "gtmworks_off") if k in disk_entry})
+    return merged
+
+
+def _gtmworks_merge_pool_row_generation(
+'''
 patches = [
+    # Every write of a pool row (write_credential_pool, and a borrowing profile's _update_root_pool_rows) merges it with
+    # the stored row here: the Owner's order and switch are taken from the stored row, so only the order route sets them.
+    (root / "hermes_cli/auth.py",
+     'def _merge_pool_row_generation(\n',
+     merge),
     # The pool's order: a placed entry first, by its place, then the rest by priority as before.
     (root / "agent/credential_pool.py",
      '        self._entries = sorted(entries, key=lambda entry: entry.priority)\n',

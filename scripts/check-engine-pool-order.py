@@ -77,6 +77,13 @@ def root():
     # b runs out too: a is off, so nothing is left to move to, and nothing is recorded.
     assert exhaust(agent) is False and agent.swaps == ["bbbbbb"], agent.swaps
     assert len(switches()) == 1 and load_pool("openai-codex").select() is None
+    # A request that loaded the pool before the Owner's change writes it back (an exhaustion or a rotation does): the
+    # stored order and switch stay the Owner's.
+    stale = load_pool("openai-codex")
+    order([{"id": "cccccc", "off": False}, {"id": "aaaaaa", "off": True}, {"id": "bbbbbb", "off": True}])
+    stale._persist()
+    rows = {r["id"]: r for r in _load_auth_store()["credential_pool"]["openai-codex"]}
+    assert rows["bbbbbb"]["gtmworks_off"] is True and rows["aaaaaa"]["gtmworks_place"] == 1, rows
     # An order that no longer names a: its place and switch leave its stored row, and it is on again.
     order([{"id": "bbbbbb", "off": False}])
     rows = {r["id"]: r for r in _load_auth_store()["credential_pool"]["openai-codex"]}

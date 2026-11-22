@@ -75,10 +75,12 @@ grant execute on function public.record_provider_switches(uuid,jsonb) to service
 
 -- What the worker gives each Company's Engine and reads back from it: every Company that has an Engine, with its
 -- Providers' places, switches and names (provider_order, provider_names), so the Engine takes its accounts in the
--- Owner's order and skips one switched off, and a move reads under the names the Owner gave. No credential is here.
+-- Owner's order and skips one switched off, and a move reads under the names the Owner gave. `ordered` says the Owner
+-- placed or switched the Provider at some time, so a switch turned on again is still given to the Engine; a Provider only
+-- named was never ordered. No credential is here.
 create function public.provider_accounts_work() returns table(company_id uuid, accounts jsonb)
 language sql stable security definer set search_path='' as $$
- select c.id,coalesce((select jsonb_agg(jsonb_build_object('provider',k.provider,'account',k.account,'place',o.place,'enabled',coalesce(o.enabled,true),'name',n.name)
+ select c.id,coalesce((select jsonb_agg(jsonb_build_object('provider',k.provider,'account',k.account,'ordered',o.company_id is not null,'place',o.place,'enabled',coalesce(o.enabled,true),'name',n.name)
    order by k.provider,k.account)
   from (select p.provider,p.account from public.provider_order p where p.company_id=c.id
    union select n.provider,n.account from public.provider_names n where n.company_id=c.id) k

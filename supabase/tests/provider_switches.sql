@@ -51,7 +51,7 @@ select public.rename_provider('10000000-0000-0000-0000-000000000001','openai-cod
 select throws_ok($$select * from public.provider_accounts_work()$$,'42501',null,'no signed-in person reads every Company''s accounts');
 set local role service_role;
 select is((select accounts from public.provider_accounts_work() where company_id='10000000-0000-0000-0000-000000000001'),
- '[{"provider":"openai-codex","account":"c0dex1","place":null,"enabled":false,"name":null},{"provider":"openai-codex","account":"c0dex2","place":null,"enabled":true,"name":"ChatGPT · Omar"}]'::jsonb,
+ '[{"provider":"openai-codex","account":"c0dex1","ordered":true,"place":null,"enabled":false,"name":null},{"provider":"openai-codex","account":"c0dex2","ordered":false,"place":null,"enabled":true,"name":"ChatGPT · Omar"}]'::jsonb,
  'the worker reads each Provider''s place, switch and name, for its own Company');
 reset role;
 select * from finish();
