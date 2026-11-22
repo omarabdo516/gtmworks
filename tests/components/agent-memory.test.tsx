@@ -205,6 +205,10 @@ test('a note the Engine refuses as too long shows one line saying so, and stays 
  expect(refresh).not.toHaveBeenCalled();
 });
 
+// Two of the page's own frames, which the fake clock leaves real: a toast's clock, and what its Undo can undo, start on
+// the first frame after the toast is put on the page.
+const frames = () => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+
 test('Forget this hides the note at once, gives the focus to the next Forget this, and removes it when the toast ends', async () => {
  const send = responder({ forgotten: true });
  vi.stubGlobal('fetch', send);
@@ -219,6 +223,8 @@ test('Forget this hides the note at once, gives the focus to the next Forget thi
  expect([...screen.container.querySelectorAll('.mem-note__t')].map(node => node.textContent)).toEqual(['Omar works in Cairo.']);
  expect(screen.container.querySelector('.dp-label .num')?.textContent).toBe('1');
  expect(send).not.toHaveBeenCalled();
+ // The removal runs on the toast's clock, which starts on the frame the toast is drawn in (#561).
+ await frames();
  await vi.advanceTimersByTimeAsync(5999);
  expect(send).not.toHaveBeenCalled();
  expect(document.querySelector('.toast')?.textContent).toContain('Ads forgot this note');
@@ -232,6 +238,23 @@ test('Forget this hides the note at once, gives the focus to the next Forget thi
  await expect.poll(() => refresh.mock.calls.length).toBe(1);
 });
 
+test('a page that draws no frame for six seconds after Forget this keeps the note until its toast has had its time', async () => {
+ const send = responder({ forgotten: true });
+ vi.stubGlobal('fetch', send);
+ const screen = await drawn({ canForget: true });
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ (screen.getByRole('button', { name: /^Forget this: Prefers short/ }).element() as HTMLButtonElement).click();
+ // Seven seconds pass in this one task, before the page can draw a frame: Undo has not been on screen yet.
+ vi.advanceTimersByTime(7000);
+ await frames();
+ expect(send).not.toHaveBeenCalled();
+ expect(document.querySelector('.toast__act')?.textContent).toBe('Undo');
+ await vi.advanceTimersByTimeAsync(5999);
+ expect(send).not.toHaveBeenCalled();
+ await vi.advanceTimersByTimeAsync(1);
+ expect(send).toHaveBeenCalledTimes(1);
+});
+
 test('a note forgotten for one Agent is removed from that Agent even if another Agent is drawn before the toast ends', async () => {
  const send = responder({ forgotten: true });
  vi.stubGlobal('fetch', send);
@@ -241,6 +264,7 @@ test('a note forgotten for one Agent is removed from that Agent even if another 
  (screen.getByRole('button', { name: /^Forget this: Prefers short/ }).element() as HTMLButtonElement).click();
  await vi.advanceTimersByTimeAsync(0);
  await screen.rerender(view({ canForget: true, agent: { id: 'ag-2', name: 'SEO' }, notes: [{ id: 'memory:memory:5:9a8b7c6d5e4f', text: 'Writes the blog.' }] }));
+ await frames();
  await vi.advanceTimersByTimeAsync(6000);
  expect(send).toHaveBeenCalledTimes(1);
  const [url, init] = send.mock.calls[0];
