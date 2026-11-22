@@ -24,9 +24,9 @@ select json_build_object(
  'logged_from_its_source',position('''reply_card_answers''' in pg_get_constraintdef((select oid from pg_constraint where conname='company_log_source_check')))>0
   and position('''member_invitations''' in pg_get_constraintdef((select oid from pg_constraint where conname='company_log_source_check')))>0,
  'no_policy_copy',to_regprocedure('public.engine_tool_policy()') is null,
- 'person_answers',has_function_privilege('authenticated','public.answer_question(uuid,uuid,bigint,int,text,uuid)','execute')
-  and not has_function_privilege('anon','public.answer_question(uuid,uuid,bigint,int,text,uuid)','execute')
-  and not has_function_privilege('service_role','public.answer_question(uuid,uuid,bigint,int,text,uuid)','execute'),
+ 'person_answers',has_function_privilege('authenticated','public.answer_question(uuid,uuid,bigint,int,text,uuid,int[])','execute')
+  and not has_function_privilege('anon','public.answer_question(uuid,uuid,bigint,int,text,uuid,int[])','execute')
+  and not has_function_privilege('service_role','public.answer_question(uuid,uuid,bigint,int,text,uuid,int[])','execute'),
  'closers_track_and_settle',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute'))
   from unnest(array['public.track_run_question(uuid,text,jsonb,boolean,timestamptz)','public.settle_question(bigint,text)']) f),
  'helpers_private',not has_function_privilege('authenticated','public.reply_card_valid(text,text,jsonb)','execute')

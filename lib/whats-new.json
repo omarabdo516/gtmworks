@@ -1,5 +1,11 @@
 [
  {
+  "issue": 648,
+  "date": "2026-11-22",
+  "en": { "title": "Pick several answers to a question", "body": "When an Agent asks a question where several choices fit, its card now shows every choice: pick one or more and press Send, or write your answer in the message as before." },
+  "ar": { "title": "اختار أكتر من إجابة للسؤال", "body": "لما وكيل يسأل سؤال ينفع تختار فيه أكتر من حاجة، السؤال بقى بيعرض كل الاختيارات: اختار واحدة أو أكتر ودوس ابعت، أو اكتب ردك في الرسالة زي الأول." }
+ },
+ {
   "issue": 621,
   "date": "2026-11-22",
   "en": { "title": "A request goes on when a subscription runs out", "body": "When one ChatGPT or Claude subscription has no quota left, the same request now goes on with the next one of its kind in your providers order, skipping any you switched off; the Activity log notes the move and Settings shows which ran out." },

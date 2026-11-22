@@ -6,13 +6,13 @@
 // request expires or the run is stopped, and its reply is then also given the choices (null for one never taken).
 // A conversation's session (#346) reads as the turns `sessions` holds for its id, or missing.
 import { randomUUID } from 'node:crypto';
-/** @typedef {{id:string,text:string,choices:string[],multiple:boolean,answer?:string|null,settled:'answered'|'expired'|null}} FakeQuestion */
+/** @typedef {{id:string,text:string,choices:string[],multiple:boolean,answer?:import('../lib/engine.mjs').QuestionAnswer|null,settled:'answered'|'expired'|null}} FakeQuestion */
 /** @typedef {{id:string,description:string,command:string,choices:import('../lib/engine.mjs').PermissionChoice[],choice?:string|null,settled:'answered'|'expired'|null}} FakePermission */
 /** @typedef {{id:string,key:string,conversation:string,input:import('../lib/engine.mjs').RunInput,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],history:import('../lib/engine.mjs').HistoryEntry[]|null,reads:number,stopped:boolean,ended:boolean,asked:FakeQuestion[],permissions:FakePermission[]}} FakeRun */
 // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
 // itself, so a fake's reply and tools read a person's words as they always did.
 const inputText=/** @param {import('../lib/engine.mjs').RunInput} input */ input=>typeof input==='string'?input:(input.at(-1)?.content.flatMap(part=>part.type==='text'?[part.text]:[]).join('')??'');
-/** @returns {{settings:{ending:'completed'|'failed'|'noModel'|'credit'|'key'|'model',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,sessions:Map<string,import('../lib/engine.mjs').SessionTurn[]>,sessionUsage:Map<string,import('../lib/engine.mjs').SessionUsage>,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'},runs:FakeRun[],connections:object[],appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string}[],removed:string[],answers:{run:string,question:string,text:string}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
+/** @returns {{settings:{ending:'completed'|'failed'|'noModel'|'credit'|'key'|'model',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,sessions:Map<string,import('../lib/engine.mjs').SessionTurn[]>,sessionUsage:Map<string,import('../lib/engine.mjs').SessionUsage>,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'},runs:FakeRun[],connections:object[],appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string}[],removed:string[],answers:{run:string,question:string,text:import('../lib/engine.mjs').QuestionAnswer}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
 export function fakeEngine() {
  const settings={ending:/** @type {'completed'|'failed'|'noModel'|'credit'|'key'|'model'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12}),
   // How providing an Agent's own profile ends: with no subscription, a made profile has no model to answer with.
@@ -39,7 +39,7 @@ export function fakeEngine() {
  const agentReads=/** @type {string[]} */([]);
  const provided=/** @type {{name:string,instructions:string}[]} */([]);
  const removed=/** @type {string[]} */([]);
- const answers=/** @type {{run:string,question:string,text:string}[]} */([]);
+ const answers=/** @type {{run:string,question:string,text:import('../lib/engine.mjs').QuestionAnswer}[]} */([]);
  const permits=/** @type {{run:string,permission:string,choice:string}[]} */([]);
  // How many reads of the profile's apps were made.
  const appReads={count:0};
