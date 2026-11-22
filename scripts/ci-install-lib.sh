@@ -264,6 +264,14 @@ probe() {
 }
 # One Engine's Company's exit (#394), derived from the Engine's container name as its sandbox is.
 exit_of() { printf '%s' "$1" | sed 's/^gtmworks-engine-/gtmworks-exit-/'; }
+# Whether a container publishes a port on the host (#540): true for any real binding, in its running ports or in the ones
+# it asked for, never for a port it only exposes; Docker 29 lists that one with a null binding where Docker 28 listed
+# none, so a count of its ports is no answer. A container it cannot read counts as publishing, so a check fails closed.
+publishes_host_port() {
+  local bindings
+  bindings=$(docker inspect -f '{{json .NetworkSettings.Ports}} {{json .HostConfig.PortBindings}}' "$1") || return 0
+  [[ $bindings == *'"HostPort"'* ]]
+}
 # Every address a container has, on every network it joins, comma-separated.
 addresses_of() { docker inspect -f '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$1" | grep . | paste -sd, -; }
 # The sandbox exit proof (scripts/check-install-sandbox-exit.mjs) run inside a Company's sandbox the way an Agent's
