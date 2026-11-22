@@ -11,7 +11,7 @@
 //                                                  writes tests/browser-shard-times.json from Playwright JSON reports
 //
 // The times are each file's seconds summed over its tests and their retries; a file with none counts as the middle
-// measured one. Refresh them from a main run's `browser-times-<i>` artifacts (each shard's `times.json`) when the
+// measured one. Refresh them from a run's `browser-times-<i>` artifacts (each shard's `times.json`) when the
 // shards drift apart.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
