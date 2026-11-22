@@ -113,8 +113,15 @@ trademarks.
 ## Simple Icons
 
 Source: https://github.com/simple-icons/simple-icons (npm `simple-icons` 16.38.0). The apps' logos in `public/logos/simple/`
-are copied with each brand's colour from the set's data set as their fill; CC0 1.0, `public/logos/simple/LICENSE.md`. The
-logos remain their owners' trademarks.
+are copied with each brand's colour from the set's data set as their fill; a mark whose colour is too pale to read on a
+white tile (Intercom, Mailchimp, Robinhood) is drawn in black on a rounded plate of that colour, as the brand's own app
+icon is. CC0 1.0, `public/logos/simple/LICENSE.md`. The logos remain their owners' trademarks.
+
+## Company logos
+
+The apps' logos in `public/logos/brand/` are each company's own logo file, taken from its brand, press or official site
+page and cut to the mark where the file held a wordmark too (#577); `public/logos/brand/SOURCES.md` names the page of each
+file. They are shown only to name the app they belong to and remain their owners' trademarks.
 
 ## Matt Pocock skills
 

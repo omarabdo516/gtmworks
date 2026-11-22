@@ -62,7 +62,7 @@ export function AgentSkills({agent,name,slug,learning,skills,editable}:{agent:st
  const on=(skill:AgentSkillRow)=>draftState?draftState.draft[`skill:${skill.name}`]??(skill.enabled?'on':'off'):skill.enabled?'on':'off';
  const count=skills?skills.filter(skill=>on(skill)==='on').length:0;
  return <section className="dp-sec" aria-labelledby="set-h-skills">
-  <h4 className="dp-label" id="set-h-skills"><span>{t('settingsSkills')}{skills&&<> <span className="muted num">{count}/{skills.length}</span></>}</span></h4>
+  <h5 className="dp-label" id="set-h-skills"><span>{t('settingsSkills')}{skills&&<> <span className="muted num">{count}/{skills.length}</span></>}</span></h5>
   {!skills?<div className="panel-card"><p className="panel-empty">{t('settingsSkillsUnread')}</p></div>
    :skills.length===0?<div className="panel-card"><p className="panel-empty">{t('settingsSkillsEmpty',name)}</p></div>
    :<ul className="panel-card">{skills.map((skill,index)=><SkillRow key={skill.name} agent={agent} slug={slug} learning={learning} skill={skill} editable={editable} index={index}/>)}</ul>}

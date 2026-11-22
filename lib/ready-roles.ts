@@ -1,3 +1,4 @@
+import { markOf } from './app-mark.mjs';
 import { roleApps, roleTemplates, type RoleId } from './role-templates.mjs';
 import type { Language } from './i18n.mjs';
 import en from './messages/ready-made.en.json';
@@ -16,7 +17,7 @@ export function readyRoles(language:Language,alone:boolean):ReadyRole[] {
  const text=catalogues[language];
  return (Object.keys(roleTemplates) as RoleId[]).map(id=>{
   const {category,name}=roleTemplates[id];
-  const apps=roleTemplates[id].apps.map(key=>({key,...roleApps[key]}));
+  const apps=roleTemplates[id].apps.map(key=>({key,name:roleApps[key].name,mark:markOf(roleApps[key].name)}));
   const role=text[`role.${id}`], english=en[`role.${id}`];
   const words=Object.values(catalogues).flatMap(other=>[`role.${id}`,`line.${id}`,`category.${category}`,`hand.${id}`,`handAlone.${id}`].map(key=>other[key]));
   return {id,category,name,role,line:text[`line.${id}`],handoff:(alone&&text[`handAlone.${id}`])||text[`hand.${id}`]||null,apps,

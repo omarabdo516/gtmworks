@@ -1,9 +1,9 @@
 [
  {
-  "issue": 554,
+  "issue": 615,
   "date": "2026-11-22",
-  "en": { "title": "A failed update leaves your engine's files as they were", "body": "When an update stops before its agent engines start, for example because a database change fails, the engine files of the version you run are put back, so adding a company, a restore or the next update use that version's own engine again." },
-  "ar": { "title": "التحديث اللي يفشل بيسيب ملفات المحرك زي ما كانت", "body": "لما التحديث يقف قبل ما محركات الوكلاء تشتغل، مثلاً عشان تغيير في قاعدة البيانات فشل، ملفات المحرك بتاعة النسخة اللي شغّالة عندك بترجع مكانها، فإضافة شركة أو الاسترجاع أو التحديث الجاي بيستخدموا محرك النسخة دي نفسها تاني." }
+  "en": { "title": "An agent's settings in five groups", "body": "An agent's page in Settings now reads in five groups, Identity, How it works, Thinking, Voice, and Tools and skills, with Good morning as one row with its switch and time, and the voice's speed, Pause and Delete under Advanced." },
+  "ar": { "title": "إعدادات الوكيل في خمس مجموعات", "body": "صفحة الوكيل في الإعدادات بقت متقسمة خمس مجموعات: الهوية، وطريقة الشغل، والتفكير، والصوت، والأدوات والمهارات، وصباح الخير بقى سطر واحد فيه المفتاح والميعاد، وسرعة الصوت والإيقاف المؤقت والمسح تحت «متقدم»." }
  },
  {
   "issue": 465,
@@ -22,6 +22,18 @@
   "date": "2026-11-22",
   "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
   "ar": { "title": "البطاقة اللي تسيبها بعيد بتفضل قدامك", "body": "لما تشيل بطاقة على لوحة التسويق وتسيبها في عمود بعيد عن مكانها، اللوحة دلوقتي بتفضل مكان ما سبتها بدل ما تنطّ الأول لمكان البطاقة القديم." }
+ },
+ {
+  "issue": 577,
+  "date": "2026-11-22",
+  "en": { "title": "Every app shows its own logo", "body": "In Connect apps and Settings, Apps, every app now shows its company's official logo instead of letters, in the same tile and clear in the light and the dark theme." },
+  "ar": { "title": "كل تطبيق بقى بلوجو شركته", "body": "في «وصّل التطبيقات» وفي الإعدادات، التطبيقات، كل تطبيق بقى بيظهر باللوجو الرسمي بتاع شركته بدل الحروف، في نفس المربع، وواضح في الوضع الفاتح والغامق." }
+ },
+ {
+  "issue": 554,
+  "date": "2026-11-22",
+  "en": { "title": "A failed update leaves your engine's files as they were", "body": "When an update stops before its agent engines start, for example because a database change fails, the engine files of the version you run are put back, so adding a company, a restore or the next update use that version's own engine again." },
+  "ar": { "title": "التحديث اللي يفشل بيسيب ملفات المحرك زي ما كانت", "body": "لما التحديث يقف قبل ما محركات الوكلاء تشتغل، مثلاً عشان تغيير في قاعدة البيانات فشل، ملفات المحرك بتاعة النسخة اللي شغّالة عندك بترجع مكانها، فإضافة شركة أو الاسترجاع أو التحديث الجاي بيستخدموا محرك النسخة دي نفسها تاني." }
  },
  {
   "issue": 520,

@@ -1,0 +1,1 @@
+| `app-logos.test.mjs` | Every app of the catalogue maps to its company's logo file in `public/logos/` (Simple Icons, Lobe Icons, or the company's own file named in `brand/SOURCES.md`), a shared name takes the right company's mark, every logo is a static SVG of the install, and a letter mark is the first letter of the name (#577). |
