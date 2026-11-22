@@ -48,7 +48,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 - ✅ **Lead makes an Agent from a plain request.** The Owner says what is needed and Lead creates it in the Engine. [#12, #13, #89, #91]
 - ✅ **Ready-made roles.** Lead starts from a proven role (ads, ad reviewer, article writer, numbers, coder) and the gallery sits beside its composer. [#14, #102, #104, #189]
 - ✅ **One Engine profile per Agent.** An Agent is its own profile with its own memory, Skills and settings, and the main Agent keeps the Company's first profile. [#119, #120, #121, ADR 0016, decision 0035]
-- ✅ **Agent settings are the Engine's real settings.** Name, About, How it works, thinking level, model, Skill switches, saved with a bar. [#125, #161, #175, #176, #179, #180, #352]
+- ✅ **Agent settings are the Engine's real settings.** Name, About, How it works, thinking level, model, Skill switches, saved with a bar, in five groups with Advanced last. [#125, #161, #175, #176, #179, #180, #352, #615]
 - ✅ **The main Agent is configurable like any Agent.** [#425, #431]
 - 🟡 **Agents propose changes to themselves.** An Agent proposes a change to its model, instructions or settings; the Owner edits, then approves, and the Agents list shows "Proposal waiting". Merged; waiting for the release (#572). [#19, #178, #482, #484]
 - 🟡 **Every Agent asks any other Agent (Handover).** In a Conversation or a channel, any Agent hands a job to any other, even one the person cannot see, and the asked Agent may hand on in turn. Merged; waiting for the release (#572). [#475, #476, #477, decision 0057]

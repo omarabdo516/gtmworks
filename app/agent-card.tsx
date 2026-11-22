@@ -8,6 +8,7 @@ import { localeFor } from '@/lib/i18n.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
+import { markOf } from '@/lib/app-mark.mjs';
 import { knownApp } from '@/lib/app-catalogue.mjs';
 import { madeDay, useZone } from '@/app/agent-made';
 import type { AgentRequestView, MadeAgent } from '@/lib/conversations';
@@ -22,14 +23,8 @@ export function useCardText() {
 
 // The three things no Agent does without a person (ADR 0006, 0008).
 const never=['madeAgentPublish','madeAgentSpend','madeAgentMessage'];
-// A request names its apps in words, so its tile is the known app of that name, else the name's own letters: the
-// capitals of its first word when it has two (WhatsApp, as the reference marks it), else its initials.
-function appOf(name:string) {
- const found=knownApp(name);
- if(found) return found;
- const words=name.trim().split(/\s+/); const capitals=words[0].replace(/[^A-Z]/g,'');
- return {key:'',mark:capitals.length>1?capitals.slice(0,2):(words.length>1?words[0][0]+words[1][0]:words[0].slice(0,2)).toUpperCase()};
-}
+// A request names its apps in words, so its tile is the known app of that name, else the name's first letter (#577).
+const appOf=(name:string)=>knownApp(name)??{key:'',mark:markOf(name)};
 function AgentRows({job,apps,tiles=false,children}:{job:string,apps:string[]|null,tiles?:boolean,children?:ReactNode}) {
  const {c}=useCardText();
  return <dl className="kv ac-kv">

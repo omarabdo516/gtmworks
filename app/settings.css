@@ -222,7 +222,6 @@
 .gw .sov .vc-select:disabled { cursor: default; }
 .gw .sov .vc-play { flex: none; --od-icon-size: 14px; }
 .gw .sov .vc-quote { color: var(--gw-text-2); }
-.gw .sov .sov-rules { margin-bottom: var(--s6); }
 .gw .sov .sov-soon .panel-empty { padding-block: 10px; }
 /* The rules an Agent was told in its chat (#18; design-reference: .rl-list, .rl-row), with an Owner's or a Manager's Remove */
 .gw .sov .rl-list { padding-block: var(--s1); }
@@ -428,10 +427,29 @@
    their form are drawn in the details too, so they live in app/shell.css. */
 .gw .sov .sov-ag-l { display: inline-flex; align-items: center; gap: var(--s2); color: var(--gw-text-1); }
 
-/* Good morning (#182; design-reference/index.html .ck-time, .ck-hint): the time select keeps its own width, reads muted
-   while the switch is off, and the hint sits under the card. */
+/* Good morning (#182; design-reference/index.html .ck-time): one row since #615, its name and one short line facing the
+   zone, the time and the switch. The time select keeps its own width and reads muted while the switch is off; on a phone
+   the controls drop under the name. */
 .gw :is(.sov, .modal.team-dlg) .set-input.ck-time { width: auto; min-width: 120px; flex: none; cursor: pointer; appearance: auto; padding-inline-end: 6px; }
 .gw :is(.sov, .modal.team-dlg) .set-input.ck-time:disabled { color: var(--gw-text-4); cursor: default; }
-.gw .sov .ck-hint { padding-inline: var(--s3); margin: 0; }
-.gw .sov .ck-hint + .ck-hint { margin-top: var(--s1); }
+.gw .sov .ck-row { flex-wrap: wrap; }
+.gw .sov .ck-row .panel-row__text { flex-basis: 220px; }
+.gw .sov .ck-controls { display: inline-flex; align-items: center; gap: var(--s2); flex: none; margin-inline-start: auto; }
+.gw .sov .ck-zone { font-size: var(--gw-fs-xs); color: var(--gw-text-3); white-space: nowrap; }
+
+/* An Agent's page in five groups (#615): each group's name once, a step above the quiet labels of its parts, and the
+   groups further apart than the parts inside one. Advanced closes the page, shut until opened. */
+.gw .sov .set-group { display: flex; flex-direction: column; gap: var(--s3); }
+/* DESIGN.md Typography: Section title, 600 at 16px / 24px. */
+.gw .sov :is(.set-group__h, .set-advanced__h) { margin: 0; padding-inline: 2px; font-size: 16px; line-height: 24px; font-weight: 600; color: var(--gw-text-1); }
+.gw .sov .set-group > .set-hint { padding-inline: 2px; }
+.gw .sov .set-advanced { border-top: 0.5px solid var(--gw-border-2); padding-top: var(--s3); }
+.gw .sov .set-advanced__s { display: flex; align-items: center; gap: var(--s2); min-height: 32px; padding-inline: 2px; list-style: none; cursor: pointer;
+  border-radius: var(--gw-r-sm); --od-icon-size: 16px; }
+.gw .sov .set-advanced__s::-webkit-details-marker { display: none; }
+.gw .sov .set-advanced__s .sov-icon { color: var(--gw-text-3); transition: transform var(--gw-dur-fast) ease; }
+.gw .sov .set-advanced[open] > .set-advanced__s .sov-icon { transform: rotate(90deg); }
+.gw .sov .set-advanced[open] > .set-advanced__s .sov-icon:dir(rtl) { transform: rotate(-90deg); }
+.gw .sov .set-advanced__body { display: flex; flex-direction: column; gap: var(--s6); padding-top: var(--s3); }
+@media (prefers-reduced-motion: reduce) { .gw .sov .set-advanced__s .sov-icon { transition: none; } }
 
