@@ -6,6 +6,12 @@
   "ar": { "title": "وش الوكيل بينط في الصفحة اللي بتفتح ببطء", "body": "لما تدوس على مربع وكيل، وشه في الصفحة اللي بتفتح بقى بينط مهما الصفحة تاخد وقت عشان تظهر، مش بس لما تظهر على طول." }
  },
  {
+  "issue": 556,
+  "date": "2026-11-22",
+  "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
+  "ar": { "title": "البطاقة اللي تسيبها بعيد بتفضل قدامك", "body": "لما تشيل بطاقة على لوحة التسويق وتسيبها في عمود بعيد عن مكانها، اللوحة دلوقتي بتفضل مكان ما سبتها بدل ما تنطّ الأول لمكان البطاقة القديم." }
+ },
+ {
   "issue": 520,
   "date": "2026-11-21",
   "en": { "title": "A Conversation opens cleanly in your own time zone", "body": "Outside UTC, a Conversation's message times now appear straight in your own time zone, without the page redrawing itself as it opens." },
