@@ -14,6 +14,8 @@ type Held={apps:AppItem[]|null,at:number};
 export type Reader={company:string,person:string,language:string};
 const held=new Map<string,Held>();
 let readingFor:string|undefined;
+// Counts the sign-ins this tab has seen, so a read asked for before one is dropped even when the same person is back.
+let signIns=0;
 const listeners=new Set<()=>void>();
 // One person's reads of one Company share a prefix: a change to an app makes every language's read of it stale.
 const companyOf=({company,person}:Pick<Reader,'company'|'person'>)=>`${person}:${company}:`;
@@ -25,7 +27,7 @@ const freshFor=60_000;
 export function useSignedIn(person:string) {
  useLayoutEffect(()=>{
   if(readingFor===person) return;
-  readingFor=person;
+  readingFor=person; signIns++;
   if(held.size) { held.clear(); listeners.forEach(listener=>listener()); }
  },[person]);
 }
@@ -34,9 +36,10 @@ const current=({person}:Reader)=>!person||person===readingFor;
 
 export async function readApps(reader:Reader) {
  if(!current(reader)) return;
+ const asked=signIns;
  const apps=await fetch(`/api/company-apps?company=${encodeURIComponent(reader.company)}`,{cache:'no-store'})
   .then(response=>response.ok?response.json():null).then(body=>Array.isArray(body?.apps)?body.apps as AppItem[]:null).catch(()=>null);
- if(!current(reader)) return;
+ if(!current(reader)||(reader.person&&asked!==signIns)) return;
  const key=keyOf(reader);
  if(!apps&&held.get(key)?.apps) return;
  held.set(key,{apps,at:Date.now()});

@@ -162,6 +162,22 @@ test('an answer for the person before, landing after the next one signed in, is 
  expect(appsButton().textContent).toBe('Connect apps');
 });
 
+test('a read the Owner asked for before someone else signed in is dropped when the Owner is back, as newer reads land', async () => {
+ const answers: ((apps: AppItem[]) => void)[] = [];
+ vi.stubGlobal('fetch', () => new Promise<Response>(resolve => answers.push(apps => resolve(new Response(JSON.stringify({ apps }), { status: 200 })))));
+ const screen = await render(shell(true, 'c-return', 'en', 'p-owner'));
+ await expect.poll(() => answers.length).toBe(1);
+ await screen.rerender(shell(false, 'c-return', 'en', 'p-member'));
+ await expect.poll(() => answers.length).toBe(2);
+ await screen.rerender(shell(true, 'c-return', 'en', 'p-owner'));
+ await expect.poll(() => answers.length).toBe(3);
+ answers[2]([]);
+ await expect.element(appsButton()).toHaveTextContent('Connect apps0 connected');
+ answers[0](items);
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(appsButton().textContent).toBe('Connect apps0 connected');
+});
+
 // A disconnect the Owner pressed that finishes after the next person signed in still holds the Owner's reader: it reads
 // nothing and drops nothing of the person now signed in.
 test('a change answered for the person before neither reads for them nor drops the next one\'s apps', async () => {
