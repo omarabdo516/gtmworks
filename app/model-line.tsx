@@ -5,7 +5,7 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import type { ModelCause } from '@/lib/model-causes';
 
 // What a Conversation, a channel and a Card note say when a model call cannot succeed on a retry (#422, #457, #530):
-// the cause, and where it is fixed. An Owner gets the link to Subscription and models (the Company's model for no model
+// the cause, and where it is fixed. An Owner gets the link to Providers (the Company's model for no model
 // at all, the Agent's model for a refusal); a Member is told to ask the Owner. `agent` names the Agent that could not
 // reply. The caller draws the line around it, with `data-outcome` set from modelOutcome (lib/model-causes.ts).
 const refusalWords={noCredit:'modelNoCredit',keyRefused:'modelKeyRefused',modelMissing:'modelMissing'} as const;

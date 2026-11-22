@@ -220,7 +220,7 @@ test('the details mark a handover that did not finish, and leave a finished one 
 });
 
 // #428: a handover that ended with no reply because the Company has no model at all says so under its row, in the words
-// a Conversation uses (#422): the Owner gets the way to Subscription and models, a Member is told to ask the Owner. A
+// a Conversation uses (#422): the Owner gets the way to Providers, a Member is told to ask the Owner. A
 // handover that ended otherwise draws no such line.
 const noModelWords = {
  en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask the company’s Owner to connect one in Settings.' },

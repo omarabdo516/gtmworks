@@ -100,10 +100,10 @@ test('two Agents a message called that both had no model say it once, and anothe
 
 // #530: a channel Run whose model call cannot succeed on a retry says its cause and its Agent, in the words a
 // Conversation uses (#457), instead of that the Agent could not reply: the Owner gets the way to the Agent's model in
-// Subscription and models, a Member is told to ask the Owner.
+// Providers, a Member is told to ask the Owner.
 const refusedWords = {
- en: { noCredit: 'Lead could not reply: the company’s model key has no credit left.', keyRefused: 'Lead could not reply: the model provider refused the company’s key or sign-in.', modelMissing: 'Lead could not reply: its model is not available from the provider.', fix: 'Check the agent’s model in Subscription and models', ask: 'Ask the company’s Owner to check it in Settings.' },
- ar: { noCredit: 'Lead مقدرش يرد: مفتاح الموديل بتاع الشركة مفيهوش رصيد.', keyRefused: 'Lead مقدرش يرد: مزوّد الموديل رفض مفتاح الشركة أو تسجيل الدخول.', modelMissing: 'Lead مقدرش يرد: الموديل بتاعه مش متاح عند المزوّد.', fix: 'اتأكد من موديل الوكيل من الاشتراك والموديلات', ask: 'اطلب من مالك الشركة يتأكد منه من الإعدادات.' },
+ en: { noCredit: 'Lead could not reply: the company’s model key has no credit left.', keyRefused: 'Lead could not reply: the model provider refused the company’s key or sign-in.', modelMissing: 'Lead could not reply: its model is not available from the provider.', fix: 'Check the agent’s model in Providers', ask: 'Ask the company’s Owner to check it in Settings.' },
+ ar: { noCredit: 'Lead مقدرش يرد: مفتاح الموديل بتاع الشركة مفيهوش رصيد.', keyRefused: 'Lead مقدرش يرد: مزوّد الموديل رفض مفتاح الشركة أو تسجيل الدخول.', modelMissing: 'Lead مقدرش يرد: الموديل بتاعه مش متاح عند المزوّد.', fix: 'اتأكد من موديل الوكيل من المزوّدين', ask: 'اطلب من مالك الشركة يتأكد منه من الإعدادات.' },
 } as const;
 for (const language of ['en', 'ar'] as const) for (const cause of ['noCredit', 'keyRefused', 'modelMissing'] as const) for (const owner of [true, false]) test(`in ${language} a channel Run refused for ${cause} says so and tells ${owner ? 'the Owner where to fix it' : 'a Member to ask the Owner'}`, async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
