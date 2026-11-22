@@ -71,7 +71,16 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // The root profile's credential pool (auth.json credential_pool), where `hermes auth add anthropic --type oauth` (the
   // install's `gtmworks sign-in claude`) puts a Claude subscription with no ~/.anthropic_oauth.json, so the Engine's own
   // sign-in status does not see it (#438).
-  defaultPool:/** @type {Record<string,{id:string,label:string,auth_type:'oauth'|'api_key',source:string,priority:number,access_token:string}[]>} */({}),
+  defaultPool:/** @type {Record<string,{id:string,label:string,auth_type:'oauth'|'api_key',source:string,priority:number,access_token:string,last_status?:string|null,place?:number,off?:boolean}[]>} */({}),
+  // The pinned Engine with scripts/engine-pool-order.sh (#621): PUT /api/credentials/pool/<provider>/order puts the root's
+  // rows of a provider in the Owner's order and marks those switched off. A Run on a subscription takes the first account
+  // of its provider switched on and not exhausted; an account in `outOfQuota` answers it with a usage limit, so the Engine
+  // marks it exhausted and sends the same model call on the next one, recording the move in `switches` (GET
+  // /api/credentials/pool/switches), and the Run's one reply is made once on the account that answered (`answeredOn`).
+  // With none left the Run fails with `noAccountText`.
+  outOfQuota:/** @type {Set<string>} */(new Set()),switches:/** @type {{id:string,provider:string,from:string,to:string,at:number}[]} */([]),
+  answeredOn:/** @type {Map<string,string>} */(new Map()),modelCalls:/** @type {{run:string,account:string}[]} */([]),
+  noAccountText:'You have hit your usage limit on every account.',
   configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
   configWriteFail:/** @type {Set<string>} */(new Set()),
   // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal
@@ -283,6 +292,20 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      const asks=settings.routineAsks(inputText(sent.input));
      if(asks&&enabledToolsets(profileOf(runProfile)?.config).includes('cronjob')) cronStore(runProfile).push(cronJob({...asks,origin:{platform:'api_server'}}));
      run={id:`run_${instance}_${settings.runs.length+1}`,profile:runProfile,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
+     const runProvider=sent.provider??profileOf(runProfile)?.provider;
+     const accounts=(settings.defaultPool[runProvider]||[]).filter(row=>row.auth_type==='oauth');
+     if(accounts.length) {
+      let using=null;
+      for(const row of accounts) {
+       if(row.off||row.last_status==='exhausted') continue;
+       settings.modelCalls.push({run:run.id,account:row.id});
+       if(using) settings.switches.push({id:randomUUID().replaceAll('-',''),provider:runProvider,from:using.id,to:row.id,at:Date.now()/1000});
+       using=row;
+       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); break; }
+       row.last_status='exhausted';
+      }
+      if(!settings.answeredOn.has(run.id)) run.outOfAccounts=true;
+     }
      streams.set(run.id,{backlog:[],next:0,ended:false,readers:new Set()});
     }
     // A start whose answer is lost: the run exists, but the connection closes before any answer (loseStarts of them).
@@ -310,6 +333,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      approval:{command:asking.command,description:asking.description,pattern_key:asking.patternKeys[0],pattern_keys:asking.patternKeys,request_id:asking.request_id,timeout_s:300,
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
+    if(done&&run.outOfAccounts) { endEvents(run.id,'run.failed'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'failed',session_id:run.session,...times,output:settings.noAccountText,pending_controls:[]}); }
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
     return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
@@ -815,6 +839,19 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     return send(response,200,{providers:Object.entries(pool).filter(([,entries])=>entries.length).map(([provider,entries])=>({provider,
      entries:entries.map((entry,at)=>({index:at+1,id:entry.id,label:entry.label,auth_type:entry.auth_type,source:entry.source,priority:entry.priority,last_status:entry.last_status??null,request_count:0,token_preview:`...${entry.access_token.slice(-4)}`,has_refresh:entry.auth_type==='oauth'}))}))});
    }
+   // The Owner's order of a provider's root accounts and their switches (scripts/engine-pool-order.sh): the rows it
+   // names first, in its order, each kept off or on; the rest after, on. The root is named, as the patch's route asks.
+   const poolOrder=url.pathname.match(/^\/api\/credentials\/pool\/([^/]+)\/order$/);
+   if(poolOrder&&request.method==='PUT') {
+    if(!url.searchParams.get('profile')) return send(response,400,{detail:'profile is required on a multi-profile host'});
+    const listed=body?.entries;
+    if(!Array.isArray(listed)||!listed.every(entry=>typeof entry?.id==='string'&&typeof entry.off==='boolean')) return send(response,400,{detail:'entries must list each pool entry id once'});
+    const rows=settings.defaultPool[poolOrder[1]]||[];
+    for(const row of rows) { const at=listed.findIndex(entry=>entry.id===row.id); if(at<0) { delete row.place; delete row.off; } else { row.place=at; row.off=listed[at].off; } }
+    rows.sort((a,b)=>(a.place??64)-(b.place??64));
+    return send(response,200,{ok:true,provider:poolOrder[1],entries:rows.map(row=>({id:row.id,off:row.off===true}))});
+   }
+   if(url.pathname==='/api/credentials/pool/switches'&&request.method==='GET') return send(response,200,{switches:settings.switches.slice(-100)});
    // One pool entry leaves by its 1-based index (ops.py 438-488); the singleton's row takes the singleton with it. A
    // root not named is refused on an Engine serving several profiles (destructive_profile), as every Company's does.
    const poolEntry=url.pathname.match(/^\/api\/credentials\/pool\/([^/]+)\/(\d+)$/);

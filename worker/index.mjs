@@ -10,6 +10,7 @@ import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, checkAgentTo
 import { keepSharedSkills } from '../lib/shared-skills.mjs';
 import { keepAgentRules } from '../lib/agent-rules.mjs';
 import { logHeldAgentChanges } from '../lib/agent-change-log.mjs';
+import { keepProviderAccounts } from '../lib/provider-switches.mjs';
 checkSettings();
 // The worker's elevated database client; lib/conversation-runs.mjs and lib/channel-runs.mjs use it.
 const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});
@@ -31,7 +32,7 @@ const loop=async(name,work,every=1000)=>{ while(!stopping) { try { await work();
 // Company and Agent profile is read, so one the Engine lost is made again. Each call asks the one module for the Engine
 // of the Company it serves (lib/company-engine.mjs), and Runs go to that Engine on each Agent's profile (#342, ADR 0018).
 const selfHosted=isSelfHosted();
-const waiting=new Map(); const moving=new Map();
+const waiting=new Map(); const moving=new Map(); const providerAccounts=new Map();
 await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queued turns',()=>startQueuedTurns(db,{})),
  loop('Channel runs',()=>driveChannelRuns(db,{})),
  loop('Note runs',()=>driveNoteRuns(db,{})),
@@ -42,5 +43,8 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  selfHosted&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{}); await keepSharedSkills(db,{}); await keepAgentRules(db,{}); await moveAgentProfiles(db,{waiting:moving,driverFor:connection=>engineFor(connection)}); },2000),
  selfHosted&&loop('Agent tools',()=>checkAgentTools(db,{}),300000),
  loop('Reserved runs',()=>abandonConversationReservations(db),60000),
+ // Each Company's Engine takes its subscription accounts in the Owner's order, and each move it made from one account to
+ // the next is logged once (#621).
+ loop('Provider accounts',()=>keepProviderAccounts(db,{memory:providerAccounts}),10000),
  // A memory or skill change whose log the app could not write is logged once by this pass (#370).
  loop('Held changes',()=>logHeldAgentChanges(db),60000)]);

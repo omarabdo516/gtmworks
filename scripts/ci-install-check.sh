@@ -89,6 +89,19 @@ assert rows() == []
 oauth._gtmworks_save_codex_login({"access_token": jwt("c"), "refresh_token": "r"})
 assert [s for _, s, _ in rows()] == ["device_code"], rows()
 PY' || fail 'a second ChatGPT sign-in adds its own account to the pinned Engine'
+# A request goes on, in the Owner's order, on the next account switched on when one runs out (#621): the cont-init hook
+# patches the pool's order, its switch-off and a record of each move. In a throwaway container of the pinned image, after
+# the accounts hook as the Engine runs them, the hook runs twice, and scripts/check-engine-pool-order.py proves on the
+# root that the order and the switch are kept and followed and one usage-limit failure moves the request once, then on
+# an Agent's profile that it borrows the root's accounts in that order, its move recorded in the root's home. It runs
+# with no network: nothing it does reaches OpenAI.
+docker run --rm -u root --network none -v "$PWD/scripts/engine-codex-accounts.sh:/etc/cont-init.d/07-engine-codex-accounts:ro" \
+  -v "$PWD/scripts/engine-pool-order.sh:/hook:ro" -v "$PWD/scripts/check-engine-pool-order.py:/check.py:ro" \
+  --entrypoint /bin/sh "$engine_image" -ec '/etc/cont-init.d/07-engine-codex-accounts; /hook; /hook; cd /opt/hermes
+mkdir -p /tmp/pool/profiles/ag-check; export HERMES_HOME=/tmp/pool
+.venv/bin/python /check.py root; HERMES_HOME=/tmp/pool/profiles/ag-check .venv/bin/python /check.py borrowed
+.venv/bin/python /check.py recorded; [ ! -e /tmp/pool/profiles/ag-check/auth.json ]' \
+  || fail 'the pinned Engine follows the Owner'"'"'s account order and records each move'
 [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
 # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
 # other line, and a repeat install while setup is still open prints the same link. The code travels after `#`

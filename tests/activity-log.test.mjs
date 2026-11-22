@@ -328,6 +328,13 @@ test('a subscription connected or disconnected names ChatGPT or Claude and its s
  assert.equal(describeEntry({ subject: 'company', action: 'subscription_connected', details: { provider: 'constructor' } }).obj, 'constructor');
 });
 
+// #621: the Engine went on with a request on the next account of one kind; the row names the kind and both accounts.
+test('a request moved to the next account names its kind and the two accounts, before and after', () => {
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'provider_switched', details: { provider: 'openai-codex', from_name: 'ChatGPT · Said', to_name: 'ChatGPT 2' } }),
+  { act: ['logActProviderSwitched'], obj: 'ChatGPT', from: { text: 'ChatGPT · Said' }, to: { text: 'ChatGPT 2' }, note: undefined });
+ assert.equal(describeEntry({ subject: 'company', action: 'provider_switched', details: { provider: 'anthropic' } }).obj, 'Claude');
+});
+
 test('a day with no zone given follows the runtime zone, also after it changes', () => {
  const before = process.env.TZ;
  try {

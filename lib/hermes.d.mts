@@ -54,6 +54,9 @@ export function cancelSignIn(connection:import('./engine.mjs').EngineConnection,
 export function disconnectSignIn(connection:import('./engine.mjs').EngineConnection,provider:string):Promise<{state:'disconnected'|'nothing'|'refused'|'unreachable'|'failed'}>;
 export function readSubscriptionAccounts(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found'|'refused'|'unreachable'|'failed',accounts:{provider:SignInProvider,account:string,exhausted:boolean}[]|null}>;
 export function removeSubscriptionAccount(connection:import('./engine.mjs').EngineConnection,provider:string,account:string):Promise<{state:'disconnected'|'nothing'|'refused'|'unreachable'|'failed'}>;
+export function writeAccountOrder(connection:import('./engine.mjs').EngineConnection,provider:string,entries:{account:string,off:boolean}[]):Promise<{state:'written'|'unsupported'|'refused'|'unreachable'|'failed'}>;
+export type AccountSwitch={id:string,provider:SignInProvider,from:string,to:string,at:number};
+export function readAccountSwitches(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',switches:AccountSwitch[]}|{state:'unsupported'|'refused'|'unreachable'|'failed',switches:null}>;
 export function readApps(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',apps:import('./app-catalogue.mjs').CompanyApp[]}|{state:'refused'|'unreachable'|'failed',apps:null}>;
 export function prepareApp(connection:import('./engine.mjs').EngineConnection,key:string,redirectUri:string):Promise<null|'refused'|'unreachable'|'failed'>;
 export function startAppSignIn(connection:import('./engine.mjs').EngineConnection,key:string,redirectUri:string):Promise<{state:'started',flow:string,url:string}|{state:'busy'|'refused'|'unreachable'|'failed',flow:null,url:null}>;
