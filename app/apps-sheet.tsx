@@ -4,7 +4,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { leave } from '@/lib/motion';
 import { AppsList, AppDetail, connectedCount, type AppsPlace } from './settings-apps-client';
-import { readApps, useCompanyApps, useHeldApps } from './company-apps-read';
+import { readApps, useCompanyApps, useHeldApps, useSignedIn } from './company-apps-read';
 import en from '@/lib/messages/apps.en.json';
 import ar from '@/lib/messages/apps.ar.json';
 import './sheet.css';
@@ -29,6 +29,7 @@ const leaveMs=190;
 // and after an app is connected or disconnected; the last good read stays shown meanwhile.
 export function AppsSheetProvider({company,person,owner,rtl,children}:{company:string,person:string,owner:boolean,rtl:boolean,children:ReactNode}) {
  const {language}=useI18n(); const text:Record<string,string>=language==='ar'?ar:en;
+ useSignedIn(person);
  const items=useCompanyApps({company,person,language});
  const [sheet,setSheet]=useState<Sheet>({phase:'closed'});
  const box=useRef<HTMLDialogElement>(null); const stopLeaving=useRef(()=>{});

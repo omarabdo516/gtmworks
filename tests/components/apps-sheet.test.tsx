@@ -9,6 +9,7 @@ import type { AppItem } from '@/app/settings-apps-client';
 import { ToastHost } from '@/app/toast';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { useAppsSheet } from '@/app/apps-sheet-open';
+import { appsChanged } from '@/app/company-apps-read';
 import en from '@/lib/messages/apps.en.json';
 import { apps } from '@/lib/app-catalogue.mjs';
 import '@/app/tokens.css';
@@ -159,6 +160,21 @@ test('an answer for the person before, landing after the next one signed in, is 
  await screen.rerender(shell(true, 'c-late', 'en', 'p-owner'));
  await expect.poll(() => answers.length).toBe(3);
  expect(appsButton().textContent).toBe('Connect apps');
+});
+
+// A disconnect the Owner pressed that finishes after the next person signed in still holds the Owner's reader: it reads
+// nothing and drops nothing of the person now signed in.
+test('a change answered for the person before neither reads for them nor drops the next one\'s apps', async () => {
+ const seen = engine(items);
+ const screen = await render(shell(true, 'c-stale-change', 'en', 'p-owner'));
+ await expect.element(appsButton()).toHaveTextContent('Connect apps2 connected');
+ seen.read = [];
+ await screen.rerender(shell(false, 'c-stale-change', 'en', 'p-member'));
+ await expect.element(appsButton()).toHaveTextContent('Connect apps0 connected');
+ const reads = seen.reads;
+ await appsChanged({ company: 'c-stale-change', person: 'p-owner', language: 'en' });
+ expect(seen.reads).toBe(reads);
+ expect(appsButton().textContent).toBe('Connect apps0 connected');
 });
 
 test('while the apps are being read the sheet draws its head with the search field and no list', async () => {
