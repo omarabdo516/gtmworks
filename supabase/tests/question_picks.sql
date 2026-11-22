@@ -1,14 +1,14 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(10);
 -- #648. A question where several choices may be picked: its person picks two of four, sent as one answer the Engine
 -- takes, or answers in words. Ads in RS Learning, one Conversation with the Contributor (3), one run asking.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('f1000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1000000-0000-0000-0000-000000000001','Ads','Ads','picks-test');
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','f1000000-0000-0000-0000-000000000002');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
- select ('f2000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','f1000000-0000-0000-0000-000000000002','Ads' from generate_series(1,2) n;
+ select ('f2000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','f1000000-0000-0000-0000-000000000002','Ads' from generate_series(1,3) n;
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
- select '10000000-0000-0000-0000-000000000001',('f2000000-0000-0000-0000-00000000000'||n)::uuid,'person','20000000-0000-0000-0000-000000000003','Someone','Plan the December campaign',gen_random_uuid(),'m-run-'||n from generate_series(1,2) n;
+ select '10000000-0000-0000-0000-000000000001',('f2000000-0000-0000-0000-00000000000'||n)::uuid,'person','20000000-0000-0000-0000-000000000003','Someone','Plan the December campaign',gen_random_uuid(),'m-run-'||n from generate_series(1,3) n;
 set local role service_role;
 select public.track_run_question(('f2000000-0000-0000-0000-00000000000'||n)::uuid,'m-run-'||n,
  '{"id":"m1@1","text":"Which of them do we make now?","choices":["Reel","Carousel","Story","Post"],"multiple":true}',false,'2026-06-10T10:14:00Z') from generate_series(1,2) n;
@@ -32,9 +32,20 @@ select results_eq($$values
 select is(public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000002',null,null,'Only the reel, this week','f3000000-0000-0000-0000-000000000002'),'claimed',
  'typed words answer a several-pick question as written');
 reset role;
-select results_eq($$select conversation_id,content->'answer' from public.reply_cards where kind='question' order by conversation_id$$,
+select results_eq($$select conversation_id,content->'answer' from public.reply_cards where kind='question' and run_id in ('m-run-1','m-run-2') order by conversation_id$$,
  $$values ('f2000000-0000-0000-0000-000000000001'::uuid,'["Reel","Story"]'::jsonb),('f2000000-0000-0000-0000-000000000002'::uuid,'"Only the reel, this week"'::jsonb)$$,
  'the picks are kept as the choices'' own texts, in the order they were offered; typed words as written');
+
+-- Two choices that read alike are one answer text, kept once.
+reset role;
+set local role service_role;
+select public.track_run_question('f2000000-0000-0000-0000-000000000003','m-run-3','{"id":"m3@1","text":"Which?","choices":["Reel","Reel","Post"],"multiple":true}',false,'2026-06-10T10:14:00Z');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select public.answer_question('10000000-0000-0000-0000-000000000001','f2000000-0000-0000-0000-000000000003',(select id from public.reply_cards where call_id='m3@1'),null,null,'f3000000-0000-0000-0000-000000000003',array[2,1,0]);
+reset role;
+select is((select content->'answer' from public.reply_cards where call_id='m3@1'),'["Reel","Post"]'::jsonb,'two choices that read alike are kept once, at the first of them');
 
 -- The closer hands the picks over as they are kept, and the answer the Engine took is logged with them.
 set local role service_role;

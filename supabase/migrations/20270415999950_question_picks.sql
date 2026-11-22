@@ -124,7 +124,8 @@ begin
   if not coalesce((asked.content->>'multiple')::boolean,false) or cardinality(picks)<1 or array_position(picks,null) is not null
    or exists(select 1 from unnest(picks) p where p<0 or p>=jsonb_array_length(asked.content->'choices'))
    or (select count(distinct p) from unnest(picks) p)<>cardinality(picks) then raise exception 'questionAnswerInvalid' using errcode='22023'; end if;
-  said:=(select jsonb_agg(asked.content->'choices'->p order by p) from unnest(picks) p);
+  -- Two choices may read alike: each text is kept once, at its first pick, so the card stays one reply_card_valid keeps.
+  said:=(select jsonb_agg(text order by first) from (select asked.content->'choices'->p as text,min(p) as first from unnest(picks) p group by 1) picked);
  elsif choice is not null then
   if (asked.content->>'multiple')::boolean or choice<0 or choice>=jsonb_array_length(asked.content->'choices') then raise exception 'questionAnswerInvalid' using errcode='22023'; end if;
   said:=asked.content->'choices'->choice;
