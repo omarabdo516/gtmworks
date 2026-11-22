@@ -367,6 +367,16 @@
    (design-reference: .shimmer, .thinking .shimmer; #132). */
 .gw .thinking .shimmer { display: inline-block; color: var(--gw-text-2); animation: gw-breathe 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .gw .thinking .shimmer { animation: none; } }
+/* While the Agent works, the live line names it and the step it is on now (#646; design-reference: .activity,
+   syncActivityKey): the working dot, its face and name, then the step, which breathes and rises in each time it moves on
+   (`is-swap`). With reduced motion it is text only. */
+.gw .activity { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 24px; padding: 0 4px; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
+.gw .activity .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--gw-accent); }
+.gw .activity__who { flex: none; font-weight: 600; color: var(--gw-text-1); }
+.gw .activity__t { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw .activity .shimmer { animation: gw-breathe 1.4s ease-in-out infinite; }
+.gw .activity .is-swap { animation: gw-rise 240ms var(--gw-ease-out), gw-breathe 1.4s ease-in-out 240ms infinite; }
+@media (prefers-reduced-motion: reduce) { .gw .activity .shimmer, .gw .activity .is-swap { animation: none; } }
 /* A turn waiting for the current reply (also the line under a message to a person), and the stop square
    (design-reference: .queued, .is-queued, .is-stop) */
 .gw .queued { display: inline-flex; align-items: center; gap: 4px; padding-inline-end: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }

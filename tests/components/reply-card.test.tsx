@@ -14,6 +14,9 @@ const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: 
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-1', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
+// The live steps' read (#646) is tests/components/live-steps.test.tsx's own: here it waits for ever, so it never takes an
+// answer meant for the record.
+const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : fetch(url, init));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 // The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
 const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
@@ -130,7 +133,7 @@ test('a card that arrives while the Conversation is open rises in once; the card
  onTestFinished(() => styles.forEach(style => style.remove()));
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  const asks = vi.fn(async () => Response.json(turns([outline, plan], false)));
- vi.stubGlobal('fetch', asks);
+ stubFetch(asks);
  const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={{ id: 'cv-1', agent_id: null, agent_name: 'Ads', face: 'c-1' }} title="" writer={false}><Arrived record={arrived(turns([outline], true))} team={false}/></ConversationView></div></LanguageProvider>);
  const rising = (card: Card) => getComputedStyle(screen.getByRole('group', { name: card.title }).element()).animationName;
  await expect.element(screen.getByRole('group', { name: outline.title })).toBeVisible();
@@ -309,7 +312,7 @@ test('in the chat, Done it posts the done intent with the card and shows the tim
  let answer: (value: Response) => void = () => {};
  const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z', first: true })
   : new Promise<Response>(resolve => { answer = resolve; }));
- vi.stubGlobal('fetch', calls);
+ stubFetch(calls);
  const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived(record(open))} team={false}/></ConversationView></div></LanguageProvider>);
  const group = screen.getByRole('group', { name: handWords.en.label(open.title) });
  await screen.getByRole('button', { name: 'Done it' }).click();
@@ -337,7 +340,7 @@ test('in the chat, a Done it another tab pressed first reads done with that time
  const conversation = { id: '7d3f0b1e-1c2a-4b5d-8e6f-9a0b1c2d3e4f', agent_id: null, agent_name: 'SEO', face: 'c-1' };
  const calls = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z', first: false })
   : Response.json({ ...turns([open], false), conversation }));
- vi.stubGlobal('fetch', calls);
+ stubFetch(calls);
  const screen = await render(<LanguageProvider language="en"><div className="gw"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={conversation} title="" writer><Arrived record={arrived({ ...turns([open], false), conversation })} team={false}/></ConversationView></div></LanguageProvider>);
  const group = screen.getByRole('group', { name: handWords.en.label(open.title) });
  await screen.getByRole('button', { name: 'Done it' }).click();
@@ -354,7 +357,7 @@ test('opened at a handed step\'s address, the chat shows that card in view and f
  onTestFinished(() => history.replaceState(null, '', before));
  const many = turns([handed(), ...[11, 12, 13, 14, 15, 16].map(id => ({ ...plan, id }))], false);
  const replied: ConversationRecord = { ...many, messages: [...many.messages, { id: 90, author: 'agent', author_name: 'SEO', body: 'I saw it on the site.', created_at: '2026-06-10T09:43:00Z' }] };
- vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z', first: true }) : Response.json(replied)));
+ stubFetch(vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ state: 'done', at: '2026-06-10T09:42:00Z', first: true }) : Response.json(replied)));
  const screen = await render(<LanguageProvider language="en"><div className="gw" style={{ height: '600px' }}><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={many.conversation} title="" writer><Arrived record={arrived(many)} team={false}/></ConversationView></div></LanguageProvider>);
  const card = screen.getByRole('group', { name: handWords.en.label(handed().title) });
  await expect.element(card).toBeVisible();

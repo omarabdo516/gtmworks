@@ -1,0 +1,5 @@
+| `live-steps.spec.ts` | A Conversation with Lead on the lane's fake Hermes (#646): while the Run works, the line under the transcript says "Thinking…", then each call's tool and preview as the fake Engine streams `tool.started`, and "Writing the reply…" after `tool.completed`, while the live steps list fills in, a path never shown and a failed call skipped; a reload mid-Run draws the line and the steps so far at once; the reply that lands carries the session's list in their place, once and still open, read from the Run's own profile. | 15 s | live-run-steps.test.mjs (the stream and the fold), components/live-steps.test.tsx (the screen and the fallback) | new (#646) |
+
+## Cases
+
+| `live-steps.spec.ts` "while Lead works, its step now and its steps so far are on screen live, a reload keeps them, and the reply takes their place" | stays | The whole path of #646 on the lane's fake Hermes: the app reads the open Run named by conversation_live_run from its own profile's event stream and passes each call to the page as it happens; the component test covers the fallback and the channel. |

@@ -23,6 +23,7 @@ import { ReplyCard } from '@/app/reply-card';
 import type { AnswerQuestion } from '@/app/question-card';
 import type { MarkHandDone } from '@/app/hand-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
+import { ActivityLine, LiveTurn, useLanding, useLiveSteps } from '@/app/run-activity';
 import { offeredChoices } from '@/lib/conversations';
 import { useArrivals, type Arrival } from '@/lib/arrivals';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
@@ -161,6 +162,11 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  // The Agent working now: the first Run still open, since a message's Agents answer one after another (#152).
  const waiting=messages.find((message):message is Extract<ChannelMessage,{author:'person'}>=>message.author==='person'&&mentionsOf(message).some(mention=>mention.state==='open'));
  const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
+ // Its Run's steps live, as a Conversation shows them (#646): the reply that lands after them takes their place without
+ // rising in again, its list open if the live one was.
+ const live=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
+ const landing=useLanding({working:!!workingNow,live,newest:messages.findLast(message=>message.author==='agent')?.id??null});
+ const landedHere=(message:ChannelMessage)=>message.author==='agent'&&landing.landed(message.id);
  const boardColumn=board?t(columnLabel(board.column,writer)):'';
  return <div className="convo"><div className="chat">
   <HeadPill panel={panel} details={c('channelDetails')} face={<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>} title={name}
@@ -176,7 +182,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={message.id}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} rise={rise(`${message.author}:${message.id}`)} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
+    <Turn message={message} rise={landedHere(message)?'':rise(`${message.author}:${message.id}`)} opened={message.author==='agent'&&landing.opened(message.id)} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {mention.questions.map(card=><ReplyCard key={`question${card.id}`} card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
@@ -185,8 +191,10 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
        waitingFor={card.chips&&!message.mine?firstName(message.name):null}/>)}
      {mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
     </li>)}
-   </Fragment>)}</ol>
-   {workingNow&&<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>}
+   </Fragment>)}
+    {workingNow&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} toggled={landing.toggled}/>}</ol>
+   {workingNow&&(live?<ActivityLine view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>
+    :<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>)}
   </div></div>
   <div className="composer-area">
    {/* Stop (#478; design-reference: syncComposer): while a message the reader may stop has work open, an empty box turns
@@ -205,7 +213,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} time={time} refresh={refresh}/></div>;
 }
 
-function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done,owner}:{message:ChannelMessage,rise:string,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,owner:boolean}) {
+function Turn({message,rise,opened=false,time,c,slug,name,cb,drawnCards,memberNames,done,owner}:{message:ChannelMessage,rise:string,opened?:boolean,time:(value:string)=>string,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,owner:boolean}) {
  const {t}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
@@ -225,7 +233,7 @@ function Turn({message,rise,time,c,slug,name,cb,drawnCards,memberNames,done,owne
  }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
   <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
-  {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
+  {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={opened}/>}
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)} done={done} team/>)}
  </li>;

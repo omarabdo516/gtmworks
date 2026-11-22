@@ -70,5 +70,7 @@
   "stepsUsedTook": "{0} · {1}",
   "stepLine": "{0} · {1}",
   "stepDone": "تم",
-  "stepSkipped": "اتخطى"
+  "stepSkipped": "اتخطى",
+  "activityThinking": "بيفكر",
+  "activityWriting": "بيكتب الرد"
 }

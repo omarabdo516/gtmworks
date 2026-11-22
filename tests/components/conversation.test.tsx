@@ -19,6 +19,9 @@ const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: 
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
+// The live steps' read (#646) is tests/components/live-steps.test.tsx's own: here it waits for ever, so it never takes an
+// answer meant for the record.
+const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : fetch(url, init));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 // The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
 const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
@@ -43,7 +46,7 @@ test('a Member who keeps their Conversation open sees the Owner\'s answer arrive
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  const answers = [waiting, declined];
  const asks = vi.fn(async () => Response.json(answers.shift() ?? declined));
- vi.stubGlobal('fetch', asks);
+ stubFetch(asks);
  const screen = await render(<LanguageProvider language="en"><ConversationView slug="rs-learning" agent={null} details={null} company="co-1" conversation={waiting.conversation} title="" writer={false}><Arrived record={arrived(waiting)} team={false}/></ConversationView></LanguageProvider>);
  const request = screen.getByRole('group', { name: 'Agent request: FollowUp' });
  await expect.element(request.getByText('Request · not made yet')).toBeVisible();
@@ -69,7 +72,7 @@ const sent = { id: 1, author: 'person' as const, author_name: 'Omar', body: 'Dra
 
 test('while the Agent works the page says so, and the line goes once the reply is in the record', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(talk([sent, { id: 2, author: 'agent', author_name: 'Mona', body: 'Reply to: Draft the long launch plan', created_at: at }]))));
+ stubFetch(vi.fn(async () => Response.json(talk([sent, { id: 2, author: 'agent', author_name: 'Mona', body: 'Reply to: Draft the long launch plan', created_at: at }]))));
  const screen = await render(view(talk([sent], { pending: true })));
  await expect.element(screen.getByRole('status')).toHaveTextContent('Mona is working on a reply…');
  await vi.advanceTimersByTimeAsync(500);
@@ -370,7 +373,7 @@ test('a handed job keeps the chat asking until Lead\'s follow-up reply is in the
   cards: [{ kind: 'handed', from: { name: 'Lead', face: 'c-2' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads' }] }]), handover: true };
  const replied: ConversationRecord = talk([...handed.messages, { id: 3, author: 'agent', author_name: 'Lead', body: 'Ads planned three ad sets.', created_at: at }]);
  const asks = vi.fn(async () => Response.json(replied));
- vi.stubGlobal('fetch', asks);
+ stubFetch(asks);
  const screen = await render(view(handed));
  await expect.element(screen.getByText('I handed it to Ads.')).toBeVisible();
  await vi.advanceTimersByTimeAsync(500);
@@ -408,7 +411,7 @@ test('a turn that arrives while the Conversation is open rises once; the turns i
  const reply = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'Here is the plan.', created_at: at };
  const started = { id: 3, author: 'person' as const, author_name: 'Omar', body: 'And the budget?', created_at: at };
  const answers = [talk([sent, reply, queued], { pending: true }), talk([sent, reply, started], { pending: true }), talk([sent, reply, started], { pending: true }), talk([sent, reply, started], { pending: true })];
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? answers.at(-1))));
+ stubFetch(vi.fn(async () => Response.json(answers.shift() ?? answers.at(-1))));
  await render(inShell(talk([sent], { pending: true })));
  expect(motionOf(turnOf('Draft the long launch plan'))[0]).toBe('none');
  await vi.advanceTimersByTimeAsync(500);
@@ -429,7 +432,7 @@ test('a turn that arrives while the Conversation is open rises once; the turns i
 });
 
 test('a Conversation opened with its history moves nothing but the working line\'s words, which breathe, and are still with reduced motion', async () => {
- vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+ stubFetch(vi.fn(() => new Promise<Response>(() => {})));
  const made = { id: 4, author: 'agent' as const, author_name: 'Mona', body: 'Made it.', created_at: at, cards: [{ kind: 'made' as const, agent: { id: 'ag-9', connection_id: 'c-9', name: 'Reach', job: 'Runs Meta ads', apps: [], fresh: false, created_at: at } }] };
  await render(inShell(talk([sent, made], { pending: true, working: 'Omar' })));
  await expect.element(page.getByRole('status')).toBeVisible();
@@ -448,7 +451,7 @@ test('a Conversation opened with its history moves nothing but the working line\
 test('the card for an Agent Lead makes while the Conversation is open rises in over 280ms', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
  const made = { id: 4, author: 'agent' as const, author_name: 'Mona', body: 'Made it.', created_at: at, cards: [{ kind: 'made' as const, agent: { id: 'ag-9', connection_id: 'c-9', name: 'Reach', job: 'Runs Meta ads', apps: [], fresh: false, created_at: at } }] };
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(talk([sent, made]))));
+ stubFetch(vi.fn(async () => Response.json(talk([sent, made]))));
  await render(inShell(talk([sent], { pending: true })));
  await vi.advanceTimersByTimeAsync(500);
  await expect.poll(() => document.querySelector('.ac-card')).toBeTruthy();
@@ -461,7 +464,7 @@ test('the made card moved from its own turn into the Agent\'s reply does not ris
  const alone = { id: 4, author: 'agent' as const, author_name: 'Mona', body: '', created_at: at, kind: 'made' as const, cards: [{ kind: 'made' as const, agent }] };
  const reply = { id: 5, author: 'agent' as const, author_name: 'Mona', body: 'Made it.', created_at: at, cards: [{ kind: 'made' as const, agent }] };
  const answers = [talk([sent, alone], { pending: true }), talk([sent, reply])];
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? talk([sent, reply]))));
+ stubFetch(vi.fn(async () => Response.json(answers.shift() ?? talk([sent, reply]))));
  await render(inShell(talk([sent], { pending: true })));
  await vi.advanceTimersByTimeAsync(500);
  await expect.poll(() => document.querySelector('.ac-card')?.className).toBe('ac-card card-in');
@@ -477,7 +480,7 @@ test('a saved rule\'s line moved from under the person\'s message to under the r
  const reply = { id: 2, author: 'agent' as const, author_name: 'Mona', body: 'Noted.', created_at: at };
  const late = { id: 2, author: 'agent' as const, author_name: 'Mona', body: '', created_at: at, kind: 'saved' as const, saved: [rule] };
  const answers = [talk([sent, early], { pending: true }), talk([sent, reply, late])];
- vi.stubGlobal('fetch', vi.fn(async () => Response.json(answers.shift() ?? talk([sent, reply, late]))));
+ stubFetch(vi.fn(async () => Response.json(answers.shift() ?? talk([sent, reply, late]))));
  await render(inShell(talk([sent], { pending: true })));
  const line = () => document.querySelector('[data-kind="saved"]');
  await vi.advanceTimersByTimeAsync(500);

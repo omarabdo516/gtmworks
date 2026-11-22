@@ -22,6 +22,10 @@ export type RunStep={tool:string,preview:string|null,state:'started'|'done'|'fai
 export type SessionTurn={at:number,seconds:number,steps:RunStep[]};
 export type SessionUsage={input:number,output:number};
 export type SessionRead={state:'found',turns:SessionTurn[],usage:SessionUsage|null}|{state:'missing'|'refused'|'unreachable',turns:null,usage:null};
+// A Run's tool calls as they happen (#646): each call starting (its id, tool and the Engine's preview) or ending (done or
+// failed, by the same id, or none when the Engine gave it none), a loss when older events are gone, and one end last.
+export type RunStepEvent={seq:number,step:{call:string|null,tool:string,preview:string|null,state:'started'|'done'|'failed'}};
+export type RunEvent=RunStepEvent|{lost:true}|{end:'ended'|'closed'|'gone'|'unreachable'};
 export type Agent={name:string,instructions:string,model:string|null,ready:boolean,displayName?:string|null,description?:string,descriptionAuto?:boolean,botTitle?:string|null};
 export type AgentRequest={name:string,instructions:string,model?:string|null};
 export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'|'unreachable'|'failed',agent:null};
@@ -69,6 +73,7 @@ export type Engine={
  answer(run:string,question:string,text:string):Promise<AnsweredQuestion>,
  permit(run:string,permission:string,choice:PermissionChoice):Promise<AnsweredPermission>,
  session(session:string):Promise<SessionRead>,
+ steps?(run:string,read?:{signal?:AbortSignal}):AsyncIterable<RunEvent>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
  provideAgent(agent:{name:string,instructions:string,subagents?:boolean}):Promise<ProvidedAgent>,
