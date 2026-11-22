@@ -136,6 +136,6 @@ test('the heaviest Agent is the one whose profile used the most tokens, and the 
 test('the overlay shows no invented figures: no prices, no sample usage or backups', () => {
   const source = readFileSync('app/settings-overlay.tsx', 'utf8');
   assert.doesNotMatch(source, /EGP|جنيه|MB|Opus|GPT|Gemini/);
-  // The Models section keeps one slot for the company's own subscription sign-in (#3).
-  assert.match(source, /function ModelsSubscriptions/);
+  // The Models section keeps one slot for the Company's Providers, its subscription sign-ins and keys (#3, #617).
+  assert.match(source, /<CompanyProviders /);
 });

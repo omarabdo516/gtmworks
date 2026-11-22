@@ -1542,5 +1542,21 @@
   "aboutLicenseMit": "MIT License",
   "aboutThirdParty": "Third-party notices",
   "aboutThirdPartyD": "The code, fonts and logos gtmworks includes",
-  "aboutOpens": "opens in a new tab"
+  "aboutOpens": "opens in a new tab",
+  "providers": "Providers",
+  "providersSubscription": "Subscription",
+  "providersKey": "API key",
+  "providersKeySaved": "Key saved",
+  "providersPartly": "Partly connected",
+  "providersNone": "No provider connected yet.",
+  "providersAdd": "Connect a provider",
+  "providersSubscriptions": "Subscriptions",
+  "providersKeys": "API keys",
+  "providersAllSigned": "Every subscription is connected.",
+  "providersName": "Display name",
+  "providersConnection": "Connection type",
+  "providersStatus": "Status",
+  "providersAdvanced": "Advanced",
+  "providersEngineId": "Name in the agent engine",
+  "providersOwnerOnly": "Only the Owner connects, disconnects or gives a key. You see each provider’s state."
 }

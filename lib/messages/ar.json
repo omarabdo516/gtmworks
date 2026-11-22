@@ -1542,5 +1542,21 @@
   "aboutLicenseMit": "رخصة MIT",
   "aboutThirdParty": "ملاحظات الأطراف التانية",
   "aboutThirdPartyD": "الكود والخطوط واللوجوهات اللي جوه gtmworks",
-  "aboutOpens": "بيفتح في تاب جديدة"
+  "aboutOpens": "بيفتح في تاب جديدة",
+  "providers": "المزوّدين",
+  "providersSubscription": "اشتراك",
+  "providersKey": "مفتاح API",
+  "providersKeySaved": "المفتاح محفوظ",
+  "providersPartly": "متوصل جزئيًا",
+  "providersNone": "لسه مفيش مزوّد متوصل.",
+  "providersAdd": "وصّل مزوّد",
+  "providersSubscriptions": "الاشتراكات",
+  "providersKeys": "مفاتيح API",
+  "providersAllSigned": "كل الاشتراكات متوصلة.",
+  "providersName": "الاسم",
+  "providersConnection": "طريقة التوصيل",
+  "providersStatus": "الحالة",
+  "providersAdvanced": "متقدم",
+  "providersEngineId": "الاسم في محرّك الوكلاء",
+  "providersOwnerOnly": "المالك بس هو اللي بيوصّل أو يفصل أو يحط مفتاح. إنت بتشوف حالة كل مزوّد."
 }

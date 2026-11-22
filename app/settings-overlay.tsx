@@ -32,7 +32,7 @@ import { LearningSection } from './settings-learning';
 import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
+import { CompanyProviders, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, DefaultEffort, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -159,8 +159,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='backup'&&owner?<BackupSection t={t}/>
   // About (#616) is every Role's: the version this image was built as, and the notes and licenses it ships.
   :section==='about'?<AboutSection t={t} language={language} locale={locale} version={process.env.GTMWORKS_VERSION}/>
-  :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} companyName={company.name} owner={owner} subscriptions={subscriptions} keyed={keys?.keys?.filter(key=>key.set).map(key=>key.provider)??[]}/>}
-    keys={<><ProviderKeys company={company.id} owner={owner} data={keys}/><SpeechToText company={company.id} owner={owner} data={speech}/></>}
+  :<SoonSection t={t} section={section} ro={ro} providers={<CompanyProviders company={company.id} companyName={company.name} owner={owner} keys={keys}
+     subscriptions={{available:subscriptions?.profiles!=null,signIns:subscriptions?.signIns??null,noEngine:subscriptions?.noEngine===true}}/>}
+    speech={<SpeechToText company={company.id} owner={owner} data={speech}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}
     defaultEffort={<DefaultEffort/>}/>;
@@ -391,16 +392,11 @@ function AccountSection({t,theme,personName,role,roleName,companyName,company,me
 
 // The company's sections whose features come later (#29–#33): each keeps the reference's heading, its explanation and
 // its parts in place, empty and marked "Soon", with no sample figures. Learning (#28) has its own section.
-function SoonSection({t,section,ro,subscriptions,keys,defaultModel,eachAgent,defaultEffort}:{t:T,section:OverlaySection,ro:ReactNode,subscriptions:ReactNode,keys:ReactNode,defaultModel:ReactNode,eachAgent:ReactNode,defaultEffort:ReactNode}) {
+function SoonSection({t,section,ro,providers,speech,defaultModel,eachAgent,defaultEffort}:{t:T,section:OverlaySection,ro:ReactNode,providers:ReactNode,speech:ReactNode,defaultModel:ReactNode,eachAgent:ReactNode,defaultEffort:ReactNode}) {
+ // The Company's Providers, list and details (#617), then the defaults every Agent starts with and speech-to-text below
+ // the list, as the approved Providers layout puts them (spec #610).
  if(section==='models') return <><Head title={t('settingsModels')} sub={t('settingsModelsSub')}/>{ro}
-  {subscriptions}{keys}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
-  {defaultEffort}{eachAgent}</>;
+  {providers}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
+  {defaultEffort}{eachAgent}{speech}</>;
  return null;
-}
-
-// The Company's connected AI subscriptions. A Company signs its subscription in once on the root profile of its own
-// Engine (#384, ADR 0018): the state is read on the server from that Engine, and the Owner's buttons call
-// /api/company-sign-in, which checks the Owner again.
-function ModelsSubscriptions({company,companyName,owner,subscriptions,keyed}:{company:string,companyName:string,owner:boolean,subscriptions:Awaited<ReturnType<typeof readCompanySignIns>>|null,keyed:string[]}) {
- return <CompanySubscriptions company={company} companyName={companyName} owner={owner} available={subscriptions?.profiles!=null} signIns={subscriptions?.signIns??null} noEngine={subscriptions?.noEngine===true} keyed={keyed}/>;
 }
