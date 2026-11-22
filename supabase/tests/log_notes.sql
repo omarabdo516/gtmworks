@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(59);
+select plan(62);
 -- Notes and mentions in the log (#22). Seed people of RS Learning: Omar 0001 owns it, 0002 مدير is a Manager, 0003 مراجع
 -- and 0005 عضو are Contributors, 0004 مشاهد is a Viewer, 30000000-…-0001 is a role Agent. Faye is shown to the Manager;
 -- Secret to nobody but the Owner. 0005 is also a Contributor of Aleem.
@@ -162,5 +162,19 @@ select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),0,
 select ok(public.close_note_run((select id from notes where label='aleem'),null,'lost',null,null,null),'once it ended');
 select is(public.move_company_profile('10000000-0000-0000-0000-000000000003'),1,'the Company moves');
 
+-- #530: a Card note's Run that failed for want of any model, or whose model call cannot succeed on a retry, keeps that
+-- cause, which the Card reads to say what to fix; an outcome no Run takes is refused.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
+insert into notes select 'aleem-'||cause, public.change_work_card('10000000-0000-0000-0000-000000000003',(select id from aleem_card),'comment',jsonb_build_object('body','@Lead plan it: '||cause))
+ from unnest(array['no_model','no_credit','key_refused','model_missing']) cause;
+reset role;
+set local role service_role;
+select is((select bool_and(public.close_note_run(n.id,null,substr(n.label,7),null,null,null)) from notes n where n.label like 'aleem-%' and n.label<>'aleem'),true,
+ 'each note''s Run closes with its cause');
+select throws_ok($$select public.close_note_run((select id from notes where label='aleem'),null,'refused',null,null,null)$$,'22023','noteFailed','an outcome no Run takes is refused');
+reset role;
+select is((select string_agg(r.outcome,',' order by r.outcome) from public.note_runs r join notes n on n.id=r.note_id where n.label like 'aleem-%' and n.label<>'aleem'),
+ 'key_refused,model_missing,no_credit,no_model','and the Card reads it');
 select * from finish();
 rollback;

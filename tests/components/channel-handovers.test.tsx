@@ -220,7 +220,7 @@ test('the details mark a handover that did not finish, and leave a finished one 
 });
 
 // #428: a handover that ended with no reply because the Company has no model at all says so under its row, in the words
-// a Conversation uses (#422): the Owner gets the way to Subscription and models, a Member is told to ask the Owner. A
+// a Conversation uses (#422): the Owner gets the way to Providers, a Member is told to ask the Owner. A
 // handover that ended otherwise draws no such line.
 const noModelWords = {
  en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask the company’s Owner to connect one in Settings.' },
@@ -231,8 +231,8 @@ for (const language of ['en', 'ar'] as const) for (const owner of [true, false])
  const said = noModelWords[language];
  const asked: ChannelMessage = { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Lead plan the ads', at, files: [], mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } };
  const answered: ChannelMessage = { id: 2, author: 'agent', name: 'Lead', face: 'c-1', body: 'Handing it to Ads.', at };
- const row = (id: number, noModel: boolean): ChannelMessage => ({ id: `handover-${id}`, author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: `Job ${id}`, at, ...(noModel ? { noModel: true as const } : {}) });
- const screen = await view(record([asked, answered, row(7, true), row(8, false)], [], { noModel: { owner } }), language);
+ const row = (id: number, noModel: boolean): ChannelMessage => ({ id: `handover-${id}`, author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: `Job ${id}`, at, ...(noModel ? { model: { cause: 'noModel' as const, agent: 'Ads' } } : {}) });
+ const screen = await view(record([asked, answered, row(7, true), row(8, false)], [], { modelLine: { owner } }), language);
  const turns = Array.from(screen.container.querySelectorAll('.turns > li'));
  const handed = turns.findIndex(turn => turn.textContent?.includes('Job 7'));
  const line = turns[handed + 1];
@@ -249,6 +249,22 @@ for (const language of ['en', 'ar'] as const) for (const owner of [true, false])
   expect(line.textContent).toContain(said.ask);
   expect(line.querySelector('a')).toBeNull();
  }
+});
+
+// #530: a handover whose leg the model refused, with no reply from the asking Agent, says that cause under its row and
+// names the Agent whose leg it was: the Owner gets the way to the Agent's model, a Member is told to ask the Owner.
+for (const owner of [true, false]) test(`a handover whose leg ran out of credit names its Agent under its row and tells ${owner ? 'the Owner where to fix it' : 'a Member to ask the Owner'}`, async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const asked: ChannelMessage = { id: 1, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Lead plan the ads', at, files: [], mention: { agent: 'Lead', face: 'c-1', state: 'answered', permissions: [], questions: [] } };
+ const row: ChannelMessage = { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'c-1' }, to: { name: 'Ads', face: 'c-2' }, goal: 'Job 7', at, failed: true, model: { cause: 'noCredit', agent: 'Ads' } };
+ const screen = await view(record([asked, row], [], { modelLine: { owner } }), 'en');
+ const turns = Array.from(screen.container.querySelectorAll('.turns > li'));
+ const line = turns[turns.findIndex(turn => turn.textContent?.includes('Job 7')) + 1];
+ expect(line.getAttribute('role')).toBe('alert');
+ expect(line.getAttribute('data-outcome')).toBe('no-credit');
+ expect(line.textContent).toContain('Ads could not reply: the company’s model key has no credit left.');
+ if (owner) expect(line.querySelector('a')?.getAttribute('href')).toBe('/c/rs-learning/settings?section=models');
+ else { expect(line.textContent).toContain('Ask the company’s Owner to check it in Settings.'); expect(line.querySelector('a')).toBeNull(); }
 });
 
 // #476: any Agent of the channel asks any Agent of the Company. In a channel whose one Agent is Writer, Writer asks Ads,
