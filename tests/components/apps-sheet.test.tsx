@@ -9,6 +9,7 @@ import type { AppItem } from '@/app/settings-apps-client';
 import { ToastHost } from '@/app/toast';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { useAppsSheet } from '@/app/apps-sheet-open';
+import { appsChanged } from '@/app/company-apps-read';
 import en from '@/lib/messages/apps.en.json';
 import { apps } from '@/lib/app-catalogue.mjs';
 import '@/app/tokens.css';
@@ -50,8 +51,8 @@ function engine(first: Read, step: (body: Record<string, string>) => object = ()
 }
 // Each test draws its own Company: the browser keeps each Company's last read across the pages it is drawn on.
 let companies = 0;
-const shell = (owner = true, company = `c-${++companies}`, language: 'en' | 'ar' = 'en') => <div className="gw"><LanguageProvider language={language}>
- <AppsSheetProvider company={company} owner={owner} rtl={language === 'ar'}>
+const shell = (owner = true, company = `c-${++companies}`, language: 'en' | 'ar' = 'en', person = 'p-owner') => <div className="gw"><LanguageProvider language={language}>
+ <AppsSheetProvider company={company} person={person} owner={owner} rtl={language === 'ar'}>
   <AppsButton/>
   <AccountMenuView saveLanguage={async () => ''} saveTheme={async () => ''} slug="rs-learning" personName="Omar" role="Owner" theme="light" companyName="RS Learning"/>
  </AppsSheetProvider>
@@ -119,6 +120,77 @@ test('the count on the button and on the menu item is the sheet\'s badge, read o
  await screen.getByRole('button', { name: /^Connect apps/ }).click();
  await expect.element(screen.getByRole('dialog').getByText('2 connected')).toBeVisible();
  expect(seen.reads).toBe(2);
+});
+
+// #552: a sign-out and sign-in in another tab leaves this tab open; the next page it draws is the new person's, and the
+// copy the browser held for the one before (an Owner's, with a command server's command) is neither shown nor kept.
+test('when the signed-in person changes, the apps held for the one before are not shown', async () => {
+ const seen = engine([{ ...items[0], state: 'connected' }, { ...items[1], state: 'connected' }, { ...items[2], state: 'connected' }]);
+ const screen = await render(shell(true, 'c-handover', 'en', 'p-owner'));
+ await expect.element(appsButton()).toHaveTextContent('Connect apps3 connected');
+ seen.read = 'hang';
+ await screen.rerender(shell(false, 'c-handover', 'en', 'p-member'));
+ await expect.poll(() => seen.reads).toBe(2);
+ expect(appsButton().textContent).toBe('Connect apps');
+ await screen.getByRole('button', { name: /^Connect apps/ }).click();
+ await expect.element(screen.getByRole('searchbox', { name: 'Search apps' })).toHaveFocus();
+ expect(dialog().querySelectorAll('.app-card, .apps-count, .tpl-cats')).toHaveLength(0);
+ await userEvent.keyboard('{Escape}');
+ await expect.poll(() => document.querySelector('dialog.apps-sheet'), busyBrowser).toBeNull();
+ // The Owner signing back in reads again rather than finding their old copy.
+ seen.read = items;
+ await screen.rerender(shell(true, 'c-handover', 'en', 'p-owner'));
+ await expect.poll(() => seen.reads).toBe(4);
+ await expect.element(appsButton()).toHaveTextContent('Connect apps2 connected');
+});
+
+test('an answer for the person before, landing after the next one signed in, is dropped, not kept', async () => {
+ const answers: ((apps: AppItem[]) => void)[] = [];
+ vi.stubGlobal('fetch', () => new Promise<Response>(resolve => answers.push(apps => resolve(new Response(JSON.stringify({ apps }), { status: 200 })))));
+ const screen = await render(shell(true, 'c-late', 'en', 'p-owner'));
+ await expect.poll(() => answers.length).toBe(1);
+ await screen.rerender(shell(false, 'c-late', 'en', 'p-member'));
+ await expect.poll(() => answers.length).toBe(2);
+ answers[0](items);
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(appsButton().textContent).toBe('Connect apps');
+ answers[1]([]);
+ await expect.element(appsButton()).toHaveTextContent('Connect apps0 connected');
+ // Nothing of the Owner's was held: their return reads again.
+ await screen.rerender(shell(true, 'c-late', 'en', 'p-owner'));
+ await expect.poll(() => answers.length).toBe(3);
+ expect(appsButton().textContent).toBe('Connect apps');
+});
+
+test('a read the Owner asked for before someone else signed in is dropped when the Owner is back, as newer reads land', async () => {
+ const answers: ((apps: AppItem[]) => void)[] = [];
+ vi.stubGlobal('fetch', () => new Promise<Response>(resolve => answers.push(apps => resolve(new Response(JSON.stringify({ apps }), { status: 200 })))));
+ const screen = await render(shell(true, 'c-return', 'en', 'p-owner'));
+ await expect.poll(() => answers.length).toBe(1);
+ await screen.rerender(shell(false, 'c-return', 'en', 'p-member'));
+ await expect.poll(() => answers.length).toBe(2);
+ await screen.rerender(shell(true, 'c-return', 'en', 'p-owner'));
+ await expect.poll(() => answers.length).toBe(3);
+ answers[2]([]);
+ await expect.element(appsButton()).toHaveTextContent('Connect apps0 connected');
+ answers[0](items);
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(appsButton().textContent).toBe('Connect apps0 connected');
+});
+
+// A disconnect the Owner pressed that finishes after the next person signed in still holds the Owner's reader: it reads
+// nothing and drops nothing of the person now signed in.
+test('a change answered for the person before neither reads for them nor drops the next one\'s apps', async () => {
+ const seen = engine(items);
+ const screen = await render(shell(true, 'c-stale-change', 'en', 'p-owner'));
+ await expect.element(appsButton()).toHaveTextContent('Connect apps2 connected');
+ seen.read = [];
+ await screen.rerender(shell(false, 'c-stale-change', 'en', 'p-member'));
+ await expect.element(appsButton()).toHaveTextContent('Connect apps0 connected');
+ const reads = seen.reads;
+ await appsChanged({ company: 'c-stale-change', person: 'p-owner', language: 'en' });
+ expect(seen.reads).toBe(reads);
+ expect(appsButton().textContent).toBe('Connect apps0 connected');
 });
 
 test('while the apps are being read the sheet draws its head with the search field and no list', async () => {
@@ -281,7 +353,7 @@ function Opener() {
 test('the sheet can open at one app\'s page from outside it', async () => {
   engine(items);
   const screen = await render(<div className="gw"><LanguageProvider language="en">
-    <AppsSheetProvider company="c-direct" owner rtl={false}><Opener/></AppsSheetProvider>
+    <AppsSheetProvider company="c-direct" person="p-owner" owner rtl={false}><Opener/></AppsSheetProvider>
   </LanguageProvider></div>);
   await screen.getByRole('button', { name: 'Open Klaviyo' }).click();
   await expect.element(screen.getByRole('heading', { name: 'Klaviyo' })).toBeVisible();
@@ -296,7 +368,7 @@ test('the sheet opened for an Agent picks that Agent on the app\'s page, not the
   const writer = '3a000000-0000-0000-0000-000000000012';
   engine(items.map(item => item.key !== 'airtable' ? item : { ...item, agents: [...item.agents, { id: writer, name: 'Writer', connection: 'f0000000-0000-0000-0000-000000000012', main: false, own: true, state: 'off' as const }] }));
   const screen = await render(<div className="gw"><LanguageProvider language="en">
-    <AppsSheetProvider company="c-for-agent" owner rtl={false}><OpenerFor agent={writer}/></AppsSheetProvider>
+    <AppsSheetProvider company="c-for-agent" person="p-owner" owner rtl={false}><OpenerFor agent={writer}/></AppsSheetProvider>
   </LanguageProvider></div>);
   await screen.getByRole('button', { name: 'Open Airtable' }).click();
   await expect.element(screen.getByRole('checkbox', { name: /Writer/ })).toHaveAttribute('aria-checked', 'true');
