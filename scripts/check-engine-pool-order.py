@@ -91,10 +91,10 @@ def root():
     # A request that loaded the pool before the Owner's change writes it back (an exhaustion or a rotation does): the
     # stored order and switch stay the Owner's.
     stale = load_pool("openai-codex")
-    order([{"id": "cccccc", "off": False}, {"id": "aaaaaa", "off": True}, {"id": "bbbbbb", "off": True}])
+    order([{"id": "cccccc", "off": False}, {"id": "bbbbbb", "off": True}, {"id": "aaaaaa", "off": True}])
     stale._persist()
     rows = {r["id"]: r for r in _load_auth_store()["credential_pool"]["openai-codex"]}
-    assert rows["bbbbbb"]["gtmworks_off"] is True and rows["aaaaaa"]["gtmworks_place"] == 1, rows
+    assert [(rows[i]["gtmworks_place"], rows[i]["gtmworks_off"]) for i in ("cccccc", "bbbbbb", "aaaaaa")] == [(0, False), (1, True), (2, True)], rows
     # An order that no longer names a: its place and switch leave its stored row, and it is on again.
     order([{"id": "bbbbbb", "off": False}])
     rows = {r["id"]: r for r in _load_auth_store()["credential_pool"]["openai-codex"]}
@@ -118,7 +118,24 @@ def borrowed():
     assert [e.id for e in pool.entries()] == ["bbbbbb", "aaaaaa", "cccccc"], [e.id for e in pool.entries()]
     agent = running_on(pool, pool.select())
     assert agent._credential_pool_entry_id == "bbbbbb", agent._credential_pool_entry_id
+    # The Owner changes the order while this profile's request holds the pool: c moves first and b is switched off. The
+    # route runs in the dashboard's process on the root; here its edit is made to the root's store the same way, under
+    # the store's lock.
+    from hermes_cli.auth import _auth_store_lock, _global_auth_file_path, _load_auth_store, _save_auth_store
+    root_store = _global_auth_file_path()
+    with _auth_store_lock(target_path=root_store):
+        store = _load_auth_store(root_store)
+        for row in store["credential_pool"]["openai-codex"]:
+            place, off = {"cccccc": (0, False), "bbbbbb": (1, True), "aaaaaa": (2, True)}[row["id"]]
+            row.update(gtmworks_place=place, gtmworks_off=off, priority=place)
+        _save_auth_store(store, target_path=root_store)
+    # The profile's request runs out on b and goes on on c; its write of the borrowed rows goes to the root and keeps
+    # the Owner's new order and switch, not the ones it loaded.
     assert exhaust(agent) is True and agent.swaps == ["cccccc"], agent.swaps
+    from hermes_cli.auth import _load_global_auth_store
+    rows = {r["id"]: r for r in _load_global_auth_store()["credential_pool"]["openai-codex"]}
+    assert [(rows[i]["gtmworks_place"], rows[i]["gtmworks_off"]) for i in ("cccccc", "bbbbbb", "aaaaaa")] == [(0, False), (1, True), (2, True)], rows
+    assert rows["bbbbbb"]["last_status"] == "exhausted", rows["bbbbbb"]
 
 
 def recorded():
