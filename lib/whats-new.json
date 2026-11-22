@@ -42,6 +42,12 @@
   "ar": { "title": "كل تطبيق بقى بلوجو شركته", "body": "في «وصّل التطبيقات» وفي الإعدادات، التطبيقات، كل تطبيق بقى بيظهر باللوجو الرسمي بتاع شركته بدل الحروف، في نفس المربع، وواضح في الوضع الفاتح والغامق." }
  },
  {
+  "issue": 554,
+  "date": "2026-11-22",
+  "en": { "title": "A failed update leaves your engine's files as they were", "body": "When an update stops before its agent engines start, for example because a database change fails, the engine files of the version you run are put back, so adding a company, a restore or the next update use that version's own engine again." },
+  "ar": { "title": "التحديث اللي يفشل بيسيب ملفات المحرك زي ما كانت", "body": "لما التحديث يقف قبل ما محركات الوكلاء تشتغل، مثلاً عشان تغيير في قاعدة البيانات فشل، ملفات المحرك بتاعة النسخة اللي شغّالة عندك بترجع مكانها، فإضافة شركة أو الاسترجاع أو التحديث الجاي بيستخدموا محرك النسخة دي نفسها تاني." }
+ },
+ {
   "issue": 520,
   "date": "2026-11-21",
   "en": { "title": "A Conversation opens cleanly in your own time zone", "body": "Outside UTC, a Conversation's message times now appear straight in your own time zone, without the page redrawing itself as it opens." },
