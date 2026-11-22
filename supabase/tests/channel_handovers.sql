@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(76);
+select plan(82);
 -- #150. RS Learning: Lead on the Company's own profile, Ads and Writer on profiles of their own. The "scripts" team
 -- channel holds the Owner (1), the Manager (2), the Contributor (3) and the Viewer (4), and only Lead and Ads: Writer is
 -- the Company's third Agent, outside it. Member 5 is in the Company but not in the channel; Karim belongs to Aleem only.
@@ -279,6 +279,29 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 select is((select no_model from public.channel_handovers('c1500000-0000-0000-0000-000000000001') where goal='Plan the July reels'),false,
  'a handover whose follow-up was stopped is not read as no model');
+reset role;
+-- #530: a channel Run and a handover's legs whose model call cannot succeed on a retry keep the cause, and the channel's
+-- record names it and whose leg it was for a handover that ended with no reply from Lead.
+update public.channel_runs set outcome=null, closed_at=null where run_id='run-ads';
+select is(public.close_channel_run(current_setting('test.ads')::bigint,'run-ads','key_refused',null,null,null),true,'a channel Run whose key was refused closes');
+select is((select outcome from public.channel_runs where run_id='run-ads'),'key_refused','as key_refused, which the channel reads');
+insert into public.agent_handovers(company_id,channel_message_id,run_id,call_id,from_agent,to_agent,goal,state,target_run) values
+ ('10000000-0000-0000-0000-000000000001',current_setting('test.writer')::bigint,'run-writer','call-credit','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000012','Plan the August reels','target','run-target-credit'),
+ ('10000000-0000-0000-0000-000000000001',current_setting('test.writer')::bigint,'run-writer','call-missing','a1500000-0000-0000-0000-000000000011','a1500000-0000-0000-0000-000000000012','Plan the September reels','target','run-target-missing');
+select is(public.close_handover_target((select id from public.agent_handovers where call_id='call-credit'),'run-target-credit','no_credit',null)
+ and public.close_handover_target((select id from public.agent_handovers where call_id='call-missing'),'run-target-missing','completed','The September plan.'),true,
+ 'a target out of credit ends its leg');
+update public.agent_handovers set state='follow_up', follow_up_run='run-return-'||call_id where call_id in ('call-credit','call-missing');
+select is(public.close_handover_follow_up((select id from public.agent_handovers where call_id='call-credit'),'run-return-call-credit','completed','Ads ran out of credit.')
+ and public.close_handover_follow_up((select id from public.agent_handovers where call_id='call-missing'),'run-return-call-missing','model_missing',null),true,
+ 'and Lead''s follow-up ends with its reply, or as model_missing');
+select throws_ok($$select public.close_channel_run(1,'run-unknown','refused',null,null,null)$$,'22023','channelFailed','an outcome no Run takes is refused');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select string_agg(goal||':'||coalesce(model_end,'-')||':'||coalesce(model_agent,'-')||':'||no_model::text,',' order by goal) from public.channel_handovers('c1500000-0000-0000-0000-000000000001')
+ where goal in ('Plan the August reels','Plan the September reels','Plan the June reels')),
+ 'Plan the August reels:-:-:false,Plan the June reels:no_model:Lead:true,Plan the September reels:model_missing:Lead:false',
+ 'the channel names the cause and the Agent whose leg ended the handover, only where Lead''s reply did not come');
 reset role;
 select * from finish();
 rollback;

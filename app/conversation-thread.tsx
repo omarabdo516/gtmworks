@@ -31,6 +31,8 @@ import { signInToApp } from '@/app/app-sign-in';
 import { useAppsReader, useAppsSheet } from '@/app/apps-sheet-open';
 import { appsChanged } from '@/app/company-apps-read';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
+import { ModelLine } from '@/app/model-line';
+import { modelOutcome } from '@/lib/model-causes';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { localeFor } from '@/lib/i18n.mjs';
 import { useReportRun } from '@/lib/live-runs';
@@ -67,9 +69,8 @@ const ruleArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages
 const madeArrivals=(messages:ConversationRecord['messages']):Arrival[]=>messages.flatMap(message=>message.cards?.flatMap(card=>card.kind==='made'?[madeArrival(message,card.agent.id)]:[])??[]);
 // An Agent made, or one opened for this person (#167), changes the sidebar: either is counted, so it is drawn again.
 const madeCount=(rows:ConversationRecord['messages'])=>rows.reduce((sum,message)=>sum+(message.cards?.filter(card=>card.kind==='made').length||0)+(message.decided?.kind==='access'&&message.decided.opened?1:0),0);
-// The words and the recorded outcome for a model error a retry cannot fix (#457).
-const refusalLine={credit:'modelNoCredit',key:'modelKeyRefused',model:'modelMissing'};
-const refusalOutcome={credit:'no-credit',key:'key-refused',model:'model-missing'};
+// The cause of a model error a retry cannot fix (#457), as the record names it.
+const refusalCause={credit:'noCredit',key:'keyRefused',model:'modelMissing'} as const;
 
 export function useConversationText() {
  const {language}=useI18n(); const own:Record<string,string>=language==='ar'?conversationAr:conversationEn;
@@ -172,6 +173,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const here=usePathname();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working}=record;
+ const modelCause=record.noModel?'noModel' as const:record.modelRefused?refusalCause[record.modelRefused.reason]:null;
  const answer=async(card:number,choice:number,answerKey:string)=>{
   const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
   asked();
@@ -277,11 +279,10 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}</ol>
   {pending&&!record.asking&&<p className="thinking convo-status" role="status"><span className="shimmer">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</span></p>}
-  {failed&&(record.noModel
-   // The Company has no model at all (#422): sending again cannot work, so the line says where one is connected.
-   ?<p className="note convo-status" role="alert" data-outcome="no-model">{t('noModelLine')} {record.noModel.owner?<Link className="note__link" href={overlayHref(slug,'models')}>{t('noModelConnect')}</Link>:t('noModelAskOwner')}</p>
-   // A model error a retry cannot fix (#457) says its cause, and where the Owner fixes it: the Agent's model.
-   :record.modelRefused?<p className="note convo-status" role="alert" data-outcome={refusalOutcome[record.modelRefused.reason]}>{t(refusalLine[record.modelRefused.reason],conversation.agent_name)} {record.modelRefused.owner?<Link className="note__link" href={overlayHref(slug,'models')}>{t('modelRefusedFix')}</Link>:t('modelRefusedAskOwner')}</p>
+  {failed&&(modelCause
+   // The Company has no model at all (#422), or a model error a retry cannot fix (#457): sending again cannot work, so
+   // the line says its cause and where the Owner fixes it.
+   ?<p className="note convo-status" role="alert" data-outcome={modelOutcome(modelCause)}><ModelLine cause={modelCause} agent={record.modelRefused?.agent??conversation.agent_name} slug={slug} owner={(record.noModel??record.modelRefused)?.owner===true}/></p>
    :<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>)}
  </>;
 }

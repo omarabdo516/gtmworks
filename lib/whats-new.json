@@ -6,6 +6,12 @@
   "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد زي ما هو مكتوب بلغة الواجهة، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
  },
  {
+  "issue": 530,
+  "date": "2026-11-22",
+  "en": { "title": "Channels and Card notes say why an agent could not reply", "body": "When an agent called in a channel, asked by another agent, or called in a Card's note cannot reply because the company has no model, its key ran out of credit or was refused, or its model is missing, it now says so there, with the way to fix it in Providers, instead of only that it could not reply." },
+  "ar": { "title": "القنوات وملاحظات البطاقات بتقول الوكيل مقدرش يرد ليه", "body": "لما وكيل اتنادى في قناة، أو طلب منه وكيل تاني، أو اتنادى في ملاحظة على بطاقة، مايقدرش يرد علشان الشركة مفيهاش موديل، أو مفتاحها خلص رصيده أو اترفض، أو الموديل بتاعه مش موجود، بقى بيقول كده في مكانه، ومعاه طريقة الحل من المزوّدين، بدل ما يقول بس إنه مقدرش يرد." }
+ },
+ {
   "issue": 612,
   "date": "2026-11-22",
   "en": { "title": "Settings open over your work", "body": "Settings now open as a window over the page you were on, with their pages grouped under Company, Agents and Engine, Members on a page of their own and a trail at the top saying where you are; closing puts you back exactly where you left off." },

@@ -122,7 +122,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
   db.from('note_runs').select('note_id,agent_id,agent_name,outcome').eq('company_id',company.id).eq('card_id',cardId),
   db.from('company_log').select('actor_id,actor_name,body,details,created_at').eq('company_id',company.id).eq('card_id',cardId).eq('action','note_reply'),
   db.from('hermes_agents').select('id,name,connection_id').eq('company_id',company.id),
- ]).then(([comments,runs,replies,agents])=>({me:user.id,drawnAt:drawnAt(),comments:comments.data||[],runs:runs.data||[],agents:agents.data||[],
+ ]).then(([comments,runs,replies,agents])=>({me:user.id,owner:membership?.role==='owner',drawnAt:drawnAt(),comments:comments.data||[],runs:runs.data||[],agents:agents.data||[],
   replies:(replies.data||[]).map(r=>({reply_to:Number(r.details?.reply_to),actor_id:r.actor_id,actor_name:r.actor_name,body:r.body||'',created_at:r.created_at}))})):undefined;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const openCard=workData[2]?.data?.find(c=>c.id===cardId);

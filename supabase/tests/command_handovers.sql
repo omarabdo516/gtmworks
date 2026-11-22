@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(44);
+select plan(46);
 -- #358. RS Learning: Lead on the Company's own profile, Reach (made from the meta role) and Faye on profiles of their
 -- own. The Owner and the Manager see every Agent; the Contributor (…03) sees only the ones given to them; the Viewer
 -- (…04) writes nothing.
@@ -138,6 +138,16 @@ select is(public.close_handover_target((select id from public.agent_handovers wh
  'a target with no model ends its handover');
 select is((select h.state||':'||h.target_outcome||':'||e.outcome from public.agent_handovers h join public.conversation_run_ends e on e.run_id=h.run_id
  where h.call_id='d3580000-0000-0000-0000-000000000008'),'done:no_model:no_model','and the person''s Run ends as no_model, the line the chat draws');
+
+-- #530: a target whose model call cannot succeed on a retry ends the person's Run with that cause, so the chat says what
+-- to fix instead of offering a retry that cannot work.
+insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person,state,target_run)
+ values('10000000-0000-0000-0000-000000000001','c3580000-0000-0000-0000-000000000001','command:d3580000-0000-0000-0000-000000000013',
+ 'd3580000-0000-0000-0000-000000000013','a3580000-0000-0000-0000-000000000011','a3580000-0000-0000-0000-000000000012','Launch again',true,'target','run-no-credit');
+select is(public.close_handover_target((select id from public.agent_handovers where call_id='d3580000-0000-0000-0000-000000000013'),'run-no-credit','no_credit',null),true,
+ 'a target out of credit ends its handover');
+select is((select h.state||':'||h.target_outcome||':'||e.outcome from public.agent_handovers h join public.conversation_run_ends e on e.run_id=h.run_id
+ where h.call_id='d3580000-0000-0000-0000-000000000013'),'done:no_credit:no_credit','and the person''s Run ends as no_credit, the line the chat draws');
 
 -- The reply is the chat's message from that Agent and holds more than a #317 summary does.
 insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal,answers_person,state,target_run)

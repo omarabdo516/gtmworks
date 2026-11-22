@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import ChannelView from '@/app/c/[slug]/channels/[id]/channel';
 import { LanguageProvider } from '@/lib/i18n-client';
-import type { ChannelMessage, ChannelRecord } from '@/lib/channels';
+import type { ChannelMention, ChannelMessage, ChannelRecord } from '@/lib/channels';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -16,7 +16,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 const at = '2026-06-10T09:05:00Z';
 const peer: ChannelMessage = { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: 'Morning all', at, files: [], mention: null };
-const called = (state: 'open' | 'answered' | 'unanswered' | 'noModel'): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, files: [], mention: { agent: 'Lead', face: 'c-1', state, permissions: [], questions: [] } });
+const called = (state: ChannelMention['state']): ChannelMessage => ({ id: 2, author: 'person', mine: true, name: 'Omar', role: 'owner', body: 'Hey @lead, what is due today?', at, files: [], mention: { agent: 'Lead', face: 'c-1', state, permissions: [], questions: [] } });
 const reply: ChannelMessage = { id: 3, author: 'agent', name: 'Lead', face: 'c-1', body: 'Two things are due.', at };
 const record = (messages: ChannelMessage[], more: Partial<ChannelRecord> = {}): ChannelRecord => ({
  channel: { id: 'ch-1', company: 'co-1', kind: 'general' },
@@ -73,7 +73,7 @@ const noModelWords = {
 for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a channel Run that failed for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'}`, async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const said = noModelWords[language];
- const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([called('noModel')], { noModel: { owner } })}/></LanguageProvider>);
+ const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([called('noModel')], { modelLine: { owner } })}/></LanguageProvider>);
  const line = screen.getByRole('alert');
  await expect.element(line).toBeVisible();
  expect(line.element().textContent).toContain(said.line);
@@ -93,9 +93,44 @@ test('two Agents a message called that both had no model say it once, and anothe
  const mention = (agent: string, state: 'noModel' | 'unanswered') => ({ agent, face: agent, state, permissions: [], questions: [] });
  const three: ChannelMessage = { id: 6, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Ads @SEO @Lead the scripts', at, files: [],
   mention: mention('Ads', 'noModel'), mentions: [mention('Ads', 'noModel'), mention('SEO', 'noModel'), mention('Lead', 'unanswered')] };
- const screen = await channel(record([three], { noModel: { owner: false } }));
+ const screen = await channel(record([three], { modelLine: { owner: false } }));
  const lines = screen.getByRole('alert').elements().map(line => line.textContent);
  expect(lines).toEqual(['Lead couldn’t reply to this message.', 'This company has no AI subscription or model key connected yet, so its agents can’t reply. Ask the company’s Owner to connect one in Settings.']);
+});
+
+// #530: a channel Run whose model call cannot succeed on a retry says its cause and its Agent, in the words a
+// Conversation uses (#457), instead of that the Agent could not reply: the Owner gets the way to the Agent's model in
+// Providers, a Member is told to ask the Owner.
+const refusedWords = {
+ en: { noCredit: 'Lead could not reply: the company’s model key has no credit left.', keyRefused: 'Lead could not reply: the model provider refused the company’s key or sign-in.', modelMissing: 'Lead could not reply: its model is not available from the provider.', fix: 'Check the agent’s model in Providers', ask: 'Ask the company’s Owner to check it in Settings.' },
+ ar: { noCredit: 'Lead مقدرش يرد: مفتاح الموديل بتاع الشركة مفيهوش رصيد.', keyRefused: 'Lead مقدرش يرد: مزوّد الموديل رفض مفتاح الشركة أو تسجيل الدخول.', modelMissing: 'Lead مقدرش يرد: الموديل بتاعه مش متاح عند المزوّد.', fix: 'اتأكد من موديل الوكيل من المزوّدين', ask: 'اطلب من مالك الشركة يتأكد منه من الإعدادات.' },
+} as const;
+for (const language of ['en', 'ar'] as const) for (const cause of ['noCredit', 'keyRefused', 'modelMissing'] as const) for (const owner of [true, false]) test(`in ${language} a channel Run refused for ${cause} says so and tells ${owner ? 'the Owner where to fix it' : 'a Member to ask the Owner'}`, async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const said = refusedWords[language];
+ const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([called(cause)], { modelLine: { owner } })}/></LanguageProvider>);
+ const line = screen.getByRole('alert');
+ await expect.element(line).toBeVisible();
+ expect(line.element().textContent).toContain(said[cause]);
+ expect(line.element().getAttribute('data-outcome')).toBe({ noCredit: 'no-credit', keyRefused: 'key-refused', modelMissing: 'model-missing' }[cause]);
+ if (owner) {
+  await expect.element(line.getByRole('link', { name: said.fix })).toHaveAttribute('href', '/c/rs-learning/settings?section=models');
+  expect(line.element().textContent).not.toContain(said.ask);
+ } else {
+  expect(line.element().textContent).toContain(said.ask);
+  await expect.element(line.getByRole('link')).not.toBeInTheDocument();
+ }
+});
+
+test('each Agent a message called whose model refused it says its own cause, beside the no-model line and another Agent\'s "couldn\'t reply"', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const mention = (agent: string, state: ChannelMention['state']) => ({ agent, face: agent, state, permissions: [], questions: [] });
+ const three: ChannelMessage = { id: 6, author: 'person', mine: true, name: 'Omar', role: 'owner', body: '@Ads @SEO @Lead the scripts', at, files: [],
+  mention: mention('Ads', 'noCredit'), mentions: [mention('Ads', 'noCredit'), mention('SEO', 'modelMissing'), mention('Lead', 'unanswered')] };
+ const screen = await channel(record([three], { modelLine: { owner: false } }));
+ const lines = screen.getByRole('alert').elements().map(line => line.textContent);
+ expect(lines).toEqual(['Ads could not reply: the company’s model key has no credit left. Ask the company’s Owner to check it in Settings.',
+  'SEO could not reply: its model is not available from the provider. Ask the company’s Owner to check it in Settings.', 'Lead couldn’t reply to this message.']);
 });
 
 test('a message is posted to the channel with its own send key', async () => {
