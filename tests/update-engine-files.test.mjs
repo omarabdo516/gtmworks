@@ -31,22 +31,30 @@ case "$*" in
   *'nginx -t'*) exit "\${GATEWAY_CONFIG_EXIT:-0}";;
   *'count(*) from public.companies'*) echo 1;;
   *'exec -T db psql'*) cat > /dev/null; exit "\${MIGRATION_EXIT:-0}";;
+  *'label=com.docker.compose.service=hermes'*) echo "\${OLD_HERMES:-}";;
   *'engine-first'*' up '*) exit "\${ENGINE_EXIT:-0}";;
 esac
 `;
 
-function installFolder(t, mode) {
+function installFolder(t, mode, { before = 'engines' } = {}) {
   const directory = mkdtempSync(join(tmpdir(), `gtmworks-engine-files-${mode}-`));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const folder of ['scripts', 'bin', 'lib', 'supabase/migrations', '.engines/first']) mkdirSync(join(directory, folder), { recursive: true });
   for (const file of ['install-nginx.conf', 'install-gateway-real-ip.sh']) copyFileSync(join('scripts', file), join(directory, 'scripts', file));
   for (const name of ['install-env.mjs', 'setup-code.mjs', 'setup-link.mjs', 'settings.mjs', 'supabase-settings.mjs']) copyFileSync(join('lib', name), join(directory, 'lib', name));
   // An install this release's shape already made: its first Company's Engine runs from its own folder.
-  writeFileSync(join(directory, '.env.install'), 'existing secrets\n');
-  writeFileSync(join(directory, '.engines/first/.env'), `ENGINE_KEY=${'k'.repeat(64)}\nENGINE_VOLUME=gtmworks-install_hermes\n`);
-  writeFileSync(join(directory, '.work-sandbox-image'), 'gtmworks-work-sandbox:local\n');
+  if (before === 'hermes') {
+    // An install the release before one Engine per Company made: its key in .env.install, its one `hermes` Engine, and
+    // no Engine files or Engine folder.
+    writeFileSync(join(directory, '.env.install'), `existing secrets\nHERMES_API_KEY=${'k'.repeat(64)}\n`);
+    rmSync(join(directory, '.engines'), { recursive: true });
+  } else {
+    writeFileSync(join(directory, '.env.install'), 'existing secrets\n');
+    writeFileSync(join(directory, '.engines/first/.env'), `ENGINE_KEY=${'k'.repeat(64)}\nENGINE_VOLUME=gtmworks-install_hermes\n`);
+    writeFileSync(join(directory, '.work-sandbox-image'), 'gtmworks-work-sandbox:local\n');
+  }
+  const kept = before === 'hermes' ? {} : previous;
   writeFileSync(join(directory, 'supabase/migrations/001_first.sql'), 'select 1;');
-  for (const [name, text] of Object.entries(previous)) writeFileSync(join(directory, 'scripts', name), text);
   writeFileSync(join(directory, 'bin/docker'), docker, { mode: 0o755 });
   // What the update copies in: the target release's Engine files over the previous release's.
   const bring = join(directory, 'bring-next.sh');
@@ -68,7 +76,7 @@ function installFolder(t, mode) {
   const run = (extra = {}) => {
     writeFileSync(commands, '');
     for (const name of Object.keys(engineFiles(directory))) rmSync(join(directory, 'scripts', name));
-    for (const [name, text] of Object.entries(previous)) writeFileSync(join(directory, 'scripts', name), text);
+    for (const [name, text] of Object.entries(kept)) writeFileSync(join(directory, 'scripts', name), text);
     const result = spawnSync('sh', command, { cwd: directory, env: { ...env, ...extra }, encoding: 'utf8' });
     return { ...result, commands: readFileSync(commands, 'utf8').split('\n'), files: engineFiles(directory) };
   };
@@ -93,6 +101,9 @@ for (const mode of ['source', 'release']) {
       assert.ok(!failed.commands.some(line => / up /.test(line) && /engine-first/.test(line)), 'no Engine was started');
       assert.equal(existsSync(join(install.directory, '.install-lock')), false);
       assert.equal(readFileSync(join(install.directory, '.work-sandbox-image'), 'utf8'), 'gtmworks-work-sandbox:local\n');
+      const tagBack = failed.commands.filter(line => line === 'tag gtmworks-work-sandbox:local-previous gtmworks-work-sandbox:local');
+      // Before the build a -previous image is an earlier run's, older than the one serving: its tag stays where it is.
+      if (mode === 'release' || failure.GATEWAY_CONFIG_EXIT || failure.EXTRACTION_EXIT) assert.deepEqual(tagBack, [], failed.commands.join('\n'));
       if (mode === 'source' && failure.MIGRATION_EXIT) {
         // The source build rebuilt the sandbox tag before the migrations; the image the previous release's sandboxes run gets it back.
         const build = failed.commands.indexOf('build --tag gtmworks-work-sandbox:local sandbox');
@@ -117,5 +128,16 @@ for (const mode of ['source', 'release']) {
     assert.deepEqual(failed.files, previous);
     // The rollback put them back before it started the Engines from them, so the exit handler has nothing to do.
     assert.doesNotMatch(failed.stderr, /stopped before its Engines started/);
+  });
+
+  test(`a ${mode} update of the release before one Engine per Company whose Engine does not start leaves it no Engine files`, t => {
+    const install = installFolder(t, mode, { before: 'hermes' });
+    const failed = install.run({ ENGINE_EXIT: '1', GTMWORKS_ENGINE_WAIT: '1', OLD_HERMES: 'old-hermes-1' });
+    assert.notEqual(failed.status, 0);
+    assert.match(failed.stderr, /the previous release keeps serving, with its own Engines again/);
+    assert.ok(failed.commands.includes('start old-hermes-1'), failed.commands.join('\n'));
+    // That release shipped no Engine template, so none of this release's stays on its disk.
+    assert.deepEqual(failed.files, {});
+    assert.match(readFileSync(join(install.directory, '.env.install'), 'utf8'), /^HERMES_API_KEY=k{64}$/m);
   });
 }
