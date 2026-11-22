@@ -163,6 +163,19 @@ test('the speed in Advanced stops a playing sound, as a change to the voice does
  await expect.element(screen.getByRole('button', { name: 'Listen' })).toBeDisabled();
 });
 
+test('a Listen answer that arrives after the speed changed is dropped, not played', async () => {
+ vi.stubGlobal('Audio', FakeAudio);
+ let answer: (value: Response) => void = () => {};
+ vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { answer = resolve; })));
+ const screen = await voicePage();
+ await screen.getByRole('button', { name: 'Listen' }).click();
+ await screen.getByRole('radio', { name: '1.25×' }).click();
+ answer(answerFor({ dataUrl: 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAA', mimeType: 'audio/mpeg' }));
+ await expect.element(screen.getByText('Save your changes first: “Listen” plays the saved voice.')).toBeVisible();
+ await new Promise(resolve => setTimeout(resolve, 50));
+ expect(FakeAudio.made).toHaveLength(0);
+});
+
 test('everyone who may not change the voice reads the speed as text in Advanced', async () => {
  const screen = await render(<LanguageProvider language="en"><AgentVoiceSpeed agent="ag-voice-read" speed={1.25} editable={false}/></LanguageProvider>);
  await expect.poll(() => document.getElementById('set-speed-val')?.textContent).toBe('1.25×');

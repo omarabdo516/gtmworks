@@ -28,6 +28,9 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
  const choices=voice.list?.state==='found'&&voice.list.available?voice.list.voices:null;
  const sample=t('settingsVoiceSample',firstName(personName));
  const sound=useRef<HTMLAudioElement|null>(null);
+ // Counts the section's changes: a Listen answer asked for before one is dropped, since it would play what is no longer
+ // the draft.
+ const epoch=useRef(0);
  const [playing,setPlaying]=useState(false);
  const [loading,setLoading]=useState(false);
  const [missing,setMissing]=useState<''|'noSpeech'|'unreachable'>('');
@@ -40,15 +43,17 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
  // Any change to the section, the speed in Advanced too, stops the sound: Listen plays only what is saved. The button
  // reads Listen again in the same render, and the sound itself is paused once the change is drawn.
  if(dirty&&playing) setPlaying(false);
- useEffect(()=>{ if(dirty) { sound.current?.pause(); sound.current=null; } },[dirty]);
+ useEffect(()=>{ if(dirty) { epoch.current+=1; sound.current?.pause(); sound.current=null; } },[dirty]);
  // The sound stops when the section leaves the page.
  useEffect(()=>()=>{ sound.current?.pause(); sound.current=null; },[]);
  const listen=async()=>{
   if(playing) { stop(); return; }
   setMissing(''); setLoading(true);
+  const asked=epoch.current;
   try {
    const response=await fetch('/api/agent-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent})});
    const answer=await response.json().catch(()=>null);
+   if(epoch.current!==asked) return;
    if(!response.ok||typeof answer?.dataUrl!=='string') { setMissing(response.status===503?'unreachable':'noSpeech'); return; }
    const audio=new Audio(answer.dataUrl);
    audio.addEventListener('ended',()=>{ if(sound.current===audio) { sound.current=null; setPlaying(false); } });
