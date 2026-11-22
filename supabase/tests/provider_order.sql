@@ -30,7 +30,7 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002'
 select is((select count(*)::int from public.provider_order where company_id='10000000-0000-0000-0000-000000000001'),3,'a Manager reads the order');
 select throws_ok($$select public.switch_provider('10000000-0000-0000-0000-000000000001','anthropic','key',false)$$,'42501','providerNotAllowed','a Manager cannot switch one off');
 select throws_ok($$select public.order_providers('10000000-0000-0000-0000-000000000001','[{"provider":"openai-codex","account":"86c091"}]')$$,'42501','providerNotAllowed','nor reorder');
-select throws_ok($$select public.forget_provider('10000000-0000-0000-0000-000000000001','anthropic','key')$$,'42501','providerNotAllowed','nor forget one');
+select throws_ok($$select public.forget_provider_order('10000000-0000-0000-0000-000000000001','anthropic','key')$$,'42501','providerNotAllowed','nor forget one');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select throws_ok($$select public.switch_provider('10000000-0000-0000-0000-000000000002','anthropic','key',false)$$,'42501','providerNotAllowed','nor does a Viewer, in a Company they are not in');
 
@@ -43,7 +43,7 @@ select is((select jsonb_agg(jsonb_build_array(company_id,account,place,enabled) 
  'a Member of the first Company reads its order only, unchanged by the second''s');
 -- A removed Provider takes its place and switch with it.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select public.forget_provider('10000000-0000-0000-0000-000000000001','openai-codex','61b59d');
+select public.forget_provider_order('10000000-0000-0000-0000-000000000001','openai-codex','61b59d');
 select is((select count(*)::int from public.provider_order where company_id='10000000-0000-0000-0000-000000000001' and account='61b59d'),0,'the Owner forgets a removed Provider''s place');
 reset role;
 select * from finish();

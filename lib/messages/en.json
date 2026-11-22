@@ -1589,7 +1589,7 @@
   "providersMoveDown": "Move down",
   "providersMoveUpLabel": "Move {0} up",
   "providersMoveDownLabel": "Move {0} down",
-  "providersOrderHint": "Agents use the providers in this order, first to last. A switched-off provider is skipped.",
+  "providersOrderHint": "The company’s order, first to last. A switched-off provider’s models are no longer offered when you choose a model.",
   "providersOrderSaved": "Order saved.",
   "providersUse": "Use this provider",
   "providersUseLabel": "Use {0}",

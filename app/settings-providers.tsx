@@ -205,8 +205,8 @@ function PlaceFacts({company,owner,entry,placed}:{company:string,owner:boolean,e
  // A switch the server now reads as asked is the server's again.
  if(turned!==null&&turned===entry.on&&!busy) setTurned(null);
  const at=placed.findIndex(found=>found.id===entry.id);
- // A move to either end disables the button that took it there once the page reads the new order: the focus then goes
- // to the other one, which only that read enables.
+ // A move keeps the focus on the button pressed (a click while one is saved does nothing). A move to either end disables
+ // that button once the page reads the new order: the focus then goes to the other one, which only that read enables.
  const [refocus,setRefocus]=useState<'up'|'down'|null>(null);
  useEffect(()=>{
   const target=refocus==='up'?up.current:refocus==='down'?down.current:null;
@@ -247,8 +247,8 @@ function PlaceFacts({company,owner,entry,placed}:{company:string,owner:boolean,e
   <div className="panel-card" role="group" aria-labelledby={`${id}-h`}>
    <div className="panel-row pv-fact"><span className="panel-row__text"><span className="panel-row__d" id={`${id}-t`}>{t('providersPlaceLabel')}</span></span>
     <span className="pv-fact__v pv-place"><span id={id}>{place}</span>
-     {owner&&<><button ref={up} type="button" className="circle-btn pv-move" aria-label={t('providersMoveUpLabel',entry.name)} title={t('providersMoveUp')} aria-describedby={id} disabled={busy||at===0} onClick={()=>move(-1)}><SettingsIcon name="up" rtl={rtl}/></button>
-      <button ref={down} type="button" className="circle-btn pv-move" aria-label={t('providersMoveDownLabel',entry.name)} title={t('providersMoveDown')} aria-describedby={id} disabled={busy||at===placed.length-1} onClick={()=>move(1)}><SettingsIcon name="down" rtl={rtl}/></button></>}
+     {owner&&<><button ref={up} type="button" className="circle-btn pv-move" aria-label={t('providersMoveUpLabel',entry.name)} title={t('providersMoveUp')} aria-describedby={id} disabled={at===0} onClick={()=>move(-1)}><SettingsIcon name="up" rtl={rtl}/></button>
+      <button ref={down} type="button" className="circle-btn pv-move" aria-label={t('providersMoveDownLabel',entry.name)} title={t('providersMoveDown')} aria-describedby={id} disabled={at===placed.length-1} onClick={()=>move(1)}><SettingsIcon name="down" rtl={rtl}/></button></>}
     </span></div>
    <div className="panel-row pv-fact"><span className="panel-row__text"><span className="panel-row__t" id={`${id}-use`}>{t('providersUse')}</span></span>
     {owner?<button type="button" className="switch" role="switch" id={`${id}-switch`} aria-checked={on} aria-label={t('providersUseLabel',entry.name)} aria-disabled={busy} onClick={turn}/>

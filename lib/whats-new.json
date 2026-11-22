@@ -2,8 +2,8 @@
  {
   "issue": 619,
   "date": "2026-11-22",
-  "en": { "title": "Put your providers in order", "body": "In Settings you can now move each subscription and key up or down the providers list and switch one off without disconnecting it, so switching it back on needs no new sign-in." },
-  "ar": { "title": "رتّب المزوّدين بتوعك", "body": "من الإعدادات بقيت تقدر تطلّع أو تنزّل أي اشتراك أو مفتاح في ليستة المزوّدين، وتقفل واحد من غير ما تفصله، فلما تشغّله تاني مش محتاج تسجّل دخول من جديد." }
+  "en": { "title": "Put your providers in order", "body": "In Settings you can now move each subscription and key up or down the providers list and switch one off without disconnecting it: its models are no longer offered, and switching it back on needs no new sign-in." },
+  "ar": { "title": "رتّب المزوّدين بتوعك", "body": "من الإعدادات بقيت تقدر تطلّع أو تنزّل أي اشتراك أو مفتاح في ليستة المزوّدين، وتقفل واحد من غير ما تفصله: موديلاته مش بتظهر، ولما تشغّله تاني مش محتاج تسجّل دخول من جديد." }
  },
  {
   "issue": 618,

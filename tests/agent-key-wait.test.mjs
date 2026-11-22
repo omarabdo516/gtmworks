@@ -33,7 +33,7 @@ function sessions(fake,{owner=true,extra=[],waits=[],failing=[],failingOnce=[],f
   if(name==='company_key_profiles') return {data:rowsOf(asked.filter(call=>call.name===name).length>1?[...extra,...joined]:extra),error:null};
   if(name==='record_provider_key_change') return {data:null,error:null};
   // A removed key's name, place and switch go with it (#618, #619).
-  if(name==='rename_provider'||name==='forget_provider') return {data:null,error:null};
+  if(name==='rename_provider'||name==='forget_provider_order') return {data:null,error:null};
   if(name==='record_unfinished_provider_key') { if(args.missed.length) unfinished.set(args.key_provider,args.missed); else unfinished.delete(args.key_provider); return {data:null,error:null}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   return {data:null,error:{message:'unexpected'}}; }};

@@ -21,7 +21,7 @@ const seed=fake=>{
 };
 // The person's own session: which profiles are the Company's, whether they are its Owner, and the switches the
 // database keeps (company_provider_models), changed only through set_provider_model as the Owner.
-function database({owner=true,rows=[]}={}) {
+function database({owner=true,rows=[],order=[]}={}) {
  const kept=[...rows]; const calls=[];
  const db={
   rpc:async(name,args)=>{
@@ -40,7 +40,10 @@ function database({owner=true,rows=[]}={}) {
    }
    return {data:null,error:{message:`unexpected ${name}`}};
   },
-  from:table=>({select:()=>({eq:async(column,value)=>table==='company_provider_models'&&column==='company_id'&&value===company?{data:kept.map(row=>({...row})),error:null}:{data:null,error:{message:'unexpected'}}})}),
+  from:table=>({select:()=>({eq:async(column,value)=>column!=='company_id'||value!==company?{data:null,error:{message:'unexpected'}}
+   :table==='company_provider_models'?{data:kept.map(row=>({...row})),error:null}
+   // The Owner's switches of whole Providers (#619), none unless the test gives them.
+   :table==='provider_order'?{data:order.map(row=>({...row})),error:null}:{data:null,error:{message:'unexpected'}}})}),
  };
  return {db,calls,kept};
 }
@@ -141,5 +144,24 @@ test('a subscription signed in only on an Agent\'s profile lists its models from
   const switches=await readProviderModels(db,{company,hermes:install(fake)});
   assert.deepEqual(switches['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:true}]);
   assert.equal(switches['key-anthropic'],undefined);
+ } finally { await fake.close(); }
+});
+
+test('a Provider the Owner switched off offers nothing, and a subscription goes only once every account of it is off (#619)', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake);
+  fake.settings.defaultPool.anthropic=[{id:'c1aude',label:'',auth_type:'oauth',source:'manual:hermes_pkce',priority:0,access_token:'test-only-claude-a'},
+   {id:'c2aude',label:'',auth_type:'oauth',source:'manual:hermes_pkce',priority:1,access_token:'test-only-claude-b'}];
+  const off=(provider,account)=>({provider,account,place:null,enabled:false});
+  const ids=async order=>(await access(database({order}).db,fake)).entries.map(entry=>entry.id).sort();
+  assert.deepEqual(await ids([]),['key-anthropic','key-openrouter','sub-anthropic'],'every Provider on by default');
+  assert.deepEqual(await ids([off('openrouter','key')]),['key-anthropic','sub-anthropic'],'a key switched off offers nothing');
+  assert.deepEqual(await ids([off('anthropic','c1aude')]),['key-anthropic','key-openrouter','sub-anthropic'],'one Claude account off: the other still serves');
+  const found=await access(database({order:[off('anthropic','c1aude'),off('anthropic','c2aude'),off('anthropic','key')]}).db,fake);
+  assert.deepEqual(found.entries.map(entry=>entry.id),['key-openrouter'],'both accounts and the key off: no Claude choice is offered');
+  assert.equal(modelEnabled(found,{provider:'anthropic',model:'claude-opus-4-6'}),false);
+  // The details still list every Provider's models, switched off or not, so the Owner can switch it on again.
+  assert.deepEqual(Object.keys(await readProviderModels(database({order:[off('anthropic','key')]}).db,{company,hermes:install(fake)})).sort(),['key-anthropic','key-openrouter','sub-anthropic']);
  } finally { await fake.close(); }
 });

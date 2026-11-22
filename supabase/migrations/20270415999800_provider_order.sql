@@ -69,11 +69,11 @@ grant execute on function public.switch_provider(uuid,text,text,boolean) to auth
 
 -- A Provider the Owner removed takes its place and its switch with it, so a key given again, which is named `key` as the
 -- removed one was, starts switched on at the end of the list.
-create function public.forget_provider(c uuid, provider text, account text) returns void
+create function public.forget_provider_order(c uuid, provider text, account text) returns void
 language plpgsql security definer set search_path='' as $$
 begin
  if not public.is_company_owner(c) then raise exception 'providerNotAllowed' using errcode='42501'; end if;
- delete from public.provider_order p where p.company_id=c and p.provider=forget_provider.provider and p.account=forget_provider.account;
+ delete from public.provider_order p where p.company_id=c and p.provider=forget_provider_order.provider and p.account=forget_provider_order.account;
 end $$;
-revoke all on function public.forget_provider(uuid,text,text) from public,anon,service_role;
-grant execute on function public.forget_provider(uuid,text,text) to authenticated;
+revoke all on function public.forget_provider_order(uuid,text,text) from public,anon,service_role;
+grant execute on function public.forget_provider_order(uuid,text,text) to authenticated;

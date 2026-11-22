@@ -62,6 +62,6 @@ test('placed Providers come first in their places, the rest after in the Engine\
 test('a removed Provider\'s place and switch are forgotten; a failed forget is answered, not thrown', async () => {
  const person=db();
  assert.equal(await forgetProviderOrder(person,{company,provider:'anthropic',account:'key'}),true);
- assert.deepEqual(person.asked,[{name:'forget_provider',args:{c:company,provider:'anthropic',account:'key'}}]);
+ assert.deepEqual(person.asked,[{name:'forget_provider_order',args:{c:company,provider:'anthropic',account:'key'}}]);
  assert.equal(await forgetProviderOrder(db({error:{code:'XX000'}}),{company,provider:'anthropic',account:'key'}),false);
 });

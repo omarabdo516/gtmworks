@@ -11,9 +11,9 @@ select json_build_object(
   and not has_function_privilege('anon','public.order_providers(uuid,jsonb)','execute')
   and has_function_privilege('authenticated','public.switch_provider(uuid,text,text,boolean)','execute')
   and not has_function_privilege('anon','public.switch_provider(uuid,text,text,boolean)','execute'),
- 'forget_signed_in_only',has_function_privilege('authenticated','public.forget_provider(uuid,text,text)','execute')
-  and not has_function_privilege('anon','public.forget_provider(uuid,text,text)','execute'),
+ 'forget_signed_in_only',has_function_privilege('authenticated','public.forget_provider_order(uuid,text,text)','execute')
+  and not has_function_privilege('anon','public.forget_provider_order(uuid,text,text)','execute'),
  'order_as_owner',(select bool_and(prosecdef and proconfig @> array['search_path=""'] and position('is_company_owner(c)' in pg_get_functiondef(oid))>0)
   from pg_proc where oid in ('public.order_providers(uuid,jsonb)'::regprocedure,'public.switch_provider(uuid,text,text,boolean)'::regprocedure,
-   'public.forget_provider(uuid,text,text)'::regprocedure))
+   'public.forget_provider_order(uuid,text,text)'::regprocedure))
 );
