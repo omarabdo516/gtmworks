@@ -1,9 +1,9 @@
 [
  {
-  "issue": 544,
+  "issue": 561,
   "date": "2026-11-22",
-  "en": { "title": "Open Design is a ready-made app", "body": "Turn Open Design on for an agent in Apps, and the agent makes designs from a conversation in your company’s work folder, drawn with your company’s own model, a subscription sign-in or an API key alike." },
-  "ar": { "title": "Open Design بقى تطبيق جاهز", "body": "فعّل Open Design لوكيل من التطبيقات، والوكيل هيعمل تصميمات من المحادثة في فولدر شغل شركتك، بموديل شركتك نفسه، سواء تسجيل دخول باشتراك أو مفتاح API." }
+  "en": { "title": "Confirmations get their full time on screen", "body": "A confirmation such as the one after you decide an agent's suggested rule now stays its full time from the moment it appears, even when the page is slow to show what changed." },
+  "ar": { "title": "رسايل التأكيد بتاخد وقتها كله على الشاشة", "body": "رسالة التأكيد، زي اللي بتظهر بعد ما تقرر في قاعدة اقترحها وكيل، بقت تفضل وقتها كله من لحظة ما تظهر، حتى لو الصفحة اتأخرت في إنها توريك اللي اتغير." }
  },
  {
   "issue": 616,
@@ -58,6 +58,12 @@
   "date": "2026-11-22",
   "en": { "title": "A failed update leaves your engine's files as they were", "body": "When an update stops before its agent engines start, for example because a database change fails, the engine files of the version you run are put back, so adding a company, a restore or the next update use that version's own engine again." },
   "ar": { "title": "التحديث اللي يفشل بيسيب ملفات المحرك زي ما كانت", "body": "لما التحديث يقف قبل ما محركات الوكلاء تشتغل، مثلاً عشان تغيير في قاعدة البيانات فشل، ملفات المحرك بتاعة النسخة اللي شغّالة عندك بترجع مكانها، فإضافة شركة أو الاسترجاع أو التحديث الجاي بيستخدموا محرك النسخة دي نفسها تاني." }
+ },
+ {
+  "issue": 544,
+  "date": "2026-11-22",
+  "en": { "title": "Open Design is a ready-made app", "body": "Turn Open Design on for an agent in Apps, and the agent makes designs from a conversation in your company’s work folder, drawn with your company’s own model, a subscription sign-in or an API key alike." },
+  "ar": { "title": "Open Design بقى تطبيق جاهز", "body": "فعّل Open Design لوكيل من التطبيقات، والوكيل هيعمل تصميمات من المحادثة في فولدر شغل شركتك، بموديل شركتك نفسه، سواء تسجيل دخول باشتراك أو مفتاح API." }
  },
  {
   "issue": 520,
