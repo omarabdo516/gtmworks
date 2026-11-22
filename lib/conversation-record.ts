@@ -144,6 +144,9 @@ export async function conversationRecord(db:Database,person:string,company:strin
  const ended=latestEnd(messages,ends);
  const reason: 'credit'|'key'|'model'|null=ended==='no_credit'?'credit':ended==='key_refused'?'key':ended==='model_missing'?'model':null;
  const {data:ownsIt}=ended==='no_model'||reason?await db.rpc('is_company_owner',{c:company}):{data:false};
+ // A job command's target answers the person (#358), so a refusal of its model call names that Agent, not the chat's (#530).
+ const lastRun=messages.filter(message=>message.author==='person').at(-1)?.run_id;
+ const commanded=reason?handedRows.find(row=>row.answers_person&&row.run===lastRun&&!row.parent):undefined;
  // Only a Card the chat put on the board says so; a chat started from its Card (#145) found it there. A chat with Lead
  // gets its Card when Lead hands the work over (#147), so its line goes under the handover's answer: the follow-up reply
  // of a Run no message of the person started. A job command's answer (#358) is a message from an Agent the chat handed
@@ -169,7 +172,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(ownsChanges===true?{changeOwner:true as const,...((mode as {work_mode?:string}|null)?.work_mode==='alone'?{alone:true as const}:{})}:{}),
   failed:ended!==null,
   ...(ended==='no_model'?{noModel:{owner:ownsIt===true}}:{}),
-  ...(reason?{modelRefused:{reason,owner:ownsIt===true}}:{}),
+  ...(reason?{modelRefused:{reason,owner:ownsIt===true,...(commanded?{agent:commanded.to_name}:{})}}:{}),
   working:runner?.name??null,
   canStop:!!runner&&(runner.person===person||manages===true),
   ...(board?{board}:{}),

@@ -105,6 +105,45 @@ test('a reply the Engine fails for no credit, a refused key or sign-in, or a mis
  }
 });
 
+// #530: a channel Run, and a Card note's Run, whose model call cannot succeed on a retry keep the cause and say it where
+// the Run was asked for, with the Owner's way to the Agent's model, instead of "Lead couldn't reply" or nothing at all.
+test('a channel Run the Engine fails for no credit records why, and says so in the channel',async({page})=>{
+ const general='69000000-0000-0000-0000-000000000001';
+ fake.settings.failure=creditExhaustedError;
+ await signIn(page,'omar@example.com',`/c/rs-learning/channels/${general}`);
+ await page.getByRole('textbox',{name:'Write your message in the channel'}).fill('@Lead plan the credit week');
+ await page.getByRole('button',{name:'Send',exact:true}).click();
+ const failed=page.locator('[data-outcome=no-credit]');
+ await expect(failed).toContainText('Lead could not reply: the company’s model key has no credit left.');
+ await expect(failed.getByRole('link',{name:refusedFix})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
+ await expect(page.getByText('Lead couldn’t reply to this message.')).toHaveCount(0);
+ expect(JSON.parse(query(`select r.outcome from public.channel_runs r join public.channel_messages m on m.id=r.message_id
+  where m.channel_id='${general}' and m.body='@Lead plan the credit week'`))).toEqual([{outcome:'no_credit'}]);
+});
+
+test('a Card note whose Run the Engine fails for want of a model, or for a refused key, says why under the note',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board/4');
+ for(const [failure,outcome,said] of [[noProvider,'no_model',line],[apiKeyRefusedError,'key_refused','Lead could not reply: the model provider refused the company’s key or sign-in.']] as const) {
+  fake.settings.failure=failure;
+  await page.goto('/c/rs-learning/work/board/4');
+  const body=`@Lead plan the ${outcome} teaser`;
+  await page.getByLabel('Comment',{exact:true}).fill(body);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect.poll(()=>JSON.parse(query(`select id from public.work_comments where body='${body}'`)).length,{timeout:20000}).toBe(1);
+  const note=Number(JSON.parse(query(`select id from public.work_comments where body='${body}'`))[0].id);
+  const under=page.locator(`#note-${note} + li`);
+  await expect(under).toHaveAttribute('data-outcome',outcome.replace('_','-'),{timeout:20000});
+  await expect(under).toContainText(said);
+  await expect(under.getByRole('link',{name:outcome==='no_model'?connect:refusedFix})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
+  expect(JSON.parse(query(`select outcome from public.note_runs where note_id=${note}`))).toEqual([{outcome}]);
+  // The sheet the board opens a Card in says the same under the note in its log.
+  await page.goto('/c/rs-learning/work/board?card=4');
+  const inSheet=page.locator(`[id="note-${note}"] [data-outcome="${outcome.replace('_','-')}"]`);
+  await expect(inSheet).toContainText(said);
+  await expect(inSheet.getByRole('link',{name:outcome==='no_model'?connect:refusedFix})).toHaveAttribute('href','/c/rs-learning/settings?section=models');
+ }
+});
+
 test('once the Company holds a key, the empty chat shows no notice',async({page})=>{
  fake.settings.profiles.get(space)!.env={OPENROUTER_API_KEY:'sk-or-v1-playwright-0123456789abcdef'};
  await signIn(page,'omar@example.com','/c/rs-learning/chat');
