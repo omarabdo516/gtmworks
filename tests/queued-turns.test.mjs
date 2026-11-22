@@ -61,3 +61,72 @@ test('queued turns page through every waiting Conversation behind a stable curso
  assert.equal(started.length,501);
  assert.deepEqual(calls.map(call=>call.after),[null,all[499]],'the next page starts after the last Conversation of the first');
 });
+
+// #514: a queued turn's start that never reached its Engine (nothing could connect: the Engine is not running) is no
+// attempt. Its attempt is handed back (release_queued_start), so the turn stays due as never started and its model is
+// not refused; its next start is a first attempt again, which a refusal then fails. A start that may have reached the
+// Engine keeps its attempt and is retried with the same key. The database half is supabase/tests/unreached_queued_starts.sql.
+const notReached=Object.freeze({state:'notReached'});
+function counted({model=null}={}) {
+ const state={attempts:0,released:/** @type {any[]} */([]),failed:/** @type {[string,any][]} */([]),kept:0};
+ const rpc=async(/** @type {string} */ name,/** @type {any} */ given)=>{
+  if(name==='queued_conversations') return {data:given.after?[]:[{conversation:'c1'}],error:null};
+  if(name==='claim_conversation_turn') return {data:[{company:'co',agent:'a',person:'p',send_key:'k-c1',message:'Hello',connection,profile:'writer',note:null,retry:state.attempts>0}],error:null};
+  if(name==='pin_run') return {data:{tools:null},error:null};
+  if(name==='pin_run_history') return {data:null,error:null};
+  if(name==='pin_run_model') return {data:model,error:null};
+  if(name==='pin_lead_brief') return {data:null,error:null};
+  if(name==='conversation_handover_agents') return {data:[],error:null};
+  if(name==='begin_start') return {data:++state.attempts,error:null};
+  if(name==='release_queued_start') { state.released.push(given); if(given.attempt===state.attempts) { state.attempts--; return {data:true,error:null}; } return {data:false,error:null}; }
+  if(name==='keep_unknown_start') { state.kept++; return {data:true,error:null}; }
+  if(name==='fail_conversation_turn'||name==='refuse_run_model') { state.failed.push([name,given]); return {data:true,error:null}; }
+  if(name==='record_conversation_turn') return {data:true,error:null};
+  return {data:null,error:{message:`unexpected ${name}`}};
+ };
+ const chain=(/** @type {unknown} */ data)=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>({data,error:null})}; return c; };
+ return {state,service:{rpc,from:()=>chain({instructions:null})}};
+}
+
+for(const model of [null,{provider:'openrouter',model:'openai/gpt-5.5'}]) {
+ const refusal=model?'refuse_run_model':'fail_conversation_turn';
+ test(`a stopped Engine leaves a queued turn${model?' sent with a model':''} due, and its next start is a first attempt a refusal fails`, async () => {
+  const {state,service}=counted({model}); const starts=[]; let answer=/** @type {any} */(notReached);
+  const engineFor=()=>({start:async run=>{ starts.push(run); return answer; }});
+  assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),0,'nothing connected to the Engine');
+  assert.deepEqual(state.released,[{conversation:'c1',message_key:'k-c1',attempt:1}],'so its attempt is handed back');
+  assert.deepEqual(state.failed,[],`and the turn is not failed${model?', nor its model refused':''}`);
+  assert.equal(state.kept,0,'nor kept as unknown');
+  answer=null;
+  assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),0,'the Engine runs again and refuses the start');
+  assert.deepEqual(starts.map(start=>[start.idempotencyKey,start.retry]),[['c1:k-c1',false],['c1:k-c1',false]],'both are sent as a first attempt');
+  assert.deepEqual(state.failed,[[refusal,{conversation:'c1',message_key:'k-c1',attempt:1}]],'so the refusal fails the turn for its first attempt');
+  assert.equal(state.released.length,1,'a refusal reached the Engine and is not handed back');
+ });
+}
+
+test('a queued start that may have reached the Engine keeps its attempt and is retried with the same key', async () => {
+ const {state,service}=counted(); const starts=[]; let answer=/** @type {any} */({state:'unknown'});
+ const engineFor=()=>({start:async run=>{ starts.push(run); return answer; }});
+ await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)});
+ assert.deepEqual(state.released,[],'an unknown outcome is never handed back');
+ assert.equal(state.kept,1,'it is kept as unknown');
+ answer='run-1';
+ assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),1);
+ assert.deepEqual(starts.map(start=>[start.idempotencyKey,start.retry]),[['c1:k-c1',false],['c1:k-c1',true]],'the second is the same request, as a retry');
+ assert.deepEqual(state.failed,[]);
+});
+
+// #514 (review): a turn claimed as a retry while another caller's first attempt was in flight, and handed back before
+// this caller began, is a first attempt again: the attempt begin_start answers decides, not the claim's flag, so an
+// Engine that is still down is handed back here too instead of read as an unknown start that waits a day.
+test('a turn claimed as a retry whose earlier attempt was handed back is sent, and handed back, as a first attempt', async () => {
+ const {state,service}=counted(); const starts=[];
+ const claimed=service.rpc;
+ service.rpc=async(name,given)=>name==='claim_conversation_turn'?{data:[{company:'co',agent:'a',person:'p',send_key:'k-c1',message:'Hello',connection,profile:'writer',note:null,retry:true}],error:null}:claimed(name,given);
+ const engineFor=()=>({start:async run=>{ starts.push(run); return run.retry?{state:'unknown'}:notReached; }});
+ assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),0);
+ assert.deepEqual(starts.map(start=>start.retry),[false],'begin_start answered attempt 1, so it is no retry');
+ assert.deepEqual(state.released,[{conversation:'c1',message_key:'k-c1',attempt:1}],'and the unreached start is handed back');
+ assert.equal(state.kept,0,'never kept as unknown');
+});
