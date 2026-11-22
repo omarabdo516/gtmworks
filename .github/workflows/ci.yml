@@ -684,8 +684,8 @@ jobs:
       fail-fast: false
       matrix:
         area: [first-install, companies, agents, agents-sandbox, backup, backup-engines, proxy, rollback, update, previous-archive, release-update, sandbox-update, staged-update, sandbox-rollback, sizes, engines-update, one-line, updater]
-    # 11.3 min measured for its slowest area, backup, on run 44897434186, once update kept its fixed release image (7.0 min,
-    # #423): 12 min is 1.5 times it, capped at 12 (#410).
+    # 10.0 min measured for its slowest area, updater, on run 44967491326, once #553 split agents and backup in two (from
+    # 11.3 min for backup, run 44897434186): 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:
       contents: read
