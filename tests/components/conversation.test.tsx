@@ -1,5 +1,7 @@
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
-import { use, type ComponentProps } from 'react';
+import { act, use, type ComponentProps } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { render } from 'vitest-browser-react';
 import { cdp, page } from 'vitest/browser';
 // Gives cdp() Playwright's session type (its send), as the config's provider does at run time.
@@ -11,6 +13,7 @@ import type { ConversationRecord } from '@/lib/conversation-record';
 import { latestEnd, shown, withHandedOn, withHandoverAnswers, type AgentRequestView } from '@/lib/conversations';
 import '@/app/tokens.css';
 import '@/app/shell.css';
+import '@/app/globals.css';
 // The loaded chat once its record is read, as the page streams it.
 const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
 
@@ -476,4 +479,31 @@ test('a saved rule\'s line moved from under the person\'s message to under the r
  await vi.advanceTimersByTimeAsync(1500);
  await expect.poll(() => turnOf('Noted.')).toBeTruthy();
  expect(line()!.classList.contains('msg-in')).toBe(false);
+});
+
+// #520: the server draws the page in UTC and the reader is in Cairo, two hours ahead in November. Each message's time
+// is drawn in UTC, hidden, until the page hydrates, then in the reader's own zone, with no hydration mismatch.
+test('a message\'s time the server drew in UTC shows in the reader\'s own zone once the page hydrates, with no hydration error', async () => {
+ const zone = (timezoneId: string) => cdp().send('Emulation.setTimezoneOverride', { timezoneId });
+ onTestFinished(async () => { await zone(''); });
+ const late = '2026-11-12T22:30:00Z';
+ const chat: ConversationRecord = { ...waiting, messages: [
+  { id: 1, author: 'person', author_name: 'Youssef', body: 'Plan this week', created_at: late },
+  { id: 2, author: 'agent', author_name: 'Lead', body: 'Here is the plan.', created_at: late },
+  { id: 3, author: 'agent', author_name: 'Lead', body: '', created_at: late, kind: 'decided', decided: { kind: 'request', by: 'Omar', name: 'FollowUp', at: late, made: false, reason } },
+ ] };
+ await zone('UTC');
+ const host = document.body.appendChild(document.createElement('div'));
+ host.innerHTML = renderToString(view(chat));
+ const times = () => [...host.querySelectorAll('.turns time')];
+ expect(times().map(time => time.textContent)).toEqual(['10:30 PM', '10:30 PM', '10:30 PM']);
+ expect(times().map(time => getComputedStyle(time).visibility), 'hidden until the reader\'s zone is known').toEqual(['hidden', 'hidden', 'hidden']);
+ await zone('Africa/Cairo');
+ const recoverable = vi.fn();
+ const root = await act(async () => hydrateRoot(host, view(chat), { onRecoverableError: recoverable }));
+ try {
+  await expect.poll(() => times().map(time => time.textContent)).toEqual(['12:30 AM', '12:30 AM', '12:30 AM']);
+  expect(times().map(time => getComputedStyle(time).visibility)).toEqual(['visible', 'visible', 'visible']);
+  expect(recoverable).not.toHaveBeenCalled();
+ } finally { act(() => root.unmount()); host.remove(); }
 });
