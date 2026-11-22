@@ -6,6 +6,12 @@
   "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد زي ما هو مكتوب بلغة الواجهة، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
  },
  {
+  "issue": 561,
+  "date": "2026-11-22",
+  "en": { "title": "Confirmations get their full time on screen", "body": "A confirmation such as the one after you decide an agent's suggested rule now stays its full time from the moment it appears, even when the page is slow to show what changed." },
+  "ar": { "title": "رسايل التأكيد بتاخد وقتها كله على الشاشة", "body": "رسالة التأكيد، زي اللي بتظهر بعد ما تقرر في قاعدة اقترحها وكيل، بقت تفضل وقتها كله من لحظة ما تظهر، حتى لو الصفحة اتأخرت في إنها توريك اللي اتغير." }
+ },
+ {
   "issue": 616,
   "date": "2026-11-22",
   "en": { "title": "Pick System and find About in Settings", "body": "Your account now offers Light, Dark or System, which follows your device, and the new About page shows the installed version, what's new and the licenses." },
