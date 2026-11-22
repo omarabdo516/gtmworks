@@ -6,6 +6,12 @@
   "ar": { "title": "القنوات وملاحظات البطاقات بتقول الوكيل مقدرش يرد ليه", "body": "لما وكيل اتنادى في قناة، أو طلب منه وكيل تاني، أو اتنادى في ملاحظة على بطاقة، مايقدرش يرد علشان الشركة مفيهاش موديل، أو مفتاحها خلص رصيده أو اترفض، أو الموديل بتاعه مش موجود، بقى بيقول كده في مكانه، ومعاه طريقة الحل من الاشتراك والموديلات، بدل ما يقول بس إنه مقدرش يرد." }
  },
  {
+  "issue": 520,
+  "date": "2026-11-21",
+  "en": { "title": "A Conversation opens cleanly in your own time zone", "body": "Outside UTC, a Conversation's message times now appear straight in your own time zone, without the page redrawing itself as it opens." },
+  "ar": { "title": "المحادثة بتفتح نضيف بتوقيتك انت", "body": "لو انت برا توقيت UTC، مواعيد الرسايل في المحادثة دلوقتي بتظهر على طول بتوقيتك انت، من غير ما الصفحة ترسم نفسها من الأول وهي بتفتح." }
+ },
+ {
   "issue": 478,
   "date": "2026-11-21",
   "en": { "title": "Stop ends the whole chain", "body": "Stop in a chat, or on a channel message an agent is working on, now also stops every job the agents handed each other from it, each shown as stopped, and nothing more starts after it." },

@@ -23,12 +23,12 @@ import { AccessCard, type PressAccess } from '@/app/access-card';
 // The Owner's answer posts through a server action: loaded only when a waiting proposal is drawn for an Owner, so the
 // chat's own bundle and its tests never load the server module.
 const ChangeAnswer=lazy(()=>import('@/app/c/[slug]/[[...section]]/agent-change-card').then(module=>({default:module.ChangeAnswer})));
-import { AgentMadeToast } from '@/app/agent-made';
+import { AgentMadeToast, useZone } from '@/app/agent-made';
 import { ReplyCard } from '@/app/reply-card';
 import type { DecidePermission, PermissionOutcome } from '@/app/permission-card';
 import type { ConnectApps } from '@/app/connect-card';
 import { signInToApp } from '@/app/app-sign-in';
-import { useAppsSheet } from '@/app/apps-sheet-open';
+import { useAppsReader, useAppsSheet } from '@/app/apps-sheet-open';
 import { appsChanged } from '@/app/company-apps-read';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { ModelLine } from '@/app/model-line';
@@ -168,7 +168,7 @@ export function ChatPlaceholder() {
 // line.
 // `details`: the Agent's details are beside this chat, so a Routine the Agent made is a way into them (#205).
 export function ConversationTurns({slug,company,record,writer,asked,reread,details=false}:{slug:string,company:string,record:ConversationRecord,writer:boolean,asked:()=>void,reread?:()=>Promise<void>,details?:boolean}) {
- const openSheet=useAppsSheet();
+ const openSheet=useAppsSheet(); const appsReader=useAppsReader(company);
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
  const here=usePathname();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
@@ -222,7 +222,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   start:async(app,signal)=>{
    if(!agent) return {error:'connectFailed'};
    const result=await signInToApp({company,agent,app,signal,openApp:key=>openSheet?.(null,key,agent)});
-   if('state' in result) void appsChanged(company,language);
+   if('state' in result) void appsChanged(appsReader);
    return result;
   },
   later:async card=>{
@@ -240,7 +240,10 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const drawn=arrivals(messages);
  const {rises}=useArrivals([...drawn,...madeArrivals(messages),...ruleArrivals(messages)],{fresh:useSentIntoNewChat(conversation.id)});
  const rise=(index:number)=>rises(drawn[index])?' msg-in':'';
- const time=(value:string)=>new Date(value).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit'});
+ // A message's time: in UTC on the server and the first browser render, hidden (globals.css), then in the reader's own
+ // zone, so the page hydrates without a text mismatch outside UTC (#520).
+ const zone=useZone();
+ const when=(at:string,className:string)=><time className={className} dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
  const face=(size:number,connection?:string,name=conversation.agent_name)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:connection||conversation.face,name}} size={size}/></span>;
@@ -252,8 +255,8 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   <ol className="turns" aria-label={t('conversationMessages')}>{messages.map((message,index)=>message.kind==='boarded'?<li key={`boarded${message.id}`} className={`note${rise(index)}`} data-kind="boarded"><span>{c('cardAddedToBoard')}</span></li>:message.kind==='saved'?<Fragment key={`saved${message.id}`}>{message.saved?.map(rule=>rule.sentTo?<SuggestedLine key={rule.id} to={rule.sentTo} cb={cb} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>:<SavedLine key={rule.id} slug={slug} agent={conversation.agent_name} rule={rule} c={c} rise={rises(ruleArrival(message,rule.id))?' msg-in':''}/>)}</Fragment>
    // #477: a job an asked Agent handed on is its own quiet row between the turns, as a channel draws every handover.
    :message.kind==='handedOn'&&message.cards?.[0]?.kind==='handed'?handed(message.cards[0],`handedOn${message.id}`,'li',rise(index).trim()||undefined)
-   :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi><time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}${rise(index)}`} data-author="person" data-kind={message.kind}>
-   {!!message.body.trim()&&<div className="bubble-row"><time className="bubble__time" dateTime={message.created_at}>{time(message.created_at)}</time><div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
+   :message.kind==='decided'&&message.decided?<DecidedLine key={`decided${message.id}`} decided={message.decided} c={c} cb={cb} rise={rise(index)} lead={<div className="sender">{face(20)}<bdi>{conversation.agent_name}</bdi>{when(message.created_at,'sender__time')}</div>}/>:message.author==='person'?<li key={`${message.kind||'m'}${message.id}`} className={`turn turn--user msg${message.kind==='queued'&&!message.failed?' is-queued':''}${rise(index)}`} data-author="person" data-kind={message.kind}>
+   {!!message.body.trim()&&<div className="bubble-row">{when(message.created_at,'bubble__time')}<div className="bubble bubble--user" dir="auto">{message.body}</div></div>}
    {!!message.files?.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/conversation/${file.id}`} target="_blank" rel="noreferrer"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
    {message.kind==='queued'&&!message.failed&&<span className="queued"><ShellIcon name="clock"/>{c('conversationQueued')}</span>}
    {message.kind==='queued'&&message.failed&&<p className="note" role="alert">{c('conversationQueuedFailed')}</p>}
@@ -261,7 +264,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
   </li>:<Fragment key={`${message.kind||'m'}${message.id}`}><li className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
-   <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}<time className="sender__time" dateTime={message.created_at}>{time(message.created_at)}</time></div>
+   <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}{when(message.created_at,'sender__time')}</div>
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {/* A tool the Engine could not run because the Company's work sandbox is down (#398): one plain line under the reply,

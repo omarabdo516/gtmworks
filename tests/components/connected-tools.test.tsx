@@ -117,7 +117,7 @@ test('after a handoff to the sheet, a connect there is read back into the row', 
   await screen.getByRole('button', { name: 'Connect' }).click();
   await expect.poll(() => signInToApp.mock.calls.length).toBe(1);
   connected = true;
-  await appsChanged('co-handoff', 'en');
+  await appsChanged({ company: 'co-handoff', person: '', language: 'en' });
   await expect.element(screen.getByText('Connected')).toBeVisible();
   await expect.element(screen.getByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
  } finally { vi.unstubAllGlobals(); }
