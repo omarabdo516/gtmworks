@@ -7,10 +7,8 @@ import type { ModelCause } from '@/lib/model-causes';
 // What a Conversation, a channel and a Card note say when a model call cannot succeed on a retry (#422, #457, #530):
 // the cause, and where it is fixed. An Owner gets the link to Subscription and models (the Company's model for no model
 // at all, the Agent's model for a refusal); a Member is told to ask the Owner. `agent` names the Agent that could not
-// reply. The caller draws the line around it, with `data-outcome` set from modelOutcome.
+// reply. The caller draws the line around it, with `data-outcome` set from modelOutcome (lib/model-causes.ts).
 const refusalWords={noCredit:'modelNoCredit',keyRefused:'modelKeyRefused',modelMissing:'modelMissing'} as const;
-const outcomes:Record<ModelCause,string>={noModel:'no-model',noCredit:'no-credit',keyRefused:'key-refused',modelMissing:'model-missing'};
-export const modelOutcome=(cause:ModelCause)=>outcomes[cause];
 
 export function ModelLine({cause,agent,slug,owner}:{cause:ModelCause,agent:string,slug:string,owner:boolean}) {
  const {t}=useI18n();

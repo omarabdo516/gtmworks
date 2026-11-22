@@ -26,8 +26,8 @@ import { StepsList, type StepsBidiText } from '@/app/run-steps';
 import { offeredChoices } from '@/lib/conversations';
 import { useArrivals, type Arrival } from '@/lib/arrivals';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
-import { ModelLine, modelOutcome } from '@/app/model-line';
-import { isModelCause } from '@/lib/model-causes';
+import { ModelLine } from '@/app/model-line';
+import { isModelCause, modelOutcome } from '@/lib/model-causes';
 
 type Say=(key:string,...values:unknown[])=>string;
 type Choices=NonNullable<Awaited<ReturnType<typeof channelChoices>>>;

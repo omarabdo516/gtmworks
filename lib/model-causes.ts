@@ -6,3 +6,6 @@ export type ModelCause='noModel'|'noCredit'|'keyRefused'|'modelMissing';
 const causes:Record<string,ModelCause>={no_model:'noModel',no_credit:'noCredit',key_refused:'keyRefused',model_missing:'modelMissing'};
 export const modelCauseOf=(outcome:string|null|undefined):ModelCause|null=>outcome&&Object.hasOwn(causes,outcome)?causes[outcome]:null;
 export const isModelCause=(value:string):value is ModelCause=>Object.values(causes).includes(value as ModelCause);
+// The `data-outcome` a line of that cause carries, as a Conversation's always has (#457).
+const outcomes:Record<ModelCause,string>={noModel:'no-model',noCredit:'no-credit',keyRefused:'key-refused',modelMissing:'model-missing'};
+export const modelOutcome=(cause:ModelCause)=>outcomes[cause];
