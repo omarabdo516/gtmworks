@@ -1,1 +1,1 @@
-| `settings-overlay.test.mjs` | The overlay lists the reference's sections, and a Viewer sees only theirs; "Open company knowledge" has the Company knowledge address for every Role but a Viewer (#192). | 0.3 s | settings-overlay.spec.ts | keep, extended (#192) |
+| `settings-overlay.test.mjs` | The overlay lists the reference's sections then About, which every Role sees (#616), and a Viewer sees only theirs; "Open company knowledge" has the Company knowledge address for every Role but a Viewer (#192). | 0.3 s | settings-overlay.spec.ts | keep, extended (#192) |
