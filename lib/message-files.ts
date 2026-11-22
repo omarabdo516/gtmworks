@@ -53,6 +53,10 @@ export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,
  const rows=files.map((file,index)=>({position:index,name:file.name.slice(0,255)||'image',content_type:file.type.slice(0,127),size:file.size}));
  const {data,error}=await db.rpc(reserve,{...reserveArgs(place),files:rows});
  if(error) return {error:refusalOf(error.code,words)};
+ // -2: the send key's files are kept and still held by its waiting turn or its Run (#465). The send goes on to that turn,
+ // and nothing is written: not over a kept image, so its retry carries what it was sent with, and not beside them at a
+ // place no row names, which nothing would read or give back.
+ if(data===-2) return {};
  // -1: the files of this send key are already a stored message's own; the send goes on to its message, which the send key
  // answers with the one it stored. A file whose upload failed the first time is written now, and one already stored is
  // never replaced (no upsert: "already exists" is the file being there). Its rows stay: they are the message's. The repair
@@ -74,7 +78,8 @@ export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,
 }
 
 // A send that stored no message takes its images with it: the sender's own rows the database gives back, then their
-// bytes. A file a stored message already took is kept.
+// bytes. A file a stored message already took is kept, and so is every file of a send key that is still a waiting turn
+// or holds a Run reservation: the database gives back no path for them (#465).
 /** @param {SupabaseClient} db @param {SupabaseClient} service @param {{place:FilesPlace,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>}} gone */
 export async function discardMessageFiles(db:SupabaseClient,service:SupabaseClient,{place,discard,discardArgs}:{place:FilesPlace,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>}) {
  const {data}=await db.rpc(discard,discardArgs(place));

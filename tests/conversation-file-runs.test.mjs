@@ -17,13 +17,16 @@ const jpeg=Buffer.from('a jpeg, not really').toString('base64');
 const files=[{content_type:'image/png',base64:png},{content_type:'image/jpeg',base64:jpeg}];
 const imagePart=(type,base64)=>({type:'image_url',image_url:{url:`data:${type};base64,${base64}`}});
 
-/** @param {{has_files?:boolean,files?:{content_type:string,path:string,bytes:string}[],refuse?:string|null,download?:'not found'|'fails once'|null}} [options] */
-function databases({has_files=false,files=[],refuse=null,download=null}={}) {
+/** @param {{has_files?:boolean,retry?:boolean,begin?:'fails'|'none'|null,files?:{content_type:string,path:string,bytes:string}[],refuse?:string|null,download?:'not found'|'fails once'|null}} [options] */
+function databases({has_files=false,retry=false,begin=null,files=[],refuse=null,download=null}={}) {
  const calls=/** @type {[string,any][]} */([]);
  const downloads=/** @type {string[]} */([]);
  // The Conversation's waiting turns, oldest first: the first until a turn is failed, then the next, then nothing.
  const turns=[{send_key:'q',message:'Look at these',has_files},{send_key:'q2',message:'And this too',has_files:false}];
- let claimed=0; let transient=download==='fails once'?1:0;
+ let claimed=0;
+ // The first turn's start was attempted before this claim (retry), so it is a retry and the database never fails it.
+ const retried=()=>claimed===0&&retry;
+ let transient=download==='fails once'?1:0;
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  const completion={state:'reserved',connection,profile:'writer',note:null};
  const rpc=async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
@@ -31,13 +34,15 @@ function databases({has_files=false,files=[],refuse=null,download=null}={}) {
   if(name==='queued_conversations') return ok([{conversation}]);
   if(name==='reserve_conversation_turn') return ok(completion);
   if(name==='claim_conversation_turn') { const turn=turns[claimed];
-   return ok(turn?[{company:'co',agent:'a',person:'p',send_key:turn.send_key,message:turn.message,connection,profile:'writer',note:null,retry:false,has_files:turn.has_files}]:[]); }
+   return ok(turn?[{company:'co',agent:'a',person:'p',send_key:turn.send_key,message:turn.message,connection,profile:'writer',note:null,retry:retried(),has_files:turn.has_files}]:[]); }
   if(name==='conversation_handover_agents') return ok([]);
   if(['pin_run','pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return ok(null);
-  if(name==='begin_start') return ok(1);
+  if(name==='begin_start') return begin==='fails'?{data:null,error:{code:'40001',message:'could not serialize access'}}:begin==='none'?ok(null):ok(retried()?2:1);
+  if(name==='release_conversation_run') return ok(true);
   // The three-argument form fails a turn nobody attempted yet (attempt 0): it leaves the queue, so the next claim gets
-  // the next turn. A retried turn's attempt is above 0 and the database leaves it alone.
-  if(name==='fail_conversation_turn') { if(args.attempt===0) claimed++; return ok(null); }
+  // the next turn. A retried turn's attempt is above 0, or its start was attempted before this claim, and the database
+  // leaves it alone: it may hold a Run.
+  if(name==='fail_conversation_turn') { if(args.attempt===0&&!retried()) claimed++; return ok(null); }
   if(name==='send_conversation_message') return refuse?{data:null,error:{code:refuse}}:ok(true);
   if(name==='record_conversation_turn') { claimed++; return ok(true); }
   return {data:null,error:{message:`unexpected ${name}`}};
@@ -110,6 +115,39 @@ test('a queued turn whose stored image is gone fails for its sender, and the nex
  assert.equal(fake.runs.length,1);
  assert.equal(fake.runs[0].input,'And this too','the Conversation’s next turn starts');
  assert.equal(failed().length,1,'the next turn is not failed');
+});
+
+// #465: a send whose start could not be begun gives its reservation back before the route gives its images back: a held
+// reservation keeps them (discard_conversation_files), and nothing else would release it before the worker's ten minutes.
+for(const begin of /** @type {const} */(['fails','none'])) test(`a send whose start ${begin==='fails'?'fails to begin':'is not begun'} releases its reservation, so its images can go`,async()=>{
+ const fake=fakeEngine(); const stand=databases({begin});
+ const sent=await send(stand,fake,{images:files});
+ assert.ok('code' in sent||'error' in sent,'the send is refused');
+ assert.deepEqual(stand.calls.filter(([name])=>name==='release_conversation_run').map(([,args])=>args),[{conversation,c:'co',message_key:'k',attempt:0}]);
+ assert.equal(fake.runs.length,0);
+});
+
+// #465: the images of a turn whose start was attempted or marked unknown are kept while it may need them
+// (supabase/tests/queued_turn_files_kept.sql), so its retry reads them and asks again with the same key and body.
+test('a retried turn whose images were kept starts with the same images, as a retry of the same Run',async()=>{
+ const fake=fakeEngine(); const starts=/** @type {any[]} */([]);
+ const engineFor=(/** @type {any} */ connection)=>{ const engine=fake.engineFor(connection); return {...engine,start:(/** @type {any} */ input)=>{ starts.push(input); return engine.start(input); }}; };
+ const bytes='bytes of the image';
+ const stand=databases({has_files:true,retry:true,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes}]});
+ assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor}),1,'the retried turn starts');
+ assert.deepEqual(stand.downloads,['co/conversations/c/q-0']);
+ assert.equal(starts[0].retry,true,'as a retry, which no answer but a run id settles');
+ assert.deepEqual(fake.runs[0].input,[{role:'user',content:[{type:'text',text:'Look at these'},imagePart('image/png',Buffer.from(bytes).toString('base64'))]}],'with the images it was sent with');
+ assert.deepEqual(stand.calls.filter(([name])=>name==='fail_conversation_turn'),[]);
+});
+
+test('a retried turn whose image is gone for outside reasons is never failed and never sent without it',async()=>{
+ const fake=fakeEngine();
+ const stand=databases({has_files:true,retry:true,files:[{content_type:'image/png',path:'co/conversations/c/q-0',bytes:'gone'}],download:'not found'});
+ assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),0);
+ assert.equal(fake.runs.length,0,'no request with a changed body under the same key');
+ assert.equal(await startQueuedTurns(stand.service,{hermes,engineFor:fake.engineFor}),0,'the database refuses to fail it, so it waits: it may hold a Run');
+ assert.equal(fake.runs.length,0);
 });
 
 test('a storage error that may pass leaves the turn to be retried on the next pass',async()=>{
