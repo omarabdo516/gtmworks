@@ -20,6 +20,10 @@ const leaving = () => document.querySelectorAll('.toast.is-leaving');
 const onTop = () => { const box = document.querySelector('.toast')!.getBoundingClientRect(); return !!document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.closest('.toast'); };
 const reducedMotion = () => vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener() {}, removeEventListener() {} }));
 const fakeClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+// The page's own frames are not faked: a toast's clock starts on the frame it is drawn in, so a test waits until the
+// toast is on the page and two more frames have run before it moves the clock.
+const frame = () => new Promise<void>(done => requestAnimationFrame(() => done()));
+const drawn = async () => { for (let n = 0; n < 10 && !toasts().length; n++) await frame(); await frame(); await frame(); };
 
 test('the area is announced politely; one toast shows at the top centre with a check, and a second replaces it with its own icon', async () => {
  const screen = await show(<i data-icons><ShellIcon name="check"/><ShellIcon name="hand"/></i>);
@@ -48,8 +52,10 @@ test('a toast leaves after 2.8 seconds with the 140 ms leaving step, and a new t
  fakeClock();
  await show();
  toast('Moved to “Planned”');
+ await drawn();
  await vi.advanceTimersByTimeAsync(2000);
  toast('Moved to “In progress”');
+ await drawn();
  await vi.advanceTimersByTimeAsync(2799);
  await expect.poll(() => toasts()[0]?.textContent).toBe('Moved to “In progress”');
  expect(leaving()).toHaveLength(0);
@@ -61,10 +67,30 @@ test('a toast leaves after 2.8 seconds with the 140 ms leaving step, and a new t
  await expect.poll(() => toasts().length).toBe(0);
 });
 
+// A page that is busy drawing what an answer brought back can go seconds without a frame (#561): a toast whose clock ran
+// from the call would come and go in that time, unseen. Its time starts on the frame it is first drawn in.
+test('a toast’s 2.8 seconds start once it is drawn, so a page that draws nothing for longer still shows it in full', async () => {
+ fakeClock();
+ await show();
+ toast('The rule now applies team-wide for Ads');
+ // Five seconds pass in this one task, before the page can draw a frame.
+ vi.advanceTimersByTime(5000);
+ await drawn();
+ expect([...toasts()].map(each => each.textContent)).toEqual(['The rule now applies team-wide for Ads']);
+ await vi.advanceTimersByTimeAsync(2799);
+ expect(toasts()).toHaveLength(1);
+ expect(leaving()).toHaveLength(0);
+ await vi.advanceTimersByTimeAsync(1);
+ expect(leaving()).toHaveLength(1);
+ await vi.advanceTimersByTimeAsync(140);
+ expect(toasts()).toHaveLength(0);
+});
+
 test('a toast with an action stays 6 seconds, then takes the same leaving step', async () => {
  fakeClock();
  await show();
  toast('Moved to “Planned”', { action: { label: 'Undo', run() {} } });
+ await drawn();
  await vi.advanceTimersByTimeAsync(5999);
  await expect.poll(() => toasts().length).toBe(1);
  expect(leaving()).toHaveLength(0);
@@ -92,6 +118,7 @@ test('a toast rises in and lifts out with the reference’s motion, and the toas
   await expect.poll(() => started.length).toBe(1);
   toast('Moved to “In progress”');
   await expect.poll(() => started.length).toBe(2);
+  await drawn();
   await vi.advanceTimersByTimeAsync(2800);
   await expect.poll(() => started.length).toBe(3);
   const rise = { name: 'toastIn', duration: '0.2s', easing: 'cubic-bezier(0.2, 0, 0, 1)', fill: 'none', frames: [['translate(-50%, 4px)', '0'], ['translate(-50%)', '1']] };
@@ -107,6 +134,7 @@ test('with reduced motion a toast is removed at once, with no leaving step', asy
  const watch = new MutationObserver(() => { leavingSeen ||= leaving().length > 0; });
  watch.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
  toast('Moved to “Planned”');
+ await drawn();
  await vi.advanceTimersByTimeAsync(2799);
  await expect.poll(() => toasts().length).toBe(1);
  await vi.advanceTimersByTimeAsync(1);
