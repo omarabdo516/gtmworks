@@ -53,9 +53,9 @@ export function shardFiles(specs, times, count, workers = 1) {
 }
 
 // Every spec of a Playwright JSON report (or list) with its file's name: the browser specs all sit directly in tests/.
-function eachSpec(report, use) {
+function eachSpec(report, onSpec) {
   const visit = suite => {
-    for (const spec of suite.specs ?? []) use(spec.file.replace(/^.*\//, ''), spec);
+    for (const spec of suite.specs ?? []) onSpec(spec.file.replace(/^.*\//, ''), spec);
     for (const child of suite.suites ?? []) visit(child);
   };
   for (const suite of report.suites ?? []) visit(suite);
