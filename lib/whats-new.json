@@ -1,5 +1,11 @@
 [
  {
+  "issue": 465,
+  "date": "2026-11-22",
+  "en": { "title": "A waiting message with images reaches the agent", "body": "A message with images that waits while the agent is busy now starts with its images once the agent is free, and sending it again no longer removes or replaces them. An image that was already gone is not brought back." },
+  "ar": { "title": "الرسالة اللي فيها صور وبتستنى بتوصل للوكيل", "body": "الرسالة اللي فيها صور وبتستنى لحد ما الوكيل يفضى، دلوقتي بتبدأ بصورها أول ما يفضى، ولو بعتها تاني صورها مش بتتشال ولا بتتغير. الصورة اللي كانت ضاعت قبل كده مش بترجع." }
+ },
+ {
   "issue": 535,
   "date": "2026-11-22",
   "en": { "title": "Ran overnight no longer misses runs", "body": "Each routine result is now kept as soon as its run ends, so the morning card lists what ran overnight, up to 200 results, even for a routine that runs every 15 minutes." },
