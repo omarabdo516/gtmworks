@@ -6,6 +6,12 @@
   "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد زي ما هو مكتوب بلغة الواجهة، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
  },
  {
+  "issue": 514,
+  "date": "2026-11-22",
+  "en": { "title": "Waiting messages and handed-over jobs wait for a stopped engine", "body": "When the agent engine is not running, a message that waited its turn, or a job one agent handed to another, now waits for the engine to come back instead of failing at once: a waiting message for up to ten minutes." },
+  "ar": { "title": "الرسايل المستنية والشغل المتسلّم بيستنوا المحرك الواقف", "body": "لما محرك الوكلاء مايكونش شغال، الرسالة اللي كانت مستنية دورها، أو الشغلانة اللي وكيل سلّمها لوكيل تاني، دلوقتي بتستنى المحرك يرجع بدل ما تفشل على طول: الرسالة المستنية لحد عشر دقايق." }
+ },
+ {
   "issue": 615,
   "date": "2026-11-22",
   "en": { "title": "An agent's settings in five groups", "body": "An agent's page in Settings now reads in five groups, Identity, How it works, Thinking, Voice, and Tools and skills, with Good morning as one row with its switch and time, and the voice's speed, Pause and Delete under Advanced." },
@@ -24,6 +30,12 @@
   "ar": { "title": "«اشتغل بالليل» مبقاش بيفوّت تشغيلات", "body": "كل نتيجة روتين بقت بتتحفظ أول ما تشغيلتها تخلص، فبطاقة الصبح بتعرض اللي اشتغل بالليل لحد 200 نتيجة، حتى لو الروتين بيشتغل كل ربع ساعة." }
  },
  {
+  "issue": 529,
+  "date": "2026-11-22",
+  "en": { "title": "An agent's face hops on a page that opens slowly", "body": "When you press an agent's tile, its face on the page that opens now hops however long that page takes to appear, not only when it appears at once." },
+  "ar": { "title": "وش الوكيل بينط في الصفحة اللي بتفتح ببطء", "body": "لما تدوس على مربع وكيل، وشه في الصفحة اللي بتفتح بقى بينط مهما الصفحة تاخد وقت عشان تظهر، مش بس لما تظهر على طول." }
+ },
+ {
   "issue": 556,
   "date": "2026-11-22",
   "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
@@ -34,6 +46,12 @@
   "date": "2026-11-22",
   "en": { "title": "Every app shows its own logo", "body": "In Connect apps and Settings, Apps, every app now shows its company's official logo instead of letters, in the same tile and clear in the light and the dark theme." },
   "ar": { "title": "كل تطبيق بقى بلوجو شركته", "body": "في «وصّل التطبيقات» وفي الإعدادات، التطبيقات، كل تطبيق بقى بيظهر باللوجو الرسمي بتاع شركته بدل الحروف، في نفس المربع، وواضح في الوضع الفاتح والغامق." }
+ },
+ {
+  "issue": 554,
+  "date": "2026-11-22",
+  "en": { "title": "A failed update leaves your engine's files as they were", "body": "When an update stops before its agent engines start, for example because a database change fails, the engine files of the version you run are put back, so adding a company, a restore or the next update use that version's own engine again." },
+  "ar": { "title": "التحديث اللي يفشل بيسيب ملفات المحرك زي ما كانت", "body": "لما التحديث يقف قبل ما محركات الوكلاء تشتغل، مثلاً عشان تغيير في قاعدة البيانات فشل، ملفات المحرك بتاعة النسخة اللي شغّالة عندك بترجع مكانها، فإضافة شركة أو الاسترجاع أو التحديث الجاي بيستخدموا محرك النسخة دي نفسها تاني." }
  },
  {
   "issue": 520,

@@ -386,8 +386,8 @@ test('An Agent face hops when its tile is pressed, lifts on hover, and shows its
   const tile=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'});
   const tileFace=tile.locator('svg.face');
   const motion=(face:typeof tileFace)=>face.evaluate(element=>{ const style=getComputedStyle(element); return [style.animationName,style.animationDuration]; });
-  // The chat a hovered tile leads to is prepared before the press, as navigation.spec.ts opens its pages: the same Agent's
-  // face hops on the next page only when that page is drawn within 450ms of the press.
+  // The chat a hovered tile leads to is prepared before the press, as navigation.spec.ts opens its pages. The hop carries
+  // to that page however long it takes to draw (#529), so a busy runner changes nothing here.
   await tile.hover(); await idle(page);
   // Each hop as it starts, with the computed animation of the face it starts on and where that face is.
   await page.evaluate(()=>{ const hops:string[][]=[]; (window as unknown as {hops:string[][]}).hops=hops;

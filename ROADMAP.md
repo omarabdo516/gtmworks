@@ -39,7 +39,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 - 🟡 **Backup and restore.** A backup holds every Company's database rows, Engine and work folder, and restores into an empty install. Merged; waiting for the release (#572). [#33, #357, #349, #386, #399]
 - 🟡 **Fewer keys in the app.** The app and the worker get only the values they read. Merged; waiting for the release (#572). [#446, #539]
 - 🟡 **Server sizes measured.** The README states two sizes (with and without video) from the install job's numbers. Merged; waiting for the release (#572). [#400]
-- 🟡 **Safer failed updates.** A failed migration leaves new Engine files on disk. [#554]
+- 🟡 **Safer failed updates.** An update that fails before its Engines start leaves the previous release's own Engine files on disk. Merged; waiting for the release (#572). [#554]
 - 🟡 **A disk limit for each work sandbox.** Today one Company can fill the install's disk. [#507]
 
 ## 2. Team and Agents
@@ -82,7 +82,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 - 🟡 **Good morning.** The main Agent opens a new chat with a card of what waits and what ran overnight, switched on and timed in its settings. Merged; waiting for the release (#572). [#182, #183, #506, #524]
 - ✅ **Empty chats help.** Lead's four suggestions, and "Try starting with this sentence" for a new Agent. [#170, #171, #292]
 - ✅ **A chat starts a Card, and a Card has its Chat.** [#144, #145, #146, #147]
-- 🟡 **Reliable queued turns.** A retried turn whose stored image is gone still holds up its Conversation; a stopped Engine still fails the start of queued turns and Handovers; a job command's Agent cannot ask in the chat. [#465, #514, #470, #530]
+- 🟡 **Reliable queued turns.** A retried turn whose stored image is gone still holds up its Conversation; a job command's Agent cannot ask in the chat. A stopped Engine no longer fails the start of queued turns and Handovers: they wait within their own time limits (#514). [#465, #470, #530]
 - ⚪ **Talk to an Agent live by voice.** A full-duplex voice mode while the Agent works in the background, separate from dictation; candidate `gpt-live-1`. [decision 0052]
 - ⚪ **Hermes Group Chat under channels.** The spike shows it is possible only as "Hermes room = engine"; not pursued now (hard caps clash with decision 0057). [decision 0058 (idea)]
 
