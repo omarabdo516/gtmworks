@@ -3,10 +3,10 @@ import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { changeProviderModel } from '@/lib/provider-models.mjs';
+import { uuid } from '@/lib/conversations';
 
 // One model of one of the Company's Providers switched on or off (#620): only an Owner, which set_provider_model checks
 // again in the database. Every Member reads the switches on Settings, server side (lib/provider-models.mjs).
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 export async function POST(request:NextRequest) {
  try {
