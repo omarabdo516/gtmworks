@@ -39,8 +39,10 @@ test('alone: the sidebar has no channels and keeps the log; settings has no memb
  await expect(channels(page)).toHaveCount(0);
  await expect(page.locator('#lbl-ch')).toHaveCount(0);
 
- await page.goto('/c/rs-consultations/settings?section=members');
+ await page.goto('/c/rs-consultations/settings');
  await expect(page.getByText('Alone · just you and the agents')).toBeVisible();
+ // The invitation to the first Member is on Members (#612).
+ await page.goto('/c/rs-consultations/settings?section=members');
  await expect(page.getByLabel('Member’s email')).toBeVisible();
  await expect(page.locator('#inv-role')).toHaveValue('contributor');
  await expect(page.locator('#inv-role-d')).toHaveText('Contributor: Writes with the agents you choose for them.');

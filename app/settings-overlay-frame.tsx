@@ -27,7 +27,8 @@ let lastFocus:string|undefined;
 // The workspace the overlay opens over (app/c/[slug]/layout.tsx): out of reach while Settings are open, so the keyboard
 // and a screen reader stay in the dialog, and back as it was once they close (#612).
 function useWorkspaceInert() {
- useEffect(()=>{
+ // A layout effect, so the workspace is back in reach before a page drawn in the same change takes the focus.
+ useLayoutEffect(()=>{
   const workspace=[...document.querySelectorAll<HTMLElement>('[data-workspace]')].filter(node=>!node.hasAttribute('inert'));
   for(const node of workspace) node.setAttribute('inert','');
   return ()=>{ for(const node of workspace) node.removeAttribute('inert'); };
