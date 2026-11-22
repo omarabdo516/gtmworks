@@ -6,6 +6,12 @@
   "ar": { "title": "الإعدادات بتفتح فوق شغلك", "body": "الإعدادات دلوقتي بتفتح كشبّاك فوق الصفحة اللي كنت فيها، وصفحاتها متقسّمة تحت الشركة والوكلاء والمحرك، والأعضاء ليهم صفحة لوحدهم، وفوق فيه مسار بيقولك انت فين؛ ولما تقفلها بترجع بالظبط مكان ما سبت." }
  },
  {
+  "issue": 616,
+  "date": "2026-11-22",
+  "en": { "title": "Pick System and find About in Settings", "body": "Your account now offers Light, Dark or System, which follows your device, and the new About page shows the installed version, what's new and the licenses." },
+  "ar": { "title": "اختار حسب الجهاز ولاقي عن gtmworks في الإعدادات", "body": "حسابك دلوقتي فيه فاتح أو غامق أو حسب الجهاز اللي بيمشي مع جهازك، وصفحة عن gtmworks الجديدة بتوريك النسخة المتسطّبة والجديد والتراخيص." }
+ },
+ {
   "issue": 514,
   "date": "2026-11-22",
   "en": { "title": "Waiting messages and handed-over jobs wait for a stopped engine", "body": "When the agent engine is not running, a message that waited its turn, or a job one agent handed to another, now waits for the engine to come back instead of failing at once: a waiting message for up to ten minutes." },
@@ -46,6 +52,12 @@
   "date": "2026-11-22",
   "en": { "title": "Every app shows its own logo", "body": "In Connect apps and Settings, Apps, every app now shows its company's official logo instead of letters, in the same tile and clear in the light and the dark theme." },
   "ar": { "title": "كل تطبيق بقى بلوجو شركته", "body": "في «وصّل التطبيقات» وفي الإعدادات، التطبيقات، كل تطبيق بقى بيظهر باللوجو الرسمي بتاع شركته بدل الحروف، في نفس المربع، وواضح في الوضع الفاتح والغامق." }
+ },
+ {
+  "issue": 554,
+  "date": "2026-11-22",
+  "en": { "title": "A failed update leaves your engine's files as they were", "body": "When an update stops before its agent engines start, for example because a database change fails, the engine files of the version you run are put back, so adding a company, a restore or the next update use that version's own engine again." },
+  "ar": { "title": "التحديث اللي يفشل بيسيب ملفات المحرك زي ما كانت", "body": "لما التحديث يقف قبل ما محركات الوكلاء تشتغل، مثلاً عشان تغيير في قاعدة البيانات فشل، ملفات المحرك بتاعة النسخة اللي شغّالة عندك بترجع مكانها، فإضافة شركة أو الاسترجاع أو التحديث الجاي بيستخدموا محرك النسخة دي نفسها تاني." }
  },
  {
   "issue": 520,

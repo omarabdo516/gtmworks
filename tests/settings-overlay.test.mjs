@@ -58,6 +58,8 @@ test('a request opens the section asked for only when the person may see it, els
   assert.equal(pickSection('members', 'viewer'), 'agents');
   assert.equal(pickSection('members', 'contributor'), 'members');
   assert.equal(pickSection('about', 'viewer'), 'about');
+  // About is everyone's (#616): the installed version and its notes are no Role's secret.
+  for (const role of ['owner', 'manager', 'contributor', 'viewer']) assert.equal(pickSection('about', role), 'about', role);
 });
 
 // #192: "Open company knowledge" in an Agent's memory is the Company knowledge section, which a Viewer may not open.

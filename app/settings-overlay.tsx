@@ -45,6 +45,7 @@ import { AgentTabs } from './settings-agent-tabs';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
 import type { MemoryNote } from '@/lib/engine.mjs';
 import { BackupSection } from './settings-backup';
+import { AboutSection } from './settings-about';
 import { StandingPermissions } from './standing-permissions';
 import { readAgentPermissions, type StandingPermission } from '@/lib/standing-permissions.mjs';
 import { RoutinesSection } from './settings-routines';
@@ -154,12 +155,13 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
-  :section==='about'?<AboutSection t={t}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='routines'&&routines?<>{ro}<RoutinesSection company={company.id} state={routines.state} agents={routines.agents??[]} canManage={canManage} now={new Date().toISOString()}/></>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
+  // About (#616) is every Role's: the version this image was built as, and the notes and licenses it ships.
+  :section==='about'?<AboutSection t={t} language={language} locale={locale} version={process.env.GTMWORKS_VERSION}/>
   :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} companyName={company.name} owner={owner} subscriptions={subscriptions} keyed={keys?.keys?.filter(key=>key.set).map(key=>key.provider)??[]}/>}
     keys={<><ProviderKeys company={company.id} owner={owner} data={keys}/><SpeechToText company={company.id} owner={owner} data={speech}/></>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
@@ -209,15 +211,6 @@ function MembersSection({t,company,solo,members,invitations,agents,allowed,invit
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
  return <><Head title={t('members')}/>{ro}{solo?invite:canManage?table:list}</>;
-}
-
-// About (#612): the installed gtmworks, by the version its release built into the image (lib/updates.mjs). The release
-// notes and licences join it later (#616).
-function AboutSection({t}:{t:T}) {
- const version=process.env.GTMWORKS_VERSION;
- return <><Head title={t('settingsAboutApp')}/>
-  <ul className="panel-card"><li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVersion')}</span>
-   <span className="panel-row__d ro-val" id="about-version">{version?<bdi dir="ltr">{version}</bdi>:t('settingsVersionDev')}</span></span></li></ul></>;
 }
 
 // What a face needs of an Agent: the client component is handed no more of the row than it draws.

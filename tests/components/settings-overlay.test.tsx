@@ -5,6 +5,8 @@ import type { ComponentProps } from 'react';
 import { OverlayChrome } from '@/app/settings-overlay-chrome';
 import { BackLink, CloseButton, FocusReturn, OverlayFrame } from '@/app/settings-overlay-frame';
 import AccountChoicesView from '@/app/account-choices-view';
+import { AboutSection } from '@/app/settings-about';
+import { whatsNew } from '@/lib/updates.mjs';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { i18n, type Language } from '@/lib/i18n.mjs';
 import { untilDrawn, fakeClock } from './fake-clock';
@@ -18,12 +20,13 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn(), 
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))}/> }));
 
 const saveLanguage = vi.fn<(state: string, form: FormData) => Promise<string>>();
-afterEach(() => { vi.useRealTimers(); saveLanguage.mockReset(); push.mockReset(); sessionStorage.clear(); });
+const saveTheme = vi.fn<(state: string, form: FormData) => Promise<string>>(async () => '');
+afterEach(() => { vi.useRealTimers(); saveLanguage.mockReset(); saveTheme.mockClear(); push.mockReset(); sessionStorage.clear(); });
 
 // The Owner's Settings open on Your account, as the server draws them.
-const account = (language: Language) => render(<LanguageProvider language={language}>
+const account = (language: Language, theme = 'light') => render(<LanguageProvider language={language}>
  <OverlayChrome t={i18n(language).t} slug="rs-learning" companyName="RS Learning" role="owner" readOnly={false} section="account" learningWaiting={0}>
-  <AccountChoicesView theme="light" saveTheme={async () => ''} saveLanguage={saveLanguage}/>
+  <AccountChoicesView theme={theme} saveTheme={saveTheme} saveLanguage={saveLanguage}/>
  </OverlayChrome>
 </LanguageProvider>);
 
@@ -44,8 +47,8 @@ test('on a phone the sections become a row and every control has a 44px tap area
  const open = document.getElementById('sov-main')!;
  expect(open.scrollWidth).toBe(open.clientWidth);
  const controls = [...sections.getByRole('link').elements(), screen.getByRole('button', { name: 'Close settings and go back' }).element(), ...screen.getByRole('radio').elements()];
- // Twelve sections (#612), the close button and the four account choices.
- expect(controls).toHaveLength(17);
+ // Twelve sections (#612), the close button and the five account choices (#616).
+ expect(controls).toHaveLength(18);
  expect(controls.map(control => [control.textContent, ...tapArea(control)]).filter(([, width, height]) => Number(width) < 44 || Number(height) < 44)).toEqual([]);
 });
 
@@ -203,4 +206,82 @@ test('"All agents" goes to the Agents list, where that Agent\'s row takes the fo
  (document.activeElement as HTMLElement).blur();
  await list.rerender(<div><a href="#1" id="sov-ag-ag-1">Lead</a><a href="#2" id="sov-ag-ag-2">SEO</a><FocusReturn key="again"/></div>);
  await expect.element(list.getByRole('link', { name: 'SEO' })).not.toHaveFocus();
+});
+
+// #616: Appearance is Light, Dark or System, the saved choice checked as it is; System is saved as the account's
+// "device", which follows the device's own light or dark setting.
+test('Appearance offers Light, Dark and System, checks the saved one and saves the one chosen', async () => {
+ const screen = await account('en', 'device');
+ const group = screen.getByRole('radiogroup', { name: 'Appearance' });
+ expect(group.getByRole('radio').elements().map(radio => radio.textContent)).toEqual(['Light', 'Dark', 'System']);
+ await expect.element(group.getByRole('radio', { name: 'System' })).toHaveAttribute('aria-checked', 'true');
+ await expect.element(group.getByRole('radio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'false');
+ await group.getByRole('radio', { name: 'System' }).click();
+ expect(saveTheme).not.toHaveBeenCalled();
+ await group.getByRole('radio', { name: 'Dark' }).click();
+ await expect.poll(() => saveTheme.mock.calls.map(([, form]) => form.get('theme'))).toEqual(['dark']);
+ await screen.rerender(<LanguageProvider language="ar"><AccountChoicesView theme="light" saveTheme={saveTheme} saveLanguage={saveLanguage}/></LanguageProvider>);
+ const arabic = screen.getByRole('radiogroup', { name: 'الشكل' });
+ expect(arabic.getByRole('radio').elements().map(radio => radio.textContent)).toEqual(['فاتح', 'غامق', 'حسب الجهاز']);
+ await expect.element(arabic.getByRole('radio', { name: 'فاتح' })).toHaveAttribute('aria-checked', 'true');
+ await arabic.getByRole('radio', { name: 'حسب الجهاز' }).click();
+ await expect.poll(() => saveTheme.mock.calls.map(([, form]) => form.get('theme'))).toEqual(['dark', 'device']);
+});
+
+test('the arrow keys move between the three Appearance choices in the reading direction', async () => {
+ const screen = await account('en', 'light');
+ const light = screen.getByRole('radio', { name: 'Light' });
+ (light.element() as HTMLElement).focus();
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.element(screen.getByRole('radio', { name: 'Dark' })).toHaveFocus();
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.element(screen.getByRole('radio', { name: 'System' })).toHaveFocus();
+ await userEvent.keyboard('{ArrowRight}');
+ await expect.element(light).toHaveFocus();
+});
+
+// #616: About names the installed version, lists What's new from the shipped release notes in the interface language,
+// newest first, and opens the licenses.
+const about = (language: Language, version?: string) => render(<LanguageProvider language={language}>
+ <OverlayChrome t={i18n(language).t} slug="rs-learning" companyName="RS Learning" role="viewer" readOnly section="about" learningWaiting={0}>
+  <AboutSection t={i18n(language).t} language={language} locale={i18n(language).locale} version={version}/>
+ </OverlayChrome>
+</LanguageProvider>);
+
+test('About shows the installed version, What\'s new from the release notes and the licenses, in English', async () => {
+ const screen = await about('en', '0.4.2');
+ await expect.element(screen.getByRole('heading', { name: 'About', exact: true, level: 3 })).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'About' })).toHaveAttribute('aria-current', 'page');
+ await expect.element(screen.getByRole('region', { name: 'Version' })).toHaveTextContent('Versiongtmworksv0.4.2');
+ const notes = screen.getByRole('region', { name: 'What’s new' });
+ // Every shipped entry is in the page, the earlier ones closed until asked for.
+ const items = [...notes.element().querySelectorAll('li')];
+ expect(items).toHaveLength(whatsNew.length);
+ expect(notes.getByRole('listitem').elements()).toHaveLength(5);
+ expect(items[0].textContent).toContain(whatsNew[0].en.title);
+ expect(items[0].textContent).toContain(whatsNew[0].en.body);
+ expect(items.at(-1)!.textContent).toContain(whatsNew.at(-1)!.en.title);
+ // The newest few are shown; the earlier ones open from one control and close again.
+ const older = notes.getByText(`${whatsNew.length - 5} earlier changes`);
+ await expect.element(notes.getByText(whatsNew[5].en.title)).not.toBeVisible();
+ await older.click();
+ await expect.element(notes.getByText(whatsNew[5].en.title)).toBeVisible();
+ await older.click();
+ await expect.element(notes.getByText(whatsNew[5].en.title)).not.toBeVisible();
+ const licenses = screen.getByRole('region', { name: 'Licenses' });
+ await expect.element(licenses.getByRole('link', { name: /^gtmworks MIT License/ })).toHaveAttribute('href', '/licenses/gtmworks');
+ await expect.element(licenses.getByRole('link', { name: /^Third-party notices/ })).toHaveAttribute('href', '/licenses/third-party');
+ for (const link of licenses.getByRole('link').elements()) expect(link.getAttribute('target')).toBe('_blank');
+});
+
+test('About in Arabic reads the Arabic release notes and names a main build and a source build', async () => {
+ const screen = await about('ar', 'main');
+ await expect.element(screen.getByRole('heading', { name: 'عن gtmworks', level: 3 })).toBeVisible();
+ await expect.element(screen.getByRole('region', { name: 'الإصدار' })).toHaveTextContent('الإصدارgtmworksmain');
+ const items = screen.getByRole('region', { name: 'الجديد' }).getByRole('listitem').elements();
+ expect(items[0].textContent).toContain(whatsNew[0].ar.title);
+ expect(items[0].textContent).not.toContain(whatsNew[0].en.title);
+ await expect.element(screen.getByRole('region', { name: 'التراخيص' }).getByRole('link', { name: /^ملاحظات الأطراف التانية/ })).toBeVisible();
+ await screen.rerender(<LanguageProvider language="en"><AboutSection t={i18n('en').t} language="en" locale="en-US"/></LanguageProvider>);
+ await expect.element(screen.getByRole('region', { name: 'Version' })).toHaveTextContent('VersiongtmworksBuilt from source');
 });
