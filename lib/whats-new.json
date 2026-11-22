@@ -6,6 +6,18 @@
   "ar": { "title": "القنوات وملاحظات البطاقات بتقول الوكيل مقدرش يرد ليه", "body": "لما وكيل اتنادى في قناة، أو طلب منه وكيل تاني، أو اتنادى في ملاحظة على بطاقة، مايقدرش يرد علشان الشركة مفيهاش موديل، أو مفتاحها خلص رصيده أو اترفض، أو الموديل بتاعه مش موجود، بقى بيقول كده في مكانه، ومعاه طريقة الحل من الاشتراك والموديلات، بدل ما يقول بس إنه مقدرش يرد." }
  },
  {
+  "issue": 514,
+  "date": "2026-11-22",
+  "en": { "title": "Waiting messages and handed-over jobs wait for a stopped engine", "body": "When the agent engine is not running, a message that waited its turn, or a job one agent handed to another, now waits for the engine to come back instead of failing at once: a waiting message for up to ten minutes." },
+  "ar": { "title": "الرسايل المستنية والشغل المتسلّم بيستنوا المحرك الواقف", "body": "لما محرك الوكلاء مايكونش شغال، الرسالة اللي كانت مستنية دورها، أو الشغلانة اللي وكيل سلّمها لوكيل تاني، دلوقتي بتستنى المحرك يرجع بدل ما تفشل على طول: الرسالة المستنية لحد عشر دقايق." }
+ },
+ {
+  "issue": 615,
+  "date": "2026-11-22",
+  "en": { "title": "An agent's settings in five groups", "body": "An agent's page in Settings now reads in five groups, Identity, How it works, Thinking, Voice, and Tools and skills, with Good morning as one row with its switch and time, and the voice's speed, Pause and Delete under Advanced." },
+  "ar": { "title": "إعدادات الوكيل في خمس مجموعات", "body": "صفحة الوكيل في الإعدادات بقت متقسمة خمس مجموعات: الهوية، وطريقة الشغل، والتفكير، والصوت، والأدوات والمهارات، وصباح الخير بقى سطر واحد فيه المفتاح والميعاد، وسرعة الصوت والإيقاف المؤقت والمسح تحت «متقدم»." }
+ },
+ {
   "issue": 465,
   "date": "2026-11-22",
   "en": { "title": "A waiting message with images reaches the agent", "body": "A message with images that waits while the agent is busy now starts with its images once the agent is free, and sending it again no longer removes or replaces them. An image that was already gone is not brought back." },
@@ -22,6 +34,12 @@
   "date": "2026-11-22",
   "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
   "ar": { "title": "البطاقة اللي تسيبها بعيد بتفضل قدامك", "body": "لما تشيل بطاقة على لوحة التسويق وتسيبها في عمود بعيد عن مكانها، اللوحة دلوقتي بتفضل مكان ما سبتها بدل ما تنطّ الأول لمكان البطاقة القديم." }
+ },
+ {
+  "issue": 577,
+  "date": "2026-11-22",
+  "en": { "title": "Every app shows its own logo", "body": "In Connect apps and Settings, Apps, every app now shows its company's official logo instead of letters, in the same tile and clear in the light and the dark theme." },
+  "ar": { "title": "كل تطبيق بقى بلوجو شركته", "body": "في «وصّل التطبيقات» وفي الإعدادات، التطبيقات، كل تطبيق بقى بيظهر باللوجو الرسمي بتاع شركته بدل الحروف، في نفس المربع، وواضح في الوضع الفاتح والغامق." }
  },
  {
   "issue": 520,

@@ -20,6 +20,7 @@ const LazyInstructions=lazy(()=>import('./settings-agent-form').then(module=>({d
 const LazyInstructionsRead=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentInstructionsReadOnly})));
 const LazySaveBar=lazy(()=>import('./settings-agent-form').then(module=>({default:module.AgentSaveBar})));
 const LazyVoice=lazy(()=>import('./settings-agent-voice').then(module=>({default:module.AgentVoice})));
+const LazyVoiceSpeed=lazy(()=>import('./settings-agent-voice').then(module=>({default:module.AgentVoiceSpeed})));
 const LazyEffort=lazy(()=>import('./settings-agent-effort').then(module=>({default:module.AgentEffort})));
 const LazyMorning=lazy(()=>import('./settings-agent-morning').then(module=>({default:module.AgentMorning})));
 const LazyKeys=lazy(()=>import('./settings-models').then(module=>({default:module.ProviderKeys})));
@@ -47,6 +48,8 @@ export function AgentInstructionsReadOnly(props:{instructions:string,empty:strin
 export function AgentSaveBar(props:{company:string,agent:string,name:string}) { return <Suspense fallback={null}><LazySaveBar {...props}/></Suspense>; }
 /** @param {{company:string,agent:string,personName:string,voice:import('@/lib/agent-voice.mjs').AgentVoice}} props */
 export function AgentVoice(props:{company:string,agent:string,personName:string,voice:import('@/lib/agent-voice.mjs').AgentVoice}) { return <Suspense fallback={null}><LazyVoice {...props}/></Suspense>; }
+/** @param {{agent:string,speed:number|null,editable:boolean}} props */
+export function AgentVoiceSpeed(props:{agent:string,speed:number|null,editable:boolean}) { return <Suspense fallback={null}><LazyVoiceSpeed {...props}/></Suspense>; }
 /** @param {{agent:string,effort:string|null,editable:boolean}} props */
 export function AgentEffort(props:{agent:string,effort:string|null,editable:boolean}) { return <Suspense fallback={null}><LazyEffort {...props}/></Suspense>; }
 /** @param {{agent:string,editable:boolean,morning:import('./settings-agent-morning').MorningProps|null}} props */
