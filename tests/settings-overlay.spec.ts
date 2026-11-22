@@ -106,6 +106,8 @@ test('on a phone, closing Settings opened from the account menu gives the focus 
  await settings.click();
  const overlay=page.getByRole('dialog',{name:'Settings'});
  await expect(overlay).toBeVisible();
+ // The dialog takes the focus in the same pass that starts listening for Escape.
+ await expect.poll(()=>overlay.evaluate(node=>node.contains(document.activeElement))).toBe(true);
  await page.keyboard.press('Escape');
  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
  await expect(overlay).toHaveCount(0);
