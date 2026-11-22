@@ -241,3 +241,17 @@ test('a cancel while the Run is still starting stops it as soon as the Engine na
   assert.ok(!seen.some(line=>line.startsWith('GET')),'no read after the cancel');
  } finally { engine.closeAllConnections(); engine.close(); }
 });
+
+test('a cancel interrupts an approval the Engine holds, and the stop goes out at once', async () => {
+ const held=await engineAnswering(request=>request.url.endsWith('/approval')?null:request.method==='GET'?[200,{status:'waiting_for_approval',approval:{request_id:'req-9'}}]:[200,{ok:true}]);
+ try {
+  const abort=new AbortController();
+  const running=runOnEngine(held.route,{input:'x',cwd,signal:abort.signal,pace:20});
+  await new Promise(resolve=>setTimeout(resolve,200));
+  const asked=Date.now();
+  abort.abort();
+  await assert.rejects(running,/cancelled/);
+  assert.ok(Date.now()-asked<3000,'not after the approval\'s own time limit');
+  assert.ok(held.seen.some(line=>line.endsWith('/run-9/stop')),held.seen.join('\n'));
+ } finally { held.close(); }
+});

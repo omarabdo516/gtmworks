@@ -119,7 +119,7 @@ export async function runOnEngine(route,{input,cwd,signal,outage=60000,pace=1000
   if(record) {
    seen=Date.now();
    if(record.status==='waiting_for_approval'&&typeof record.approval?.request_id==='string')
-    await call(route,'POST',`${at}/approval`,{choice:'once',request_id:record.approval.request_id}).catch(()=>null);
+    await call(route,'POST',`${at}/approval`,{choice:'once',request_id:record.approval.request_id},5000,signal).catch(()=>null);
    if(terminal.includes(record.status)) {
     if(record.status==='completed') return typeof record.output==='string'?record.output:'';
     throw new Error(typeof record.error==='string'&&record.error?record.error:`The design Run ${record.status}.`);
