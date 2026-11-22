@@ -33,9 +33,9 @@ test('an Engine that is not running says so once in Settings, refuses a message 
 
   await page.goto('/c/rs-learning/settings?section=models');
   await expect(page.locator('#sub-no-engine')).toHaveText('This company’s agent engine isn’t running. Ask the install owner to start it.');
-  await expect(page.locator('#md-subscriptions').getByRole('button')).toHaveCount(0);
+  await expect(page.locator('#md-providers').getByRole('button')).toHaveCount(0);
   await expect(page.locator('#sub-openai-codex')).toHaveCount(0);
-  await expect(page.locator('#md-subscriptions code')).toHaveCount(0);
+  await expect(page.locator('#md-providers code')).toHaveCount(0);
 
   await page.goto('/c/rs-learning/chat');
   const composer=page.locator('.composer');

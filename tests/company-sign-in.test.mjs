@@ -27,7 +27,7 @@ test('the sign-in page says one account serves one Company, in both languages, a
  const en=JSON.parse(readFileSync('lib/messages/en.json','utf8')); const ar=JSON.parse(readFileSync('lib/messages/ar.json','utf8'));
  assert.equal(en.signInOneAccount,'One account serves one Company.');
  assert.match(ar.signInOneAccount,/^[^A-Za-z]+$/,'the Arabic line is Arabic');
- const client=readFileSync('app/company-engine-client.tsx','utf8');
+ const client=readFileSync('app/settings-providers.tsx','utf8');
  assert.match(client,/t\('signInOneAccount'\)/);
  assert.match(client,/gtmworks sign-in claude --company/);
  const get=readFileSync('scripts/get.sh','utf8');

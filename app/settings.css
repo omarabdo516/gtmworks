@@ -423,6 +423,45 @@
 .gw .sov .sub-code--cmd { align-self: stretch; font-size: var(--gw-fs-xs); letter-spacing: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .gw .sov .sub-row > .set-hint, .gw .sov .sub-row > .set-err { margin: 0; padding: 0 var(--s3) var(--s2); }
 
+/* The Company's Providers (#617, spec #611): the list and the chosen one's details side by side on a desktop; on a phone
+   the list, and a row opens its details on a page of their own with one Back, the rest of the section out of view. */
+.gw .sov .pv-split { display: grid; grid-template-columns: minmax(0, 248px) minmax(0, 1fr); gap: var(--s4); align-items: start; }
+.gw .sov .pv-list { margin: 0; padding: 4px; list-style: none; }
+.gw .sov .pv-list > li { display: block; }
+.gw .sov .pv-row { width: 100%; text-align: start; }
+.gw .sov .pv-row[aria-current="true"] { background: var(--gw-bg-active); }
+.gw .sov .pv-row .panel-row__d { display: flex; flex-wrap: wrap; align-items: center; gap: 0 2px; }
+.gw .sov .pv-dot { display: inline-block; width: 6px; height: 6px; margin-inline-end: 4px; border-radius: 50%; background: var(--gw-accent); }
+.gw .sov .pv-dot--part { background: var(--gw-wait); }
+.gw .sov .pv-row .pv-chev, .gw .sov .pv-detail > .pv-back { display: none; }
+.gw .sov .pv-details { min-width: 0; }
+.gw .sov .pv-detail { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.gw .sov .pv-detail[hidden] { display: none; }
+.gw .sov .pv-head { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+.gw .sov .pv-head__t { display: grid; min-width: 0; }
+.gw .sov .pv-name { margin: 0; font-size: var(--gw-fs-lg); line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.gw .sov .pv-name:focus { outline: none; }
+.gw .sov .pv-type { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
+.gw .sov .pv-group { margin: var(--s2) 0 0; font-size: var(--gw-fs-sm); line-height: 1.5; font-weight: 600; color: var(--gw-text-2); }
+.gw .sov .pv-fact { justify-content: space-between; }
+.gw .sov .pv-fact__v { flex: none; max-width: 60%; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); text-align: end; overflow-wrap: anywhere; }
+.gw .sov .pv-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--gw-fs-xs); }
+.gw .sov .pv-adv { display: flex; flex-direction: column; gap: var(--s2); }
+.gw .sov .pv-adv__s { align-self: flex-start; cursor: pointer; list-style: none; font-weight: 600; }
+.gw .sov .pv-adv__s::-webkit-details-marker { display: none; }
+.gw .sov .pv-adv__s .sov-icon { transition: transform var(--gw-dur) var(--gw-ease-out); }
+.gw .sov .pv-adv[open] > .pv-adv__s .sov-icon { transform: rotate(90deg); }
+.gw .sov .pv-adv[open] > .pv-adv__s:dir(rtl) .sov-icon { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .gw .sov .pv-adv__s .sov-icon { transition: none; } }
+@media (max-width: 767px) {
+  .gw .sov .pv-split { grid-template-columns: minmax(0, 1fr); }
+  .gw .sov .pv-split:not([data-open]) .pv-details, .gw .sov .pv-split[data-open] .pv-list { display: none; }
+  .gw .sov .pv-row[aria-current="true"] { background: none; }
+  .gw .sov .pv-row .pv-chev, .gw .sov .pv-detail > .pv-back { display: inline-flex; }
+  .gw .sov-page--models:has(.pv-split[data-open]) > :not(#md-providers),
+  .gw .sov #md-providers:has(.pv-split[data-open]) > :not(.pv-split) { display: none; }
+}
+
 /* Subscription and models (#29): the providers' keys, the default model and each Agent's own, and sub-agents. */
 .gw .sov .md-key + .md-key { border-top: 0.5px solid var(--gw-border-2); }
 .gw .sov .md-key .sub-step { padding-inline: var(--s2); }

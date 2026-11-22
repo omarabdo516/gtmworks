@@ -32,44 +32,53 @@ test('the Owner signs the company in to ChatGPT and out again; a member only see
   // A member: the state, no button, and the server refuses a start.
   const context=await browser.newContext(); const other=await context.newPage();
   await signIn(other,'multi@example.com','/c/aleem/settings?section=models');
-  const memberChatgpt=other.locator('#sub-openai-codex');
-  await expect(memberChatgpt.getByText('Not connected')).toBeVisible();
-  await expect(other.locator('#md-subscriptions').getByRole('button')).toHaveCount(0);
+  // No subscription is connected yet, and a member has no row to connect one (#617). This Company has no space in the
+  // Engine for keys, so they read as unread rather than as nothing connected.
+  await expect(other.locator('#pv-keys-unread')).toHaveText(en.settingsModelsKeyUnread);
+  await expect(other.locator('#md-providers .pv-row')).toHaveCount(0);
+  await expect(other.locator('#md-providers').getByRole('button')).toHaveCount(0);
   const refused=await other.request.post('/api/company-sign-in',{data:{company:aleem,provider:'openai-codex',intent:'start'}});
   expect(refused.status()).toBe(403);
   expect(fake.settings.signInSessions.size).toBe(0);
   await context.close();
 
   // The Owner: the code and the link, then Connected on the Company's own Engine's root profile.
+  // ChatGPT is connected from the list's last row, which a desktop opens first while nothing is connected (#617).
   await page.goto('/c/aleem/settings?section=models');
+  const add=page.locator('#pv-d-add');
   const chatgpt=page.locator('#sub-openai-codex');
-  await expect(chatgpt.getByText('Not connected')).toBeVisible();
-  // The sign-in page says, in one line, that one account serves one Company.
-  await expect(page.locator('#md-subscriptions')).toContainText(`${en.signInHint} ${en.signInOneAccount}`);
+  await expect(add.locator('#sub-openai-codex').getByText('Not connected')).toBeVisible();
+  // The sign-in says, in one line, that one account serves one Company.
+  await expect(add).toContainText(`${en.signInWhat} ${en.signInOneAccount}`);
   await chatgpt.getByRole('button',{name:'Connect ChatGPT'}).click();
   await expect(chatgpt.getByText('ABCD-1234')).toBeVisible();
   await expect(chatgpt.getByRole('link',{name:'Open the sign-in page'})).toHaveAttribute('href','https://auth.provider.test/codex/device');
   const [session]=[...fake.settings.signInSessions.keys()];
   expect(fake.settings.signInSessions.get(session)?.profile).toBe('default');
   fake.settings.approve(session);
-  await expect(chatgpt.getByText('Connected',{exact:true})).toBeVisible({timeout:20000});
+  // Once connected it is a Provider of its own, whose details open in the place of the row that connected it.
+  await expect(page.locator('#pv-d-sub-openai-codex #sub-openai-codex').getByText('Connected',{exact:true})).toBeVisible({timeout:20000});
+  await expect(page.getByRole('region',{name:'ChatGPT'}).getByRole('heading',{name:'ChatGPT'})).toBeVisible();
   // The credential is on the Engine's root profile only, and the page never shows it.
   const credential=fake.settings.defaultCredentials['openai-codex'];
   expect(credential).toBeTruthy();
   expect(fake.settings.profiles.get(profile)!.credentials['openai-codex']).toBeUndefined();
   expect(await page.content()).not.toContain(credential!.slice(-6));
   // Claude signs in from the install's command line, for this Company.
+  await page.locator('#pv-row-add').click();
   await expect(page.locator('#sub-anthropic code')).toContainText('gtmworks sign-in claude --company "Aleem"');
 
+  await page.locator('#pv-row-sub-openai-codex').click();
   await chatgpt.getByRole('button',{name:'Disconnect ChatGPT'}).click();
-  await expect(chatgpt.getByText('Not connected')).toBeVisible();
+  await expect(page.locator('#pv-row-sub-openai-codex')).toHaveCount(0);
+  await expect(add.locator('#sub-openai-codex').getByText('Not connected')).toBeVisible();
   expect(fake.settings.defaultCredentials['openai-codex']).toBeUndefined();
 
   // The same one line in Arabic.
   query(`update public.people set language='ar' where id='${omar}'`);
   await page.goto('/c/aleem/settings?section=models');
   await expect(page.locator('html')).toHaveAttribute('lang','ar');
-  await expect(page.locator('#md-subscriptions')).toContainText(`${ar.signInHint} ${ar.signInOneAccount}`);
+  await expect(page.locator('#pv-d-add')).toContainText(`${ar.signInWhat} ${ar.signInOneAccount}`);
  } finally {
   query(`delete from public.company_profiles where company_id='${aleem}'`);
   query(`delete from public.hermes_agents where id='${agent}'`);

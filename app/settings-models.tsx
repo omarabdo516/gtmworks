@@ -7,7 +7,7 @@ import { toast } from './toast';
 import { AppTile } from '@/components/app-tile';
 import { markOf } from '@/lib/app-mark.mjs';
 
-// The "Subscription and models" section (#29) and an Agent's "Thinks with" rows: the Engine's model options for the
+// The "Subscription and models" section's defaults and speech-to-text (#29; its Providers are settings-providers.tsx) and an Agent's "Thinks with" rows: the Engine's model options for the
 // Company's space and for each Agent's own profile, the model written to that profile and read back, and the Owner's
 // switch for sub-agents. A model is provider/model as the Engine lists and takes it. No control here carries a key, and
 // a key the Owner types goes straight to the route that hands it to the Engine and is then cleared from the page.
@@ -16,9 +16,7 @@ export type ModelOption={provider:string,providerName:string,model:string};
 type ModelSetting={key:string,type:'string'|'number'|'boolean'|'select',choices:string[]|null,default:unknown,value:unknown,limits:{min?:number,max?:number,integer?:boolean}|null,label:string};
 export type AgentModels={id:string,name:string,own:boolean,choosable:boolean,model:string|null,choice:string|null,subagents:boolean,options:ModelOption[],effort:string|null,settings:ModelSetting[]};
 export type ModelsData={default:{model:string|null,options:ModelOption[]},agents:AgentModels[]};
-type KeyRow={provider:string,label:string,set:boolean};
-export type Named={agent:string|null,name:string|null};
-export type ProviderKeysData={keys:KeyRow[]|null,waiting:Named[]|null,leftover:Named[]|null,unknown:Named[]|null};
+import type { Named } from './settings-providers';
 
 type Answer={ok:boolean,error:string,data:Record<string,unknown>|null};
 async function send(path:string,body:object):Promise<Answer> {
@@ -43,54 +41,11 @@ function moveChoice(event:KeyboardEvent<HTMLButtonElement>,rtl:boolean) {
 }
 // The route's error code, as the line under the control that made the change: a refusal is the Owner's line, an Agent
 // that keeps the Company profile says why, and anything else is that control's own retry line.
-function reasonKey(code:string,scope:'key'|'model'='model') {
- if(code==='keyNotAllowed'||code==='settingNotAllowed') return 'settingsModelsOwnerOnly';
+function reasonKey(code:string) {
+ if(code==='settingNotAllowed') return 'settingsModelsOwnerOnly';
  if(code==='settingAgentShared'||code==='settingSubagentsOff') return 'settingsModelsShared';
  if(code==='settingNoDefault'||code==='settingNoEngine') return 'settingsModelsNoChoice';
- return scope==='key'?'settingsModelsKeyError':'settingsModelsError';
-}
-
-// The providers the Engine takes a key for, whether each has one, and — for the Owner — the one field that gives it and
-// the control that removes it. The value is never drawn back: the field starts empty every time and is cleared after it
-// is sent.
-export function ProviderKeys({company,owner,data}:{company:string,owner:boolean,data:ProviderKeysData|null}) {
- const {t}=useI18n(); const router=useRouter();
- const [open,setOpen]=useState(''); const [value,setValue]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
- const rows=data?.keys??null;
- const act=async(provider:string,intent:'set'|'remove')=>{
-  if(busy) return;
-  if(intent==='set'&&value.trim().length<8) { setError('settingInvalid'); return; }
-  setBusy(true); setError('');
-  const answer=await send('/api/provider-keys',{company,provider,intent,...(intent==='set'?{value:value.trim()}:{})});
-  setBusy(false);
-  if(!answer.ok) { setError(answer.error||'keyFailed'); return; }
-  setOpen(''); setValue('');
-  toast(t(intent==='set'?'settingsModelsKeySaved':'settingsModelsKeyRemoved'));
-  router.refresh();
- };
- const names=(list:Named[]|null)=>list&&list.length?list.map(item=>item.name||t('settingsModelsAnAgent')):[];
- const notes=[...names(data?.waiting??null).map(name=>['settingsModelsKeyWaiting',name]),
-  ...names(data?.leftover??null).map(name=>['settingsModelsKeyLeftover',name])];
- return <section className="dp-sec" aria-labelledby="md-h-keys" id="md-keys"><h4 className="dp-label" id="md-h-keys"><span>{t('settingsModelsProviderKeys')}</span></h4>
-  {rows?<div className="panel-card md-keys">{rows.map(row=><div className="md-key" key={row.provider} id={`mdl-key-row-${row.provider}`}>
-   <div className="panel-row"><ProviderLogo provider={row.provider} name={row.label} label={row.label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{row.label}</bdi></span>
-    <span className="panel-row__d" id={`mdl-key-${row.provider}-state`}>{t(row.set?'settingsModelsKeySet':'settingsModelsKeyUnset')}</span></span>
-    {owner&&row.set&&<button type="button" className="btn btn--secondary btn--sm" disabled={busy} aria-label={t('settingsModelsKeyRemoveLabel',row.label)} onClick={()=>act(row.provider,'remove')}>{t('settingsModelsKeyRemove')}</button>}
-    {owner&&<button type="button" className="link-btn" aria-expanded={open===row.provider} aria-controls={`mdl-key-${row.provider}-form`} onClick={()=>{ setOpen(open===row.provider?'':row.provider); setValue(''); setError(''); }}>{t(row.set?'settingsModelsKeyReplace':'settingsModelsKeyGive')}</button>}
-   </div>
-   {owner&&open===row.provider&&<div className="sub-step" id={`mdl-key-${row.provider}-form`}>
-    <label className="set-label" htmlFor={`mdl-key-${row.provider}-value`}>{t('settingsModelsKeyValue')}</label>
-    <input className="set-input" id={`mdl-key-${row.provider}-value`} type="password" dir="ltr" autoComplete="new-password" spellCheck={false} value={value} disabled={busy}
-     onChange={event=>setValue(event.target.value)} onKeyDown={event=>{ if(event.key==='Enter') act(row.provider,'set'); }}/>
-    <div className="panel-form__row panel-form__row--end"><button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={()=>act(row.provider,'set')}>{t('settingsModelsKeySave')}</button></div>
-   </div>}
-  </div>)}</div>
-  :<div className="panel-card"><p className="panel-empty">{t(data?'settingsModelsKeyUnread':'settingsModelsKeyNoEngine')}</p></div>}
-  {error&&<p className="set-err" role="alert">{t(reasonKey(error,'key'))}</p>}
-  {!owner&&<p className="set-hint">{t('settingsModelsKeyOwnerOnly')}</p>}
-  {owner&&notes.length>0&&<ul className="set-hint md-waiting">{notes.map(([label,name],at)=><li key={`${label}-${at}`}>{t(label)} <bdi>{name}</bdi></li>)}</ul>}
-  <p className="set-hint">{t('settingsModelsKeyWhat')} {t('settingsModelsProviderKeysHint')}</p>
- </section>;
+ return 'settingsModelsError';
 }
 
 // The Company's speech-to-text provider (#430): the Owner picks one and pastes its key once, and every Agent transcribes
