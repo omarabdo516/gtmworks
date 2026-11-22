@@ -1,0 +1,7 @@
+| `provider-order.spec.ts` | Two ChatGPT subscriptions, a Claude one and an API key (#619): the Owner moves the key from last to first one place at a time and switches the first ChatGPT off, reloads, and the order and the switch stay in the page and the database; switching it on again needs no new sign-in, and the Engine's accounts and tokens never change; no credential, token tail or Engine label is drawn. A Manager reads each place and switch with no control and the server refuses their reorder and their switch; another Company's list is its own and an Owner cannot change a Company they are not in. | 20 s | provider-order.test.mjs and supabase/tests/provider_order.sql (the order and switch per Role and Company); components/company-providers.test.tsx (the controls) | new |
+
+## Cases
+
+| `provider-order.spec.ts` "the Owner moves the key first and switches a ChatGPT off; both stay after a reload, and switching it on needs no new sign-in" | stays | Providers: the Owner's order and switch are kept across a reload and touch no credential in the Engine. |
+| `provider-order.spec.ts` "a Manager reads the order and the switch with no control, and the server refuses their change" | stays | Permissions: a Manager reads the order only, and the server refuses a reorder and a switch. |
+| `provider-order.spec.ts` "another Company's list is its own: the Owner's order and switch change nothing there" | stays | Isolation: one Company's order never reaches another's page, and no Owner changes a Company they are not in. |

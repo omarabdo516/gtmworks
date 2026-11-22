@@ -10,6 +10,7 @@ import { InfoTip } from './settings-info';
 import { toast } from './toast';
 import type { CompanySignIns, SubscriptionAccount, SubscriptionState } from '@/lib/company-sign-in.mjs';
 import { keyAccount, nameKey, nameLimit } from '@/lib/provider-names.mjs';
+import { inOrder, providerOn, type Placed } from '@/lib/provider-order.mjs';
 
 // The Company's Providers (#617, spec #611; GLOSSARY: Provider): one list of the ways its Engine reaches models, a
 // subscription the Company signed in to or an API key it holds, each with its brand's own mark, and the selected one's
@@ -18,8 +19,9 @@ import { keyAccount, nameKey, nameLimit } from '@/lib/provider-names.mjs';
 // (lib/provider-keys.mjs), and a key the Owner types goes straight to the route that hands it to the Engine, then leaves
 // the page. Every change goes through the routes that check the Owner again. Each subscription account is a Provider of
 // its own (#618), so a second ChatGPT or Claude account is a second row and never replaces the first, and the Owner
-// names each Provider in its details; the name is the Company's (lib/provider-names.mjs). Ordering and switching one
-// off are #619.
+// names each Provider in its details; the name is the Company's (lib/provider-names.mjs). The Owner also puts the
+// Providers in order and switches one off and on again in its details (#619, lib/provider-order.mjs); a switched-off
+// Provider keeps its sign-in or key, so switching it on needs no new sign-in.
 
 type SubscriptionProvider='openai-codex'|'anthropic';
 type KeyRow={provider:string,label:string,set:boolean};
@@ -37,27 +39,42 @@ const subscriptions:SubscriptionProvider[]=['openai-codex','anthropic'];
 // `account` is the Engine's id of a subscription account, or `key` for a key: what the Provider's name is kept by.
 // `own` is its kind's own name, which it reads under until the Owner names it. A subscription the Engine lists no account
 // for (an older sign-in left on an Agent's profile, or a list the Engine did not answer) is one row for its provider.
-type Entry={id:string,kind:'subscription'|'key',provider:string,account:string|null,name:string,own:string,state:SubscriptionState|'set',exhausted:boolean};
-// The list keeps the Engine's own order: a signed-in subscription before a key (agent/credential_pool.py
-// _normalize_pool_priorities, v0.23.0), so the first row is the one the Agents use first, and accounts of one kind in
-// the order the Engine lists them. A second account of one kind reads as its kind's name and its place: ChatGPT 2.
-function entriesOf(t:(key:string)=>string,signIns:CompanySignIns['signIns'],accounts:SubscriptionAccount[]|null|undefined,keys:KeyRow[]|null,names:Record<string,string>):Entry[] {
+// `on` is the Owner's switch (#619): off, the Provider stays connected and is skipped.
+type Entry={id:string,kind:'subscription'|'key',provider:string,account:string|null,name:string,own:string,state:SubscriptionState|'set',exhausted:boolean,on:boolean};
+// The list is in the Owner's order (#619): each Provider the Owner placed in its place, then the rest in the Engine's own
+// order, a signed-in subscription before a key (agent/credential_pool.py _normalize_pool_priorities, v0.23.0) and
+// accounts of one kind as the Engine lists them, so a Provider connected after the last ordering comes last. A second
+// account of one kind reads as its kind's name and its place among the Engine's: ChatGPT 2.
+function entriesOf(t:(key:string)=>string,signIns:CompanySignIns['signIns'],accounts:SubscriptionAccount[]|null|undefined,keys:KeyRow[]|null,names:Record<string,string>,order:Record<string,Placed>):Entry[] {
  const signed=subscriptions.flatMap((provider):Entry[]=>{
   if(!signIns||signIns[provider].state==='notConnected') return [];
   const held=(accounts??[]).filter(row=>row.provider===provider);
-  if(signIns[provider].state!=='connected'||!held.length) return [{id:entryId('subscription',provider),kind:'subscription' as const,provider,account:null,name:t(subscriptionName[provider]),own:t(subscriptionName[provider]),state:signIns[provider].state,exhausted:false}];
+  if(signIns[provider].state!=='connected'||!held.length) return [{id:entryId('subscription',provider),kind:'subscription' as const,provider,account:null,name:t(subscriptionName[provider]),own:t(subscriptionName[provider]),state:signIns[provider].state,exhausted:false,on:true}];
   return held.map((row,at)=>{ const placed=at?`${t(subscriptionName[provider])} ${at+1}`:t(subscriptionName[provider]);
-   return {id:`sub-${provider}-${row.account}`,kind:'subscription' as const,provider,account:row.account,name:names[nameKey(provider,row.account)]??placed,own:placed,state:'connected' as const,exhausted:row.exhausted}; });
+   return {id:`sub-${provider}-${row.account}`,kind:'subscription' as const,provider,account:row.account,name:names[nameKey(provider,row.account)]??placed,own:placed,state:'connected' as const,exhausted:row.exhausted,on:providerOn(order,{provider,account:row.account})}; });
  });
- const held=(keys??[]).filter(row=>row.set).map(row=>({id:entryId('key',row.provider),kind:'key' as const,provider:row.provider,account:keyAccount,name:names[nameKey(row.provider,keyAccount)]??row.label,own:row.label,state:'set' as const,exhausted:false}));
- return [...signed,...held];
+ const held=(keys??[]).filter(row=>row.set).map(row=>({id:entryId('key',row.provider),kind:'key' as const,provider:row.provider,account:keyAccount,name:names[nameKey(row.provider,keyAccount)]??row.label,own:row.label,state:'set' as const,exhausted:false,on:providerOn(order,{provider:row.provider,account:keyAccount})}));
+ return inOrder([...signed,...held],order);
 }
 const tileOf=(entry:{kind:Entry['kind'],provider:string,name:string}):{key:string,mark:string}=>({key:entry.kind==='subscription'?subscriptionLogo[entry.provider as SubscriptionProvider]:entry.provider,mark:entry.kind==='subscription'?'':letterOf(entry.name)});
 const partial=(state:Entry['state'])=>state==='mainAgentOnly'||state==='someAgentsOnly';
 
-export function CompanyProviders({company,companyName,owner,subscriptions:subs,keys,models=null,names={}}:{company:string,companyName:string,owner:boolean,subscriptions:ProvidersSubscriptions,keys:ProviderKeysData|null,models?:ProviderModelsData|null,names?:Record<string,string>}) {
+export function CompanyProviders({company,companyName,owner,subscriptions:subs,keys,models=null,names={},order:read={}}:{company:string,companyName:string,owner:boolean,subscriptions:ProvidersSubscriptions,keys:ProviderKeysData|null,models?:ProviderModelsData|null,names?:Record<string,string>,order?:Record<string,Placed>|null}) {
  const {t,language}=useI18n(); const rtl=language==='ar';
- const entries=entriesOf(t,subs.signIns,subs.accounts,keys?.keys??null,names);
+ // An order the database did not answer is unread, never every Provider on: the list keeps the Engine's order and no
+ // place or switch is drawn or changed until it is read.
+ const order=read??{};
+ const entries=entriesOf(t,subs.signIns,subs.accounts,keys?.keys??null,names,order);
+ // The Providers that take a place: each the Engine lists by its own id (an older sign-in it lists no account for has none).
+ const placed=entries.filter(entry=>entry.account);
+ // A saved move waits for the page to read the new order before another is taken, from any Provider's details, so no
+ // move is made from the list as it was: `ordering` is the order the last move saved, cleared once the list reads it (or
+ // after a while, should the read never come).
+ const [ordering,setOrdering]=useState<string|null>(null);
+ const placedNow=placed.map(entry=>entry.id).join(' ');
+ if(ordering!==null&&ordering===placedNow) setOrdering(null);
+ useEffect(()=>{ if(ordering===null) return; const late=setTimeout(()=>setOrdering(null),10000); return ()=>clearTimeout(late); },[ordering]);
+ const gate={waiting:ordering!==null,saved:setOrdering,unread:read===null};
  // What the Owner can connect: either subscription, a second account of one already connected included, and a provider
  // with no key.
  const unkeyed=(keys?.keys??[]).filter(row=>!row.set);
@@ -88,7 +105,8 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
  }
  const open=(id:string)=>{ setChosen(id); setFocus({to:'detail',id}); };
  const back=()=>{ if(selected) setFocus({to:'row',id:selected}); setChosen(null); };
- const status=(entry:Entry)=>entry.kind==='key'?t('providersKeySaved'):partial(entry.state)?t('providersPartly'):entry.exhausted?t('providersExhausted'):t('signInConnected');
+ const status=(entry:Entry)=>!entry.on?t('providersOff'):entry.kind==='key'?t('providersKeySaved'):partial(entry.state)?t('providersPartly'):entry.exhausted?t('providersExhausted'):t('signInConnected');
+ const dot=(entry:Entry)=>!entry.on?' pv-dot--off':partial(entry.state)||entry.exhausted?' pv-dot--part':'';
  const backButton=<button type="button" className="link-btn sov-back pv-back" onClick={back}><SettingsIcon name="back" rtl={rtl}/><span>{t('providers')}</span></button>;
  const notes=owner?[...(keys?.waiting??[]).map(item=>['settingsModelsKeyWaiting',item.name||t('settingsModelsAnAgent')]),
   ...(keys?.leftover??[]).map(item=>['settingsModelsKeyLeftover',item.name||t('settingsModelsAnAgent')])]:[];
@@ -100,7 +118,7 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
     {entries.map(entry=><li key={entry.id}><button type="button" className="panel-row pv-row" id={`pv-row-${entry.id}`} aria-current={entry.id===shown?'true':undefined} aria-controls={`pv-d-${entry.id}`} onClick={()=>open(entry.id)}>
      <AppTile app={tileOf(entry)}/>
      <span className="panel-row__text"><span className="panel-row__t"><bdi>{entry.name}</bdi></span>
-      <span className="panel-row__d"><span>{t(entry.kind==='key'?'providersKey':'providersSubscription')}</span><span aria-hidden="true"> · </span><span className={`pv-dot${partial(entry.state)||entry.exhausted?' pv-dot--part':''}`} aria-hidden="true"/><span>{status(entry)}</span></span></span>
+      <span className="panel-row__d"><span>{t(entry.kind==='key'?'providersKey':'providersSubscription')}</span><span aria-hidden="true"> · </span><span className={`pv-dot${dot(entry)}`} aria-hidden="true"/><span>{status(entry)}</span></span></span>
      <span className="panel-row__icon sov-chev pv-chev"><SettingsIcon name="forward" rtl={rtl}/></span>
     </button></li>)}
     {!entries.length&&subs.signIns&&keys?.keys&&<li><p className="panel-empty" id="pv-none">{t('providersNone')}</p></li>}
@@ -116,8 +134,8 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
       <span className="pv-head__t"><h5 className="pv-name" id={`pv-d-${entry.id}-name`} tabIndex={-1}><bdi>{entry.name}</bdi></h5>
        <span className="pv-type">{t(entry.kind==='key'?'providersKey':'providersSubscription')}</span></span></header>
      {entry.kind==='subscription'
-      ?<SubscriptionDetail company={company} companyName={companyName} owner={owner} entry={entry} keyed={(keys?.keys??[]).some(row=>row.set&&row.provider==='anthropic')}/>
-      :<KeyDetail company={company} owner={owner} entry={entry}/>}
+      ?<SubscriptionDetail company={company} companyName={companyName} owner={owner} entry={entry} placed={placed} gate={gate} keyed={(keys?.keys??[]).some(row=>row.set&&row.provider==='anthropic')}/>
+      :<KeyDetail company={company} owner={owner} entry={entry} placed={placed} gate={gate}/>}
      <ProviderModels company={company} owner={owner} entry={entryId(entry.kind,entry.provider)} panel={entry.id} name={entry.name} models={models?models[entryId(entry.kind,entry.provider)]??[]:null}/>
     </div>)}
     {owner&&<div className="pv-detail" id="pv-d-add" role="region" aria-labelledby="pv-d-add-name" hidden={shown!=='add'}>
@@ -156,7 +174,8 @@ function Advanced({id,provider,children}:{id:string,provider:string,children?:Re
  </details>;
 }
 
-function SubscriptionDetail({company,companyName,owner,entry,keyed}:{company:string,companyName:string,owner:boolean,entry:Entry,keyed:boolean}) {
+type Gate={waiting:boolean,saved:(order:string)=>void,unread:boolean};
+function SubscriptionDetail({company,companyName,owner,entry,placed,gate,keyed}:{company:string,companyName:string,owner:boolean,entry:Entry,placed:Entry[],gate:Gate,keyed:boolean}) {
  const {t}=useI18n();
  const provider=entry.provider as SubscriptionProvider; const state=entry.state as SubscriptionState;
  return <>
@@ -165,12 +184,13 @@ function SubscriptionDetail({company,companyName,owner,entry,keyed}:{company:str
    <Fact label={t('providersConnection')}>{t('providersSubscription')}</Fact>
    <div className="sub-row" id={`sub-${entry.account?`${provider}-${entry.account}`:provider}`}><SubscriptionActions company={company} companyName={companyName} owner={owner} provider={provider} name={entry.name} state={state} account={entry.account}/></div>
   </div>
+  <PlaceFacts company={company} owner={owner} entry={entry} placed={placed} gate={gate}/>
   {provider==='anthropic'&&state==='connected'&&keyed&&<p className="set-hint" id="sub-anthropic-order">{t('signInKeyFallback')}</p>}
   <Advanced id={`pv-d-${entry.id}`} provider={provider}><p className="set-hint">{t('signInWhat')} {t('signInHint')} {t('signInOneAccount')}</p></Advanced>
  </>;
 }
 
-function KeyDetail({company,owner,entry}:{company:string,owner:boolean,entry:Entry}) {
+function KeyDetail({company,owner,entry,placed,gate}:{company:string,owner:boolean,entry:Entry,placed:Entry[],gate:Gate}) {
  const {t}=useI18n();
  const row={provider:entry.provider,label:entry.name,set:true};
  return <>
@@ -179,7 +199,82 @@ function KeyDetail({company,owner,entry}:{company:string,owner:boolean,entry:Ent
    <Fact label={t('providersConnection')}>{t('providersKey')}</Fact>
    <div className="md-key" id={`mdl-key-row-${row.provider}`}><KeyActions company={company} owner={owner} row={row}/></div>
   </div>
+  <PlaceFacts company={company} owner={owner} entry={entry} placed={placed} gate={gate}/>
   <Advanced id={`pv-d-key-${row.provider}`} provider={row.provider}><p className="set-hint">{t('settingsModelsKeyWhat')} {t('settingsModelsProviderKeysHint')}</p></Advanced>
+ </>;
+}
+
+// What a refused order or switch says: the route's codes (app/api/provider-order).
+const orderReason=(code:string)=>code==='providerNotAllowed'?'providersOrderNotAllowed':'providersOrderError';
+// The Provider's place in the Company's list and its switch (#619). The Owner moves it one place up or down, the whole
+// list then saved as it now reads, and switches it off or on again; its sign-in or key stays in the Engine either way.
+// Every other Member reads both. The switch shows its new state at once and goes back, with a line, when it was not kept.
+// A Provider with no place (an older sign-in the Engine lists no account for) has neither.
+function PlaceFacts({company,owner,entry,placed,gate}:{company:string,owner:boolean,entry:Entry,placed:Entry[],gate:Gate}) {
+ const {t,language}=useI18n(); const router=useRouter(); const rtl=language==='ar';
+ const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [turned,setTurned]=useState<boolean|null>(null);
+ const up=useRef<HTMLButtonElement>(null); const down=useRef<HTMLButtonElement>(null);
+ // A switch the server now reads as asked is the server's again.
+ if(turned!==null&&turned===entry.on&&!busy) setTurned(null);
+ const at=placed.findIndex(found=>found.id===entry.id);
+ // A move keeps the focus on the button pressed: while a move is saved and read back the buttons only say they wait
+ // (aria-disabled), so the focus stays. A move to either end disables
+ // that button once the page reads the new order: the focus then goes to the other one, which only that read enables.
+ const [refocus,setRefocus]=useState<'up'|'down'|null>(null);
+ useEffect(()=>{
+  const target=refocus==='up'?up.current:refocus==='down'?down.current:null;
+  if(target&&!target.disabled) { target.focus(); setRefocus(null); }
+ },[refocus,at,busy]);
+ if(!entry.account||at<0) return null;
+ const on=turned??entry.on;
+ const id=`pv-d-${entry.id}-place`;
+ if(gate.unread) return <>
+  <h6 className="pv-group" id={`${id}-h`}>{t('providersOrder')}</h6>
+  <div className="panel-card"><p className="panel-empty" id={`${id}-unread`}>{t('providersOrderUnread')}</p></div>
+ </>;
+ const save=async(body:object):Promise<boolean>=>{
+  setBusy(true); setError('');
+  let ok=false; let code='';
+  try {
+   const response=await fetch('/api/provider-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,...body})});
+   ok=response.ok; if(!ok) code=String(((await response.json().catch(()=>null)) as {error?:unknown}|null)?.error||'');
+  } catch { ok=false; }
+  setBusy(false);
+  if(!ok) setError(orderReason(code));
+  return ok;
+ };
+ const move=async(by:-1|1)=>{
+  if(busy||gate.waiting) return;
+  const next=placed.filter(found=>found.id!==entry.id); next.splice(at+by,0,entry);
+  if(!await save({intent:'order',entries:next.map(found=>({provider:found.provider,account:found.account}))})) return;
+  gate.saved(next.map(found=>found.id).join(' '));
+  if(at+by===0) setRefocus('down'); else if(at+by===placed.length-1) setRefocus('up');
+  toast(t('providersOrderSaved'));
+  router.refresh();
+ };
+ const turn=async()=>{
+  if(busy) return;
+  const next=!on; setTurned(next);
+  if(!await save({intent:'switch',provider:entry.provider,account:entry.account,enabled:next})) { setTurned(null); return; }
+  toast(t(next?'providersOnSaved':'providersOffSaved',entry.name));
+  router.refresh();
+ };
+ const place=t('providersPlace',String(at+1),String(placed.length));
+ return <>
+  <h6 className="pv-group" id={`${id}-h`}>{t('providersOrder')}</h6>
+  <div className="panel-card" role="group" aria-labelledby={`${id}-h`}>
+   <div className="panel-row pv-fact"><span className="panel-row__text"><span className="panel-row__d" id={`${id}-t`}>{t('providersPlaceLabel')}</span></span>
+    <span className="pv-fact__v pv-place"><span id={id}>{place}</span>
+     {owner&&<><button ref={up} type="button" className="circle-btn pv-move" aria-label={t('providersMoveUpLabel',entry.name)} title={t('providersMoveUp')} aria-describedby={id} disabled={at===0} aria-disabled={busy||gate.waiting||undefined} onClick={()=>move(-1)}><SettingsIcon name="up" rtl={rtl}/></button>
+      <button ref={down} type="button" className="circle-btn pv-move" aria-label={t('providersMoveDownLabel',entry.name)} title={t('providersMoveDown')} aria-describedby={id} disabled={at===placed.length-1} aria-disabled={busy||gate.waiting||undefined} onClick={()=>move(1)}><SettingsIcon name="down" rtl={rtl}/></button></>}
+    </span></div>
+   <div className="panel-row pv-fact"><span className="panel-row__text"><span className="panel-row__t" id={`${id}-use`}>{t('providersUse')}</span></span>
+    {owner?<button type="button" className="switch" role="switch" id={`${id}-switch`} aria-checked={on} aria-label={t('providersUseLabel',entry.name)} aria-disabled={busy} onClick={turn}/>
+     :<span className="pv-fact__v" id={`${id}-state`}>{t(on?'providersOn':'providersOff')}</span>}
+   </div>
+  </div>
+  {error&&<p className="set-err" role="alert">{t(error)}</p>}
+  <p className="set-hint">{t('providersOrderHint')} {t('providersUseHint')}</p>
  </>;
 }
 

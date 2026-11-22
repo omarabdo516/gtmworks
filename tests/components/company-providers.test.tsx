@@ -4,6 +4,7 @@ import { page } from 'vitest/browser';
 import { CompanyProviders, type ProviderKeysData, type ProviderModelsData } from '@/app/settings-providers';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { CompanySignIns, SubscriptionAccount, SubscriptionState } from '@/lib/company-sign-in.mjs';
+import type { Placed } from '@/lib/provider-order.mjs';
 import en from '@/lib/messages/en.json';
 import ar from '@/lib/messages/ar.json';
 import '@/app/tokens.css';
@@ -25,13 +26,15 @@ const keys = (extra: Partial<ProviderKeysData> = {}): ProviderKeysData => ({
   keys: [{ provider: 'openrouter', label: 'OpenRouter', set: false }, { provider: 'anthropic', label: 'Anthropic', set: true }],
   waiting: null, leftover: null, unknown: null, ...extra,
 });
-type Props = { owner?: boolean, signIns?: CompanySignIns['signIns'], available?: boolean, noEngine?: boolean, keys?: ProviderKeysData | null, models?: ProviderModelsData | null, accounts?: SubscriptionAccount[] | null, names?: Record<string, string> };
-const providers = async ({ owner = true, signIns: signed = signIns('connected', 'notConnected'), available = true, noEngine = false, keys: held = keys(), models = null, accounts, names }: Props = {}, language: 'en' | 'ar' = 'en', width = 1440) => {
-  await page.viewport(width, 900);
-  return render(<div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="sov"><div className="sov-page sov-page--models"><LanguageProvider language={language}>
-    <CompanyProviders company={company} companyName={companyName} owner={owner} keys={held} models={models} names={names} subscriptions={{ available, signIns: signed, accounts, noEngine }}/>
+type Props = { owner?: boolean, signIns?: CompanySignIns['signIns'], available?: boolean, noEngine?: boolean, keys?: ProviderKeysData | null, models?: ProviderModelsData | null, accounts?: SubscriptionAccount[] | null, names?: Record<string, string>, order?: Record<string, Placed> | null };
+const tree = ({ owner = true, signIns: signed = signIns('connected', 'notConnected'), available = true, noEngine = false, keys: held = keys(), models = null, accounts, names, order }: Props = {}, language: 'en' | 'ar' = 'en') =>
+  <div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="sov"><div className="sov-page sov-page--models"><LanguageProvider language={language}>
+    <CompanyProviders company={company} companyName={companyName} owner={owner} keys={held} models={models} names={names} order={order} subscriptions={{ available, signIns: signed, accounts, noEngine }}/>
     <section className="dp-sec" id="md-below">Below</section>
-  </LanguageProvider></div></div></div>);
+  </LanguageProvider></div></div></div>;
+const providers = async (props: Props = {}, language: 'en' | 'ar' = 'en', width = 1440) => {
+  await page.viewport(width, 900);
+  return render(tree(props, language));
 };
 const rows = () => [...document.querySelectorAll<HTMLElement>('#md-providers .pv-row')].map(row => row.innerText.replace(/\s+/g, ' ').trim());
 const shown = () => [...document.querySelectorAll<HTMLElement>('.pv-detail')].filter(detail => !detail.hidden).map(detail => detail.id);
@@ -390,4 +393,82 @@ test('a connected subscription the Engine did not list account by account has no
   expect(buttons('pv-d-sub-openai-codex')).toEqual([en.providers]);
   // An older sign-in left on a profile is still removed from its row.
   expect(buttons('pv-d-sub-anthropic')).toContain('Disconnect Claude');
+});
+
+// #619: the Owner puts the Providers in order and switches one off and on again in its details; a Manager reads both.
+const placeOf = (detail: string) => document.querySelector(`#${detail}-place`)?.textContent;
+test('the list follows the Owner\'s order, a switched-off Provider says so, and a move sends the whole list once', async () => {
+  const sent: { url: string, body: object }[] = [];
+  vi.stubGlobal('fetch', (url: string, init: RequestInit) => { sent.push({ url, body: JSON.parse(String(init.body)) }); return Promise.resolve(new Response('{"ordered":4}')); });
+  const order = { 'anthropic:key': { place: 0, enabled: true }, 'openai-codex:61b59d': { place: 1, enabled: false } };
+  const screen = await providers({ signIns: signIns('connected', 'connected'), accounts, order });
+  // The placed two first, in their places; the rest after them in the Engine's order.
+  expect(rows()).toEqual([`Anthropic ${en.providersKey} · ${en.providersKeySaved}`, `ChatGPT 2 ${en.providersSubscription} · ${en.providersOff}`,
+    `ChatGPT ${en.providersSubscription} · ${en.signInConnected}`, `Claude ${en.providersSubscription} · ${en.signInConnected}`, en.providersAdd]);
+  expect(placeOf('pv-d-key-anthropic')).toBe('1 of 4');
+  // The first cannot move up; moving it down sends every Provider, first to last.
+  await expect.element(screen.getByRole('button', { name: 'Move Anthropic up' })).toBeDisabled();
+  await screen.getByRole('button', { name: 'Move Anthropic down' }).click();
+  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  expect(sent).toEqual([{ url: '/api/provider-order', body: { company, intent: 'order', entries: [
+    { provider: 'openai-codex', account: '61b59d' }, { provider: 'anthropic', account: 'key' }, { provider: 'openai-codex', account: '86c091' }, { provider: 'anthropic', account: 'c1a2u3' }] } }]);
+  // Until the page reads that order back, a second move is not taken from the list as it was, here or in another's details.
+  const again = document.querySelector<HTMLButtonElement>('#pv-d-key-anthropic .pv-move[aria-label="Move Anthropic down"]');
+  expect(again?.getAttribute('aria-disabled')).toBe('true');
+  again?.click();
+  await new Promise(resolve => setTimeout(resolve, 200));
+  expect(sent.length).toBe(1);
+  // The switched-off ChatGPT: its switch reads off and switching it on sends that one switch; nothing is signed in again.
+  await screen.getByRole('button', { name: /^ChatGPT 2/ }).click();
+  const use = screen.getByRole('switch', { name: 'Use ChatGPT 2' });
+  await expect.element(use).toHaveAttribute('aria-checked', 'false');
+  expect(placeOf('pv-d-sub-openai-codex-61b59d')).toBe('2 of 4');
+  await use.click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toEqual({ url: '/api/provider-order', body: { company, intent: 'switch', provider: 'openai-codex', account: '61b59d', enabled: true } });
+  await expect.element(use).toHaveAttribute('aria-checked', 'true');
+  expect(sent.some(call => call.url !== '/api/provider-order')).toBe(false);
+  const ids = [...document.querySelectorAll('[id]')].map(node => node.id);
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+test('the last Provider cannot move down, and a move to either end leaves the focus on the other button', async () => {
+  vi.stubGlobal('fetch', () => Promise.resolve(new Response('{"ordered":2}')));
+  const props = { signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 2), keys: keys({ keys: [] }) };
+  const screen = await providers(props);
+  await screen.getByRole('button', { name: /^ChatGPT 2/ }).click();
+  await expect.element(screen.getByRole('button', { name: 'Move ChatGPT 2 down' })).toBeDisabled();
+  await screen.getByRole('button', { name: 'Move ChatGPT 2 up' }).click();
+  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  // The page reads the new order, as the refresh does.
+  await screen.rerender(tree({ ...props, order: { 'openai-codex:61b59d': { place: 0, enabled: true }, 'openai-codex:86c091': { place: 1, enabled: true } } }));
+  expect(rows()[0]).toBe(`ChatGPT 2 ${en.providersSubscription} · ${en.providersExhausted}`);
+  await expect.element(screen.getByRole('button', { name: 'Move ChatGPT 2 up' })).toBeDisabled();
+  await expect.poll(() => document.activeElement?.getAttribute('aria-label')).toBe('Move ChatGPT 2 down');
+});
+
+test('a switch the server refuses goes back and says why, in Arabic; a Manager reads the place and the switch with no control', async () => {
+  vi.stubGlobal('fetch', () => Promise.resolve(new Response('{"error":"providerNotAllowed"}', { status: 403 })));
+  const screen = await providers({ signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 1) }, 'ar');
+  const use = screen.getByRole('switch', { name: `استخدم ChatGPT` });
+  await use.click();
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(ar.providersOrderNotAllowed);
+  await expect.element(use).toHaveAttribute('aria-checked', 'true');
+  expect(refresh).not.toHaveBeenCalled();
+  await screen.unmount();
+  await providers({ owner: false, signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 2), order: { 'openai-codex:86c091': { place: 1, enabled: false } } });
+  expect(document.querySelectorAll('#md-providers [role="switch"], #md-providers .pv-move').length).toBe(0);
+  // Its place is among the placed ones: the only one placed comes first, wherever its number was.
+  expect(rows()[0]).toBe(`ChatGPT ${en.providersSubscription} · ${en.providersOff}`);
+  expect(placeOf('pv-d-sub-openai-codex-86c091')).toBe('1 of 3');
+  expect(document.querySelector('#pv-d-sub-openai-codex-86c091-place-state')?.textContent).toBe(en.providersOff);
+});
+
+test('an order the database did not answer reads as unread, never as every Provider on, and draws no place or switch', async () => {
+  await providers({ signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 2), order: null });
+  // The Engine's order, and no row says switched on or off.
+  expect(rows()).toEqual([`ChatGPT ${en.providersSubscription} · ${en.signInConnected}`, `ChatGPT 2 ${en.providersSubscription} · ${en.providersExhausted}`,
+    `Anthropic ${en.providersKey} · ${en.providersKeySaved}`, en.providersAdd]);
+  expect(document.querySelector('#pv-d-sub-openai-codex-86c091-place-unread')?.textContent).toBe(en.providersOrderUnread);
+  expect(document.querySelectorAll('#md-providers .pv-move, #md-providers [id$="-place-switch"]').length).toBe(0);
 });

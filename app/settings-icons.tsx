@@ -25,6 +25,8 @@ const paths = {
  clock: <><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></>,
  forward: <path d="M15 6l-6 6 6 6"/>,
  back: <path d="M9 6l6 6-6 6"/>,
+ up: <path d="M6 15l6-6 6 6"/>,
+ down: <path d="M6 9l6 6 6-6"/>,
  pencil: <><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></>,
  spark: <><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></>,
  play: <path d="M8 5.5v13l10.5-6.5z"/>,

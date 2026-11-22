@@ -136,7 +136,7 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   if(name==='record_unfinished_provider_key') { if(owner) args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return owner?{data:null,error:null}:{data:null,error:{code:'42501'}}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
-  if(name==='rename_provider') return owner?{data:null,error:null}:{data:null,error:{code:'42501'}};
+  if(name==='rename_provider'||name==='forget_provider_order') return owner?{data:null,error:null}:{data:null,error:{code:'42501'}};
   if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space').map(row=>noKeeper&&row.kind==='company'?{...row,agent:null,name:null}:row),error:null};
   if(name==='record_provider_key_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
@@ -186,6 +186,8 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
   assert.deepEqual(owner.logged.map(entry=>entry.present),[true,true,false]);
   // The key's name goes with it (#618), so the next key of this provider reads under its own name.
   assert.deepEqual(owner.asked.filter(call=>call.name==='rename_provider').at(-1)?.args,{c:first,provider:'openrouter',account:'key',name:''});
+  // And its place and switch (#619), so a key given again starts switched on at the end of the list.
+  assert.deepEqual(owner.asked.filter(call=>call.name==='forget_provider_order').at(-1)?.args,{c:first,provider:'openrouter',account:'key'});
   assert.deepEqual(await change(owner,fake,{intent:'remove'}),{status:200,body:{provider:'openrouter',agents:removed.body.agents}});
   assert.equal(owner.logged.length,3,'removing a key nobody held logs nothing');
   await change(owner,fake,{intent:'set',value:known});

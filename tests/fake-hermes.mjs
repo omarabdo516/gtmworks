@@ -135,7 +135,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   modelNeedsKey:false,
   // Models a Run may not run on (#158): a Run naming one is answered 400 before it is made, as the pinned release answers a
   // provider or model it cannot resolve (api_server_runs.py 803-809).
-  refusedModels:/** @type {Set<string>} */(new Set()),defaultEnv:/** @type {Record<string,string>} */({}),modelOptionsFail:false,poolFail:false,envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
+  refusedModels:/** @type {Set<string>} */(new Set()),defaultEnv:/** @type {Record<string,string>} */({}),modelOptionsFail:false,poolFail:false,poolNamedFail:false,envFail:/** @type {Set<string>} */(new Set()),envReadFail:/** @type {Set<string>} */(new Set()),envDropped:/** @type {Set<string>} */(new Set()),envHang:/** @type {Set<string>} */(new Set()),
   // A run's events (#141): `emit` adds one (tool.started, tool.completed, message.delta and the like) to its stream,
   // `forget` drops its oldest ones as the 1,000-event backlog does, `sweep` drops its whole stream as Hermes does five
   // minutes after the start when nobody reads it. A run reports `runSeconds` from its start to its end. `stallEvents`
@@ -807,6 +807,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    if(url.pathname==='/api/credentials/pool'&&request.method==='GET') {
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     if(settings.poolFail) return send(response,500,{detail:'Internal Server Error'});
+    // A read that names its profile (the accounts list, #618) failing alone, while the sign-in status still reads.
+    if(settings.poolNamedFail&&url.searchParams.has('profile')) return send(response,500,{detail:'Internal Server Error'});
     const pool={...settings.defaultPool};
     const env=(scoped==='default'?settings.defaultEnv:settings.profiles.get(scoped)?.env)||{};
     if(env.ANTHROPIC_API_KEY) pool.anthropic=[...pool.anthropic||[],{id:'envkey',label:'ANTHROPIC_API_KEY',auth_type:'api_key',source:'env:ANTHROPIC_API_KEY',priority:(pool.anthropic||[]).length,access_token:env.ANTHROPIC_API_KEY}];
