@@ -57,7 +57,8 @@ export function DetailsShell({panel,label,start,children}:{panel:DetailsPanel,la
  useEffect(()=>{
   if(!covering) return;
   close.current?.focus();
-  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape') done();};
+  // Settings opened from this panel's gear cover it, inert, and their Escape is theirs alone (#612).
+  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!close.current?.closest('[inert]')) done();};
   document.addEventListener('keydown',escape);
   return ()=>document.removeEventListener('keydown',escape);
  },[covering,done]);

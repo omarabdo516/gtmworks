@@ -617,10 +617,39 @@ SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh > companies-repeat.log 2>
 [[ $(limits_of "$second_sandbox") == '805306368 1000000000' ]] || fail "a repeat install keeps the second Company's limits"
 }
 
+# The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
+# read are scanned for the real values in .env.install, passed on stdin; only names and paths are printed. Every
+# Engine of the install is scanned, the first and each Company's own (#382). The agents and agents-sandbox areas each end
+# with it (#553).
+scan_engines() {
+engines_scanned=0
+for folder in .engines/*/; do
+  [ -f "$folder/.env" ] || continue
+  name=$(engine_value "$folder" NAME)
+  [[ -n $(docker ps -q --filter "name=^${name}$") ]] || fail "the Engine container $name"
+  engines_scanned=$((engines_scanned+1))
+  { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$name" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine $name holds none of gtmworks's keys and passwords"
+  # The sandbox runs the Agents' code, so it is scanned too, with its own Engine's keys added (#393, #394): its API key,
+  # a line of the private key it dials the sandbox with (the line that holds its secret half, past the header every
+  # OpenSSH key shares), and the model credential the Engine was given. Its exit is scanned the same way: nothing the
+  # sandbox can reach holds a key.
+  engine_ssh_line=$(docker exec -u 0 "$name" sed -n 5p /opt/data/ssh/id_ed25519) || fail "read the private key of $name"
+  [[ ${#engine_ssh_line} -ge 40 ]] || fail "a line of the private key of $name"
+  for scanned in "$(sandbox_of "$name")" "$(exit_of "$name")"; do
+    { { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install
+        printf 'ENGINE_KEY=%s\nENGINE_SSH_KEY=%s\nMODEL_KEY=fake-model-key\n' "$(engine_value "$folder" KEY)" "$engine_ssh_line"; } \
+      | docker exec -i -u pn "$scanned" python3 -c "$(cat scripts/check-hermes-keys.py)"; } \
+      || fail "$scanned holds none of gtmworks's keys, not its Engine's key, not its Engine's private key and no model credential"
+  done
+done
+[[ $engines_scanned -ge 2 ]] || fail 'the scan covers every Engine'
+}
+
 # agents: Agents on their Engines (#378, #408): an Agent made and run through the contract, the Engine management listener
-# never public, the profile of each Company with the terminal, files and code execution on run in its Company's work
-# sandbox, the apps, and the scan that neither the Engine nor the sandbox holds a key of gtmworks. The area makes the install it starts from, its first run and its second Company
-# itself, so first-install no longer runs it (#408).
+# never public, the profile of each Company with the terminal, files and code execution on, its memory and lessons kept
+# to its own Company, the apps, and the scan that neither the Engine nor the sandbox holds a key of gtmworks. The area
+# makes the install it starts from, its first run and its second Company itself, so first-install no longer runs it
+# (#408). What an Agent runs in its Company's work sandbox is the agents-sandbox area's, on a machine of its own (#553).
 agents() {
 cd "$root"
 area_setup
@@ -662,6 +691,28 @@ engine_node "$engine_key" - verify "$marker" < scripts/check-install-profiles.mj
 # added, tested, turned on for one Agent and removed through the same driver, for no sign-in, a token and OAuth, against a
 # fake MCP server the check starts inside this container (the Engine reaches it as http://web:9123).
 engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps come with all their tools, and any remote MCP server is added and removed'
+scan_engines
+}
+
+# agents-sandbox: an Agent's work in its Company's work sandbox (#393, #395, #459, ADR 0018, ADR 0024), split from the
+# agents area to keep each within its minutes (#553): its command, file and code run in the sandbox and never on its
+# Engine, a command MCP server runs there, its Library shows the work folder, the Engine pins the sandbox's host key, no
+# file sync runs between them, the apps still answer, and the same scan of every Engine, sandbox and exit. It makes its
+# own install, first run and second Company, and the first Company's second Agent the sandbox checks start in.
+agents_sandbox() {
+cd "$root"
+area_setup
+reset_install
+install_source agents-sandbox-install.log || fail 'first install'
+complete_setup || fail 'emailed sign-in and invitation links on the local install'
+engine_id=$(first_engine_id) || fail 'the Engine container'
+engine_key=$(first_engine_key)
+point_engine_at_fake_model "$engine_id"
+second_company || fail 'company add makes the second Company'
+engine_node "$engine_key" - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles on two Engines with the work tools on, each with one shared space'
+first=$(tail -n 1 prepare-profiles.log)
+[[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
+engine_node "$engine_key" - second < scripts/check-install-profiles.mjs || fail "the first Company's second Agent moves to a profile of its own"
 # The work sandbox (#393, ADR 0018): the command, file and code an Agent asks for run in the Company's sandbox and never
 # on its Engine, two Agents start in a folder of their own inside the Company's work folder, and a profile write and a
 # settings write cannot move a command off the sandbox. The job reads the host's Docker for where each marker landed: a
@@ -843,38 +894,15 @@ after_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills aft
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.
 engine_node "$engine_key" - < scripts/check-install-apps.mjs || fail 'apps write only their read tools and come back through gtmworks'
-# The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
-# read are scanned for the real values in .env.install, passed on stdin; only names and paths are printed. Every
-# Engine of the install is scanned, the first and each Company's own (#382).
-engines_scanned=0
-for folder in .engines/*/; do
-  [ -f "$folder/.env" ] || continue
-  name=$(engine_value "$folder" NAME)
-  [[ -n $(docker ps -q --filter "name=^${name}$") ]] || fail "the Engine container $name"
-  engines_scanned=$((engines_scanned+1))
-  { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$name" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine $name holds none of gtmworks's keys and passwords"
-  # The sandbox runs the Agents' code, so it is scanned too, with its own Engine's keys added (#393, #394): its API key,
-  # a line of the private key it dials the sandbox with (the line that holds its secret half, past the header every
-  # OpenSSH key shares), and the model credential the Engine was given. Its exit is scanned the same way: nothing the
-  # sandbox can reach holds a key.
-  engine_ssh_line=$(docker exec -u 0 "$name" sed -n 5p /opt/data/ssh/id_ed25519) || fail "read the private key of $name"
-  [[ ${#engine_ssh_line} -ge 40 ]] || fail "a line of the private key of $name"
-  for scanned in "$(sandbox_of "$name")" "$(exit_of "$name")"; do
-    { { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install
-        printf 'ENGINE_KEY=%s\nENGINE_SSH_KEY=%s\nMODEL_KEY=fake-model-key\n' "$(engine_value "$folder" KEY)" "$engine_ssh_line"; } \
-      | docker exec -i -u pn "$scanned" python3 -c "$(cat scripts/check-hermes-keys.py)"; } \
-      || fail "$scanned holds none of gtmworks's keys, not its Engine's key, not its Engine's private key and no model credential"
-  done
-done
-[[ $engines_scanned -ge 2 ]] || fail 'the scan covers every Engine'
+scan_engines
 }
 
-# backup: backup and restore (#386, #409, ADR 0018): a backup of the install's own data and of every Company Engine,
-# restored into a fresh install with identities, keys and migration history intact; and an archive naming an Engine
-# without its data, or holding a hard link, refused before anything changes (#378, C4, C15). An archive made before
-# Engines existed is the previous release's own, so the update area restores it (#378, C3). The area makes the install,
-# the Companies and the archives it needs (#409): it starts on a fresh isolated Docker machine, completes first run for
-# the first Company, and adds a second Company on an Engine of its own.
+# backup: backup and restore (#386, #409, ADR 0018): a backup of the install's own data, refused onto an occupied install
+# and restored into a fresh one with identities, keys and migration history intact. The backup of every Company's Engine
+# and the archives refused for a missing part are the backup-engines area's, on a machine of its own (#553). An archive
+# made before Engines existed is the previous release's own, so the update area restores it (#378, C3). The area makes
+# the install and the archive it needs (#409): it starts on a fresh isolated Docker machine and completes first run for
+# the first Company.
 backup() {
 cd "$root"
 area_setup
@@ -906,6 +934,20 @@ lifecycle verify > data.after || fail 'read restored people, companies, cards an
 diff -u data.before data.after || fail 'restored identities match'
 db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
 diff -u before restored || fail 'restored migration history'
+}
+
+# backup-engines: the backup of every Company's Engine and work folder (#386, #399, ADR 0018), split from the backup area
+# to keep each within its minutes (#553): an install with two Companies, each on its own Engine, its sandbox and its own
+# limits, backed up in one archive and restored into a fresh empty install, every Company answering on its own Engine
+# again; and an archive naming an Engine without its data, one holding a hard link, and one missing a Company's work
+# folder, each refused before anything changes (#378, C4, C15). The area makes its own install, first run, second
+# Company and archives.
+backup_engines() {
+cd "$root"
+area_setup
+reset_install
+install_source backup-engines-install.log || fail 'every-Engine backup area install'
+complete_setup || fail 'first run before the every-Engine backup'
 # A second Company on an Engine of its own for the every-Engine archive: the first run's Owner is its Owner, and the
 # worker gives it its main Agent by itself. It is given its own sandbox limits (#396), which the restore brings back.
 second_company scripts/install.sh --memory 1536m --cpus 1.5 || fail 'the second Company for the every-Engine backup'
@@ -977,7 +1019,7 @@ for folder in .engines/*/; do
   [[ -n $engine ]] || fail "the restored install runs the Engine $name"
   [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == "$volume" ]] || fail "the Engine $name keeps its own volume"
   [[ $(docker inspect -f '{{range $other, $_ := .NetworkSettings.Networks}}{{println $other}}{{end}}' "$engine" | grep . | sort) == $(printf '%s\n' "$network" "gtmworks-work-${name#gtmworks-engine-}" | sort) ]] || fail "the Engine $name joins its own network and its work network only"
-  # The lifecycle seed's two Companies (restore-one, restore-two) hold records of their own at the first Engine's address.
+  # The first run's Company is the first Engine's, the second Company the other's.
   [[ $(db -c "select count(*) from public.companies c join public.company_engines e on e.id=c.engine_id where e.address='http://$name:8642'") -ge 1 ]] || fail "a Company's record names the Engine $name"
   for service in web worker; do
     docker inspect -f '{{range $network, $_ := .NetworkSettings.Networks}}{{println $network}}{{end}}' "$(compose ps -q "$service")" | grep -qx "$network" \
@@ -2437,16 +2479,18 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 { grep -E '^(POSTGRES_PASSWORD|PGSODIUM_ROOT_KEY|SUPABASE_JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_ENCRYPTION_KEY|SETUP_CODE)=' .env.install | docker exec -i -u hermes "$engine_id" /opt/hermes/.venv/bin/python -c "$(cat scripts/check-hermes-keys.py)"; } || fail "the Engine holds none of gtmworks's keys and passwords after the capacity profiles"
 }
 
-# The area named by the one argument, or all nine in the order the proof has always run them, then the measurement
+# The area named by the one argument, or all of them in the order the proof has always run them, then the measurement
 # (#406, #408). A CI job names one area; `./ci.sh install` without one still runs the whole proof. Each area of `all` runs
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sandbox_rollback); (sizes); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (agents_sandbox); (backup); (backup_engines); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sandbox_rollback); (sizes); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
+ agents-sandbox) agents_sandbox;;
  backup) backup;;
+ backup-engines) backup_engines;;
  proxy) proxy;;
  rollback) rollback;;
  update) update;;
@@ -2460,5 +2504,5 @@ case "${1:-all}" in
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | agents-sandbox | backup | backup-engines | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

@@ -13,7 +13,7 @@ const company='10000000-0000-0000-0000-000000000001';
 const hex=company.replaceAll('-','');
 const space=`cs-${hex}`; const co=`co-${hex}`;
 const line='This company has no AI subscription or model key connected yet, so its agents can’t reply.';
-const connect='Connect one in Subscription and models';
+const connect='Connect one in Providers';
 const askOwner='Ask the company’s Owner to connect one in Settings.';
 let fake:Awaited<ReturnType<typeof laneHermes>>;
 
@@ -84,8 +84,8 @@ test('a channel Run the Engine fails for want of a model says so in the channel,
 });
 
 // #457: a model error a retry cannot fix is closed with its own outcome and says so, and the Owner gets the way to the
-// Agent's model in Subscription and models.
-const refusedFix='Check the agent’s model in Subscription and models';
+// Agent's model in Providers.
+const refusedFix='Check the agent’s model in Providers';
 test('a reply the Engine fails for no credit, a refused key or sign-in, or a missing model records why, and says so',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/chat');
  for(const [failure,outcome,line] of [

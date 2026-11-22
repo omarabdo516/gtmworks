@@ -67,8 +67,8 @@ test('while the called Agent replies the page says so and asks again, and a repl
 // (#422), instead of that the Agent could not reply: the Owner gets the way to Subscription and models, a Member is told
 // to ask the Owner.
 const noModelWords = {
- en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Subscription and models', ask: 'Ask the company’s Owner to connect one in Settings.', failed: 'couldn’t reply' },
- ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من الاشتراك والموديلات', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.', failed: 'مقدرش يرد' },
+ en: { line: 'This company has no AI subscription or model key connected yet, so its agents can’t reply.', connect: 'Connect one in Providers', ask: 'Ask the company’s Owner to connect one in Settings.', failed: 'couldn’t reply' },
+ ar: { line: 'الشركة دي لسه مفيهاش اشتراك ذكاء اصطناعي ولا مفتاح موديل متوصّل، فالوكلاء مش هيقدروا يردّوا.', connect: 'وصّل واحد من المزوّدين', ask: 'اطلب من مالك الشركة يوصّل واحد من الإعدادات.', failed: 'مقدرش يرد' },
 } as const;
 for (const language of ['en', 'ar'] as const) for (const owner of [true, false]) test(`in ${language} a channel Run that failed for want of a model tells ${owner ? 'the Owner where to connect one' : 'a Member to ask the Owner'}`, async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
