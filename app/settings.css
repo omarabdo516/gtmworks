@@ -348,6 +348,9 @@
   .gw .sov-find { flex-direction: row; align-items: center; gap: var(--s3); padding: var(--s3) var(--s3) 0; }
   .gw .sov-find .tpl-search { flex: 1 1 auto; min-width: 0; padding-block: 4px; margin-block: -4px; }
   .gw .sov-find__none { white-space: normal; padding-block: 0; min-height: 36px; align-content: center; }
+  /* Clear search keeps its size, with an invisible ring that makes its tap area 44px (PRODUCT.md). */
+  .gw .sov-side .link-btn { position: relative; }
+  .gw .sov-side .link-btn::before { content: ""; position: absolute; inset: -12px -4px; }
   .gw .sov-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: var(--s2) var(--s3); scrollbar-width: none; }
   .gw .sov-nav::-webkit-scrollbar { display: none; }
   .gw .sov-nav__l { display: none; }

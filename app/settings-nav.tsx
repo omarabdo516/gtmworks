@@ -20,8 +20,10 @@ export function SettingsNav({slug,companyName,role,section,learningWaiting,agent
  useEffect(()=>{
   const keys=(event:KeyboardEvent)=>{
    if(event.key!=='/'||event.defaultPrevented||event.ctrlKey||event.metaKey||event.altKey||editable(event.target)) return;
-   // Only while Settings are in front: the overlay leaving (inert) or taken out (hidden) gives the key back to the page.
+   // Only while Settings are in front: the overlay leaving (inert) or taken out (hidden), or a modal opened over it (a
+   // file's preview), gives the key back to what is in front.
    const field=search.current; if(!field||field.closest('[inert], [hidden]')) return;
+   const modal=document.querySelector('dialog:modal'); if(modal&&!modal.contains(field)) return;
    event.preventDefault(); field.focus(); field.select();
   };
   document.addEventListener('keydown',keys);

@@ -26,6 +26,12 @@ const settings = (language: Language, role = 'owner') => render(<LanguageProvide
   <label>{language === 'ar' ? 'ملاحظة' : 'Note'}<input/></label>
  </OverlayChrome>
 </LanguageProvider>);
+// What a finger can reach: the control's box, grown by the invisible ring around it.
+const tapArea = (node: Element) => {
+ const own = node.getBoundingClientRect(), ring = getComputedStyle(node, '::before');
+ const top = parseFloat(ring.top) || 0, bottom = parseFloat(ring.bottom) || 0, left = parseFloat(ring.left) || 0, right = parseFloat(ring.right) || 0;
+ return ring.content === 'none' ? [own.width, own.height] : [own.width - left - right, own.height - top - bottom];
+};
 const names = (screen: Awaited<ReturnType<typeof settings>>) => screen.getByRole('navigation').getByRole('link').elements().map(link => link.textContent);
 
 test('/ outside a field finds a setting by name, Enter opens it, and clearing the search brings every section back', async () => {
@@ -83,7 +89,7 @@ test('/ typed in a field of the page stays in that field', async () => {
  expect(names(screen)).toHaveLength(10);
 });
 
-test('on a phone the search sits above the row of sections, its field a 44px tap area', async () => {
+test('on a phone the search sits above the row of sections, its field and Clear search each a 44px tap area', async () => {
  await page.viewport(390, 900);
  const screen = await settings('ar');
  const find = screen.getByRole('searchbox', { name: 'دوّر على إعداد' }).element().closest('label')!.getBoundingClientRect();
@@ -91,4 +97,31 @@ test('on a phone the search sits above the row of sections, its field a 44px tap
  expect(find.height).toBeGreaterThanOrEqual(44);
  expect(find.bottom).toBeLessThanOrEqual(first.top);
  expect(document.getElementById('sov-main')!.scrollWidth).toBe(document.getElementById('sov-main')!.clientWidth);
+ // Clear search, beside a section found and under a name nothing has, is a 44px tap area too.
+ for(const text of ['حساب', 'zzz']) {
+  await screen.getByRole('searchbox', { name: 'دوّر على إعداد' }).fill(text);
+  const [width, height] = tapArea(screen.getByRole('button', { name: 'امسح البحث' }).element());
+  expect(Math.min(width, height), text).toBeGreaterThanOrEqual(44);
+ }
+});
+
+test('/ pressed in a modal opened over Settings stays with that modal', async () => {
+ const screen = await settings('en');
+ const modal = document.createElement('dialog');
+ modal.innerHTML = '<button type="button">Preview</button>';
+ document.body.append(modal);
+ try {
+  modal.showModal();
+  const inside = modal.querySelector('button')!;
+  inside.focus();
+  // Registered after the overlay's own listener, so it sees whether Settings took the key.
+  let taken: boolean | undefined;
+  const seen = (event: KeyboardEvent) => { taken = event.defaultPrevented; };
+  document.addEventListener('keydown', seen);
+  await userEvent.keyboard('/');
+  document.removeEventListener('keydown', seen);
+  expect(taken).toBe(false);
+  expect(document.activeElement).toBe(inside);
+  await expect.element(screen.getByRole('searchbox', { name: 'Find a setting', includeHidden: true })).toHaveValue('');
+ } finally { modal.remove(); }
 });
