@@ -341,6 +341,9 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   await shows('agents',view.agents);
   await page.goto(`/c/rs-learning/settings?agent=${ads}`);
   await expect(overlay.locator('#set-name-val')).toHaveText('Ads · @ads');
+  // Pause and Delete are in Advanced, closed until opened (#615).
+  await expect(overlay.locator('#set-advanced')).not.toHaveAttribute('open');
+  await overlay.locator('#set-g-advanced').click();
   await shows('agent',view.agent);
   // The pinned Engine has no paused state for a profile, so Pause stays "Soon" and opens nothing (#177); force, as Playwright waits on aria-disabled.
   // Delete's confirm is drawn after the click on Pause, so a confirm Pause opened would be drawn by then too.

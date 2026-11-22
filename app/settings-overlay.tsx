@@ -11,7 +11,7 @@ import { AgentFaceDot } from './agent-face-dot';
 import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
 import { pickSection, overlayHref, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, agentTab, agentTabFocus, type OverlaySection, type AgentTab } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
-import { Head, Label } from './settings-overlay-parts';
+import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
@@ -32,7 +32,7 @@ import { LearningSection } from './settings-learning';
 import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
+import { CompanySubscriptions, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, DefaultEffort, ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -173,7 +173,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
 
 // A part of the reference whose feature is not built yet: drawn in its place, empty, and saying "Soon".
 const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true" title={t('soon')}><p className="panel-empty">{t('soon')}</p></div>;
-const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
+const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><SubLabel id={id}>{label}</SubLabel><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
 function CompanySection({t,company,solo,count,owner,ro,sandbox}:{t:T,company:{id:string,name:string},solo:boolean,count:number,owner:boolean,ro:ReactNode,sandbox:boolean}) {
@@ -268,10 +268,10 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
  const morningEditable=canManage&&morning?.state==='found';
  const morningProps=morning?.state==='found'?{made:!!morning.routine,on:morning.routine?.on===true,time:morning.routine?.time??null,expr:morning.routine?.schedule.expr??null,display:morning.routine?.schedule.display??null,timezone:morning.routine?.timezone??null,quietYesterday:morning.quietYesterday}:null;
  const spokenLanguage=voice?.state!=='found'?null:voice.language==='ar'?t('settingsVoiceArabic'):voice.language==='en'?t('settingsVoiceEnglish'):voice.language||t('settingsVoiceDetect');
- const mainSec=owner?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><ul className="panel-card">
-   {isMain?<li className="panel-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
-    :<MakeMain company={company} agent={agent} current={main?.name||''}/>}</ul></section>
-  :isMain?<section className="dp-sec" id="set-main" aria-labelledby="set-h-main"><Label id="set-h-main">{t('settingsMainAgent')}</Label><div className="panel-card"><p className="panel-empty">{t('settingsMainOwnerOnly',agent.name)}</p></div></section>:null;
+ // The main mark is a row of Identity (#615): the Owner moves it here, and every other Role reads why only the Owner can.
+ const mainRow=owner?(isMain?<li className="panel-row" id="set-main"><span className="panel-row__icon"><SettingsIcon name="check"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsIsMain',agent.name)}</span><span className="panel-row__d">{t('settingsIsMainD')}</span></span></li>
+   :<MakeMain company={company} agent={agent} current={main?.name||''}/>)
+  :isMain?<li className="panel-row" id="set-main"><span className="panel-row__text"><span className="panel-row__t">{t('settingsMainAgent')}</span><span className="panel-row__d">{t('settingsMainOwnerOnly',agent.name)}</span></span></li>:null;
  return <>
   {isNewFor(agent,userId)&&<OpenedMark company={company} agent={agent.id}/>}
   <BackLink className="link-btn sov-back" id="sov-back" slug={slug} agent={agent.id}><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></BackLink>
@@ -286,59 +286,74 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
     ?<div className="dp-sections">{memory?.state==='found'?<AgentMemory key={agent.id} company={company} agent={{id:agent.id,name:agent.name}} notes={memory.notes||[]} main={memory.main} canReset={owner} canEdit={canManage} canForget={owner} knowledgeHref={canWrite?overlayHref(slug,'knowledge'):undefined}/>:<section className="dp-sec"><p className="panel-empty">{t('agentMemoryUnread')}</p></section>}</div>
     :(<>
    <TalkTip t={t} rtl={rtl} text={t('settingsTalkTipAgent',agent.name)} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
-   <div className="dp-sections sov-rules"><AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage}/></div>
-   <div className="dp-sections">
+   {/* The page in five groups by what is being changed (#615): Identity, How it works, Thinking, Voice, and Tools and
+       skills, then Advanced, closed until opened, with the voice's speed, Pause and Delete. Every control, permission and
+       confirmation is the one it was before; only its place changed. */}
+   <div className="dp-sections set-groups">
     {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
-    <section className="dp-sec" aria-labelledby="set-h-job"><Label id="set-h-job">{t('settingsJob')}</Label>
+    <Group id="set-h-identity" title={t('settingsGroupIdentity')}>
      {/* The pinned Engine writes neither a name nor a role for a named profile from its management listener (#161), so
          both are the reference's read-only rows, for every Role. */}
      <ul className="panel-card">
       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsName')}</span><span className="panel-row__d ro-val" id="set-name-val"><bdi>{agent.name}</bdi> · <bdi dir="ltr">{handle}</bdi></span></span></li>
       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsRole')}</span><span className="panel-row__d ro-val" id="set-role-val">{agent.speciality?<bdi>{agent.speciality}</bdi>:'—'}</span></span></li>
-     </ul></section>
-    {mainSec}
-    {/* Good morning (#182): the main Agent's daily message, its switch and time saved with the bar; one row for the rest. */}
-    {isMain&&<AgentMorning agent={agent.id} editable={morningEditable} morning={morningProps}/>}
-    {/* About is the Agent's profile description (#161); the fields after it join its save bar later. */}
-    <section className="dp-sec" aria-labelledby="set-h-about"><Label id="set-h-about">{t('settingsAbout')}</Label>
-     {editable?<AgentAboutField agent={agent.id} name={agent.name} description={about?.description??''}/>
-      :<div className="panel-card"><p className="ro-text" id="set-about">{about?.description||'—'}</p></div>}</section>
+      {mainRow}
+     </ul>
+     {/* About is the Agent's profile description (#161). */}
+     <section className="dp-sec" aria-labelledby="set-h-about"><SubLabel id="set-h-about">{t('settingsAbout')}</SubLabel>
+      {editable?<AgentAboutField agent={agent.id} name={agent.name} description={about?.description??''}/>
+       :<div className="panel-card"><p className="ro-text" id="set-about">{about?.description||'—'}</p></div>}</section>
+    </Group>
     {/* How it works is the profile SOUL.md outside the team's rules section (#176): the Owner edits it, every other Role
-        reads it with its line breaks; an Engine that could not be read shows no text at all. A Manager reads the section
-        read-only, and its own line says why, apart from the page's one read-only note (the reference's settingsReadHTML). */}
-    <section className="dp-sec" aria-labelledby="set-h-how"><Label id="set-h-how">{t('settingsHow')}</Label>
+        reads it with its line breaks; an Engine that could not be read shows no text at all. A Manager reads it
+        read-only, and its own line says why. Good morning (#182) is the main Agent's one row here, and the rules it was
+        told in its chat (#18) close the group. */}
+    <Group id="set-h-how" title={t('settingsHow')}>
      {!owner&&<p className="set-hint">{t('settingsHowRO')}</p>}
      {howEditable?<AgentInstructionsField agent={agent.id} name={agent.name} instructions={how?.instructions??''} sectionChars={how?.sectionChars??0} limit={how?.limit??20000}/>
-      :<AgentInstructionsRead instructions={how?.state==='found'?how.instructions:''} empty={how?.state==='found'?t('settingsHowEmpty'):'—'}/>}</section>
-    {/* Thinks with: the Agent's own Engine profile's model (#29), written there and read back, then its thinking level
+      :<AgentInstructionsRead instructions={how?.state==='found'?how.instructions:''} empty={how?.state==='found'?t('settingsHowEmpty'):'—'}/>}
+     {isMain&&<AgentMorning agent={agent.id} editable={morningEditable} morning={morningProps}/>}
+     <AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage}/>
+    </Group>
+    {/* Thinking: the Agent's own Engine profile's model (#29), written there and read back, then its thinking level
         (#179): the eight the Engine accepts, saved with the same bar, read as text by every other Role. */}
-    <section className="dp-sec" aria-labelledby="set-h-thinks"><Label id="set-h-thinks">{t('settingsThinks')}</Label>
+    <Group id="set-h-thinks" title={t('settingsGroupThinking')}>
      {agentModel?.models?.agents[0]?<>
       <AgentModel company={company} agent={agent.id} name={agent.name} model={agentModel.models.agents[0].model} options={agentModel.models.agents[0].options} choosable={agentModel.models.agents[0].choosable} owner={owner}/>
       <AgentEffort agent={agent.id} effort={agentModel.models.agents[0].effort} editable={effortEditable}/>
      </>:<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
-     <p className="set-hint">{t('settingsThinksHint')}</p></section>
-    {/* The Agent's voice (#162): its language, its real voice with Listen, and the speed. */}
-    <section className="dp-sec" aria-labelledby="set-h-voice"><Label id="set-h-voice">{t('settingsVoice')}</Label>
+     <p className="set-hint">{t('settingsThinksHint')}</p></Group>
+    {/* The Agent's voice (#162): its language and its real voice with Listen; the speed is in Advanced. */}
+    <Group id="set-h-voice" title={t('settingsVoice')}>
      {voiceEditable?<AgentVoiceField company={company} agent={agent.id} personName={personName} voice={voice}/>
       :<ul className="panel-card">
        <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoiceLang')}</span>
         <span className="panel-row__d ro-val" id="set-voice-lang-val">{spokenLanguage??'—'}</span></span></li>
        <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoice')}</span>
-        <span className="panel-row__d ro-val" id="set-voice-val">{voice?.state==='found'?voice.voiceName??'—':'—'}{voice?.state==='found'&&<> · <bdi dir="ltr">{voice.speed}×</bdi></>}</span></span></li>
+        <span className="panel-row__d ro-val" id="set-voice-val">{voice?.state==='found'?voice.voiceName??'—':'—'}</span></span></li>
       </ul>}
-    </section>
-    <SoonSec t={t} id="set-h-settingsTools" label={t('settingsTools')}/>
-    {/* design-reference: settingsHTML, permsHTML after Tools (#166). */}
-    <StandingPermissions key={agent.id} company={company} agent={agent.id} permissions={permissions} canRevoke={canManage}/>
-    {/* The Agent's own Skills and their switches (#180); the Company's shared skills stay on the team's Skills page. */}
-    <AgentSkills agent={agent.id} name={agent.name} slug={slug} learning={learning} skills={skills?.state==='found'?skills.skills:null} editable={skillsEditable}/>
-    {owner&&<section className="dp-sec" aria-labelledby="set-h-danger"><Label id="set-h-danger">{t('settingsDanger')}</Label><ul className="panel-card">
-     <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsPause')}</span><span className="panel-row__d">{t('settingsPauseD')}</span></span>
-      <button type="button" id="danger-pause" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}>{t('settingsPauseButton')}</button></li>
-     {isMain?<li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsDelete',agent.name)}</span><span className="panel-row__d">{t('settingsDeleteMain')}</span></span></li>
-      :<DeleteAgent company={company} slug={slug} agent={agent}/>}
-    </ul></section>}
+    </Group>
+    <Group id="set-h-tools" title={t('settingsGroupTools')}>
+     <SoonSec t={t} id="set-h-settingsTools" label={t('settingsTools')}/>
+     {/* design-reference: settingsHTML, permsHTML after Tools (#166). */}
+     <StandingPermissions key={agent.id} company={company} agent={agent.id} permissions={permissions} canRevoke={canManage} heading="h5"/>
+     {/* The Agent's own Skills and their switches (#180); the Company's shared skills stay on the team's Skills page. */}
+     <AgentSkills agent={agent.id} name={agent.name} slug={slug} learning={learning} skills={skills?.state==='found'?skills.skills:null} editable={skillsEditable}/>
+    </Group>
+    {/* Advanced (#615): closed when the page opens, for every Role. The voice's speed joins the page's save bar; Pause and
+        Delete are the Owner's, with Delete's typed-name confirmation as before. */}
+    <details className="set-advanced" id="set-advanced" key={agent.id}>
+     <summary className="set-advanced__s" id="set-g-advanced"><h4 className="set-advanced__h">{t('settingsAdvanced')}</h4><SettingsIcon name="forward" rtl={rtl}/></summary>
+     <div className="set-advanced__body">
+      <AgentVoiceSpeed agent={agent.id} speed={voice?.state==='found'?voice.speed:null} editable={voiceEditable}/>
+      {owner&&<section className="dp-sec" aria-labelledby="set-h-danger"><SubLabel id="set-h-danger">{t('settingsDanger')}</SubLabel><ul className="panel-card">
+       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsPause')}</span><span className="panel-row__d">{t('settingsPauseD')}</span></span>
+        <button type="button" id="danger-pause" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}>{t('settingsPauseButton')}</button></li>
+       {isMain?<li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsDelete',agent.name)}</span><span className="panel-row__d">{t('settingsDeleteMain')}</span></span></li>
+        :<DeleteAgent company={company} slug={slug} agent={agent}/>}
+      </ul></section>}
+     </div>
+    </details>
    </div>
    </>)}
   </div>
@@ -351,7 +366,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
 // said it ("you" for the reader, as the reference's firstName) and when. An Owner or a Manager may remove one; the server
 // checks that again (remove_agent_rule).
 function AgentRules({t,company,userId,rules,canManage}:{t:T,company:string,userId:string,rules:Rule[],canManage:boolean}) {
- return <section className="dp-sec" aria-labelledby="rl-h"><h4 className="dp-label" id="rl-h" tabIndex={-1}><span>{t('settingsRules')} <span className="muted num">{rules.length}</span></span></h4>
+ return <section className="dp-sec sov-rules" aria-labelledby="rl-h"><h5 className="dp-label" id="rl-h" tabIndex={-1}><span>{t('settingsRules')} <span className="muted num">{rules.length}</span></span></h5>
   {rules.length?<ul className="panel-card rl-list">{rules.map(rule=><li key={rule.id} className="panel-row rl-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span>
    <span className="panel-row__text"><span className="panel-row__t" dir="auto">{rule.body}</span><RuleSaid by={rule.said_by===userId?t('settingsRuleYou'):rule.teller?.name||t('member')} at={rule.said_at}/></span>
    {canManage&&<RemoveRule company={company} rule={rule.id} body={rule.body}/>}</li>)}</ul>
