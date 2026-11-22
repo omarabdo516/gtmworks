@@ -78,6 +78,16 @@ test('in Arabic a Viewer finds their own sections by their Arabic names and neve
  expect(names(screen)).toEqual([]);
 });
 
+test('Enter and Escape that confirm a word being composed (an input method) neither open a section nor clear the search', async () => {
+ const screen = await settings('en');
+ const find = screen.getByRole('searchbox', { name: 'Find a setting' });
+ await find.fill('tasks');
+ for (const key of ['Enter', 'Escape']) find.element().dispatchEvent(new KeyboardEvent('keydown', { key, isComposing: true, bubbles: true, cancelable: true }));
+ expect(opened).toEqual([]);
+ await expect.element(find).toHaveValue('tasks');
+ expect(push).not.toHaveBeenCalled();
+});
+
 test('/ typed in a field of the page stays in that field', async () => {
  const screen = await settings('en');
  const note = screen.getByRole('textbox', { name: 'Note' });

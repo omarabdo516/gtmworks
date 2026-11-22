@@ -43,6 +43,8 @@ export function SettingsNav({slug,companyName,role,section,learningWaiting,agent
     <input ref={search} id="sov-find" type="search" autoComplete="off" spellCheck={false} aria-keyshortcuts="/" aria-controls="sov-nav" placeholder={t('settingsFind')} value={query}
      onChange={event=>setQuery(event.target.value)}
      onKeyDown={event=>{
+      // A key that confirms a word an input method is composing belongs to that word.
+      if(event.nativeEvent.isComposing) return;
       if(event.key==='Escape'&&query) { event.preventDefault(); event.stopPropagation(); setQuery(''); }
       else if(event.key==='Enter'&&wanted&&found[0]) { event.preventDefault(); document.getElementById(`sov-nav-${found[0][0]}`)?.click(); }
      }}/></label>
