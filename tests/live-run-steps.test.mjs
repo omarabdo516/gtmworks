@@ -72,6 +72,18 @@ test('a Run the Engine no longer knows is gone, and an Engine that cannot be rea
  assert.deepEqual(await collect(/** @type {AsyncIterable<any>} */(engineFor({address,profile,key:'test-only-key'}).steps?.('run_1'))),[{end:'unreachable'}]);
 });
 
+test('a refusal whose body stalls after its head is unreachable within the request\'s deadline',async()=>{
+ const { createServer }=await import('node:http');
+ const server=createServer((_request,response)=>{ response.writeHead(502,{'Content-Type':'application/json'}); response.write('{"error":'); });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',()=>resolve(undefined)));
+ try {
+  const address=`http://127.0.0.1:${/** @type {import('node:net').AddressInfo} */(server.address()).port}`;
+  const started=Date.now();
+  assert.deepEqual(await collect(/** @type {AsyncIterable<any>} */(engineFor({address,profile,key:'test-only-key'}).steps?.('run_1'))),[{end:'unreachable'}]);
+  assert.ok(Date.now()-started<8000,'it does not wait for ever');
+ } finally { server.closeAllConnections(); server.close(); }
+});
+
 test('a replayed start is drawn once; an end with no id closes the oldest open call of its tool; an end of no call changes nothing',()=>{
  const one=withStep([],{call:'a',tool:'web_search',preview:'x',state:'started'});
  assert.equal(withStep(one,{call:'a',tool:'web_search',preview:'x',state:'started'}),one);
@@ -80,6 +92,8 @@ test('a replayed start is drawn once; an end with no id closes the oldest open c
  const ended=withStep(two,{call:null,tool:'terminal',preview:null,state:'failed'});
  assert.deepEqual(liveView('r',ended),{run:'r',steps:[{tool:'terminal',preview:'ls',state:'failed'}],now:{tool:'terminal',preview:'pwd'}});
  assert.equal(withStep(ended,{call:'zzz',tool:'web_search',preview:null,state:'done'}),ended);
+ const mixed=withStep(withStep([],{call:'call_a',tool:'terminal',preview:'ls',state:'started'}),{call:'#7',tool:'terminal',preview:'pwd',state:'started'});
+ assert.deepEqual(liveView('r',withStep(mixed,{call:null,tool:'terminal',preview:null,state:'done'})),{run:'r',steps:[{tool:'terminal',preview:'pwd',state:'done'}],now:{tool:'terminal',preview:'ls'}},'an end with no id never closes a call the Engine gave an id');
  const full=Array.from({length:mostLiveSteps},(_,index)=>({call:`c${index}`,tool:'t',preview:null,state:/** @type {const} */('done')}));
  assert.equal(withStep(full,{call:'more',tool:'t',preview:null,state:'started'}),full,'a Run past its limit shows its first calls');
 });

@@ -165,7 +165,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  // Its Run's steps live, as a Conversation shows them (#646): the reply that lands after them takes their place without
  // rising in again, its list open if the live one was.
  const landing=useLanding({working:!!workingNow,live:useLiveSteps({company:channel.company,channel:channel.id},!!workingNow),
-  newest:messages.findLast(message=>message.author==='agent')?.id??null,turn:`${waiting?.id}:${workingNow?.agent}`});
+  newest:messages.findLast(message=>message.author==='agent')?.id??null});
  const live=landing.view;
  const landedHere=(message:ChannelMessage)=>message.author==='agent'&&landing.landed(message.id);
  const boardColumn=board?t(columnLabel(board.column,writer)):'';
@@ -193,7 +193,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
      {mention.permissions.map(card=><PermissionCard key={card.id} card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/>)}
     </li>)}
    </Fragment>)}
-    {workingNow&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} toggled={landing.toggled}/>}</ol>
+    {workingNow&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
    {workingNow&&(live?<ActivityLine view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>
     :<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>)}
   </div></div>

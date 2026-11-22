@@ -150,6 +150,9 @@ test('a queued turn: once the first Run\'s reply lands its live steps go at once
  await expect.poll(() => fake.asked.length).toBeGreaterThan(0);
  fake.send({ run: 'run_1', steps: [found], now: null });
  await expect.poll(() => live()).not.toBeNull();
+ fake.send({ end: 'ended' }); fake.end();
+ // Nothing on screen says the Run's events ended: the page is given a moment to read the end.
+ await new Promise(resolve => setTimeout(resolve, 200));
  // The reply to the first message lands while the queued one keeps the Conversation waiting.
  const next = { id: 3, author: 'person' as const, author_name: 'Omar', body: 'And the budget?', created_at: at };
  await screen.rerender(chat('en', { ...landed, pending: true, messages: [...landed.messages, next] }));
@@ -158,6 +161,27 @@ test('a queued turn: once the first Run\'s reply lands its live steps go at once
  expect(document.querySelectorAll('.steps').length).toBe(1);
  expect(document.querySelector('[data-author="agent"]')?.classList.contains('msg-in')).toBe(false);
  await expect.element(screen.getByRole('status')).toHaveTextContent('Ads is working on a reply…');
+ await expect.poll(() => fake.asked.length, { timeout: 4000 }).toBe(2);
  fake.send({ run: 'run_2', steps: [], now: { tool: 'sheets', preview: 'budget' } });
  await expect.poll(() => step()?.textContent).toBe('sheets · budget…');
+});
+
+test('a Run still streaming stays drawn when a reply or a decision lands meanwhile, and its list stays open across a read again', async () => {
+ const fake = engine();
+ const screen = await render(chat('en', working));
+ await expect.poll(() => fake.asked.length).toBe(1);
+ fake.send({ run: 'run_2', steps: [found], now: { tool: 'sheets', preview: null } });
+ await screen.getByRole('button', { name: 'Used 1 tool', exact: true }).click();
+ // The first Run's reply reaches the page only now, after the next Run's stream began; and an Owner's decision lands.
+ const decided = { id: 4, author: 'agent' as const, author_name: 'Ads', body: '', created_at: at, kind: 'decided' as const, decided: { kind: 'request' as const, by: 'Omar', name: 'Writer', at, made: true as const } };
+ await screen.rerender(chat('en', { ...landed, pending: true, messages: [...landed.messages, { id: 3, author: 'person', author_name: 'Omar', body: 'And the budget?', created_at: at }, decided] }));
+ await expect.element(screen.getByText('I read the last three campaigns.')).toBeVisible();
+ expect(step()?.textContent).toBe('sheets…');
+ expect(live()).not.toBeNull();
+ // The stream is cut and read again: the same Run comes back with nothing, then its steps, and its list is still open.
+ fake.end();
+ await expect.poll(() => fake.asked.length, { timeout: 4000 }).toBe(2);
+ fake.send({ run: 'run_2', steps: [], now: null });
+ fake.send({ run: 'run_2', steps: [found], now: { tool: 'sheets', preview: null } });
+ await expect.poll(() => live()?.querySelector('.steps__toggle')?.getAttribute('aria-expanded')).toBe('true');
 });

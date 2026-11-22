@@ -13,10 +13,11 @@ import type { LiveLine, LiveView } from '@/lib/live-steps.mjs';
 const againAfter=1500;
 
 // The Run's view while the place it works in waits on it (`working`), null while there is none to draw: nothing works,
-// no Run has reached the Engine yet, or the stream could not be read. A view stays drawn once its Run's events end, until
-// the reply lands and the place no longer waits.
-export function useLiveSteps(place:{company:string,conversation?:string,channel?:string},working:boolean):LiveView|null {
- const [view,setView]=useState<LiveView|null>(null);
+// no Run has reached the Engine yet, or the stream could not be read. A view stays drawn once its Run's events end
+// (`ended`), until the reply lands and the place no longer waits.
+export type LiveRun=LiveView&{ended?:true};
+export function useLiveSteps(place:{company:string,conversation?:string,channel?:string},working:boolean):LiveRun|null {
+ const [view,setView]=useState<LiveRun|null>(null);
  const {company,conversation,channel}=place;
  useEffect(()=>{
   if(!working) return;
@@ -41,7 +42,8 @@ export function useLiveSteps(place:{company:string,conversation?:string,channel?
    } catch { if(stopped.signal.aborted) return; end='unreachable'; }
    if(stopped.signal.aborted) return;
    // A Run that ended keeps its last view until the reply lands; with no Run to read, the plain line comes back.
-   if(end!=='ended'&&end!=='closed') setView(null);
+   if(end==='ended') setView(current=>current&&{...current,ended:true});
+   else if(end!=='closed') setView(null);
    timer=setTimeout(read,againAfter);
   };
   void read();
@@ -52,19 +54,22 @@ export function useLiveSteps(place:{company:string,conversation?:string,channel?
 }
 
 // The reply that lands after live steps were drawn takes their place (#646): the turn it is drawn in does not rise in
-// again, and its list is drawn open if the person opened the live one. `newest` is the newest reply now. `turn` names
-// what the place works on now (the newest reply in a Conversation, the message and the Agent called in a channel): once
-// it moves on while the view is still of the same Run, that Run's work is over, so its view is no longer drawn, though
-// the place may still wait on a next Run (a queued turn, or the next Agent a message called) that is not read yet.
-// Kept as state from the render before, as React keeps it.
-export function useLanding<Id>({working,live,newest,turn}:{working:boolean,live:LiveView|null,newest:Id|null,turn:string}) {
- const [shown,setShown]=useState(false); const [landed,setLanded]=useState<Id|null>(null); const [open,setOpen]=useState(false);
- const [base,setBase]=useState<{run:string,turn:string}|null>(null);
- if(live&&base?.run!==live.run) setBase({run:live.run,turn});
- const over=!!live&&base?.run===live.run&&base.turn!==turn;
- if(working&&!over&&!!live?.steps.length&&!shown) setShown(true);
- if((!working||over)&&shown) { setShown(false); setLanded(newest); }
- return {view:over?null:live,landed:(id:Id)=>landed!==null&&id===landed,opened:(id:Id)=>landed!==null&&id===landed&&open,toggled:setOpen};
+// again, and its list is drawn open if the person opened the live one. `newest` is the newest reply now. A Run whose
+// events ended is over once a newer reply lands, so its view is no longer drawn, though the place may still wait on a
+// next Run (a queued turn, or the next Agent a message called) that is not read yet; a Run still streaming is never
+// taken for over, whatever else the place draws meanwhile. Whether the live list is open is kept here, per Run, so a
+// read again of the same Run draws it as it was. Kept as state from the render before, as React keeps it.
+export function useLanding<Id>({working,live,newest}:{working:boolean,live:LiveRun|null,newest:Id|null}) {
+ const [shown,setShown]=useState<string|null>(null); const [landed,setLanded]=useState<{id:Id|null,open:boolean}>({id:null,open:false});
+ const [openRun,setOpenRun]=useState<string|null>(null);
+ const [ended,setEnded]=useState<{run:string,newest:Id|null}|null>(null);
+ if(live?.ended&&ended?.run!==live.run) setEnded({run:live.run,newest});
+ const over=!!live?.ended&&ended?.run===live.run&&ended.newest!==newest;
+ if(working&&!over&&!!live?.steps.length&&shown!==live.run) setShown(live.run);
+ if((!working||over)&&shown!==null) { setShown(null); setLanded({id:newest,open:openRun===shown}); }
+ const run=live?.run??null;
+ return {view:over?null:live,open:run!==null&&openRun===run,toggled:(open:boolean)=>setOpenRun(open?run:null),
+  landed:(id:Id)=>landed.id!==null&&id===landed.id,opened:(id:Id)=>landed.id!==null&&id===landed.id&&landed.open};
 }
 
 // The live line (design-reference: .activity): the working dot, the Agent's face and name, then its step now: the tool
@@ -81,13 +86,12 @@ export function ActivityLine({view,agent,face,c,cb}:{view:LiveView,agent:string,
  </p>;
 }
 
-// The Agent's turn while it works: its sender line and the steps it finished so far, in the list the reply will carry.
-// Each Run's turn starts with its list closed; `toggled` hears whether the person opened it.
-export function LiveTurn({view,agent,face,c,cb,toggled}:{view:LiveView,agent:string,face:string,c:StepsText,cb:StepsBidiText,toggled?:(open:boolean)=>void}) {
- useEffect(()=>{ toggled?.(false); },[view.run,toggled]);
+// The Agent's turn while it works: its sender line and the steps it finished so far, in the list the reply will carry,
+// open as the person left it for this Run (`open`, `toggled`).
+export function LiveTurn({view,agent,face,c,cb,open,toggled}:{view:LiveView,agent:string,face:string,c:StepsText,cb:StepsBidiText,open:boolean,toggled:(open:boolean)=>void}) {
  if(!view.steps.length) return null;
  return <li className="turn turn--agent msg" data-author="agent" data-live>
   <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:face,name:agent}} size={20}/></span><bdi>{agent}</bdi></div>
-  <StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} toggled={toggled}/>
+  <StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} opened={open} toggled={toggled}/>
  </li>;
 }

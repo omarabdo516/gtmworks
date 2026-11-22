@@ -243,8 +243,9 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // While the Agent works, the line under the transcript and the turn's steps follow its Run live (#646). The reply that
  // lands after live steps were drawn takes their place without rising in again, its list open if the live one was.
  const working=pending&&!record.asking;
- const newest=messages.findLast(message=>message.author==='agent')?.id??null;
- const landing=useLanding({working,live:useLiveSteps({company,conversation:conversation.id},working),newest,turn:String(newest)});
+ // An Agent's reply, not a decision drawn as its message.
+ const newest=messages.findLast(message=>message.author==='agent'&&message.kind!=='decided')?.id??null;
+ const landing=useLanding({working,live:useLiveSteps({company,conversation:conversation.id},working),newest});
  const live=landing.view;
  const rise=(index:number)=>rises(drawn[index])&&!(messages[index].author==='agent'&&landing.landed(messages[index].id))?' msg-in':'';
  // A message's time: in UTC on the server and the first browser render, hidden (globals.css), then in the reader's own
@@ -285,7 +286,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}
-   {working&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} toggled={landing.toggled}/>}</ol>
+   {working&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
   {working&&(live?<ActivityLine view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>
    :<p className="thinking convo-status" role="status"><span className="shimmer">{runner?c('conversationWorkingFor',conversation.agent_name,runner):t('conversationWorking',conversation.agent_name)}</span></p>)}
   {failed&&(modelCause

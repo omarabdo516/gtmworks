@@ -75,6 +75,7 @@ test('in a Conversation the sent message, the reply and the card for the Agent L
  expect(await motionOf(mine)).toEqual(rises);
  // While Lead works, the live line's words breathe (#646): its Run has made no call yet.
  await expect(page.locator('.activity .shimmer')).toHaveText('Thinking…');
+ await expect(page.locator('.activity .activity__who')).toHaveText('Lead');
  expect(await motion(page,'.activity .shimmer')).toEqual(breathes);
  // Lead makes an Agent during the Run, as lead_create_agent writes it; then the Run ends with its reply. The made Agent is
  // tied to this Conversation by a test-only trigger, in the transaction that writes the reply (close_conversation_run; the
@@ -155,6 +156,7 @@ test('in the general channel a Viewer sees the working line breathe and the repl
   await expect(theirs).toBeVisible({timeout:20000});
   expect(await theirs.evaluate(element=>getComputedStyle(element).animationName)).toBe('gw-rise');
   await expect(page.locator('.activity .shimmer')).toHaveText('Thinking…',{timeout:20000});
+  await expect(page.locator('.activity .activity__who')).toHaveText('Lead');
   expect(await motion(page,'.activity .shimmer')).toEqual(breathes);
   fake.settings.pendingReads=0;
   const reply=page.locator('.turn--agent').filter({hasText:'Reply to:'});
@@ -194,6 +196,7 @@ test('with reduced motion the working line\'s words are still and fully drawn',a
   await page.getByLabel('Message',{exact:true}).fill('Plan the week');
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page.locator('.activity .shimmer')).toHaveText('Thinking…',{timeout:20000});
+  await expect(page.locator('.activity .activity__who')).toHaveText('Lead');
   expect(await page.locator('.activity .shimmer').evaluate(element=>[getComputedStyle(element).animationName,getComputedStyle(element).opacity])).toEqual(['none','1']);
   expect(await page.locator('.send-fly').count()).toBe(0);
  } finally { fake.settings.pendingReads=0; await context.close(); }
