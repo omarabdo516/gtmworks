@@ -98,6 +98,20 @@ test('a held key\'s details say it is a key, the Owner removes or replaces it, a
   expect(sent[1]).toEqual({ company, provider: 'anthropic', intent: 'remove' });
 });
 
+test('a key the Engine refused leaves the field empty with the reason, so the value typed stays nowhere on the page', async () => {
+  vi.stubGlobal('fetch', () => Promise.resolve(new Response(JSON.stringify({ error: 'keyFailed' }), { status: 502 })));
+  const screen = await providers();
+  await screen.getByRole('button', { name: /^Anthropic/ }).click();
+  const detail = screen.getByRole('region', { name: 'Anthropic' });
+  await detail.getByRole('button', { name: en.settingsModelsKeyReplace }).click();
+  await detail.getByLabelText(en.settingsModelsKeyValue).fill(secret);
+  await detail.getByRole('button', { name: en.settingsModelsKeySave }).click();
+  await expect.element(detail.getByRole('alert')).toHaveTextContent(en.settingsModelsKeyError);
+  expect((document.getElementById('mdl-key-anthropic-value') as HTMLInputElement).value).toBe('');
+  expect(document.body.innerHTML.includes(secret)).toBe(false);
+  expect(refresh).not.toHaveBeenCalled();
+});
+
 test('the Owner\'s last row connects what is not connected yet: a subscription by sign-in, a provider by its key', async () => {
   const sent: object[] = [];
   vi.stubGlobal('fetch', (_: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); return Promise.resolve(new Response('{}')); });
@@ -137,6 +151,19 @@ test('a Provider connected from the Owner\'s last row opens in its place once th
   </LanguageProvider></div></div></div>);
   await expect.poll(shown).toEqual(['pv-d-key-openrouter']);
   expect(document.querySelector('#pv-row-key-openrouter')?.getAttribute('aria-current')).toBe('true');
+});
+
+test('on a phone, a Provider connected from the last row opens with the focus on its name', async () => {
+  const none = keys({ keys: [{ provider: 'openrouter', label: 'OpenRouter', set: false }] });
+  const view = (held: ProviderKeysData) => <div className="gw" dir="ltr"><div className="sov"><div className="sov-page sov-page--models"><LanguageProvider language="en">
+    <CompanyProviders company={company} companyName={companyName} owner keys={held} subscriptions={{ available: true, signIns: signIns('notConnected', 'notConnected'), noEngine: false }}/>
+  </LanguageProvider></div></div></div>;
+  const screen = await providers({ signIns: signIns('notConnected', 'notConnected'), keys: none }, 'en', 390);
+  await screen.getByRole('button', { name: en.providersAdd }).click();
+  await expect.poll(() => document.activeElement?.id).toBe('pv-d-add-name');
+  await screen.rerender(view(keys({ keys: [{ provider: 'openrouter', label: 'OpenRouter', set: true }] })));
+  await expect.poll(() => document.activeElement?.id).toBe('pv-d-key-openrouter-name');
+  expect(visible('.pv-list')).toBe(false);
 });
 
 test('on a phone the list comes first; a row opens its details with its name and one Back, and Back returns to the row', async () => {

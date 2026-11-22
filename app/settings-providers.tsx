@@ -52,26 +52,26 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
  const selected=chosen&&ids.includes(chosen)?chosen:null;
  const shown=selected??ids[0]??null;
  const list=useRef<HTMLUListElement>(null);
- const moved=useRef<'detail'|string|null>(null);
- // A row that opens a page of its own (a phone, where the list gives way) takes the focus to that page's name, and Back
- // gives it to the row again. On a desktop both stay in view and the focus stays on the row.
+ // Where the focus goes once a choice is drawn: a row that opens a page of its own (a phone, where the list gives way)
+ // gives it to that page's name, and Back gives it to the row again. On a desktop both stay in view and the focus stays
+ // where it was. Each request is a new object, so the same move asked twice is done twice.
+ const [focus,setFocus]=useState<{to:'detail'|'row',id:string}|null>(null);
  useEffect(()=>{
-  const target=moved.current; moved.current=null;
-  if(!target) return;
-  if(target==='detail') { if(selected&&list.current&&getComputedStyle(list.current).display==='none') document.getElementById(`pv-d-${selected}-name`)?.focus(); return; }
-  document.getElementById(`pv-row-${target}`)?.focus();
- },[selected]);
- // A Provider the Owner just connected from the last row opens in its place, so the sign-in or key that finished is seen
- // where it now lives.
+  if(!focus) return;
+  if(focus.to==='row') { document.getElementById(`pv-row-${focus.id}`)?.focus(); return; }
+  if(list.current&&getComputedStyle(list.current).display==='none') document.getElementById(`pv-d-${focus.id}-name`)?.focus();
+ },[focus]);
+ // A Provider the Owner just connected from the last row opens in its place, with the focus as if its row were chosen,
+ // so the sign-in or key that finished is seen where it now lives.
  const listed=entries.map(entry=>entry.id).join(' ');
  const [seen,setSeen]=useState(listed);
  if(seen!==listed) {
   setSeen(listed);
   const added=entries.find(entry=>!seen.split(' ').includes(entry.id));
-  if(added&&shown==='add') setChosen(added.id);
+  if(added&&shown==='add') { setChosen(added.id); setFocus({to:'detail',id:added.id}); }
  }
- const open=(id:string)=>{ moved.current='detail'; setChosen(id); };
- const back=()=>{ moved.current=selected; setChosen(null); };
+ const open=(id:string)=>{ setChosen(id); setFocus({to:'detail',id}); };
+ const back=()=>{ if(selected) setFocus({to:'row',id:selected}); setChosen(null); };
  const status=(entry:Entry)=>entry.kind==='key'?t('providersKeySaved'):partial(entry.state)?t('providersPartly'):t('signInConnected');
  const backButton=<button type="button" className="link-btn sov-back pv-back" onClick={back}><SettingsIcon name="back" rtl={rtl}/><span>{t('providers')}</span></button>;
  const notes=owner?[...(keys?.waiting??[]).map(item=>['settingsModelsKeyWaiting',item.name||t('settingsModelsAnAgent')]),
@@ -257,11 +257,13 @@ function KeyActions({company,owner,row,rowed=false}:{company:string,owner:boolea
  const act=async(intent:'set'|'remove')=>{
   if(busy) return;
   if(intent==='set'&&value.trim().length<8) { setError('settingInvalid'); return; }
+  // The typed value leaves the field as it is sent, whatever the answer.
+  const sent=value.trim(); setValue('');
   setBusy(true); setError('');
-  const answer=await send({company,provider:row.provider,intent,...(intent==='set'?{value:value.trim()}:{})});
+  const answer=await send({company,provider:row.provider,intent,...(intent==='set'?{value:sent}:{})});
   setBusy(false);
   if(!answer.ok) { setError(answer.error||'keyFailed'); return; }
-  setOpen(false); setValue('');
+  setOpen(false);
   toast(t(intent==='set'?'settingsModelsKeySaved':'settingsModelsKeyRemoved'));
   router.refresh();
  };
