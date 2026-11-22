@@ -106,6 +106,18 @@ def borrowed():
 def recorded():
     # The profile's move is in the root's record, after the root's own; the profile made no copy of the accounts.
     assert [(s["from"], s["to"]) for s in switches()] == [("cccccc", "bbbbbb"), ("bbbbbb", "cccccc")], switches()
+    # Both routes answer over HTTP on the dashboard's own router, so no route of the pinned release takes their paths.
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    app = FastAPI()
+    app.include_router(ops.router)
+    client = TestClient(app)
+    listed = client.get("/api/credentials/pool/switches")
+    assert listed.status_code == 200 and [(s["from"], s["to"]) for s in listed.json()["switches"]] == [("cccccc", "bbbbbb"), ("bbbbbb", "cccccc")], listed.text
+    put = client.put("/api/credentials/pool/openai-codex/order?profile=default",
+                     json={"entries": [{"id": "cccccc", "off": False}, {"id": "bbbbbb", "off": False}]})
+    assert put.status_code == 200 and [e["id"] for e in put.json()["entries"]] == ["cccccc", "bbbbbb", "aaaaaa"], put.text
+    assert client.put("/api/credentials/pool/openai-codex/order?profile=default", json={"entries": "x"}).status_code == 400
 
 
 {"root": root, "borrowed": borrowed, "recorded": recorded}[sys.argv[1]]()
