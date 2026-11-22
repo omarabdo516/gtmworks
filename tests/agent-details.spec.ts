@@ -266,6 +266,24 @@ for(const [where,path] of [['a Conversation',`/c/rs-learning/conversations/${con
  }
 });
 
+// #612: below 1024px the details panel covers the chat with its own Escape. Settings opened from its gear draw over it,
+// and their Escape closes only them: the panel is still open behind, its gear holding the focus.
+test('below 1024px Escape closes the Settings opened from the details panel and leaves the panel open',async({page})=>{
+ await page.setViewportSize({width:900,height:900});
+ await signIn(page,'omar@example.com',`/c/rs-learning/chat/${ads}`);
+ await page.locator('#btn-details').click();
+ const details=page.getByRole('complementary',{name:'Details: Meta Ads',exact:true});
+ await expect(details).toBeVisible();
+ await details.getByRole('link',{name:'Settings for Meta Ads',exact:true}).click();
+ await expect(page).toHaveURL(agentPage(ads));
+ await expect(page.locator('#sov-tab-settings')).toBeFocused();
+ await page.keyboard.press('Escape');
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/chat/${ads}$`));
+ await expect(page.locator('.sov')).toHaveCount(0);
+ await expect(details).toBeVisible();
+ await expect(page.locator('#dp-settings')).toBeFocused();
+});
+
 test('"All agents" returns to the Agents list with the focus on that Agent\'s row',async({page})=>{
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${ads}`);

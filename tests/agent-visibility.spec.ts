@@ -25,7 +25,7 @@ test.beforeAll(({},testInfo)=>{
 });
 
 test('the Owner shows an Agent to a Member, who then sees it while a hidden one stays absent, even by its address',async({page,browser})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/settings');
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
  const row=page.locator('.ta-table tbody tr').filter({hasText:'مراجع'});
  const toggle=row.getByRole('switch',{name:'مراجع · Meta Ads'});
  await expect(row.getByText('Shown to all')).toBeVisible();
@@ -73,7 +73,7 @@ test('a switch\'s thumb springs to the end side and fades its colour, in English
  const trackMoves='background-color 0.15s cubic-bezier(0.2, 0, 0, 1)';
  try { for(const [language,end] of [['en',12],['ar',-12]] as const) {
   query(`update public.people set language='${language}' where id='${omar}';`);
-  await signIn(page,'omar@example.com','/c/rs-learning/settings');
+  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
   await expect(page.locator('html')).toHaveAttribute('lang',language);
   const toggle=page.locator('.ta-table tbody tr').filter({hasText:'مراجع'}).getByRole('switch',{name:'مراجع · SEO'});
   await expect(toggle).toHaveAttribute('aria-checked','false');

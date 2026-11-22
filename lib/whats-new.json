@@ -6,6 +6,12 @@
   "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد زي ما هو مكتوب بلغة الواجهة، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
  },
  {
+  "issue": 612,
+  "date": "2026-11-22",
+  "en": { "title": "Settings open over your work", "body": "Settings now open as a window over the page you were on, with their pages grouped under Company, Agents and Engine, Members on a page of their own and a trail at the top saying where you are; closing puts you back exactly where you left off." },
+  "ar": { "title": "الإعدادات بتفتح فوق شغلك", "body": "الإعدادات دلوقتي بتفتح كشبّاك فوق الصفحة اللي كنت فيها، وصفحاتها متقسّمة تحت الشركة والوكلاء والمحرك، والأعضاء ليهم صفحة لوحدهم، وفوق فيه مسار بيقولك انت فين؛ ولما تقفلها بترجع بالظبط مكان ما سبت." }
+ },
+ {
   "issue": 561,
   "date": "2026-11-22",
   "en": { "title": "Confirmations get their full time on screen", "body": "A confirmation such as the one after you decide an agent's suggested rule now stays its full time from the moment it appears, even when the page is slow to show what changed." },

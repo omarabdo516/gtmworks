@@ -59,7 +59,10 @@ const proposals=()=>JSON.parse(query(`select change,setting,state,answered_by,an
 const engineWrites=()=>fake.settings.managementRequests.filter(request=>request.method==='PUT').map(request=>request.path);
 
 // The proposal a board card opens, over "Waiting on you".
-const opened=async(page:Page,title:string)=>{ await page.getByRole('button',{name:title}).click(); const dialog=page.getByRole('dialog'); await expect(dialog.locator('.chg-card')).toBeVisible(); return dialog; };
+// A click that lands before the board's buttons are live is repeated, as the account menu's are; the card must still open.
+const opened=async(page:Page,title:string)=>{ const dialog=page.getByRole('dialog');
+ await expect(async()=>{ if(!await dialog.locator('.chg-card').isVisible()) await page.getByRole('button',{name:title}).click(); await expect(dialog.locator('.chg-card')).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+ return dialog; };
 
 test('the proposals wait in the Owner\'s "Waiting on you" only, change nothing, and one that is not on the list waits on nobody',async({page,browser})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/approvals');

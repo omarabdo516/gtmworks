@@ -13,7 +13,7 @@ const budgets = {
   image: { limit: 10, measured: 6.5 }, // cold sandbox layer cache (#393), run 44735657345
   database: { limit: 4, measured: 2.1 },
   integration: { limit: 12, measured: 10.6 }, // its slowest shard
-  install: { limit: 12, measured: 11.3 }, // its slowest area, backup, run 44897434186 (update 7.0 min, #423)
+  install: { limit: 12, measured: 10.0 }, // its slowest area, updater, run 44967491326, once #553 split agents and backup (from 11.3 min, backup)
   // One lane's stack, one build and the one chat-open test, with the machine to itself (#421). The first estimate for
   // the run that starts it; the job says its measured minutes in the pull request that adds it.
   'chat-open': { limit: 8, measured: 5 },
