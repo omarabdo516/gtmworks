@@ -26,7 +26,7 @@ const keys = (extra: Partial<ProviderKeysData> = {}): ProviderKeysData => ({
   keys: [{ provider: 'openrouter', label: 'OpenRouter', set: false }, { provider: 'anthropic', label: 'Anthropic', set: true }],
   waiting: null, leftover: null, unknown: null, ...extra,
 });
-type Props = { owner?: boolean, signIns?: CompanySignIns['signIns'], available?: boolean, noEngine?: boolean, keys?: ProviderKeysData | null, models?: ProviderModelsData | null, accounts?: SubscriptionAccount[] | null, names?: Record<string, string>, order?: Record<string, Placed> };
+type Props = { owner?: boolean, signIns?: CompanySignIns['signIns'], available?: boolean, noEngine?: boolean, keys?: ProviderKeysData | null, models?: ProviderModelsData | null, accounts?: SubscriptionAccount[] | null, names?: Record<string, string>, order?: Record<string, Placed> | null };
 const tree = ({ owner = true, signIns: signed = signIns('connected', 'notConnected'), available = true, noEngine = false, keys: held = keys(), models = null, accounts, names, order }: Props = {}, language: 'en' | 'ar' = 'en') =>
   <div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="sov"><div className="sov-page sov-page--models"><LanguageProvider language={language}>
     <CompanyProviders company={company} companyName={companyName} owner={owner} keys={held} models={models} names={names} order={order} subscriptions={{ available, signIns: signed, accounts, noEngine }}/>
@@ -462,4 +462,13 @@ test('a switch the server refuses goes back and says why, in Arabic; a Manager r
   expect(rows()[0]).toBe(`ChatGPT ${en.providersSubscription} · ${en.providersOff}`);
   expect(placeOf('pv-d-sub-openai-codex-86c091')).toBe('1 of 3');
   expect(document.querySelector('#pv-d-sub-openai-codex-86c091-place-state')?.textContent).toBe(en.providersOff);
+});
+
+test('an order the database did not answer reads as unread, never as every Provider on, and draws no place or switch', async () => {
+  await providers({ signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 2), order: null });
+  // The Engine's order, and no row says switched on or off.
+  expect(rows()).toEqual([`ChatGPT ${en.providersSubscription} · ${en.signInConnected}`, `ChatGPT 2 ${en.providersSubscription} · ${en.providersExhausted}`,
+    `Anthropic ${en.providersKey} · ${en.providersKeySaved}`, en.providersAdd]);
+  expect(document.querySelector('#pv-d-sub-openai-codex-86c091-place-unread')?.textContent).toBe(en.providersOrderUnread);
+  expect(document.querySelectorAll('#md-providers .pv-move, #md-providers [id$="-place-switch"]').length).toBe(0);
 });

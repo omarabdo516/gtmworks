@@ -1590,6 +1590,7 @@
   "providersMoveUpLabel": "طلّع {0} لفوق",
   "providersMoveDownLabel": "نزّل {0} لتحت",
   "providersOrderHint": "ترتيب الشركة، من الأول للآخر. الموديلات بتاعة المزوّد المقفول مش بتظهر لما تختار موديل.",
+  "providersOrderUnread": "مقدرناش نقرا ترتيب المزوّدين ومفاتيحهم دلوقتي.",
   "providersOrderSaved": "الترتيب اتحفظ.",
   "providersUse": "استخدم المزوّد ده",
   "providersUseLabel": "استخدم {0}",

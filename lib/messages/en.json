@@ -1590,6 +1590,7 @@
   "providersMoveUpLabel": "Move {0} up",
   "providersMoveDownLabel": "Move {0} down",
   "providersOrderHint": "The company’s order, first to last. A switched-off provider’s models are no longer offered when you choose a model.",
+  "providersOrderUnread": "Couldn’t read the providers’ order and switches right now.",
   "providersOrderSaved": "Order saved.",
   "providersUse": "Use this provider",
   "providersUseLabel": "Use {0}",

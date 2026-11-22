@@ -98,8 +98,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
  const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;
  const names=section==='models'?await readProviderNames(db,company.id):{};
- // The Owner's order of the Providers and which are switched off (#619), read for every Member.
- const order=section==='models'?await readProviderOrder(db,company.id)??{}:{};
+ // The Owner's order of the Providers and which are switched off (#619), read for every Member; null when unread.
+ const order=section==='models'?await readProviderOrder(db,company.id):null;
  const keys=section==='models'?await (async()=>{ try { return await readCompanyKeys(db,service(),{company:company.id}); } catch { return null; } })():null;
  // Each Provider's models with the Owner's switch (#620), read for every Member, who sees them read-only.
  const providerModels=section==='models'?await readProviderModels(db,{company:company.id}).catch(()=>null):null;

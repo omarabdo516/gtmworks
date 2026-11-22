@@ -59,8 +59,11 @@ function entriesOf(t:(key:string)=>string,signIns:CompanySignIns['signIns'],acco
 const tileOf=(entry:{kind:Entry['kind'],provider:string,name:string}):{key:string,mark:string}=>({key:entry.kind==='subscription'?subscriptionLogo[entry.provider as SubscriptionProvider]:entry.provider,mark:entry.kind==='subscription'?'':letterOf(entry.name)});
 const partial=(state:Entry['state'])=>state==='mainAgentOnly'||state==='someAgentsOnly';
 
-export function CompanyProviders({company,companyName,owner,subscriptions:subs,keys,models=null,names={},order={}}:{company:string,companyName:string,owner:boolean,subscriptions:ProvidersSubscriptions,keys:ProviderKeysData|null,models?:ProviderModelsData|null,names?:Record<string,string>,order?:Record<string,Placed>}) {
+export function CompanyProviders({company,companyName,owner,subscriptions:subs,keys,models=null,names={},order:read={}}:{company:string,companyName:string,owner:boolean,subscriptions:ProvidersSubscriptions,keys:ProviderKeysData|null,models?:ProviderModelsData|null,names?:Record<string,string>,order?:Record<string,Placed>|null}) {
  const {t,language}=useI18n(); const rtl=language==='ar';
+ // An order the database did not answer is unread, never every Provider on: the list keeps the Engine's order and no
+ // place or switch is drawn or changed until it is read.
+ const order=read??{};
  const entries=entriesOf(t,subs.signIns,subs.accounts,keys?.keys??null,names,order);
  // The Providers that take a place: each the Engine lists by its own id (an older sign-in it lists no account for has none).
  const placed=entries.filter(entry=>entry.account);
@@ -71,7 +74,7 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
  const placedNow=placed.map(entry=>entry.id).join(' ');
  if(ordering!==null&&ordering===placedNow) setOrdering(null);
  useEffect(()=>{ if(ordering===null) return; const late=setTimeout(()=>setOrdering(null),10000); return ()=>clearTimeout(late); },[ordering]);
- const gate={waiting:ordering!==null,saved:setOrdering};
+ const gate={waiting:ordering!==null,saved:setOrdering,unread:read===null};
  // What the Owner can connect: either subscription, a second account of one already connected included, and a provider
  // with no key.
  const unkeyed=(keys?.keys??[]).filter(row=>!row.set);
@@ -171,7 +174,7 @@ function Advanced({id,provider,children}:{id:string,provider:string,children?:Re
  </details>;
 }
 
-type Gate={waiting:boolean,saved:(order:string)=>void};
+type Gate={waiting:boolean,saved:(order:string)=>void,unread:boolean};
 function SubscriptionDetail({company,companyName,owner,entry,placed,gate,keyed}:{company:string,companyName:string,owner:boolean,entry:Entry,placed:Entry[],gate:Gate,keyed:boolean}) {
  const {t}=useI18n();
  const provider=entry.provider as SubscriptionProvider; const state=entry.state as SubscriptionState;
@@ -225,6 +228,10 @@ function PlaceFacts({company,owner,entry,placed,gate}:{company:string,owner:bool
  if(!entry.account||at<0) return null;
  const on=turned??entry.on;
  const id=`pv-d-${entry.id}-place`;
+ if(gate.unread) return <>
+  <h6 className="pv-group" id={`${id}-h`}>{t('providersOrder')}</h6>
+  <div className="panel-card"><p className="panel-empty" id={`${id}-unread`}>{t('providersOrderUnread')}</p></div>
+ </>;
  const save=async(body:object):Promise<boolean>=>{
   setBusy(true); setError('');
   let ok=false; let code='';
