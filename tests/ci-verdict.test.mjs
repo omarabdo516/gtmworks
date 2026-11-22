@@ -97,11 +97,12 @@ test('the integration job runs as 6 shards, each uploading its own artifacts, an
   const uploads = steps.filter(step => step.uses?.startsWith('actions/upload-artifact@'));
   assert.ok(uploads.length >= 3);
   for (const upload of uploads) assert.match(upload.with.name, /-\$\{\{ matrix\.shard \}\}$/, upload.with.name);
-  // The proxy suite runs once, in shard 1; every argument after `integration` reaches the browser suite.
+  // The proxy suite runs once, in shard 1; every argument after `integration` but --shard reaches the browser suite,
+  // and --shard becomes the shard's spec files (#653, tests/browser-shards.test.mjs).
   const ci = readFileSync('ci.sh', 'utf8');
-  assert.match(ci, /\[\[ " \$\* " == \*' --shard='\* && " \$\* " != \*' --shard=1\/'\* \]\] && proxy=false/);
+  assert.match(ci, /\[\[ -n \$shard \]\] && \[\[ \$shard != 1\/\* \]\] && proxy=false/);
   assert.match(ci, /if \[\[ \$proxy == true \]\]; then npm run test:e2e:proxy; fi/);
-  assert.match(ci, /npm run test:e2e -- "\$@"\n/);
+  assert.match(ci, /npm run test:e2e -- "\$\{files\[@\]\}" "\$@"\n/);
 });
 
 // #421: the chat's open time runs in a job of its own, on the pull request too, so the browser shards no longer share

@@ -133,10 +133,23 @@ case "${1:-check}" in
   ;;
  integration)
   # Any further arguments go to the browser suite; CI passes --shard=<i>/6 (#335, #404), and the proxy suite runs in
-  # shard 1 only.
+  # shard 1 only. A shard runs the spec files scripts/browser-shards.mjs gives it, split by measured time, in place of
+  # Playwright's own --shard, which splits by test count (#653).
   shift
+  shard='' args=()
+  for arg in "$@"; do
+    if [[ $arg == --shard=* ]]; then shard=${arg#--shard=}; else args+=("$arg"); fi
+  done
+  set -- "${args[@]}"
   proxy=true
-  [[ " $* " == *' --shard='* && " $* " != *' --shard=1/'* ]] && proxy=false
+  [[ -n $shard ]] && [[ $shard != 1/* ]] && proxy=false
+  files=()
+  if [[ -n $shard ]]; then
+    list=$(GTMWORKS_TEST_LANES=$lanes node scripts/browser-shards.mjs "$shard")
+    [[ -n $list ]] || { echo "browser shard $shard has no spec files" >&2; exit 1; }
+    mapfile -t files <<< "$list"
+    echo "browser shard $shard: ${files[*]}"
+  fi
   # CI restores the dependencies and the browser from the fast job's caches before this, and installs Chromium alone on
   # a miss: the runner image has its system packages and fonts, so nothing here reaches a package mirror (#404). A local
   # run uses the checkout's own node_modules and browser.
@@ -156,7 +169,7 @@ case "${1:-check}" in
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
   # The measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
-  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e -- "$@"
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e -- "${files[@]}" "$@"
   ;;
  chat-open)
   # The chat's open time (project `alone`, #346) with a machine to itself, on the pull request too (#421): one lane's

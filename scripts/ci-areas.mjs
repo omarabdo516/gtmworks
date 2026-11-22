@@ -39,6 +39,8 @@ const suites = {
       /^tests\/(lane|fake-hermes|fake-engine|offline|motion-table)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
       /^scripts\/(web\.sh|local-db\.sh|proxy-stack\.sh|ci-image\.sh|first-run-db\.mjs|local-default-privileges\.sql|supabase-images\.sh)$/,
+      // The shards' split by measured time and its times (#653): a change moves spec files between shards.
+      /^scripts\/browser-shards\.mjs$/, /^tests\/browser-shard-times\.json$/,
       /^supabase\/(migrations\/|config\.toml$|seed\.sql$)/, /^public\//,
     ],
   },

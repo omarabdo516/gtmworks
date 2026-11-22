@@ -1,0 +1,1 @@
+| `browser-shard-times.json` | data: each browser spec file's measured seconds, summed over its tests and their retries, from which `scripts/browser-shards.mjs` splits the six shards (#653); `node scripts/browser-shards.mjs times <times.json>...` writes it again from a main run's `browser-times-<i>` artifacts. | — | browser-shards.test.mjs | new (#653) |
