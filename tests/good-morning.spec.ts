@@ -61,7 +61,7 @@ test('the Owner switches Good morning on at a time on the main Agent\'s page (#1
  await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${lead}`);
  const overlay=settings(page);
  await hydrated(page);
- await overlay.getByRole('switch',{name:'Send me a morning summary every day'}).click();
+ await overlay.getByRole('switch',{name:'Good morning'}).click();
  await overlay.getByRole('combobox',{name:'Time'}).selectOption('8:30');
  await page.locator('#set-save').click();
  // Saved once the bar goes: the draft is what the Engine holds.
@@ -147,7 +147,7 @@ test('switched off, no morning is recorded, and the card says it will not arrive
  test.setTimeout(90000);
  await signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${lead}`);
  await hydrated(page);
- await settings(page).getByRole('switch',{name:'Send me a morning summary every day'}).click();
+ await settings(page).getByRole('switch',{name:'Good morning'}).click();
  await page.locator('#set-save').click();
  await expect(page.locator('#dp-savebar')).toBeHidden({timeout:30000});
  await expect.poll(()=>job()?.state).toBe('paused');
