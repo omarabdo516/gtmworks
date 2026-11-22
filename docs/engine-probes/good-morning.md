@@ -22,7 +22,8 @@ Conversation of each Member (not the fallback of the card at the top of the firs
   Routine's new finished runs as they end, with their Agent, Routine and first line (`keep_routine_results`), and the
   morning reads its night from what was kept (`good_morning_night`, #535). A run is kept only while the Engine still
   lists it: if the worker is stopped, or the Engine away, for longer than a Routine's newest 100 runs, the older ones
-  are lost, said in the server log once a Routine kept before shows a full list. A morning records at most 200 results
+  are lost. The server log says so when a Routine this same worker process kept before shows a full list; after a
+  worker restart that loss is not logged. A morning records at most 200 results
   (`record_good_morning`), the newest, and a night with more is said in the server log;
 - `record_good_morning` stores the morning once (by its session), and a reply of `[SILENT]` is kept with no greeting and
   opens no Conversation;
