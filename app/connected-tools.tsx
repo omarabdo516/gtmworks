@@ -12,14 +12,14 @@ import { useI18n } from '@/lib/i18n-client';
 import { toast } from '@/app/toast';
 import { signInToApp } from '@/app/app-sign-in';
 import { appsChanged, useHeldApps } from '@/app/company-apps-read';
-import { useAppsSheet } from '@/app/apps-sheet-open';
+import { useAppsReader, useAppsSheet } from '@/app/apps-sheet-open';
 import type { AgentTool } from '@/lib/company-apps.mjs';
 
 export type AgentToolItem=AgentTool&{use:string};
 type State=AgentToolItem['state']|'connecting';
 
 export function ConnectedTools({company,agent,name,owner,tools:given}:{company:string,agent:string,name:string,owner:boolean,tools?:AgentToolItem[]|null}) {
- const {t,language}=useI18n(); const openSheet=useAppsSheet();
+ const {t}=useI18n(); const openSheet=useAppsSheet(); const reader=useAppsReader(company);
  const [managing,setManaging]=useState(false); const [states,setStates]=useState<Record<string,State>>({}); const [error,setError]=useState('');
  const manage=useRef<HTMLButtonElement>(null);
  // A sign-in still followed when the panel goes is cancelled and its window closed.
@@ -29,7 +29,7 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
  const [read,setRead]=useState<AgentToolItem[]|null>(); const [reads,setReads]=useState(0);
  // The apps sheet's store changes after a connect there (#458: a tool that needs a token is connected on its page), so
  // the Agent's tools are read again, and a row left Not connected by that handoff shows what the read says.
- const held=useHeldApps(company,language);
+ const held=useHeldApps(reader);
  useEffect(()=>{
   if(given!==undefined) return;
   let live=true;
@@ -52,7 +52,7 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
   const result=await signInToApp({company,agent,app:tool.key,signal:controller.signal,openApp:key=>openSheet?.(null,key,agent)});
   following.current.delete(controller);
   if(controller.signal.aborted) return;
-  if('state' in result) { if(result.state==='manual') { handedOff.current=true; setStates(now=>{ const rest={...now}; delete rest[tool.key]; return rest; }); return; } set(tool.key,'connected'); toast(t('connectConnected',tool.name)); void appsChanged(company,language); }
+  if('state' in result) { if(result.state==='manual') { handedOff.current=true; setStates(now=>{ const rest={...now}; delete rest[tool.key]; return rest; }); return; } set(tool.key,'connected'); toast(t('connectConnected',tool.name)); void appsChanged(reader); }
   else { set(tool.key,'missing'); setError(result.error); }
  };
  const disconnect=async(tool:AgentToolItem)=>{
@@ -60,7 +60,7 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
   const done=await fetch('/api/company-apps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,agent,app:tool.key,action:'disconnect'})})
    .then(response=>response.ok).catch(()=>false);
   if(!done) { setError('agentToolsFailed'); return; }
-  set(tool.key,'missing'); toast(t('agentToolDisconnected',tool.name),{icon:'x'}); void appsChanged(company,language);
+  set(tool.key,'missing'); toast(t('agentToolDisconnected',tool.name),{icon:'x'}); void appsChanged(reader);
   manage.current?.focus();
  };
 
