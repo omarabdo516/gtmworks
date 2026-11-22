@@ -118,7 +118,11 @@ test('the next request runs on the account that answered and logs nothing; one w
  await field(page).press('Enter');
  await page.waitForURL(/\/conversations\/[0-9a-f-]{36}$/);
  await expect.poll(()=>fake.settings.runs.length,{timeout:30000}).toBe(before+1);
- expect(callsOf(fake.settings.runs.at(-1)!.id)).toEqual(['c0dex3']);
+ const failed=fake.settings.runs.at(-1)!.id;
+ // The app closed the Run as failed, with no reply, before anything else is read.
+ await expect.poll(()=>rows<{outcome:string}>(`select outcome from public.conversation_run_ends where run_id='${failed}'`),{timeout:30000}).toEqual([{outcome:'failed'}]);
+ expect(rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where author='agent' and run_id='${failed}'`)).toEqual([{n:0}]);
+ expect(callsOf(failed)).toEqual(['c0dex3']);
  await expect(page.locator('.turn--agent').filter({hasText:'Reply to: Draft the email'})).toHaveCount(0);
  expect(fake.settings.switches).toHaveLength(1);
  // A worker pass later, the log still holds the one move. (This lane's fake Engine serves every Company, so it is not

@@ -1,8 +1,8 @@
 """The account order patch on the pinned Engine (#621, scripts/engine-pool-order.sh), in a throwaway container of it.
 
 Run by scripts/ci-install-check.sh, once per step with the step's HERMES_HOME: `root` on the Engine's root home, then
-`borrowed` on an Agent's profile home under it, then `recorded` on the root again. Tokens are unsigned test JWTs and the
-model call is never made: the Engine's own recovery step (recover_with_credential_pool) is given a usage-limit failure
+`borrowed` on an Agent's profile home under it, then `recorded` on the root again. Tokens are unsigned test JWTs, the quota probe is
+answered offline, and the model call is never made: the Engine's own recovery step (recover_with_credential_pool) is given a usage-limit failure
 as its classifier reports one, so nothing reaches OpenAI.
 """
 import asyncio
@@ -18,6 +18,11 @@ from hermes_cli.auth import DEFAULT_CODEX_BASE_URL, _load_auth_store
 from hermes_cli.web_routers import ops
 
 LIMIT = {"reason": "usage_limit_reached", "message": "You have hit your usage limit"}
+
+# An exhausted ChatGPT row is probed for an early reopened quota (credential_pool.py _codex_quota_restored_upstream), a
+# GET to OpenAI with the row's token: the test tokens are never sent anywhere, so the probe answers "not yet" here.
+import hermes_cli.auth as _codex_auth  # noqa: E402
+_codex_auth._probe_codex_quota_restored = lambda *args, **kwargs: False
 
 
 def order(entries):
@@ -60,11 +65,17 @@ def root():
                                         source=SOURCE_MANUAL_DEVICE_CODE, access_token=jwt(who), refresh_token="r",
                                         base_url=DEFAULT_CODEX_BASE_URL))
     assert ids() == ["aaaaaa", "bbbbbb", "cccccc"], ids()
+    # A strategy the Engine is configured with holds until the Owner orders the accounts.
+    import os
+    from pathlib import Path
+    Path(os.environ["HERMES_HOME"], "config.yaml").write_text("credential_pool_strategies:\n  openai-codex: least_used\n")
+    assert load_pool("openai-codex")._strategy == "least_used", load_pool("openai-codex")._strategy
     # The Owner's order: c first, a switched off, b last. The pool lists and selects in that order.
     put = order([{"id": "cccccc", "off": False}, {"id": "aaaaaa", "off": True}, {"id": "bbbbbb", "off": False}])
     assert put["entries"] == [{"id": "cccccc", "off": False}, {"id": "aaaaaa", "off": True}, {"id": "bbbbbb", "off": False}], put
     assert ids() == ["cccccc", "aaaaaa", "bbbbbb"], ids()
     pool = load_pool("openai-codex")
+    assert pool._strategy == "fill_first", pool._strategy
     agent = running_on(pool, pool.select())
     assert agent._credential_pool_entry_id == "cccccc", agent._credential_pool_entry_id
     # c runs out: the same request goes on on b, the next account switched on, and the move is recorded once.

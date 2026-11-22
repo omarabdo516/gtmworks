@@ -93,8 +93,9 @@ PY' || fail 'a second ChatGPT sign-in adds its own account to the pinned Engine'
 # patches the pool's order, its switch-off and a record of each move. In a throwaway container of the pinned image, after
 # the accounts hook as the Engine runs them, the hook runs twice, and scripts/check-engine-pool-order.py proves on the
 # root that the order and the switch are kept and followed and one usage-limit failure moves the request once, then on
-# an Agent's profile that it borrows the root's accounts in that order, its move recorded in the root's home.
-docker run --rm -u root -v "$PWD/scripts/engine-codex-accounts.sh:/etc/cont-init.d/07-engine-codex-accounts:ro" \
+# an Agent's profile that it borrows the root's accounts in that order, its move recorded in the root's home. It runs
+# with no network: nothing it does reaches OpenAI.
+docker run --rm -u root --network none -v "$PWD/scripts/engine-codex-accounts.sh:/etc/cont-init.d/07-engine-codex-accounts:ro" \
   -v "$PWD/scripts/engine-pool-order.sh:/hook:ro" -v "$PWD/scripts/check-engine-pool-order.py:/check.py:ro" \
   --entrypoint /bin/sh "$engine_image" -ec '/etc/cont-init.d/07-engine-codex-accounts; /hook; /hook; cd /opt/hermes
 mkdir -p /tmp/pool/profiles/ag-check; export HERMES_HOME=/tmp/pool

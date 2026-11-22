@@ -168,6 +168,13 @@ patches = [
      '        # gtmworks patch (#621, scripts/engine-pool-order.sh): the Owner\'s order first.\n'
      '        self._entries = sorted(entries, key=lambda entry: (0, entry.extra["gtmworks_place"], entry.priority)\n'
      '                               if isinstance((entry.extra or {}).get("gtmworks_place"), int) else (1, 0, entry.priority))\n'),
+    # With the Owner's order in place the pool takes the first account available in it, whatever strategy is configured:
+    # least_used, random and round_robin would pick past it.
+    (root / "agent/credential_pool.py",
+     '        self._strategy = get_pool_strategy(provider)\n',
+     '        # gtmworks patch (#621, scripts/engine-pool-order.sh): the Owner\'s order picks the account.\n'
+     '        self._strategy = STRATEGY_FILL_FIRST if any(isinstance((e.extra or {}).get("gtmworks_place"), int)\n'
+     '                                                    for e in self._entries) else get_pool_strategy(provider)\n'),
     # A switched-off account is never available, for a new request or a rotation.
     (root / "agent/credential_pool.py",
      '        for entry in self._entries:\n            # Borrowed credentials persist as metadata-only references and are\n',

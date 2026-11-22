@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(14);
 -- #621 (spec #611). The Company's Engine moved a request from one subscription account to the next: the worker copies
 -- each move into the Company's log once, as gtmworks's own entry, with the two accounts' names. RS Learning (1): Omar
 -- (…01) is its Owner, …02 a Manager who is no Member of R&S Consultations (2).
@@ -22,11 +22,14 @@ select throws_ok($$select public.record_provider_switches('10000000-0000-0000-00
 select throws_ok($$select public.record_provider_switches('10000000-0000-0000-0000-000000000001',
  '[{"id":"33333333333333333333333333333333","provider":"openai-codex","from":"c0dex1","to":"c0dex1","from_name":"ChatGPT","to_name":"ChatGPT","at":1795000000}]')$$,
  '22023','providerSwitchInvalid','a move goes to another account');
+select throws_ok($$select public.record_provider_switches('10000000-0000-0000-0000-000000000001',
+ '[{"id":"66666666666666666666666666666666","provider":"openai-codex","from":"c0dex1","to":"c0dex2","to_name":"ChatGPT 2","at":1795000000}]')$$,
+ '22023','providerSwitchInvalid','a move names both accounts');
 select throws_ok($$select public.record_provider_switches('10000000-0000-0000-0000-000000000001','[{"id":"nope","at":1}]')$$,
  '22023','providerSwitchInvalid','a move carries the Engine''s id for it');
 -- What was kept, read as the database owner: no Role reads company_audit itself.
 reset role;
-select is((select count(*)::int from public.company_audit where switch_id in ('11111111111111111111111111111111','22222222222222222222222222222222')),0,
+select is((select count(*)::int from public.company_audit where switch_id in ('11111111111111111111111111111111','22222222222222222222222222222222','66666666666666666666666666666666')),0,
  'a refused list copies nothing');
 select is((select jsonb_agg(jsonb_build_array(actor_kind,actor_id,subject,details) order by details->>'provider' desc)
   from public.company_log where company_id='10000000-0000-0000-0000-000000000001' and action='provider_switched'),

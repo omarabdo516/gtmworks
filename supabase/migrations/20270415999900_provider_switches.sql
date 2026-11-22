@@ -23,7 +23,8 @@ alter table public.company_audit add constraint company_audit_values check (
  or (action in ('app_connected','app_disconnected') and app is not null)
  or (action in ('subscription_connected','subscription_disconnected') and provider in ('openai-codex','anthropic'))
  or (action in ('provider_key_set','provider_key_removed') and provider ~ '^[a-z0-9][a-z0-9._-]{0,63}$')
- or (action='provider_switched' and actor_id is null and provider in ('openai-codex','anthropic') and switch_id ~ '^[0-9a-f]{32}$'
+ or (action='provider_switched' and actor_id is null and switch_id is not null and from_account is not null and to_account is not null
+  and from_name is not null and to_name is not null and provider in ('openai-codex','anthropic') and switch_id ~ '^[0-9a-f]{32}$'
   and from_account ~ '^[A-Za-z0-9_-]{1,64}$' and to_account ~ '^[A-Za-z0-9_-]{1,64}$' and from_account<>to_account
   and from_name=btrim(from_name) and char_length(from_name) between 1 and 80 and from_name !~ '[[:cntrl:]]'
   and to_name=btrim(to_name) and char_length(to_name) between 1 and 80 and to_name !~ '[[:cntrl:]]'));
