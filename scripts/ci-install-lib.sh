@@ -107,7 +107,7 @@ remove_install() { compose down -v && remove_engine; }
 reset_install() {
   # The release areas install a previous release in a folder of its own: one an earlier area left in the same checkout
   # (./ci.sh install, all of them, on one Docker machine) is taken down from that folder, with its volumes, first.
-  for fixture in release-install stable-release-install sandbox-release-install staged-release-install; do
+  for fixture in release-install stable-release-install sandbox-release-install staged-release-install rollback-release-install; do
     [ -f "$fixture/.env.install" ] || continue
     (cd "$fixture" && remove_install) || return 1
     rm -f "$fixture/.env.install" 2> /dev/null || docker run --rm -v "$PWD/$fixture:/fixture" alpine:3.21 rm -f /fixture/.env.install
@@ -216,6 +216,17 @@ RUN echo 'create table gtmworks_install.release_update_probe(id integer);' > /ap
 DOCKERFILE
   next=$(publish 0.0.1-ci) || fail 'push the next release image'
   node scripts/release-assets.mjs "$next" release-next "$sandbox" || fail 'next release files'
+}
+# A release whose work sandbox does not start, as release-broken-sandbox files: this release with a sandbox image that
+# exits at once (broken_sandbox). The staged-update and sandbox-rollback areas update to it (#504); publish_releases runs
+# first.
+publish_broken_sandbox_release() {
+  docker build -q -t localhost:5000/gtmworks-sandbox:0.0.3-broken - > /dev/null <<DOCKERFILE || fail 'build a work sandbox image that does not start'
+FROM $sandbox
+ENTRYPOINT ["sh","-c","echo this work sandbox does not start >&2; exit 1"]
+DOCKERFILE
+  broken_sandbox=$(publish_sandbox 0.0.3-broken) || fail 'push the work sandbox image that does not start'
+  ( cd "$root" && node scripts/release-assets.mjs "$first" release-broken-sandbox "$broken_sandbox" ) || fail 'the release files whose work sandbox does not start'
 }
 # A release whose Engine does not start, as release-broken-engine files: this release with an Engine image that holds no
 # Hermes. The staged-update area updates the release before the work sandbox to it, and the update area the release
