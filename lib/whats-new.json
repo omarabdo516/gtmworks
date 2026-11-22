@@ -6,6 +6,12 @@
   "ar": { "title": "القنوات وملاحظات البطاقات بتقول الوكيل مقدرش يرد ليه", "body": "لما وكيل اتنادى في قناة، أو طلب منه وكيل تاني، أو اتنادى في ملاحظة على بطاقة، مايقدرش يرد علشان الشركة مفيهاش موديل، أو مفتاحها خلص رصيده أو اترفض، أو الموديل بتاعه مش موجود، بقى بيقول كده في مكانه، ومعاه طريقة الحل من الاشتراك والموديلات، بدل ما يقول بس إنه مقدرش يرد." }
  },
  {
+  "issue": 616,
+  "date": "2026-11-22",
+  "en": { "title": "Pick System and find About in Settings", "body": "Your account now offers Light, Dark or System, which follows your device, and the new About page shows the installed version, what's new and the licenses." },
+  "ar": { "title": "اختار حسب الجهاز ولاقي عن gtmworks في الإعدادات", "body": "حسابك دلوقتي فيه فاتح أو غامق أو حسب الجهاز اللي بيمشي مع جهازك، وصفحة عن gtmworks الجديدة بتوريك النسخة المتسطّبة والجديد والتراخيص." }
+ },
+ {
   "issue": 514,
   "date": "2026-11-22",
   "en": { "title": "Waiting messages and handed-over jobs wait for a stopped engine", "body": "When the agent engine is not running, a message that waited its turn, or a job one agent handed to another, now waits for the engine to come back instead of failing at once: a waiting message for up to ten minutes." },
