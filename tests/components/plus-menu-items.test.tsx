@@ -37,7 +37,7 @@ function engine(company: string) {
 // Each test reads its own Company, as the apps are kept per Company once read. The Shell draws the apps sheet around
 // the page, with the sidebar's Connect apps button.
 const composer = (place: ComposerPlace, language: Language = 'en') => render(<div className="gw" style={{ paddingTop: 520 }}><div className="composer-area">
- <LanguageProvider language={language}><AppsSheetProvider company={place.company} owner={place.owner} rtl={language === 'ar'}><CallableAgentsProvider agents={[{ id: 'a1', connection_id: 'c1', name: 'Lead' }]}><ComposerPlaceProvider place={place}>
+ <LanguageProvider language={language}><AppsSheetProvider company={place.company} person={place.person} owner={place.owner} rtl={language === 'ar'}><CallableAgentsProvider agents={[{ id: 'a1', connection_id: 'c1', name: 'Lead' }]}><ComposerPlaceProvider place={place}>
   <AppsButton/><MessageBox placeholder="Write" send={async () => null} model={{ company: place.company, conversation, agent: 'Lead' }}/><ToastHost/>
  </ComposerPlaceProvider></CallableAgentsProvider></AppsSheetProvider></LanguageProvider>
 </div></div>);
