@@ -25,6 +25,7 @@ The logos remain their owners' trademarks and are shown only to name the app the
 | `lusha.svg` | Lusha | https://www.lusha.com/newsroom/ | https://www.lusha.com/wp-content/uploads/2026/04/lusha-media-kit.zip (`Lusha_black_icon.svg`) |
 | `monday.svg` | monday.com | https://monday.com/ | https://cdn.prod.website-files.com/656da6fea306219773d04208/69f1f07236c38c800a45a687_monday-logo.svg (monday.com's own site files, linked from its home page; the white circle behind the mark removed) |
 | `motherduck.svg` | MotherDuck | https://motherduck.com/ | The home page's header logo, cut to the duck feet (the same mark as https://motherduck.com/apple-touch-icon.png) |
+| `open-design.svg` | Open Design (nexu-io, Apache-2.0) | https://github.com/nexu-io/open-design | https://github.com/nexu-io/open-design/blob/b83646f4afb9b21b415d98c4d073477d077d7943/apps/web/public/brand-icon.svg, the commit the sandbox builds (#544), its `currentColor` filled #202020, the dark of the same folder's `logo-mark.svg` |
 | `plaid.svg` | Plaid | https://plaid.com/ | The home page's header logo, cut to the tartan square |
 | `rentahuman.svg` | RentAHuman | https://rentahuman.ai/ | https://rentahuman.ai/brand/rent-a-human-app-icon.svg (its beige background square removed) |
 | `semgrep.svg` | Semgrep | https://semgrep.dev/ | https://semgrep.dev/build/assets/favicon-CIx-xpG_.svg |

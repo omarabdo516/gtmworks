@@ -75,7 +75,7 @@ test('a letter mark is the first letter of the name, uppercase', () => {
     webflow:'W', wolfram:'W', 'wordpress-com':'W', 'meta-ads':'M', 'tiktok-ads':'T', apollo:'A', semrush:'S',
     ahrefs:'A', supermetrics:'S', similarweb:'S', brevo:'B', 'mailchimp-transactional':'M', zapier:'Z', make:'M',
     buffer:'B', 'hootsuite-content':'H', 'hootsuite-inbox':'H', 'hootsuite-listening':'H', typeform:'T', clay:'C',
-    lusha:'L', x:'X', own:'Y'
+    lusha:'L', x:'X', 'open-design':'O', own:'Y'
   };
   assert.deepEqual(Object.fromEntries(apps.map(app => [app.key, app.mark])), expected);
   assert.equal(customApp('my-crm').mark, 'M');

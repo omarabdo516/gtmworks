@@ -55,6 +55,7 @@ RUN --mount=type=secret,id=build-ca set -eu; \
  && pnpm install --frozen-lockfile \
  && pnpm --filter @open-design/daemon deploy --prod --legacy /opt/open-design/app \
  && test -f /opt/open-design/app/dist/cli.js \
+ && cp LICENSE /opt/open-design/app/LICENSE \
  && cd / && rm -rf /src /opt/pnpm /root/.local/share/pnpm /root/.cache /root/.npm
 
 FROM browser

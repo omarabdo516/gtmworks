@@ -102,6 +102,7 @@ const files:Record<string,string>={
  neon:'simple/neon.svg',
  netlify:'simple/netlify.svg',
  notion:'simple/notion.svg',
+ 'open-design':'brand/open-design.svg',
  paypal:'simple/paypal.svg',
  plaid:'brand/plaid.svg',
  postman:'simple/postman.svg',
