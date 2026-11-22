@@ -80,6 +80,8 @@ test('About shows the installed version, What\'s new from the release notes and 
  await overlay.getByRole('radio',{name:/^العربية/}).click();
  await expect(page.locator('html')).toHaveAttribute('dir','rtl');
  try {
+  // The overlay is named in the interface language now.
+  const overlay=page.getByRole('dialog',{name:'الإعدادات'});
   await overlay.locator('#sov-nav-about').click();
   await expect(overlay.getByRole('heading',{name:'عن gtmworks',exact:true})).toBeVisible();
   await expect(overlay.getByRole('region',{name:'الإصدار'})).toContainText('v0.0.1');
