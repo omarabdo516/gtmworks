@@ -69,9 +69,11 @@ test('a profile the Engine did not take the choice on is named by its Agents; th
  assert.equal(none.status,200);
 });
 
-test('a model no Provider switched on, a malformed value and a refusal change nothing', async () => {
+test('a model no Provider switched on or Providers that cannot be read, a malformed value and a refusal change nothing', async () => {
  for(const [value,access,error,answer] of [
   ['anthropic/claude-sonnet-4-6',enabled(false),null,{status:400,body:{error:'settingModelNotEnabled'}}],
+  // Providers that cannot be read now: no other kind of Provider is reached by a choice not known to be on.
+  ['anthropic/claude-sonnet-4-6',async()=>null,null,{status:502,body:{error:'fallbackFailed'}}],
   ['claude-sonnet-4-6',enabled(true),null,{status:400,body:{error:'fallbackInvalid'}}],
   [7,enabled(true),null,{status:400,body:{error:'fallbackInvalid'}}],
   ['anthropic/claude-sonnet-4-6',enabled(true),{code:'42501'},{status:403,body:{error:'fallbackNotAllowed'}}],
@@ -79,7 +81,7 @@ test('a model no Provider switched on, a malformed value and a refusal change no
   const db=owner({error}); const {calls,driver}=engine();
   assert.deepEqual(await changeFallbackModel(db,{company,value,hermes,driver,access}),answer,String(value));
   assert.deepEqual(calls,[],'the Engine is not asked');
-  if(answer.status===400) assert.deepEqual(db.asked,[],'nor the database');
+  if(answer.status!==403&&!error) assert.deepEqual(db.asked,[],'nor the database');
  }
 });
 

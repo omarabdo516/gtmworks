@@ -163,7 +163,7 @@ export function FallbackModel({company,owner,model,options}:{company:string,owne
   if(!failed.length) toast(t('settingsFallbackSaved'));
   router.refresh();
  };
- const held=model&&!options.some(option=>modelOf(option)===model)?(()=>{ const at=model.indexOf('/'); return {provider:model.slice(0,at),providerName:model.slice(0,at),model:model.slice(at+1)}; })():null;
+ const held=model&&model.includes('/')&&!options.some(option=>modelOf(option)===model)?(()=>{ const at=model.indexOf('/'); return {provider:model.slice(0,at),providerName:model.slice(0,at),model:model.slice(at+1)}; })():null;
  const rows:(ModelOption|null)[]=[null,...options,...(held?[held]:[])];
  const valueOf=(option:ModelOption|null)=>option?modelOf(option):null;
  const idOf=(option:ModelOption|null)=>option?`mdl-fb-${option.provider}-${option.model}`:'mdl-fb-none';
