@@ -82,7 +82,7 @@ test('the worker asks again on a turn whose start was unknown, and never fails i
  assert.ok(first.order.indexOf('service begin_start')>=0&&first.order.indexOf('service begin_start')<first.order.indexOf('start retry=false'),'the attempt is recorded first');
  assert.ok(!first.order.includes('service fail_conversation_turn'));
  // Its retry is sent as a retry; a refusal then is not a proof, so the turn stays.
- const again=databases({claim:[{...turn,retry:true}]});
+ const again=databases({claim:[{...turn,retry:true}],attempt:2});
  await startQueuedTurns(again.service,{hermes,...engine(again.order,null)});
  assert.ok(again.order.includes('start retry=true'));
  assert.ok(!again.order.includes('service fail_conversation_turn'));

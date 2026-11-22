@@ -1,5 +1,11 @@
 [
  {
+  "issue": 514,
+  "date": "2026-11-22",
+  "en": { "title": "Waiting messages and handed-over jobs wait for a stopped engine", "body": "When the agent engine is not running, a message that waited its turn, or a job one agent handed to another, now waits for the engine to come back instead of failing at once: a waiting message for up to ten minutes." },
+  "ar": { "title": "الرسايل المستنية والشغل المتسلّم بيستنوا المحرك الواقف", "body": "لما محرك الوكلاء مايكونش شغال، الرسالة اللي كانت مستنية دورها، أو الشغلانة اللي وكيل سلّمها لوكيل تاني، دلوقتي بتستنى المحرك يرجع بدل ما تفشل على طول: الرسالة المستنية لحد عشر دقايق." }
+ },
+ {
   "issue": 615,
   "date": "2026-11-22",
   "en": { "title": "An agent's settings in five groups", "body": "An agent's page in Settings now reads in five groups, Identity, How it works, Thinking, Voice, and Tools and skills, with Good morning as one row with its switch and time, and the voice's speed, Pause and Delete under Advanced." },
