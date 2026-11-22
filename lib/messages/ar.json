@@ -1536,5 +1536,14 @@
   "goodMorningWaitTwo": "حاجتين مستنيينك",
   "goodMorningWaitingTeam": "مستني الفريق",
   "goodMorningWaitingYou": "مستنيك",
-  "goodMorningTitle": "صباح الخير · {0}"
+  "goodMorningTitle": "صباح الخير · {0}",
+  "settingsAboutApp": "عن gtmworks",
+  "aboutVersionSource": "متعمل من الكود",
+  "aboutWhatsNewOlder": "{0} تغييرات أقدم",
+  "aboutLicenses": "التراخيص",
+  "aboutProduct": "gtmworks",
+  "aboutLicenseMit": "رخصة MIT",
+  "aboutThirdParty": "ملاحظات الأطراف التانية",
+  "aboutThirdPartyD": "الكود والخطوط واللوجوهات اللي جوه gtmworks",
+  "aboutOpens": "بيفتح في تاب جديدة"
 }

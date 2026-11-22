@@ -4,21 +4,21 @@ import { readFileSync } from 'node:fs';
 import { overlaySections, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, companyKnowledgeHref, agentTab, agentTabFocus, memoryAgent, findSections } from '../lib/settings-overlay.mjs';
 import { messages } from '../lib/i18n.mjs';
 
-test('the overlay lists the reference’s ten sections in its order, Your account under “You”', () => {
-  assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'agents', 'knowledge', 'learning', 'models', 'apps', 'routines', 'usage', 'backup', 'account']);
-  assert.deepEqual(overlaySections.filter(section => section[4]).map(([key]) => key), ['account']);
+test('the overlay lists the reference’s ten sections in its order, then About; Your account and About under “You”', () => {
+  assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'agents', 'knowledge', 'learning', 'models', 'apps', 'routines', 'usage', 'backup', 'account', 'about']);
+  assert.deepEqual(overlaySections.filter(section => section[4]).map(([key]) => key), ['account', 'about']);
   for (const [key, label] of overlaySections) for (const language of ['en', 'ar']) assert.ok(messages[language][label], `${key}: ${language} label`);
 });
 
-test('a Viewer sees only their account and the Agents; Usage is the Owner’s and the Managers’, in the same order', () => {
-  assert.deepEqual(visibleSections('viewer').map(([key]) => key), ['agents', 'account']);
-  assert.deepEqual(visibleSections('contributor').map(([key]) => key), ['company', 'agents', 'knowledge', 'learning', 'models', 'apps', 'routines', 'account']);
+test('a Viewer sees only their account, About and the Agents; Usage is the Owner’s and the Managers’, in the same order', () => {
+  assert.deepEqual(visibleSections('viewer').map(([key]) => key), ['agents', 'account', 'about']);
+  assert.deepEqual(visibleSections('contributor').map(([key]) => key), ['company', 'agents', 'knowledge', 'learning', 'models', 'apps', 'routines', 'account', 'about']);
   assert.deepEqual(visibleSections('manager').map(([key]) => key), overlaySections.map(([key]) => key).filter(key => key !== 'backup'));
   assert.deepEqual(visibleSections('owner').map(([key]) => key), overlaySections.map(([key]) => key));
 });
 
 test('the Owner alone sees Backup (#33)', () => {
-  assert.equal(visibleSections('owner').length, 10);
+  assert.equal(visibleSections('owner').length, 11);
   for (const role of ['manager', 'contributor', 'viewer']) {
     assert.ok(!visibleSections(role).some(([key]) => key === 'backup'), `Backup is the Owner's: ${role}`);
     assert.notEqual(pickSection('backup', role), 'backup', `a request for Backup falls back: ${role}`);
@@ -35,6 +35,8 @@ test('a request opens the section asked for only when the person may see it, els
   assert.equal(pickSection('company', 'viewer'), 'agents');
   assert.equal(pickSection('usage', 'viewer'), 'agents');
   assert.equal(pickSection('account', 'viewer'), 'account');
+  // About is everyone's (#616): the installed version and its notes are no Role's secret.
+  for (const role of ['owner', 'manager', 'contributor', 'viewer']) assert.equal(pickSection('about', role), 'about', role);
 });
 
 // #192: "Open company knowledge" in an Agent's memory is the Company knowledge section, which a Viewer may not open.
@@ -142,7 +144,7 @@ test('the overlay shows no invented figures: no prices, no sample usage or backu
 test('a search finds the sections the Role sees by their name in the interface language, and nothing else', () => {
   const en = key => messages.en[key], ar = key => messages.ar[key];
   assert.deepEqual(findSections('', 'owner', en).map(([key]) => key), visibleSections('owner').map(([key]) => key));
-  assert.deepEqual(findSections('  ', 'viewer', en).map(([key]) => key), ['agents', 'account']);
+  assert.deepEqual(findSections('  ', 'viewer', en).map(([key]) => key), ['agents', 'account', 'about']);
   assert.deepEqual(findSections('back', 'owner', en).map(([key]) => key), ['backup']);
   assert.deepEqual(findSections('  ACCOUNT ', 'owner', en).map(([key]) => key), ['account']);
   // Every word of the name counts, not only its first: "Recurring tasks" for "tasks".

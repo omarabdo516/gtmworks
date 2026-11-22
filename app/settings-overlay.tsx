@@ -45,6 +45,7 @@ import { AgentTabs } from './settings-agent-tabs';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
 import type { MemoryNote } from '@/lib/engine.mjs';
 import { BackupSection } from './settings-backup';
+import { AboutSection } from './settings-about';
 import { StandingPermissions } from './standing-permissions';
 import { readAgentPermissions, type StandingPermission } from '@/lib/standing-permissions.mjs';
 import { RoutinesSection } from './settings-routines';
@@ -156,6 +157,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
+  // About (#616) is every Role's: the version this image was built as, and the notes and licenses it ships.
+  :section==='about'?<AboutSection t={t} language={language} locale={locale} version={process.env.GTMWORKS_VERSION}/>
   :<SoonSection t={t} section={section} ro={ro} subscriptions={<ModelsSubscriptions company={company.id} companyName={company.name} owner={owner} subscriptions={subscriptions} keyed={keys?.keys?.filter(key=>key.set).map(key=>key.provider)??[]}/>}
     keys={<><ProviderKeys company={company.id} owner={owner} data={keys}/><SpeechToText company={company.id} owner={owner} data={speech}/></>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}

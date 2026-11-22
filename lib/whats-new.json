@@ -6,6 +6,12 @@
   "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد زي ما هو مكتوب بلغة الواجهة، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
  },
  {
+  "issue": 616,
+  "date": "2026-11-22",
+  "en": { "title": "Pick System and find About in Settings", "body": "Your account now offers Light, Dark or System, which follows your device, and the new About page shows the installed version, what's new and the licenses." },
+  "ar": { "title": "اختار حسب الجهاز ولاقي عن gtmworks في الإعدادات", "body": "حسابك دلوقتي فيه فاتح أو غامق أو حسب الجهاز اللي بيمشي مع جهازك، وصفحة عن gtmworks الجديدة بتوريك النسخة المتسطّبة والجديد والتراخيص." }
+ },
+ {
   "issue": 514,
   "date": "2026-11-22",
   "en": { "title": "Waiting messages and handed-over jobs wait for a stopped engine", "body": "When the agent engine is not running, a message that waited its turn, or a job one agent handed to another, now waits for the engine to come back instead of failing at once: a waiting message for up to ten minutes." },

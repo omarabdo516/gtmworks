@@ -8,8 +8,9 @@ import { signIn, openNavigation, emailLink } from './sign-in';
 const company='10000000-0000-0000-0000-000000000003';
 const owner='20000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-// The reference's ten sections, the company's nine first and Your account under "You". Backup is the Owner's alone (#33).
-const sections=['Company','Agents','Company knowledge','Learning','Subscription and models','Apps','Recurring tasks','Usage','Backups','Your account'];
+// The reference's ten sections, the company's nine first and Your account under "You", then About (#616). Backup is the
+// Owner's alone (#33).
+const sections=['Company','Agents','Company knowledge','Learning','Subscription and models','Apps','Recurring tasks','Usage','Backups','Your account','About'];
 const staffSections=sections.filter(section=>section!=='Backups');
 
 test('the account menu opens Settings over the page, Escape and the close button return to it',async({page})=>{
@@ -196,7 +197,7 @@ test('a Viewer sees only the Agents and their account, read only, and no Owner c
  await signIn(page,'viewer@example.com','/c/rs-learning/home');
  await page.goto('/c/rs-learning/settings?section=company');
  const overlay=page.getByRole('dialog',{name:'Settings'});
- await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(['Agents','Your account']);
+ await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(['Agents','Your account','About']);
  // Asking for the Company section falls back to the Viewer's first one.
  await expect(overlay.getByRole('heading',{name:'Agents',exact:true})).toBeVisible();
  await expect(overlay.getByText('Read only',{exact:true})).toBeVisible();
@@ -219,7 +220,7 @@ const roleViews=[
  {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-pause','#danger-delete','.talk-tip a']},
  {role:'Manager',email:'manager@example.com',sections:staffSections,readOnly:false,movesMain:false,company:['.ro-text','.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
  {role:'Contributor',email:'reviewer@example.com',sections:staffSections.filter(section=>section!=='Usage'),readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
- {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account'],readOnly:true,movesMain:false,company:null,agents:['.ro-note'],agent:['.ro-note']},
+ {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account','About'],readOnly:true,movesMain:false,company:null,agents:['.ro-note'],agent:['.ro-note']},
 ];
 
 for(const view of roleViews) test(`${view.role}: Settings shows only what the Role allows, and only the Owner's request moves the main mark`,async({page})=>{
@@ -458,7 +459,7 @@ test('in Arabic a Viewer finds their sections by their Arabic names and never on
   const overlay=page.getByRole('dialog',{name:'الإعدادات'});
   const find=overlay.getByRole('searchbox',{name:'دوّر على إعداد'});
   const shown=overlay.locator('.sov-nav .sb-item');
-  await expect(shown).toHaveText(['الوكلاء','حسابك']);
+  await expect(shown).toHaveText(['الوكلاء','حسابك','عن gtmworks']);
   await expect(async()=>{ await overlay.locator('.sov__title').click(); await page.keyboard.press('/'); await expect(find).toBeFocused({timeout:2000}); }).toPass({timeout:30000});
   await page.keyboard.type('الوكلا');
   await expect(shown).toHaveText(['الوكلاء']);
@@ -470,6 +471,6 @@ test('in Arabic a Viewer finds their sections by their Arabic names and never on
    await expect(shown).toHaveCount(0);
   }
   await overlay.getByRole('button',{name:'امسح البحث'}).click();
-  await expect(shown).toHaveText(['الوكلاء','حسابك']);
+  await expect(shown).toHaveText(['الوكلاء','حسابك','عن gtmworks']);
  } finally { query(`update public.people set language='en' where id=${viewer}`); }
 });

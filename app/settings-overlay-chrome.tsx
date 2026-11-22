@@ -6,7 +6,8 @@ import { SettingsIcon } from './settings-icons';
 import { SettingsNav } from './settings-nav';
 
 // The overlay's bar, its section list with its search (settings-nav.tsx) and the place of the open section (reference:
-// dialog#sov), around the section the server drew. It imports no server code, so a component test renders the overlay as the server does (#218).
+// dialog#sov), around the section the server drew. It imports no server code, so a component test renders the overlay
+// as the server does (#218).
 export function OverlayChrome({t,slug,companyName,role,readOnly,section,learningWaiting,agentsWaiting=0,initialFocus,children}:{t:I18n['t'],slug:string,companyName:string,role:string,readOnly:boolean,section:OverlaySection,learningWaiting:number,agentsWaiting?:number,initialFocus?:string,children:ReactNode}) {
  return <OverlayFrame slug={slug} initialFocus={initialFocus}>
   <header className="sov__bar">
