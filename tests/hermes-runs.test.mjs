@@ -175,6 +175,38 @@ test('a pick: the waiting Run reads as running with its question, the choice\'s 
  } finally { await fake.close(); }
 });
 
+// #647: an Agent that writes its answer so far in the same message that asks (or that calls a tool waiting for approval)
+// keeps those words only in its session until the Run completes, and the completed output holds only what came after
+// the pause. The driver reads them from the session while the Run waits, once, and the reply after the answer has none.
+test('words written before a question or an approval are read from the session while the Run waits, and the reply after it does not carry them',async()=>{
+ const fake=await fakeHermes();
+ const five='Five Agents I advise:\n1. Writer — drafts posts alone\n2. Analyst — reads the numbers';
+ fake.settings.questions=input=>input==='Which Agents?'?[{question:'Which of them do we make now?',choices:['Writer','Analyst'],multi_select:true,said:five}]:input==='Plan the ads'?[{question:'Which audience first?',choices:['Parents','Students'],said:''}]:[];
+ fake.settings.approvals=input=>input==='Clean up'?[{description:'delete the old exports',command:'rm -r /srv/exports',said:'The exports folder is 4 GB of old files.'}]:[];
+ fake.settings.reply=input=>input==='Which Agents?'?'Making Writer and Analyst now.':`Reply to: ${input}`;
+ try {
+  const engine=engineFor({...connection(fake),managementAddress:fake.managementAddress});
+  const run=/** @type {string} */(await engine.start({conversation:'s1',input:'Which Agents?',idempotencyKey:'k1'}));
+  const waiting=await engine.read(run);
+  assert.equal(waiting.said,five);
+  assert.equal(waiting.question?.text,'Which of them do we make now?');
+  assert.equal((await engine.read(run)).said,five,'the same words on every read while it waits');
+  assert.equal(await engine.answer(run,/** @type {string} */(waiting.question?.id),'Writer, Analyst'),'answered');
+  assert.deepEqual(await engine.read(run),{state:'completed',reply:'Making Writer and Analyst now.',session:'s1',usage:{input:14000,output:12},toolCalls:[]});
+  // A message that asked with no words of its own has none; a request to allow an action carries its message's words.
+  const quiet=/** @type {string} */(await engine.start({conversation:'s2',input:'Plan the ads',idempotencyKey:'k2'}));
+  const asked=await engine.read(quiet);
+  assert.ok(asked.question&&!('said' in asked));
+  const cleaning=/** @type {string} */(await engine.start({conversation:'s3',input:'Clean up',idempotencyKey:'k3'}));
+  const allowing=await engine.read(cleaning);
+  assert.equal(allowing.permission?.description,'delete the old exports');
+  assert.equal(allowing.said,'The exports folder is 4 GB of old files.');
+  // A session the listener cannot read leaves the question as it is, with no words.
+  const unread=await engineFor({...connection(fake),managementAddress:'http://127.0.0.1:1'}).read(cleaning);
+  assert.ok(unread.permission&&!('said' in unread));
+ } finally { await fake.close(); }
+});
+
 test('a free answer: an open-ended or several-pick question is answered with the typed words as written, one question at a time',async()=>{
  const fake=await fakeHermes(); asks(fake,[{question:'What tone should the ads take?'},{question:'Which channels?',choices:['Meta','TikTok'],multi_select:true}]);
  try {

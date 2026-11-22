@@ -1,0 +1,105 @@
+import { test, expect } from './fresh-seed';
+import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { createClient } from '@supabase/supabase-js';
+import { answerQuestion, closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
+import { answerChannelQuestion, driveChannelRuns, postChannelMessage } from '../lib/channel-runs.mjs';
+import { fakeEngine } from './fake-engine.mjs';
+import { signIn } from './sign-in';
+
+// #647: an Agent writes its whole answer and asks about it with clarify in the same message. The Engine keeps those
+// words only in its session while the Run waits (the driver's own test, tests/hermes-runs.test.mjs, reads them there);
+// the fake engine hands them over with the question, as the driver does. The chat shows them as the Agent's message
+// above the card while the Run waits, once, and after the answer and a reload the reply does not repeat them, in a
+// Conversation and in a Channel.
+const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
+const status=()=>{ const env=execFileSync('npx',['--no-install','supabase','status','-o','env'],{encoding:'utf8'}); return (name:string)=>env.match(new RegExp(`^${name}="(.*)"$`,'m'))![1]; };
+const company='10000000-0000-0000-0000-000000000001';
+const omar='20000000-0000-0000-0000-000000000001';
+const general='69000000-0000-0000-0000-000000000001';
+const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
+const five='Five Agents I advise:\n1. Writer — drafts the posts alone\n2. Analyst — reads the numbers, asks you before any spend';
+
+function attachAgent() {
+ const [connection,agent]=[randomUUID(),randomUUID()];
+ query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('${agent}','${company}','${connection}','Faye','Marketing','fake-${connection.slice(0,8)}')`);
+ query(`insert into public.member_agent_access(company_id,person_id,agent_id) select company_id,person_id,'${agent}' from public.members where company_id='${company}' and removed_at is null and role<>'owner'`);
+ return {agent,detach:()=>{ query(`delete from public.hermes_agents where id='${agent}'`); }};
+}
+async function memberClient(email:string) {
+ const value=status();
+ const service=createClient(value('API_URL'),value('SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
+ const person=createClient(value('API_URL'),value('ANON_KEY'),{auth:{persistSession:false,autoRefreshToken:false}});
+ const {data:link,error:linked}=await service.auth.admin.generateLink({type:'magiclink',email});
+ expect(linked).toBeNull();
+ expect((await person.auth.verifyOtp({type:'email',token_hash:link.properties!.hashed_token})).error).toBeNull();
+ return {service,person};
+}
+const asking=()=>{
+ const fake=fakeEngine();
+ fake.settings.questions=input=>input.includes('Which Agents')?[{text:'Which of them do we make now?',choices:['Writer','Analyst'],said:five}]:[];
+ fake.settings.reply=(_input,answers)=>`Making ${answers.join(', ')} now.`;
+ return fake;
+};
+
+test('integration: in a Conversation the words written before a question are the Agent\'s message above its card while the Run waits, and once after the answer and a reload',async({page})=>{
+ test.setTimeout(120000);
+ const fake=asking(); const {agent,detach}=attachAgent();
+ try {
+  const {service,person}=await memberClient('omar@example.com');
+  const conversation=randomUUID();
+  const close=()=>closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor});
+  expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Which Agents do you advise we make?',hermes,engineFor:fake.engineFor})).toEqual({conversation});
+  expect(await close()).toBe(0);
+  expect(await close()).toBe(0);
+  expect(JSON.parse(query(`select kind,said from public.reply_cards where conversation_id='${conversation}'`))).toEqual([{kind:'question',said:five}]);
+
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
+  const asked=page.locator('.turns > li.turn--agent[data-kind="asked"]');
+  await expect(asked).toHaveCount(1);
+  await expect(asked.locator('.sender')).toContainText('Faye');
+  await expect(asked.locator('.bubble--agent')).toHaveText(five);
+  await expect(asked.getByText('Which of them do we make now?')).toBeVisible();
+  // The words come first, then the card that asks about them.
+  expect(await asked.evaluate(turn=>{ const words=turn.querySelector('.bubble--agent'); const card=[...turn.querySelectorAll('*')].find(node=>node.textContent?.trim()==='Which of them do we make now?'); return !!words&&!!card&&!!(words.compareDocumentPosition(card)&Node.DOCUMENT_POSITION_FOLLOWING); })).toBe(true);
+
+  const [{id:card}]=JSON.parse(query(`select id from public.reply_cards where conversation_id='${conversation}'`));
+  expect(await answerQuestion(person,service,{company,conversation,card:Number(card),choice:0,answerKey:randomUUID(),hermes,engineFor:fake.engineFor})).toEqual({state:'claimed'});
+  await expect.poll(async()=>{ await close(); return JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent'`)); }).toEqual([{body:'Making Writer now.'}]);
+
+  await page.reload();
+  await expect(page.locator('.turns .bubble--agent').filter({hasText:'Making Writer now.'})).toHaveCount(1);
+  await expect(page.locator('.turns .bubble--agent').filter({hasText:'Five Agents I advise'})).toHaveCount(1);
+  await expect(page.locator('.turns > li.turn--agent[data-kind="asked"] .bubble--agent')).toHaveText(five);
+ } finally { detach(); }
+});
+
+test('integration: in a Channel the words written before a question are the Agent\'s message above its card while the Run waits, and once after the answer and a reload',async({page})=>{
+ test.setTimeout(120000);
+ const fake=asking(); const {detach}=attachAgent();
+ try {
+  const {service,person}=await memberClient('omar@example.com');
+  const drive=()=>driveChannelRuns(service,{hermes,channel:general,engineFor:fake.engineFor});
+  const sent=await postChannelMessage(person,service,{channel:general,sendKey:randomUUID(),message:'@Faye Which Agents do you advise we make?',hermes,engineFor:fake.engineFor}) as {message:number};
+  expect(await drive()).toEqual({started:0,closed:0});
+  expect(JSON.parse(query(`select said from public.reply_cards where channel_message_id=${sent.message}`))).toEqual([{said:five}]);
+
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com',`/c/rs-learning/channels/${general}`);
+  const turn=page.locator('.turns > li.turn--agent').filter({hasText:'Which of them do we make now?'});
+  await expect(turn).toHaveCount(1);
+  await expect(turn.locator('.sender')).toContainText('Faye');
+  await expect(turn.locator('.bubble--agent')).toHaveText(five);
+
+  const [{id:card}]=JSON.parse(query(`select id from public.reply_cards where channel_message_id=${sent.message}`));
+  const work:Promise<void>[]=[];
+  expect(await answerChannelQuestion(person,service,{company,channel:general,card:Number(card),choice:1,answerKey:randomUUID(),hermes,engineFor:fake.engineFor,later:(deliver:()=>Promise<void>)=>{ work.push(deliver()); }})).toMatchObject({state:'claimed'});
+  await Promise.all(work);
+  await expect.poll(async()=>{ await drive(); return JSON.parse(query(`select body from public.channel_messages where reply_to=${sent.message}`)); }).toEqual([{body:'Making Analyst now.'}]);
+
+  await page.reload();
+  await expect(page.locator('.turns .bubble--agent').filter({hasText:'Making Analyst now.'})).toHaveCount(1);
+  await expect(page.locator('.turns .bubble--agent').filter({hasText:'Five Agents I advise'})).toHaveCount(1);
+ } finally { detach(); }
+});

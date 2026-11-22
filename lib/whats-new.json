@@ -1,5 +1,11 @@
 [
  {
+  "issue": 647,
+  "date": "2026-11-22",
+  "en": { "title": "What an Agent writes before it asks stays in the chat", "body": "When an Agent writes its answer and asks you about it in the same breath, its words now show above the question or the request to allow, in a Conversation and in a Channel, and the reply after your answer does not repeat them." },
+  "ar": { "title": "كلام الوكيل قبل ما يسأل بيفضل في الشات", "body": "لما الوكيل يكتب رده ويسألك عليه في نفس الرسالة، كلامه بقى بيظهر فوق السؤال أو طلب السماح، في المحادثة وفي القناة، والرد اللي بعد إجابتك مش بيكرره." }
+ },
+ {
   "issue": 621,
   "date": "2026-11-22",
   "en": { "title": "A request goes on when a subscription runs out", "body": "When one ChatGPT or Claude subscription has no quota left, the same request now goes on with the next one of its kind in your providers order, skipping any you switched off; the Activity log notes the move and Settings shows which ran out." },
