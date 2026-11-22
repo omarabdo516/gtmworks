@@ -194,6 +194,19 @@ test('an Engine without the Company\'s profile still lists the held keys and say
   expect(buttons('pv-d-add')).not.toContain('Connect ChatGPT');
 });
 
+test('a sign-in or key read that failed is said under the list for every Role, never read as nothing connected', async () => {
+  for (const owner of [true, false]) {
+    const screen = await providers({ owner, signIns: null, keys: keys({ keys: null }) });
+    expect(document.getElementById('pv-none')).toBeNull();
+    expect(document.getElementById('pv-no-profile')?.textContent).toBe(en.signInUnknown);
+    expect(document.getElementById('pv-keys-unread')?.textContent).toBe(en.settingsModelsKeyUnread);
+    await screen.unmount();
+  }
+  await providers({ owner: false, available: false, signIns: null });
+  expect(document.getElementById('pv-no-profile')?.textContent).toBe(en.signInNoProfile);
+  expect(rows()).toEqual([`Anthropic ${en.providersKey} · ${en.providersKeySaved}`]);
+});
+
 test('a Claude subscription with an Anthropic key says the subscription is used first and the key is the paid fallback, in both languages (#438)', async () => {
   for (const [language, messages] of [['en', en], ['ar', ar]] as const) {
     const screen = await providers({ signIns: signIns('connected', 'connected') }, language);

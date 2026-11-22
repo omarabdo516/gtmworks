@@ -87,7 +87,7 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
       <span className="panel-row__d"><span>{t(entry.kind==='key'?'providersKey':'providersSubscription')}</span><span aria-hidden="true"> · </span><span className={`pv-dot${partial(entry.state)?' pv-dot--part':''}`} aria-hidden="true"/><span>{status(entry)}</span></span></span>
      <span className="panel-row__icon sov-chev pv-chev"><SettingsIcon name="forward" rtl={rtl}/></span>
     </button></li>)}
-    {!entries.length&&<li><p className="panel-empty" id="pv-none">{t('providersNone')}</p></li>}
+    {!entries.length&&subs.signIns&&keys?.keys&&<li><p className="panel-empty" id="pv-none">{t('providersNone')}</p></li>}
     {owner&&<li><button type="button" className="panel-row pv-row" id="pv-row-add" aria-current={shown==='add'?'true':undefined} aria-controls="pv-d-add" onClick={()=>open('add')}>
      <span className="panel-row__icon"><SettingsIcon name="plus"/></span><span className="panel-row__text"><span className="panel-row__t">{t('providersAdd')}</span></span>
      <span className="panel-row__icon sov-chev pv-chev"><SettingsIcon name="forward" rtl={rtl}/></span>
@@ -120,8 +120,9 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
     </div>}
    </div>
   </div>
-  {!owner&&!subs.available&&<p className="set-hint" id="pv-no-profile">{t('signInNoProfile')}</p>}
-  {!owner&&!keys?.keys&&<p className="set-hint" id="pv-keys-unread">{t(keys?'settingsModelsKeyUnread':'settingsModelsKeyNoEngine')}</p>}
+  {/* A read that failed is said under the list for every Role, so no Provider reads as absent when it is only unread. */}
+  {!subs.signIns&&<p className="set-hint" id="pv-no-profile">{t(subs.available?'signInUnknown':'signInNoProfile')}</p>}
+  {!keys?.keys&&<p className="set-hint" id="pv-keys-unread">{t(keys?'settingsModelsKeyUnread':'settingsModelsKeyNoEngine')}</p>}
   {notes.length>0&&<ul className="set-hint md-waiting">{notes.map(([label,name],at)=><li key={`${label}-${at}`}>{t(label)} <bdi>{name}</bdi></li>)}</ul>}
   {!owner&&<p className="set-hint">{t('providersOwnerOnly')}</p>}
  </section>;
