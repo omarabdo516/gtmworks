@@ -24,6 +24,12 @@
   "ar": { "title": "«اشتغل بالليل» مبقاش بيفوّت تشغيلات", "body": "كل نتيجة روتين بقت بتتحفظ أول ما تشغيلتها تخلص، فبطاقة الصبح بتعرض اللي اشتغل بالليل لحد 200 نتيجة، حتى لو الروتين بيشتغل كل ربع ساعة." }
  },
  {
+  "issue": 529,
+  "date": "2026-11-22",
+  "en": { "title": "An agent's face hops on a page that opens slowly", "body": "When you press an agent's tile, its face on the page that opens now hops however long that page takes to appear, not only when it appears at once." },
+  "ar": { "title": "وش الوكيل بينط في الصفحة اللي بتفتح ببطء", "body": "لما تدوس على مربع وكيل، وشه في الصفحة اللي بتفتح بقى بينط مهما الصفحة تاخد وقت عشان تظهر، مش بس لما تظهر على طول." }
+ },
+ {
   "issue": 556,
   "date": "2026-11-22",
   "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
