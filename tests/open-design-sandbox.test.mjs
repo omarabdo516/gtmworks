@@ -219,3 +219,25 @@ test('a cancel interrupts a read the Engine holds, and the stop goes out at once
   assert.ok(held.seen.some(line=>line.endsWith('/run-9/stop')),held.seen.join('\n'));
  } finally { held.close(); }
 });
+
+test('a cancel while the Run is still starting stops it as soon as the Engine names it', async () => {
+ const home=mkdtempSync(join(tmpdir(),'od-start-'));
+ const socket=`${home}/engine.sock`;
+ const seen=[];
+ const engine=createServer((request,response)=>{
+  seen.push(`${request.method} ${request.url}`);
+  response.setHeader('Content-Type','application/json');
+  if(request.method==='POST'&&request.url.endsWith('/v1/runs')) { setTimeout(()=>{ response.statusCode=202; response.end(JSON.stringify({run_id:'run-slow'})); },300); return; }
+  response.end(JSON.stringify({ok:true}));
+ });
+ await new Promise(resolve=>engine.listen(socket,resolve));
+ try {
+  const abort=new AbortController();
+  const running=runOnEngine({sockets:[socket],profile:`od-${agent}`,key:'k'.repeat(43)},{input:'x',cwd,signal:abort.signal,pace:20});
+  await new Promise(resolve=>setTimeout(resolve,50));
+  abort.abort();
+  await assert.rejects(running,/cancelled/);
+  assert.ok(seen.some(line=>line.endsWith('/run-slow/stop')),seen.join('\n'));
+  assert.ok(!seen.some(line=>line.startsWith('GET')),'no read after the cancel');
+ } finally { engine.closeAllConnections(); engine.close(); }
+});

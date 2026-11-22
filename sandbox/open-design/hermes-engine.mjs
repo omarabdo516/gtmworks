@@ -96,12 +96,15 @@ const terminal=['completed','failed','cancelled','interrupted'];
 // Engine refuses the key, the Run is given up in words, never polled for ever.
 /** @param {{sockets:string[],profile:string,key:string}} route @param {{input:string,cwd:string,signal:AbortSignal,outage?:number,pace?:number}} turn */
 export async function runOnEngine(route,{input,cwd,signal,outage=60000,pace=1000}) {
- const started=await call(route,'POST','/v1/runs',{input,instructions:instructionsFor(cwd)}).catch(()=>null);
+ // The start is not interrupted by a cancel, so its Run id is known and the Run can be stopped; it takes ten seconds at
+ // most, inside the twenty a closing runtime waits.
+ const started=await call(route,'POST','/v1/runs',{input,instructions:instructionsFor(cwd)},10000).catch(()=>null);
  const run=started?.json?.run_id;
  if(started&&[401,403].includes(started.status)) throw new Error(refused);
  if(!started||![200,202].includes(started.status)||typeof run!=='string') throw new Error(`The Engine did not start the design (${started?started.status:'no answer'}).`);
  const at=`/v1/runs/${encodeURIComponent(run)}`;
  const stop=async()=>{ await call(route,'POST',`${at}/stop`,undefined,5000).catch(()=>null); throw new Error('cancelled'); };
+ if(signal.aborted) return stop();
  let seen=Date.now();
  for(;;) {
   if(signal.aborted) return stop();
@@ -173,10 +176,10 @@ export function serveAcp({input,output,run=runOnEngine,route=routeOf}) {
   if(method==='session/prompt') return void prompt(id,params);
   send({id,error:{code:-32601,message:'Method not found'}});
  });
- // Open Design cancels a run and then closes stdin: every Run still going is stopped on the Engine, for ten seconds at
- // most, before the process ends.
+ // Open Design cancels a run and then closes stdin: every Run still going is stopped on the Engine, a Run still starting
+ // once its start answers, for twenty seconds at most, before the process ends.
  lines.once('close',()=>{ for(const session of sessions.values()) session.abort?.abort(); });
- return {lines,drained:()=>Promise.race([Promise.allSettled([...pending]),sleep(10000)])};
+ return {lines,drained:()=>Promise.race([Promise.allSettled([...pending]),sleep(20000)])};
 }
 
 if(import.meta.url===`file://${process.argv[1]}`) {

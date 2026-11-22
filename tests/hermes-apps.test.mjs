@@ -403,3 +403,31 @@ test('an Engine whose profile list cannot be read leaves key changes unfinished,
   assert.equal(fake.settings.profiles.get(designProfileOf(target.profile)).env.ANTHROPIC_API_KEY,undefined);
  } finally { await fake.close(); }
 });
+
+test('turning Open Design off seals the design profile first: a key it cannot replace leaves the app on', async () => {
+ const {fake,target,servers}=await companyEngine();
+ try {
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  const name=designProfileOf(target.profile);
+  const key=fake.settings.profiles.get(name).key;
+  fake.settings.envFail.add(name);
+  assert.notEqual((await disconnectApp(target,'open-design')).state,'disconnected');
+  assert.ok(servers()['open-design'],'the server stays, so the app is still shown on and can be turned off again');
+  assert.equal(fake.settings.profiles.get(name).key,key);
+  fake.settings.envFail.delete(name);
+  assert.deepEqual(await disconnectApp(target,'open-design'),{state:'disconnected'});
+  assert.notEqual(fake.settings.profiles.get(name).key,key);
+ } finally { await fake.close(); }
+});
+
+test('a key set with no model listed still stays unfinished when the profile list cannot be read', async () => {
+ const {fake,target}=await companyEngine();
+ try {
+  assert.equal(await prepareApp(target,'open-design',null),null);
+  fake.settings.profiles.set(spaceOf,{soul:'',provider:'auto',model:'',key:null,config:{},credentials:{},env:{}});
+  fake.settings.profilesListStatus=503;
+  const set=await setProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'deepseek',value:'sk-deepseek-key-1234567890'});
+  assert.notEqual(set.profiles[target.profile],'noModel');
+  assert.notEqual(set.profiles[target.profile],'written');
+ } finally { fake.settings.profilesListStatus=null; await fake.close(); }
+});
