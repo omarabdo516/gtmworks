@@ -164,8 +164,9 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
  // Its Run's steps live, as a Conversation shows them (#646): the reply that lands after them takes their place without
  // rising in again, its list open if the live one was.
- const live=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
- const landing=useLanding({working:!!workingNow,live,newest:messages.findLast(message=>message.author==='agent')?.id??null});
+ const landing=useLanding({working:!!workingNow,live:useLiveSteps({company:channel.company,channel:channel.id},!!workingNow),
+  newest:messages.findLast(message=>message.author==='agent')?.id??null,turn:`${waiting?.id}:${workingNow?.agent}`});
+ const live=landing.view;
  const landedHere=(message:ChannelMessage)=>message.author==='agent'&&landing.landed(message.id);
  const boardColumn=board?t(columnLabel(board.column,writer)):'';
  return <div className="convo"><div className="chat">

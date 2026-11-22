@@ -52,5 +52,5 @@ export async function GET(request:NextRequest) {
    },
    async cancel() { stopped.abort(); await lines.return?.(undefined); },
   }),{headers});
- } catch { return refuse('conversationFailed',400); }
+ } catch { return refuse('conversationFailed',500); }
 }

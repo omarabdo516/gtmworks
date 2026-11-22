@@ -143,3 +143,21 @@ test('a channel shows the same: the called Agent, its step now, and its steps so
  await expect.element(screen.getByRole('button', { name: 'Used 1 tool', exact: true })).toBeVisible();
  expect(live()?.closest('ol')?.getAttribute('aria-label')).toBe('Messages in #general');
 });
+
+test('a queued turn: once the first Run\'s reply lands its live steps go at once, and the next Run\'s are drawn when read', async () => {
+ const fake = engine();
+ const screen = await render(chat('en', working));
+ await expect.poll(() => fake.asked.length).toBeGreaterThan(0);
+ fake.send({ run: 'run_1', steps: [found], now: null });
+ await expect.poll(() => live()).not.toBeNull();
+ // The reply to the first message lands while the queued one keeps the Conversation waiting.
+ const next = { id: 3, author: 'person' as const, author_name: 'Omar', body: 'And the budget?', created_at: at };
+ await screen.rerender(chat('en', { ...landed, pending: true, messages: [...landed.messages, next] }));
+ await expect.element(screen.getByText('I read the last three campaigns.')).toBeVisible();
+ expect(live(), 'no second list beside the reply').toBeNull();
+ expect(document.querySelectorAll('.steps').length).toBe(1);
+ expect(document.querySelector('[data-author="agent"]')?.classList.contains('msg-in')).toBe(false);
+ await expect.element(screen.getByRole('status')).toHaveTextContent('Ads is working on a reply…');
+ fake.send({ run: 'run_2', steps: [], now: { tool: 'sheets', preview: 'budget' } });
+ await expect.poll(() => step()?.textContent).toBe('sheets · budget…');
+});

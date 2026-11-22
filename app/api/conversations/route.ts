@@ -193,6 +193,12 @@ async function read(db:Database,person:string,company:string,conversation:string
  if(!found) return refuse('conversationNotFound',404);
  await closeOpenRuns(service(),{conversation,owner:person});
  await startQueuedTurns(service(),{conversation});
+ // A new chat's first Run, closed just now, is what names its Engine session: read again, so the reply that lands carries
+ // its steps at once, where its live steps were (#646), whoever closed the Run first.
+ if(!found.hermes_session_id) {
+  const {data:named}=await db.from('conversations').select('hermes_session_id').eq('id',conversation).maybeSingle();
+  if(named?.hermes_session_id) found.hermes_session_id=named.hermes_session_id;
+ }
  return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent),(agent,session)=>agentSessionTurns(company,agent,session)));
 }
 

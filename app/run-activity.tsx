@@ -52,13 +52,19 @@ export function useLiveSteps(place:{company:string,conversation?:string,channel?
 }
 
 // The reply that lands after live steps were drawn takes their place (#646): the turn it is drawn in does not rise in
-// again, and its list is drawn open if the person opened the live one. `newest` is the newest reply now; the one the
-// place holds when it stops waiting is the one that landed. Kept as state from the render before, as React keeps it.
-export function useLanding<Id>({working,live,newest}:{working:boolean,live:LiveView|null,newest:Id|null}) {
+// again, and its list is drawn open if the person opened the live one. `newest` is the newest reply now. `turn` names
+// what the place works on now (the newest reply in a Conversation, the message and the Agent called in a channel): once
+// it moves on while the view is still of the same Run, that Run's work is over, so its view is no longer drawn, though
+// the place may still wait on a next Run (a queued turn, or the next Agent a message called) that is not read yet.
+// Kept as state from the render before, as React keeps it.
+export function useLanding<Id>({working,live,newest,turn}:{working:boolean,live:LiveView|null,newest:Id|null,turn:string}) {
  const [shown,setShown]=useState(false); const [landed,setLanded]=useState<Id|null>(null); const [open,setOpen]=useState(false);
- if(working&&!!live?.steps.length&&!shown) setShown(true);
- if(!working&&shown) { setShown(false); setLanded(newest); }
- return {landed:(id:Id)=>landed!==null&&id===landed,opened:(id:Id)=>landed!==null&&id===landed&&open,toggled:setOpen};
+ const [base,setBase]=useState<{run:string,turn:string}|null>(null);
+ if(live&&base?.run!==live.run) setBase({run:live.run,turn});
+ const over=!!live&&base?.run===live.run&&base.turn!==turn;
+ if(working&&!over&&!!live?.steps.length&&!shown) setShown(true);
+ if((!working||over)&&shown) { setShown(false); setLanded(newest); }
+ return {view:over?null:live,landed:(id:Id)=>landed!==null&&id===landed,opened:(id:Id)=>landed!==null&&id===landed&&open,toggled:setOpen};
 }
 
 // The live line (design-reference: .activity): the working dot, the Agent's face and name, then its step now: the tool

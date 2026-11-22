@@ -243,8 +243,9 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // While the Agent works, the line under the transcript and the turn's steps follow its Run live (#646). The reply that
  // lands after live steps were drawn takes their place without rising in again, its list open if the live one was.
  const working=pending&&!record.asking;
- const live=useLiveSteps({company,conversation:conversation.id},working);
- const landing=useLanding({working,live,newest:messages.findLast(message=>message.author==='agent')?.id??null});
+ const newest=messages.findLast(message=>message.author==='agent')?.id??null;
+ const landing=useLanding({working,live:useLiveSteps({company,conversation:conversation.id},working),newest,turn:String(newest)});
+ const live=landing.view;
  const rise=(index:number)=>rises(drawn[index])&&!(messages[index].author==='agent'&&landing.landed(messages[index].id))?' msg-in':'';
  // A message's time: in UTC on the server and the first browser render, hidden (globals.css), then in the reader's own
  // zone, so the page hydrates without a text mismatch outside UTC (#520).
