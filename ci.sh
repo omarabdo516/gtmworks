@@ -138,7 +138,9 @@ case "${1:-check}" in
   shift
   shard='' args=()
   for arg in "$@"; do
-    if [[ $arg == --shard=* ]]; then shard=${arg#--shard=}; else args+=("$arg"); fi
+    if [[ $arg == --shard=* ]]; then shard=${arg#--shard=}
+    elif [[ $arg == --shard ]]; then echo 'the browser suite takes its shard as --shard=<i>/<n>' >&2; exit 2
+    else args+=("$arg"); fi
   done
   set -- "${args[@]}"
   proxy=true

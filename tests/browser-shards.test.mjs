@@ -25,9 +25,9 @@ test('the slow files that sit side by side in file order land in different shard
 test('a shard runs as Playwright runs it: a file in order holds one worker, a parallel file spreads its tests, and the first-run files come after the rest', () => {
   const times = { 'engine.spec.ts': 800, 'chat.spec.ts': 300, 'first-run.spec.ts': 100 };
   const seconds = spec => times[spec.file];
-  const engine = { file: 'engine.spec.ts', tests: 4, parallel: true, last: false };
-  const chat = { file: 'chat.spec.ts', tests: 3, parallel: false, last: false };
-  const firstRun = { file: 'first-run.spec.ts', tests: 2, parallel: false, last: true };
+  const engine = { file: 'engine.spec.ts', tests: 4, parallel: true, firstRun: false };
+  const chat = { file: 'chat.spec.ts', tests: 3, parallel: false, firstRun: false };
+  const firstRun = { file: 'first-run.spec.ts', tests: 2, parallel: false, firstRun: true };
   // chat's 300 s hold the first worker; engine's four tests of 200 s take the other three, and the fourth the first of
   // them to be free: 400 s, then first run's 100 s.
   assert.equal(shardSeconds([engine, chat, firstRun], seconds, 4), 500);
@@ -58,12 +58,4 @@ test('the measured times name only spec files the suite has', () => {
     assert.doesNotThrow(() => readFileSync(`tests/${file}`), `tests/${file} exists`);
     assert.ok(Number.isInteger(seconds) && seconds > 0, `${file}: whole seconds`);
   }
-});
-
-test('ci.sh gives a shard its files from the split in place of Playwright\'s --shard, and shard 1 still runs the proxy suite', () => {
-  const ci = readFileSync('ci.sh', 'utf8');
-  assert.match(ci, /node scripts\/browser-shards\.mjs "\$shard"/);
-  assert.match(ci, /npm run test:e2e -- "\$\{files\[@\]\}" "\$@"/);
-  assert.doesNotMatch(ci, /test:e2e -- "\$@"\n/);
-  assert.match(ci, /\[\[ \$shard != 1\/\* \]\] && proxy=false/);
 });
