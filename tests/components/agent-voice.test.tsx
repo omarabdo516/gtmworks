@@ -124,7 +124,7 @@ test('while the section has unsaved changes Listen is off with the line to save 
  // The speed's explanation is its optional help (#614), there for the asking.
  const speedHelp = document.getElementById('set-speed-hint')!;
  expect(speedHelp.checkVisibility()).toBe(false);
- await screen.getByRole('button', { name: 'More about Speed' }).click();
+ await screen.getByRole('button', { name: 'More about Voice speed' }).click();
  await expect.element(screen.getByText('1× is normal speed. Slower is clearer for numbers and names.')).toBeVisible();
 });
 

@@ -553,6 +553,7 @@
 .gw .sov-h-meta { font-size: var(--gw-fs-sm); color: var(--gw-text-3); }
 .gw .sov-head__row { display: flex; align-items: center; flex-wrap: wrap; gap: 0 var(--s2); min-width: 0; }
 .gw .sov-head__row .info { margin-inline-start: -4px; }
+.gw .sov .set-group__row { display: flex; align-items: center; gap: 2px; }
 
 /* Advanced (#614): closed at first; its summary is the section's one line, its controls below it once open. */
 .gw .sov .set-adv { border-radius: var(--gw-r-md); }

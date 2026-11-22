@@ -1,20 +1,28 @@
 import { test, expect } from './fresh-seed';
 import type { Locator, Page } from '@playwright/test';
 import { signIn } from './sign-in';
-import { chooseLanguageInSettings } from './choose-language';
+import { execFileSync } from 'node:child_process';
 import en from '../lib/messages/en.json' with { type: 'json' };
 import ar from '../lib/messages/ar.json' with { type: 'json' };
 
 // #614: Settings rows stay short. A page or a section names itself with no paragraph under it, a row carries at most one
 // short grey line, and the longer help waits behind an "i" that a mouse, the keyboard or a tap opens and closes.
 // Company knowledge needs a running Engine to draw at all; tests/company-knowledge.spec.ts checks its head there.
-const sections = ['company', 'agents', 'learning', 'models', 'apps', 'routines', 'usage', 'backup', 'account'];
+const sections = ['company', 'members', 'agents', 'learning', 'models', 'apps', 'routines', 'usage', 'backup', 'account'];
 // The explanations that were paragraphs under a name, by catalogue key; none may show until its "i" is opened.
 const help = ['settingsCompanySub', 'settingsAgentsSub', 'settingsTalkTip', 'settingsUsageSub', 'settingsAccountSub', 'settingsModelsSub',
  'settingsKnowledgeSub', 'settingsLearningSub', 'settingsBackupSub', 'settingsRoutinesSub', 'settingsTeamHint',
  'settingsModelsDefaultHint', 'settingsModelsEachHint', 'settingsSpeechHint', 'settingsLearnSuggestHint', 'settingsLearnTapHint',
  'settingsLearnAskHint', 'settingsLearnOwnerHint', 'settingsChatsStayArabic'] as const;
 const overlayOf = (page: Page) => page.locator('.sov');
+// The Owner's interface language, set on the account as settings-overlay.spec does, then read back from the page.
+const owner = '20000000-0000-0000-0000-000000000001';
+const query = (sql: string) => execFileSync('npx', ['--no-install', 'supabase', 'db', 'query', sql, '-o', 'json', '--agent', 'no'], { encoding: 'utf8' });
+async function speak(page: Page, language: 'en' | 'ar') {
+ query(`update public.people set language='${language}' where id='${owner}'`);
+ await page.reload();
+ await expect(page.locator('html')).toHaveAttribute('lang', language);
+}
 
 
 async function expectConcise(page: Page, catalogue: Record<string, string>) {
@@ -31,13 +39,15 @@ const shown = (info: Locator) => info.locator('.info__pop');
 
 test('every Settings page names itself without a paragraph under it, in English and in Arabic', async ({ page }) => {
  await signIn(page, 'omar@example.com', '/c/rs-learning/settings');
- for (const [language, catalogue] of [['ar', ar], ['en', en]] as const) {
-  await chooseLanguageInSettings(page, language);
-  for (const section of sections) {
-   await page.goto(`/c/rs-learning/settings?section=${section}`);
-   await expectConcise(page, catalogue);
+ try {
+  for (const [language, catalogue] of [['ar', ar], ['en', en]] as const) {
+   await speak(page, language);
+   for (const section of sections) {
+    await page.goto(`/c/rs-learning/settings?section=${section}`);
+    await expectConcise(page, catalogue);
+   }
   }
- }
+ } finally { query(`update public.people set language='en' where id='${owner}'`); }
 });
 
 test('the help opens on a resting mouse and the keyboard, and Escape closes it without closing Settings', async ({ page }) => {
@@ -75,7 +85,7 @@ test('on an Arabic phone a tap opens the help inside the screen and a tap elsewh
  const page = await context.newPage();
  try {
   await signIn(page, 'omar@example.com', '/c/rs-learning/settings?section=account');
-  await chooseLanguageInSettings(page, 'ar');
+  await speak(page, 'ar');
   for (const section of ['company', 'models', 'learning']) {
    await page.goto(`/c/rs-learning/settings?section=${section}`);
    const info = overlayOf(page).locator('.sov-head .info');
@@ -90,6 +100,5 @@ test('on an Arabic phone a tap opens the help inside the screen and a tap elsewh
    await overlayOf(page).locator('#sov-h').tap();
    await expect(shown(info)).toBeHidden();
   }
-  await chooseLanguageInSettings(page, 'en');
- } finally { await context.close(); }
+ } finally { await context.close(); query(`update public.people set language='en' where id='${owner}'`); }
 });
