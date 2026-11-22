@@ -180,13 +180,13 @@ test('an Agent\'s connected tools are its own profile\'s apps with their states,
   }};
   const tools=agent=>readAgentTools(db,{company,agent,driver,hermes});
   assert.deepEqual(await tools(writer),[
-   {key:'canva',name:'Canva',mark:'Ca',state:'connected'},
-   {key:'klaviyo',name:'Klaviyo',mark:'Kl',state:'attention'},
-   {key:'mixpanel',name:'Mixpanel',mark:'MP',state:'missing'},
+   {key:'canva',name:'Canva',mark:'C',state:'connected'},
+   {key:'klaviyo',name:'Klaviyo',mark:'K',state:'attention'},
+   {key:'mixpanel',name:'Mixpanel',mark:'M',state:'missing'},
    {key:'notion',name:'Notion',mark:'N',state:'turnedOff'},
-   {key:'meta-ads',name:'Meta Ads',mark:'MA',state:'missing'},
+   {key:'meta-ads',name:'Meta Ads',mark:'M',state:'missing'},
   ]);
-  assert.deepEqual(await tools(lead),[{key:'amplitude',name:'Amplitude',mark:'Am',state:'connected'}],'two Agents of one Company, two lists');
+  assert.deepEqual(await tools(lead),[{key:'amplitude',name:'Amplitude',mark:'A',state:'connected'}],'two Agents of one Company, two lists');
   assert.equal(await tools(analyst),null,'an Agent not listed for the person');
   assert.equal(await readAgentTools(db,{company,agent:writer,hermes:{address:fake.address,key:'test-only-key'},driver:{read:async()=>({state:'unreachable',apps:null})}}),null);
  } finally { await fake.close(); }
