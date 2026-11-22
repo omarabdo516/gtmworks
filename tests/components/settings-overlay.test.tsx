@@ -44,7 +44,8 @@ test('on a phone the sections become a row and every control has a 44px tap area
  const open = document.getElementById('sov-main')!;
  expect(open.scrollWidth).toBe(open.clientWidth);
  const controls = [...sections.getByRole('link').elements(), screen.getByRole('button', { name: 'Close settings and go back' }).element(), ...screen.getByRole('radio').elements()];
- expect(controls).toHaveLength(15);
+ // Twelve sections (#612), the close button and the four account choices.
+ expect(controls).toHaveLength(17);
  expect(controls.map(control => [control.textContent, ...tapArea(control)]).filter(([, width, height]) => Number(width) < 44 || Number(height) < 44)).toEqual([]);
 });
 
@@ -62,6 +63,37 @@ test('while the chosen language is being saved the other choice waits, so the ch
  await expect.element(arabic).toBeEnabled();
  expect(saveLanguage).toHaveBeenCalledOnce();
  await expect.element(screen.getByRole('alert')).not.toBeInTheDocument();
+});
+
+// #612: the sidebar's groups, each under its name, and the breadcrumb naming the open page's group and the page itself.
+test('the sections sit in their groups, and the breadcrumb names the group and the open page, in English and Arabic', async () => {
+ await page.viewport(1440, 900);
+ const screen = await account('en');
+ const sections = screen.getByRole('navigation', { name: 'Settings sections' });
+ expect(sections.getByRole('group').elements().map(group => group.getAttribute('aria-labelledby') && document.getElementById(group.getAttribute('aria-labelledby')!)?.textContent)).toEqual(['Company', 'Agents', 'Engine']);
+ expect(sections.getByRole('group', { name: 'Engine' }).getByRole('link').elements().map(link => link.textContent)).toEqual(['Providers', 'Usage']);
+ expect(sections.getByRole('link').elements().slice(-3).map(link => link.textContent)).toEqual(['Backups', 'Your account', 'About']);
+ const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('listitem');
+ expect(crumbs.elements().map(crumb => crumb.textContent)).toEqual(['Settings', 'Your account']);
+ await expect.element(crumbs.last()).toHaveAttribute('aria-current', 'page');
+});
+
+test('in Arabic the breadcrumb reads Settings, the group, then the page', async () => {
+ await page.viewport(1440, 900);
+ const arabic = render(<LanguageProvider language="ar">
+  <OverlayChrome t={i18n('ar').t} slug="rs-learning" companyName="RS Learning" role="owner" readOnly={false} section="members" learningWaiting={0}><p>Members</p></OverlayChrome>
+ </LanguageProvider>);
+ const trail = (await arabic).getByRole('navigation', { name: 'مسار التنقل' }).getByRole('listitem');
+ expect(trail.elements().map(crumb => crumb.textContent)).toEqual(['الإعدادات', 'الشركة', 'الأعضاء']);
+});
+
+test('on a wide screen Settings float over the page; on a phone they cover it', async () => {
+ await page.viewport(1440, 900);
+ const screen = await account('en');
+ const dialog = screen.getByRole('dialog').element().getBoundingClientRect();
+ expect(dialog.left).toBeGreaterThan(0); expect(dialog.top).toBeGreaterThan(0); expect(dialog.right).toBeLessThan(1440);
+ await page.viewport(390, 900);
+ await expect.poll(() => { const box = screen.getByRole('dialog').element().getBoundingClientRect(); return [box.left, box.top, box.width, box.height]; }).toEqual([0, 0, 390, 900]);
 });
 
 // An Agent's page as the server draws its focus targets: the Settings tab and "All agents".
@@ -97,7 +129,7 @@ test('closing goes back to where the gear was pressed and leaves the gear its fo
   sessionStorage.setItem('gw-settings-from', JSON.stringify({ from: '/c/rs-learning/conversations/cv-1', focus: 'dp-settings' }));
   await screen.rerender(agentFrame(index + 1));
   await close();
-  await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/conversations/cv-1']]);
+  await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/conversations/cv-1', { scroll: false }]]);
   expect(sessionStorage.getItem('gw-return-focus')).toBe('dp-settings');
   expect(sessionStorage.getItem('gw-settings-from')).toBeNull();
   sessionStorage.removeItem('gw-return-focus');
@@ -122,7 +154,7 @@ test('closing keeps the overlay in the page with its exit running, then takes it
  expect(overlay).toHaveClass('is-closing');
  expect(push).not.toHaveBeenCalled();
  await vi.advanceTimersByTimeAsync(1);
- expect(push.mock.calls).toEqual([['/c/rs-learning/chat']]);
+ expect(push.mock.calls).toEqual([['/c/rs-learning/chat', { scroll: false }]]);
  // useLeave marks the overlay gone and navigates in one callback; React draws it gone on its next render.
  await untilDrawn(() => document.querySelector<HTMLElement>('.sov-root')?.hidden === true, 'the overlay gone');
  await vi.advanceTimersByTimeAsync(1000);
@@ -138,7 +170,7 @@ test('the place it was opened from is used once: the next close with none stored
  await screen.rerender(agentFrame(1));
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
  await expect.poll(() => push.mock.calls.length).toBe(2);
- expect(push).toHaveBeenLastCalledWith('/c/rs-learning/chat');
+ expect(push).toHaveBeenLastCalledWith('/c/rs-learning/chat', { scroll: false });
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
 
@@ -146,7 +178,7 @@ for (const [from, why] of [['/c/aleem/conversations/cv-9', 'another Company'], [
  sessionStorage.setItem('gw-settings-from', JSON.stringify({ from, focus: 'dp-settings' }));
  const screen = await agentPage();
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
- await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat']]);
+ await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat', { scroll: false }]]);
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
 
@@ -154,7 +186,7 @@ test('an address stored before the focus was kept still closes to it, with no fo
  sessionStorage.setItem('gw-settings-from', '/c/rs-learning/chat/ag-2');
  const screen = await agentPage();
  await screen.getByRole('button', { name: 'Close settings and go back' }).click();
- await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat/ag-2']]);
+ await expect.poll(() => push.mock.calls).toEqual([['/c/rs-learning/chat/ag-2', { scroll: false }]]);
  expect(sessionStorage.getItem('gw-return-focus')).toBeNull();
 });
 

@@ -73,13 +73,15 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // ?agent=<id> alone opens that Agent's page.
  const section=pickSection(query.section??(query.agent?'agents':undefined),role);
  const owner=role==='owner', canManage=owner||role==='manager', canWrite=role!=='viewer';
- const needAgents=['company','agents'].includes(section);
+ const needAgents=['members','agents'].includes(section);
  const agents:Agent[]=needAgents?agentsMainFirst((await db.from('hermes_agents').select(`id,connection_id,name,speciality,is_default,${madeColumns}`).eq('company_id',company.id).order('name')).data||[]):[];
- const members:Member[]=section==='company'?orderMembers(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]):[];
+ const members:Member[]=section==='members'?orderMembers(((await db.from('members').select('person_id,role,people(name)').eq('company_id',company.id).is('removed_at',null)).data||[]) as unknown as Member[]):[];
+ // The team's size, for the Company page's way of working line; the people themselves are on Members (#612).
+ const memberCount=section==='company'&&workMode!=='alone'?(await db.from('members').select('person_id',{count:'exact',head:true}).eq('company_id',company.id).is('removed_at',null)).count??0:0;
  // Which Agents each Member sees (#15): every Member's switches, read by an Owner or a Manager.
- const allowed=new Set(section==='company'&&canManage?((await db.from('member_agent_access').select('person_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.person_id}:${row.agent_id}`):[]);
+ const allowed=new Set(section==='members'&&canManage?((await db.from('member_agent_access').select('person_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.person_id}:${row.agent_id}`):[]);
  // Open invitations are rows of the same table (#185), with their own switches, until the person joins.
- const invitations:Invitation[]=section==='company'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).order('created_at')).data||[]):[];
+ const invitations:Invitation[]=section==='members'&&canManage?((await db.from('member_invitations').select('id,email,role').eq('company_id',company.id).is('claimed_at',null).order('created_at')).data||[]):[];
  const invitedAllowed=new Set(invitations.length?((await db.from('invitation_agent_access').select('invitation_id,agent_id').eq('company_id',company.id)).data||[]).map(row=>`${row.invitation_id}:${row.agent_id}`):[]);
  // The Company's model sign-in, read from the root profile of its own Engine (#384, ADR 0018), with that Engine's key,
  // after the database said the person is a member (company_engine_target).
@@ -146,11 +148,13 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const rules:Rule[]=agent?(((await db.from('agent_rules').select('id,body,said_by,said_at,teller:people!said_by(name)').eq('agent_id',agent.id).is('removed_at',null).or('suggestion.is.null,suggestion.eq.approved').order('said_at',{ascending:false})).data||[]) as unknown as Rule[]):[];
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
- const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro} sandbox={workSandbox?.state==='notRunning'}/>
+ const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} count={memberCount} owner={owner} ro={ro} sandbox={workSandbox?.state==='notRunning'}/>
+  :section==='members'?<MembersSection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro}/>
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} permissions={permissions?.permissions??[]} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
+  :section==='about'?<AboutSection t={t}/>
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='routines'&&routines?<>{ro}<RoutinesSection company={company.id} state={routines.state} agents={routines.agents??[]} canManage={canManage} now={new Date().toISOString()}/></>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
@@ -172,8 +176,7 @@ const Soon=({t}:{t:T})=><div className="panel-card sov-soon" aria-disabled="true
 const SoonSec=({t,id,label}:{t:T,id:string,label:string})=><section className="dp-sec" aria-labelledby={id}><Label id={id}>{label}</Label><Soon t={t}/></section>;
 const initial=(name:string)=>name.trim().slice(0,1).toUpperCase()||'?';
 
-function CompanySection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,roleNames,ro,sandbox}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,roleNames:Record<string,string>,ro:ReactNode,sandbox:boolean}) {
- const count=members.length;
+function CompanySection({t,company,solo,count,owner,ro,sandbox}:{t:T,company:{id:string,name:string},solo:boolean,count:number,owner:boolean,ro:ReactNode,sandbox:boolean}) {
  const name=<section className="dp-sec" aria-labelledby="co-h-name"><Label id="co-h-name">{t('settingsCompanyName')}</Label>
   <div className="panel-card set-card">{owner?<div className="set-field"><label className="set-label" htmlFor="co-name">{t('settingsCompanyNameHint')}</label>
    {/* Only the Owner renames the Company (#26); the server checks it again. Other Roles read the name. */}
@@ -189,6 +192,13 @@ function CompanySection({t,company,solo,members,invitations,agents,allowed,invit
   {/* The Company's work sandbox not answering (#398): one plain state in the existing notice style, and no control. */}
   {sandbox&&<p className="ro-note sov-warn" role="note" id="co-sandbox"><SettingsIcon name="shield"/><span>{t('workSandboxNotRunning')}</span></p>}
  </section>;
+ return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}{name}{mode}{tools}</>;
+}
+
+// The Company's Members on their own page (#612): who is in the team and which Agents each one sees, for an Owner or a
+// Manager; the names and Roles for anyone else; and, for a Company worked alone, the Owner's invitation to the first one.
+function MembersSection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,roleNames:Record<string,string>,ro:ReactNode}) {
+ const count=members.length;
  const inviteRoles=teamInviteRoles(t);
  const table=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('settingsMembersAgents')}</Label><div className="ta sov-ta">
   <SettingsTeamTable company={company.id} slug={slug} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner}/>
@@ -198,8 +208,16 @@ function CompanySection({t,company,solo,members,invitations,agents,allowed,invit
  const invite=owner&&<Invite mode="alone" company={company.id} slug={slug} roles={inviteRoles}/>;
  const list=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('members')} <span className="muted num">{count}</span></Label>
   <div className="panel-card">{members.map(member=><div className="panel-row" key={member.person_id}><span className="me__av pp-av" aria-hidden="true">{initial(member.people?.name||t('member'))}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{member.people?.name||t('member')}</bdi>{member.person_id===userId&&<> <span className="ch-you">{t('settingsYouMark')}</span></>}</span><span className="panel-row__d">{roleNames[member.role]||''}</span></span></div>)}</div></section>;
- return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}
-  {name}{mode}{tools}{solo?invite:canManage?table:list}</>;
+ return <><Head title={t('members')}/>{ro}{solo?invite:canManage?table:list}</>;
+}
+
+// About (#612): the installed gtmworks, by the version its release built into the image (lib/updates.mjs). The release
+// notes and licences join it later (#616).
+function AboutSection({t}:{t:T}) {
+ const version=process.env.GTMWORKS_VERSION;
+ return <><Head title={t('settingsAboutApp')}/>
+  <ul className="panel-card"><li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVersion')}</span>
+   <span className="panel-row__d ro-val" id="about-version">{version?<bdi dir="ltr">{version}</bdi>:t('settingsVersionDev')}</span></span></li></ul></>;
 }
 
 // What a face needs of an Agent: the client component is handed no more of the row than it draws.

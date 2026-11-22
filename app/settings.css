@@ -30,13 +30,27 @@
 .gw :is(.sov, .modal.team-dlg) :is(p, h3, .panel-row__t, .panel-row__d, .set-hint) { text-wrap: pretty; }
 
 /* the overlay: full window, a bar, the section list and the page */
-.gw .sov { width: 100%; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--gw-bg-chrome); animation: gw-fade-in var(--gw-dur) var(--gw-ease-out); }
+/* A floating dialog over the workspace on a wide screen (#612), its content column wide; the whole window on a phone. */
+.gw.sov-root { display: grid; place-items: center; padding: var(--s8); }
+.gw .sov { width: min(1240px, 100%); height: min(900px, 100%); display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--gw-bg-chrome); border-radius: var(--gw-r-lg); box-shadow: var(--gw-shadow-modal); overflow: hidden; animation: gw-fade-in var(--gw-dur) var(--gw-ease-out); }
+/* The same page drawn again for the next address (the workspace's overlay and the address's own one) does not enter twice. */
+.gw .sov.is-continued { animation: none; }
 /* Its leave (design-reference: .sov.is-closing, sovClose) fades it over the scrim, the reference's ::backdrop, before the
    page it was opened from returns (#130). */
 .gw .sov.is-closing { animation: gw-modal-out 190ms var(--gw-ease-in) forwards; }
 .gw .sov__bar { display: flex; align-items: center; gap: var(--s3); height: var(--gw-head-h); padding-inline: var(--s5) var(--s4); border-bottom: 0.5px solid var(--gw-border-3); }
 .gw .sov__bar .ws__mark { display: inline-flex; width: 28px; height: 28px; flex: none; }
 .gw .sov__title { font-size: var(--gw-fs-lg); line-height: 1.4; font-weight: 600; }
+/* The breadcrumb (#612): Settings › group › page, the page in the text's own colour, the trail truncating at its end. */
+.gw .sov-crumbs { min-width: 0; flex: 0 1 auto; }
+.gw .sov-crumbs ol { display: flex; align-items: center; gap: var(--s1); min-width: 0; margin: 0; padding: 0; list-style: none; }
+.gw .sov-crumbs li { display: inline-flex; align-items: center; gap: var(--s1); min-width: 0; font-size: var(--gw-fs-lg); line-height: 1.4; color: var(--gw-text-3); white-space: nowrap; --od-icon-size: 16px; }
+.gw .sov-crumbs li:first-child { flex: none; }
+.gw .sov-crumbs li:first-child .sov__title { color: var(--gw-text-3); font-weight: 400; }
+.gw .sov-crumbs li:only-child .sov__title { color: var(--gw-text-1); font-weight: 600; }
+.gw .sov-crumbs li[aria-current="page"] { color: var(--gw-text-1); font-weight: 600; }
+.gw .sov-crumbs__cur { overflow: hidden; text-overflow: ellipsis; }
+[dir="rtl"] .gw .sov-crumbs .sov-icon, .gw[dir="rtl"] .sov-crumbs .sov-icon { transform: scaleX(-1); }
 .gw .sov__co { font-size: var(--gw-fs-sm); color: var(--gw-text-3); }
 .gw :is(.sov, .modal.team-dlg) .circle-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: none; border-radius: var(--gw-r-full);
@@ -48,13 +62,15 @@
 .gw .sov__body { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 0; }
 .gw .sov-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; padding: var(--s4) var(--s3) var(--s8); background: var(--gw-bg-sidebar); border-inline-end: 0.5px solid var(--gw-border-3); }
 .gw .sov-nav__l { margin: var(--s5) 0 var(--s1); padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-3); }
-.gw .sov-nav__l:first-child { margin-top: 0; }
+.gw .sov-nav__g { display: flex; flex-direction: column; gap: 2px; }
+.gw .sov-nav__g:first-child > .sov-nav__l { margin-top: 0; }
+.gw .sov-nav__g--own { margin-top: var(--s5); padding-top: var(--s3); border-top: 0.5px solid var(--gw-border-3); }
 .gw .sov-nav .sb-item { flex: none; --od-icon-size: 18px; }
 .gw .sov-nav .sb-item .sov-icon { color: var(--gw-text-2); }
 /* Learning suggestions waiting for the reader's OK (#25; design-reference: the nav item's .sb-count) */
 .gw .sov-count { flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--gw-r-full); background: var(--gw-wait-bg); color: var(--gw-wait-text); font-size: var(--gw-fs-xs); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
 .gw .sov-main { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
-.gw .sov-page { width: min(800px, 100%); padding: var(--s8) var(--s8) var(--s16); display: flex; flex-direction: column; gap: var(--s6); }
+.gw .sov-page { width: min(960px, 100%); padding: var(--s8) var(--s8) var(--s16); display: flex; flex-direction: column; gap: var(--s6); }
 .gw .sov-head { display: flex; align-items: flex-end; gap: var(--s4); flex-wrap: wrap; }
 .gw .sov-head__t { flex: 1 1 320px; min-width: 0; display: grid; gap: var(--s1); }
 .gw .sov-h { font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; }
@@ -336,6 +352,11 @@
 
 @media (max-width: 1023px) { .gw .sov__body { grid-template-columns: 220px minmax(0, 1fr); } .gw .sov-page { padding-inline: var(--s6); } }
 @media (max-width: 767px) {
+  .gw.sov-root { padding: 0; }
+  .gw .sov { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
+  .gw .sov-crumbs li:not(:first-child):not(:last-child) { display: none; }
+  .gw .sov-nav__g { flex-direction: row; flex: none; }
+  .gw .sov-nav__g--own { margin-top: 0; padding-top: 0; border-top: 0; }
   .gw .sov__body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   .gw .sov-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: var(--s2) var(--s3); border-inline-end: 0; border-bottom: 0.5px solid var(--gw-border-3); scrollbar-width: none; }
   .gw .sov-nav::-webkit-scrollbar { display: none; }

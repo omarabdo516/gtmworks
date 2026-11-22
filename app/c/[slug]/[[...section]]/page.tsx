@@ -5,7 +5,6 @@ import { sections, placeholders } from '@/lib/navigation';
 import { EmptyState } from '@/components/paperclip/EmptyState';
 import { Inbox } from 'lucide-react';
 import Shell from '@/app/shell';
-import SettingsOverlay from '@/app/settings-overlay';
 import { approvalQueue } from '@/lib/approval-queue';
 import { canCreateCard } from '@/lib/card-permissions.mjs';
 import { boardCardColumns } from '@/lib/board-columns.mjs';
@@ -39,11 +38,6 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  const canCreate=canCreateCard({role:membership?.role});
- // Settings is the full-window overlay (#26, app/settings-overlay.tsx) over the company's frame, which stays behind it
- // inert, as the reference's dialog covers the workspace.
- if(section==='settings') { const roleName=(({owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')}) as Record<string,string>)[String(membership?.role || '')]||'';
-  return <><div className="contents" inert><Shell company={company} companies={companies || []} personId={user.id} section={section} title={title} personName={person?.name || user.email || ''} role={roleName} owner={membership?.role==='owner'}><main className="content"/></Shell></div>
-   <SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} workMode={company.work_mode} query={await searchParams}/></>; }
  const manage=['owner','manager'].includes(membership?.role || ''); const canOwner=membership?.role==='owner';
  // Usage is the Owner's and the Managers' (#32), checked here for the page as the database checks each read.
  if(section==='usage'&&!manage) notFound();

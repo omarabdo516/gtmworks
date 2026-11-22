@@ -1,24 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { overlaySections, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, companyKnowledgeHref, agentTab, agentTabFocus, memoryAgent } from '../lib/settings-overlay.mjs';
+import { overlaySections, overlayGroups, sectionGroup, visibleSections, pickSection, overlayHref, closeTarget, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, companyKnowledgeHref, agentTab, agentTabFocus, memoryAgent } from '../lib/settings-overlay.mjs';
 import { messages } from '../lib/i18n.mjs';
 
-test('the overlay lists the reference’s ten sections in its order, Your account under “You”', () => {
-  assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'agents', 'knowledge', 'learning', 'models', 'apps', 'routines', 'usage', 'backup', 'account']);
-  assert.deepEqual(overlaySections.filter(section => section[4]).map(([key]) => key), ['account']);
+// #612 (spec #610): the sidebar is grouped by what a person changes. Company holds Company, Members and Company
+// knowledge; Agents holds Agents, Learning, Recurring tasks and Apps; Engine holds Providers and Usage; Backups, Your
+// account and About stand on their own at the end.
+test('the overlay lists its sections in groups, Backups, Your account and About on their own at the end', () => {
+  assert.deepEqual(overlaySections.map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'usage', 'backup', 'account', 'about']);
+  assert.deepEqual(overlayGroups('owner').map(({ group, sections }) => [group, sections.map(([key]) => key)]), [
+    ['company', ['company', 'members', 'knowledge']],
+    ['agents', ['agents', 'learning', 'routines', 'apps']],
+    ['engine', ['models', 'usage']],
+    [null, ['backup', 'account', 'about']],
+  ]);
   for (const [key, label] of overlaySections) for (const language of ['en', 'ar']) assert.ok(messages[language][label], `${key}: ${language} label`);
+  for (const { group, label } of overlayGroups('owner')) for (const language of ['en', 'ar']) assert.ok(group === null || messages[language][label], `${group}: ${language} label`);
+  assert.equal(messages.en.settingsModels, 'Providers');
 });
 
-test('a Viewer sees only their account and the Agents; Usage is the Owner’s and the Managers’, in the same order', () => {
-  assert.deepEqual(visibleSections('viewer').map(([key]) => key), ['agents', 'account']);
-  assert.deepEqual(visibleSections('contributor').map(([key]) => key), ['company', 'agents', 'knowledge', 'learning', 'models', 'apps', 'routines', 'account']);
+test('a Viewer sees only the Agents, their account and About; Usage is the Owner’s and the Managers’, in the same order', () => {
+  assert.deepEqual(visibleSections('viewer').map(([key]) => key), ['agents', 'account', 'about']);
+  assert.deepEqual(visibleSections('contributor').map(([key]) => key), ['company', 'members', 'knowledge', 'agents', 'learning', 'routines', 'apps', 'models', 'account', 'about']);
   assert.deepEqual(visibleSections('manager').map(([key]) => key), overlaySections.map(([key]) => key).filter(key => key !== 'backup'));
   assert.deepEqual(visibleSections('owner').map(([key]) => key), overlaySections.map(([key]) => key));
+  // A group none of whose pages the person may open is not drawn at all.
+  assert.deepEqual(overlayGroups('viewer').map(({ group, sections }) => [group, sections.map(([key]) => key)]), [['agents', ['agents']], [null, ['account', 'about']]]);
+  assert.deepEqual(overlayGroups('contributor').find(({ group }) => group === 'engine').sections.map(([key]) => key), ['models']);
+});
+
+test('the breadcrumb names the group of the open page, and nothing for a page on its own', () => {
+  assert.equal(sectionGroup('members')?.label, 'settingsCompany');
+  assert.equal(sectionGroup('routines')?.label, 'agents');
+  assert.equal(sectionGroup('usage')?.label, 'settingsGroupEngine');
+  for (const key of ['backup', 'account', 'about']) assert.equal(sectionGroup(key), null, key);
 });
 
 test('the Owner alone sees Backup (#33)', () => {
-  assert.equal(visibleSections('owner').length, 10);
+  assert.equal(visibleSections('owner').length, 12);
   for (const role of ['manager', 'contributor', 'viewer']) {
     assert.ok(!visibleSections(role).some(([key]) => key === 'backup'), `Backup is the Owner's: ${role}`);
     assert.notEqual(pickSection('backup', role), 'backup', `a request for Backup falls back: ${role}`);
@@ -35,6 +55,9 @@ test('a request opens the section asked for only when the person may see it, els
   assert.equal(pickSection('company', 'viewer'), 'agents');
   assert.equal(pickSection('usage', 'viewer'), 'agents');
   assert.equal(pickSection('account', 'viewer'), 'account');
+  assert.equal(pickSection('members', 'viewer'), 'agents');
+  assert.equal(pickSection('members', 'contributor'), 'members');
+  assert.equal(pickSection('about', 'viewer'), 'about');
 });
 
 // #192: "Open company knowledge" in an Agent's memory is the Company knowledge section, which a Viewer may not open.
@@ -49,6 +72,7 @@ test('every overlay state has one address', () => {
   assert.equal(overlayHref('rs', 'agents', { agent: 'a-1' }), '/c/rs/settings?agent=a-1');
   assert.equal(overlayHref('rs', 'usage', { period: '30' }), '/c/rs/settings?section=usage&period=30');
   assert.equal(overlayHref('rs', 'account'), '/c/rs/settings?section=account');
+  assert.equal(overlayHref('rs', 'members'), '/c/rs/settings?section=members');
 });
 
 test('closing returns to the page Settings was opened from, never outside the company or back into the overlay', () => {
