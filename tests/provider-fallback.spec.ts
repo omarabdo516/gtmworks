@@ -104,6 +104,8 @@ test('with Claude Sonnet as the Fallback model, the same request completes on it
  const group=page.getByRole('radiogroup',{name:'Fallback model'});
  const choice=group.locator('#mdl-fb-anthropic-claude-sonnet-4-6');
  await expect(choice).toBeVisible({timeout:30000});
+ // A click before React hydrated the radio does nothing: wait until it has its handlers.
+ await page.waitForFunction(()=>{ const radio=document.getElementById('mdl-fb-anthropic-claude-sonnet-4-6'); return !!radio&&Object.getOwnPropertyNames(radio).some(name=>name.startsWith('__reactProps$')); });
  await choice.click();
  await expect(choice).toHaveAttribute('aria-checked','true');
  await expect(page.getByText('Fallback model saved.')).toBeVisible();
