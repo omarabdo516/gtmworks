@@ -141,7 +141,9 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
  // A Card let go over nothing, over its own place, or cancelled with Escape flies back to its place over 220ms and is
  // removed when it arrives; with reduced motion it is gone at once. A Card that moves is removed at once and lands.
  // dnd-kit skips the drop animation when it cannot measure the Card's place (a refresh drew it away), so the dimmed
- // place is also cleared after the flight's own time.
+ // place is also cleared after the flight's own time. A drop with no flight hands dnd-kit no drop animation at all:
+ // with one, dnd-kit first scrolls the Card's old place back into view, so a Card carried across the board would drag
+ // the board back to where it was before it lands (#556).
  const returnHome=(id:number)=>{ if(prefersReducedMotion()) return; flyBack.current=id; setReturning(id); window.setTimeout(()=>{ if(flyBack.current===id) flyBack.current=null; setReturning(current=>current===id?null:current); },300); };
  const dropAnimation=({active,dragOverlay}:{active:{rect:{left:number,top:number}},dragOverlay:{node:HTMLElement}})=>{
   const id=flyBack.current; flyBack.current=null;
@@ -168,7 +170,7 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
   <DropMark.Provider value={{place,carrying:activeId!==null,returning}}>
    <div ref={columns} className="board board-cols board--enter" id="board-cols" aria-label={label} aria-busy={busy}>{children}</div>
    {/* The carried Card follows the pointer and never catches it, so the Card under the pointer is the one read (#174). */}
-   <DragOverlay dropAnimation={dropAnimation} style={{pointerEvents:'none'}}>{activeId!==null?renderOverlay(activeId):null}</DragOverlay>
+   <DragOverlay dropAnimation={returning===null?null:dropAnimation} style={{pointerEvents:'none'}}>{activeId!==null?renderOverlay(activeId):null}</DragOverlay>
   </DropMark.Provider>
  </DndContext>;
 }
