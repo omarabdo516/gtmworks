@@ -33,7 +33,7 @@ test('a several-pick question draws its choices: two of four picked are sent as 
   await expect(card).toBeVisible();
   await expect(card).toContainText('Pick one or more, then send, or write your answer in the message');
   await expect(card.locator('.qcard__opts .opt .opt__t')).toHaveText(formats);
-  const send=card.getByRole('button',{name:'Send',exact:true});
+  const send=card.getByRole('button',{name:'Send picks',exact:true});
   await expect(send).toBeDisabled();
   await card.getByRole('button',{name:'Story'}).click();
   await card.getByRole('button',{name:'Reel'}).click();
@@ -53,6 +53,8 @@ test('a several-pick question draws its choices: two of four picked are sent as 
   await ask(`Plan the January posts ${stamp}`);
   await expect(page.getByRole('group',{name:`Which of them do we make now ${stamp}?`,exact:true})).toBeVisible();
   await ask('Only the reel, this week');
+  // Answered in words, the card shows the words as written, with no letter.
+  await expect(answered.last().locator('.opt.is-chosen.opt--typed .opt__t')).toHaveText('Only the reel, this week');
   await expect(page.locator('.msg[data-author=agent]').filter({hasText:`Plan the January posts ${stamp} (Only the reel, this week)`})).toBeVisible({timeout:30000});
   expect(fake.settings.answers.map(answer=>answer.body.answer)).toEqual([JSON.stringify(['Reel','Story']),'Only the reel, this week']);
  } finally {

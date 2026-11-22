@@ -36,10 +36,11 @@ export type AnswerQuestion=(card:number,choice:number|number[],answerKey:string)
 // design-reference: justCls. The answered card settles only on the page where it was answered, within this long.
 const settling=900;
 
-export function QuestionCard({card,fresh,answer,chips:asChips=false,waitingFor=null,team=false}:{card:Question,fresh:boolean,answer?:AnswerQuestion,chips?:boolean,waitingFor?:string|null,team?:boolean}) {
+export function QuestionCard({card,fresh,answer,chips=false,waitingFor=null,team=false}:{card:Question,fresh:boolean,answer?:AnswerQuestion,chips?:boolean,waitingFor?:string|null,team?:boolean}) {
  const {t}=useI18n();
  const several=card.choices.length>0&&card.multiple;
- const chips=asChips&&!several;
+ // A chip is one pick, so a several-pick question keeps the lettered card even for the main Agent.
+ const chipCard=chips&&!several;
  // One letter per choice, in the interface's language (أ ب ج د, or A B C D). Only the lettered card draws them.
  const keys=Array.from(t('questionLetters'));
  const [answerKey]=useState(newId); const [picked,setPicked]=useState<number[]|null>(null); const [error,setError]=useState('');
@@ -57,32 +58,28 @@ export function QuestionCard({card,fresh,answer,chips:asChips=false,waitingFor=n
   const timer=setTimeout(()=>setJust(false),settling);
   return ()=>clearTimeout(timer);
  },[state]);
- const pick=async(index:number)=>{
+ // One pick, or a several-pick question's picks, is claimed once; a refusal gives the card back with its reason.
+ const claim=async(choice:number|number[])=>{
   if(picked!==null||!answer) return;
-  setPicked([index]); setError('');
-  const failure=await answer(card.id,index,answerKey);
+  setPicked([choice].flat()); setError('');
+  const failure=await answer(card.id,choice,answerKey);
   if(failure) { setPicked(null); setError(failure); }
  };
+ const pick=(index:number)=>claim(index);
  const toggle=(index:number)=>setToggled(now=>now.includes(index)?now.filter(each=>each!==index):[...now,index].sort((a,b)=>a-b));
- const send=async()=>{
-  if(picked!==null||!answer||!toggled.length) return;
-  const picks=[...toggled];
-  setPicked(picks); setError('');
-  const failure=await answer(card.id,picks,answerKey);
-  if(failure) { setPicked(null); setError(failure); }
- };
+ const send=()=>toggled.length?claim([...toggled]):Promise.resolve();
  const head=(hint:string)=><div className="qcard__head"><span className="qcard__q">{card.question}</span><span className="qcard__hint">{hint}</span></div>;
  // The main Agent's card (design-reference: .ask1__head, .ask1__q): the question alone, since the Engine's grey "why"
  // line has no source here.
  const ask1Head=<div className="ask1__head"><span className="ask1__q">{card.question}</span></div>;
- const frame=`reply-card reply-card--question${chips?' reply-card--ask1':''}${fresh?' card-in':''}`;
+ const frame=`reply-card reply-card--question${chipCard?' reply-card--ask1':''}${fresh?' card-in':''}`;
  // The card's place in the channel, so "Waiting on you" opens it (#149).
  const place={id:`question-${card.id}`,tabIndex:-1};
- if(state==='closed') return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">{chips
+ if(state==='closed') return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">{chipCard
   ?<div className="ask1__head"><span className="ask1__q">{card.question}</span><span className="qcard__hint">{t('questionClosed')}</span></div>
   :head(t('questionClosed'))}</div>;
  if(said!==null) {
-  if(chips) return <div className={`${frame} is-resolved${just?' is-just':''}`} {...place} role="group" aria-label={`${card.question}: ${t('questionAnswered')}`} dir="auto">
+  if(chipCard) return <div className={`${frame} is-resolved${just?' is-just':''}`} {...place} role="group" aria-label={`${card.question}: ${t('questionAnswered')}`} dir="auto">
    {ask1Head}
    <div className="card__outcome"><ShellIcon name="check"/><span dir="auto">{typeof said==='string'?said:said.join('\n')}</span></div>
   </div>;
@@ -99,7 +96,7 @@ export function QuestionCard({card,fresh,answer,chips:asChips=false,waitingFor=n
  // Agent's shows the team's wait line over its options as plain rows (design-reference: ask1HTML's wait line,
  // cardHTML's `.opt--static`).
  if(!answer) {
-  if(chips) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
+  if(chipCard) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
    {ask1Head}
    <div className="card__outcome"><ShellIcon name="clock"/><span>{waitingFor?t('questionWaitFor',waitingFor):t('questionWaitTeam')}</span></div>
   </div>;
@@ -110,7 +107,7 @@ export function QuestionCard({card,fresh,answer,chips:asChips=false,waitingFor=n
    </div>)}</div>}
   </div>;
  }
- if(chips) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
+ if(chipCard) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
   {ask1Head}
   {lettered&&<div className="ask1__opts">{card.choices.map((choice,index)=><button key={index} type="button" className="chip" onClick={()=>void pick(index)}>{choice}</button>)}</div>}
   {team&&!lettered?<div className="card__outcome"><ShellIcon name="clock"/><span>{t('questionWaitTeam')}</span></div>

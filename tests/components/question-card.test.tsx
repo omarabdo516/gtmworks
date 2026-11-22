@@ -137,7 +137,7 @@ test('an open-ended question is answered in words: no lettered buttons and the h
 // #648: a question where several may be picked draws every choice on the lettered card (design-reference: cardHTML's
 // choice branch), each a toggle, and a Send that sends the picks as one answer; it can still be answered in words. The
 // main Agent's asks it on the same card, since a chip is one pick.
-const picks = { en: { hint: 'Pick one or more, then send, or write your answer in the message', send: 'Send' }, ar: { hint: 'اختار واحدة أو أكتر وابعت، أو اكتب ردك في الرسالة', send: 'ابعت' } };
+const picks = { en: { hint: 'Pick one or more, then send, or write your answer in the message', send: 'Send picks' }, ar: { hint: 'اختار واحدة أو أكتر وابعت، أو اكتب ردك في الرسالة', send: 'ابعت اختياراتك' } };
 test.each([['en', false], ['ar', false], ['en', true], ['ar', true]] as const)('in the %s interface (main Agent: %s), a several-pick question draws every choice as a lettered toggle and a Send that waits for a pick', async (language, chips) => {
  const card = asked(angles, { multiple: true });
  const screen = await drawn(card, language, async () => null, chips);

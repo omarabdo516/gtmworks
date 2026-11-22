@@ -1,4 +1,4 @@
-import type { PermissionChoice } from './engine.mjs';
+import type { PermissionChoice , QuestionAnswer } from './engine.mjs';
 import type { AppState } from './app-catalogue.mjs';
 export type { PermissionChoice };
 // The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
@@ -35,8 +35,6 @@ type Permission={id:number,kind:'permission',title:string,description:string,com
 type Connect={id:number,kind:'connect',title:string,app:string,reason:string};
 type ReviewItem={text:string,fine:boolean,note:string};
 type Question={id:number,kind:'question',title:string,question:string,choices:string[],multiple:boolean};
-// The answer a question keeps: typed words, or the texts of the choices picked on one where several may be picked (#648).
-type QuestionAnswer=string|string[];
 export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]}
  |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string}
  |(Question&({state:'open'}|{state:'answered',answer:QuestionAnswer}|{state:'closed'}))
