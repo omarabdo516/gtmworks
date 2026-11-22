@@ -1659,6 +1659,8 @@ done
 # A failed update: its migration fails, the release it runs keeps serving, and nothing of a sandbox is begun: no
 # container, volume or network, no key in an Engine's volume, and no image recorded.
 web=$(compose ps -q web)
+# The previous release's own Engine files, as its install left them.
+engine_files_before=$(cd scripts && cksum engine-*) || fail "read the previous release's Engine files"
 cp "$root/release-failing/docker-compose.install.yml" "$root/release-failing/install.sh" . || fail 'the release files whose update fails in place'
 if sh install.sh update > update.log 2>&1; then fail_update 'the update whose migration fails must fail'; fi
 grep -Fq 'Applying migration: 99999999999999_failure.sql' update.log || fail_update 'the failed update names its migration'
@@ -1673,6 +1675,10 @@ done < engines-before
 half=$(sandbox_parts)
 [[ -z $half ]] || fail_update "the failed update leaves no half-made sandbox: $half"
 [[ ! -e .work-sandbox-image ]] || fail_update 'the failed update records no work sandbox image'
+# Its Engine files on disk are the previous release's own again (#554), as that release's company add, restore and the
+# next update's rollback read them.
+previous_engine_files() { [[ $(cd scripts && cksum engine-*) == "$engine_files_before" ]]; }
+previous_engine_files || fail_update "the failed update leaves the previous release's own Engine files"
 # An update whose work sandbox image cannot be pulled (#397): the image is pulled before the migrations, so the update
 # exits non-zero with no migration applied and the release it runs keeps serving.
 applied=$(db -c 'select count(*) from gtmworks_install.schema_migrations') || fail 'read the applied migrations'
@@ -1686,6 +1692,7 @@ if grep -Fq 'Applying migration:' update.log; then fail_update 'the update whose
 [[ $(compose ps -q web) == "$web" ]] || fail_update 'the update whose sandbox image cannot be pulled leaves the release before the work sandbox serving'
 probe 'after the update whose sandbox image cannot be pulled'
 [[ -z $(sandbox_parts) && ! -e .work-sandbox-image ]] || fail_update 'the update whose sandbox image cannot be pulled begins no sandbox'
+previous_engine_files || fail_update "the update whose sandbox image cannot be pulled leaves the previous release's own Engine files"
 # An update whose second Company's sandbox does not start, after its migrations applied and the first Company's sandbox,
 # exit, work folder and networks were made (#479): its Company is given more CPUs than Docker has, which Docker refuses at
 # the sandbox's start. The previous release keeps serving with its own Engines, and nothing of a sandbox is left: no
@@ -1693,9 +1700,6 @@ probe 'after the update whose sandbox image cannot be pulled'
 second_slug=$(ls .engines | grep -vx first)
 [[ -n $second_slug && $second_slug != *$'\n'* ]] || fail "read the second Company's one Engine folder"
 printf 'SANDBOX_CPUS=100000\n' >> ".engines/$second_slug/.env"
-# The updates that failed above left this release's Engine files on disk, as a real one leaves them; the previous release's
-# own go back with its command (scripts/get.sh), here by hand from the commit its image was built from.
-cp "$RUNNER_TEMP/sandbox-previous-release/scripts/"engine-* scripts/ || fail "the previous release's Engine files back before the failed sandbox start"
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place for the failed sandbox start'
 if GTMWORKS_ENGINE_WAIT=60 sh install.sh update > update.log 2>&1; then fail_update "the update whose second Company's sandbox does not start must fail"; fi
 grep -Fq 'Applying migration:' update.log || fail_update "the update whose second Company's sandbox does not start applies its migrations first"
@@ -2230,10 +2234,14 @@ previous_release_serves() {
   engine_node "$(first_engine_key)" - < "$RUNNER_TEMP/staged-previous-release/scripts/check-install-conversation.mjs" \
     || fail_update "after the update $1 the previous release answers a Conversation"
 }
+# The previous release's own Engine files, as its install left them: each failed update leaves them so (#554), even while
+# an Engine of the release that does not start restarts on the files that release brought.
+staged_engine_files=$(cd scripts && cksum engine-*) || fail "read the previous release's Engine files"
 for failing in sandbox engine; do
   cp "$root/release-broken-$failing/docker-compose.install.yml" "$root/release-broken-$failing/install.sh" . || fail "the release files whose $failing does not start in place"
   if GTMWORKS_ENGINE_WAIT=40 sh install.sh update > update.log 2>&1; then fail_update "the update whose $failing does not start must fail"; fi
   grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update "the update whose $failing does not start says the previous release keeps serving"
+  [[ $(cd scripts && cksum engine-* 2>&1) == "$staged_engine_files" ]] || fail_update "the update whose $failing does not start leaves the previous release's own Engine files"
   # The release files of a failed update stay in the folder, as a real one leaves them: the previous release's own go
   # back with its command (scripts/get.sh); here they go back by hand.
   cp "$root/release-before-staged/docker-compose.install.yml" "$root/release-before-staged/install.sh" . || fail "the previous release files back after the $failing failure"
