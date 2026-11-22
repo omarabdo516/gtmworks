@@ -8,7 +8,10 @@ import { join } from 'node:path';
 // once under app/.
 const tokenFile = 'app/tokens.css';
 const tokens = ['gw-dur-fast', 'gw-dur', 'gw-dur-slow', 'gw-ease-out', 'gw-ease-in', 'gw-ease-spring'];
-const stylesheets = readdirSync('app').filter(file => file.endsWith('.css')).map(file => join('app', file)).sort();
+/** @param {string} dir @returns {string[]} every stylesheet under dir, its folders included */
+const cssUnder = dir => readdirSync(dir, { withFileTypes: true })
+  .flatMap(entry => (entry.isDirectory() ? cssUnder(join(dir, entry.name)) : entry.name.endsWith('.css') ? [join(dir, entry.name)] : []));
+const stylesheets = cssUnder('app').sort();
 /** @param {string} file */
 const css = file => readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -47,7 +50,9 @@ test('every keyframe under app/ is written once, under one name, and no two name
 // `transition` shorthand whose item names no property, or names `all`, would fade whatever a later rule changes (size,
 // place, colour) on every part it reaches under `.gw`. `none` is allowed. The same holds for Tailwind's `transition-all`
 // in our own components; the scoped Paperclip copies in components/paperclip/ keep their upstream classes.
-const timing = /^(?:ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end|steps\(.*|cubic-bezier\(.*|linear\(.*|normal|allow-discrete|-?[\d.]+m?s|var\(.*|calc\(.*)$/;
+// A property name is never a function, so every function (var(), calc(), min(), clamp(), cubic-bezier(), steps()) is a
+// time, a curve or a value, never the property.
+const timing = /^(?:ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end|normal|allow-discrete|[+-]?[\d.]+m?s|[\w-]+\(.*)$/;
 /** @param {string} value @param {RegExp} separator */
 const topLevel = (value, separator) => {
   /** @type {string[]} */
@@ -71,7 +76,7 @@ const unlistedTransitions = text => {
   const problems = [];
   for (const match of text.matchAll(/(?<![\w-])(?:-webkit-)?transition(-property)?\s*:\s*([^;}]+)/g)) {
     const line = text.slice(0, match.index).split('\n').length;
-    const value = match[2].replace(/!important\s*$/, '').trim();
+    const value = match[2].replace(/!\s*important\s*$/, '').trim();
     if (match[1]) {
       if (topLevel(value, /,/).some(name => name === 'all')) problems.push(`line ${line}: transition-property: ${value} names all`);
       continue;
@@ -100,6 +105,11 @@ test('the guard catches transition: all, a shorthand with no property and transi
   assert.equal(unlistedTransitions('.gw .a { transition: color 1s, all 1s; }').length, 1);
   assert.equal(unlistedTransitions('.gw .a {\n  -webkit-transition: all 1s; }').length, 1);
   assert.equal(unlistedTransitions('.gw .a { transition-property: opacity, all; }').length, 1);
+  assert.equal(unlistedTransitions('.gw .a { transition-property: all ! important; }').length, 1);
+  assert.equal(unlistedTransitions('.gw .a { transition: 200ms ease ! important; }').length, 1);
+  assert.deepEqual(unlistedTransitions('.gw .a { transition: opacity 200ms ! important; }'), []);
+  assert.equal(unlistedTransitions('.gw .a { transition: min(150ms, 200ms) ease; }').length, 1);
+  assert.deepEqual(unlistedTransitions('.gw .a { transition: min(150ms, 200ms) ease opacity; }'), []);
 });
 
 test('no stylesheet under app/ gives a part transition: all or a transition with no property', () => {
