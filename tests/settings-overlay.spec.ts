@@ -165,7 +165,8 @@ test('the keyboard alone opens Settings from the account menu, moves between sec
  // Focus moves into the overlay, so Tab walks the overlay's own controls and reaches the sections.
  await expect.poll(()=>overlay.evaluate(node=>node.contains(document.activeElement))).toBe(true);
  const agents=overlay.locator('#sov-nav-agents');
- for(let presses=0;presses<5&&!await agents.evaluate(node=>node===document.activeElement);presses++) await page.keyboard.press('Tab');
+ // The close button, Find a setting (#613), then Company, Members and Company knowledge come before Agents (#612).
+ for(let presses=0;presses<7&&!await agents.evaluate(node=>node===document.activeElement);presses++) await page.keyboard.press('Tab');
  await expect(agents).toBeFocused();
  await page.keyboard.press('Enter');
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=agents$/);
@@ -506,4 +507,63 @@ test('with reduced motion Settings leave at once, with no exit, by Escape',async
  }));
  expect(after).toEqual([false,false]);
  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+});
+
+// Finding a setting by name (#613), through the app as the server draws each Role's Settings.
+test('the Owner finds a setting by name with /, opens it with an empty search, and a name nothing has says so until cleared',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=account');
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ const find=overlay.getByRole('searchbox',{name:'Find a setting'});
+ const shown=overlay.locator('.sov-nav .sb-item');
+ await expect(shown).toHaveText(sections);
+ // A key pressed before the page has hydrated does nothing, so it is pressed again until the search takes the focus.
+ await expect(async()=>{ await overlay.locator('.sov__title').click(); await page.keyboard.press('/'); await expect(find).toBeFocused({timeout:2000}); }).toPass({timeout:30000});
+ await expect(find).toHaveValue('');
+ await page.keyboard.type('back');
+ await expect(shown).toHaveText(['Backups']);
+ await page.keyboard.press('Enter');
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=backup$/);
+ await expect(overlay.locator('#sov-nav-backup')).toHaveAttribute('aria-current','page');
+ // The section opened starts with an empty search and every section listed.
+ await expect(find).toHaveValue('');
+ await expect(shown).toHaveText(sections);
+ await find.fill('nothing like this');
+ await expect(overlay.locator('.sov-find__none')).toHaveText(/No setting matches “nothing like this”\./);
+ await expect(shown).toHaveCount(0);
+ await overlay.getByRole('button',{name:'Clear search'}).click();
+ await expect(shown).toHaveText(sections);
+ // A slash typed in a field of the page stays in that field.
+ await overlay.locator('#sov-nav-account').click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=account$/);
+ const note=overlay.locator('#ac-note');
+ await note.click();
+ await page.keyboard.type('a/b');
+ await expect(note).toBeFocused();
+ await expect(note).toHaveValue(/a\/b$/);
+ await expect(find).toHaveValue('');
+});
+
+test('in Arabic a Viewer finds their sections by their Arabic names and never one the Role may not open',async({page})=>{
+ const viewer=`(select id from auth.users where email='viewer@example.com')`;
+ query(`update public.people set language='ar' where id=${viewer}`);
+ try {
+  await signIn(page,'viewer@example.com','/c/rs-learning/settings?section=account');
+  await expect(page.locator('html')).toHaveAttribute('lang','ar');
+  const overlay=page.getByRole('dialog',{name:'الإعدادات'});
+  const find=overlay.getByRole('searchbox',{name:'دوّر على إعداد'});
+  const shown=overlay.locator('.sov-nav .sb-item');
+  await expect(shown).toHaveText(['الوكلاء','حسابك','عن gtmworks']);
+  await expect(async()=>{ await overlay.locator('.sov__title').click(); await page.keyboard.press('/'); await expect(find).toBeFocused({timeout:2000}); }).toPass({timeout:30000});
+  await page.keyboard.type('الوكلا');
+  await expect(shown).toHaveText(['الوكلاء']);
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=agents$/);
+  for(const hidden of ['الاستهلاك','النسخ الاحتياطي','الشركة','التطبيقات']) {
+   await find.fill(hidden);
+   await expect(overlay.locator('.sov-find__none')).toHaveText(new RegExp(`مفيش إعداد فيه «${hidden}»`));
+   await expect(shown).toHaveCount(0);
+  }
+  await overlay.getByRole('button',{name:'امسح البحث'}).click();
+  await expect(shown).toHaveText(['الوكلاء','حسابك','عن gtmworks']);
+ } finally { query(`update public.people set language='en' where id=${viewer}`); }
 });

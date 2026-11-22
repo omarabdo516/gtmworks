@@ -6,6 +6,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { AppTile } from '@/components/app-tile';
 import { ShellIcon } from '@/components/shell-icon';
+import { searchFold } from '@/lib/arabic-search.mjs';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { SettingsIcon } from './settings-icons';
 import { toast } from './toast';
@@ -24,9 +25,6 @@ type Text=Record<string,string>;
 // The reference's count of connected apps: every app in the Connected group, a sign-in needing attention included.
 export const connectedCount=(items:AppItem[])=>items.filter(item=>item.state!=='off').length;
 const sayer=(text:Text)=>(key:string,...values:string[])=>values.reduce((line,value,index)=>line.replace(`{${index}}`,()=>value),text[key]??'');
-// Search reads Arabic as the reference does (arNorm): the hamza forms of alef as alef, alef maksura as ya, ta marbuta as
-// ha, and no diacritics.
-const fold=(value:string)=>value.toLowerCase().normalize('NFKD').replace(/[ً-ٕ]/g,'').replace(/[ةى]/g,letter=>String.fromCharCode(letter.charCodeAt(0)===0x629?0x647:0x64A));
 const order:AppCategory[]=['ads','content','communication','analytics','sales','more'];
 // A line naming the app or an Agent keeps each name in its own direction.
 const named=(line:string,...names:string[])=>line.split(/(\{\d\})/).map((part,index)=>{ const at=/^\{(\d)\}$/.exec(part); return at?<bdi key={index}>{names[Number(at[1])]}</bdi>:part; });
@@ -61,8 +59,8 @@ export function AppsList({place,owner,items:read,text}:{place:AppsPlace,owner:bo
  const say=sayer(text); const items=read??[];
  const [query,setQuery]=useState(''); const [category,setCategory]=useState<AppCategory|'all'>('all');
  const search=useRef<HTMLInputElement>(null);
- const needle=fold(query.trim());
- const shown=items.filter(item=>(category==='all'||item.category===category)&&fold(item.words).includes(needle));
+ const needle=searchFold(query);
+ const shown=items.filter(item=>(category==='all'||item.category===category)&&searchFold(item.words).includes(needle));
  const card=(item:AppItem)=>{
   const action=item.state==='connected'||item.source==='custom'?'manage':item.state==='attention'?'reconnect':'connect';
   return <article key={item.key} className="app-card" aria-labelledby={`app-t-${item.key}`}>

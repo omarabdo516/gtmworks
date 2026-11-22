@@ -1,0 +1,1 @@
+| `arabic-search.test.mjs` | How the interface's searches read text (#613): case, runs of spaces, Arabic marks and tatweel aside, every hamza seat, alef wasla, alef maqsura and teh marbuta read as the letter most people type. | 0.1 s | settings-overlay.test.mjs (findSections), components/settings-apps.test.tsx (the Apps search) | new |
