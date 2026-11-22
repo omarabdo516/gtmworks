@@ -69,8 +69,9 @@ test('the Owner changes the speaking language and the speed, saves, and the Engi
  expect(direct.ok()).toBe(true);
  expect(spoken()?.body.text).toContain('Hi عمر, I finished');
  expect(spoken()?.body.text).not.toContain('Say something else entirely.');
- // A change of language and of speed, saved with the bar; Listen is off while they are unsaved.
+ // A change of language and of speed (in Advanced since #615), saved with the bar; Listen is off while they are unsaved.
  await language.selectOption('ar');
+ await overlay.getByText('Advanced',{exact:true}).click();
  await overlay.getByRole('radio',{name:'1.25×'}).click();
  await expect(bar).toBeVisible();
  await expect(overlay.getByRole('button',{name:'Listen',exact:true})).toBeDisabled();
@@ -88,6 +89,7 @@ test('the Owner changes the speaking language and the speed, saves, and the Engi
  // Reloaded, the page shows what the Engine now holds.
  await page.reload();
  await expect(language).toHaveValue('ar');
+ await overlay.getByText('Advanced',{exact:true}).click();
  await expect(overlay.getByRole('radio',{name:'1.25×'})).toHaveAttribute('aria-checked','true');
  await expect(overlay.locator('#set-voice-lang-hint')).toHaveText('It understands you in this language when you dictate.');
 });
@@ -98,7 +100,10 @@ test('a Contributor and a Viewer read the voice rows with no control, and the se
   await agentPage(email,page);
   const overlay=page.getByRole('dialog',{name:'Settings'});
   await expect(overlay.locator('#set-voice-lang-val')).toHaveText('Arabic');
-  await expect(overlay.locator('#set-voice-val')).toHaveText('en-US-AriaNeural · 1.25×');
+  await expect(overlay.locator('#set-voice-val')).toHaveText('en-US-AriaNeural');
+  // The speed is read in Advanced (#615), as text.
+  await overlay.getByText('Advanced',{exact:true}).click();
+  await expect(overlay.locator('#set-speed-val')).toHaveText('1.25×');
   await expect(overlay.locator('#set-voice-lang')).toHaveCount(0);
   await expect(overlay.locator('#set-voice')).toHaveCount(0);
   await expect(overlay.locator('#set-speed-l')).toHaveCount(0);

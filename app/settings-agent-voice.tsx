@@ -19,7 +19,6 @@ const firstName = (name: string) => name.trim().split(/\s+/)[0] || '';
 /** @param {{company:string,agent:string,personName:string,voice:AgentVoiceRead}} props */
 export function AgentVoice({company,agent,personName,voice}:{company:string,agent:string,personName:string,voice:AgentVoiceRead}) {
  const {t,language}=useI18n();
- const rtl=language==='ar';
  const speaking=useDraftValue(agent,'voice.language',voice.language);
  const speed=useDraftValue(agent,'voice.speed',String(voice.speed));
  const chosen=useDraftValue(agent,'voice.voice',voice.voice??'');
@@ -38,6 +37,10 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
   [agent,voice.language,voice.speed,voice.voice,voice.list?.state,voice.list?.available]);
  // Listen plays what is saved, so any change to the section stops the sound and leaves it off until Save.
  const stop=()=>{ sound.current?.pause(); sound.current=null; setPlaying(false); };
+ // Any change to the section, the speed in Advanced too, stops the sound: Listen plays only what is saved. The button
+ // reads Listen again in the same render, and the sound itself is paused once the change is drawn.
+ if(dirty&&playing) setPlaying(false);
+ useEffect(()=>{ if(dirty) { sound.current?.pause(); sound.current=null; } },[dirty]);
  // The sound stops when the section leaves the page.
  useEffect(()=>()=>{ sound.current?.pause(); sound.current=null; },[]);
  const listen=async()=>{
@@ -63,18 +66,8 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
   :missing==='unreachable'?t('settingsVoiceUnreachable')
   :missing==='noSpeech'?t('settingsVoiceNoSpeech')
   :t('settingsVoiceListenHint');
- // Arrow keys move the speed as the reference does: forward is left in Arabic and right in English.
- const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
-  if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
-  const direction=(event.key==='ArrowLeft')===rtl?1:-1;
-  const next=Math.max(0,Math.min(voiceSteps.length-1,index+direction));
-  event.preventDefault();
-  stop();
-  setDraftValue('voice.speed',String(voiceSteps[next]));
-  document.getElementById(`set-speed-${next}`)?.focus();
- };
- return <section className="dp-sec" aria-labelledby="set-h-voice"><h4 className="dp-label" id="set-h-voice"><span>{t('settingsVoice')}</span></h4>
-  <div className="panel-card set-card">
+ // The page's Voice group carries the heading (#615); the speed is in its Advanced part (AgentVoiceSpeed below).
+ return <div className="panel-card set-card">
    <div className="set-field"><label className="set-label" htmlFor="set-voice-lang">{t('settingsVoiceLang')}</label>
     <select className="set-input vc-select" id="set-voice-lang" value={speaking} aria-describedby="set-voice-lang-hint"
      onChange={event=>{ stop(); setDraftValue('voice.language',event.target.value); }}>
@@ -99,12 +92,32 @@ export function AgentVoice({company,agent,personName,voice}:{company:string,agen
     <span className={`set-hint${playing?' vc-quote':''}`} id="set-voice-hint" aria-live="polite">{hint}</span>
     {voice.provider==='edge'&&<span className="set-hint" id="set-voice-microsoft">{t('settingsVoiceMicrosoft')}</span>}
    </div>
-   <div className="set-field"><span className="set-label" id="set-speed-l">{t('settingsVoiceSpeed')}</span>
-    <div className="segmented segmented--field" role="radiogroup" aria-labelledby="set-speed-l">
-     {voiceSteps.map((step,index)=><button type="button" role="radio" key={step} id={`set-speed-${index}`} className="num" dir="ltr"
-       aria-checked={speed===String(step)} tabIndex={speed===String(step)?0:-1} onClick={()=>{ stop(); setDraftValue('voice.speed',String(step)); }}
-       onKeyDown={event=>move(event,index)}>{step}×</button>)}
-    </div>
-    <span className="set-hint">{t('settingsVoiceSpeedHint')}</span></div>
-  </div></section>;
+  </div>;
+}
+
+// The voice's speed (#162), in the Agent page's Advanced part since #615: the reference's five steps as one radio group,
+// one key of the page's draft (`voice.speed`) saved with the bar together with the Voice group's language and voice. The
+// arrow keys move it forward, which is left in Arabic and right in English. Everyone who may not change the voice reads
+// the speed as text.
+export function AgentVoiceSpeed({agent,speed:saved,editable}:{agent:string,speed:number|null,editable:boolean}) {
+ const {t,language}=useI18n();
+ const rtl=language==='ar';
+ const speed=useDraftValue(agent,'voice.speed',String(saved??1));
+ if(!editable) return <ul className="panel-card"><li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsVoiceSpeed')}</span>
+  <span className="panel-row__d ro-val" id="set-speed-val">{saved===null?'—':<bdi dir="ltr">{saved}×</bdi>}</span></span></li></ul>;
+ const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
+  if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight') return;
+  const direction=(event.key==='ArrowLeft')===rtl?1:-1;
+  const next=Math.max(0,Math.min(voiceSteps.length-1,index+direction));
+  event.preventDefault();
+  setDraftValue('voice.speed',String(voiceSteps[next]));
+  document.getElementById(`set-speed-${next}`)?.focus();
+ };
+ return <div className="panel-card set-card"><div className="set-field"><span className="set-label" id="set-speed-l">{t('settingsVoiceSpeed')}</span>
+  <div className="segmented segmented--field" role="radiogroup" aria-labelledby="set-speed-l" aria-describedby="set-speed-hint">
+   {voiceSteps.map((step,index)=><button type="button" role="radio" key={step} id={`set-speed-${index}`} className="num" dir="ltr"
+     aria-checked={speed===String(step)} tabIndex={speed===String(step)?0:-1} onClick={()=>setDraftValue('voice.speed',String(step))}
+     onKeyDown={event=>move(event,index)}>{step}×</button>)}
+  </div>
+  <span className="set-hint" id="set-speed-hint">{t('settingsVoiceSpeedHint')}</span></div></div>;
 }

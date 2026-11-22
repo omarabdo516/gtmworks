@@ -15,7 +15,8 @@ import type { StandingPermission } from '@/lib/standing-permissions.mjs';
 // The Owner and Managers see "Revoke" (canRevoke); the server checks the Role again (/api/agent-permissions). After it the
 // row goes, the toast says the Agent will ask again, and focus moves as the reference's does: to the panel's settings
 // button in the details (`returnTo`), else to the next row's Revoke, the one before it, or the Agent's settings tab.
-export function StandingPermissions({company,agent,permissions,canRevoke,returnTo}:{company:string,agent:string,permissions:StandingPermission[],canRevoke:boolean,returnTo?:string}) {
+// `heading` is h5 inside an Agent page's Tools and skills group in Settings (#615), h3 in the details panel.
+export function StandingPermissions({company,agent,permissions,canRevoke,returnTo,heading:Heading='h3'}:{company:string,agent:string,permissions:StandingPermission[],canRevoke:boolean,returnTo?:string,heading?:'h3'|'h5'}) {
  const {t}=useI18n(); const router=useRouter();
  const [gone,setGone]=useState<string[]>([]); const [pending,setPending]=useState<string|null>(null); const [failed,setFailed]=useState<string|null>(null);
  // A row hidden on revoke stays hidden only until the server's list is drawn again: an entry allowed again comes back.
@@ -37,7 +38,7 @@ export function StandingPermissions({company,agent,permissions,canRevoke,returnT
   toast(t('agentPermissionRevoked'));
   router.refresh();
  };
- return <section ref={own} className="dp-sec sp" aria-labelledby={`sp-h-${agent}`}><h3 className="dp-label" id={`sp-h-${agent}`}><span>{t('agentStandingPermissions')}</span></h3>
+ return <section ref={own} className="dp-sec sp" aria-labelledby={`sp-h-${agent}`}><Heading className="dp-label" id={`sp-h-${agent}`}><span>{t('agentStandingPermissions')}</span></Heading>
   <ul className="panel-card">{shown.map(permission=><li key={permission.entry} className="panel-row sp-row">
    <span className="panel-row__icon"><ShellIcon name="shield"/></span>
    <span className="panel-row__text"><span className="panel-row__t"><PermissionName permission={permission}/></span>

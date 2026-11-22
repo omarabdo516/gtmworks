@@ -1,5 +1,11 @@
 [
  {
+  "issue": 615,
+  "date": "2026-11-22",
+  "en": { "title": "An agent's settings in five groups", "body": "An agent's page in Settings now reads in five groups, Identity, How it works, Thinking, Voice, and Tools and skills, with Good morning as one row with its switch and time, and the voice's speed, Pause and Delete under Advanced." },
+  "ar": { "title": "إعدادات الوكيل في خمس مجموعات", "body": "صفحة الوكيل في الإعدادات بقت متقسمة خمس مجموعات: الهوية، وطريقة الشغل، والتفكير، والصوت، والأدوات والمهارات، وصباح الخير بقى سطر واحد فيه المفتاح والميعاد، وسرعة الصوت والإيقاف المؤقت والمسح تحت «متقدم»." }
+ },
+ {
   "issue": 465,
   "date": "2026-11-22",
   "en": { "title": "A waiting message with images reaches the agent", "body": "A message with images that waits while the agent is busy now starts with its images once the agent is free, and sending it again no longer removes or replaces them. An image that was already gone is not brought back." },
