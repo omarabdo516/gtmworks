@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { measuredTimes, shardFiles, shardSeconds } from '../scripts/browser-shards.mjs';
 
 // The browser shards split the suite by measured time, not by test count (#653): Playwright's own --shard cuts the
@@ -58,4 +61,22 @@ test('the measured times name only spec files the suite has', () => {
     assert.doesNotThrow(() => readFileSync(`tests/${file}`), `tests/${file} exists`);
     assert.ok(Number.isInteger(seconds) && seconds > 0, `${file}: whole seconds`);
   }
+});
+
+test('a shard lists its spec files as ci.sh runs it in CI, where the shard\'s JSON report has a file of its own', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'browser-shards-'));
+  const report = join(dir, 'times.json');
+  const env = { ...process.env, CI: 'true', GTMWORKS_TEST_LANES: '4', PLAYWRIGHT_JSON_OUTPUT_FILE: report };
+  const shards = [1, 2, 3, 4, 5, 6].map(shard => {
+    const run = spawnSync('node', ['scripts/browser-shards.mjs', `${shard}/6`], { encoding: 'utf8', env });
+    assert.equal(run.status, 0, run.stderr);
+    return run.stdout.trim().split('\n');
+  });
+  const files = shards.flat();
+  for (const file of files) assert.match(file, /^tests\/[a-z0-9-]+\.spec\.ts$/, file);
+  assert.equal(new Set(files).size, files.length, 'no spec file is in two shards');
+  assert.ok(files.includes('tests/engine-conversation.spec.ts') && files.includes('tests/first-run.spec.ts'));
+  // Listing writes nothing to the shard's report: only the run itself does.
+  assert.equal(existsSync(report), false);
+  rmSync(dir, { recursive: true, force: true });
 });
