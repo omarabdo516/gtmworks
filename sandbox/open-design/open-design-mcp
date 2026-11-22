@@ -1,0 +1,8 @@
+#!/bin/sh
+# Open Design's MCP command in the work sandbox (#544, ADR 0025), the command of the Open Design app's server entry: the
+# Engine runs it over its ssh route from the Agent's own folder (lib/open-design.mjs). It starts the Agent's Open Design
+# daemon unless one answers (daemon.mjs), then becomes Open Design's own stdio MCP server for that daemon.
+#   open-design-mcp <design profile> <key>
+set -eu
+url=$(node /usr/local/lib/gtmworks/open-design/daemon.mjs "$@")
+exec /opt/open-design/node /opt/open-design/app/dist/cli.js mcp --daemon-url "$url"

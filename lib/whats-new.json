@@ -84,6 +84,12 @@
   "ar": { "title": "المزوّدين بتوعك في قايمة واحدة", "body": "الإعدادات دلوقتي بتعرض كل اشتراك ومفتاح API الشركة متوصلة بيه، كل واحد بشعاره ونوعه وحالته؛ اختار واحد تشوف تفاصيله، أو وصّل مزوّد تاني من القايمة." }
  },
  {
+  "issue": 544,
+  "date": "2026-11-22",
+  "en": { "title": "Open Design is a ready-made app", "body": "Turn Open Design on for an agent in Apps, and the agent makes designs from a conversation in your company’s work folder, drawn with your company’s own model, a subscription sign-in or an API key alike." },
+  "ar": { "title": "Open Design بقى تطبيق جاهز", "body": "فعّل Open Design لوكيل من التطبيقات، والوكيل هيعمل تصميمات من المحادثة في فولدر شغل شركتك، بموديل شركتك نفسه، سواء تسجيل دخول باشتراك أو مفتاح API." }
+ },
+ {
   "issue": 520,
   "date": "2026-11-21",
   "en": { "title": "A Conversation opens cleanly in your own time zone", "body": "Outside UTC, a Conversation's message times now appear straight in your own time zone, without the page redrawing itself as it opens." },

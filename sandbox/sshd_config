@@ -23,3 +23,8 @@ AcceptEnv LANG LC_*
 # as the image's environment (sandbox/Dockerfile), which sshd does not pass on by itself.
 SetEnv HTTP_PROXY=http://exit:3128 HTTPS_PROXY=http://exit:3128 http_proxy=http://exit:3128 https_proxy=http://exit:3128 NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 NODE_USE_ENV_PROXY=1
 Subsystem sftp internal-sftp
+# The Open Design app (#544, ADR 0025): the Engine's ssh session for an Agent's Open Design server forwards one socket in
+# the work user's home back to the Engine's Run API, which is how Open Design's design runtime reaches the Company's
+# Engine. A socket a session that ended uncleanly left behind is replaced by the next session's.
+AllowStreamLocalForwarding remote
+StreamLocalBindUnlink yes

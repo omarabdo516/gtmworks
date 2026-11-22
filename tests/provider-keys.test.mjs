@@ -165,7 +165,8 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
    {agent:agentId(one.main),name:'Lead',written:true},{agent:agentId(one.agents[0]),name:'Writer',written:true},{agent:agentId(one.agents[1]),name:'Designer',written:false}]}});
   const own=new Set([one.space,one.main,...one.agents]);
   const asked=fake.settings.managementRequests.map(request=>({request:`${request.method} ${request.path}`,profile:profileOf(request.path)}));
-  for(const {request,profile} of asked) assert.ok(own.has(profile),`${request} names one of the Company's own profiles`);
+  // The profile list is read once, to know which Agents have a design profile (#544); every other request names a profile.
+  for(const {request,profile} of asked) assert.ok(own.has(profile)||request==='GET /api/profiles',`${request} names one of the Company's own profiles`);
   for(const name of [two.space,two.main,...two.agents]) assert.deepEqual(envOf(fake,name),{},`${name} holds no key`);
   for(const profile of [one.main,one.agents[0]]) {
    const steps=asked.filter(found=>found.profile===profile&&found.request.startsWith('PUT')).map(found=>found.request);

@@ -24,13 +24,13 @@ const cases = [...script.matchAll(/^ ([\w-]+)\) (.*);;$/gm)].map(([, name, comma
 
 test('the proof is one job with one matrix entry per area, every entry left to its end', () => {
   assert.equal(job.name, 'install-${{ matrix.area }}', 'the name says which area failed');
-  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'agents-sandbox', 'backup', 'backup-engines', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sandbox-rollback', 'sizes', 'engines-update', 'one-line', 'updater'] } });
+  assert.deepEqual(job.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'agents-sandbox', 'open-design', 'backup', 'backup-engines', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sandbox-rollback', 'sizes', 'engines-update', 'one-line', 'updater'] } });
   assert.equal(job.permissions.contents, 'read');
   // Its time limit is tests/ci-budgets.test.mjs's, one table for every job of the full check (#410).
 });
 
-const areaFns = ['first_install', 'companies', 'agents', 'agents_sandbox', 'backup', 'backup_engines', 'proxy', 'rollback', 'update', 'previous_archive', 'release_update', 'sandbox_update', 'staged_update', 'sandbox_rollback', 'sizes', 'engines_update', 'one_line', 'updater'];
-// The proof's eighteen areas (#553's agents-sandbox and backup-engines, #389's rollback, previous-archive, engines-update and staged-update, #483's release-update, #397's sandbox-update, #504's sandbox-rollback, #400's sizes, #443's updater the last) in the order it has always run them, then the measurement: all of them in subshells when no
+const areaFns = ['first_install', 'companies', 'agents', 'agents_sandbox', 'open_design', 'backup', 'backup_engines', 'proxy', 'rollback', 'update', 'previous_archive', 'release_update', 'sandbox_update', 'staged_update', 'sandbox_rollback', 'sizes', 'engines_update', 'one_line', 'updater'];
+// The proof's nineteen areas (#553's agents-sandbox and backup-engines, #544's open-design, #389's rollback, previous-archive, engines-update and staged-update, #483's release-update, #397's sandbox-update, #504's sandbox-rollback, #400's sizes, #443's updater the last) in the order it has always run them, then the measurement: all of them in subshells when no
 // area is named, one area when one is (#406, #411).
 const allAreas = [...areaFns, 'measure'];
 
@@ -50,6 +50,7 @@ test('the dispatch names every area once, in the matrix, the measurement and all
   assert.equal(dispatches.companies, 'companies');
   assert.equal(dispatches.agents, 'agents');
   assert.equal(dispatches['agents-sandbox'], 'agents_sandbox');
+  assert.equal(dispatches['open-design'], 'open_design');
   assert.equal(dispatches.backup, 'backup');
   assert.equal(dispatches['backup-engines'], 'backup_engines');
   assert.equal(dispatches.proxy, 'proxy');
@@ -222,7 +223,7 @@ test('every ./ci.sh install area the checks document names is a case of the disp
   const doc = readFileSync('docs/agents/checks.md', 'utf8');
   const dispatches = new Set([...script.matchAll(/^ ([\w-]+)\)/gm)].map(([, name]) => name));
   const areas = new Set([...doc.matchAll(/\.\/ci\.sh install ([a-z][a-z-]*)/g)].map(([, area]) => area));
-  assert.deepEqual([...areas].sort(), ['agents', 'agents-sandbox', 'backup', 'backup-engines', 'companies', 'engines-update', 'first-install', 'measure', 'one-line', 'previous-archive', 'proxy', 'release-update', 'rollback', 'sandbox-rollback', 'sandbox-update', 'sizes', 'staged-update', 'update', 'updater']);
+  assert.deepEqual([...areas].sort(), ['agents', 'agents-sandbox', 'backup', 'backup-engines', 'companies', 'engines-update', 'first-install', 'measure', 'one-line', 'open-design', 'previous-archive', 'proxy', 'release-update', 'rollback', 'sandbox-rollback', 'sandbox-update', 'sizes', 'staged-update', 'update', 'updater']);
   for (const area of areas) assert.ok(dispatches.has(area), `./ci.sh install ${area}`);
 });
 
@@ -233,7 +234,7 @@ test('backup and restore is an area of its own and the first-install job no long
   assert.doesNotMatch(first, /backup/, 'the first-install area runs no backup check');
   assert.match(script, /^ backup\) backup;;$/m, 'the proof has a backup area of its own');
   // The area is one command of the repo, and its sentence names it on a failure.
-  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| agents-sandbox \| backup \| backup-engines \| proxy \| rollback \| update \| previous-archive \| release-update \| sandbox-update \| staged-update \| sandbox-rollback \| sizes \| engines-update \| one-line \| updater \| measure\]/);
+  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /install \[first-install \| companies \| agents \| agents-sandbox \| open-design \| backup \| backup-engines \| proxy \| rollback \| update \| previous-archive \| release-update \| sandbox-update \| staged-update \| sandbox-rollback \| sizes \| engines-update \| one-line \| updater \| measure\]/);
 });
 
 // #553: the two areas that held the install job longest are each split in two, every check kept and run once: the agents
@@ -244,7 +245,7 @@ test('the agents and backup areas are each split in two, each half making the in
   const text = readFileSync(proof[0], 'utf8');
   const area = (name, next) => text.slice(text.indexOf(`\n${name}() {`), text.indexOf(next, text.indexOf(`\n${name}() {`)));
   const agents = area('agents', '\n# agents-sandbox:');
-  const sandbox = area('agents_sandbox', '\n# backup:');
+  const sandbox = area('agents_sandbox', '\n# open-design:');
   const backup = area('backup', '\n# backup-engines:');
   const engines = area('backup_engines', '\n# proxy:');
   for (const [name, body] of [['agents', agents], ['agents-sandbox', sandbox], ['backup', backup], ['backup-engines', engines]]) {

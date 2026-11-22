@@ -1,5 +1,5 @@
 export type AppCategory='ads'|'content'|'communication'|'analytics'|'sales'|'more';
-export type AppSource='engine'|'remote'|'own'|'custom';
+export type AppSource='engine'|'remote'|'sandbox'|'own'|'custom';
 /** `command`: a command server the Owner added, which runs in the Company's work sandbox (#459). */
 export type AppAuth='oauth'|'header'|'none'|'command';
 export type App={readonly key:string,readonly name:string,readonly mark:string,readonly category:AppCategory,readonly source:AppSource,readonly url?:string,readonly docs?:string,readonly auth?:AppAuth,readonly care?:'customers'|'money'};
