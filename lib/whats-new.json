@@ -6,6 +6,18 @@
   "ar": { "title": "Open Design بقى تطبيق جاهز", "body": "فعّل Open Design لوكيل من التطبيقات، والوكيل هيعمل تصميمات من المحادثة في فولدر شغل شركتك، بموديل شركتك نفسه، سواء تسجيل دخول باشتراك أو مفتاح API." }
  },
  {
+  "issue": 556,
+  "date": "2026-11-22",
+  "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
+  "ar": { "title": "البطاقة اللي تسيبها بعيد بتفضل قدامك", "body": "لما تشيل بطاقة على لوحة التسويق وتسيبها في عمود بعيد عن مكانها، اللوحة دلوقتي بتفضل مكان ما سبتها بدل ما تنطّ الأول لمكان البطاقة القديم." }
+ },
+ {
+  "issue": 520,
+  "date": "2026-11-21",
+  "en": { "title": "A Conversation opens cleanly in your own time zone", "body": "Outside UTC, a Conversation's message times now appear straight in your own time zone, without the page redrawing itself as it opens." },
+  "ar": { "title": "المحادثة بتفتح نضيف بتوقيتك انت", "body": "لو انت برا توقيت UTC، مواعيد الرسايل في المحادثة دلوقتي بتظهر على طول بتوقيتك انت، من غير ما الصفحة ترسم نفسها من الأول وهي بتفتح." }
+ },
+ {
   "issue": 478,
   "date": "2026-11-21",
   "en": { "title": "Stop ends the whole chain", "body": "Stop in a chat, or on a channel message an agent is working on, now also stops every job the agents handed each other from it, each shown as stopped, and nothing more starts after it." },

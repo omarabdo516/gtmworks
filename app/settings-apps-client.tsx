@@ -10,6 +10,7 @@ import { CompanyAgentFace } from '@/components/company-agent-face';
 import { SettingsIcon } from './settings-icons';
 import { toast } from './toast';
 import { appsChanged } from './company-apps-read';
+import { useAppsReader } from './apps-sheet-open';
 import type { AppAgent, AppCategory, CompanyApp } from '@/lib/app-catalogue.mjs';
 
 // Settings, Apps (#30; design-reference: appsHeadHTML, appsListHTML, appCardHTML, appDetailHTML, the app-agent and
@@ -116,7 +117,7 @@ export function AppDetail(props:{place:AppsPlace,company:string,owner:boolean,rt
  return props.item.source==='own'?<OwnTool place={props.place} company={props.company} owner={props.owner} rtl={props.rtl} item={props.item} text={props.text}/>:<CatalogueDetail {...props}/>;
 }
 function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFor}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text,failed:boolean,agent?:string}) {
- const say=sayer(text); const router=useRouter(); const {language}=useI18n();
+ const say=sayer(text); const router=useRouter(); const reader=useAppsReader(company); const {language}=reader;
  const [run,setRun]=useState<Run>(idle); const [asking,setAsking]=useState(false); const [error,setError]=useState(failed?'signInFailed':'');
  const [token,setToken]=useState(''); const [values,setValues]=useState<Record<string,string>>({});
  const own=item.agents.filter(agent=>agent.own);
@@ -135,7 +136,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
  // Settings draws its apps on the server and reads them again with the page; the sidebar's count and the sheet read
  // them in the browser.
  const address=place.kind==='address';
- const refreshApps=()=>{ void appsChanged(company,language); if(address) router.refresh(); };
+ const refreshApps=()=>{ void appsChanged(reader); if(address) router.refresh(); };
  // The vendor's window, and the sign-in being followed in it, for the page closing under it (the sheet closed, Settings
  // left): that sign-in is cancelled, its window closed, and the person told.
  const vendor=useRef<Window|null>(null);
@@ -228,7 +229,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
   if(!answer.ok) { setError(`error.${String(answer.body.error||'appsFailed')}`); return; }
   toast(say(custom?'removed':'disconnected',item.name),{icon:'x'});
   if(place.kind==='address') router.replace(overlayHref(place.slug,'apps')); else place.back(item.key);
-  void appsChanged(company,language); if(address) router.refresh();
+  void appsChanged(reader); if(address) router.refresh();
  });
  const busy=pending||waiting;
  // Connect on an app that is off signs in for every picked Agent, in the list's order; none picked is said first.
@@ -309,7 +310,7 @@ function CatalogueDetail({place,company,owner,rtl,item,text,failed,agent:askedFo
 // then opens the vendor's window as every app does. The token is kept in this form until the answer and cleared at once;
 // gtmworks never stores or returns it.
 function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:string,owner:boolean,rtl:boolean,item:AppItem,text:Text}) {
- const say=sayer(text); const router=useRouter(); const {language}=useI18n();
+ const say=sayer(text); const router=useRouter(); const reader=useAppsReader(company);
  const own=item.agents.filter(agent=>agent.own);
  const [name,setName]=useState(''); const [address,setAddress]=useState('');
  const [kind,setKind]=useState<'oauth'|'header'|'none'|'command'>('oauth'); const [token,setToken]=useState('');
@@ -324,7 +325,7 @@ function OwnTool({place,company,owner,rtl,item,text}:{place:AppsPlace,company:st
  const nameOf=(id:string)=>item.agents.find(agent=>agent.id===id)?.name??'';
  const vendor=useRef<Window|null>(null); const left=useRef(following);
  const addressPage=place.kind==='address';
- const refreshApps=()=>{ void appsChanged(company,language); if(addressPage) router.refresh(); };
+ const refreshApps=()=>{ void appsChanged(reader); if(addressPage) router.refresh(); };
  useEffect(()=>{ left.current=following; });
  // Closing the page under an OAuth sign-in cancels it, as every app's page does.
  useEffect(()=>()=>{

@@ -127,7 +127,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const question=asking&&company?<FirstRunChoice slug={company.slug} company={company.id} companyName={company.name} personName={personName} lead={main?{name:main.name,connection_id:main.connection_id}:null} mark={mark} brand={<>gtm<span>works</span></>} finish={chooseWorkMode}/>:null;
  const frame=<Frame sidebar={sidebar} title={chat?t('chats'):title} breadcrumb={chat?undefined:breadcrumb} chat={chat}>{children}</Frame>;
  // The apps sheet sits around the whole frame, so the sidebar, the account menu and every composer's "+" open it (#202).
- const framed=company?.id?<AppsSheetProvider company={company.id} owner={owner} rtl={language==='ar'}>{frame}</AppsSheetProvider>:frame;
+ const framed=company?.id?<AppsSheetProvider company={company.id} person={personId} owner={owner} rtl={language==='ar'}>{frame}</AppsSheetProvider>:frame;
  const shown=question?<><div style={{display:'contents'}} inert>{framed}</div>{question}</>:framed;
  // The composer's "+" menu calls the Agents this Member sees, as the sidebar lists them (#153); the "@" list offers the
  // same Agents with the line under each name, their state and role (#154; design-reference: mentionMenu). Each Agent
