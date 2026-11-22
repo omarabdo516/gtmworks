@@ -70,4 +70,5 @@ test('the design profile works in the Agent\'s own folder with the work tools an
  assert.ok(config.platform_toolsets.api_server.includes('terminal'));
  assert.ok(noAgentGets.every(name=>!config.platform_toolsets.api_server.includes(name)));
  assert.ok(config.agent.disabled_toolsets.includes('delegation'));
+ assert.ok(!config.platform_toolsets.api_server.includes('clarify')&&config.agent.disabled_toolsets.includes('clarify'),'no question nobody would read');
 });

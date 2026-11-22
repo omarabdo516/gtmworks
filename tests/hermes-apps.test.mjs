@@ -286,6 +286,7 @@ test('Open Design gives the Agent a design profile with a key of its own, and ru
   assert.notEqual(design.key,target.key,'never the install\'s key');
   assert.deepEqual(design.config.terminal,{cwd:`/work/${target.profile}`},'it works in the Agent\'s own folder');
   assert.deepEqual(design.config.platform_toolsets,designProfileConfig(target.profile).platform_toolsets);
+  assert.ok(!design.config.platform_toolsets.api_server.includes('clarify'),'a design Run asks no question nobody would read');
   const entry=servers()['open-design'];
   assert.deepEqual({command:entry.command,args:entry.args},openDesignServer({profile:target.profile,engine:new URL(fake.address).hostname,key:design.key}));
   assert.equal(entry.enabled,true);
@@ -302,7 +303,7 @@ test('Open Design gives the Agent a design profile with a key of its own, and ru
  } finally { await fake.close(); }
 });
 
-test('a design profile that no longer takes the entry\'s key gets a new one, and off removes the entry and the design profile', async () => {
+test('a design profile that no longer takes the entry\'s key gets a new one, and off removes the entry and takes the key away, keeping the profile\'s history', async () => {
  const {fake,target,servers}=await companyEngine();
  try {
   assert.equal(await prepareApp(target,'open-design',null),null);
@@ -315,7 +316,9 @@ test('a design profile that no longer takes the entry\'s key gets a new one, and
   assert.ok(servers()['open-design'].args.at(-1).endsWith(`'${after}'`));
   assert.deepEqual(await disconnectApp(target,'open-design'),{state:'disconnected'});
   assert.equal(servers()['open-design'],undefined);
-  assert.equal(fake.settings.profiles.has(name),false,'the design profile is removed');
+  assert.equal(fake.settings.profiles.has(name),true,'the design profile stays, with the Runs its usage counts');
+  assert.notEqual(fake.settings.profiles.get(name).key,after,'the key the sandbox kept runs nothing');
+  assert.match(fake.settings.profiles.get(name).key,/^[A-Za-z0-9_-]{43}$/);
   assert.deepEqual(await disconnectApp(target,'open-design'),{state:'disconnected'},'again: nothing left, nothing refused');
  } finally { await fake.close(); }
 });
@@ -342,10 +345,10 @@ test('the design profile gets its Agent\'s provider key and model, and later key
   const removed=await removeProviderKey(target,{space:spaceOf,profiles:[target.profile],provider:'anthropic'});
   assert.equal(removed.state,'removed');
   assert.equal(design.env.ANTHROPIC_API_KEY,undefined,'a removed key leaves the design profile too');
-  // An Agent with no Open Design: its writes ask for no design profile and fail nothing.
+  // Turned off, the design profile keeps following the Agent's model, so turning it on again starts from the Agent's.
   await disconnectApp(target,'open-design');
   assert.equal((await writeProfileModel(target,{profile:target.profile,provider:'openrouter',model:'x/y'})).state,'saved');
-  assert.equal(fake.settings.profiles.has(name),false);
+  assert.deepEqual([design.provider,design.model],['openrouter','x/y']);
  } finally { await fake.close(); }
 });
 

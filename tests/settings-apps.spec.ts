@@ -181,6 +181,7 @@ test('the Owner turns Open Design on for Lead with no window; it runs in the wor
  expect(design,'Lead\'s design profile is made').toBeTruthy();
  expect(design!.key).toMatch(/^[A-Za-z0-9_-]{43}$/);
  expect(design!.key).not.toBe(fake.settings.key);
+ const designKey=design!.key;
  const entry=servers()['open-design'] as {command:string,args:string[],enabled:boolean};
  expect(entry.command).toBe('ssh');
  expect(entry.args).toContain('pn@sandbox');
@@ -192,7 +193,7 @@ test('the Owner turns Open Design on for Lead with no window; it runs in the wor
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings\?section=apps$/);
  await expect(card(page,'Open Design').locator('.app__state')).toHaveText('Not connected');
  expect(servers()['open-design'],'off removes the server').toBeUndefined();
- expect(fake.settings.profiles.has(`od-${profile}`),'and Lead\'s design profile').toBe(false);
+ expect(fake.settings.profiles.get(`od-${profile}`)?.key,'and the key the sandbox kept runs nothing').not.toBe(designKey);
  expect(JSON.parse(query(`select actor_id,action,details->>'app' as app from public.company_log where company_id='${company}' and action in ('app_connected','app_disconnected') and details->>'app'='open-design' order by id`)))
   .toEqual([{actor_id:omar,action:'app_connected',app:'open-design'},{actor_id:omar,action:'app_disconnected',app:'open-design'}]);
 });
