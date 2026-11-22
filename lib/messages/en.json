@@ -272,7 +272,7 @@
   "theme": "Theme",
   "light": "Light",
   "dark": "Dark",
-  "device": "Device",
+  "device": "System",
   "interfaceLanguage": "Interface language",
   "english": "English",
   "arabic": "Arabic",
@@ -1533,5 +1533,14 @@
   "goodMorningWaitTwo": "Two things waiting on you",
   "goodMorningWaitingTeam": "Waiting on the team",
   "goodMorningWaitingYou": "Waiting on you",
-  "goodMorningTitle": "Good morning · {0}"
+  "goodMorningTitle": "Good morning · {0}",
+  "settingsAboutApp": "About",
+  "aboutVersionSource": "Built from source",
+  "aboutWhatsNewOlder": "{0} earlier changes",
+  "aboutLicenses": "Licenses",
+  "aboutProduct": "gtmworks",
+  "aboutLicenseMit": "MIT License",
+  "aboutThirdParty": "Third-party notices",
+  "aboutThirdPartyD": "The code, fonts and logos gtmworks includes",
+  "aboutOpens": "opens in a new tab"
 }

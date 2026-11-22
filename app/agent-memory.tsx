@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
-import { toast } from '@/app/toast';
+import { afterDrawn, toast, toastTime } from '@/app/toast';
 import type { MemoryNote } from '@/lib/engine.mjs';
 
 // One Agent's memory (#350; design-reference: memoryHTML, memNoteHTML): the notes its own Engine profile holds, or the
@@ -18,8 +18,8 @@ import type { MemoryNote } from '@/lib/engine.mjs';
 // search that finds nothing offers "Clear search", and Escape in a filled field does the same. The intro's second line
 // and the way to Company knowledge (knowledgeHref, from lib/settings-overlay.mjs) follow what the person may do.
 export type AgentMemoryProps={company:string,agent:{id:string,name:string},notes:MemoryNote[],main:boolean,canReset:boolean,canEdit:boolean,canForget:boolean,knowledgeHref?:string};
-// The reference's toast with an action stays six seconds (design-reference/app.js: toast); the removal happens then.
-const forgetDelay=6000;
+// The reference's toast with an action stays six seconds (design-reference/app.js: toast); the removal happens then, on
+// the toast's own clock, which runs from the frame it is drawn in (#561), so Undo never shows after the note is gone.
 // The action's accessible name carries the note's first line, as the reference's does (design-reference: memNoteHTML).
 const short=(text:string)=>text.length>40?`${text.slice(0,40)}…`:text;
 export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget,knowledgeHref}:AgentMemoryProps) {
@@ -40,7 +40,7 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  // Engine when the toast ends. The target is kept with the note, so a panel that stays mounted while another Agent is
  // drawn removes the note from the Agent it was forgotten for, never from the Agent showing now.
  type ForgetTarget={company:string,agent:string};
- const forgetting=useRef<{note:MemoryNote,target:ForgetTarget,timer:number}|null>(null);
+ const forgetting=useRef<{note:MemoryNote,target:ForgetTarget,stop:()=>void}|null>(null);
  // The question takes the focus, on Cancel (the harmless answer); closing it gives it back to "Reset memory".
  useEffect(()=>{
   if(asking) cancelButton.current?.focus();
@@ -122,7 +122,7 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  useEffect(()=>{
   const leave=()=>{
    const waiting=forgetting.current; if(!waiting) return;
-   forgetting.current=null; window.clearTimeout(waiting.timer); void removeLatest.current(waiting.target,waiting.note,true);
+   forgetting.current=null; waiting.stop(); void removeLatest.current(waiting.target,waiting.note,true);
   };
   window.addEventListener('pagehide',leave);
   return ()=>{ window.removeEventListener('pagehide',leave); leave(); };
@@ -130,18 +130,18 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  const forget=(note:MemoryNote)=>{
   // A second forget while a toast is up removes the first note at once, as its toast gives way to the new one.
   const earlier=forgetting.current;
-  if(earlier) { forgetting.current=null; window.clearTimeout(earlier.timer); void removeLatest.current(earlier.target,earlier.note); }
+  if(earlier) { forgetting.current=null; earlier.stop(); void removeLatest.current(earlier.target,earlier.note); }
   const target={company,agent:agent.id};
   const at=matched.findIndex(each=>each.id===note.id);
   const next=matched[at+1]??matched[at-1]??null;
   setHidden(ids=>[...ids,note.id]); setForgetError(false); focusAfter.current={forget:next?.id??'search'};
-  const timer=window.setTimeout(()=>{ forgetting.current=null; void removeLatest.current(target,note); },forgetDelay);
-  forgetting.current={note,target,timer};
+  const stop=afterDrawn(toastTime.action,()=>{ forgetting.current=null; void removeLatest.current(target,note); });
+  forgetting.current={note,target,stop};
   toast(t('memoryForgot',agent.name),{action:{label:t('memoryUndo'),run:()=>undo()}});
  };
  const undo=()=>{
   const waiting=forgetting.current; if(!waiting) return;
-  forgetting.current=null; window.clearTimeout(waiting.timer);
+  forgetting.current=null; waiting.stop();
   reveal(waiting.note.id); focusAfter.current={forget:waiting.note.id};
   toast(t('memoryRestored'));
  };
