@@ -58,6 +58,7 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
  // The page behind keeps its scroll: closing returns to it as it was left.
  const close=useCallback(()=>{ if(!holdLeave(t('settingsSaveFirst'))) leaveThen(()=>router.push(leaveOverlay(slug),{scroll:false})); },[leaveThen,router,slug,t]);
  const [continued]=useState(()=>drawn>0);
+ const keepFocus=useRef(continued);
  useLayoutEffect(()=>{ const frame=box.current; drawn++; return ()=>{ drawn--; lastFocus=frame?.contains(document.activeElement)?document.activeElement?.id||undefined:undefined; giveFocusBack(); }; },[]);
  useWorkspaceInert();
  // Opening moves focus into the overlay: to the element the page names (an Agent's page: its Settings tab, as the
@@ -67,7 +68,9 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
  // and focused once it is there.
  useEffect(()=>{
   // The same overlay drawn again for the next address keeps the focus on the control that had it.
-  const kept=continued&&lastFocus?document.getElementById(lastFocus):null;
+  // Once only: the next page the overlay draws focuses as it always does.
+  const kept=keepFocus.current&&lastFocus?document.getElementById(lastFocus):null;
+  keepFocus.current=false;
   if(kept&&box.current?.contains(kept)) { kept.focus({preventScroll:true}); return; }
   const named=initialFocus&&document.getElementById(initialFocus);
   if(named) { named.focus({preventScroll:true}); return; }
@@ -83,7 +86,7 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
   watch.observe(box.current,{childList:true,subtree:true});
   const stop=setTimeout(()=>watch.disconnect(),3000);
   return ()=>{ watch.disconnect(); clearTimeout(stop); };
- },[initialFocus,continued]);
+ },[initialFocus]);
  useEffect(()=>{
   const keys=(event:globalThis.KeyboardEvent)=>{
    if(event.key!=='Escape'||event.defaultPrevented) return;
