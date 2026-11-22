@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import { ProviderKeys, SpeechToText, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
+import { SpeechToText, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { ToastHost } from '@/app/toast';
 import en from '@/lib/messages/en.json';
@@ -23,10 +23,6 @@ const options: ModelOption[] = [
   { provider: 'openrouter', providerName: 'OpenRouter', model: 'openai/gpt-5.5' },
   { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-6' },
 ];
-const keysData = {
-  keys: [{ provider: 'openrouter', label: 'OpenRouter', set: false }, { provider: 'anthropic', label: 'Anthropic', set: true }],
-  waiting: [{ agent: 'a-1', name: 'Writer' }], leftover: null, unknown: null,
-};
 const agent = (extra: Partial<AgentModels> = {}): AgentModels => ({
   id: 'a-1', name: 'Writer', own: true, choosable: true, model: 'openrouter/openai/gpt-5.5', choice: null,
   subagents: false, options, effort: 'medium', settings: [], ...extra,
@@ -37,30 +33,6 @@ const stub = (body: object = { ok: true }) => {
   return sent;
 };
 const renderNode = (node: React.ReactNode, language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>{node}</LanguageProvider>);
-
-test('the Owner gives a provider key: it is sent once and never drawn, and each provider says whether one is set', async () => {
-  const sent = stub();
-  const screen = await renderNode(<ProviderKeys company={company} owner data={keysData}/>);
-  await expect.element(screen.getByText(en.settingsModelsKeyUnset, { exact: true })).toBeVisible();
-  await expect.element(screen.getByText(en.settingsModelsKeySet, { exact: true })).toBeVisible();
-  await screen.getByRole('button', { name: en.settingsModelsKeyGive }).click();
-  await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
-  await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
-  await expect.poll(() => sent.length).toBe(1);
-  expect(sent[0]).toEqual({ url: '/api/provider-keys', body: { company, provider: 'openrouter', intent: 'set', value: key } });
-  await expect.poll(() => refresh.mock.calls.length).toBe(1);
-  expect(document.body.textContent).not.toContain(key);
-  await expect.poll(() => (document.getElementById('mdl-key-openrouter-value') as HTMLInputElement | null)?.value ?? '').toBe('');
-  await expect.element(screen.getByText(new RegExp(en.settingsModelsKeyWaiting))).toBeVisible();
-  await screen.unmount();
-  await renderNode(<ProviderKeys company={company} owner={false} data={keysData}/>, 'ar');
-  expect(document.querySelector('#mdl-key-row-openrouter input')).toBeNull();
-  expect(document.querySelector('#mdl-key-row-openrouter button')).toBeNull();
-  await expect.element(page.getByText(ar.settingsModelsKeyOwnerOnly)).toBeVisible();
-  await expect.element(page.getByText(ar.settingsModelsKeySet, { exact: true })).toBeVisible();
-  // The keys box says what a key is: paid per use (#438).
-  expect(document.querySelector('#md-keys > .set-hint:last-child')?.textContent).toBe(`${ar.settingsModelsKeyWhat} ${ar.settingsModelsProviderKeysHint}`);
-});
 
 // #430: the Company's speech-to-text provider. Deepgram is first; the Owner picks one and pastes its key, which is sent
 // once and never drawn; the provider in use can be removed; a member reads which one is in use with no control.
@@ -288,13 +260,7 @@ const tileOf = (row: Element | null) => {
   const tile = row?.querySelector('.tool-tile');
   return [tile?.getAttribute('aria-label'), tile?.querySelector('img.tool-logo')?.getAttribute('src') ?? tile?.textContent];
 };
-test('every provider key row and default model row shows its provider\'s logo, named, or its first letter', async () => {
-  const keys = [{ provider: 'openrouter', label: 'OpenRouter', set: false }, { provider: 'anthropic', label: 'Anthropic', set: true },
-    { provider: 'nvidia', label: 'NVIDIA NIM', set: false }, { provider: 'moa', label: 'Mixture of Agents', set: false }];
-  await renderNode(<ProviderKeys company={company} owner data={{ ...keysData, keys }}/>);
-  expect(keys.map(row => tileOf(document.getElementById(`mdl-key-row-${row.provider}`)))).toEqual([
-    ['OpenRouter', '/logos/lobe/openrouter-color.svg'], ['Anthropic', '/logos/lobe/anthropic.svg'],
-    ['NVIDIA NIM', '/logos/lobe/nvidia-color.svg'], ['Mixture of Agents', 'M']]);
+test('every default model row shows its provider\'s logo out of the radio\'s name', async () => {
   // A model choice shows its provider's logo too, out of the radio's name, which says the provider in words already.
   const screen = await renderNode(<DefaultModel company={company} owner models={{ model: null, options }}/>);
   expect(options.map(option => tileOf(document.getElementById(`mdl-def-${option.provider}-${option.model}`)))).toEqual([

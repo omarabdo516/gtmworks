@@ -59,12 +59,15 @@ const openKeyField=(row:Locator)=>expect(async()=>{
 test('the Owner gives a provider key and the Engine holds it; the page never draws it', async({page})=>{
  language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
  await openModels(page,'omar@example.com');
+ // A provider with no key is connected from the Providers list's last row (#617).
+ await expect(async()=>{ await page.locator('#pv-row-add').click(); await expect(page.locator('#pv-d-add')).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
  const row=page.locator('#mdl-key-row-anthropic');
  await expect(row.locator('#mdl-key-anthropic-state')).toHaveText('No key yet');
  await openKeyField(row);
  await page.locator('#mdl-key-anthropic-value').fill(key);
  await row.getByRole('button',{name:'Save key'}).click();
- await expect(row.locator('#mdl-key-anthropic-state')).toHaveText('A key is set');
+ // The key is then a Provider of its own, whose details open in the row's place, with no field left.
+ await expect(page.locator('#pv-d-key-anthropic #mdl-key-anthropic-state')).toHaveText('A key is set');
  await expect(page.locator('#mdl-key-anthropic-value')).toHaveCount(0);
  expect(fake.settings.profiles.get(space)?.env?.ANTHROPIC_API_KEY).toBe(key);
  expect(await page.content()).not.toContain(key);
@@ -137,7 +140,7 @@ test('the Owner turns sub-agents on for one Agent; the profile waits for the too
  const contributor=await browser.newContext(); const see=await contributor.newPage();
  await openModels(see,'reviewer@example.com');
  // The section's parts arrive in streamed segments that hydrate into place: wait for the key row to be shown.
- await expect(see.locator('#mdl-key-row-anthropic')).toBeVisible();
+ await expect(async()=>{ await see.locator('#pv-row-key-anthropic').click(); await expect(see.locator('#mdl-key-row-anthropic')).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
  await expect(see.locator('#mdl-key-anthropic-state')).toHaveText('A key is set');
  await expect(see.getByRole('button',{name:'Save key'})).toHaveCount(0);
  await expect(see.getByRole('combobox',{name:'Model for Writer'})).toHaveCount(0);
@@ -156,15 +159,24 @@ test('every provider and subscription shows its logo from the install, in both t
  for(const theme of ['light','dark'] as const) {
   await page.emulateMedia({colorScheme:theme});
   if(theme==='dark') { language(`update public.people set language='ar' where id='20000000-0000-0000-0000-000000000001'`); await page.reload(); }
-  const rows=page.locator('#md-keys .md-key');
+  // What is not connected yet, under the Providers list's last row (#617): each subscription and provider by its mark.
+  const add=page.locator('#pv-d-add');
+  await expect(async()=>{ await page.locator('#pv-row-add').click(); await expect(add).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+  const rows=add.locator(':is(.md-key, .sub-row)');
   await expect(rows.first()).toBeVisible();
   for(const row of await rows.all()) {
    const name=await row.locator('.panel-row__t').textContent();
    await expect(row.getByRole('img',{name:name!,exact:true})).toBeVisible();
   }
-  for(const name of ['ChatGPT','Claude']) await expect(page.locator('#md-subscriptions').getByRole('img',{name,exact:true}).locator('.tool-logo')).toBeVisible();
-  await expect.poll(()=>page.locator('#md-keys img.tool-logo').evaluateAll(images=>images.length>0&&images.every(image=>(image as HTMLImageElement).complete&&(image as HTMLImageElement).naturalWidth>0))).toBe(true);
-  await page.locator('#md-subscriptions').scrollIntoViewIfNeeded();
+  await expect.poll(()=>add.locator('img.tool-logo').evaluateAll(images=>images.length>0&&images.every(image=>(image as HTMLImageElement).complete&&(image as HTMLImageElement).naturalWidth>0))).toBe(true);
+  // A held one shows its mark in its details' header.
+  const held=page.locator('.pv-row[id^="pv-row-key-"], .pv-row[id^="pv-row-sub-"]');
+  for(const row of await held.all()) {
+   await row.click();
+   const name=(await row.locator('.panel-row__t').textContent())!;
+   await expect(page.getByRole('region',{name,exact:true}).locator('.pv-head').getByRole('img',{name,exact:true}).locator('.tool-logo')).toBeVisible();
+  }
+  await page.locator('#md-providers').scrollIntoViewIfNeeded();
   await testInfo.attach(`models-${theme}`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
  }
  expect(outside).toEqual([]);
