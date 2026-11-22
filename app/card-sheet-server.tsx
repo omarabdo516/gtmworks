@@ -23,7 +23,7 @@ export async function cardSheet(db:Db,{company,card,slug,me,canWrite,t,language}
  const [{data,count},{data:open},{data:refused},people,chat]=await Promise.all([
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).eq('card_id',card).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logPageSize),
   db.from('note_runs').select('note_id').eq('company_id',company).eq('card_id',card).is('outcome',null).limit(1),
-  db.from('note_runs').select('note_id,agent_name,outcome').eq('company_id',company).eq('card_id',card).in('outcome',['no_model','no_credit','key_refused','model_missing']),
+  db.from('note_runs').select('note_id,agent_name,outcome').eq('company_id',company).eq('card_id',card).in('outcome',['no_model','no_credit','key_refused','model_missing','no_access']),
   logPeople(db,company,[card]),
   sheetChat(db,company,card,me),
  ]);

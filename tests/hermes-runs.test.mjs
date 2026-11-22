@@ -125,11 +125,14 @@ test('a run that failed because the Engine has no model provider says so; any ot
  } finally { await fake.close(); }
 });
 
-test('a run that failed for no credit, a refused key or sign-in, or a missing model says which; any other failure does not',async()=>{
+test('a run that failed for no credit, a refused key or sign-in, a missing model or no account left says which; any other failure does not',async()=>{
  const fake=await fakeHermes(); fake.settings.ending='failed';
  try {
   const run=await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'});
-  for(const [sentence,reason] of [[creditExhaustedError,'credit'],[apiKeyRefusedError,'key'],[signInRefusedError,'key'],[modelMissingError,'model']]) {
+  for(const [sentence,reason] of [[creditExhaustedError,'credit'],[apiKeyRefusedError,'key'],[signInRefusedError,'key'],[modelMissingError,'model'],
+   // #622: every account of the model, and the Fallback model's when there is one, ran out (the pinned Engine's
+   // exhausted rate-limit copy, agent/turn_failure_copy.py), after one attempt or several.
+   [fake.settings.noAccountText,'access'],['Claude is rate-limiting requests right now — it looks temporarily unavailable.','access']]) {
    fake.settings.failure=sentence;
    assert.equal((await readRun({...connection(fake),run})).modelRefused,reason);
    assert.equal((await engineFor(connection(fake)).read(run)).modelRefused,reason);

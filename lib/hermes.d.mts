@@ -6,7 +6,7 @@ export type HermesConnection={address:string,profile:string,key:string};
 export const startUnknown:{readonly state:'unknown'};
 export function startRun(message:HermesConnection&{input:string,instructions?:string,history?:import('./engine.mjs').HistoryEntry[],sessionKey:string,idempotencyKey:string,retry?:boolean}):Promise<string|null|{readonly state:'unknown'}>;
 export type RunUsage={input:number,output:number};
-export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null,question?:import('./engine.mjs').RunQuestion,noModel?:true,modelRefused?:'credit'|'key'|'model'}>;
+export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null,question?:import('./engine.mjs').RunQuestion,noModel?:true,modelRefused?:'credit'|'key'|'model'|'access'}>;
 export function readSession(connection:import('./engine.mjs').EngineConnection,session:string):Promise<import('./engine.mjs').SessionRead>;
 export type UsageModel={model:string,input:number,output:number,sessions:number};
 export type ProfileUsage={state:'found',input:number,output:number,sessions:number,models:UsageModel[]}|{state:'refused'|'unreachable',input:null,output:null,sessions:null,models:null};
@@ -68,6 +68,9 @@ export function readConfig(connection:import('./engine.mjs').EngineConnection):P
 export function readSavedConfig(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
 export function readConfigDefaults(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',config:Record<string,unknown>}|{state:'refused'|'unreachable'|'failed',config:null}>;
 export function readConfigSchema(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',schema:{fields:Record<string,{type?:string,options?:unknown[]}>,category_order?:string[]}}|{state:'refused'|'unreachable'|'failed',schema:null}>;
+export function readFallbackChain(connection:import('./engine.mjs').EngineConnection):Promise<{state:'found',chain:{provider:string,model:string}[],legacy:boolean}|{state:'refused'|'unreachable'|'failed',chain:null,legacy:false}>;
+export function writeFallbackChain(connection:import('./engine.mjs').EngineConnection,change:{chain:{provider:string,model:string}[],legacy?:boolean}):Promise<{state:'saved'|'mismatch'|'written'|'refused'|'unreachable'|'failed'}>;
+export function sameChain(one:{provider:string,model:string}[],other:{provider:string,model:string}[]):boolean;
 export function writeConfig(connection:import('./engine.mjs').EngineConnection,config:Record<string,unknown>):Promise<{state:'written'|'refused'|'unreachable'|'failed'}>;
 export type VoiceChoice={id:string,name:string,label:string};
 export type VoiceList={state:'found',available:boolean,voices:VoiceChoice[],error?:string}|{state:'refused'|'unreachable'|'failed',available:false,voices:[]};

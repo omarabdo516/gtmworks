@@ -77,10 +77,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // of its provider switched on and not exhausted; an account in `outOfQuota` answers it with a usage limit, so the Engine
   // marks it exhausted and sends the same model call on the next one, recording the move in `switches` (GET
   // /api/credentials/pool/switches), and the Run's one reply is made once on the account that answered (`answeredOn`).
-  // With none left the Run fails with `noAccountText`.
+  // With none left, the Run walks the fallback chain its profile's own config holds (#622; v0.23.0 `fallback_providers`
+  // and the older `fallback_model`, loaded for every Run, agent/turn_recovery.py), once and in order: each entry's
+  // provider's accounts in turn, recorded in `fallbacks`. With no chain, or every entry's accounts out of quota too, the
+  // Run fails with `noAccountText`, the pinned Engine's exhausted rate-limit copy (agent/turn_failure_copy.py). Each model
+  // call names the account and its provider (`modelCalls`).
   outOfQuota:/** @type {Set<string>} */(new Set()),switches:/** @type {{id:string,provider:string,from:string,to:string,at:number}[]} */([]),
-  answeredOn:/** @type {Map<string,string>} */(new Map()),modelCalls:/** @type {{run:string,account:string}[]} */([]),
-  noAccountText:'You have hit your usage limit on every account.',
+  answeredOn:/** @type {Map<string,string>} */(new Map()),modelCalls:/** @type {{run:string,account:string,provider?:string,model?:string}[]} */([]),
+  fallbacks:/** @type {{run:string,provider:string,model:string}[]} */([]),
+  noAccountText:'ChatGPT rate-limited every one of 3 attempts — its usage limit resets in 4h 12m. Send /retry after that, or switch models with /model. To avoid this in future, add a backup provider with `hermes fallback add`.\n\nProvider said: You have hit your usage limit.',
   configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
   configWriteFail:/** @type {Set<string>} */(new Set()),
   // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal
@@ -293,16 +298,27 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      if(asks&&enabledToolsets(profileOf(runProfile)?.config).includes('cronjob')) cronStore(runProfile).push(cronJob({...asks,origin:{platform:'api_server'}}));
      run={id:`run_${instance}_${settings.runs.length+1}`,profile:runProfile,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
      const runProvider=sent.provider??profileOf(runProfile)?.provider;
+     const runModel=sent.model??profileOf(runProfile)?.model;
      const accounts=(settings.defaultPool[runProvider]||[]).filter(row=>row.auth_type==='oauth');
-     if(accounts.length) {
+     // One provider's accounts in the pool's order: each switched on and not exhausted is asked until one has quota.
+     const tryAccounts=(provider,model,rows,{record})=>{
       let using=null;
-      for(const row of accounts) {
+      for(const row of rows) {
        if(row.off||row.last_status==='exhausted') continue;
-       settings.modelCalls.push({run:run.id,account:row.id});
-       if(using) settings.switches.push({id:randomUUID().replaceAll('-',''),provider:runProvider,from:using.id,to:row.id,at:Date.now()/1000});
+       settings.modelCalls.push({run:run.id,account:row.id,provider,model});
+       if(using&&record) settings.switches.push({id:randomUUID().replaceAll('-',''),provider,from:using.id,to:row.id,at:Date.now()/1000});
        using=row;
-       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); break; }
+       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); return true; }
        row.last_status='exhausted';
+      }
+      return false;
+     };
+     if(accounts.length&&!tryAccounts(runProvider,runModel,accounts,{record:true})) {
+      const saved=profileOf(runProfile)?.config||{};
+      const entries=raw=>(Array.isArray(raw)?raw:raw&&typeof raw==='object'?[raw]:[]).filter(entry=>entry?.provider&&entry?.model);
+      for(const entry of [...entries(saved.fallback_providers),...entries(saved.fallback_model)]) {
+       settings.fallbacks.push({run:run.id,provider:entry.provider,model:entry.model});
+       if(tryAccounts(entry.provider,entry.model,settings.defaultPool[entry.provider]||[],{record:false})) break;
       }
       if(!settings.answeredOn.has(run.id)) run.outOfAccounts=true;
      }
