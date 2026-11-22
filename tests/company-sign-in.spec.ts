@@ -32,8 +32,10 @@ test('the Owner signs the company in to ChatGPT and out again; a member only see
   // A member: the state, no button, and the server refuses a start.
   const context=await browser.newContext(); const other=await context.newPage();
   await signIn(other,'multi@example.com','/c/aleem/settings?section=models');
-  // Nothing is connected yet, and a member has no row to connect one (#617).
-  await expect(other.locator('#pv-none')).toHaveText(en.providersNone);
+  // No subscription is connected yet, and a member has no row to connect one (#617). This Company has no space in the
+  // Engine for keys, so they read as unread rather than as nothing connected.
+  await expect(other.locator('#pv-keys-unread')).toHaveText(en.settingsModelsKeyUnread);
+  await expect(other.locator('#md-providers .pv-row')).toHaveCount(0);
   await expect(other.locator('#md-providers').getByRole('button')).toHaveCount(0);
   const refused=await other.request.post('/api/company-sign-in',{data:{company:aleem,provider:'openai-codex',intent:'start'}});
   expect(refused.status()).toBe(403);
