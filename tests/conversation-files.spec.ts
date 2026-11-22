@@ -135,10 +135,14 @@ test('an image turn that waited, its start unknown, keeps its image and starts w
   const files=()=>rows<{path:string}>(`select path from public.conversation_attachments where send_key='${key}'`);
   const stored=()=>rows<{n:number}>(`select count(*)::int as n from storage.objects o join public.conversation_attachments a on o.name=a.path where o.bucket_id='creatives' and a.send_key='${key}'`)[0].n;
   expect([files().length,stored()]).toEqual([1,1]);
-  // Its sender sends it again, even with another image under the same key: it is still waiting, and its image stays.
-  const other=Buffer.concat([png,Buffer.from('another image')]);
-  expect(await (await page.request.post('/api/conversations',{multipart:{company,conversation,sendKey:key,message:'Look at this chart',files:{...image,buffer:other}}})).json()).toEqual({conversation,queued:true});
-  expect([files().length,stored()]).toEqual([1,1]);
+  // Its sender sends it again, even with other and more images under the same key: it is still waiting, its image stays,
+  // and nothing is written beside it (no object without a row, which nothing would read or remove).
+  const objects=()=>rows<{n:number}>(`select count(*)::int as n from storage.objects where bucket_id='creatives' and name like '${company}/conversations/${conversation}/${key}-%'`)[0].n;
+  const again=new FormData();
+  for(const [name,value] of Object.entries({company,conversation,sendKey:key,message:'Look at this chart'})) again.append(name,value);
+  for(const extra of ['another image','a third image']) again.append('files',new Blob([Buffer.concat([png,Buffer.from(extra)])],{type:'image/png'}),'cover.png');
+  expect(await (await page.request.post('/api/conversations',{multipart:again})).json()).toEqual({conversation,queued:true});
+  expect([files().length,stored(),objects()]).toEqual([1,1,1]);
   // The Run ahead of it settles: the worker starts the turn as a retry, with the image it was sent with.
   query(`delete from public.conversation_run_reservations where send_key='${blocker}'`);
   await expect.poll(async()=>{ await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`);

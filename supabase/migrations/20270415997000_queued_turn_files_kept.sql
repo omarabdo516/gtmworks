@@ -14,11 +14,14 @@
 --
 -- Nor are they replaced: a resend of a held key keeps its files again before the Agent is asked, and the server wrote
 -- the bytes over the same paths (upsert), so the turn's retry could carry other images under the same idempotency key.
--- reserve_conversation_files now answers such a key as it answers one a stored message already took (-1): the rows
--- stay, and the server only puts back an object that is missing, never over one that is there (lib/message-files.ts).
+-- reserve_conversation_files now answers such a key -2 (held): no row is added and the server writes nothing at all,
+-- neither over a kept object nor beside it at a place no row names (lib/message-files.ts). Its rows imply their bytes
+-- were written: a first send whose upload failed gave its rows back before its key was held. -1 keeps its meaning (a
+-- stored message's key, whose missing object the server may put back).
 --
 -- Same signatures and grants: the previous app version calls both as it did; it only gets fewer paths back from the
--- discard, and -1, which it already handles, for a held key.
+-- discard, and reads -2 as it reads -1 (any negative): it writes no byte over a kept object (no upsert), at worst an
+-- object beside them that no row names, only until this version serves.
 create or replace function public.discard_conversation_files(conversation uuid, c uuid, message_key uuid)
 returns setof text language plpgsql security definer set search_path='' as $$
 begin
@@ -50,8 +53,8 @@ grant execute on function public.discard_conversation_files(uuid,uuid,uuid) to a
 -- written and given back by their sender's own functions above.
 grant select on public.conversation_attachments to service_role;
 
--- A send key whose files are already kept and still held by its waiting turn or Run is answered -1, as a stored
--- message's key is: nothing is inserted, and the server writes no byte over a kept file. reserve_conversation_files as
+-- A send key whose files are already kept and still held by its waiting turn or Run is answered -2: nothing is
+-- inserted, and the server writes nothing for it. reserve_conversation_files as
 -- 20270224000000_message_files_retry_sends.sql left it, with that one answer added after the stored message's.
 do $$
 declare def text; stored text:=$q$  return -1; end if;
@@ -64,6 +67,6 @@ begin
     and q.started_at is null and q.failed_at is null)
    or exists(select 1 from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key
     and r.abandoned_at is null)) then
-  return -1; end if;
+  return -2; end if;
 $q$);
 end $$;

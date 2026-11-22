@@ -40,8 +40,8 @@ reset role;
 set local role authenticated;
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001'),0,'a refused resend of an attempted start gives no path back');
 select is(pg_temp.rows('d4650000-0000-0000-0000-000000000001'),1,'and its file row stays');
-select is(pg_temp.keep('c4650000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001'),-1,
- 'a resend keeping its images again is told they are kept: the server writes nothing over them');
+select is(pg_temp.keep('c4650000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001'),-2,
+ 'a resend keeping its images again is told they are held (-2): the server writes nothing, over them or beside them');
 select is(public.release_conversation_run('c4650000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001',0),false,
  'a resend that made no attempt of its own cannot release it');
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000001'),0,'so the file is still kept');
@@ -62,7 +62,7 @@ select is(public.keep_unknown_start('c4650000-0000-0000-0000-000000000002','d465
 reset role;
 set local role authenticated;
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000002','d4650000-0000-0000-0000-000000000002'),0,'a resend of a start marked unknown gives no path back');
-select is(pg_temp.keep('c4650000-0000-0000-0000-000000000002','d4650000-0000-0000-0000-000000000002'),-1,'nor does it keep them again');
+select is(pg_temp.keep('c4650000-0000-0000-0000-000000000002','d4650000-0000-0000-0000-000000000002'),-2,'nor does it keep them again');
 select is(pg_temp.reserve('c4650000-0000-0000-0000-000000000002','d4650000-0000-0000-0000-000000000002'),'queued','the resend finds it waiting');
 reset role;
 set local role service_role;
@@ -88,7 +88,7 @@ select is(pg_temp.keep('c4650000-0000-0000-0000-000000000003','d4650000-0000-000
 select is(pg_temp.reserve('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),'queued','a second waits behind it');
 select is(pg_temp.keep('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),1,'with its image');
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),0,'a waiting turn''s resend gives no path back');
-select is(pg_temp.keep('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),-1,'and keeps nothing over its image');
+select is(pg_temp.keep('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000032'),-2,'and keeps nothing over its image');
 select is(pg_temp.discard('c4650000-0000-0000-0000-000000000003','d4650000-0000-0000-0000-000000000031'),0,'nor does a Run reserved and not yet started');
 -- The engine refused the first before any attempt: its sender releases it, and its file goes, as today.
 select is(public.release_conversation_run('c4650000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','d4650000-0000-0000-0000-000000000031',0),true,'the refused first send is released');

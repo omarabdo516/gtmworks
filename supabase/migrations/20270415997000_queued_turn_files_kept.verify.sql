@@ -3,7 +3,8 @@
 select json_build_object(
  'held_by_a_waiting_turn',position('conversation_queued_turns' in pg_get_functiondef('public.discard_conversation_files(uuid,uuid,uuid)'::regprocedure))>0,
  'held_by_a_reservation',position('conversation_run_reservations' in pg_get_functiondef('public.discard_conversation_files(uuid,uuid,uuid)'::regprocedure))>0,
- 'kept_files_are_not_kept_again',position('conversation_queued_turns' in pg_get_functiondef('public.reserve_conversation_files(uuid,uuid,uuid,jsonb)'::regprocedure))>0,
+ 'kept_files_are_not_kept_again',position('conversation_queued_turns' in pg_get_functiondef('public.reserve_conversation_files(uuid,uuid,uuid,jsonb)'::regprocedure))>0
+  and position('return -2' in pg_get_functiondef('public.reserve_conversation_files(uuid,uuid,uuid,jsonb)'::regprocedure))>0,
  'same_grants',has_function_privilege('authenticated','public.discard_conversation_files(uuid,uuid,uuid)','execute')
   and not has_function_privilege('anon','public.discard_conversation_files(uuid,uuid,uuid)','execute')
   and not has_function_privilege('service_role','public.discard_conversation_files(uuid,uuid,uuid)','execute'),
