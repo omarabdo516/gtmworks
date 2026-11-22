@@ -1,7 +1,7 @@
 [
  {
   "issue": 529,
-  "date": "2026-11-21",
+  "date": "2026-11-22",
   "en": { "title": "An agent's face hops on a page that opens slowly", "body": "When you press an agent's tile, its face on the page that opens now hops however long that page takes to appear, not only when it appears at once." },
   "ar": { "title": "وش الوكيل بينط في الصفحة اللي بتفتح ببطء", "body": "لما تدوس على مربع وكيل، وشه في الصفحة اللي بتفتح بقى بينط مهما الصفحة تاخد وقت عشان تظهر، مش بس لما تظهر على طول." }
  },
