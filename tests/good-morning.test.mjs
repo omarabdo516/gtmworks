@@ -57,8 +57,8 @@ function service({agents=[{id:lead,profile:leadProfile,is_default:true,name:'Lea
   if(name==='good_morning_seen') return {data:recorded.filter(row=>args.sessions.includes(row.session)).map(row=>row.session),error:null};
   if(name==='record_good_morning') { recorded.push(args); return {data:1,error:null}; }
   if(name==='routine_results_seen') return {data:kept.filter(row=>row.profile===args.at_profile&&args.sessions.includes(row.session)).map(row=>row.session),error:null};
-  if(name==='keep_routine_results') { const added=args.results.filter(row=>!kept.some(each=>each.profile===row.profile&&each.session===row.session)); kept.push(...added); return {data:added.length,error:null}; }
-  if(name==='good_morning_night') return {data:kept.filter(row=>row.routine&&row.line&&row.at>args.since&&row.at<=args.until).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,200).map(row=>({agent:row.agent,routine:row.routine,line:row.line,at:row.at})),error:null};
+  if(name==='keep_routine_results') { if(db.keepFails) return {data:null,error:{message:'keep refused'}}; const added=args.results.filter(row=>!kept.some(each=>each.profile===row.profile&&each.session===row.session)); kept.push(...added); return {data:added.length,error:null}; }
+  if(name==='good_morning_night') return {data:kept.filter(row=>row.routine&&row.line&&row.at>args.since&&row.at<=args.until).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,201).map(row=>({agent:row.agent,routine:row.routine,line:row.line,at:row.at})),error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
  return {db,recorded,kept};
@@ -187,7 +187,33 @@ test('a Routine that runs more often between two mornings than the Engine lists 
   const ofRoutine=replies.filter(session=>kept.some(row=>row.session===session&&row.routine_id===often.id));
   assert.equal(ofRoutine.length,new Set(ofRoutine).size,'each run\'s reply is read once');
   assert.ok(!kept.some(row=>row.routine_id===morning.id),'the daily job\'s own runs are not Routine results');
+  // A restarted worker (no marks) lists each Routine again and reads no reply it kept already.
+  replies.length=0;
+  await driveGoodMornings(db,{...options,marks:new Map()});
+  assert.deepEqual(replies,[],'after a restart nothing kept is read again');
  } finally { await fake.close(); }
+});
+
+test('a keep the database refuses holds the morning, said in the server log, and the next pass keeps it (#535)', async () => {
+ const fake=await engine();
+ const logged=[]; const error=console.error; console.error=(...args)=>logged.push(args.join(' '));
+ try {
+  const hermes=install(fake); const {db,recorded,kept}=service();
+  const {routine:morning}=await dailyJob(fake);
+  const {routine:ads1}=await createRoutine(at(fake,adsProfile),{name:'Ad-pause routine',prompt:'Pause',schedule:'0 * * * *'});
+  fake.settings.cronReply=job=>job.name==='Ad-pause routine'?'Paused the Video 2 ad':'Good morning.';
+  await triggerRoutine(at(fake,adsProfile),{id:ads1.id});
+  await new Promise(resolve=>setTimeout(resolve,20));
+  await triggerRoutine(at(fake,leadProfile),{id:morning.id});
+  const options={engineOf:async()=>hermes,marks:new Map()};
+  db.keepFails=true;
+  assert.equal(await driveGoodMornings(db,options),0,'held, not recorded without the night');
+  assert.deepEqual([recorded,kept],[[],[]]);
+  assert.ok(logged.some(line=>line.includes('Routine results not kept')&&line.includes('keep refused')));
+  db.keepFails=false;
+  assert.equal(await driveGoodMornings(db,options),1);
+  assert.deepEqual(recorded[0].results.map(result=>result.line),['Paused the Video 2 ad']);
+ } finally { console.error=error; await fake.close(); }
 });
 
 test('with a paused extra marked job left before it, the worker reads the one that is on, as Settings does', async () => {

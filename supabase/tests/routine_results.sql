@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(10);
+select plan(11);
 -- #535: the worker keeps each Routine result once as it ends, for Agents of the Company only, and the morning draws its
 -- night from what was kept: the results with a line that ended after the previous morning and by this one, newest
 -- first. No Member reads the kept runs. RS Learning is 10000000-...-0001, Aleem 10000000-...-0003.
@@ -24,6 +24,11 @@ select is(public.keep_routine_results('10000000-0000-0000-0000-000000000001',jso
 reset role;
 select is((select line from public.routine_results where session_id='local-2'),'Checked the leads 2','and the first keep stands');
 select is((select count(*)::int from public.routine_results where agent_id='e5350000-0000-0000-0000-000000000002'),0,'another Company''s Agent is never kept under this one');
+set local role service_role;
+select is(public.keep_routine_results('10000000-0000-0000-0000-000000000001',jsonb_build_array(
+  jsonb_build_object('agent','e5350000-0000-0000-0000-000000000001','profile','ag-e5350000000000000000000000000002','routine_id','abc123','session','local-5','routine','Every 15 minutes','line','On another profile','at','2026-11-11T02:00:00Z'))),
+ 0,'a run is kept only on its Agent''s own profile');
+reset role;
 set local role service_role;
 select is((select array_agg(s order by s) from public.routine_results_seen('10000000-0000-0000-0000-000000000001','ag-e5350000000000000000000000000001',array['local-1','local-3','local-7']) s),
  array['local-1','local-3'],'the worker reads which runs are kept already, a silent one too');

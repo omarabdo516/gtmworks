@@ -32,7 +32,8 @@ $$;
 revoke all on function public.routine_results_seen(uuid,text,text[]) from public,anon,authenticated;
 grant execute on function public.routine_results_seen(uuid,text,text[]) to service_role;
 
--- Keeps finished runs once each (a run kept already is left as it is) for Agents of the Company, and lets go of what
+-- Keeps finished runs once each (a run kept already is left as it is) for Agents of the Company, each on that Agent's
+-- own profile, and lets go of what
 -- ended over 30 days ago. Answers how many were new.
 create function public.keep_routine_results(c uuid, results jsonb) returns integer
 language plpgsql security definer set search_path='' as $$
@@ -43,7 +44,7 @@ begin
   select c,(r->>'agent')::uuid,r->>'profile',r->>'routine_id',r->>'session',nullif(left(trim(coalesce(r->>'routine','')),200),''),
    nullif(left(trim(coalesce(r->>'line','')),300),''),(r->>'at')::timestamptz
   from jsonb_array_elements(results) r
-  where exists(select 1 from public.hermes_agents a where a.id=(r->>'agent')::uuid and a.company_id=c)
+  where exists(select 1 from public.hermes_agents a where a.id=(r->>'agent')::uuid and a.company_id=c and a.profile=r->>'profile')
   on conflict (company_id,profile,session_id) do nothing;
  get diagnostics added=row_count;
  delete from public.routine_results r where r.company_id=c and r.ended_at<now()-interval '30 days';
@@ -52,13 +53,14 @@ end $$;
 revoke all on function public.keep_routine_results(uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.keep_routine_results(uuid,jsonb) to service_role;
 
--- A morning's night: the newest 200 kept results with a line that ended after `since` and by `until`, each with its
--- Agent, its Routine and its line, as record_good_morning takes them.
+-- A morning's night: the newest 201 kept results with a line that ended after `since` and by `until`, each with its
+-- Agent, its Routine and its line, as record_good_morning takes them (the worker records 200, and says a night with
+-- more in its log).
 create function public.good_morning_night(c uuid, since timestamptz, until timestamptz) returns table(agent uuid, routine text, line text, at timestamptz)
 language sql stable security definer set search_path='' as $$
  select r.agent_id,r.routine,r.line,r.ended_at from public.routine_results r
  where r.company_id=c and r.ended_at>since and r.ended_at<=until and r.routine is not null and r.line is not null
- order by r.ended_at desc,r.id limit 200;
+ order by r.ended_at desc,r.id limit 201;
 $$;
 revoke all on function public.good_morning_night(uuid,timestamptz,timestamptz) from public,anon,authenticated;
 grant execute on function public.good_morning_night(uuid,timestamptz,timestamptz) to service_role;

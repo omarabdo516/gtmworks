@@ -1,9 +1,9 @@
 [
  {
   "issue": 535,
-  "date": "2026-11-21",
-  "en": { "title": "Ran overnight holds the whole night", "body": "Each routine result is now kept as soon as its run ends, so the morning card lists everything that ran overnight, even for a routine that runs every few minutes." },
-  "ar": { "title": "«اشتغل بالليل» بقى فيه الليلة كلها", "body": "كل نتيجة روتين بقت بتتحفظ أول ما تشغيلتها تخلص، فبطاقة الصبح بيعرض كل اللي اشتغل بالليل، حتى لو الروتين بيشتغل كل كام دقيقة." }
+  "date": "2026-11-22",
+  "en": { "title": "Ran overnight holds the whole night", "body": "Each routine result is now kept as soon as its run ends, so the morning card lists everything that ran overnight, even for a routine that runs every 15 minutes." },
+  "ar": { "title": "«اشتغل بالليل» بقى فيه الليلة كلها", "body": "كل نتيجة روتين بقت بتتحفظ أول ما تشغيلتها تخلص، فبطاقة الصبح بتعرض كل اللي اشتغل بالليل، حتى لو الروتين بيشتغل كل ربع ساعة." }
  },
  {
   "issue": 478,
