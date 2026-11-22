@@ -66,6 +66,12 @@
   "ar": { "title": "التحديث اللي يفشل بيسيب ملفات المحرك زي ما كانت", "body": "لما التحديث يقف قبل ما محركات الوكلاء تشتغل، مثلاً عشان تغيير في قاعدة البيانات فشل، ملفات المحرك بتاعة النسخة اللي شغّالة عندك بترجع مكانها، فإضافة شركة أو الاسترجاع أو التحديث الجاي بيستخدموا محرك النسخة دي نفسها تاني." }
  },
  {
+  "issue": 617,
+  "date": "2026-11-22",
+  "en": { "title": "Your Providers in one list", "body": "Settings now lists every subscription and API key your company is connected with, each with its own logo, type and status; choose one to see its details, or connect another from the list." },
+  "ar": { "title": "المزوّدين بتوعك في قايمة واحدة", "body": "الإعدادات دلوقتي بتعرض كل اشتراك ومفتاح API الشركة متوصلة بيه، كل واحد بشعاره ونوعه وحالته؛ اختار واحد تشوف تفاصيله، أو وصّل مزوّد تاني من القايمة." }
+ },
+ {
   "issue": 520,
   "date": "2026-11-21",
   "en": { "title": "A Conversation opens cleanly in your own time zone", "body": "Outside UTC, a Conversation's message times now appear straight in your own time zone, without the page redrawing itself as it opens." },
