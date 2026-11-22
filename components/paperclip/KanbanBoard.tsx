@@ -144,6 +144,8 @@ export function KanbanBoard({label,busy,cards,columnName,onMove,renderOverlay,ch
  // place is also cleared after the flight's own time. A drop with no flight hands dnd-kit no drop animation at all:
  // with one, dnd-kit first scrolls the Card's old place back into view, so a Card carried across the board would drag
  // the board back to where it was before it lands (#556).
+ // `returning` is set in the same render as the drop, and dnd-kit reads the prop a commit later, once the copy it
+ // animates is mounted.
  const returnHome=(id:number)=>{ if(prefersReducedMotion()) return; flyBack.current=id; setReturning(id); window.setTimeout(()=>{ if(flyBack.current===id) flyBack.current=null; setReturning(current=>current===id?null:current); },300); };
  const dropAnimation=({active,dragOverlay}:{active:{rect:{left:number,top:number}},dragOverlay:{node:HTMLElement}})=>{
   const id=flyBack.current; flyBack.current=null;
