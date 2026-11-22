@@ -117,6 +117,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 - 🟡 **Agent memory.** The Memory tab: read, edit in place, search, forget with undo, reset; a change the Engine holds always gets its log row. Merged; waiting for the release (#572). [#191, #192, #193, #350, #353, #370]
 - ✅ **Usage.** Token use read from Hermes. [#32, #347]
 - 🟡 **Settings writes that cannot go stale.** A conditional write for an Agent's settings, and removing one standing permission atomically. [#486, #503]
+- 🟡 **Find a setting by name.** `/` or the search above Settings' sections finds a section by its name in the interface language, only among those the Role may open. Merged; waiting for the release (#572). [#613]
 - ⚪ **Offerings and Segments as lists.** A Company's own list of what it sells and to whom, each Offering linked to its Odoo products; today a Card carries "offering" and "segment" as plain text. [GLOSSARY.md Offering, Segment; `work-actions.ts` fields]
 - ⚪ **Key dates.** Dates the content is built around, written by the team or read from Odoo events. [GLOSSARY.md Key date; no code]
 - ⚪ **Stronger memory, like Omar's vault and Hindsight.** A memory provider per Company on its Engine, one bank shared by its Agents. [decision 0056]

@@ -5,6 +5,8 @@ export type OverlaySectionEntry = readonly [OverlaySection, string, OverlayIcon,
 export const overlaySections: readonly OverlaySectionEntry[];
 export function visibleSections(role: string): OverlaySectionEntry[];
 export function overlayGroups(role: string): { group: OverlayGroup | null, label: string | null, sections: OverlaySectionEntry[] }[];
+export function findGroups(query: unknown, role: string, t: (key: string) => string): { group: OverlayGroup | null, label: string | null, sections: OverlaySectionEntry[] }[];
+export function findSections(query: unknown, role: string, t: (key: string) => string): OverlaySectionEntry[];
 export function sectionGroup(key: OverlaySection): { group: OverlayGroup, label: string } | null;
 export function pickSection(requested: unknown, role: string): OverlaySection;
 export function overlayHref(slug: string, section: OverlaySection, extra?: Record<string, string | undefined>): string;

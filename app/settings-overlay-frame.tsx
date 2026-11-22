@@ -89,7 +89,8 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
  },[initialFocus]);
  useEffect(()=>{
   const keys=(event:globalThis.KeyboardEvent)=>{
-   if(event.key!=='Escape'||event.defaultPrevented) return;
+   // An Escape that ends a word an input method is composing is that word's, not a close.
+   if(event.key!=='Escape'||event.defaultPrevented||event.isComposing) return;
    close();
   };
   document.addEventListener('keydown',keys);

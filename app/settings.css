@@ -60,11 +60,20 @@
 .gw .sov:focus { outline: none; }
 .gw .sov-ro { align-self: center; --od-icon-size: 13px; color: var(--gw-text-2); }
 .gw .sov__body { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 0; }
-.gw .sov-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; padding: var(--s4) var(--s3) var(--s8); background: var(--gw-bg-sidebar); border-inline-end: 0.5px solid var(--gw-border-3); }
+/* The section list's column: "Find a setting" (#613) above the list, which scrolls under it. */
+.gw .sov-side { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--gw-bg-sidebar); border-inline-end: 0.5px solid var(--gw-border-3); }
+.gw .sov-find { display: flex; flex-direction: column; gap: var(--s1); padding: var(--s4) var(--s3) 0; }
+.gw .sov-find input::-webkit-search-cancel-button { display: none; }
+.gw .sov-find__clear { align-self: flex-end; }
+.gw .sov-find__none { display: grid; justify-items: start; gap: var(--s1); padding: var(--s2) var(--s3); font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-2); }
+.gw .sov-find__none p { margin: 0; overflow-wrap: anywhere; }
+.gw .sov-nav { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; padding: var(--s3) var(--s3) var(--s8); }
 .gw .sov-nav__l { margin: var(--s5) 0 var(--s1); padding-inline: var(--s3); font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-3); }
 .gw .sov-nav__g { display: flex; flex-direction: column; gap: 2px; }
 .gw .sov-nav__g:first-child > .sov-nav__l { margin-top: 0; }
 .gw .sov-nav__g--own { margin-top: var(--s5); padding-top: var(--s3); border-top: 0.5px solid var(--gw-border-3); }
+/* A search can leave the pages that stand alone first (#613): then nothing above needs a line. */
+.gw .sov-nav__g--own:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .gw .sov-nav .sb-item { flex: none; --od-icon-size: 18px; }
 .gw .sov-nav .sb-item .sov-icon { color: var(--gw-text-2); }
 /* Learning suggestions waiting for the reader's OK (#25; design-reference: the nav item's .sb-count) */
@@ -357,7 +366,14 @@
   .gw .sov-nav__g { flex-direction: row; flex: none; }
   .gw .sov-nav__g--own { margin-top: 0; padding-top: 0; border-top: 0; }
   .gw .sov__body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-  .gw .sov-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: var(--s2) var(--s3); border-inline-end: 0; border-bottom: 0.5px solid var(--gw-border-3); scrollbar-width: none; }
+  .gw .sov-side { border-inline-end: 0; border-bottom: 0.5px solid var(--gw-border-3); }
+  .gw .sov-find { flex-direction: row; align-items: center; gap: var(--s3); padding: var(--s3) var(--s3) 0; }
+  .gw .sov-find .tpl-search { flex: 1 1 auto; min-width: 0; padding-block: 4px; margin-block: -4px; }
+  .gw .sov-find__none { white-space: normal; padding-block: 0; min-height: 36px; align-content: center; }
+  /* Clear search keeps its size, with an invisible ring that makes its tap area 44px (PRODUCT.md). */
+  .gw .sov-side .link-btn { position: relative; }
+  .gw .sov-side .link-btn::before { content: ""; position: absolute; inset: -12px -4px; }
+  .gw .sov-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: var(--s2) var(--s3); scrollbar-width: none; }
   .gw .sov-nav::-webkit-scrollbar { display: none; }
   .gw .sov-nav__l { display: none; }
   .gw .sov-page { padding: var(--s5) var(--s4) var(--s12); }

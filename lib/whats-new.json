@@ -1,5 +1,11 @@
 [
  {
+  "issue": 613,
+  "date": "2026-11-22",
+  "en": { "title": "Find a setting by its name", "body": "In Settings, press / or use the search above the sections to type a setting's name as your interface language shows it, and open it with Enter; you only ever see the sections your role can open." },
+  "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد زي ما هو مكتوب بلغة الواجهة، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
+ },
+ {
   "issue": 530,
   "date": "2026-11-22",
   "en": { "title": "Channels and Card notes say why an agent could not reply", "body": "When an agent called in a channel, asked by another agent, or called in a Card's note cannot reply because the company has no model, its key ran out of credit or was refused, or its model is missing, it now says so there, with the way to fix it in Providers, instead of only that it could not reply." },
