@@ -191,6 +191,11 @@ test('a Routine that runs more often between two mornings than the Engine lists 
   replies.length=0;
   await driveGoodMornings(db,{...options,marks:new Map()});
   assert.deepEqual(replies,[],'after a restart nothing kept is read again');
+  // A full list with no finished run the worker can read (each still running) is nothing to keep, never a failed pass.
+  await triggerRoutine(at(fake,adsProfile),{id:often.id});
+  const empty=async()=>({state:'found',full:true,runs:[]});
+  assert.equal(await driveGoodMornings(db,{...options,driver:{runs:empty,reply}}),0);
+  assert.equal(await driveGoodMornings(db,{...options,driver:{runs:empty,reply}}),0,'a Routine kept whole before with an empty full list');
  } finally { await fake.close(); }
 });
 
