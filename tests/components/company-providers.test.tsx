@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import { CompanyProviders, type ProviderKeysData, type ProviderModelsData } from '@/app/settings-providers';
 import { LanguageProvider } from '@/lib/i18n-client';
-import type { CompanySignIns, SubscriptionState } from '@/lib/company-sign-in.mjs';
+import type { CompanySignIns, SubscriptionAccount, SubscriptionState } from '@/lib/company-sign-in.mjs';
 import en from '@/lib/messages/en.json';
 import ar from '@/lib/messages/ar.json';
 import '@/app/tokens.css';
@@ -25,11 +25,11 @@ const keys = (extra: Partial<ProviderKeysData> = {}): ProviderKeysData => ({
   keys: [{ provider: 'openrouter', label: 'OpenRouter', set: false }, { provider: 'anthropic', label: 'Anthropic', set: true }],
   waiting: null, leftover: null, unknown: null, ...extra,
 });
-type Props = { owner?: boolean, signIns?: CompanySignIns['signIns'], available?: boolean, noEngine?: boolean, keys?: ProviderKeysData | null, models?: ProviderModelsData | null };
-const providers = async ({ owner = true, signIns: signed = signIns('connected', 'notConnected'), available = true, noEngine = false, keys: held = keys(), models = null }: Props = {}, language: 'en' | 'ar' = 'en', width = 1440) => {
+type Props = { owner?: boolean, signIns?: CompanySignIns['signIns'], available?: boolean, noEngine?: boolean, keys?: ProviderKeysData | null, models?: ProviderModelsData | null, accounts?: SubscriptionAccount[] | null, names?: Record<string, string> };
+const providers = async ({ owner = true, signIns: signed = signIns('connected', 'notConnected'), available = true, noEngine = false, keys: held = keys(), models = null, accounts, names }: Props = {}, language: 'en' | 'ar' = 'en', width = 1440) => {
   await page.viewport(width, 900);
   return render(<div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="sov"><div className="sov-page sov-page--models"><LanguageProvider language={language}>
-    <CompanyProviders company={company} companyName={companyName} owner={owner} keys={held} models={models} subscriptions={{ available, signIns: signed, noEngine }}/>
+    <CompanyProviders company={company} companyName={companyName} owner={owner} keys={held} models={models} names={names} subscriptions={{ available, signIns: signed, accounts, noEngine }}/>
     <section className="dp-sec" id="md-below">Below</section>
   </LanguageProvider></div></div></div>);
 };
@@ -112,13 +112,16 @@ test('a key the Engine refused leaves the field empty with the reason, so the va
   expect(refresh).not.toHaveBeenCalled();
 });
 
-test('the Owner\'s last row connects what is not connected yet: a subscription by sign-in, a provider by its key', async () => {
+test('the Owner\'s last row connects a subscription by sign-in, another account of one already connected, and a provider by its key', async () => {
   const sent: object[] = [];
   vi.stubGlobal('fetch', (_: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); return Promise.resolve(new Response('{}')); });
   const screen = await providers({ keys: keys({ waiting: [{ agent: 'a-1', name: 'Writer' }] }) });
   await screen.getByRole('button', { name: en.providersAdd }).click();
   const add = screen.getByRole('region', { name: en.providersAdd });
-  expect(document.querySelector('#pv-d-add #sub-openai-codex')).toBeNull();
+  // A subscription already connected is offered again: its sign-in adds another account beside the first (#618).
+  expect(document.querySelector('#add-sub-openai-codex-state')?.textContent).toBe(en.signInConnected);
+  await expect.element(add.getByRole('button', { name: 'Connect another ChatGPT account' })).toBeVisible();
+  expect(document.querySelector('#pv-d-add')?.textContent).toContain(en.providersAnotherAccount);
   await expect.element(add.getByText(command)).toBeVisible();
   await expect.element(add.getByRole('img', { name: 'Claude' })).toBeVisible();
   expect(document.querySelector('#pv-d-add #mdl-key-anthropic-state')).toBeNull();
@@ -308,4 +311,75 @@ test('a Provider whose models could not be read says so, and one listing none sa
   document.body.innerHTML = '';
   await providers({ signIns: signIns('notConnected', 'connected'), models: { 'sub-anthropic': [] } });
   expect(document.querySelector('#pv-d-sub-anthropic')?.textContent).toContain(en.providersModelsNone);
+});
+
+// #618: each subscription account is a Provider of its own, two of one kind apart by the Engine's id, each named by the
+// Owner; a second ChatGPT reads as its kind's name and place until it is named.
+const accounts: SubscriptionAccount[] = [
+  { provider: 'openai-codex', account: '86c091', exhausted: false }, { provider: 'openai-codex', account: '61b59d', exhausted: true },
+  { provider: 'anthropic', account: 'c1a2u3', exhausted: false }];
+test('two ChatGPT accounts and a Claude one are rows of their own beside a key, each with its own name and Disconnect', async () => {
+  const sent: object[] = [];
+  vi.stubGlobal('fetch', (_: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); return Promise.resolve(new Response('{"status":"disconnected"}')); });
+  const screen = await providers({ signIns: signIns('connected', 'connected'), accounts, names: { 'openai-codex:86c091': 'ChatGPT · Said', 'anthropic:key': 'Anthropic · Team' } });
+  expect(rows()).toEqual([`ChatGPT · Said ${en.providersSubscription} · ${en.signInConnected}`, `ChatGPT 2 ${en.providersSubscription} · ${en.providersExhausted}`,
+    `Claude ${en.providersSubscription} · ${en.signInConnected}`, `Anthropic · Team ${en.providersKey} · ${en.providersKeySaved}`, en.providersAdd]);
+  const ids = [...document.querySelectorAll('[id]')].map(node => node.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  await screen.getByRole('button', { name: /^ChatGPT 2/ }).click();
+  expect(shown()).toEqual(['pv-d-sub-openai-codex-61b59d']);
+  await expect.element(screen.getByRole('heading', { name: 'ChatGPT 2' })).toBeVisible();
+  await screen.getByRole('button', { name: 'Disconnect ChatGPT 2' }).click();
+  await expect.poll(() => sent).toEqual([{ company, provider: 'openai-codex', intent: 'disconnect', account: '61b59d' }]);
+  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  expect(document.body.innerHTML).not.toMatch(/sk-|token/);
+});
+
+test('the Owner names a Provider in its details, or gives back its own name with an empty one; a member reads the name only', async () => {
+  const sent: { url: string, body: object }[] = [];
+  vi.stubGlobal('fetch', (url: string, init: RequestInit) => { sent.push({ url, body: JSON.parse(String(init.body)) }); return Promise.resolve(new Response('{"name":"x"}')); });
+  const screen = await providers({ signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 2), names: { 'openai-codex:86c091': 'ChatGPT · Said' } });
+  const field = screen.getByLabelText(en.providersName).first();
+  await expect.element(field).toHaveValue('ChatGPT · Said');
+  const save = screen.getByRole('button', { name: en.providersNameSave }).first();
+  await expect.element(save).toBeDisabled();
+  await field.fill('  ChatGPT · Work ');
+  await save.click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toEqual({ url: '/api/provider-names', body: { company, provider: 'openai-codex', account: '86c091', name: 'ChatGPT · Work' } });
+  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  await field.fill('');
+  await save.click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1].body).toEqual({ company, provider: 'openai-codex', account: '86c091', name: '' });
+  expect(document.querySelector<HTMLInputElement>('#pv-name-sub-openai-codex-86c091')?.maxLength).toBe(60);
+  await screen.unmount();
+  for (const language of ['en', 'ar'] as const) {
+    const member = await providers({ owner: false, signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 2), names: { 'openai-codex:86c091': 'ChatGPT · Said' } }, language);
+    expect(document.querySelector('#md-providers input')).toBeNull();
+    expect(document.querySelector('#pv-d-sub-openai-codex-86c091 .pv-fact__v')?.textContent).toBe('ChatGPT · Said');
+    await member.unmount();
+  }
+});
+
+test('a name the database refuses says why, in Arabic too', async () => {
+  vi.stubGlobal('fetch', () => Promise.resolve(new Response('{"error":"providerNotAllowed"}', { status: 403 })));
+  const screen = await providers({ signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 1) }, 'ar');
+  await screen.getByLabelText(ar.providersName).first().fill('اسم جديد');
+  await screen.getByRole('button', { name: ar.providersNameSave }).first().click();
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(ar.providersNotAllowed);
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+test('two ChatGPT accounts share their kind\'s model switches, each in its own details with ids of its own', async () => {
+  const sent: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); return new Response(JSON.stringify({ ok: true }), { status: 200 }); }));
+  const screen = await providers({ signIns: signIns('connected', 'notConnected'), accounts: accounts.slice(0, 2), models: { 'sub-openai-codex': [{ model: 'gpt-5.4', enabled: true }] } });
+  expect(document.querySelector('#pv-d-sub-openai-codex-86c091-models')).not.toBeNull();
+  expect(document.querySelector('#pv-d-sub-openai-codex-61b59d-models')).not.toBeNull();
+  const ids = [...document.querySelectorAll('[id]')].map(node => node.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  await screen.getByRole('button', { name: /^ChatGPT 2/ }).click();
+  switchOf('pv-d-sub-openai-codex-61b59d', 'gpt-5.4', 'ChatGPT 2')!.click();
+  await expect.poll(() => sent).toEqual([{ company, entry: 'sub-openai-codex', model: 'gpt-5.4', enabled: false }]);
 });
