@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import SettingsOverlay from './settings-overlay';
+import { OnSettingsAddress } from './settings-address';
 
 export type SettingsQuery = Parameters<typeof SettingsOverlay>[0]['query'];
 
@@ -15,5 +16,5 @@ export default async function SettingsLayer({slug,query}:{slug:string,query:Sett
   db.from('people').select('name').eq('id',user.id).single(),
   db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
  ]);
- return <SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} workMode={company.work_mode} query={query}/>;
+ return <OnSettingsAddress slug={slug}><SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} workMode={company.work_mode} query={query}/></OnSettingsAddress>;
 }
