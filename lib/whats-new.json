@@ -1,5 +1,11 @@
 [
  {
+  "issue": 621,
+  "date": "2026-11-22",
+  "en": { "title": "A request goes on when a subscription runs out", "body": "When one ChatGPT or Claude subscription has no quota left, the same request now goes on with the next one of its kind in your providers order, skipping any you switched off; the Activity log notes the move and Settings shows which ran out." },
+  "ar": { "title": "الطلب بيكمّل لما اشتراك يخلص", "body": "لما اشتراك ChatGPT أو Claude يخلص رصيده، نفس الطلب بقى بيكمّل على اللي بعده من نفس النوع حسب ترتيب المزوّدين بتاعك، ومن غير اللي إنت قافله؛ سجل النشاط بيكتب إنه نقل، والإعدادات بتوضح أنهي واحد خلص." }
+ },
+ {
   "issue": 619,
   "date": "2026-11-22",
   "en": { "title": "Put your providers in order", "body": "In Settings you can now move each subscription and key up or down the providers list and switch one off without disconnecting it: its models are no longer offered, and switching it back on needs no new sign-in." },

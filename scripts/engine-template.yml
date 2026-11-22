@@ -46,6 +46,10 @@ services:
       # A ChatGPT sign-in from Settings adds its account beside the Company's others and never overwrites one (#618): a
       # hook before s6 starts any service patches the Engine's own copy, and fails the start if the pinned text moved.
       - ./engine-codex-accounts.sh:/etc/cont-init.d/07-engine-codex-accounts:ro
+      # A request that runs out of one subscription account goes on, in the Owner's order, on the next account of its kind
+      # left switched on, and the Engine records each move (#621): the same kind of hook, which fails the start if the
+      # pinned text moved.
+      - ./engine-pool-order.sh:/etc/cont-init.d/08-engine-pool-order:ro
       # The one way the listeners learn the address the install network gave this Engine: a hook that runs before s6
       # starts any service writes it into the container's environment, so the gateway and the dashboard bind there and
       # never to the wildcard address the sandbox's network could reach (#390).

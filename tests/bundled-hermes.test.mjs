@@ -96,6 +96,10 @@ test('an Engine publishes no host port, joins its install network and its work n
  // the install job runs it against the pinned image and proves two accounts stay apart.
  assert.ok(engine.volumes.includes('./engine-codex-accounts.sh:/etc/cont-init.d/07-engine-codex-accounts:ro'),'the ChatGPT accounts patch runs at start');
  assert.ok(statSync('scripts/engine-codex-accounts.sh').mode&0o111,'the accounts hook is executable as s6 runs it');
+ // A request goes on on the next account in the Owner's order, and the move is recorded (#621): the same kind of hook;
+ // the install job runs it against the pinned image and proves the order, the switch-off and the record.
+ assert.ok(engine.volumes.includes('./engine-pool-order.sh:/etc/cont-init.d/08-engine-pool-order:ro'),'the account order patch runs at start');
+ assert.ok(statSync('scripts/engine-pool-order.sh').mode&0o111,'the order hook is executable as s6 runs it');
  const launch=readFileSync('scripts/ci-install-lib.sh','utf8');
  assert.match(launch,/cat > \/opt\/data\/config\.yaml/,'the install names the launch profile it writes');
  assert.doesNotMatch(launch,/external_dirs/,'the launch profile names no shared Skills folder');
