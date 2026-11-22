@@ -1,5 +1,11 @@
 [
  {
+  "issue": 620,
+  "date": "2026-11-22",
+  "en": { "title": "Choose which models each provider offers", "body": "Each provider in Settings now lists its models with a switch, and the chat's model menu and every agent's model choice offer a model only while a provider has it on, once even when several do." },
+  "ar": { "title": "اختار الموديلات اللي كل مزوّد بيقدّمها", "body": "كل مزوّد في الإعدادات بقى بيعرض موديلاته وجنب كل واحد مفتاح، وقايمة الموديلات في المحادثة واختيار موديل أي وكيل بيعرضوا الموديل بس طول ما فيه مزوّد مشغّله، ومرة واحدة حتى لو أكتر من مزوّد مشغّله." }
+ },
+ {
   "issue": 614,
   "date": "2026-11-22",
   "en": { "title": "Settings help when you want it", "body": "Settings pages now show each setting's name and control without paragraphs above them; the longer explanation opens from the small “i” beside a name, by hovering, tabbing to it or tapping it, and Escape or a tap elsewhere closes it." },

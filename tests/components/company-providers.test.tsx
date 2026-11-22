@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
-import { CompanyProviders, type ProviderKeysData } from '@/app/settings-providers';
+import { CompanyProviders, type ProviderKeysData, type ProviderModelsData } from '@/app/settings-providers';
 import { LanguageProvider } from '@/lib/i18n-client';
 import type { CompanySignIns, SubscriptionState } from '@/lib/company-sign-in.mjs';
 import en from '@/lib/messages/en.json';
@@ -25,11 +25,11 @@ const keys = (extra: Partial<ProviderKeysData> = {}): ProviderKeysData => ({
   keys: [{ provider: 'openrouter', label: 'OpenRouter', set: false }, { provider: 'anthropic', label: 'Anthropic', set: true }],
   waiting: null, leftover: null, unknown: null, ...extra,
 });
-type Props = { owner?: boolean, signIns?: CompanySignIns['signIns'], available?: boolean, noEngine?: boolean, keys?: ProviderKeysData | null };
-const providers = async ({ owner = true, signIns: signed = signIns('connected', 'notConnected'), available = true, noEngine = false, keys: held = keys() }: Props = {}, language: 'en' | 'ar' = 'en', width = 1440) => {
+type Props = { owner?: boolean, signIns?: CompanySignIns['signIns'], available?: boolean, noEngine?: boolean, keys?: ProviderKeysData | null, models?: ProviderModelsData | null };
+const providers = async ({ owner = true, signIns: signed = signIns('connected', 'notConnected'), available = true, noEngine = false, keys: held = keys(), models = null }: Props = {}, language: 'en' | 'ar' = 'en', width = 1440) => {
   await page.viewport(width, 900);
   return render(<div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="sov"><div className="sov-page sov-page--models"><LanguageProvider language={language}>
-    <CompanyProviders company={company} companyName={companyName} owner={owner} keys={held} subscriptions={{ available, signIns: signed, noEngine }}/>
+    <CompanyProviders company={company} companyName={companyName} owner={owner} keys={held} models={models} subscriptions={{ available, signIns: signed, noEngine }}/>
     <section className="dp-sec" id="md-below">Below</section>
   </LanguageProvider></div></div></div>);
 };
@@ -259,4 +259,53 @@ test('each Provider shows its own brand mark, named, or its first letter', async
   expect([...document.querySelectorAll('.pv-list .tool-tile')].every(found => found.getAttribute('aria-hidden') === 'true')).toBe(true);
   const loaded = [...document.querySelectorAll<HTMLImageElement>('img.tool-logo')];
   await expect.poll(() => loaded.every(image => image.complete && image.naturalWidth > 0)).toBe(true);
+});
+
+// #620: each Provider's models, each with the Owner's switch; another Role reads each one.
+const claudeModels: ProviderModelsData = {
+  'sub-anthropic': [{ model: 'claude-opus-4-6', enabled: true }, { model: 'claude-sonnet-4-6', enabled: false }],
+  'key-anthropic': [{ model: 'claude-opus-4-6', enabled: true }, { model: 'claude-sonnet-4-6', enabled: true }],
+};
+const switchOf = (detail: string, model: string, name: string) => document.querySelector<HTMLButtonElement>(`#${detail} [role="switch"][aria-label="${en.providersModelSwitch.replace('{0}', model).replace('{1}', name)}"]`);
+
+test('the Owner switches one Provider\'s model off and on, each change sent once and the page read again', async () => {
+  const sent: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); return new Response(JSON.stringify({ ok: true }), { status: 200 }); }));
+  const screen = await providers({ signIns: signIns('notConnected', 'connected'), models: claudeModels });
+  expect(shown()).toEqual(['pv-d-sub-anthropic']);
+  await expect.element(screen.getByRole('region', { name: 'Claude' }).getByRole('heading', { name: en.providersModels })).toBeVisible();
+  expect(switchOf('pv-d-sub-anthropic', 'claude-opus-4-6', 'Claude')?.getAttribute('aria-checked')).toBe('true');
+  expect(switchOf('pv-d-sub-anthropic', 'claude-sonnet-4-6', 'Claude')?.getAttribute('aria-checked')).toBe('false');
+  switchOf('pv-d-sub-anthropic', 'claude-opus-4-6', 'Claude')!.click();
+  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  expect(sent).toEqual([{ company, entry: 'sub-anthropic', model: 'claude-opus-4-6', enabled: false }]);
+  expect(switchOf('pv-d-sub-anthropic', 'claude-opus-4-6', 'Claude')?.getAttribute('aria-checked')).toBe('false');
+  // The key's own switches are its own: the same model stays on there.
+  await screen.getByRole('button', { name: /^Anthropic/ }).click();
+  expect(switchOf('pv-d-key-anthropic', 'claude-opus-4-6', 'Anthropic')?.getAttribute('aria-checked')).toBe('true');
+  switchOf('pv-d-key-anthropic', 'claude-sonnet-4-6', 'Anthropic')!.click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toEqual({ company, entry: 'key-anthropic', model: 'claude-sonnet-4-6', enabled: false });
+});
+
+test('a switch the server refuses goes back and says why; a Manager reads each switch and has none', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'providerModelFailed' }), { status: 502 })));
+  const screen = await providers({ signIns: signIns('notConnected', 'connected'), models: claudeModels });
+  switchOf('pv-d-sub-anthropic', 'claude-opus-4-6', 'Claude')!.click();
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(en.providersModelError);
+  expect(switchOf('pv-d-sub-anthropic', 'claude-opus-4-6', 'Claude')?.getAttribute('aria-checked')).toBe('true');
+  expect(refresh).not.toHaveBeenCalled();
+  await screen.unmount();
+  await providers({ owner: false, signIns: signIns('notConnected', 'connected'), models: claudeModels }, 'ar');
+  expect(document.querySelectorAll('#pv-d-sub-anthropic [role="switch"]').length).toBe(0);
+  expect([...document.querySelectorAll<HTMLElement>('#pv-d-sub-anthropic-models li')].map(row => row.innerText.replace(/\s+/g, ' ').trim()))
+    .toEqual([`claude-opus-4-6 ${ar.providersModelOn}`, `claude-sonnet-4-6 ${ar.providersModelOff}`]);
+});
+
+test('a Provider whose models could not be read says so, and one listing none says that', async () => {
+  await providers({ signIns: signIns('notConnected', 'connected'), models: null });
+  expect(document.querySelector('#pv-d-sub-anthropic')?.textContent).toContain(en.providersModelsUnread);
+  document.body.innerHTML = '';
+  await providers({ signIns: signIns('notConnected', 'connected'), models: { 'sub-anthropic': [] } });
+  expect(document.querySelector('#pv-d-sub-anthropic')?.textContent).toContain(en.providersModelsNone);
 });

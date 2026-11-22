@@ -104,6 +104,7 @@ function owner(proposals,{isOwner=true,answer=null,busy=false,lost=false}={}) {
    if(name==='company_engine_target') return {data:[{profile:companyProfile(company),profiles:[]}],error:null};
    if(name==='company_app_agents') return {data:agents.map(({agent,name,profile,own})=>({agent,name,profile,own})),error:null};
    if(name==='company_agent_models') return {data:agents,error:null};
+   if(name==='company_key_profiles') return {data:[{profile:`cs-${company.replaceAll('-','')}`,kind:'space',agent:null,name:null}],error:null};
    if(['log_engine_setting','set_agent_model','check_agent_owner_setting','log_agent_instructions','set_agent_subagents'].includes(name)) return {data:null,error:null};
    if(name==='claim_agent_change') {
     const row=proposals.find(found=>found.id===args.proposal&&args.c===company);
@@ -126,14 +127,23 @@ function owner(proposals,{isOwner=true,answer=null,busy=false,lost=false}={}) {
    return {data:null,error:{message:`unexpected ${name}`}};
   },
  };
+ // No Provider has a model switched off (company_provider_models).
+ db.from=()=>({select:()=>({eq:async()=>({data:[],error:null})})});
  return {db,calls};
 }
+// The Company's Providers (#620): its shared space holds an Anthropic, an OpenRouter and an OpenAI key, so a model of
+// any of them is one a Provider has on and may be written.
+const companyProviders=fake=>{
+ if(!fake.settings.envRows.some(row=>row.env==='OPENAI_API_KEY')) fake.settings.envRows.push({env:'OPENAI_API_KEY',provider:'openai',label:'OpenAI',primary:true,password:true,category:'provider'});
+ fake.settings.profiles.set(`cs-${company.replaceAll('-','')}`,{soul:'',provider:'openrouter',model:'openai/gpt-5.5',key:fake.settings.key,config:{},credentials:{},
+  env:{ANTHROPIC_API_KEY:'sk-ant-test-0123456789abcdef',OPENROUTER_API_KEY:'sk-or-v1-test-0123456789abcdef',OPENAI_API_KEY:'sk-openai-test-0123456789abcdef'}});
+};
 const profileOn=(fake,name,meta={})=>fake.settings.profiles.set(name,{soul:'',provider:'openrouter',model:'openai/gpt-5.5',key:fake.settings.key,config:{},credentials:{},...meta});
 const proposalsOf=()=>({model:{id:1,agent_id:ads,change:'model',setting:null,value:'anthropic/claude-sonnet-5-5',state:'waiting'},
  soul:{id:2,agent_id:writer,change:'instructions',setting:null,value:'You write short posts.',state:'waiting'}});
 
 test('approving a model change and an instructions change writes each to its own Agent\'s profile alone, reads it back, then marks it approved',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   profileOn(fake,own(writer),{soul:`You write long posts.\n${section}\n`});
@@ -161,7 +171,7 @@ test('approving a model change and an instructions change writes each to its own
 });
 
 test('declining writes nothing to the Engine and sends the reason; an Engine that refused leaves the claim for another approval',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads),own(writer)]) profileOn(fake,name);
   const {model,soul}=proposalsOf();
@@ -186,7 +196,7 @@ test('declining writes nothing to the Engine and sends the reason; an Engine tha
 });
 
 test('a change the writer refuses before any Engine write gives the claim back and says it cannot be made as the Agent is now',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   // Sub-agents are off for Ads, so its sub-agent settings cannot be written.
@@ -211,7 +221,7 @@ test('a claim taken again after an unconfirmed write is never given back, even w
 });
 
 test('a lease another request holds answers busy, and a claim lost before the Engine write writes nothing',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   // The same Owner's other tab holds the lease: this request is busy and never reaches the Engine.
@@ -231,7 +241,7 @@ test('a lease another request holds answers busy, and a claim lost before the En
 // be stopped; the decline is recorded as maybe applied (agent_change_proposals.sql), and the Owner whose write landed late
 // is told so rather than "already answered".
 test('a write that lands after the proposal was declined meanwhile says so to the Owner who wrote it',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   const {model}=proposalsOf();
@@ -261,9 +271,10 @@ test('a write that lands after the proposal was declined meanwhile says so to th
 // #436: an approval of a setting waits its turn behind the Company's other setting writes. Its claim is renewed once that
 // turn has come, not before the wait, so a claim another Owner declined while it waited writes nothing.
 test('an approval waiting behind a Company-wide write renews its claim only once that write ends, and a claim lost meanwhile writes nothing',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
-  for(const name of [companyProfile(company),own(ads),own(writer),`cs-${company.replaceAll('-','')}`]) profileOn(fake,name);
+  // The shared space is companyProviders' own, with its keys.
+  for(const name of [companyProfile(company),own(ads),own(writer)]) profileOn(fake,name);
   const {model}=proposalsOf();
   const {db,calls}=owner([model]);
   let open=()=>{};
@@ -312,7 +323,7 @@ test('only an Owner answers, an unknown proposal is not found, and an answered o
 // #484: "Edit, then approve". The Owner's value goes with the claim, which the database checks and answers as the value
 // to write; the writer then writes that value, not the proposed one, to the Agent's own profile.
 test('approving with an edit claims the Owner\'s value and writes it, not the proposed one, to the Agent\'s own profile',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(ads)]) profileOn(fake,name);
   profileOn(fake,own(writer),{soul:`You write long posts.\n${section}\n`});
@@ -334,7 +345,7 @@ test('approving with an edit claims the Owner\'s value and writes it, not the pr
 });
 
 test('an edit the database refuses writes nothing, and an edit sent with a decline is never sent',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   profileOn(fake,own(ads));
   const {db,calls}=owner([proposalsOf().model]);
@@ -352,6 +363,7 @@ test('an edit the database refuses writes nothing, and an edit sent with a decli
 function reader(proposals,{isOwner=true}={}) {
  const base=owner([],{isOwner});
  const db={...base.db,from:table=>{
+  if(table==='company_provider_models') return base.db.from(table);
   assert.equal(table,'agent_change_proposals');
   const filters={};
   const query={select:()=>query,eq:(key,value)=>{ filters[key]=value; return query; },
@@ -361,7 +373,7 @@ function reader(proposals,{isOwner=true}={}) {
  return db;
 }
 test('the card reads the Agent\'s current value from its own profile, and an Owner gets the field to edit the proposal in',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(writer)]) profileOn(fake,name);
   profileOn(fake,own(ads),{soul:`You write long ads.\n${section}\n`,provider:'anthropic',model:'claude-sonnet-5-5',credentials:{anthropic:{}},config:{memory:{memory_char_limit:2200}}});
@@ -405,11 +417,10 @@ test('the card reads the Agent\'s current value from its own profile, and an Own
 // provider the sub-agents run on: their own provider, else the Agent's. A model of another provider would be approved
 // into a pair the Engine cannot run (Settings writes both keys together for that reason).
 test('the sub-agents\' model is edited among the models of the provider they run on, never another provider\'s',async()=>{
- const fake=await fakeHermes();
+ const fake=await fakeHermes(); companyProviders(fake);
  try {
   for(const name of [companyProfile(company),own(writer)]) profileOn(fake,name);
   fake.settings.providerModels.openai=['gpt-5.5','gpt-5-mini'];
-  fake.settings.envRows.push({env:'OPENAI_API_KEY',provider:'openai',label:'OpenAI',primary:true,password:true,category:'provider'});
   const base={soul:'',provider:'anthropic',model:'claude-sonnet-5-5',key:fake.settings.key,credentials:{anthropic:{}},env:{OPENAI_API_KEY:'test-only-key'}};
   const rows=[{id:1,agent_id:ads,change:'setting',setting:'delegation.model',state:'waiting'}];
   const options={company,hermes:install(fake),settingDriver:settingDriver(fake),instructionsDriver:instructionsDriver(fake)};

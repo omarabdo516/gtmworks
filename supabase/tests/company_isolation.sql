@@ -9,7 +9,7 @@ insert into isolation_matrix(name) values
  ('agent_requests'),('agent_rules'),('approval_steps'),
  ('channel_agents'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
- ('company_profile_keepers'),('company_profiles'),('company_shared_spaces'),
+ ('company_profile_keepers'),('company_profiles'),('company_provider_models'),('company_shared_spaces'),
  ('good_morning_results'),('good_mornings'),
  ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
@@ -65,6 +65,7 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
    "conversation_id": "'e3370000-0000-0000-0000-00000000000c'"}$$),
  -- A Routine result kept as it ended (#535) names its profile and its Routine's Engine id.
  ('routine_results', $${"profile": "'ag-' || md5('isolation')", "routine_id": "'abcdef'"}$$),
+ ('company_provider_models', $${"entry": "'key-openrouter'", "model": "'openai/gpt-5.5'", "enabled": "false"}$$),
  ('waiting_items', $${"card_id": "1"}$$),
  ('work_attachments', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$),
  ('work_stages', $${"board_column": "'ideas'"}$$),

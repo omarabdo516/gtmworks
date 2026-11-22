@@ -1,0 +1,6 @@
+| `provider-models.spec.ts` | On the app (#620): with a Claude subscription and an Anthropic key both offering Opus and Sonnet, the Owner turns Sonnet off on the subscription, then on the key, then on again; after each change the chat's "+" menu and Lead's own model choice offer it once with Claude's mark while one Provider has it on and not at all once none does, the switch is kept in the database and read back after a reload, and a choice of it sent anyway is refused by both writers; a Manager reads each switch and the server refuses their change. | — | provider-models.test.mjs (the offer and the writers); supabase/tests/provider_models.sql (who may switch, and Company isolation); components/company-providers.test.tsx (the switches) | new |
+
+## Cases
+
+| `provider-models.spec.ts` "a model stays offered once, with its mark, while either Provider has it on, and is gone from both pickers once neither does" | stays | A journey across the Engine and the database: only the whole app reads the Company's Providers from its Engine, keeps a switch, and draws both pickers from them through the server. |
+| `provider-models.spec.ts` "a Manager reads each Provider's switches and cannot change one" | stays | A Role's path through the server: the Manager's page draws no switch and the route refuses the change. |

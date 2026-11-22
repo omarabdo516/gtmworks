@@ -24,6 +24,7 @@ function outcomeReply(result:Record<string,unknown>&{state?:string}) {
  if(state==='shared') return reply({error:'settingAgentShared'},409);
  if(state==='subagentsOff') return reply({error:'settingSubagentsOff'},409);
  if(state==='noDefault') return reply({error:'settingNoDefault'},409);
+ if(state==='notEnabled') return reply({error:'settingModelNotEnabled'},409);
  if(state==='unknown') return reply({error:'settingUnknown'},400);
  if(state==='installOnly') return reply({error:'settingInstallOnly'},409);
  if(state==='mismatch') return reply({error:'settingMismatch'},502);

@@ -47,6 +47,8 @@ function database({owner=true,rowsFor=rows(),refuse={}}={}) {
   if(name==='log_engine_setting'||name==='set_agent_model'||name==='set_agent_subagents') return {data:null,error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
+ // No Provider has a model switched off (#620, company_provider_models).
+ db.from=table=>({select:()=>({eq:async()=>table==='company_provider_models'?{data:[],error:null}:{data:null,error:{message:`unexpected ${table}`}}})});
  return {db,calls,logged:()=>calls.filter(call=>call.name==='log_engine_setting').map(call=>call.args)};
 }
 const schema=(fake)=>{
@@ -358,6 +360,8 @@ test('an Agent\'s own model chosen during a Company default ends with the Engine
  const fake=await fakeHermes();
  try {
   seed(fake); schema(fake);
+  // The Company's Claude subscription is a Provider of the Writer's Anthropic model (#620).
+  fake.settings.defaultCredentials.anthropic='test-only-claude-oauth';
   // The record is the database's: a choice remembered by set_agent_model is what the next read answers.
   const state=rows();
   const {db}=database({rowsFor:state});

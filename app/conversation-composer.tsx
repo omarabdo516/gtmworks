@@ -11,7 +11,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { firstName } from '@/lib/channels';
 import { AppTile } from '@/components/app-tile';
-import { markOf } from '@/lib/app-mark.mjs';
+import { markOf, modelMarkOf } from '@/lib/app-mark.mjs';
 import { conversationFilesProblem, imageTypes, maxFiles } from '@/lib/attachments.mjs';
 import { useComposerDictation, type DictationTarget } from './composer-mic';
 import { toast } from './toast';
@@ -322,7 +322,7 @@ function PlusMenu({open,setOpen,callable,channel,model,attach,pickFile,insert,fi
     <div className="menu__label">{t('plusModel')}</div>
     {models.list.map(row=>{ const on=row.provider===models.current?.provider&&row.model===models.current?.model;
      return <button key={`${row.provider}:${row.model}`} type="button" className="menu__item" role="menuitemradio" aria-checked={on} onClick={()=>void pickModel({provider:row.provider,model:row.model})}>
-      <AppTile app={{key:modelMark(row),mark:markOf(row.providerName)}}/><span className="menu__t"><bdi>{row.model}</bdi><span className="menu__d"><bdi>{row.providerName}</bdi></span></span>
+      <AppTile app={{key:modelMarkOf(row),mark:markOf(row.providerName)}}/><span className="menu__t"><bdi>{row.model}</bdi><span className="menu__d"><bdi>{row.providerName}</bdi></span></span>
       {on&&<ShellIcon name="check" className="menu__check"/>}</button>; })}</>}
   </div>}
   {making&&place&&<Suspense fallback={null}><NewChannel slug={place.slug} company={place.company} person={place.person} close={()=>setMaking(false)} opener={()=>button.current}/></Suspense>}
@@ -345,9 +345,6 @@ function useModels(target:ModelTarget|undefined) {
  },[company,conversation]);
  return target?models:null;
 }
-// The reference's mark for a model (design-reference: MODELS' logo): its maker's, also when another provider serves it.
-const makers:[RegExp,string][]=[[/^(anthropic|claude)/,'claude'],[/^(openai|gpt|o\d)/,'openai'],[/^(google|gemini)/,'gemini']];
-const modelMark=({provider,model}:ModelRow)=>makers.find(([pattern])=>pattern.test(provider)||pattern.test(model))?.[1]??provider;
 
 export async function postMessage(body:object,path='/api/conversations') {
  try {

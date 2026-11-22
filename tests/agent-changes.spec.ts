@@ -29,7 +29,10 @@ test.beforeAll(async({},testInfo)=>{
  freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
  fake=await laneHermes();
  const profile=(soul='')=>({soul,provider:'openrouter',model:'openai/gpt-5.5',key:fake.settings.key,config:{},credentials:{}});
- for(const name of [space,co]) fake.settings.profiles.set(name,profile());
+ fake.settings.profiles.set(co,profile());
+ // The Company holds an OpenRouter key in its shared space, so OpenRouter is one of its Providers and its models may be
+ // chosen (#620).
+ fake.settings.profiles.set(space,{...profile(),env:{OPENROUTER_API_KEY:'test-only-key'}});
  // Writer's profile has an OpenRouter key, so its Engine lists OpenRouter's models (tests/fake-hermes.mjs).
  fake.settings.profiles.set(writerProfile,{...profile('You write long posts.'),env:{OPENROUTER_API_KEY:'test-only-key'}});
  query(`do $$ begin
@@ -39,6 +42,7 @@ test.beforeAll(async({},testInfo)=>{
    ('${writer}','${company}','e9200000-0000-0000-0000-000000000012','Writer','Writing',false,'${writerProfile}');
   insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) values ('${company}','${co}',true,true)
    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
+  insert into public.company_shared_spaces(company_id,folder) values ('${company}','/opt/data/profiles/${space}/skills') on conflict do nothing;
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${manager}','${writer}');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
    ('${managerTalk}','${company}','${manager}','${writer}','Writer'),('${ownerTalk}','${company}','${omar}','${lead}','Lead');
