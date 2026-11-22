@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(45);
 -- #514: a queued Conversation turn's start, or a handover leg's, that never reached an Engine is handed back
 -- (release_queued_start, release_handover_start): the turn or leg stays due as never started, its next start is a first
 -- attempt, so a refusal of it fails the turn or the leg, and its own time limit still ends it. Only the attempt that
@@ -141,6 +141,17 @@ set local role service_role;
 select ok(public.release_handover_start(-5144,1,'waiting'),'the start never reached an Engine and is handed back');
 reset role;
 select is((select state||':'||target_outcome||':'||target_attempts from public.agent_handovers where id=-5144),'done:stopped:1','so the leg ends as stopped, and starts no more');
+
+-- One whose earlier start may hold a Run stays marked when a later attempt is handed back, so its retry still recovers
+-- that Run for Stop to stop.
+insert into public.agent_handovers(id,company_id,conversation_id,run_id,call_id,from_agent,to_agent,goal) overriding system value values
+ (-5145,'10000000-0000-0000-0000-000000000001','c5140000-0000-0000-0000-000000000002','run-514-stop','call-5','a5140000-0000-0000-0000-000000000011','a5140000-0000-0000-0000-000000000012','Lost, then stopped');
+update public.agent_handovers set target_attempts=2, attempted_at=now(), stop_requested_at=now() where id=-5145;
+set local role service_role;
+select ok(public.release_handover_start(-5145,2,'waiting'),'a later attempt that never reached an Engine is handed back');
+reset role;
+select is((select state||':'||target_attempts||':'||(stop_requested_at is not null) from public.agent_handovers where id=-5145),'waiting:1:true',
+ 'but the leg stays marked and due, since its first start may hold a Run');
 
 select * from finish();
 rollback;

@@ -64,8 +64,9 @@ end $$;
 -- A handover leg handed back stays due as never started: its next start is a first attempt, so a refusal of it ends the
 -- leg as failed, and a waiting leg's ten minutes (or the answer's and the follow-up's day) still end it. The leg is
 -- named, so an attempt of another leg is never handed back; the 30 seconds between starts stay. A leg Stop marked while
--- this start was on its way (#478, stop_requested_at) waited only for the start's answer: none reached an Engine, so it
--- ends as stopped now, with no Run to stop, instead of starting again after Stop.
+-- this start was on its way (#478, stop_requested_at) waited only for the start's answer: when it was the leg's first
+-- attempt, none reached an Engine, so it ends as stopped now, with no Run to stop, instead of starting again after Stop.
+-- A later attempt handed back leaves an earlier one that may hold a Run, so the leg stays marked until that Run is known.
 create function public.release_handover_start(h bigint, attempt integer, leg text) returns boolean
 language plpgsql security definer set search_path='' as $$
 declare r public.agent_handovers;
@@ -75,7 +76,9 @@ begin
  if not ((r.state='waiting' and r.target_run is null and r.target_attempts=attempt)
   or (r.state='handing' and r.answer_run is null and r.answer_attempts=attempt)
   or (r.state='returning' and r.follow_up_run is null and r.return_attempts=attempt)) then return false; end if;
- if r.stop_requested_at is not null then perform public.end_handovers_stopped(array[h]); return true; end if;
+ -- Only once no attempt is left that may hold a Run: an earlier one whose answer was lost keeps the leg marked and due, so
+ -- its retry still recovers that Run's id and Stop stops it (answer_handover).
+ if r.stop_requested_at is not null and attempt=1 then perform public.end_handovers_stopped(array[h]); return true; end if;
  update public.agent_handovers set
   target_attempts=target_attempts-case when r.state='waiting' then 1 else 0 end,
   answer_attempts=answer_attempts-case when r.state='handing' then 1 else 0 end,
