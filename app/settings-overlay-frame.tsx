@@ -43,7 +43,7 @@ function giveFocusBack() {
   const id=takeReturnFocus(stored=>!!document.getElementById(stored)); const opener=id?document.getElementById(id):null;
   if(!opener) return;
   // On a phone the account button sits in the closed navigation drawer: the button that opens the drawer takes it.
-  const shown=opener.checkVisibility()?opener:document.querySelector<HTMLElement>('.mobile-menu');
+  const shown=opener.checkVisibility({visibilityProperty:true})?opener:document.querySelector<HTMLElement>('.mobile-menu');
   shown?.focus({preventScroll:true});
  });
 }

@@ -95,6 +95,23 @@ test('Settings opened over a page after the session ran out go to sign in, then 
  await expect(page.getByRole('dialog',{name:'Settings'})).toBeVisible();
 });
 
+// #612: on a phone the account button sits in the navigation drawer, which is closed again once Settings are open, so
+// closing them gives the focus to the button that opens the drawer.
+test('on a phone, closing Settings opened from the account menu gives the focus to the menu button',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await openNavigation(page);
+ const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+ await settings.click();
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ await expect(overlay).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+ await expect(overlay).toHaveCount(0);
+ await expect(page.locator('.mobile-menu')).toBeFocused();
+});
+
 test('on a phone Settings cover the whole window, and the open page is the breadcrumb’s last crumb',async({page})=>{
  await page.setViewportSize({width:390,height:844});
  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
