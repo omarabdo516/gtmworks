@@ -694,7 +694,7 @@
   "settingsRoutines": "Recurring tasks",
   "settingsBackup": "Backups",
   "settingsAccount": "Your account",
-  "settingsCompanySub": "The company name, working alone or with a team, and who works with which agents.",
+  "settingsCompanySub": "The company name, working alone or with a team, and what every agent can use.",
   "settingsAgentsSub": "Here you see how each agent is set up: its job, apps, rules and memory.",
   "settingsKnowledgeSub": "What every agent needs to know about the company, in one place. Any edit here reaches all of them.",
   "settingsLearningSub": "Agents get better on their own: they save notes and write or improve their skills from the work. You choose whether they learn on their own or ask first.",
