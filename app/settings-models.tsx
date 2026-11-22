@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { effortDefault, effortHintKey, effortLabelKey } from '@/lib/engine-effort.mjs';
 import { toast } from './toast';
 import { AppTile } from '@/components/app-tile';
+import { markOf } from '@/lib/app-mark.mjs';
 
 // The "Subscription and models" section (#29) and an Agent's "Thinks with" rows: the Engine's model options for the
 // Company's space and for each Agent's own profile, the model written to that profile and read back, and the Owner's
@@ -30,7 +31,7 @@ async function send(path:string,body:object):Promise<Answer> {
 const modelOf=(option:ModelOption)=>`${option.provider}/${option.model}`;
 // A provider's logo, or its first letter where it has none (#424). A key row names it (label); a model choice already
 // says its provider in words, so there it has no label and stays out of the radio's name.
-const ProviderLogo=({provider,name,label}:{provider:string,name:string,label?:string})=><AppTile app={{key:provider,mark:Array.from(name.trim())[0]?.toUpperCase()||'·'}} label={label}/>;
+const ProviderLogo=({provider,name,label}:{provider:string,name:string,label?:string})=><AppTile app={{key:provider,mark:markOf(name)}} label={label}/>;
 // The arrow keys move through a list of model choices as the reference's other radio groups do: down or right forward in
 // English, down or left forward in Arabic; the first and last stop the arrow, and a group with no choice marked starts
 // from the focused row. Moving selects, as the effort control does (#179).
