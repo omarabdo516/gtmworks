@@ -10,6 +10,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useCardText } from '@/app/agent-card';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { AppTile } from '@/components/app-tile';
+import { markOf } from '@/lib/app-mark.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -71,7 +72,7 @@ export function ChangeCard({change,company,owner=false,unread=false,answer}:{cha
  const now=change.state==='waiting'&&read&&read!=='loading'&&read.now!==null&&read.now!==undefined?read.now:undefined;
  // A model's mark is its provider's logo, as Settings draws it (#424); every other change keeps the Agent's face.
  const model=change.change==='model'&&!unread?modelParts(after):null;
- const mark=model?<AppTile app={{key:providerMarks[model.provider]??model.provider,mark:Array.from(model.provider)[0]?.toUpperCase()||'·'}} size="lg"/>:<CompanyAgentFace agent={change.agent} size={44}/>;
+ const mark=model?<AppTile app={{key:providerMarks[model.provider]??model.provider,mark:markOf(model.provider)}} size="lg"/>:<CompanyAgentFace agent={change.agent} size={44}/>;
  const badge=change.state==='waiting'?(owner?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{c('changeBadgeYou')}</span>
    :<span className="badge"><ShellIcon name="clock"/>{change.owners.length?cb('changeBadgeOwner',owners):c('changeBadgeAnyOwner')}</span>)
   :<span className="badge"><ShellIcon name={change.state==='approved'?'check':'x'}/>{c(change.state==='approved'?'changeBadgeApproved':change.state==='declined'?'changeBadgeDeclined':'changeBadgeRefused')}</span>;
