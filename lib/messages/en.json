@@ -827,6 +827,7 @@
   "knowReadBy": "Read by every agent",
   "knowEmptyManage": "Nothing is written here yet. Write it once, and every agent reads it from its next job.",
   "knowEmptyRead": "Nothing is written here yet. The Owner or a Manager writes it.",
+  "knowUnread": "The Company knowledge can’t be read right now.",
   "knowSaveOrCancel": "Save the page or cancel the edit first",
   "companyKnowledgeSaved": "“{0}” is saved. Every agent reads the new version from its next job.",
   "companyKnowledgeCleared": "“{0}” is now empty. From their next job, the agents no longer read it.",

@@ -1,5 +1,11 @@
 [
  {
+  "issue": 630,
+  "date": "2026-11-22",
+  "en": { "title": "Company knowledge no longer breaks Settings", "body": "When the Engine does not answer, Company knowledge now says it can’t be read right now, with no editor, and the rest of Settings stays open instead of the whole page failing." },
+  "ar": { "title": "معرفة الشركة مابقتش بتوقّع الإعدادات", "body": "لما المحرك مايردّش، معرفة الشركة بقت بتقول إننا مش قادرين نقراها دلوقتي، من غير محرّر، وباقي الإعدادات بيفضل مفتوح بدل ما الصفحة كلها توقع." }
+ },
+ {
   "issue": 647,
   "date": "2026-11-22",
   "en": { "title": "What an Agent writes before it asks stays in the chat", "body": "When an Agent writes its answer and asks you about it in the same breath, its words now show above the question or the request to allow, in a Conversation and in a Channel (in a Channel, when the question has a card), and the reply after your answer does not repeat them." },
