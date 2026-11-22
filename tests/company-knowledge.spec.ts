@@ -152,3 +152,21 @@ test('a Contributor reads the knowledge with no Edit button, and the server refu
  expect(skill()).toBe(before.skill);
  expect(logged('voice')).toEqual(before.logged);
 });
+
+// #630: an Engine that does not answer leaves Settings standing. The part says it cannot be read, with no editor that
+// could save over text nobody saw, and the other sections still open from the same overlay.
+test('when the Engine does not answer, the part says it cannot be read, with no Edit button, and Settings stay open',async({page})=>{
+ fake.settings.managementStatus=503;
+ try {
+  await signIn(page,'manager@example.com','/c/rs-learning/settings?section=knowledge');
+  const overlay=page.getByRole('dialog',{name:'Settings'});
+  await expect(overlay.getByRole('heading',{name:'Company knowledge',exact:true})).toBeVisible();
+  await expect(overlay.locator('.know-unread')).toHaveText('The Company knowledge can’t be read right now.');
+  await expect(overlay.locator('#know-tab-voice')).toHaveAttribute('aria-pressed','true');
+  await expect(overlay.locator('#know-edit-btn')).toHaveCount(0);
+  await expect(overlay.locator('.know-body')).toHaveCount(0);
+  await expect(page.getByText('Could not load this page')).toHaveCount(0);
+  await overlay.locator('#sov-nav-members').click();
+  await expect(overlay.getByRole('heading',{name:'Members',exact:true})).toBeVisible();
+ } finally { fake.settings.managementStatus=200; }
+});
