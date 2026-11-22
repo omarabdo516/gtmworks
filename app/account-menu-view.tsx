@@ -105,7 +105,7 @@ export default function AccountMenuView({slug,company,personId,personName,role,o
   }}>
    <div className="me-menu__head"><span className="me__av" aria-hidden="true">{initial}</span><span className="me__text"><span className="me__name"><bdi>{personName}</bdi></span><span className="me__role">{role}{companyName&&<> · <bdi>{companyName}</bdi></>}</span></span></div>
    {settingsHref&&<><div className="menu__sep" role="separator"/>
-    <Link className="menu__item" role="menuitem" href={settingsHref} onClick={()=>{rememberOpener();closeMenu();}}><ShellIcon name="gear"/><span className="menu__t">{t('settings')}<span className="menu__d">{t('settingsMenuDescription')}</span></span></Link></>}
+    <Link className="menu__item" role="menuitem" href={settingsHref} onClick={()=>{rememberOpener('btn-me');closeMenu();}}><ShellIcon name="gear"/><span className="menu__t">{t('settings')}<span className="menu__d">{t('settingsMenuDescription')}</span></span></Link></>}
    {canManage&&company&&team&&<><div className="menu__sep" role="separator"/>
     <button type="button" className="menu__item" role="menuitem" onClick={()=>{ closeMenu(); setTeamOpen(true); }}><ShellIcon name="team"/><span className="menu__t">{t('team')}<span className="menu__d">{t(alone?'teamMenuSoloDescription':'teamMenuDescription')}</span></span></button></>}
    <div className="menu__sep" role="separator"/>

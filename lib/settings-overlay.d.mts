@@ -1,7 +1,11 @@
-export type OverlayIcon = 'building' | 'bot' | 'book' | 'bulb' | 'cpu' | 'plug' | 'repeat' | 'gauge' | 'archive' | 'user' | 'info';
-export type OverlaySection = 'company' | 'agents' | 'knowledge' | 'learning' | 'models' | 'apps' | 'routines' | 'usage' | 'backup' | 'account' | 'about';
-export const overlaySections: readonly (readonly [OverlaySection, string, OverlayIcon, boolean, boolean])[];
-export function visibleSections(role: string): (readonly [OverlaySection, string, OverlayIcon, boolean, boolean])[];
+export type OverlayIcon = 'building' | 'team' | 'bot' | 'book' | 'bulb' | 'cpu' | 'plug' | 'repeat' | 'gauge' | 'archive' | 'user' | 'info';
+export type OverlaySection = 'company' | 'members' | 'knowledge' | 'agents' | 'learning' | 'routines' | 'apps' | 'models' | 'usage' | 'backup' | 'account' | 'about';
+export type OverlayGroup = 'company' | 'agents' | 'engine';
+export type OverlaySectionEntry = readonly [OverlaySection, string, OverlayIcon, boolean, OverlayGroup | null, boolean?];
+export const overlaySections: readonly OverlaySectionEntry[];
+export function visibleSections(role: string): OverlaySectionEntry[];
+export function overlayGroups(role: string): { group: OverlayGroup | null, label: string | null, sections: OverlaySectionEntry[] }[];
+export function sectionGroup(key: OverlaySection): { group: OverlayGroup, label: string } | null;
 export function pickSection(requested: unknown, role: string): OverlaySection;
 export function overlayHref(slug: string, section: OverlaySection, extra?: Record<string, string | undefined>): string;
 export function companyKnowledgeHref(slug: string, role: string): string | undefined;

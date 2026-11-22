@@ -100,7 +100,7 @@ test('the Owner sees each Agent\'s Routines and pauses, resumes, runs now, resch
  await overlay.locator('.dp-sec').filter({has:page.locator('.dp-label',{hasText:'Ads'})}).getByRole('button',{name:'Add a task'}).click();
  await overlay.getByRole('button',{name:'Add',exact:true}).click();
  await expect(overlay.locator('#rt-err')).toHaveText('Write the task first, even a short sentence.');
- await overlay.getByLabel('Agent').selectOption({label:'Ads'});
+ await overlay.getByLabel('Agent',{exact:true}).selectOption({label:'Ads'});
  await overlay.getByLabel('What to do').fill('Send me the cost per lead');
  await overlay.locator('#rt-n-time').fill('08:15');
  await overlay.getByRole('button',{name:'Add',exact:true}).click();

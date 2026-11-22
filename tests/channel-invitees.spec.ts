@@ -26,7 +26,7 @@ test('the Owner invites a person, who joins the general channel with "Invite sen
  await expect(details.locator('#ch-h-p .muted')).toHaveText('6');
  await expect(details.locator('.dp-id__role')).toContainText('6 members');
 
- await page.goto('/c/rs-learning/settings?section=company');
+ await page.goto('/c/rs-learning/settings?section=members');
  const overlay=page.getByRole('dialog',{name:'Settings'});
  await overlay.getByRole('button',{name:'Invite a member'}).click();
  await overlay.locator('#inv-email').fill(email);
