@@ -73,7 +73,10 @@ export function measuredTimes(reports) {
 
 // The spec files the browser suite runs where the shards do, as Playwright lists them.
 function suiteFiles() {
-  const list = execFileSync('npx', ['playwright', 'test', '--list', '--reporter=json'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GTMWORKS_HOSTED_ELSEWHERE: 'true' } });
+  // The list comes on stdout: a shard's PLAYWRIGHT_JSON_OUTPUT_FILE would send it to the shard's report file instead.
+  const env = { ...process.env, GTMWORKS_HOSTED_ELSEWHERE: 'true' };
+  delete env.PLAYWRIGHT_JSON_OUTPUT_FILE;
+  const list = execFileSync('npx', ['playwright', 'test', '--list', '--reporter=json'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env });
   const files = new Map();
   eachSpec(JSON.parse(list), (file, spec) => {
     const entry = files.get(file) ?? { file, tests: 0, parallel: /describe\.configure\(\s*\{[^}]*\bmode\s*:\s*['"]parallel['"]/.test(readFileSync(`tests/${file}`, 'utf8')), firstRun: false };
