@@ -59,8 +59,8 @@ test('the Owner turns a switch in the Team dialog: Settings reads it and the sec
  await expect(toggle).toHaveAttribute('aria-checked','true');
  await expect(toggle).toBeEnabled();
 
- // The same switch in Settings, Company, read after the change.
- await page.goto('/c/rs-learning/settings?section=company');
+ // The same switch in Settings, Members, read after the change.
+ await page.goto('/c/rs-learning/settings?section=members');
  const settingsTable=page.getByRole('dialog',{name:'Settings'}).locator('.ta-table');
  const inSettings=settingsTable.locator('tbody tr').filter({hasText:'مراجع'}).getByRole('switch',{name:'مراجع · Meta Ads'});
  await expect(inSettings).toHaveAttribute('aria-checked','true');

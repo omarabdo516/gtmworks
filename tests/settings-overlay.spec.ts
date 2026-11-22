@@ -8,9 +8,9 @@ import { signIn, openNavigation, emailLink } from './sign-in';
 const company='10000000-0000-0000-0000-000000000003';
 const owner='20000000-0000-0000-0000-000000000001';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
-// The reference's ten sections, the company's nine first and Your account under "You", then About (#616). Backup is the
-// Owner's alone (#33).
-const sections=['Company','Agents','Company knowledge','Learning','Subscription and models','Apps','Recurring tasks','Usage','Backups','Your account','About'];
+// The sections in their groups (#612): Company, Agents and Engine, then Backups, Your account and About on their own.
+// Backup is the Owner's alone (#33).
+const sections=['Company','Members','Company knowledge','Agents','Learning','Recurring tasks','Apps','Providers','Usage','Backups','Your account','About'];
 const staffSections=sections.filter(section=>section!=='Backups');
 
 test('the account menu opens Settings over the page, Escape and the close button return to it',async({page})=>{
@@ -39,6 +39,94 @@ test('the account menu opens Settings over the page, Escape and the close button
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
   await expect(overlay).toHaveCount(0);
  }
+});
+
+// #612: Settings open over the page the person is on. On a wide screen a floating dialog with its breadcrumb leaves that
+// page in view behind it, out of reach; on a phone it covers the window. Closing finds the page as it was left: the same
+// drawing of it, not one drawn again, with the focus back on the account button that opened Settings.
+test('Settings open over the board, which stays as it was left, and closing gives the focus back to the account button',async({page})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const board=page.locator('.work-root');
+ await expect(board).toBeVisible();
+ // A mark only this drawing of the board carries: a board drawn again would not have it.
+ await board.evaluate(node=>node.setAttribute('data-kept','yes'));
+ await openNavigation(page);
+ const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+ await settings.click();
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ await expect(overlay).toBeVisible();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings$/);
+ const crumbs=overlay.getByRole('navigation',{name:'Breadcrumb'}).getByRole('listitem');
+ await expect(crumbs).toHaveText(['Settings','Company']);
+ // A floating dialog: the board shows around it, and nothing of the board can be reached while it is open.
+ const box=(await overlay.boundingBox())!, view=page.viewportSize()!;
+ expect(box.x).toBeGreaterThan(0); expect(box.y).toBeGreaterThan(0); expect(box.x+box.width).toBeLessThan(view.width);
+ await expect(board).toHaveAttribute('data-kept','yes');
+ await expect(page.locator('[data-workspace]')).toHaveAttribute('inert','');
+ await overlay.locator('#sov-nav-members').click();
+ await expect(page).toHaveURL(/\?section=members$/);
+ await expect(overlay.getByRole('heading',{name:'Members',exact:true})).toBeVisible();
+ await expect(crumbs).toHaveText(['Settings','Company','Members']);
+ await expect(crumbs.last()).toHaveAttribute('aria-current','page');
+ await overlay.locator('#sov-nav-about').click();
+ await expect(crumbs).toHaveText(['Settings','About']);
+ await page.keyboard.press('Escape');
+ await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+ await expect(overlay).toHaveCount(0);
+ await expect(board).toHaveAttribute('data-kept','yes');
+ await expect(page.locator('[data-workspace]')).not.toHaveAttribute('inert');
+ await expect(page.locator('#btn-me')).toBeFocused();
+});
+
+// #612: a session that ran out while the board stayed open. Settings opened over it go to sign in, and back to Settings.
+test('Settings opened over a page after the session ran out go to sign in, then back to Settings',async({page,context})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await openNavigation(page);
+ const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+ await context.clearCookies();
+ await settings.click();
+ await expect(page).toHaveURL(/\/sign-in\?next=%2Fc%2Frs-learning%2Fsettings$/);
+ await page.getByLabel('Email',{exact:true}).fill('omar@example.com');
+ await page.getByLabel('Password',{exact:true}).fill('local-seed-password');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings$/);
+ await expect(page.getByRole('dialog',{name:'Settings'})).toBeVisible();
+});
+
+// #612: on a phone the account button sits in the navigation drawer, which is closed again once Settings are open, so
+// closing them gives the focus to the button that opens the drawer.
+test('on a phone, closing Settings opened from the account menu gives the focus to the menu button',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await openNavigation(page);
+ const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+ await settings.click();
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ await expect(overlay).toBeVisible();
+ // The dialog takes the focus in the same pass that starts listening for Escape.
+ await expect.poll(()=>overlay.evaluate(node=>node.contains(document.activeElement))).toBe(true);
+ await page.keyboard.press('Escape');
+ await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
+ await expect(overlay).toHaveCount(0);
+ await expect(page.locator('.mobile-menu')).toBeFocused();
+});
+
+test('on a phone Settings cover the whole window, and the open page is the breadcrumb’s last crumb',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
+ const overlay=page.getByRole('dialog',{name:'Settings'});
+ await expect(overlay.getByRole('heading',{name:'Members',exact:true})).toBeVisible();
+ expect(await overlay.boundingBox()).toEqual({x:0,y:0,width:390,height:844});
+ await expect(overlay.getByRole('navigation',{name:'Breadcrumb'}).getByRole('listitem').filter({visible:true})).toHaveText(['Settings','Members']);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+ // Moving between pages keeps one dialog, which neither enters again nor drops the focus from the section just chosen.
+ await overlay.locator('#sov-nav-agents').click();
+ await expect(page).toHaveURL(/\?section=agents$/);
+ await expect(page.locator('.sov-root')).toHaveCount(1);
+ await expect(overlay.locator('#sov-nav-agents')).toBeFocused();
 });
 
 // #342: the bundled Hermes is the only Hermes. No Settings section, menu entry or address connects another one.
@@ -212,15 +300,16 @@ test('a Viewer sees only the Agents and their account, read only, and no Owner c
 // is checked for every Role: on screen when the Role's row names it, absent otherwise. A Viewer has no Company section.
 const rsLearning='10000000-0000-0000-0000-000000000001';
 const surfaces={
- company:['#co-name','.ro-text','.ro-note:not(.sov-warn)','.sov-ta table','.inv-sec .inv-open','[aria-labelledby=co-h-mem] .panel-row'],
+ company:['#co-name','.ro-text','.ro-note:not(.sov-warn)'],
+ members:['.ro-note:not(.sov-warn)','.sov-ta table','.inv-sec .inv-open','[aria-labelledby=co-h-mem] .panel-row'],
  agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],
  agent:['#set-make-main','#danger-pause','#danger-delete','.ro-note','.talk-tip a'],
 };
 const roleViews=[
- {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name','.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-pause','#danger-delete','.talk-tip a']},
- {role:'Manager',email:'manager@example.com',sections:staffSections,readOnly:false,movesMain:false,company:['.ro-text','.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
- {role:'Contributor',email:'reviewer@example.com',sections:staffSections.filter(section=>section!=='Usage'),readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
- {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account','About'],readOnly:true,movesMain:false,company:null,agents:['.ro-note'],agent:['.ro-note']},
+ {role:'Owner',email:'omar@example.com',sections,readOnly:false,movesMain:true,company:['#co-name'],members:['.sov-ta table','.inv-sec .inv-open'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['#set-make-main','#danger-pause','#danger-delete','.talk-tip a']},
+ {role:'Manager',email:'manager@example.com',sections:staffSections,readOnly:false,movesMain:false,company:['.ro-text'],members:['.sov-ta table'],agents:['a[href$="/chat?new=agent"]','.talk-tip a'],agent:['.talk-tip a']},
+ {role:'Contributor',email:'reviewer@example.com',sections:staffSections.filter(section=>section!=='Usage'),readOnly:true,movesMain:false,company:['.ro-text','.ro-note:not(.sov-warn)'],members:['.ro-note:not(.sov-warn)','[aria-labelledby=co-h-mem] .panel-row'],agents:['a[href$="/chat?new=agent"]','.ro-note','.talk-tip a'],agent:['.ro-note','.talk-tip a']},
+ {role:'Viewer',email:'viewer@example.com',sections:['Agents','Your account','About'],readOnly:true,movesMain:false,company:null,members:null,agents:['.ro-note'],agent:['.ro-note']},
 ];
 
 for(const view of roleViews) test(`${view.role}: Settings shows only what the Role allows, and only the Owner's request moves the main mark`,async({page})=>{
@@ -244,6 +333,11 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
   await expect(overlay.getByRole('heading',{name:view.company?'Company':'Agents',exact:true})).toBeVisible();
   await expect(overlay.locator('.sov-ro').filter({hasText:'Read only'})).toHaveCount(view.readOnly?1:0);
   if(view.company) await shows('company',view.company);
+  if(view.members) {
+   await page.goto('/c/rs-learning/settings?section=members');
+   await expect(overlay.getByRole('heading',{name:'Members',exact:true})).toBeVisible();
+   await shows('members',view.members);
+  }
   await page.goto('/c/rs-learning/settings?section=agents');
   await expect(overlay.locator('.sov-ag')).toHaveCount(2);
   await shows('agents',view.agents);
@@ -280,7 +374,7 @@ for(const view of roleViews) test(`${view.role}: Settings shows only what the Ro
 // for the Owner and the Managers, and their ordinary Member row once they accept from the email.
 test('the Owner invites a Member from the Team table, the row says Invite sent, and becomes a Member row when accepted',async({page,context,browser})=>{
  const local=`team-invite-${Date.now()}`, email=`${local}@example.com`;
- await signIn(page,'omar@example.com','/c/rs-learning/settings?section=company');
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
  const overlay=page.getByRole('dialog',{name:'Settings'});
  const address=page.url();
  await overlay.getByRole('button',{name:'Invite a member'}).click();
@@ -305,7 +399,7 @@ test('the Owner invites a Member from the Team table, the row says Invite sent, 
 
  const other=await browser.newContext(); const manager=await other.newPage();
  try {
-  await signIn(manager,'manager@example.com','/c/rs-learning/settings?section=company');
+  await signIn(manager,'manager@example.com','/c/rs-learning/settings?section=members');
   const theirs=manager.getByRole('dialog',{name:'Settings'});
   await expect(theirs.locator('.ta-table tbody tr').filter({hasText:email}).locator('.ta-pending')).toHaveText('Invite sent');
   await expect(theirs.locator('#inv-toggle')).toHaveCount(0);
@@ -316,7 +410,7 @@ test('the Owner invites a Member from the Team table, the row says Invite sent, 
  await page.getByRole('button',{name:'Save password'}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\//);
  await context.clearCookies();
- await signIn(page,'omar@example.com','/c/rs-learning/settings?section=company');
+ await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
  const joined=overlay.locator('.ta-table tbody tr').filter({hasText:local});
  await expect(joined.locator('.ta-role')).toHaveText('Viewer');
  await expect(joined.locator('.ta-pending')).toHaveCount(0);

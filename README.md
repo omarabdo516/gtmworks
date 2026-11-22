@@ -192,7 +192,7 @@ Company says in one line what every Agent can use and that anything published or
 Approval.
 Each agent gets its own agent engine profile, with its own memory, once it moves there; until then it shares the company profile with the other agents on it. The agent that was the main agent of a company when the moves began keeps what its agents remembered before, even if another agent is made main later, and an agent moved to its own profile starts with an empty memory. A company still on the shared default profile from an earlier install shares that memory with the other agents of the same Company only: every profile lives in that Company's own Engine, and no other Company's Engine, Agents or people can read it.
 
-The Owner connects a subscription in Settings, Subscription and models: ChatGPT
+The Owner connects a subscription in Settings, Providers: ChatGPT
 signs in from that page. A Company's subscription is signed in once on its own
 Engine's root profile, and every Agent of that Company uses it. Another
 Company's Engine and its Agents never see it. One account serves one Company, so
