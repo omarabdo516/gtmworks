@@ -79,6 +79,22 @@ test('Settings open over the board, which stays as it was left, and closing give
  await expect(page.locator('#btn-me')).toBeFocused();
 });
 
+// #612: a session that ran out while the board stayed open. Settings opened over it go to sign in, and back to Settings.
+test('Settings opened over a page after the session ran out go to sign in, then back to Settings',async({page,context})=>{
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ await openNavigation(page);
+ const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
+ await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
+ await context.clearCookies();
+ await settings.click();
+ await expect(page).toHaveURL(/\/sign-in\?next=%2Fc%2Frs-learning%2Fsettings$/);
+ await page.getByLabel('Email',{exact:true}).fill('omar@example.com');
+ await page.getByLabel('Password',{exact:true}).fill('local-seed-password');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await expect(page).toHaveURL(/\/c\/rs-learning\/settings$/);
+ await expect(page.getByRole('dialog',{name:'Settings'})).toBeVisible();
+});
+
 test('on a phone Settings cover the whole window, and the open page is the breadcrumb’s last crumb',async({page})=>{
  await page.setViewportSize({width:390,height:844});
  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=members');
