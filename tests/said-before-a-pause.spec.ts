@@ -37,7 +37,8 @@ async function memberClient(email:string) {
 }
 const asking=()=>{
  const fake=fakeEngine();
- fake.settings.questions=input=>input.includes('Which Agents')?[{text:'Which of them do we make now?',choices:['Writer','Analyst'],said:five}]:[];
+ // A Conversation's question may take several picks, as Omar's did; a Channel's card offers one (#354).
+ fake.settings.questions=input=>input.includes('Which Agents')?[{text:'Which of them do we make now?',choices:['Writer','Analyst'],multiple:!input.startsWith('@')&&!input.includes(': @'),said:five}]:[];
  fake.settings.reply=(_input,answers)=>`Making ${answers.join(', ')} now.`;
  return fake;
 };
@@ -65,7 +66,7 @@ test('integration: in a Conversation the words written before a question are the
   expect(await asked.evaluate(turn=>{ const words=turn.querySelector('.bubble--agent'); const card=[...turn.querySelectorAll('*')].find(node=>node.textContent?.trim()==='Which of them do we make now?'); return !!words&&!!card&&!!(words.compareDocumentPosition(card)&Node.DOCUMENT_POSITION_FOLLOWING); })).toBe(true);
 
   const [{id:card}]=JSON.parse(query(`select id from public.reply_cards where conversation_id='${conversation}'`));
-  expect(await answerQuestion(person,service,{company,conversation,card:Number(card),choice:0,answerKey:randomUUID(),hermes,engineFor:fake.engineFor})).toEqual({state:'claimed'});
+  expect(await answerQuestion(person,service,{company,conversation,card:Number(card),answer:'Writer',answerKey:randomUUID(),hermes,engineFor:fake.engineFor})).toEqual({state:'claimed'});
   await expect.poll(async()=>{ await close(); return JSON.parse(query(`select body from public.conversation_messages where conversation_id='${conversation}' and author='agent'`)); }).toEqual([{body:'Making Writer now.'}]);
 
   await page.reload();

@@ -3,7 +3,7 @@ import type { BoardColumn } from './board-columns.mjs';
 import { agentStatus, type AgentStatus } from './agent-details.mjs';
 import type { SessionUsage } from './engine.mjs';
 import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
-import { handoverEnding, replyCardColumns, replyCardOf, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
+import { handoverEnding, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type MemberRole='owner'|'manager'|'contributor'|'viewer';
@@ -83,7 +83,7 @@ export type ChannelRecord={
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string};
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
 type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,agent_name:string,outcome:string|null};
-type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string,said:string|null};
+type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string,said?:string|null};
 type StoredFile={id:number,message_id:number,name:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
 type StoredCard=ReplyCardRow&{channel_message_id:number,channel_ordinal:number|null,addressed_to:string|null};
@@ -172,7 +172,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  for(const row of cards) {
   const card=replyCardOf(row); if(!card) continue;
   const place=`${row.channel_message_id}:${row.channel_ordinal??1}`;
-  if(card.kind==='question') questionsOf.set(place,[...(questionsOf.get(place)??[]),{...card,chips:!!row.addressed_to,...(row.said?{said:row.said}:{})}]);
+  if(card.kind==='question') questionsOf.set(place,[...(questionsOf.get(place)??[]),{...card,chips:!!row.addressed_to,...saidParts(row)}]);
   else cardsOf.set(place,[...(cardsOf.get(place)??[]),card]);
  }
  // A reply's steps are its own Hermes turn (#346): each Agent's session, matched to its replies by time, never kept.
@@ -216,7 +216,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   face:seen.find(agent=>agent.id===run.agent_id)?.connection_id||run.agent_id||run.agent_name,state:stateOf(run.outcome),
   questions:questionsOf.get(`${run.message_id}:${run.ordinal??1}`)??[],
   permissions:asked.filter(row=>row.message_id===run.message_id&&(row.ordinal??1)===(run.ordinal??1))
-   .flatMap(row=>{ const card=replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null}); return card?[{...card,...(row.said?{said:row.said}:{})}]:[]; }) as ChannelPermission[]});
+   .flatMap(row=>{ const card=replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null}); return card?[{...card,...saidParts(row)}]:[]; }) as ChannelPermission[]});
  const written:[ChannelMessage[],ChannelMessage[]]=[
   ordered.map((message):ChannelMessage=>{
    if(message.author==='agent') return {id:message.id,author:'agent',name:message.author_name,face:seen.find(agent=>agent.id===message.agent_id)?.connection_id||message.agent_id||message.author_name,body:message.body,at:message.created_at,

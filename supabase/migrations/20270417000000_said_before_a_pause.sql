@@ -3,7 +3,9 @@
 -- that message in the session but no text in the run record until the Run completes, and then only what came after the
 -- pause; the worker reads it from the session while the Run waits and hands it here with the card (`asking.said`). It is
 -- the chat record (ADR 0017), kept once: on the first card of the Run that carries it, never on a second card the same
--- message paused for, and never in the reply that follows.
+-- message paused for, and never in the reply that follows. A card kept before its words could be read takes them on a
+-- later read. shortcut: the same words are matched by their text, not by the session message they came from; upgrade
+-- if one Run writes the same words before two pauses.
 
 alter table public.reply_cards add column said text check (said is null or length(said) between 1 and 200000);
 alter table public.channel_permissions add column said text check (said is null or length(said) between 1 and 200000);
@@ -22,6 +24,13 @@ create function public.channel_run_said(asked bigint, asking_run text, words tex
 $$;
 revoke all on function public.channel_run_said(bigint,text,text) from public,anon,authenticated;
 grant execute on function public.channel_run_said(bigint,text,text) to service_role;
+
+-- The same for a Conversation's Run, whose questions and requests are both reply cards.
+create function public.conversation_run_said(talk uuid, asking_run text, words text) returns boolean language sql stable set search_path='' as $$
+ select words is not null and exists(select 1 from public.reply_cards r where r.conversation_id=talk and r.run_id=asking_run and r.said=words);
+$$;
+revoke all on function public.conversation_run_said(uuid,text,text) from public,anon,authenticated;
+grant execute on function public.conversation_run_said(uuid,text,text) to service_role;
 
 -- 20270202000000's track_run_question as it reads now (the run ends' table renamed by 20270212000000), keeping the words.
 create or replace function public.track_run_question(conversation uuid, run text, asking jsonb, ended boolean, read_started_at timestamptz) returns jsonb
@@ -45,8 +54,11 @@ begin
    insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at,said)
     values(talk.company_id,conversation,run,asked,'question',
      case when length(kept->>'question')<=100 then kept->>'question' else rtrim(left(kept->>'question',99),E' \t\r\n')||'…' end,kept,'open',read_started_at,
-     case when not exists(select 1 from public.reply_cards r where r.conversation_id=conversation and r.run_id=run and r.said=words) then words end)
+     case when not public.conversation_run_said(conversation,run,words) then words end)
     on conflict do nothing;
+   -- A read that kept the card before it could read the words leaves them to the next read that can.
+   update public.reply_cards r set said=words where r.conversation_id=conversation and r.run_id=run and r.kind='question' and r.call_id=asked and r.said is null
+    and not public.conversation_run_said(conversation,run,words);
   end if;
  end if;
  -- Each claimed answer is handed to this closer alone, for 15 seconds (an answer's call to the Engine gives up after 10):
@@ -87,8 +99,10 @@ begin
    insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,title,content,state,created_at,allows,said)
     values(talk.company_id,conversation,run,asked,'permission',
      case when length(named)<=100 then named else rtrim(left(named,99),E' \t\r\n')||'…' end,kept,'open',greatest(read_started_at,coalesce(read_ended_at,read_started_at)),keeps,
-     case when not exists(select 1 from public.reply_cards r where r.conversation_id=conversation and r.run_id=run and r.said=words) then words end)
+     case when not public.conversation_run_said(conversation,run,words) then words end)
     on conflict do nothing;
+   update public.reply_cards r set said=words where r.conversation_id=conversation and r.run_id=run and r.kind='permission' and r.call_id=asked and r.said is null
+    and not public.conversation_run_said(conversation,run,words);
   end if;
  end if;
  -- Each claimed choice is handed to this closer alone, for 15 seconds (a choice's call to the Engine gives up after 10):
@@ -128,6 +142,8 @@ begin
      kept,'open',read_started_at,case when main then m.person_id end,
      case when not public.channel_run_said(message,run,words) then words end)
     on conflict do nothing;
+   update public.reply_cards r set said=words where r.channel_message_id=message and r.run_id=run and r.kind='question' and r.call_id=asked and r.said is null
+    and not public.channel_run_said(message,run,words);
   end if;
  end if;
  return coalesce((select jsonb_agg(jsonb_build_object('card',r.id,'question',r.call_id,'answer',r.content->>'answer') order by r.id)
@@ -160,6 +176,8 @@ begin
      case when length(named)<=100 then named else rtrim(left(named,99),E' \t\r\n')||'…' end,kept,'open',greatest(read_started_at,coalesce(read_ended_at,read_started_at)),keeps,
      case when not public.channel_run_said(message,run,words) then words end)
     on conflict do nothing;
+   update public.channel_permissions p set said=words where p.message_id=message and p.run_id=run and p.request_id=asked and p.said is null
+    and not public.channel_run_said(message,run,words);
   end if;
  end if;
  -- One closer at a time, as in a Conversation.

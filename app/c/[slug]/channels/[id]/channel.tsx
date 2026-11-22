@@ -44,6 +44,8 @@ const arrivals=(messages:ChannelMessage[]):Arrival[]=>messages.flatMap(message=>
 // Agent names inside a sentence, each isolated so a name in the other script never flips the text around it.
 const Names=({agents,c}:{agents:ChannelAgent[],c:Say})=><>{agents.map((agent,index)=><Fragment key={agent.id}>{index>0&&c('channelNamesJoin')}<bdi>{agent.name}</bdi></Fragment>)}</>;
 
+// What an Agent wrote before its question or request, in the same message (#647): its words, drawn above the card.
+const Said=({words}:{words?:string})=>words?<div className="bubble bubble--agent" dir="auto">{words}</div>:null;
 export default function ChannelView({person,slug,initial}:{person:string,slug:string,initial:ChannelRecord}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c:Say=(key,...values)=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
@@ -180,11 +182,11 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
      <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {/* What the Agent wrote before it asked, in the same message (#647), is its words above the card. */}
-     {mention.questions.map(card=><Fragment key={`question${card.id}`}>{card.said&&<div className="bubble bubble--agent" dir="auto">{card.said}</div>}<ReplyCard card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
+     {mention.questions.map(card=><Fragment key={`question${card.id}`}><Said words={card.said}/><ReplyCard card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
        team
        answer={writer&&(!card.chips||message.mine)?answer:undefined}
        waitingFor={card.chips&&!message.mine?firstName(message.name):null}/></Fragment>)}
-     {mention.permissions.map(card=><Fragment key={card.id}>{card.said&&<div className="bubble bubble--agent" dir="auto">{card.said}</div>}<PermissionCard card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/></Fragment>)}
+     {mention.permissions.map(card=><Fragment key={card.id}><Said words={card.said}/><PermissionCard card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/></Fragment>)}
     </li>)}
    </Fragment>)}</ol>
    {workingNow&&<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>}

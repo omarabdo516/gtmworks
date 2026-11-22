@@ -2,7 +2,7 @@ import { ownerNames } from './company-owners.mjs';
 import type { supabase } from './supabase';
 import type { PermissionChoice, SessionUsage } from './engine.mjs';
 import type { AppStates } from './conversations';
-import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, saidParts, replyCardOf, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
+import { faceOf, handTurn, handoverEnding, latestEnd, messageColumns, noteColumns, queuedColumns, queuedWaiting, questionParts, replyCardColumns, replyCardOf, saidParts, shown, stepsOfReplies, waiting, withBoardNote, withDecisions, withHandedOn, withHandoverAnswers, withTeamWork, type AgentAccessView, type AgentRequestView, type ChangeProposalView, type Decision, type LeadCard, type PlacedCard, type QueuedTurn, type ReplyCard, type ReplyCardRow, type RunStep, type SavedRule, type RunEnd, type StoredFile, type StoredNote } from './conversations';
 import { isNewFor } from './sidebar.mjs';
 import { columnOf, type BoardColumn, type CardWait } from './board-columns.mjs';
 

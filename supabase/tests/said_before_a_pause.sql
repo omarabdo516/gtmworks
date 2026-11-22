@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(13);
 -- #647. Ads in RS Learning: one Conversation of the Owner's and one message in the general channel, each with one Run
 -- that writes its answer so far and then asks, or asks to be allowed an action, in the same message.
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile) values ('f6470000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f6470000-0000-0000-0000-000000000001','Ads','Ads','said-test');
@@ -39,6 +39,13 @@ select results_eq($$select title,said from public.reply_cards where conversation
 set local role service_role;
 select is(public.said_before('{"said":"a"}'),'a','words are read as sent');
 select is(public.said_before(jsonb_build_object('said',repeat('x',200001))),null,'nothing longer than a reply is kept');
+
+-- A card kept by a read that could not read the words yet takes them on the next read that can.
+select public.track_run_question('f6470000-0000-0000-0000-000000000003','said-run','{"id":"q3@1","text":"Which tone?","choices":["Warm","Plain"],"multiple":false}',false,'2026-06-10T10:05:00Z');
+select public.track_run_question('f6470000-0000-0000-0000-000000000003','said-run','{"id":"q3@1","text":"Which tone?","choices":["Warm","Plain"],"multiple":false,"said":"Two tones fit the brand."}',false,'2026-06-10T10:05:05Z');
+reset role;
+select results_eq($$select said from public.reply_cards where conversation_id='f6470000-0000-0000-0000-000000000003' and call_id='q3@1'$$,array['Two tones fit the brand.'],'a later read fills the words in');
+set local role service_role;
 
 -- A Channel: the question's card and a request of the same Run keep their words once, across both kinds of card.
 select public.track_channel_question(current_setting('test.message')::bigint,'said-channel-run','{"id":"cq1","text":"Which do we make now?","choices":["Writer","Analyst"],"multiple":false,"said":"Five Agents I advise."}',false,'2026-06-10T10:00:00Z');
