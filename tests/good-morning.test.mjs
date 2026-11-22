@@ -58,6 +58,7 @@ function service({agents=[{id:lead,profile:leadProfile,is_default:true,name:'Lea
   if(name==='record_good_morning') { recorded.push(args); return {data:1,error:null}; }
   if(name==='routine_results_seen') return {data:kept.filter(row=>row.profile===args.at_profile&&args.sessions.includes(row.session)).map(row=>row.session),error:null};
   if(name==='keep_routine_results') { if(db.keepFails) return {data:null,error:{message:'keep refused'}}; const added=args.results.filter(row=>!kept.some(each=>each.profile===row.profile&&each.session===row.session)); kept.push(...added); return {data:added.length,error:null}; }
+  if(name==='good_morning_night'&&db.nightFails) return {data:null,error:{message:'night refused'}};
   if(name==='good_morning_night') return {data:kept.filter(row=>row.routine&&row.line&&row.at>args.since&&row.at<=args.until).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,201).map(row=>({agent:row.agent,routine:row.routine,line:row.line,at:row.at})),error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  }};
@@ -216,6 +217,12 @@ test('a keep the database refuses holds the morning, said in the server log, and
   assert.deepEqual([recorded,kept],[[],[]]);
   assert.ok(logged.some(line=>line.includes('Routine results not kept')&&line.includes('keep refused')));
   db.keepFails=false;
+  // A night the database will not read holds that Company's morning too, said in the log, and the pass goes on.
+  db.nightFails=true;
+  assert.equal(await driveGoodMornings(db,options),0);
+  assert.deepEqual(recorded,[]);
+  assert.ok(logged.some(line=>line.includes('Good morning not recorded')&&line.includes('night refused')));
+  db.nightFails=false;
   assert.equal(await driveGoodMornings(db,options),1);
   assert.deepEqual(recorded[0].results.map(result=>result.line),['Paused the Video 2 ad']);
  } finally { console.error=error; await fake.close(); }
