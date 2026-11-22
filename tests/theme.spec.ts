@@ -3,12 +3,13 @@ import { createServerClient } from '@supabase/ssr';
 import { signIn, openNavigation, closeNavigation } from './sign-in';
 import { appOrigin } from './lane.mjs';
 
-// The account menu keeps the three theme choices, Device included, as named menu radio items.
+// The account menu keeps the three theme choices, System included, as named menu radio items; System is saved as
+// the account's "device" (#616).
 async function chooseTheme(page: Page, choice: string) {
  await openNavigation(page);
  await page.getByRole('button', { name: 'Account menu' }).click();
  await page.getByRole('menuitemradio', { name: choice, exact: true }).click();
- await expect(page.locator('html')).toHaveAttribute('data-theme', choice.toLowerCase());
+ await expect(page.locator('html')).toHaveAttribute('data-theme', choice === 'System' ? 'device' : choice.toLowerCase());
  await page.getByRole('button', { name: 'Account menu' }).click();
  await expect(page.getByRole('menuitemradio', { name: choice, exact: true })).toHaveAttribute('aria-checked', 'true');
  await page.keyboard.press('Escape');
@@ -52,7 +53,7 @@ test('device default, server-rendered theme and saved choice across sessions and
   await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'oklch(0.185 0 0)');
   await serverTheme('/c/rs-learning/home', 'dark');
- } finally { await chooseTheme(page, 'Device'); }
+ } finally { await chooseTheme(page, 'System'); }
  await page.emulateMedia({ colorScheme: 'dark' });
  await expect(page.locator('.app-layout')).toHaveCSS('background-color', 'oklch(0.185 0 0)');
  await serverTheme('/c/rs-learning/home', 'device');

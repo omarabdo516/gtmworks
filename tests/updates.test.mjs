@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { whatsNew, checkUpdate, latestStableRelease, unseenEntries, updateSource } from '../lib/updates.mjs';
+import { whatsNew, checkUpdate, latestStableRelease, unseenEntries, updateSource, installedVersion } from '../lib/updates.mjs';
 
 // The file as written, before the app leaves out an entry it cannot show.
 const written = JSON.parse(readFileSync('lib/whats-new.json', 'utf8'));
@@ -169,4 +169,13 @@ test('what\'s new after an update: the entries this person has not seen, or, wit
 test('the check reads this repository on GitHub unless the install names another source', () => {
  assert.deepEqual(updateSource(undefined), { api: 'https://api.github.com/repos/omarabdo516/gtmworks', raw: 'https://raw.githubusercontent.com/omarabdo516/gtmworks', registry: 'https://ghcr.io', image: 'omarabdo516/gtmworks' });
  assert.deepEqual(updateSource('http://127.0.0.120:8643/'), { api: 'http://127.0.0.120:8643', raw: 'http://127.0.0.120:8643', registry: 'http://127.0.0.120:8643', image: 'omarabdo516/gtmworks' });
+});
+
+// #616: About names the installed version as the image knows it: a release by its tag, a main build as main, and a
+// source checkout or test image, which carries none, as built from source.
+test('the installed version reads as a release tag, a main build or a source build', () => {
+ assert.deepEqual(installedVersion('0.4.2'), { kind: 'release', name: 'v0.4.2' });
+ assert.deepEqual(installedVersion('v1.10.0'), { kind: 'release', name: 'v1.10.0' });
+ assert.deepEqual(installedVersion('main'), { kind: 'main', name: 'main' });
+ for (const value of [undefined, '', ' ', 'main@sha256:abc', '1.2', 'latest']) assert.deepEqual(installedVersion(value), { kind: 'source', name: '' }, String(value));
 });
