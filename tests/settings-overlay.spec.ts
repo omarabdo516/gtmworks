@@ -58,7 +58,7 @@ test('Settings open over the board, which stays as it was left, and closing give
  await expect(overlay).toBeVisible();
  await expect(page).toHaveURL(/\/c\/rs-learning\/settings$/);
  const crumbs=overlay.getByRole('navigation',{name:'Breadcrumb'}).getByRole('listitem');
- await expect(crumbs).toHaveText(['Settings','Company','Company']);
+ await expect(crumbs).toHaveText(['Settings','Company']);
  // A floating dialog: the board shows around it, and nothing of the board can be reached while it is open.
  const box=(await overlay.boundingBox())!, view=page.viewportSize()!;
  expect(box.x).toBeGreaterThan(0); expect(box.y).toBeGreaterThan(0); expect(box.x+box.width).toBeLessThan(view.width);

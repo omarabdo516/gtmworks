@@ -359,7 +359,7 @@ One radius knob, `--radius: 0.5rem` (8px), drives a multiplicative ladder: `sm` 
 
 - **Sidebar:** 240px, the rail described under Colors (the root-resolved 50% mix, `#f2f2f2`), hairline on the inline-end edge; items are 13px medium, 32px minimum height, `lg` radius, 6px 8px padding, with a role glyph or icon; hover and pressed use `sidebar-hover` with `sidebar-hover-ink`. Group labels use the mono 10px uppercase style (Arabic: Vazirmatn, normal tracking).
 - **Mobile:** a bottom bar (Home, Work, New card when permitted, Agents, Inbox) that slides away on scroll down and back on scroll up, and the sidebar as a sheet.
-- **Breadcrumb:** in the top bar, Work › card title and company › Settings › page; the last crumb truncates.
+- **Breadcrumb:** in the top bar, Work › card title and company › Settings › page; the last crumb truncates. The Settings dialog carries its own in its bar (#612): Settings › group › page, the group left out for a page named as its group (Company, Agents) and on a phone, where only Settings and the page show.
 - **Tabs:** pill links on a transparent row; the active one takes `accent`.
 
 ### Panels / Containers

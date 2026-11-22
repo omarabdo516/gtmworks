@@ -15,8 +15,9 @@ export function OverlayChrome({t,slug,companyName,role,readOnly,section,learning
  // The sidebar's groups (#612): Company, Agents and Engine, each under its own name, then the pages that stand alone.
  const groups=overlayGroups(role);
  // The breadcrumb (#612): Settings › the open page's group › the page, the last crumb the page itself.
- const group=sectionGroup(section);
  const page=overlaySections.find(([key])=>key===section)?.[1];
+ // A page named as its group (Company, Agents) is one crumb, not the same word twice.
+ const group=sectionGroup(section)?.label===page?null:sectionGroup(section);
  return <OverlayFrame slug={slug} initialFocus={initialFocus}>
   <header className="sov__bar">
    <nav className="sov-crumbs" aria-label={t('breadcrumb')}><ol>

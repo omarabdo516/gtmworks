@@ -22,7 +22,6 @@ const CloseOverlay=createContext<()=>void>(()=>{});
 // two places of the same overlay (app/c/[slug]/@settings): moving from one to the other draws the new one while the old
 // one is still there, and the new one then neither enters again nor takes the focus from where it was.
 let drawn=0;
-const sameIds=(id:string|undefined)=>id?document.getElementById(id):null;
 let lastFocus:string|undefined;
 
 // The workspace the overlay opens over (app/c/[slug]/layout.tsx): out of reach while Settings are open, so the keyboard
@@ -38,7 +37,14 @@ function useWorkspaceInert() {
 // Once the overlay is gone, the element it was opened from takes the focus back (the account menu's button, an Agent's
 // gear), when the page it returned to holds it; a page drawn later takes it itself (takeReturnFocus).
 function giveFocusBack() {
- requestAnimationFrame(()=>{ if(drawn>0) return; const id=takeReturnFocus(stored=>!!document.getElementById(stored)); if(id) document.getElementById(id)?.focus({preventScroll:true}); });
+ requestAnimationFrame(()=>{
+  if(drawn>0) return;
+  const id=takeReturnFocus(stored=>!!document.getElementById(stored)); const opener=id?document.getElementById(id):null;
+  if(!opener) return;
+  // On a phone the account button sits in the closed navigation drawer: the button that opens the drawer takes it.
+  const shown=opener.checkVisibility()?opener:document.querySelector<HTMLElement>('.mobile-menu');
+  shown?.focus({preventScroll:true});
+ });
 }
 
 // The full-window overlay (reference: dialog#sov): it holds the keyboard's first stop and closes on Escape.
@@ -60,7 +66,7 @@ export function OverlayFrame({slug,initialFocus,children}:{slug:string,initialFo
  // and focused once it is there.
  useEffect(()=>{
   // The same overlay drawn again for the next address keeps the focus on the control that had it.
-  const kept=continued?sameIds(lastFocus):null;
+  const kept=continued&&lastFocus?document.getElementById(lastFocus):null;
   if(kept&&box.current?.contains(kept)) { kept.focus({preventScroll:true}); return; }
   const named=initialFocus&&document.getElementById(initialFocus);
   if(named) { named.focus({preventScroll:true}); return; }
