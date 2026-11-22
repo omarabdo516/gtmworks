@@ -7,7 +7,7 @@ import { toolConfig } from '../lib/agent-toolsets.mjs';
 // #182: Good morning on the main Agent's page. The Owner switches the daily message on and picks its time, saved with
 // the page's bar: the Engine holds one job in the main Agent's own profile at that time and in the browser's zone, the
 // page reads it back, and each change is one row of the Company log with the old and new value. A Contributor reads
-// "Morning summary: Every day at …" and the server refuses their save. Making another Agent the main one moves the job to its profile. RS Learning: Lead, the
+// "Good morning: Every day at …" and the server refuses their save. Making another Agent the main one moves the job to its profile. RS Learning: Lead, the
 // main Agent, and Ads. The Engine is the fake.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
@@ -61,13 +61,14 @@ const hydrated=async(page:Page)=>{
 test('the Owner switches the daily message on and changes its time with the save bar; the Engine holds one job, and each change is logged',async({page})=>{
  await signIn(page,'omar@example.com',agentPage(lead));
  const section=morning(page);
- await expect(section.getByRole('heading',{name:'Good morning'})).toBeVisible();
- const toggle=section.getByRole('switch',{name:'Send me a morning summary every day'});
+ // One row (#615): the name once, with its switch and time.
+ await expect(section.locator('.panel-row')).toHaveCount(1);
+ const toggle=section.getByRole('switch',{name:'Good morning'});
  const time=section.getByRole('combobox',{name:'Time'});
  await expect(toggle).toHaveAttribute('aria-checked','false');
  await expect(time).toBeDisabled();
  await hydrated(page);
- await expect(section.locator('#set-ck-hint')).toHaveText('If there’s nothing new, it won’t send anything.');
+ await expect(section.locator('#set-ck-hint')).toHaveText('What’s waiting on you and what ran overnight, in the first chat of the day');
  expect(morningJobs(profile)).toHaveLength(0);
 
  await toggle.click();
@@ -131,7 +132,7 @@ test('making another Agent the main one moves the daily message to its profile w
  const section=morning(page);
  await hydrated(page);
  // The message is on at 10:00 since the first case; a new time, saved, is what moves.
- await expect(section.getByRole('switch',{name:'Send me a morning summary every day'})).toHaveAttribute('aria-checked','true');
+ await expect(section.getByRole('switch',{name:'Good morning'})).toHaveAttribute('aria-checked','true');
  await section.getByRole('combobox',{name:'Time'}).selectOption('7:30');
  await page.locator('#set-save').click();
  await expect(page.locator('#dp-savebar')).toBeHidden();
@@ -146,7 +147,7 @@ test('making another Agent the main one moves the daily message to its profile w
  expect([moved.schedule.expr,moved.timezone,moved.state]).toEqual(['30 7 * * *','Africa/Cairo','scheduled']);
  // The new main Agent's page reads it.
  await page.goto(agentPage(ads));
- await expect(morning(page).getByRole('switch',{name:'Send me a morning summary every day'})).toHaveAttribute('aria-checked','true');
+ await expect(morning(page).getByRole('switch',{name:'Good morning'})).toHaveAttribute('aria-checked','true');
  await expect(morning(page).getByRole('combobox',{name:'Time'})).toHaveValue('7:30');
  // And the old one has none.
  await page.goto(agentPage(lead));

@@ -34,17 +34,27 @@ const answer=(body:object)=>new Response(JSON.stringify(body),{status:200,header
 const select=()=>document.getElementById('set-ck-time') as HTMLSelectElement;
 afterEach(()=>{ vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+test('Good morning is one row (#615): its name once, its line, and the time and switch facing it',async()=>{
+ const screen=await morningPage();
+ const rows=document.querySelectorAll('#set-checkin .panel-row');
+ expect(rows).toHaveLength(1);
+ expect(rows[0].contains(document.getElementById('set-ck-on'))).toBe(true);
+ expect(rows[0].contains(select())).toBe(true);
+ expect(screen.container.textContent?.split(en.settingsGoodMorning).length).toBe(2);
+ expect(document.querySelector('#set-checkin h4, #set-checkin h5')).toBeNull();
+});
+
 test('the reference\'s switch, time and hint; the select offers every half hour from 7:00 to 11:00 and is disabled while the switch is off',async()=>{
  const screen=await morningPage();
- await expect.element(screen.getByRole('switch',{name:en.settingsCheckin})).toHaveAttribute('aria-checked','false');
+ await expect.element(screen.getByRole('switch',{name:en.settingsGoodMorning})).toHaveAttribute('aria-checked','false');
  await expect.poll(()=>select()?.disabled).toBe(true);
  expect([...select().options].map(option=>option.textContent)).toEqual(['7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM']);
  expect(select().value).toBe('9:00');
- expect(document.getElementById('set-ck-hint')?.textContent).toBe(en.settingsCheckinHint);
- await screen.getByRole('switch',{name:en.settingsCheckin}).click();
- await expect.element(screen.getByRole('switch',{name:en.settingsCheckin})).toHaveAttribute('aria-checked','true');
+ expect(document.getElementById('set-ck-hint')?.textContent).toBe(en.settingsCheckinD);
+ await screen.getByRole('switch',{name:en.settingsGoodMorning}).click();
+ await expect.element(screen.getByRole('switch',{name:en.settingsGoodMorning})).toHaveAttribute('aria-checked','true');
  await expect.poll(()=>select().disabled).toBe(false);
- await screen.getByRole('switch',{name:en.settingsCheckin}).click();
+ await screen.getByRole('switch',{name:en.settingsGoodMorning}).click();
  await expect.poll(()=>select().disabled).toBe(true);
 });
 
@@ -58,7 +68,7 @@ test('the switch and the time join the save bar and go in one request as one par
  const screen=await morningPage();
  const bar=document.getElementById('dp-savebar')!;
  expect(bar.hidden).toBe(true);
- await screen.getByRole('switch',{name:en.settingsCheckin}).click();
+ await screen.getByRole('switch',{name:en.settingsGoodMorning}).click();
  await expect.poll(()=>bar.hidden).toBe(false);
  await screen.getByRole('combobox',{name:en.settingsCheckinTime}).selectOptions('10:30');
  await screen.getByRole('button',{name:'Save',exact:true}).click();
@@ -67,10 +77,10 @@ test('the switch and the time join the save bar and go in one request as one par
  expect(sent[0].body.changes).toEqual({morning:{on:true,time:'10:30',zone:Intl.DateTimeFormat().resolvedOptions().timeZone}});
  await expect.poll(()=>document.getElementById('dp-savebar')?.hidden).toBe(true);
  // Cancel puts the saved switch back, and with it the disabled select.
- await screen.getByRole('switch',{name:en.settingsCheckin}).click();
+ await screen.getByRole('switch',{name:en.settingsGoodMorning}).click();
  await expect.poll(()=>bar.hidden).toBe(false);
  await screen.getByRole('button',{name:en.settingsCancel,exact:true}).click();
- await expect.element(screen.getByRole('switch',{name:en.settingsCheckin})).toHaveAttribute('aria-checked','true');
+ await expect.element(screen.getByRole('switch',{name:en.settingsGoodMorning})).toHaveAttribute('aria-checked','true');
  await expect.poll(()=>bar.hidden).toBe(true);
 });
 
@@ -84,7 +94,7 @@ test('the job\'s own zone names the time, a time changed in a chat is shown as i
 
 test('in Arabic the reference\'s words and the zone\'s city',async()=>{
  const screen=await morningPage({made:true,on:true,time:'9:00',expr:'0 9 * * *',display:null,timezone:'Africa/Cairo',quietYesterday:false},true,'ar');
- await expect.element(screen.getByRole('switch',{name:ar.settingsCheckin})).toHaveAttribute('aria-checked','true');
+ await expect.element(screen.getByRole('switch',{name:ar.settingsGoodMorning})).toHaveAttribute('aria-checked','true');
  await expect.poll(()=>document.getElementById('set-ck-zone')?.textContent).toBe('بتوقيت القاهرة');
  expect(select().selectedOptions[0].textContent).toBe('9:00 الصبح');
 });

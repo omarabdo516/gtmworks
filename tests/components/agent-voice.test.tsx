@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-react';
 import { userEvent } from 'vitest/browser';
 import type { ComponentProps } from 'react';
 import { LanguageProvider } from '@/lib/i18n-client';
-import { AgentVoice } from '@/app/settings-agent-voice';
+import { AgentVoice, AgentVoiceSpeed } from '@/app/settings-agent-voice';
 import { AgentSaveBar } from '@/app/settings-agent-form';
 import { ToastHost } from '@/app/toast';
 import '@/app/globals.css';
@@ -38,14 +38,15 @@ class FakeAudio {
 const read = (over: Record<string, unknown> = {}) => ({ state: 'found', own: true, language: 'en', speed: 1, provider: 'edge',
  voice: 'en-US-AriaNeural', voiceName: 'en-US-AriaNeural', list: null, speech: null, languages: ['ar', 'en', ''], ...over });
 
-// The Agent page as the server draws it: the Voice section in its draft, the bar after the panel, the toasts the page
-// raises. Each test takes a new Agent, so the page's one draft starts from the read.
+// The Agent page as the server draws it: the Voice group and, in Advanced (#615), the speed, in one draft; the bar after
+// the panel, the toasts the page raises. Each test takes a new Agent, so the page's one draft starts from the read.
 let count = 0;
 const voicePage = (voice = read(), language: 'en' | 'ar' = 'en') => {
  const agent = `ag-voice-${++count}`;
  return render(<LanguageProvider language={language}>
   <ToastHost />
-  <div id="sov-agent-panel"><AgentVoice company={company} agent={agent} personName="Omar Abdelrahman" voice={voice as never}/></div>
+  <div id="sov-agent-panel"><AgentVoice company={company} agent={agent} personName="Omar Abdelrahman" voice={voice as never}/>
+   <AgentVoiceSpeed agent={agent} speed={voice.speed as number} editable/></div>
   <AgentSaveBar company={company} agent={agent} name="Lead" />
  </LanguageProvider>);
 };
@@ -149,6 +150,36 @@ test('the arrow keys move the speed: forward is right in English, and ends at th
  await expect.element(screen.getByRole('radio', { name: '1.5×' })).toHaveAttribute('aria-checked', 'true');
  await userEvent.keyboard('{ArrowRight}');
  await expect.element(screen.getByRole('radio', { name: '1.5×' })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('the speed in Advanced stops a playing sound, as a change to the voice does (#615)', async () => {
+ vi.stubGlobal('Audio', FakeAudio);
+ vi.stubGlobal('fetch', speakAnswer());
+ const screen = await voicePage();
+ await screen.getByRole('button', { name: 'Listen' }).click();
+ await expect.poll(() => FakeAudio.made.length).toBe(1);
+ await screen.getByRole('radio', { name: '0.85×' }).click();
+ await expect.poll(() => FakeAudio.made[0].paused).toBe(1);
+ await expect.element(screen.getByRole('button', { name: 'Listen' })).toBeDisabled();
+});
+
+test('a Listen answer that arrives after the speed changed is dropped, not played', async () => {
+ vi.stubGlobal('Audio', FakeAudio);
+ let answer: (value: Response) => void = () => {};
+ vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { answer = resolve; })));
+ const screen = await voicePage();
+ await screen.getByRole('button', { name: 'Listen' }).click();
+ await screen.getByRole('radio', { name: '1.25×' }).click();
+ answer(answerFor({ dataUrl: 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAA', mimeType: 'audio/mpeg' }));
+ await expect.element(screen.getByText('Save your changes first: “Listen” plays the saved voice.')).toBeVisible();
+ await new Promise(resolve => setTimeout(resolve, 50));
+ expect(FakeAudio.made).toHaveLength(0);
+});
+
+test('everyone who may not change the voice reads the speed as text in Advanced', async () => {
+ const screen = await render(<LanguageProvider language="en"><AgentVoiceSpeed agent="ag-voice-read" speed={1.25} editable={false}/></LanguageProvider>);
+ await expect.poll(() => document.getElementById('set-speed-val')?.textContent).toBe('1.25×');
+ expect(screen.container.querySelector('[role=radio]')).toBeNull();
 });
 
 test('a provider with no list of voices shows the saved voice, its one line, and no voice to pick', async () => {

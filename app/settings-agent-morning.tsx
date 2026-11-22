@@ -9,7 +9,8 @@ import { seedDraft, setDraftValue, useDraftValue } from './settings-draft';
 // 3369-3371 and the checkinTime input 3623-3633). The switch and the time are two keys of the page's draft
 // (`morning.on`, `morning.time`) and are saved with the bar, which sends them as one `morning` part with the browser's
 // zone. The time select is disabled while the switch is off in the draft. The
-// zone is the job's own, or the browser's until the message is first switched on. A Contributor and a Viewer read one row.
+// zone is the job's own, or the browser's until the message is first switched on. Since #615 it is one row inside the
+// page's How it works group, with its switch and time side by side; a Contributor and a Viewer read one row too.
 export type MorningProps={made:boolean,on:boolean,time:string|null,expr:string|null,display:string|null,timezone:string|null,quietYesterday:boolean};
 
 const never=()=>()=>{};
@@ -34,26 +35,28 @@ export function AgentMorning({agent,editable,morning}:{agent:string,editable:boo
  // The draft starts from what the Engine holds, once for this Agent; a read that changed while nothing is unsaved wins.
  useEffect(()=>{ if(editable&&morning) seedDraft(agent,{'morning.on':savedOn,'morning.time':savedTime}); },[agent,editable,morning,savedOn,savedTime]);
  const label=(value:string)=>{ const parts=clockParts.exec(value); return parts?clockLabel(t,Number(parts[1]),Number(parts[2])):scheduleLabel(t,{expr:value==='keep'?null:value,display:morning?.display??null}); };
+ // One row in every Role's view (#615): the name once, its one short line, then the time and the switch facing it. The
+ // line says what the message is; the morning after a quiet day it says instead why none came. The group (How it works)
+ // carries the heading; this row is Good morning's only mention on the page.
  if(!editable) {
   const value=!morning?'—':morning.on?(morning.time?t('settingsCheckinEvery',label(morning.time)):scheduleLabel(t,{expr:morning.expr,display:morning.display})):t('settingsCheckinOff');
-  return <section className="dp-sec" id="set-checkin" aria-labelledby="set-h-ck"><h4 className="dp-label" id="set-h-ck"><span>{t('settingsGoodMorning')}</span></h4>
-   <ul className="panel-card"><li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsCheckinRO')}</span>
-    <span className="panel-row__d ro-val" id="set-ck-val">{value}</span></span></li></ul></section>;
+  return <ul className="panel-card" id="set-checkin"><li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsGoodMorning')}</span>
+   <span className="panel-row__d ro-val" id="set-ck-val">{value}</span></span></li></ul>;
  }
  // The job's own time first among the reference's, when it is another one (changed in a chat with the Agent).
  const choices=morningTimes.includes(savedTime)?morningTimes:[savedTime,...morningTimes];
  const zone=morning?.timezone??browserZone;
- return <section className="dp-sec" id="set-checkin" aria-labelledby="set-h-ck"><h4 className="dp-label" id="set-h-ck"><span>{t('settingsGoodMorning')}</span></h4>
-  <ul className="panel-card">
-   <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t" id="set-ck-t">{t('settingsCheckin')}</span><span className="panel-row__d">{t('settingsCheckinD')}</span></span>
-    <button type="button" className="switch" role="switch" id="set-ck-on" aria-checked={on} aria-labelledby="set-ck-t"
-     onClick={()=>setDraftValue('morning.on',on?'off':'on')}/></li>
-   <li className="panel-row"><span className="panel-row__text"><label className="panel-row__t" htmlFor="set-ck-time">{t('settingsCheckinTime')}</label>
-    <span className="panel-row__d" id="set-ck-zone">{zone?t('settingsCheckinZone',cityOf(zone,t)):' '}</span></span>
-    <select className="set-input ck-time num" id="set-ck-time" value={time} disabled={!on} onChange={event=>setDraftValue('morning.time',event.target.value)}>
+ return <ul className="panel-card" id="set-checkin">
+  <li className="panel-row ck-row"><span className="panel-row__text"><span className="panel-row__t" id="set-ck-t">{t('settingsGoodMorning')}</span>
+   <span className="panel-row__d" id="set-ck-hint">{morning?.quietYesterday?`${t('settingsCheckinHint')} ${t('settingsCheckinQuiet')}`:t('settingsCheckinD')}</span></span>
+   <span className="ck-controls">
+    <span className="ck-zone" id="set-ck-zone">{zone?t('settingsCheckinZone',cityOf(zone,t)):''}</span>
+    <select className="set-input ck-time num" id="set-ck-time" value={time} disabled={!on} aria-label={t('settingsCheckinTime')} aria-describedby="set-ck-zone"
+     onChange={event=>setDraftValue('morning.time',event.target.value)}>
      {choices.map(choice=><option key={choice} value={choice}>{label(choice)}</option>)}
-    </select></li>
-  </ul>
-  <p className="set-hint ck-hint" id="set-ck-hint">{t('settingsCheckinHint')}{morning?.quietYesterday&&<> {t('settingsCheckinQuiet')}</>}</p>
- </section>;
+    </select>
+    <button type="button" className="switch" role="switch" id="set-ck-on" aria-checked={on} aria-labelledby="set-ck-t"
+     onClick={()=>setDraftValue('morning.on',on?'off':'on')}/>
+   </span></li>
+ </ul>;
 }
