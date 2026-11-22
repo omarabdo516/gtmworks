@@ -1604,5 +1604,16 @@
   "providersOffSaved": "{0} اتقفل",
   "providersOrderError": "مقدرناش نحفظ التغيير ده. جرّب تاني.",
   "providersOrderNotAllowed": "المالك بس هو اللي يقدر يرتّب المزوّدين أو يقفل واحد منهم.",
-  "signInAccountNeeded": "المزوّد ده فيه أكتر من تسجيل دخول: افصل كل واحد من الصف بتاعه."
+  "signInAccountNeeded": "المزوّد ده فيه أكتر من تسجيل دخول: افصل كل واحد من الصف بتاعه.",
+  "modelNoAccess": "{0} مقدرش يرد: كل الحسابات اللي يقدر يستخدمها خلص استخدامها دلوقتي.",
+  "modelNoAccessFix": "ضيف حساب أو اختار موديل بديل من المزوّدين",
+  "settingsFallback": "الموديل البديل",
+  "settingsFallbackHint": "لما كل حسابات موديل الوكيل يخلص استخدامها، الطلب بيكمّل على الموديل ده بداله. ولو «ولا حاجة»، الوكيل عمره ما بيروح لنوع مزوّد تاني.",
+  "settingsFallbackNone": "ولا حاجة",
+  "settingsFallbackNoneHint": "الوكلاء بيفضلوا على نفس نوع المزوّد بتاعهم",
+  "settingsFallbackMark": "البديل",
+  "settingsFallbackSaved": "اتحفظ الموديل البديل.",
+  "settingsFallbackError": "مقدرناش نحفظ الموديل البديل. جرّب تاني.",
+  "settingsFallbackNotReached": "الموديل البديل لسه موصلش لـ {0}. هيحاول تاني لوحده.",
+  "settingsFallbackOff": "مفيش مزوّد بيقدّم الموديل ده دلوقتي، فالوكلاء مش هيقدروا يروحوله."
 }

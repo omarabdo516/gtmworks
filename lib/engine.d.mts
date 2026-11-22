@@ -14,7 +14,8 @@ export type RunQuestion={id:string,text:string,choices:string[],multiple:boolean
 export type PermissionChoice='once'|'always'|'deny';
 // `allows` is what an "always" answer keeps among the profile's standing permissions (#166), none when it is not offered.
 export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[],allows?:string[]};
-export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,noModel?:true,modelRefused?:'credit'|'key'|'model'};
+// `said`: what the Agent wrote in the message that paused the Run on its question or permission (#647), as its words.
+export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,said?:string,noModel?:true,modelRefused?:'credit'|'key'|'model'|'access'};
 // Typed words, or the texts of the choices picked on a question where several may be picked (#648).
 export type QuestionAnswer=string|string[];
 export type AnsweredQuestion='answered'|'gone'|'unreachable';

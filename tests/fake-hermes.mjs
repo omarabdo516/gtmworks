@@ -39,8 +39,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // A run first asks the questions `questions` gives for its input (clarify, #138), one at a time, as the pinned release
   // does: it stays running with the question in pending_controls until it is answered on the run's clarify route,
   // expires (expire(run), Hermes's clarify_timeout) or the run is stopped. The reply is given the answers. `answers`
-  // keeps every clarify request's status and body.
-  questions:/** @type {(input:string)=>{question:string,choices?:string[],multi_select?:boolean}[]} */(()=>[]),
+  // keeps every clarify request's status and body. A question with `said` is asked in an assistant message that also
+  // carries those words (#647): the run's session holds that message, its clarify call unanswered, while the run waits,
+  // as the pinned release persists a tool-call turn before it runs the call (agent/turn_tool_round.py).
+  questions:/** @type {(input:string)=>{question:string,choices?:string[],multi_select?:boolean,said?:string}[]} */(()=>[]),
   answers:/** @type {{run:string,status:number,body:any}[]} */([]),
   expire(run) { const waiting=settings.runs.find(found=>found.id===run)?.asked.find(asked=>!asked.settled); if(waiting) waiting.settled='expired'; return !!waiting; },
   // After its questions a run stops to ask before each action `approvals` gives for its input (#163), one at a time, as
@@ -53,7 +55,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // mcp_elicitation (tools/mcp_tool_handlers.py _ask_for_call). Always keeps the command's keys, or mcp:<server>/<tool>,
   // in the run's profile's command_allowlist (#166), and a later request whose kept key is there is not asked: it reads
   // as allowed (`standing`), as tools/approval.py _approval_scope does, at once after the list changes.
-  approvals:/** @type {(input:string)=>{description?:string,command?:string,choices?:string[],keys?:string[],app?:{server:string,tool:string}}[]} */(()=>[]),
+  approvals:/** @type {(input:string)=>{description?:string,command?:string,choices?:string[],keys?:string[],app?:{server:string,tool:string},said?:string}[]} */(()=>[]),
   // `permits` keeps every approval request's status and body; with `flatPermitErrors` the route answers a refusal's code
   // at the top of its body instead of under `error`.
   permits:/** @type {{run:string,status:number,body:any}[]} */([]),flatPermitErrors:false,
@@ -77,10 +79,15 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // of its provider switched on and not exhausted; an account in `outOfQuota` answers it with a usage limit, so the Engine
   // marks it exhausted and sends the same model call on the next one, recording the move in `switches` (GET
   // /api/credentials/pool/switches), and the Run's one reply is made once on the account that answered (`answeredOn`).
-  // With none left the Run fails with `noAccountText`.
+  // With none left, the Run walks the fallback chain its profile's own config holds (#622; v0.23.0 `fallback_providers`
+  // and the older `fallback_model`, loaded for every Run, agent/turn_recovery.py), once and in order: each entry's
+  // provider's accounts in turn, recorded in `fallbacks`. With no chain, or every entry's accounts out of quota too, the
+  // Run fails with `noAccountText`, the pinned Engine's exhausted rate-limit copy (agent/turn_failure_copy.py). Each model
+  // call names the account and its provider (`modelCalls`).
   outOfQuota:/** @type {Set<string>} */(new Set()),switches:/** @type {{id:string,provider:string,from:string,to:string,at:number}[]} */([]),
-  answeredOn:/** @type {Map<string,string>} */(new Map()),modelCalls:/** @type {{run:string,account:string}[]} */([]),
-  noAccountText:'You have hit your usage limit on every account.',
+  answeredOn:/** @type {Map<string,string>} */(new Map()),modelCalls:/** @type {{run:string,account:string,provider?:string,model?:string}[]} */([]),
+  fallbacks:/** @type {{run:string,provider:string,model:string}[]} */([]),
+  noAccountText:'ChatGPT rate-limited every one of 3 attempts — its usage limit resets in 4h 12m. Send /retry after that, or switch models with /model. To avoid this in future, add a backup provider with `hermes fallback add`.\n\nProvider said: You have hit your usage limit.',
   configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
   configWriteFail:/** @type {Set<string>} */(new Set()),
   // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal
@@ -205,6 +212,18 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const allowlistOf=name=>{ const list=profileOf(name)?.config?.command_allowlist; return Array.isArray(list)?list:[]; };
  // A request in the pinned release's words, with the keys it is reported under and the ones an always answer keeps.
+ // The message a run paused in (#647), kept in its session once: the person's message, then the assistant message with
+ // its words and the call that waits.
+ const paused=(run,call,tool,said)=>{
+  // A pause with no words is kept too once the session holds an earlier paused message, so those words are not read again.
+  if(!run.session||said===undefined&&!settings.sessions.has(run.session)) return;
+  const found=settings.sessions.get(run.session)??{profile:run.profile,messages:[]};
+  settings.sessions.set(run.session,found);
+  if(found.messages.some(message=>message.tool_calls?.some(each=>each.id===call))) return;
+  const at=Date.now()/1000;
+  if(found.messages.at(-1)?.role!=='assistant') found.messages.push({role:'user',content:inputText(run.input),timestamp:at});
+  found.messages.push({role:'assistant',content:said??'',tool_calls:[{id:call,type:'function',function:{name:tool,arguments:'{}'}}],timestamp:at});
+ };
  const requestOf=each=>each.app?{description:each.description??`Server '${each.app.server}' is configured 'trust: untrusted'. Approve to run '${each.app.tool}' once, for this session, or always, or deny to block it.`,
   command:each.command??`MCP tool '${each.app.tool}' on UNTRUSTED server '${each.app.server}' wants to run. This tool is write-capable (no readOnlyHint=true annotation) and may modify external state.`,
   patternKeys:['mcp_elicitation'],kept:[`mcp:${each.app.server}/${each.app.tool}`]}
@@ -286,23 +305,34 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!run) {
      const sent=JSON.parse(raw);
      if(settings.refusedModels.has(sent.model)) return send(response,400,{error:{message:`Model '${sent.model}' is not available`,type:'invalid_request_error'}});
-     const asked=settings.questions(inputText(sent.input)).map(each=>({prompt_id:randomUUID().replaceAll('-','').slice(0,10),question:each.question,choices:each.choices??[],multi_select:each.multi_select===true,settled:null}));
-     const approvals=settings.approvals(inputText(sent.input)).map(each=>({request_id:randomUUID().replaceAll('-',''),...requestOf(each),choices:each.choices??['once','session','always','deny'],settled:null}));
+     const asked=settings.questions(inputText(sent.input)).map(each=>({prompt_id:randomUUID().replaceAll('-','').slice(0,10),question:each.question,choices:each.choices??[],multi_select:each.multi_select===true,said:each.said,settled:null}));
+     const approvals=settings.approvals(inputText(sent.input)).map(each=>({request_id:randomUUID().replaceAll('-',''),...requestOf(each),choices:each.choices??['once','session','always','deny'],said:each.said,settled:null}));
      const runProfile=decodeURIComponent(request.url.match(/^\/p\/([^/]+)\//)?.[1]||'default');
      const asks=settings.routineAsks(inputText(sent.input));
      if(asks&&enabledToolsets(profileOf(runProfile)?.config).includes('cronjob')) cronStore(runProfile).push(cronJob({...asks,origin:{platform:'api_server'}}));
      run={id:`run_${instance}_${settings.runs.length+1}`,profile:runProfile,key,session:request.headers['x-hermes-session-key'],input:sent.input,instructions:sent.instructions,history:sent.conversation_history,body:raw,reads:0,asked,approvals,created:Date.now()/1000}; settings.runs.push(run);
      const runProvider=sent.provider??profileOf(runProfile)?.provider;
+     const runModel=sent.model??profileOf(runProfile)?.model;
      const accounts=(settings.defaultPool[runProvider]||[]).filter(row=>row.auth_type==='oauth');
-     if(accounts.length) {
+     // One provider's accounts in the pool's order: each switched on and not exhausted is asked until one has quota.
+     const tryAccounts=(provider,model,rows,{record})=>{
       let using=null;
-      for(const row of accounts) {
+      for(const row of rows) {
        if(row.off||row.last_status==='exhausted') continue;
-       settings.modelCalls.push({run:run.id,account:row.id});
-       if(using) settings.switches.push({id:randomUUID().replaceAll('-',''),provider:runProvider,from:using.id,to:row.id,at:Date.now()/1000});
+       settings.modelCalls.push({run:run.id,account:row.id,provider,model});
+       if(using&&record) settings.switches.push({id:randomUUID().replaceAll('-',''),provider,from:using.id,to:row.id,at:Date.now()/1000});
        using=row;
-       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); break; }
+       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); return true; }
        row.last_status='exhausted';
+      }
+      return false;
+     };
+     if(accounts.length&&!tryAccounts(runProvider,runModel,accounts,{record:true})) {
+      const saved=profileOf(runProfile)?.config||{};
+      const entries=raw=>(Array.isArray(raw)?raw:raw&&typeof raw==='object'?[raw]:[]).filter(entry=>entry?.provider&&entry?.model);
+      for(const entry of [...entries(saved.fallback_providers),...entries(saved.fallback_model)]) {
+       settings.fallbacks.push({run:run.id,provider:entry.provider,model:entry.model});
+       if(tryAccounts(entry.provider,entry.model,settings.defaultPool[entry.provider]||[],{record:false})) break;
       }
       if(!settings.answeredOn.has(run.id)) run.outOfAccounts=true;
      }
@@ -322,6 +352,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     // As measured on the pinned release: the skip hint is appended to the question, and the first of two or more
     // choices is marked recommended.
     const waiting=run.asked?.find(asked=>!asked.settled);
+    if(waiting) paused(run,waiting.prompt_id,'clarify',waiting.said);
     if(waiting) return send(response,200,{object:'hermes.run',run_id:run.id,status:'running',session_id:run.session,pending_controls:[{kind:'clarify',prompt_id:waiting.prompt_id,execution_generation:1,
      question:`${waiting.question}\nReply "skip" to skip this question.`,choices:waiting.choices.map((choice,index)=>index===0&&waiting.choices.length>=2?`${choice} (Recommended)`:choice),multi_select:waiting.multi_select}]});
     // The request as the pinned release sends it (api_server.py _approval_request_event): its words, the envelope, the
@@ -329,6 +360,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const standing=allowlistOf(run.profile);
     for(const each of run.approvals||[]) { if(each.settled) continue; if(!each.kept.some(key=>standing.includes(key))) break; Object.assign(each,{settled:'answered',choice:'standing'}); }
     const asking=run.approvals?.find(each=>!each.settled);
+    if(asking) paused(run,asking.request_id,'terminal',asking.said);
     if(asking) return send(response,200,{object:'hermes.run',run_id:run.id,status:'waiting_for_approval',session_id:run.session,last_event:'approval.request',...times,pending_controls:[],
      approval:{command:asking.command,description:asking.description,pattern_key:asking.patternKeys[0],pattern_keys:asking.patternKeys,request_id:asking.request_id,timeout_s:300,
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});

@@ -6,6 +6,18 @@
   "ar": { "title": "اختار أكتر من إجابة للسؤال", "body": "لما وكيل يسأل سؤال ينفع تختار فيه أكتر من حاجة، السؤال بقى بيعرض كل الاختيارات: اختار واحدة أو أكتر ودوس ابعت، أو اكتب ردك في الرسالة زي الأول." }
  },
  {
+  "issue": 647,
+  "date": "2026-11-22",
+  "en": { "title": "What an Agent writes before it asks stays in the chat", "body": "When an Agent writes its answer and asks you about it in the same breath, its words now show above the question or the request to allow, in a Conversation and in a Channel (in a Channel, when the question has a card), and the reply after your answer does not repeat them." },
+  "ar": { "title": "كلام الوكيل قبل ما يسأل بيفضل في الشات", "body": "لما الوكيل يكتب رده ويسألك عليه في نفس الرسالة، كلامه بقى بيظهر فوق السؤال أو طلب السماح، في المحادثة وفي القناة (في القناة، لما السؤال يبقى ليه بطاقة)، والرد اللي بعد إجابتك مش بيكرره." }
+ },
+ {
+  "issue": 622,
+  "date": "2026-11-22",
+  "en": { "title": "Choose a fallback model", "body": "In Settings you can now pick a fallback model: when every account for an agent’s model has run out, the request goes on with it instead. It is None until you pick one, and while it is None agents never move to another kind of provider; when nothing is left, the chat says so once." },
+  "ar": { "title": "اختار موديل بديل", "body": "من الإعدادات بقيت تقدر تختار موديل بديل: لما كل حسابات موديل الوكيل يخلص استخدامها، الطلب بيكمّل عليه بداله. هو «ولا حاجة» لحد ما تختار، وطول ما هو «ولا حاجة» الوكلاء عمرهم ما بيروحوا لنوع مزوّد تاني؛ ولما مايفضلش حاجة، الشات بيقول كده مرة واحدة." }
+ },
+ {
   "issue": 621,
   "date": "2026-11-22",
   "en": { "title": "A request goes on when a subscription runs out", "body": "When one ChatGPT or Claude subscription has no quota left, the same request now goes on with the next one of its kind in your providers order, skipping any you switched off; the Activity log notes the move and Settings shows which ran out." },

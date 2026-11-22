@@ -3,7 +3,7 @@ import { lazy, Suspense, type ComponentProps } from 'react';
 import type { CompanyProviders as Providers } from './settings-providers';
 import type Knowledge from './company-knowledge-client';
 import type { CompanyLearningMode as CompanyMode, AgentLearningMode as AgentMode, RuleActions as RuleAction } from './settings-learning-client';
-import type { SpeechToText as Speech, DefaultModel as Default, EachAgent as Each, AgentModel as Model } from './settings-models';
+import type { SpeechToText as Speech, DefaultModel as Default, FallbackModel as Fallback, EachAgent as Each, AgentModel as Model } from './settings-models';
 
 // Parts of the settings overlay that only one of its sections shows, loaded on demand so they stay out of the page chunk
 // every company route loads (page weight, #55): the Company's Providers (#617), the member's
@@ -25,6 +25,7 @@ const LazyEffort=lazy(()=>import('./settings-agent-effort').then(module=>({defau
 const LazyMorning=lazy(()=>import('./settings-agent-morning').then(module=>({default:module.AgentMorning})));
 const LazySpeech=lazy(()=>import('./settings-models').then(module=>({default:module.SpeechToText})));
 const LazyDefault=lazy(()=>import('./settings-models').then(module=>({default:module.DefaultModel})));
+const LazyFallback=lazy(()=>import('./settings-models').then(module=>({default:module.FallbackModel})));
 const LazyEach=lazy(()=>import('./settings-models').then(module=>({default:module.EachAgent})));
 const LazyModel=lazy(()=>import('./settings-models').then(module=>({default:module.AgentModel})));
 const LazyDefaultEffort=lazy(()=>import('./settings-models').then(module=>({default:module.DefaultEffort})));
@@ -55,6 +56,7 @@ export function AgentEffort(props:{agent:string,effort:string|null,editable:bool
 export function AgentMorning(props:{agent:string,editable:boolean,morning:import('./settings-agent-morning').MorningProps|null}) { return <Suspense fallback={null}><LazyMorning {...props}/></Suspense>; }
 export function SpeechToText(props:ComponentProps<typeof Speech>) { return <Suspense fallback={null}><LazySpeech {...props}/></Suspense>; }
 export function DefaultModel(props:ComponentProps<typeof Default>) { return <Suspense fallback={null}><LazyDefault {...props}/></Suspense>; }
+export function FallbackModel(props:ComponentProps<typeof Fallback>) { return <Suspense fallback={null}><LazyFallback {...props}/></Suspense>; }
 export function EachAgent(props:ComponentProps<typeof Each>) { return <Suspense fallback={null}><LazyEach {...props}/></Suspense>; }
 export function AgentModel(props:ComponentProps<typeof Model>) { return <Suspense fallback={null}><LazyModel {...props}/></Suspense>; }
 export function DefaultEffort() { return <Suspense fallback={null}><LazyDefaultEffort/></Suspense>; }

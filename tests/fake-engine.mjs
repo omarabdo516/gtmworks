@@ -6,8 +6,8 @@
 // request expires or the run is stopped, and its reply is then also given the choices (null for one never taken).
 // A conversation's session (#346) reads as the turns `sessions` holds for its id, or missing.
 import { randomUUID } from 'node:crypto';
-/** @typedef {{id:string,text:string,choices:string[],multiple:boolean,answer?:import('../lib/engine.mjs').QuestionAnswer|null,settled:'answered'|'expired'|null}} FakeQuestion */
-/** @typedef {{id:string,description:string,command:string,choices:import('../lib/engine.mjs').PermissionChoice[],choice?:string|null,settled:'answered'|'expired'|null}} FakePermission */
+/** @typedef {{id:string,text:string,choices:string[],multiple:boolean,said?:string,answer?:import('../lib/engine.mjs').QuestionAnswer|null,settled:'answered'|'expired'|null}} FakeQuestion */
+/** @typedef {{id:string,description:string,command:string,choices:import('../lib/engine.mjs').PermissionChoice[],said?:string,choice?:string|null,settled:'answered'|'expired'|null}} FakePermission */
 /** @typedef {{id:string,key:string,conversation:string,input:import('../lib/engine.mjs').RunInput,instructions:string|null,tools:import('../lib/engine.mjs').ToolSpec[],history:import('../lib/engine.mjs').HistoryEntry[]|null,reads:number,stopped:boolean,ended:boolean,asked:FakeQuestion[],permissions:FakePermission[]}} FakeRun */
 // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
 // itself, so a fake's reply and tools read a person's words as they always did.
@@ -18,9 +18,10 @@ export function fakeEngine() {
   // How providing an Agent's own profile ends: with no subscription, a made profile has no model to answer with.
   agentProfile:/** @type {import('../lib/engine.mjs').ProvidedAgent['state']} */('noModel'),
   // The questions a run asks before its reply, and how many answers find the engine unreachable first.
-  questions:/** @type {(input:string)=>{text:string,choices?:string[],multiple?:boolean}[]} */(()=>[]),unreachableAnswers:0,
+  // `said`: what the Agent wrote in the message that asked (#647).
+  questions:/** @type {(input:string)=>{text:string,choices?:string[],multiple?:boolean,said?:string}[]} */(()=>[]),unreachableAnswers:0,
   // The requests a run waits on after them, and how many choices find the engine unreachable first.
-  permissions:/** @type {(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[]} */(()=>[]),unreachablePermits:0,
+  permissions:/** @type {(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[],said?:string}[]} */(()=>[]),unreachablePermits:0,
   // Each session's turns by id.
   sessions:/** @type {Map<string,import('../lib/engine.mjs').SessionTurn[]>} */(new Map()),
   // Each session's token use by id (#347); a session without one has unknown usage.
@@ -56,8 +57,8 @@ export function fakeEngine() {
    let run=runs.find(run=>run.key===idempotencyKey);
    if(!run) {
     const id=`fake_run_${instance}_${runs.length+1}`;
-    const asked=settings.questions(text).map((question,index)=>({id:`${id}_q${index+1}`,text:question.text,choices:question.choices??[],multiple:question.multiple===true,settled:null}));
-    const permissions=settings.permissions(text).map((asking,index)=>({id:`${id}_p${index+1}`,description:asking.description,command:asking.command,choices:asking.choices??/** @type {import('../lib/engine.mjs').PermissionChoice[]} */(['once','always','deny']),settled:null}));
+    const asked=settings.questions(text).map((question,index)=>({id:`${id}_q${index+1}`,text:question.text,choices:question.choices??[],multiple:question.multiple===true,said:question.said,settled:null}));
+    const permissions=settings.permissions(text).map((asking,index)=>({id:`${id}_p${index+1}`,description:asking.description,command:asking.command,choices:asking.choices??/** @type {import('../lib/engine.mjs').PermissionChoice[]} */(['once','always','deny']),said:asking.said,settled:null}));
     run={id,key:idempotencyKey,conversation,input,instructions:instructions??null,tools:tools??[],history:history??null,reads:0,stopped:false,ended:false,asked,permissions}; runs.push(run);
    }
    return run.id;
@@ -67,9 +68,9 @@ export function fakeEngine() {
    if(!run) return {state:'lost',reply:null,session:null,usage:null,toolCalls:[]};
    if(run.stopped) return {state:'stopped',reply:null,session:run.conversation,usage:settings.usage,toolCalls:[]};
    const waiting=run.asked.find(question=>!question.settled);
-   if(waiting) return {state:'running',reply:null,session:run.conversation,usage:null,toolCalls:[],question:{id:waiting.id,text:waiting.text,choices:[...waiting.choices],multiple:waiting.multiple}};
+   if(waiting) return {state:'running',reply:null,session:run.conversation,usage:null,toolCalls:[],question:{id:waiting.id,text:waiting.text,choices:[...waiting.choices],multiple:waiting.multiple},...(waiting.said?{said:waiting.said}:{})};
    const asking=run.permissions.find(each=>!each.settled);
-   if(asking) return {state:'running',reply:null,session:run.conversation,usage:null,toolCalls:[],permission:{id:asking.id,description:asking.description,command:asking.command,choices:[...asking.choices]}};
+   if(asking) return {state:'running',reply:null,session:run.conversation,usage:null,toolCalls:[],permission:{id:asking.id,description:asking.description,command:asking.command,choices:[...asking.choices]},...(asking.said?{said:asking.said}:{})};
    if(run.reads++<settings.pendingReads) return {state:'running',reply:null,session:run.conversation,usage:null,toolCalls:[]};
    run.ended=true;
    return settings.ending==='completed'?{state:'completed',reply:settings.reply(inputText(run.input),run.asked.map(question=>question.answer??null),run.permissions.map(asking=>asking.choice??null)),session:run.conversation,usage:settings.usage,toolCalls:settings.toolCalls(inputText(run.input))}:{state:'failed',reply:null,session:run.conversation,usage:settings.usage,toolCalls:[],...(settings.ending==='noModel'?{noModel:/** @type {const} */(true)}:{}),...(settings.ending==='credit'||settings.ending==='key'||settings.ending==='model'?{modelRefused:settings.ending}:{})};

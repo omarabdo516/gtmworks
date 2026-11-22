@@ -42,8 +42,9 @@ export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{lab
  |(Permission&({state:'open'}|{state:'decided',choice:PermissionChoice,at:string}|{state:'closed'}))
  |(Connect&{state:'open'|'connected'|'postponed'});
 type Hand={id:number,kind:'hand',title:string,line:string,app:string,rows:{label:string,value:string}[],url:string|null,note:string|null};
-export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,decided_at,created_at';
-export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,decided_at:string|null,created_at:string};
+export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,decided_at,created_at,said_before';
+// `said_before`: what the Agent wrote in the message that paused its Run on a question or a permission request (#647).
+export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,decided_at:string|null,created_at:string,said_before?:string|null};
 // The database keeps only rows each kind's reader can read (reply_card_valid); a kind with no reader fails the build.
 // The apps of the Agent's profile now, by key (null when the Engine could not be read).
 export type AppStates=Record<string,AppState>|null;
@@ -134,7 +135,10 @@ export const conversationColumns='id,agent_id,agent_name,hermes_session_id,good_
 // A card of a run as the record places it. A question (#138) also carries the answer its person gave, drawn as their
 // own message though none is stored; the main Agent's question is drawn as the reference's chip card by its Agent's
 // name (lib/conversation-record.ts), and any other Agent's as the lettered card (#143).
-export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean}};
+// A question or a permission request also carries what its Agent wrote before it in the same message (#647), drawn as
+// that Agent's words above the card.
+export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean},said?:string};
+export const saidParts=(row:Pick<ReplyCardRow,'said_before'>):Pick<PlacedCard,'said'>=>row.said_before?{said:row.said_before}:{};
 // What a question adds to its place in the record (#138): the answer its person gave, at the time they gave it, and
 // whether it reached the Engine (one claimed after the Engine stopped waiting, or as its Run ended, did not: its card
 // closed).
@@ -164,7 +168,7 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
  const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
  const asked=message.author==='person'?leadCards.filter(row=>row.run_id===message.run_id&&isAsked(row)).flatMap((row):ConversationMessage[]=>{
   const id=row.card.kind==='reply'?row.card.card.id:0;
-  return [{id,author:'agent',author_name:agentName,body:'',created_at:row.at,kind:'asked',cards:[row.card]},
+  return [{id,author:'agent',author_name:agentName,body:row.said??'',created_at:row.at,kind:'asked',cards:[row.card]},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];
  }):[];
   const own=handTurn(message)?[]:[plain];
@@ -203,8 +207,9 @@ const mergedByTime=(record:ConversationMessage[],lines:ConversationMessage[],tie
 export const withDecisions=(record:ConversationMessage[],decisions:Decision[],agentName=''):ConversationMessage[]=>
  mergedByTime(record,[...decisions].sort((a,b)=>a.at.localeCompare(b.at)).map((decided,index):ConversationMessage=>({id:index,author:'agent',author_name:agentName,body:'',created_at:decided.at,kind:'decided',decided})),'before');
 // How each ended run ended (conversation_run_ends); its token use is Hermes's own (#347).
-// A run that failed for a cause a retry cannot fix is no_model (#422), no_credit, key_refused or model_missing (#457).
-export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'};
+// A run that failed for a cause a retry cannot fix is no_model (#422), no_credit, key_refused or model_missing (#457), or
+// no_access when every account it could use ran out (#622).
+export type RunEnd={run_id:string,outcome:'completed'|'stopped'|'lost'|'failed'|'no_model'|'no_credit'|'key_refused'|'model_missing'|'no_access'};
 // A person's message whose run has no stored reply yet and has not been recorded as ended. A job command's Run (#358)
 // is the target Agent's, which the handover's own row closes: it is no Run of the chat's Agent and never waits here.
 export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[],handed:ReadonlySet<string>=new Set())=>messages.filter(message=>message.author==='person'&&!handed.has(message.run_id)&&!messages.some(other=>other.author==='agent'&&other.run_id===message.run_id)&&!ends.some(run=>run.run_id===message.run_id));
