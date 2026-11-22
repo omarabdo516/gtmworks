@@ -1581,5 +1581,6 @@
   "providersNameInvalid": "الاسم لحد 60 حرف، في سطر واحد.",
   "providersNotAllowed": "المالك بس هو اللي يقدر يسمّي المزوّد.",
   "providersNameFailed": "معرفناش نحفظ الاسم. جرّب تاني كمان شوية.",
-  "providersExhausted": "الحصة خلصت"
+  "providersExhausted": "الحصة خلصت",
+  "signInAccountNeeded": "المزوّد ده فيه أكتر من تسجيل دخول: افصل كل واحد من الصف بتاعه."
 }

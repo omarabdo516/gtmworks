@@ -312,7 +312,9 @@ function SubscriptionActions({company,companyName,owner,provider,name,state,row=
   router.refresh();
  });
  const another=row&&state==='connected';
- const disconnect=!row&&owner&&(state==='connected'||partial(state)); const connect=owner&&(row||state==='notConnected'||partial(state));
+ // A connected subscription the Engine did not list account by account has no Disconnect: the whole provider's would
+ // take every account it holds (#618). An older sign-in left on a profile still has its own.
+ const disconnect=!row&&owner&&((state==='connected'&&!!account)||partial(state)); const connect=owner&&(row||state==='notConnected'||partial(state));
  const command=`gtmworks sign-in claude --company ${quoted(companyName)}`;
  return <>
   <div className="panel-row">{row&&<AppTile app={tileOf({kind:'subscription',provider,name})} label={name}/>}

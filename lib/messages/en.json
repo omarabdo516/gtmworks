@@ -1581,5 +1581,6 @@
   "providersNameInvalid": "A name is up to 60 characters, on one line.",
   "providersNotAllowed": "Only the company’s Owner can name a provider.",
   "providersNameFailed": "Couldn’t save the name. Try again in a moment.",
-  "providersExhausted": "Out of quota"
+  "providersExhausted": "Out of quota",
+  "signInAccountNeeded": "This provider holds more than one sign-in: disconnect each from its own row."
 }

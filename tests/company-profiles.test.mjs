@@ -494,6 +494,9 @@ test('a second ChatGPT account is added beside the first, each subscription keep
   // Signing the first account in again renews it in place.
   await signIn('said');
   assert.deepEqual((await read()).accounts.map(row=>row.account),both.accounts.map(row=>row.account));
+  // A disconnect of the whole provider would take both accounts: it is refused, and both stay.
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect'}),{status:409,body:{error:'signInAccountNeeded'}});
+  assert.equal((await read()).accounts.length,3);
   // A Manager removes nothing; the Owner removes the second ChatGPT account and the first stays connected.
   const manager=sessions(fake,{owner:false});
   assert.deepEqual(await ask(manager,driver,{intent:'disconnect',account:both.accounts[1].account}),{status:403,body:{error:'signInNotAllowed'}});

@@ -51,7 +51,8 @@ test('the list shows each connected subscription and held key with its type and 
   await expect.element(head.getByRole('img', { name: 'ChatGPT' })).toBeVisible();
   expect(visible('#pv-d-sub-openai-codex .pv-back')).toBe(false);
   expect(document.querySelector('#sub-openai-codex-state')?.textContent).toBe(en.signInConnected);
-  expect(buttons('pv-d-sub-openai-codex')).toEqual([en.providers, 'Disconnect ChatGPT']);
+  // The Engine listed no account of it here, so it has no Disconnect: one would take every account it holds (#618).
+  expect(buttons('pv-d-sub-openai-codex')).toEqual([en.providers]);
   // Advanced is closed until opened, and names the Provider as the Engine does.
   const advanced = document.querySelector<HTMLDetailsElement>('#pv-d-sub-openai-codex-adv');
   expect(advanced?.open).toBe(false);
@@ -382,4 +383,11 @@ test('two ChatGPT accounts share their kind\'s model switches, each in its own d
   await screen.getByRole('button', { name: /^ChatGPT 2/ }).click();
   switchOf('pv-d-sub-openai-codex-61b59d', 'gpt-5.4', 'ChatGPT 2')!.click();
   await expect.poll(() => sent).toEqual([{ company, entry: 'sub-openai-codex', model: 'gpt-5.4', enabled: false }]);
+});
+
+test('a connected subscription the Engine did not list account by account has no Disconnect', async () => {
+  await providers({ signIns: signIns('connected', 'mainAgentOnly'), accounts: null });
+  expect(buttons('pv-d-sub-openai-codex')).toEqual([en.providers]);
+  // An older sign-in left on a profile is still removed from its row.
+  expect(buttons('pv-d-sub-anthropic')).toContain('Disconnect Claude');
 });
