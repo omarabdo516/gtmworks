@@ -53,7 +53,7 @@ test('integration: in a Conversation the words written before a question are the
   expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message:'Which Agents do you advise we make?',hermes,engineFor:fake.engineFor})).toEqual({conversation});
   expect(await close()).toBe(0);
   expect(await close()).toBe(0);
-  expect(JSON.parse(query(`select kind,said from public.reply_cards where conversation_id='${conversation}'`))).toEqual([{kind:'question',said:five}]);
+  expect(JSON.parse(query(`select kind,said_before from public.reply_cards where conversation_id='${conversation}'`))).toEqual([{kind:'question',said_before:five}]);
 
   await page.setViewportSize({width:1440,height:900});
   await signIn(page,'omar@example.com',`/c/rs-learning/conversations/${conversation}`);
@@ -84,7 +84,7 @@ test('integration: in a Channel the words written before a question are the Agen
   const drive=()=>driveChannelRuns(service,{hermes,channel:general,engineFor:fake.engineFor});
   const sent=await postChannelMessage(person,service,{channel:general,sendKey:randomUUID(),message:'@Faye Which Agents do you advise we make?',hermes,engineFor:fake.engineFor}) as {message:number};
   expect(await drive()).toEqual({started:0,closed:0});
-  expect(JSON.parse(query(`select said from public.reply_cards where channel_message_id=${sent.message}`))).toEqual([{said:five}]);
+  expect(JSON.parse(query(`select said_before from public.reply_cards where channel_message_id=${sent.message}`))).toEqual([{said_before:five}]);
 
   await page.setViewportSize({width:1440,height:900});
   await signIn(page,'omar@example.com',`/c/rs-learning/channels/${general}`);

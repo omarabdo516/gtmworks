@@ -42,9 +42,9 @@ export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{lab
  |(Permission&({state:'open'}|{state:'decided',choice:PermissionChoice,at:string}|{state:'closed'}))
  |(Connect&{state:'open'|'connected'|'postponed'});
 type Hand={id:number,kind:'hand',title:string,line:string,app:string,rows:{label:string,value:string}[],url:string|null,note:string|null};
-export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,decided_at,created_at,said';
-// `said`: what the Agent wrote in the message that paused its Run on a question or a permission request (#647).
-export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,decided_at:string|null,created_at:string,said?:string|null};
+export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,decided_at,created_at,said_before';
+// `said_before`: what the Agent wrote in the message that paused its Run on a question or a permission request (#647).
+export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,decided_at:string|null,created_at:string,said_before?:string|null};
 // The database keeps only rows each kind's reader can read (reply_card_valid); a kind with no reader fails the build.
 // The apps of the Agent's profile now, by key (null when the Engine could not be read).
 export type AppStates=Record<string,AppState>|null;
@@ -138,7 +138,7 @@ export const conversationColumns='id,agent_id,agent_name,hermes_session_id,good_
 // A question or a permission request also carries what its Agent wrote before it in the same message (#647), drawn as
 // that Agent's words above the card.
 export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean},said?:string};
-export const saidParts=(row:Pick<ReplyCardRow,'said'>):Pick<PlacedCard,'said'>=>row.said?{said:row.said}:{};
+export const saidParts=(row:Pick<ReplyCardRow,'said_before'>):Pick<PlacedCard,'said'>=>row.said_before?{said:row.said_before}:{};
 // What a question adds to its place in the record (#138): the answer its person gave, at the time they gave it, and
 // whether it reached the Engine (one claimed after the Engine stopped waiting, or as its Run ended, did not: its card
 // closed).

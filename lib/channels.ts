@@ -83,7 +83,7 @@ export type ChannelRecord={
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string};
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
 type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,agent_name:string,outcome:string|null};
-type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string,said?:string|null};
+type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string,said_before?:string|null};
 type StoredFile={id:number,message_id:number,name:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
 type StoredCard=ReplyCardRow&{channel_message_id:number,channel_ordinal:number|null,addressed_to:string|null};
@@ -160,7 +160,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // The channel's Card on the board (#151): the one Card a team channel has, the column it stands in now and its line,
  // read only for a Member who sees its Agent. The general channel has none.
  const {data:board}=await db.rpc('channel_board_card',{ch:channel});
- const asked=runs.length?((await db.from('channel_permissions').select('id,message_id,ordinal,title,content,state,decided_at,created_at,said').eq('channel_id',channel).gte('message_id',runs.at(-1)!.message_id).order('id')).data||[]) as StoredPermission[]:[];
+ const asked=runs.length?((await db.from('channel_permissions').select('id,message_id,ordinal,title,content,state,decided_at,created_at,said_before').eq('channel_id',channel).gte('message_id',runs.at(-1)!.message_id).order('id')).data||[]) as StoredPermission[]:[];
  // A reply's cards (#136, #137, #139) are kept against the message its Run answers, and a question (#149) against the
  // same message, drawn under it before the reply. Every member of the channel reads them.
  const askedIds=ordered.filter(message=>message.author==='person').map(message=>message.id);
