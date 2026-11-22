@@ -191,17 +191,21 @@ test('a Card carried until its own place is out of the window and dropped in ano
  const view=(await board.boundingBox())!;
  expect(body.x).toBeGreaterThanOrEqual(view.x); expect(body.x+body.width).toBeLessThanOrEqual(view.x+view.width);
  await page.mouse.move(body.x+body.width/2,body.y+body.height/2,{steps:6});
- // From the release until the Card is drawn in its new column and has landed, the board never scrolls back.
- const scrolls=board.evaluate((el,id)=>new Promise<{atDrop:number,least:number}>(done=>{
+ // The drop is let go only once dnd-kit has the pointer over In progress (#626): on a loaded machine the last move can
+ // reach it after a release sent at once.
+ await expect(page.locator('#board-cols > .col[data-column="progress"]')).toHaveClass(/\bis-over\b/);
+ // From the release until the Card is drawn in its new column and has landed, the board never scrolls back. The
+ // listener is in place before the release (an evaluate left running could install it after the mouseup, #626), and
+ // the answer is read once the Card has landed.
+ await board.evaluate((el,id)=>{ (window as unknown as {farDrop:Promise<{atDrop:number,least:number}>}).farDrop=new Promise(done=>{
   window.addEventListener('mouseup',()=>{ const atDrop=el.scrollLeft; let least=atDrop; const since=performance.now();
    const read=()=>{ least=Math.min(least,el.scrollLeft); const there=el.querySelector(`[data-column="progress"] .kcard[data-card-id="${id}"]`);
     if(there&&performance.now()-since>500) done({atDrop,least}); else requestAnimationFrame(read); };
    read();
   },{capture:true,once:true});
- }),id);
- await page.waitForTimeout(50);
+ }); },id);
  await page.mouse.up();
- const seen=await scrolls;
+ const seen=await page.evaluate(()=>(window as unknown as {farDrop:Promise<{atDrop:number,least:number}>}).farDrop);
  expect(seen.least).toBeGreaterThanOrEqual(seen.atDrop-1);
  await page.reload();
  expect(await columnOf(page,id)).toBe('progress');
