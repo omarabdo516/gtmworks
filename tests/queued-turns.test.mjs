@@ -116,3 +116,17 @@ test('a queued start that may have reached the Engine keeps its attempt and is r
  assert.deepEqual(starts.map(start=>[start.idempotencyKey,start.retry]),[['c1:k-c1',false],['c1:k-c1',true]],'the second is the same request, as a retry');
  assert.deepEqual(state.failed,[]);
 });
+
+// #514 (review): a turn claimed as a retry while another caller's first attempt was in flight, and handed back before
+// this caller began, is a first attempt again: the attempt begin_start answers decides, not the claim's flag, so an
+// Engine that is still down is handed back here too instead of read as an unknown start that waits a day.
+test('a turn claimed as a retry whose earlier attempt was handed back is sent, and handed back, as a first attempt', async () => {
+ const {state,service}=counted(); const starts=[];
+ const claimed=service.rpc;
+ service.rpc=async(name,given)=>name==='claim_conversation_turn'?{data:[{company:'co',agent:'a',person:'p',send_key:'k-c1',message:'Hello',connection,profile:'writer',note:null,retry:true}],error:null}:claimed(name,given);
+ const engineFor=()=>({start:async run=>{ starts.push(run); return run.retry?{state:'unknown'}:notReached; }});
+ assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),0);
+ assert.deepEqual(starts.map(start=>start.retry),[false],'begin_start answered attempt 1, so it is no retry');
+ assert.deepEqual(state.released,[{conversation:'c1',message_key:'k-c1',attempt:1}],'and the unreached start is handed back');
+ assert.equal(state.kept,0,'never kept as unknown');
+});
