@@ -34,7 +34,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
   redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/${parts?.join('/') || 'home'}${kept?`?${kept}`:''}`)}`); }
  const {data:companies}=await db.from('companies').select('id,slug,name,work_mode').order('name'); const company=companies?.find(c=>c.slug===slug); if(!company || !sections[section]) notFound(); const title=t(sections[section]);
  // A Company worked alone has no Member permissions to set (#10); its invitation form is in the settings overlay.
- if(section==='settings/members'&&company.work_mode==='alone') redirect(`/c/${slug}/settings`);
+ if(section==='settings/members'&&company.work_mode==='alone') redirect(`/c/${slug}/settings?section=members`);
  const {data:person}=await db.from('people').select('name').eq('id',user.id).single();
  const {data:membership}=await db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle();
  const canCreate=canCreateCard({role:membership?.role});

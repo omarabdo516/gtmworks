@@ -39,7 +39,7 @@ test('alone: the sidebar has no channels and keeps the log; settings has no memb
  await expect(channels(page)).toHaveCount(0);
  await expect(page.locator('#lbl-ch')).toHaveCount(0);
 
- await page.goto('/c/rs-consultations/settings');
+ await page.goto('/c/rs-consultations/settings?section=members');
  await expect(page.getByText('Alone · just you and the agents')).toBeVisible();
  await expect(page.getByLabel('Member’s email')).toBeVisible();
  await expect(page.locator('#inv-role')).toHaveValue('contributor');
@@ -55,17 +55,17 @@ test('alone: the sidebar has no channels and keeps the log; settings has no memb
 
  // The legacy members page holds the Member permissions; alone it opens the settings overlay instead.
  await page.goto('/c/rs-consultations/settings/members');
- await expect(page).toHaveURL(/\/c\/rs-consultations\/settings$/);
+ await expect(page).toHaveURL(/\/c\/rs-consultations\/settings\?section=members$/);
  await expect(page.locator('.member-form')).toHaveCount(0);
 });
 
 test('the first invited Member accepts: the Company is a team and every earlier Conversation, Card and log row is unchanged',async({page,context})=>{
  const email=`alone-${Date.now()}@example.com`;
- await signIn(page,'omar@example.com','/c/rs-consultations/settings');
+ await signIn(page,'omar@example.com','/c/rs-consultations/settings?section=members');
  await page.getByLabel('Member’s email').fill(email);
  await page.getByRole('button',{name:'Invite',exact:true}).click();
  await expect(page.locator('.toast')).toHaveText(`Invite sent to ${email}`);
- await expect(page).toHaveURL(/\/c\/rs-consultations\/settings$/);
+ await expect(page).toHaveURL(/\/c\/rs-consultations\/settings\?section=members$/);
  // An invitation is not a Member yet: the Company stays alone until it is accepted.
  await expect(page.getByText('Alone · just you and the agents')).toBeVisible();
  expect(rows(`select work_mode from public.companies where id='${company}'`)[0].work_mode).toBe('alone');
@@ -80,7 +80,7 @@ test('the first invited Member accepts: the Company is a team and every earlier 
  await context.clearCookies();
  await signIn(page,'omar@example.com','/c/rs-consultations/home');
  await expect(channels(page)).toBeVisible();
- await page.goto('/c/rs-consultations/settings');
+ await page.goto('/c/rs-consultations/settings?section=members');
  await expect(page.getByText('With a team · 2 members')).toBeVisible();
  await expect(page.getByRole('heading',{name:'Members and the agents they work with'})).toBeVisible();
  await expect(page.locator('#inv-email')).toHaveCount(0);
