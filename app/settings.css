@@ -153,7 +153,7 @@
 
 /* the company */
 .gw .sov .co-name { display: flex; gap: var(--s2); align-items: center; }
-.gw .sov .co-name .set-input { flex: 1 1 0; min-width: 0; }
+.gw .sov :is(.co-name, .pv-rename__row) .set-input { flex: 1 1 0; min-width: 0; }
 .gw :is(.sov, .modal.team-dlg) .table { width: 100%; border-collapse: collapse; font-size: var(--gw-fs-sm); }
 .gw :is(.sov, .modal.team-dlg) .table th { text-align: start; font-weight: 400; color: var(--gw-text-3); padding: 0 var(--s2) var(--s2); border-bottom: 0.5px solid var(--gw-border-2); white-space: nowrap; background: none; }
 .gw :is(.sov, .modal.team-dlg) .table td { padding: var(--s3) var(--s2); border-bottom: 0.5px solid var(--gw-border-3); white-space: nowrap; min-width: 0; }
@@ -443,6 +443,10 @@
 .gw .sov .pv-group { margin: var(--s2) 0 0; font-size: var(--gw-fs-sm); line-height: 1.5; font-weight: 600; color: var(--gw-text-2); }
 .gw .sov .pv-fact { justify-content: space-between; }
 .gw .sov .pv-fact__v { flex: none; max-width: 60%; font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); text-align: end; overflow-wrap: anywhere; }
+/* a Provider's name, which the Owner changes in its details (#618): the field and its Save on one line */
+.gw .sov .pv-rename { display: flex; flex-direction: column; gap: var(--s1); padding: var(--s2) var(--s3); }
+.gw .sov .pv-rename .set-label, .gw .sov .pv-rename p { margin: 0; }
+.gw .sov .pv-rename__row { display: flex; gap: var(--s2); align-items: center; }
 .gw .sov .pv-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--gw-fs-xs); }
 .gw .sov .pv-adv { display: flex; flex-direction: column; gap: var(--s2); }
 .gw .sov .pv-adv__s { align-self: flex-start; cursor: pointer; list-style: none; font-weight: 600; }

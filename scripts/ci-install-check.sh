@@ -59,6 +59,36 @@ config = _get_env_config()
 _create_configured_env(config, config["env_type"], image="", cwd="/work", timeout=30, task_id="sync-check", host_cwd=None)
 assert config["env_type"] == "ssh" and built.call_args.kwargs["sync_files"] is False, built.call_args
 PY' || fail 'the pinned Engine builds its ssh sandbox with file sync off'
+# A ChatGPT sign-in from Settings adds its account (#618): the cont-init hook patches the dashboard's device-code save.
+# In a throwaway container of the pinned image the hook runs twice, and the save the worker calls keeps a second account
+# beside the first, renews an account signed in again in place (same id), removes the second alone with the first still
+# signed in, and, after every account was removed from the pool, lists the next sign-in again. Tokens are unsigned test JWTs; nothing reaches OpenAI.
+docker run --rm -u root -e HERMES_HOME=/tmp/codex-accounts -v "$PWD/scripts/engine-codex-accounts.sh:/hook:ro" \
+  --entrypoint /bin/sh "$engine_image" -ec '/hook; /hook; mkdir -p "$HERMES_HOME"; cd /opt/hermes; exec python - <<"PY"
+import asyncio, base64, json
+from hermes_cli.web_routers import oauth, ops
+from agent.credential_pool import load_pool
+part = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")
+jwt = lambda who, n="": part({"alg": "none"}) + "." + part({"sub": who, "https://api.openai.com/auth": {"chatgpt_account_id": who}}) + ".t" + n
+rows = lambda: [(e.id, e.source, e.access_token) for e in load_pool("openai-codex").entries()]
+oauth._gtmworks_save_codex_login({"access_token": jwt("a"), "refresh_token": "r"})
+oauth._gtmworks_save_codex_login({"access_token": jwt("b"), "refresh_token": "r"})
+two = rows()
+assert [s for _, s, _ in two] == ["device_code", "manual:device_code"], two
+oauth._gtmworks_save_codex_login({"access_token": jwt("b", "2"), "refresh_token": "r"})
+again = rows()
+assert [i for i, _, _ in again] == [i for i, _, _ in two] and again[1][2] == jwt("b", "2") and again[0][2] == jwt("a"), again
+oauth._gtmworks_save_codex_login({"access_token": jwt("a", "3"), "refresh_token": "r"})
+again = rows()
+assert [i for i, _, _ in again] == [i for i, _, _ in two] and again[0][2] == jwt("a", "3"), again
+from hermes_cli.auth import get_codex_auth_status
+asyncio.run(ops.remove_credential_pool_entry("openai-codex", 2, None))
+assert rows() == again[:1] and get_codex_auth_status().get("logged_in") is True, rows()
+asyncio.run(ops.remove_credential_pool_entry("openai-codex", 1, None))
+assert rows() == []
+oauth._gtmworks_save_codex_login({"access_token": jwt("c"), "refresh_token": "r"})
+assert [s for _, s, _ in rows()] == ["device_code"], rows()
+PY' || fail 'a second ChatGPT sign-in adds its own account to the pinned Engine'
 [[ $(stat -c %a .env.install) == 600 ]] || fail '.env.install permissions (expected 600)'
 # First run opens only through the setup link (issue #50): the first install ends with it, its code is in no
 # other line, and a repeat install while setup is still open prints the same link. The code travels after `#`

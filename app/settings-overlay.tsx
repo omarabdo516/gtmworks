@@ -20,6 +20,7 @@ import PasswordSettings from './password-settings';
 import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
 import { managedUsage, type UsageRow } from '@/lib/company-app-items';
 import { readCompanySignIns } from '@/lib/company-sign-in.mjs';
+import { readProviderNames } from '@/lib/provider-names.mjs';
 import { engineOf } from '@/lib/company-engine.mjs';
 import { readWorkSandbox } from '@/lib/hermes.mjs';
 import { readCompanyModels } from '@/lib/engine-settings.mjs';
@@ -95,6 +96,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The Company's default model, each Agent's own and the Owner's model choices (#29), and the providers the Engine takes a
  // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
  const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;
+ const names=section==='models'?await readProviderNames(db,company.id):{};
  const keys=section==='models'?await (async()=>{ try { return await readCompanyKeys(db,service(),{company:company.id}); } catch { return null; } })():null;
  // Each Provider's models with the Owner's switch (#620), read for every Member, who sees them read-only.
  const providerModels=section==='models'?await readProviderModels(db,{company:company.id}).catch(()=>null):null;
@@ -166,8 +168,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='backup'&&owner?<BackupSection t={t}/>
   // About (#616) is every Role's: the version this image was built as, and the notes and licenses it ships.
   :section==='about'?<AboutSection t={t} language={language} locale={locale} version={process.env.GTMWORKS_VERSION}/>
-  :<SoonSection t={t} section={section} ro={ro} providers={<CompanyProviders company={company.id} companyName={company.name} owner={owner} keys={keys} models={providerModels}
-     subscriptions={{available:subscriptions?.profiles!=null,signIns:subscriptions?.signIns??null,noEngine:subscriptions?.noEngine===true}}/>}
+  :<SoonSection t={t} section={section} ro={ro} providers={<CompanyProviders company={company.id} companyName={company.name} owner={owner} keys={keys} models={providerModels} names={names}
+     subscriptions={{available:subscriptions?.profiles!=null,signIns:subscriptions?.signIns??null,accounts:subscriptions&&'accounts' in subscriptions?subscriptions.accounts:null,noEngine:subscriptions?.noEngine===true}}/>}
     speech={<SpeechToText company={company.id} owner={owner} data={speech}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}

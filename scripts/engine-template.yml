@@ -43,6 +43,9 @@ services:
       # The ssh backend's file sync, off (#393): a hook before s6 starts any service patches the Engine's own copy to take
       # the terminal.ssh_sync_files key the managed configuration sets, and fails the start if the pinned text moved.
       - ./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro
+      # A ChatGPT sign-in from Settings adds its account beside the Company's others and never overwrites one (#618): a
+      # hook before s6 starts any service patches the Engine's own copy, and fails the start if the pinned text moved.
+      - ./engine-codex-accounts.sh:/etc/cont-init.d/07-engine-codex-accounts:ro
       # The one way the listeners learn the address the install network gave this Engine: a hook that runs before s6
       # starts any service writes it into the container's environment, so the gateway and the dashboard bind there and
       # never to the wildcard address the sandbox's network could reach (#390).

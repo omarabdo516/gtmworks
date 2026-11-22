@@ -178,7 +178,21 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // time it started in seconds, which the profile's usage analytics count from, and the model it ran on (#32), which
   // the analytics group into by_model.
   sessions:/** @type {Map<string,{profile:string,messages:any[],input_tokens?:unknown,output_tokens?:unknown,model?:string,started_at?:number,ended_at?:number}>} */(new Map()),
-  approve(session) { const found=settings.signInSessions.get(session); if(!found) return; found.status='approved'; credentialsOf(found.profile)[found.provider]=`codex-token-${randomUUID()}`; }};
+  // A ChatGPT sign-in on the root, as the pinned Engine with scripts/engine-codex-accounts.sh saves it (#618): the first
+  // account is the singleton and its `device_code` pool row; another account is a `manual:device_code` row of its own
+  // and the first stays as it was. `account` names the ChatGPT account the person signed in with; the same one again
+  // renews its row in place.
+  approve(session,account=`account-${randomUUID()}`) {
+   const found=settings.signInSessions.get(session); if(!found) return; found.status='approved';
+   const token=`codex-token-${randomUUID()}`;
+   if(found.profile!=='default'||found.provider!=='openai-codex') { credentialsOf(found.profile)[found.provider]=token; return; }
+   const rows=settings.defaultPool['openai-codex']||=[];
+   const same=rows.find(row=>row.account===account);
+   if(same) { same.access_token=token; if(same.source==='device_code') settings.defaultCredentials['openai-codex']=token; return; }
+   const first=!rows.length;
+   if(first) settings.defaultCredentials['openai-codex']=token;
+   rows.push({id:randomUUID().replaceAll('-','').slice(0,6),label:`${account}@example.com`,auth_type:'oauth',source:first?'device_code':'manual:device_code',priority:rows.length,access_token:token,account});
+  }};
  const profileOf=name=>name==='default'?{config:settings.defaultConfig,credentials:settings.defaultCredentials}:settings.profiles.get(name);
  const allowlistOf=name=>{ const list=profileOf(name)?.config?.command_allowlist; return Array.isArray(list)?list:[]; };
  // A request in the pinned release's words, with the keys it is reported under and the ones an always answer keeps.
@@ -797,7 +811,20 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const env=(scoped==='default'?settings.defaultEnv:settings.profiles.get(scoped)?.env)||{};
     if(env.ANTHROPIC_API_KEY) pool.anthropic=[...pool.anthropic||[],{id:'envkey',label:'ANTHROPIC_API_KEY',auth_type:'api_key',source:'env:ANTHROPIC_API_KEY',priority:(pool.anthropic||[]).length,access_token:env.ANTHROPIC_API_KEY}];
     return send(response,200,{providers:Object.entries(pool).filter(([,entries])=>entries.length).map(([provider,entries])=>({provider,
-     entries:entries.map((entry,at)=>({index:at+1,id:entry.id,label:entry.label,auth_type:entry.auth_type,source:entry.source,priority:entry.priority,last_status:null,request_count:0,token_preview:`...${entry.access_token.slice(-4)}`,has_refresh:entry.auth_type==='oauth'}))}))});
+     entries:entries.map((entry,at)=>({index:at+1,id:entry.id,label:entry.label,auth_type:entry.auth_type,source:entry.source,priority:entry.priority,last_status:entry.last_status??null,request_count:0,token_preview:`...${entry.access_token.slice(-4)}`,has_refresh:entry.auth_type==='oauth'}))}))});
+   }
+   // One pool entry leaves by its 1-based index (ops.py 438-488); the singleton's row takes the singleton with it. A
+   // root not named is refused on an Engine serving several profiles (destructive_profile), as every Company's does.
+   const poolEntry=url.pathname.match(/^\/api\/credentials\/pool\/([^/]+)\/(\d+)$/);
+   if(poolEntry&&request.method==='DELETE') {
+    if(!url.searchParams.get('profile')) return send(response,400,{detail:'profile is required on a multi-profile host'});
+    if(scoped!=='default') return send(response,404,{detail:'No pool entry at that index'});
+    const rows=settings.defaultPool[poolEntry[1]]||[];
+    const at=Number(poolEntry[2])-1;
+    if(at<0||at>=rows.length) return send(response,404,{detail:'No pool entry at that index'});
+    const [removed]=rows.splice(at,1);
+    if(removed.source==='device_code'||removed.source==='hermes_pkce') delete settings.defaultCredentials[poolEntry[1]];
+    return send(response,200,{ok:true,provider:poolEntry[1],count:rows.length,cleaned:[],hints:[]});
    }
    const oauth=url.pathname.match(/^\/api\/providers\/oauth(?:\/([^/]+))?(?:\/(start|poll)(?:\/([^/]+))?)?$/);
    if(oauth) {

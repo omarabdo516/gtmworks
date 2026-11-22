@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { everyAgentGets, noAgentGets, toolConfig, fixedToolsets, toolsDiffer, childToolsets, forbiddenOf, companyProfile } from '../lib/agent-toolsets.mjs';
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
-import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, prepareApp, removeProviderKey } from '../lib/hermes.mjs';
+import { provideProfile, configureProfile, readToolsets, readSignIns, startSignIn, pollSignIn, cancelSignIn, disconnectSignIn, readSubscriptionAccounts, removeSubscriptionAccount, prepareApp, removeProviderKey } from '../lib/hermes.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, checkAgentTools, keepLeadSouls, leadSoul, baselineSoul } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { changeCompanySignIn, readCompanySignIns } from '../lib/company-sign-in.mjs';
@@ -434,7 +434,8 @@ function sessions(fake,{owner,agents=[],logFails=false}) {
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 const pointedAt=fake=>{ const at=target=>({...target,managementAddress:fake.managementAddress});
  return {hermes:{address:fake.address,key:'test-only-key'},start:(target,provider)=>startSignIn(at(target),provider),poll:(target,provider,session)=>pollSignIn(at(target),provider,session),
-  cancel:(target,session)=>cancelSignIn(at(target),session),disconnect:(target,provider)=>disconnectSignIn(at(target),provider),read:target=>readSignIns(at(target))}; };
+  cancel:(target,session)=>cancelSignIn(at(target),session),disconnect:(target,provider)=>disconnectSignIn(at(target),provider),read:target=>readSignIns(at(target)),
+  accounts:target=>readSubscriptionAccounts(at(target)),removeAccount:(target,provider,account)=>removeSubscriptionAccount(at(target),provider,account)}; };
 const ask=(person,driver,change)=>changeCompanySignIn(person.db,{company:two,provider:'openai-codex',driver,hermes:driver.hermes,...change});
 const states=read=>read.signIns&&Object.fromEntries(Object.entries(read.signIns).map(([id,found])=>[id,found.state]));
 const signInPaths=fake=>fake.settings.managementRequests.filter(request=>request.path.startsWith('/api/providers/oauth/')).map(request=>`${request.method} ${request.path}`);
@@ -449,7 +450,7 @@ test('only an Owner starts, follows or removes a company sign-in, checked on the
   assert.deepEqual(member.logged,[]);
   assert.equal(fake.settings.signInSessions.size,0,'a member never reaches Hermes');
   // A member still reads whether the company is connected.
-  assert.deepEqual(await readCompanySignIns(member.db,{company:two,driver,hermes:{address:fake.address,key:'test-only-key'}}),{profile:companyProfile(two),profiles:[companyProfile(two)],signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}}});
+  assert.deepEqual(await readCompanySignIns(member.db,{company:two,driver,hermes:{address:fake.address,key:'test-only-key'}}),{profile:companyProfile(two),profiles:[companyProfile(two)],signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}},accounts:[]});
   const owner=sessions(fake,{owner:true});
   const started=await ask(owner,driver,{intent:'start'});
   assert.equal(started.status,200);
@@ -466,6 +467,56 @@ test('only an Owner starts, follows or removes a company sign-in, checked on the
  } finally { await fake.close(); }
 });
 
+test('a second ChatGPT account is added beside the first, each subscription keeps its own id, and one leaves alone (#618)', async () => {
+ const fake=await fakeHermes({managementPort:0});
+ try {
+  const driver=pointedAt(fake);
+  await provideProfile(install(fake),{name:companyProfile(two),soul:'',config:toolConfig(),forbidden:toolConfig().agent.disabled_toolsets});
+  const owner=sessions(fake,{owner:true});
+  const read=()=>readCompanySignIns(owner.db,{company:two,driver,hermes:driver.hermes});
+  const signIn=async account=>{
+   const {body:{session}}=await ask(owner,driver,{intent:'start'});
+   fake.settings.approve(session,account);
+   assert.deepEqual(await ask(owner,driver,{intent:'poll',session}),{status:200,body:{status:'approved'}});
+  };
+  await signIn('said');
+  const first=(await read()).accounts;
+  assert.equal(first.length,1);
+  await signIn('omar');
+  // `gtmworks sign-in claude` beside them: its own pool row.
+  fake.settings.defaultPool.anthropic=[{id:'c1a2u3',label:'someone@example.com',auth_type:'oauth',source:'manual:hermes_pkce',priority:0,access_token:'sk-ant-oat01-secret-subscription-9876'}];
+  const both=await read();
+  assert.deepEqual(both.accounts.map(row=>row.provider),['openai-codex','openai-codex','anthropic'],'two ChatGPT subscriptions and a Claude one, each its own');
+  assert.equal(both.accounts[0].account,first[0].account,'the first account kept its id: the second did not replace it');
+  assert.equal(new Set(both.accounts.map(row=>row.account)).size,3);
+  assert.deepEqual(Object.keys(both.accounts[0]).sort(),['account','exhausted','provider']);
+  assert.doesNotMatch(JSON.stringify(both),/codex-token|sk-ant|example\.com|manual:|hermes_pkce|"source"|"index"/,'no credential, preview, label or source leaves the read');
+  // Signing the first account in again renews it in place.
+  await signIn('said');
+  assert.deepEqual((await read()).accounts.map(row=>row.account),both.accounts.map(row=>row.account));
+  // A disconnect of the whole provider would take both accounts: it is refused, and both stay.
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect'}),{status:409,body:{error:'signInAccountNeeded'}});
+  assert.equal((await read()).accounts.length,3);
+  // A Manager removes nothing; the Owner removes the second ChatGPT account and the first stays connected.
+  const manager=sessions(fake,{owner:false});
+  assert.deepEqual(await ask(manager,driver,{intent:'disconnect',account:both.accounts[1].account}),{status:403,body:{error:'signInNotAllowed'}});
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect',account:'not an id'}),{status:400,body:{error:'signInInvalid'}});
+  assert.deepEqual(await ask(owner,driver,{intent:'start',account:both.accounts[1].account}),{status:400,body:{error:'signInInvalid'}});
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect',account:both.accounts[1].account}),{status:200,body:{status:'disconnected'}});
+  const after=await read();
+  assert.deepEqual(after.accounts.map(row=>row.account),[both.accounts[0].account,both.accounts[2].account]);
+  assert.equal(after.signIns['openai-codex'].state,'connected');
+  assert.ok(fake.settings.defaultCredentials['openai-codex'],'the first account still serves');
+  assert.ok(fake.settings.managementRequests.some(request=>request.method==='DELETE'&&request.path==='/api/credentials/pool/openai-codex/2?profile=default'),'the root is named on the removal');
+  // An account already gone is no failure.
+  assert.deepEqual(await ask(owner,driver,{intent:'disconnect',account:both.accounts[1].account}),{status:200,body:{status:'disconnected'}});
+  assert.deepEqual(owner.logged.filter(change=>!change.connected),[{c:two,provider:'openai-codex',connected:false,session:null}],'one removal logged');
+  // The Engine finds an account out of quota: the read says so for that account only.
+  fake.settings.defaultPool['openai-codex'][0].last_status='exhausted';
+  assert.deepEqual((await read()).accounts.map(row=>row.exhausted),[true,false]);
+ } finally { await fake.close(); }
+});
+
 const agentProfile='ag-a0000000000000000000000000000001';
 test('the Owner signs the Company in once on the root profile of its own Engine, and an Agent profile with none of its own can then answer', async () => {
  const fake=await fakeHermes({managementPort:0});
@@ -478,7 +529,7 @@ test('the Owner signs the Company in once on the root profile of its own Engine,
   assert.deepEqual(await provideWriter(),{state:'noModel'},'no sign-in yet');
   const owner=sessions(fake,{owner:true,agents:[agentProfile]});
   const read=()=>readCompanySignIns(owner.db,{company:two,driver,hermes:{address:fake.address,key:'test-only-key'}});
-  assert.deepEqual(await read(),{profile:companyProfile(two),profiles:[companyProfile(two),agentProfile],signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}}});
+  assert.deepEqual(await read(),{profile:companyProfile(two),profiles:[companyProfile(two),agentProfile],signIns:{'openai-codex':{state:'notConnected',flow:'device_code'},anthropic:{state:'notConnected',flow:'external'}},accounts:[]});
   fake.settings.managementRequests.length=0;
   const started=await ask(owner,driver,{intent:'start'});
   assert.equal(started.status,200);

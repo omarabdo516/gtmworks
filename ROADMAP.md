@@ -137,7 +137,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 - ⚪ **Google Drive, one folder only.** Agents read, write and organise inside one folder, "RS Academy", through a separate Google account the Owner shares that folder with (a Google sign-in cannot be limited to one folder), on a ready-made Drive MCP server in the sandbox. [rs 0082 Q11, Q13, Q31]
 - ⚪ **GitHub, read and issues.** GitHub's own remote MCP server with fine-grained tokens on the chosen repos: Agents open issues labelled `from-agent`, Lead reads pull requests, checks and issues. Works with today's remote MCP support. [rs 0082 Q14]
 - ⚪ **Odoo.** A ready-made Odoo MCP server, read-only first with its own Odoo user; later the Agents read the whole ERP, find problems and propose fixes. gtmworks is not a CRM and leaves leads in Odoo. [rs 0082 Q5, Q32]
-- ⚪ **Several model accounts with failover.** Add more than one Claude or ChatGPT account and an API key; the Engine already switches, gtmworks needs the screen to add and order them. [decision 0055]
+- ⚪ **Several model accounts with failover.** Add more than one Claude or ChatGPT account and an API key; the Engine already switches, gtmworks needs the screen to add and order them. Adding and naming each one is built (#618); ordering and failover are #619 to #622. [decision 0055, spec #611]
 - ⚪ **T3 Code as a connection.** Route 1 (any MCP server) is built; a ready-made T3 entry is open and less likely now that Omar builds on Claude Code cloud sessions. [decision 0054, rs 0082 Q19]
 - ⚪ **Messenger conversations as a source.** The customer problems Agent reads them. [rs 0082 Q15]
 

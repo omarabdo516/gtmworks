@@ -1,5 +1,11 @@
 [
  {
+  "issue": 618,
+  "date": "2026-11-22",
+  "en": { "title": "A second subscription keeps the first", "body": "Signing in to a second ChatGPT or Claude now adds it beside the one you have instead of replacing it, and you can give each subscription and key its own name in Settings." },
+  "ar": { "title": "الاشتراك التاني مش بيشيل الأول", "body": "لما تسجّل دخول في ChatGPT أو Claude تاني بقى بيتضاف جنب اللي عندك بدل ما يشيله، وتقدر تدي كل اشتراك وكل مفتاح اسم خاص بيه من الإعدادات." }
+ },
+ {
   "issue": 620,
   "date": "2026-11-22",
   "en": { "title": "Choose which models each provider offers", "body": "Each provider in Settings now lists its models with a switch, and the chat's model menu and every agent's model choice offer a model only while a provider has it on, once even when several do." },

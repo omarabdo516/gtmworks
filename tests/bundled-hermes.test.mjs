@@ -92,6 +92,10 @@ test('an Engine publishes no host port, joins its install network and its work n
  assert.ok(engine.volumes.includes('./engine-ssh-sync-files.sh:/etc/cont-init.d/06-engine-ssh-sync-files:ro'),'the file-sync switch patch runs at start');
  // The install job runs the hook against the pinned image and proves the ssh sandbox is built with sync off.
  assert.ok(statSync('scripts/engine-ssh-sync-files.sh').mode&0o111,'the hook is executable as s6 runs it');
+ // A ChatGPT sign-in adds its account beside the Company's others (#618): the same kind of hook, after the file-sync one;
+ // the install job runs it against the pinned image and proves two accounts stay apart.
+ assert.ok(engine.volumes.includes('./engine-codex-accounts.sh:/etc/cont-init.d/07-engine-codex-accounts:ro'),'the ChatGPT accounts patch runs at start');
+ assert.ok(statSync('scripts/engine-codex-accounts.sh').mode&0o111,'the accounts hook is executable as s6 runs it');
  const launch=readFileSync('scripts/ci-install-lib.sh','utf8');
  assert.match(launch,/cat > \/opt\/data\/config\.yaml/,'the install names the launch profile it writes');
  assert.doesNotMatch(launch,/external_dirs/,'the launch profile names no shared Skills folder');
