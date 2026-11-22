@@ -121,6 +121,10 @@ test('while the section has unsaved changes Listen is off with the line to save 
  await screen.getByRole('button', { name: 'Save', exact: true }).click();
  await expect.poll(() => document.getElementById('dp-savebar')?.hidden).toBe(true);
  await expect.element(screen.getByRole('button', { name: 'Listen' })).toBeEnabled();
+ // The speed's explanation is its optional help (#614), there for the asking.
+ const speedHelp = document.getElementById('set-speed-hint')!;
+ expect(speedHelp.checkVisibility()).toBe(false);
+ await screen.getByRole('button', { name: 'More about Speed' }).click();
  await expect.element(screen.getByText('1× is normal speed. Slower is clearer for numbers and names.')).toBeVisible();
 });
 

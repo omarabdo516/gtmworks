@@ -125,6 +125,11 @@ test('the Owner turns sub-agents on for one Agent; the profile waits for the too
  await expect(toggle).toHaveAttribute('aria-checked','true');
  const state=JSON.parse(query(`select jsonb_build_object('subagents',subagents,'pending',tools_pending) as state from public.agent_profiles where agent_id='${writer}'`))[0].state;
  expect(state).toEqual({subagents:true,pending:true});
+ // The Engine's sub-agent settings wait under Advanced, closed until the Owner opens it (#614).
+ const advanced=page.locator(`#mdl-sub-${writer}-advanced`);
+ await expect(advanced).not.toHaveAttribute('open');
+ await expect(page.getByLabel('Sub-agent effort')).toBeHidden();
+ await advanced.getByText('Advanced',{exact:true}).click();
  await expect(page.getByLabel('Sub-agent effort')).toBeVisible();
  await expect(page.getByText('The agent engine’s default is 10 at once.')).toBeVisible();
  // A Manager reads the switches and gets no control, and the server refuses the change.

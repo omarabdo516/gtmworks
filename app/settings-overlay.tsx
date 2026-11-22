@@ -15,6 +15,7 @@ import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
+import { InfoTip } from './settings-info';
 import PasswordSettings from './password-settings';
 import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
 import { managedUsage, type UsageRow } from '@/lib/company-app-items';
@@ -157,7 +158,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='routines'&&routines?<>{ro}<RoutinesSection company={company.id} state={routines.state} agents={routines.agents??[]} canManage={canManage} now={new Date().toISOString()}/></>
-  :section==='knowledge'?<><Head title={t('settingsKnowledge')} sub={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
+  :section==='knowledge'?<><Head title={t('settingsKnowledge')} info={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
   // Backup is the Owner's alone (#33): pickSection never opens it for another Role, and the server renders it only here.
   :section==='backup'&&owner?<BackupSection t={t}/>
   // About (#616) is every Role's: the version this image was built as, and the notes and licenses it ships.
@@ -188,14 +189,14 @@ function CompanySection({t,company,solo,count,owner,ro,sandbox}:{t:T,company:{id
  const mode=<section className="dp-sec" aria-labelledby="co-h-mode"><Label id="co-h-mode">{t('settingsMode')}</Label>
   <div className="panel-card"><div className="panel-row"><span className="panel-row__icon"><SettingsIcon name={solo?'user':'team'}/></span><span className="panel-row__text">
    <span className="panel-row__t">{solo?t('settingsModeAlone'):t('settingsModeTeam',count)}</span><span className="panel-row__d">{solo?t('settingsModeAloneD'):t('settingsModeTeamD')}</span></span></div></div></section>;
- // Every Agent gets one fixed set of tools (ADR 0018): a read-only line where the level choice was, in the section and
- // hint styles the other Company settings use.
+ // Every Agent gets one fixed set of tools (ADR 0018): what they are, and that publishing and spending still wait for a
+ // person, is the section's read-only value, not help (#614).
  const tools=<section className="dp-sec" aria-labelledby="co-h-tools"><Label id="co-h-tools">{t('agentToolsTitle')}</Label>
-  <p className="set-hint">{t('agentToolsHint')}</p>
+  <div className="panel-card"><div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="cpu"/></span><span className="panel-row__text"><span className="panel-row__t" id="co-tools">{t('agentToolsHint')}</span></span></div></div>
   {/* The Company's work sandbox not answering (#398): one plain state in the existing notice style, and no control. */}
   {sandbox&&<p className="ro-note sov-warn" role="note" id="co-sandbox"><SettingsIcon name="shield"/><span>{t('workSandboxNotRunning')}</span></p>}
  </section>;
- return <><Head title={t('settingsCompany')} sub={t('settingsCompanySub')}/>{ro}{name}{mode}{tools}</>;
+ return <><Head title={t('settingsCompany')} info={t('settingsCompanySub')}/>{ro}{name}{mode}{tools}</>;
 }
 
 // The Company's Members on their own page (#612): who is in the team and which Agents each one sees, for an Owner or a
@@ -203,7 +204,7 @@ function CompanySection({t,company,solo,count,owner,ro,sandbox}:{t:T,company:{id
 function MembersSection({t,company,solo,members,invitations,agents,allowed,invitedAllowed,userId,slug,owner,canManage,roleNames,ro}:{t:T,company:{id:string,name:string},solo:boolean,members:Member[],invitations:Invitation[],agents:Agent[],allowed:Set<string>,invitedAllowed:Set<string>,userId:string,slug:string,owner:boolean,canManage:boolean,roleNames:Record<string,string>,ro:ReactNode}) {
  const count=members.length;
  const inviteRoles=teamInviteRoles(t);
- const table=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem">{t('settingsMembersAgents')}</Label><div className="ta sov-ta">
+ const table=<section className="dp-sec" aria-labelledby="co-h-mem"><Label id="co-h-mem" info={t('settingsTeamHint')}>{t('settingsMembersAgents')}</Label><div className="ta sov-ta">
   <SettingsTeamTable company={company.id} slug={slug} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner}/>
  </div></section>;
  // Alone (#10): no members, no per-member Agents; the Owner invites the first Member here, and the Company becomes a
@@ -217,17 +218,20 @@ function MembersSection({t,company,solo,members,invitations,agents,allowed,invit
 // What a face needs of an Agent: the client component is handed no more of the row than it draws.
 const face=({id,connection_id,name}:Agent)=>({id,connection_id,name});
 
-function TalkTip({t,rtl,text,talk}:{t:T,rtl:boolean,text:string,talk?:{href:string,name:string}}) {
- return <p className="talk-tip"><SettingsIcon name="chat"/><span>{isolate(text,rtl)}</span>{talk&&<Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link>}</p>;
+// The simplest way to change an Agent is to tell it in its chat (#18): that sentence is optional help (#614), and the
+// link to the chat stays on the page as an action.
+const talkText=(text:string,rtl:boolean)=><span className="info__p">{isolate(text,rtl)}</span>;
+function TalkTip({t,talk}:{t:T,talk?:{href:string,name:string}}) {
+ return talk?<p className="talk-tip"><SettingsIcon name="chat"/><Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link></p>:null;
 }
 
 function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiting}:{t:T,rtl:boolean,slug:string,agents:Agent[],stateOf:(agent:string)=>AgentStatus,canManage:boolean,canWrite:boolean,owner:boolean,waiting:Set<string>}) {
  const main=agents.find(agent=>agent.is_default); const other=agents.find(agent=>!agent.is_default);
  const add=canWrite&&main?<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat?new=agent`}><SettingsIcon name="chat"/><span>{owner?t('settingsAskLead',main.name):t('settingsAskAgent')}</span></Link>
   :canWrite&&<button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}><SettingsIcon name="chat"/><span>{t('settingsAskAgent')}</span></button>;
- return <><Head title={t('agents')} sub={t('settingsAgentsSub')} extra={add}/>
+ return <><Head title={t('agents')} info={<><span className="info__p">{t('settingsAgentsSub')}</span>{talkText(t('settingsTalkTip'),rtl)}</>} extra={add}/>
   {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
-  <TalkTip t={t} rtl={rtl} text={t('settingsTalkTip')} talk={canWrite&&other?{href:`/c/${slug}/chat/${other.id}`,name:other.name}:undefined}/>
+  <TalkTip t={t} talk={canWrite&&other?{href:`/c/${slug}/chat/${other.id}`,name:other.name}:undefined}/>
   <div className="panel-card sov-ags">{agents.length?agents.map(agent=><Link key={agent.id} className="panel-row sov-ag" id={`sov-ag-${agent.id}`} href={overlayHref(slug,'agents',{agent:agent.id})}>
    <AgentFaceDot agent={face(agent)} size={36} status={stateOf(agent.id)}/>
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi>{agent.is_default&&<> <span className="badge sov-badge">{t('mainAgent')}</span></>}</span>
@@ -277,9 +281,9 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
   {pend}
   <div id="sov-agent-panel" role="tabpanel" aria-labelledby={`sov-tab-${tab}`}>
    {tab==='memory'
-    ?<div className="dp-sections">{memory?.state==='found'?<AgentMemory key={agent.id} company={company} agent={{id:agent.id,name:agent.name}} notes={memory.notes||[]} main={memory.main} canReset={owner} canEdit={canManage} canForget={owner} knowledgeHref={canWrite?overlayHref(slug,'knowledge'):undefined}/>:<section className="dp-sec"><p className="panel-empty">{t('agentMemoryUnread')}</p></section>}</div>
+    ?<div className="dp-sections">{memory?.state==='found'?<AgentMemory key={agent.id} company={company} agent={{id:agent.id,name:agent.name}} notes={memory.notes||[]} main={memory.main} canReset={owner} canEdit={canManage} canForget={owner} knowledgeHref={canWrite?overlayHref(slug,'knowledge'):undefined} introAsHelp/>:<section className="dp-sec"><p className="panel-empty">{t('agentMemoryUnread')}</p></section>}</div>
     :(<>
-   <TalkTip t={t} rtl={rtl} text={t('settingsTalkTipAgent',agent.name)} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
+   <TalkTip t={t} talk={canWrite&&!isMain?{href:`/c/${slug}/chat/${agent.id}`,name:agent.name}:undefined}/>
    {/* The page in five groups by what is being changed (#615): Identity, How it works, Thinking, Voice, and Tools and
        skills, then Advanced, closed until opened, with the voice's speed, Pause and Delete. Every control, permission and
        confirmation is the one it was before; only its place changed. */}
@@ -294,7 +298,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
       {mainRow}
      </ul>
      {/* About is the Agent's profile description (#161). */}
-     <section className="dp-sec" aria-labelledby="set-h-about"><SubLabel id="set-h-about">{t('settingsAbout')}</SubLabel>
+     <section className="dp-sec" aria-labelledby="set-h-about"><SubLabel id="set-h-about" info={t('settingsAboutHint')} infoId="set-desc-hint">{t('settingsAbout')}</SubLabel>
       {editable?<AgentAboutField agent={agent.id} name={agent.name} description={about?.description??''}/>
        :<div className="panel-card"><p className="ro-text" id="set-about">{about?.description||'—'}</p></div>}</section>
     </Group>
@@ -302,21 +306,20 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
         reads it with its line breaks; an Engine that could not be read shows no text at all. A Manager reads it
         read-only, and its own line says why. Good morning (#182) is the main Agent's one row here, and the rules it was
         told in its chat (#18) close the group. */}
-    <Group id="set-h-how" title={t('settingsHow')}>
+    <Group id="set-h-how" title={t('settingsHow')} info={t('settingsHowHint',agent.name)} infoId="set-instr-hint">
      {!owner&&<p className="set-hint">{t('settingsHowRO')}</p>}
      {howEditable?<AgentInstructionsField agent={agent.id} name={agent.name} instructions={how?.instructions??''} sectionChars={how?.sectionChars??0} limit={how?.limit??20000}/>
       :<AgentInstructionsRead instructions={how?.state==='found'?how.instructions:''} empty={how?.state==='found'?t('settingsHowEmpty'):'—'}/>}
      {isMain&&<AgentMorning agent={agent.id} editable={morningEditable} morning={morningProps}/>}
-     <AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage}/>
+     <AgentRules t={t} company={company} userId={userId} rules={rules} canManage={canManage} info={talkText(t('settingsTalkTipAgent',agent.name),rtl)}/>
     </Group>
     {/* Thinking: the Agent's own Engine profile's model (#29), written there and read back, then its thinking level
         (#179): the eight the Engine accepts, saved with the same bar, read as text by every other Role. */}
-    <Group id="set-h-thinks" title={t('settingsGroupThinking')}>
+    <Group id="set-h-thinks" title={t('settingsGroupThinking')} info={t('settingsThinksHint')}>
      {agentModel?.models?.agents[0]?<>
       <AgentModel company={company} agent={agent.id} name={agent.name} model={agentModel.models.agents[0].model} options={agentModel.models.agents[0].options} choosable={agentModel.models.agents[0].choosable} owner={owner}/>
       <AgentEffort agent={agent.id} effort={agentModel.models.agents[0].effort} editable={effortEditable}/>
-     </>:<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
-     <p className="set-hint">{t('settingsThinksHint')}</p></Group>
+     </>:<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}</Group>
     {/* The Agent's voice (#162): its language and its real voice with Listen; the speed is in Advanced. */}
     <Group id="set-h-voice" title={t('settingsVoice')}>
      {voiceEditable?<AgentVoiceField company={company} agent={agent.id} personName={personName} voice={voice}/>
@@ -359,8 +362,8 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
 // The rules the Agent was told in its chat and keeps (#18; design-reference: rulesHTML): each in its own direction, who
 // said it ("you" for the reader, as the reference's firstName) and when. An Owner or a Manager may remove one; the server
 // checks that again (remove_agent_rule).
-function AgentRules({t,company,userId,rules,canManage}:{t:T,company:string,userId:string,rules:Rule[],canManage:boolean}) {
- return <section className="dp-sec sov-rules" aria-labelledby="rl-h"><h5 className="dp-label" id="rl-h" tabIndex={-1}><span>{t('settingsRules')} <span className="muted num">{rules.length}</span></span></h5>
+function AgentRules({t,company,userId,rules,canManage,info}:{t:T,company:string,userId:string,rules:Rule[],canManage:boolean,info:ReactNode}) {
+ return <section className="dp-sec sov-rules" aria-labelledby="rl-h-t"><h5 className="dp-label" id="rl-h" tabIndex={-1}><span><span id="rl-h-t">{t('settingsRules')} <span className="muted num">{rules.length}</span></span><InfoTip about={t('settingsRules')} id="rl-h-info">{info}</InfoTip></span></h5>
   {rules.length?<ul className="panel-card rl-list">{rules.map(rule=><li key={rule.id} className="panel-row rl-row"><span className="panel-row__icon"><SettingsIcon name="check"/></span>
    <span className="panel-row__text"><span className="panel-row__t" dir="auto">{rule.body}</span><RuleSaid by={rule.said_by===userId?t('settingsRuleYou'):rule.teller?.name||t('member')} at={rule.said_at}/></span>
    {canManage&&<RemoveRule company={company} rule={rule.id} body={rule.body}/>}</li>)}</ul>
@@ -376,7 +379,7 @@ function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slu
  const heaviestName=heaviest?new Intl.ListFormat(locale,{type:'unit'}).format(heaviest.agents.map(agent=>agent.name)):'—';
  const seg=<div className="segmented use-seg" role="group" aria-label={t('settingsPeriod')}>{([[7,'settingsLast7'],[30,'settingsLast30']] as const).map(([days,label])=><Link key={days} replace href={overlayHref(slug,'usage',days===30?{period:'30'}:{})} aria-pressed={period===days} id={`use-p-${days}`}>{t(label)}</Link>)}</div>;
  const kpi=(label:string,value:ReactNode)=><div className="kpi"><span className="kpi__label">{label}</span><span className="kpi__val num">{value}</span></div>;
- return <><Head title={t('usage')} sub={t('settingsUsageSub')} extra={seg}/>
+ return <><Head title={t('usage')} info={t('settingsUsageSub')} extra={seg}/>
   {usageEmpty(rows)?<div className="panel-card"><p className="panel-empty">{t('usageNone')}</p></div>:<>
    <div className="kpis use-kpis">{kpi(t('settingsTokens'),count(totals.tokens))}{kpi(t('usageSessions'),count(totals.sessions))}{kpi(t('usageHeaviest'),<bdi>{heaviestName}</bdi>)}</div>
    <section className="dp-sec" aria-labelledby="use-h"><Label id="use-h">{t('settingsPerAgent')}</Label>
@@ -388,7 +391,7 @@ function UsageSection({t,locale,slug,company,rows,period}:{t:T,locale:string,slu
 }
 
 function AccountSection({t,theme,personName,role,roleName,companyName,company,memberNote}:{t:T,theme:string,personName:string,role:string,roleName:string,companyName:string,company:string,memberNote:string}) {
- return <><Head title={t('settingsAccount')} sub={t('settingsAccountSub')}/>
+ return <><Head title={t('settingsAccount')} info={t('settingsAccountSub')}/>
   <div className="panel-card">
    <div className="panel-row"><span className="me__av sov-av" aria-hidden="true">{initial(personName)}</span><span className="panel-row__text"><span className="panel-row__t"><bdi>{personName}</bdi></span><span className="panel-row__d">{roleName} · <bdi>{companyName}</bdi></span></span></div>
    <div className="panel-row"><span className="panel-row__icon"><SettingsIcon name="shield"/></span><span className="panel-row__text"><span className="panel-row__t">{t('settingsYourRole',roleName)}</span>{roleDescription[role]&&<span className="panel-row__d">{t(roleDescription[role])}</span>}</span></div>
@@ -403,7 +406,7 @@ function AccountSection({t,theme,personName,role,roleName,companyName,company,me
 function SoonSection({t,section,ro,providers,speech,defaultModel,eachAgent,defaultEffort}:{t:T,section:OverlaySection,ro:ReactNode,providers:ReactNode,speech:ReactNode,defaultModel:ReactNode,eachAgent:ReactNode,defaultEffort:ReactNode}) {
  // The Company's Providers, list and details (#617), then the defaults every Agent starts with and speech-to-text below
  // the list, as the approved Providers layout puts them (spec #610).
- if(section==='models') return <><Head title={t('settingsModels')} sub={t('settingsModelsSub')}/>{ro}
+ if(section==='models') return <><Head title={t('settingsModels')} info={t('settingsModelsSub')}/>{ro}
   {providers}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
   {defaultEffort}{eachAgent}{speech}</>;
  return null;

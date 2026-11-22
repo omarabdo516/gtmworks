@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
 import { afterDrawn, toast, toastTime } from '@/app/toast';
+import { InfoTip } from '@/app/settings-info';
 import type { MemoryNote } from '@/lib/engine.mjs';
 
 // One Agent's memory (#350; design-reference: memoryHTML, memNoteHTML): the notes its own Engine profile holds, or the
@@ -22,7 +23,7 @@ export type AgentMemoryProps={company:string,agent:{id:string,name:string},notes
 // the toast's own clock, which runs from the frame it is drawn in (#561), so Undo never shows after the note is gone.
 // The action's accessible name carries the note's first line, as the reference's does (design-reference: memNoteHTML).
 const short=(text:string)=>text.length>40?`${text.slice(0,40)}…`:text;
-export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget,knowledgeHref}:AgentMemoryProps) {
+export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget,knowledgeHref,introAsHelp=false}:AgentMemoryProps&{introAsHelp?:boolean}) {
  const {t}=useI18n(); const router=useRouter();
  const [asking,setAsking]=useState(false); const [pending,setPending]=useState(false); const [failed,setFailed]=useState(false);
  const [editing,setEditing]=useState<string|null>(null); const [draft,setDraft]=useState(''); const [editError,setEditError]=useState<'empty'|'tooLong'|'stale'|'failed'|null>(null); const [saving,setSaving]=useState(false);
@@ -151,10 +152,12 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
  const matched=found?visible.filter(note=>note.text.toLowerCase().includes(found.toLowerCase())):visible;
  const clearSearch=()=>{ setQuery(''); search.current?.focus(); };
  const errorLine=editError==='empty'?t('memoryNoteEmpty'):editError==='tooLong'?t('memoryTooLong'):editError==='stale'?t('memoryStale'):editError==='failed'?t('memoryEditFailed'):null;
+ const intro=`${t('memoryIntro')} ${t('memoryIntroAgent',agent.name)}${(canEdit&&canForget)?` ${t('memoryIntroEdit')}`:''}`;
  return <section className="dp-sec" aria-labelledby="mem-h">
-  <h3 className="dp-label" id="mem-h"><span>{t('memoryHeading',agent.name)} <span className="muted num">{visible.length}</span></span>
+  <h3 className="dp-label"><span><span id="mem-h">{t('memoryHeading',agent.name)} <span className="muted num">{visible.length}</span></span>{introAsHelp&&<InfoTip about={t('memoryHeading',agent.name)} id="mem-intro">{intro}</InfoTip>}</span>
    {canReset&&!asking&&<button ref={resetButton} type="button" className="link-btn" aria-expanded={false} onClick={ask}>{t('memoryReset')}</button>}</h3>
-  <p className="mem-intro">{t('memoryIntro')} {t('memoryIntroAgent',agent.name)}{(canEdit&&canForget)?` ${t('memoryIntroEdit')}`:''}</p>
+  {/* In Settings the introduction is the heading's optional help (#614); the details panel keeps it as a line. */}
+  {!introAsHelp&&<p className="mem-intro">{intro}</p>}
   <p className="mem-know"><ShellIcon name="book"/><span>{t('memoryKnow',agent.name)}</span>
    {knowledgeHref&&<Link className="link-btn" href={knowledgeHref}>{t('memoryOpenKnowledge')}</Link>}</p>
   {main&&<p className="mem-main">{t('memoryMain',agent.name)}</p>}

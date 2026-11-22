@@ -68,9 +68,11 @@ test('the section says what a backup holds, what it leaves out, and the four com
   ]) await expect.element(screen.getByText(text, { exact: true })).toBeVisible();
 });
 
-test('every command copies on one press, and copy is the only button in the section', async () => {
+test('every command copies on one press, and copy is the only action in the section', async () => {
   const screen = await backup();
-  const buttons = screen.getByRole('button').elements();
+  // The head's explanation waits behind its "i" (#614); every other button copies a command.
+  await expect.element(screen.getByRole('button', { name: 'More about Backups' })).toBeVisible();
+  const buttons = screen.getByRole('button').elements().filter(button => !button.classList.contains('info__btn'));
   expect(buttons).toHaveLength(4);
   expect(buttons.map(button => button.getAttribute('aria-label'))).toEqual([
     'Copy the command gtmworks backup',
@@ -95,5 +97,5 @@ test('the section speaks Egyptian Arabic as the reference does', async () => {
   for (const text of ['فيها', 'مش فيها', 'قاعدة البيانات', 'مفاتيح التنصيبة', 'محرّك كل شركة']) {
     await expect.element(screen.getByText(text, { exact: true })).toBeVisible();
   }
-  expect(screen.getByRole('button').elements()).toHaveLength(4);
+  expect(screen.getByRole('button').elements().filter(button => !button.classList.contains('info__btn'))).toHaveLength(4);
 });

@@ -87,7 +87,7 @@ export function Invite({mode,company,slug,roles}:{mode:'table'|'alone',company:s
 // The same table is drawn by the Team dialog in the account menu (app/team-dialog.tsx).
 export function SettingsTeamTable({company,slug,members,invitations,agents,allowed,invitedAllowed,userId,owner}:{company:string,slug:string,members:TeamMember[],invitations:TeamInvitation[],agents:TeamAgent[],allowed:ReadonlySet<string>,invitedAllowed:ReadonlySet<string>,userId:string,owner:boolean}) {
  const save=(c:string,target:{member:string}|{invitation:string},agent:string,visible:boolean)=>'member' in target?setAgentVisible(c,target.member,agent,visible):setInvitationAgentVisible(c,target.invitation,agent,visible);
- return <TeamTable company={company} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner}
+ return <TeamTable company={company} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} owner={owner} hint={false}
   save={save} saveInvitation={save} send={(email,role)=>inviteMember(company,slug,email,role)}/>;
 }
 

@@ -209,7 +209,8 @@ test('a Manager reads the states with no button, and the server refuses their co
   const flows=fake.settings.appFlows.size, callbacks=fake.settings.appCallbacks.length;
   await signIn(manager,'manager@example.com','/c/rs-learning/home');
   await manager.goto('/c/rs-learning/settings?section=apps');
-  await expect(manager.locator('.apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by the Owner only.');
+  // In Settings the line is the title's help (#614), behind its "i".
+  await expect(manager.locator('#apps-sub')).toHaveText('Connecting apps and choosing which agents use them is done by the Owner only.');
   await expect(card(manager,'Canva').locator('.app__state')).toHaveText('Not connected');
   await expect(manager.locator('.app-card').getByRole('link')).toHaveCount(0);
   const refused=await manager.request.post('/api/company-apps',{data:{company,app:'canva',action:'connect'}});

@@ -23,7 +23,6 @@ export function AgentAbout({agent,name,description}:{agent:string,name:string,de
   <label className="sr-only" htmlFor="set-desc">{t('settingsAboutFor',name)}</label>
   <textarea className="set-input set-textarea" id="set-desc" rows={3} dir="auto" value={about} placeholder={t('settingsAboutPh')} aria-describedby="set-desc-hint"
    onChange={event=>setDraftValue('about',event.target.value)} ref={field}/>
-  <span className="set-hint" id="set-desc-hint">{t('settingsAboutHint')}</span>
  </div></div>;
 }
 
@@ -84,8 +83,7 @@ export function AgentInstructions({agent,name,instructions,sectionChars,limit}:{
   <label className="sr-only" htmlFor="set-instr">{t('settingsHowFor',name)}</label>
   <textarea className="set-input set-textarea set-textarea--tall" id="set-instr" rows={6} dir="auto" value={text} maxLength={allowed}
    aria-describedby="set-instr-hint set-instr-count" onChange={event=>setDraftValue('instructions',event.target.value.slice(0,allowed))}/>
-  <div className="set-hint-row"><span className="set-hint od-fill" id="set-instr-hint">{t('settingsHowHint',name)}</span>
-   <span className="set-count num" id="set-instr-count">{count(text.length+sectionChars)} / {count(limit)}</span></div>
+  <div className="set-hint-row set-hint-row--end"><span className="set-count num" id="set-instr-count">{count(text.length+sectionChars)} / {count(limit)}</span></div>
  </div></div>;
 }
 

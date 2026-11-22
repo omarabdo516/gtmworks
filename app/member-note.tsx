@@ -1,6 +1,7 @@
 'use client';
 import { useActionState, useState, useSyncExternalStore } from 'react';
 import { useI18n } from '@/lib/i18n-client';
+import { Label } from './settings-overlay-parts';
 import { saveMemberNote } from './member-note-actions';
 import { noteLimit, secretLike } from '@/lib/secret-text.mjs';
 import en from '@/lib/messages/member-note.en.json';
@@ -22,9 +23,8 @@ export default function MemberNote({company,note}:{company:string,note:string}) 
  const shown=edited?local:local||message;
  const count=(number:number)=>new Intl.NumberFormat(locale).format(number);
  const failed=shown&&shown!=='memberNoteSaved';
- return <section className="dp-sec" aria-labelledby="ac-h-note"><h4 className="dp-label" id="ac-h-note"><span>{t('memberNote')}</span></h4>
+ return <section className="dp-sec" aria-labelledby="ac-h-note"><Label id="ac-h-note" info={t('memberNoteD')}>{t('memberNote')}</Label>
   <form className="panel-card set-card" action={form=>{ setEdited(false); save(form); }}>
-   <p className="set-hint">{t('memberNoteD')}</p>
    <div className="set-field">
     <label className="sr-only" htmlFor="ac-note">{t('memberNote')}</label>
     <input type="hidden" name="company" value={company}/>

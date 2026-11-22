@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { AppTile } from '@/components/app-tile';
 import { markOf as letterOf } from '@/lib/app-mark.mjs';
 import { SettingsIcon } from './settings-icons';
+import { InfoTip } from './settings-info';
 import { toast } from './toast';
 import type { CompanySignIns, SubscriptionState } from '@/lib/company-sign-in.mjs';
 
@@ -107,17 +108,15 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
     {owner&&<div className="pv-detail" id="pv-d-add" role="region" aria-labelledby="pv-d-add-name" hidden={shown!=='add'}>
      {backButton}
      <header className="pv-head"><span className="pv-head__t"><h5 className="pv-name" id="pv-d-add-name" tabIndex={-1}>{t('providersAdd')}</h5></span></header>
-     <h6 className="pv-group">{t('providersSubscriptions')}</h6>
+     <h6 className="pv-group">{t('providersSubscriptions')}<InfoTip about={t('providersSubscriptions')} id="pv-add-sub-info">{t('signInWhat')} {t('signInOneAccount')}</InfoTip></h6>
      {subs.available&&subs.signIns?(unsigned.length?<div className="panel-card">{unsigned.map(provider=><div className="sub-row" key={provider} id={`sub-${provider}`}>
       <SubscriptionActions company={company} companyName={companyName} owner={owner} provider={provider} name={t(subscriptionName[provider])} state="notConnected" row/>
      </div>)}</div>:<div className="panel-card"><p className="panel-empty">{t('providersAllSigned')}</p></div>)
       :<div className="panel-card"><p className="panel-empty">{t(subs.signIns===null&&subs.available?'signInUnknown':'signInNoProfile')}</p></div>}
-     <p className="set-hint">{t('signInWhat')} {t('signInOneAccount')}</p>
-     <h6 className="pv-group">{t('providersKeys')}</h6>
+     <h6 className="pv-group">{t('providersKeys')}<InfoTip about={t('providersKeys')} id="pv-add-key-info">{t('settingsModelsKeyWhat')} {t('settingsModelsProviderKeysHint')}</InfoTip></h6>
      {keys?.keys?<div className="panel-card md-keys">{unkeyed.map(row=><div className="md-key" key={row.provider} id={`mdl-key-row-${row.provider}`}>
       <KeyActions company={company} owner={owner} row={row} rowed/>
      </div>)}</div>:<div className="panel-card"><p className="panel-empty">{t(keys?'settingsModelsKeyUnread':'settingsModelsKeyNoEngine')}</p></div>}
-     <p className="set-hint">{t('settingsModelsKeyWhat')} {t('settingsModelsProviderKeysHint')}</p>
     </div>}
    </div>
   </div>

@@ -1,5 +1,11 @@
 [
  {
+  "issue": 614,
+  "date": "2026-11-22",
+  "en": { "title": "Settings help when you want it", "body": "Settings pages now show each setting's name and control without paragraphs above them; the longer explanation opens from the small “i” beside a name, by hovering, tabbing to it or tapping it, and Escape or a tap elsewhere closes it." },
+  "ar": { "title": "شرح الإعدادات لما تحتاجه", "body": "صفحات الإعدادات بقت بتعرض اسم كل إعداد والزرار بتاعه من غير فقرات فوقه؛ والشرح الأطول بيفتح من علامة «i» الصغيرة جنب الاسم، لما توقّف الماوس عليها أو توصلها بـ Tab أو تدوس عليها، وEscape أو دوسة في حتة تانية بتقفله." }
+ },
+ {
   "issue": 613,
   "date": "2026-11-22",
   "en": { "title": "Find a setting by its name", "body": "In Settings, press / or use the search above the sections to type a setting's name as your interface language shows it, and open it with Enter; you only ever see the sections your role can open." },

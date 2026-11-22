@@ -85,7 +85,8 @@ test('a Viewer reads the notes with no buttons, and an Agent hidden from them op
  await expect(overlay.getByRole('heading',{name:/^What Lead remembers/})).toContainText('2');
  await expect(overlay.locator('.mem-note__t')).toHaveText(notes);
  await expect(overlay.getByRole('button',{name:'Reset memory',exact:true})).toHaveCount(0);
- await expect(overlay.getByRole('tabpanel').getByRole('button')).toHaveCount(0);
+ // Only the heading's "i" (#614): no button that changes a note.
+ await expect(overlay.getByRole('tabpanel').locator('button:not(.info__btn)')).toHaveCount(0);
 });
 
 test('Company knowledge opens the memory of the first Agent that is not main, and the main Agent when it is the only one',async({page})=>{
