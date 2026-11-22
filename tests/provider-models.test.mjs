@@ -127,3 +127,19 @@ test('a model no Provider has on is never written, as the Company default or an 
   assert.equal(written.state,'written',JSON.stringify(written));
  } finally { await fake.close(); }
 });
+
+test('a subscription signed in only on an Agent\'s profile lists its models from that profile, so the Owner can switch each one', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake);
+  // An older version left the Claude sign-in on the Company's own profile only ("Partly connected"): the shared space
+  // holds no sign-in, and its Anthropic key is gone, so it lists no Anthropic model.
+  delete fake.settings.defaultCredentials.anthropic;
+  delete fake.settings.profiles.get(space).env.ANTHROPIC_API_KEY;
+  fake.settings.profiles.get(main).credentials.anthropic='test-only-claude-oauth';
+  const {db}=database();
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:true}]);
+  assert.equal(switches['key-anthropic'],undefined);
+ } finally { await fake.close(); }
+});
