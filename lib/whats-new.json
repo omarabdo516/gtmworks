@@ -1,9 +1,9 @@
 [
  {
-  "issue": 529,
+  "issue": 465,
   "date": "2026-11-22",
-  "en": { "title": "An agent's face hops on a page that opens slowly", "body": "When you press an agent's tile, its face on the page that opens now hops however long that page takes to appear, not only when it appears at once." },
-  "ar": { "title": "وش الوكيل بينط في الصفحة اللي بتفتح ببطء", "body": "لما تدوس على مربع وكيل، وشه في الصفحة اللي بتفتح بقى بينط مهما الصفحة تاخد وقت عشان تظهر، مش بس لما تظهر على طول." }
+  "en": { "title": "A waiting message with images reaches the agent", "body": "A message with images that waits while the agent is busy now starts with its images once the agent is free, and sending it again no longer removes or replaces them. An image that was already gone is not brought back." },
+  "ar": { "title": "الرسالة اللي فيها صور وبتستنى بتوصل للوكيل", "body": "الرسالة اللي فيها صور وبتستنى لحد ما الوكيل يفضى، دلوقتي بتبدأ بصورها أول ما يفضى، ولو بعتها تاني صورها مش بتتشال ولا بتتغير. الصورة اللي كانت ضاعت قبل كده مش بترجع." }
  },
  {
   "issue": 535,
@@ -16,6 +16,12 @@
   "date": "2026-11-22",
   "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
   "ar": { "title": "البطاقة اللي تسيبها بعيد بتفضل قدامك", "body": "لما تشيل بطاقة على لوحة التسويق وتسيبها في عمود بعيد عن مكانها، اللوحة دلوقتي بتفضل مكان ما سبتها بدل ما تنطّ الأول لمكان البطاقة القديم." }
+ },
+ {
+  "issue": 529,
+  "date": "2026-11-22",
+  "en": { "title": "An agent's face hops on a page that opens slowly", "body": "When you press an agent's tile, its face on the page that opens now hops however long that page takes to appear, not only when it appears at once." },
+  "ar": { "title": "وش الوكيل بينط في الصفحة اللي بتفتح ببطء", "body": "لما تدوس على مربع وكيل، وشه في الصفحة اللي بتفتح بقى بينط مهما الصفحة تاخد وقت عشان تظهر، مش بس لما تظهر على طول." }
  },
  {
   "issue": 520,
