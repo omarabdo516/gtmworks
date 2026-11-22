@@ -34,14 +34,20 @@ function place() {
  if(liveRegion().parentElement!==home) home.append(liveRegion());
 }
 
-// A new toast replaces the one showing and stops its clock, whichever step it is in, then starts its own: 2.8 seconds,
-// or 6 with an action, before it leaves.
+// A new toast replaces the one showing and stops its clock, whichever step it is in. Its own clock starts once it is drawn
+// (startClock): 2.8 seconds, or 6 with an action, before it leaves.
 export function toast(text:string,{icon='check',action}:{icon?:ShellIconName,action?:ToastAction}={}) {
- place(); stop();
- const current:Toast={id:++count,text,icon,action};
- show({toast:current,leaving:false});
- const timer=setTimeout(()=>{ stop=leave(140,()=>show({toast:current,leaving:true}),()=>show(null)); },action?6000:2800);
- stop=()=>clearTimeout(timer);
+ place(); stop(); stop=()=>{};
+ show({toast:{id:++count,text,icon,action},leaving:false});
+}
+
+// The clock runs from the frame the toast is first drawn in, not from the call (#561): a page busy drawing what an answer
+// brought back can go seconds without a frame, and a toast timed from the call would come and go in them unseen. A page
+// in a tab out of sight draws no frame either, so the toast waits there until the person comes back.
+function startClock(current:Toast) {
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ const frame=requestAnimationFrame(()=>{ timer=setTimeout(()=>{ stop=leave(140,()=>show({toast:current,leaving:true}),()=>show(null)); },current.action?6000:2800); });
+ stop=()=>{ cancelAnimationFrame(frame); clearTimeout(timer); };
 }
 
 // Take the toast away now, as an action on it does once it has taken the person where they were going.
@@ -53,6 +59,9 @@ export function dismissToast() {
 export function ToastHost() {
  const {language}=useI18n();
  const state=useSyncExternalStore(subscribe,()=>shown,()=>null);
+ // Each toast's clock starts when the host has put it on the page; a toast that replaced it has already stopped the last.
+ const arrived=state&&!state.leaving?state.toast:null;
+ useEffect(()=>{ if(arrived) startClock(arrived); },[arrived]);
  useEffect(()=>{
   place();
   const dialogs=new MutationObserver(place);
