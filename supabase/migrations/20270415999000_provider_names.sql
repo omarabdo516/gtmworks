@@ -1,7 +1,7 @@
 -- #618 (spec #611; GLOSSARY: Provider): the name the Owner gives each of the Company's Providers, so two subscriptions
 -- of one kind, or a subscription and a key, read apart. A Provider is the Engine's: a subscription is one entry of the
 -- root profile's credential pool, named here by the Engine's own entry id, and a key is named `key` beside its provider
--- (lib/company-providers.mjs). Only the name is kept; no credential, token preview or Engine label is. A Provider with no
+-- (lib/provider-names.mjs). Only the name is kept; no credential, token preview or Engine label is. A Provider with no
 -- row reads under its kind's own name.
 --
 -- Nothing existing is changed: a new table and a new function, which the previous app version never reads.

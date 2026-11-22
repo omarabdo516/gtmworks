@@ -71,7 +71,7 @@ test('the Owner signs the company in to ChatGPT and out again; a member only see
   // A second ChatGPT account (#618): connected from the same last row, it is added beside the first, which still serves.
   await page.locator('#pv-row-add').click();
   await expect(chatgpt.getByText('Connected',{exact:true})).toBeVisible();
-  await chatgpt.getByRole('button',{name:'Connect another ChatGPT account'}).click();
+  await chatgpt.getByRole('button',{name:'Add another ChatGPT'}).click();
   await expect(chatgpt.getByText('ABCD-1234')).toBeVisible();
   const second=[...fake.settings.signInSessions.keys()].find(id=>id!==session)!;
   fake.settings.approve(second,'omar');

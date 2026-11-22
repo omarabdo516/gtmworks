@@ -136,6 +136,7 @@ function sessions(fake,{owner,space=true,extra=[],logFails=false,unfinishedFails
   if(name==='record_unfinished_provider_key') { if(owner) args.missed.length?unfinished.set(args.key_provider,args.missed):unfinished.delete(args.key_provider); return owner?{data:null,error:null}:{data:null,error:{code:'42501'}}; }
   if(name==='company_key_unfinished_profiles') return {data:owner?[...unfinished].map(([provider,profiles])=>({provider,profiles})):[],error:null};
   if(name==='is_company_owner') return {data:owner,error:null};
+  if(name==='rename_provider') return owner?{data:null,error:null}:{data:null,error:{code:'42501'}};
   if(name==='company_engine_target') return {data:[{profile:companies[args.c].main,profiles:[]}],error:null};
   if(name==='company_key_profiles') return {data:keyRows(args.c,extra).filter(row=>space||row.kind!=='space').map(row=>noKeeper&&row.kind==='company'?{...row,agent:null,name:null}:row),error:null};
   if(name==='record_provider_key_change') { logged.push(args); return logFails?{data:null,error:{code:'XX000',message:'the database is down'}}:{data:null,error:null}; }
@@ -183,6 +184,8 @@ test('a set reaches the Company\'s space and its Agent profiles only, key before
   assert.deepEqual(removed.body,{provider:'openrouter',agents:[one.main,...one.agents].map(profile=>({agent:agentId(profile),name:companies[first].names[profile],removed:true}))});
   for(const name of own) assert.equal(envOf(fake,name).OPENROUTER_API_KEY,undefined,name);
   assert.deepEqual(owner.logged.map(entry=>entry.present),[true,true,false]);
+  // The key's name goes with it (#618), so the next key of this provider reads under its own name.
+  assert.deepEqual(owner.asked.filter(call=>call.name==='rename_provider').at(-1)?.args,{c:first,provider:'openrouter',account:'key',name:''});
   assert.deepEqual(await change(owner,fake,{intent:'remove'}),{status:200,body:{provider:'openrouter',agents:removed.body.agents}});
   assert.equal(owner.logged.length,3,'removing a key nobody held logs nothing');
   await change(owner,fake,{intent:'set',value:known});

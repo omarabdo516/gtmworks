@@ -44,10 +44,10 @@ type Entry={id:string,kind:'subscription'|'key',provider:string,account:string|n
 function entriesOf(t:(key:string)=>string,signIns:CompanySignIns['signIns'],accounts:SubscriptionAccount[]|null|undefined,keys:KeyRow[]|null,names:Record<string,string>):Entry[] {
  const signed=subscriptions.flatMap((provider):Entry[]=>{
   if(!signIns||signIns[provider].state==='notConnected') return [];
-  const own=(accounts??[]).filter(row=>row.provider===provider);
-  if(signIns[provider].state!=='connected'||!own.length) return [{id:entryId('subscription',provider),kind:'subscription' as const,provider,account:null,name:t(subscriptionName[provider]),own:t(subscriptionName[provider]),state:signIns[provider].state,exhausted:false}];
-  return own.map((row,at)=>{ const kind=at?`${t(subscriptionName[provider])} ${at+1}`:t(subscriptionName[provider]);
-   return {id:`sub-${provider}-${row.account}`,kind:'subscription' as const,provider,account:row.account,name:names[nameKey(provider,row.account)]??kind,own:kind,state:'connected' as const,exhausted:row.exhausted}; });
+  const held=(accounts??[]).filter(row=>row.provider===provider);
+  if(signIns[provider].state!=='connected'||!held.length) return [{id:entryId('subscription',provider),kind:'subscription' as const,provider,account:null,name:t(subscriptionName[provider]),own:t(subscriptionName[provider]),state:signIns[provider].state,exhausted:false}];
+  return held.map((row,at)=>{ const placed=at?`${t(subscriptionName[provider])} ${at+1}`:t(subscriptionName[provider]);
+   return {id:`sub-${provider}-${row.account}`,kind:'subscription' as const,provider,account:row.account,name:names[nameKey(provider,row.account)]??placed,own:placed,state:'connected' as const,exhausted:row.exhausted}; });
  });
  const held=(keys??[]).filter(row=>row.set).map(row=>({id:entryId('key',row.provider),kind:'key' as const,provider:row.provider,account:keyAccount,name:names[nameKey(row.provider,keyAccount)]??row.label,own:row.label,state:'set' as const,exhausted:false}));
  return [...signed,...held];
@@ -220,7 +220,7 @@ function ProviderModels({company,owner,entry,panel,name,models}:{company:string,
 }
 
 // What a refused name says: the route's codes (app/api/provider-names) and the field's own check.
-const nameReason:Record<string,string>={providerNotAllowed:'providersNotAllowed',providerNameInvalid:'providersNameInvalid',providersNameInvalid:'providersNameInvalid'};
+const nameReason:Record<string,string>={providerNotAllowed:'providersNotAllowed',providerNameInvalid:'providersNameInvalid'};
 // The Provider's name: what the Owner named it, or its kind's own. The Owner changes it here; an empty name gives the
 // kind's own back. Every other Member reads it.
 function NameFact({company,owner,entry}:{company:string,owner:boolean,entry:Entry}) {
@@ -234,7 +234,7 @@ function NameFact({company,owner,entry}:{company:string,owner:boolean,entry:Entr
  const given=value.trim(); const unchanged=(given||entry.own)===entry.name;
  const save=async()=>{
   if(busy||unchanged) return;
-  if(given.length>nameLimit) { setError('providersNameInvalid'); return; }
+  if(given.length>nameLimit) { setError('providerNameInvalid'); return; }
   setBusy(true); setError('');
   let answer:{ok:boolean,error:string};
   try {

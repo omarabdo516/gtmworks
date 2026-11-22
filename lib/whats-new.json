@@ -2,8 +2,8 @@
  {
   "issue": 618,
   "date": "2026-11-22",
-  "en": { "title": "A second subscription keeps the first", "body": "Connecting another ChatGPT or Claude account now adds it beside the ones you have instead of replacing them, and you can give each subscription and key its own name in Settings." },
-  "ar": { "title": "الاشتراك التاني مش بيشيل الأول", "body": "لما توصّل حساب ChatGPT أو Claude تاني بقى بيتضاف جنب اللي عندك بدل ما يشيلهم، وتقدر تدي كل اشتراك وكل مفتاح اسم خاص بيه من الإعدادات." }
+  "en": { "title": "A second subscription keeps the first", "body": "Signing in to a second ChatGPT or Claude now adds it beside the one you have instead of replacing it, and you can give each subscription and key its own name in Settings." },
+  "ar": { "title": "الاشتراك التاني مش بيشيل الأول", "body": "لما تسجّل دخول في ChatGPT أو Claude تاني بقى بيتضاف جنب اللي عندك بدل ما يشيله، وتقدر تدي كل اشتراك وكل مفتاح اسم خاص بيه من الإعدادات." }
  },
  {
   "issue": 620,

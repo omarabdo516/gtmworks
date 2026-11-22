@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+export const accountId:RegExp;
 export const keyAccount:'key';
 export const nameLimit:number;
 export function nameKey(provider:string,account:string):string;

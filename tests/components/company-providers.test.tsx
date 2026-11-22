@@ -120,7 +120,7 @@ test('the Owner\'s last row connects a subscription by sign-in, another account 
   const add = screen.getByRole('region', { name: en.providersAdd });
   // A subscription already connected is offered again: its sign-in adds another account beside the first (#618).
   expect(document.querySelector('#add-sub-openai-codex-state')?.textContent).toBe(en.signInConnected);
-  await expect.element(add.getByRole('button', { name: 'Connect another ChatGPT account' })).toBeVisible();
+  await expect.element(add.getByRole('button', { name: 'Add another ChatGPT' })).toBeVisible();
   expect(document.querySelector('#pv-d-add')?.textContent).toContain(en.providersAnotherAccount);
   await expect.element(add.getByText(command)).toBeVisible();
   await expect.element(add.getByRole('img', { name: 'Claude' })).toBeVisible();

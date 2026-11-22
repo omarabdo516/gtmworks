@@ -78,6 +78,9 @@ assert [s for _, s, _ in two] == ["device_code", "manual:device_code"], two
 oauth._gtmworks_save_codex_login({"access_token": jwt("b", "2"), "refresh_token": "r"})
 again = rows()
 assert [i for i, _, _ in again] == [i for i, _, _ in two] and again[1][2] == jwt("b", "2") and again[0][2] == jwt("a"), again
+oauth._gtmworks_save_codex_login({"access_token": jwt("a", "3"), "refresh_token": "r"})
+again = rows()
+assert [i for i, _, _ in again] == [i for i, _, _ in two] and again[0][2] == jwt("a", "3"), again
 from hermes_cli.auth import get_codex_auth_status
 asyncio.run(ops.remove_credential_pool_entry("openai-codex", 2, None))
 assert rows() == again[:1] and get_codex_auth_status().get("logged_in") is True, rows()
