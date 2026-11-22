@@ -727,59 +727,6 @@ mcp_host=$(sed -n 's/.*"sandbox_host":"\([^"]*\)".*/\1/p' sandbox-mcp-proof.log 
 docker exec "$sandbox" grep -q "^$mcp_host /work/$first " "/work/$first/$mcp_marker-mcp.txt" \
   || fail "the command server wrote in the Agent's own folder of the Company's work folder"
 if docker exec "$engine_id" test -e "/work/$first/$mcp_marker-mcp.txt"; then fail 'nothing the command server wrote is on the Engine'; fi
-# The Open Design app (#544, ADR 0025): turned on for the Agent through the driver, then, after an Engine restart that
-# connects it, the Agent is asked for a design from a Conversation. Open Design's daemon in the sandbox draws it through
-# its `hermes` runtime, a Run on the Agent's design profile on the Engine over the socket the Engine's ssh session
-# forwards. While the call holds, the host's Docker lists both containers' processes: Open Design's MCP command and its
-# daemon are processes of the sandbox, and the Engine holds only the ssh client. The design's file is in the Agent's own
-# folder of the Company's work folder, and the sandbox holds no provider credential: the fake model's key, which is the
-# Engine's model access here, is in no process environment and no file of the sandbox.
-od_marker="open-design-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
-engine_node "$engine_key" - open-design-add "$od_marker" < scripts/check-install-profiles.mjs \
-  || { docker exec "$sandbox" sh -c 'tail -n 40 /home/pn/.gtmworks/open-design/*.log' >&2 || true; fail 'Open Design is turned on for an Agent and Test lists its tools'; }
-docker restart "$engine_id" > /dev/null || fail 'restart the Engine'
-engine_healthy "$engine_id" 60 || fail 'the Engine is healthy after its restart'
-engine_node "$engine_key" - open-design "$od_marker" < scripts/check-install-profiles.mjs > open-design-proof.log 2>&1 &
-od_check=$!
-od_file="/work/$first/open-design/projects/$od_marker/index.html"
-od_drawn=''
-for attempt in $(seq 1 600); do
-  docker exec "$sandbox" test -f "$od_file" 2> /dev/null && { od_drawn=yes; break; }
-  kill -0 "$od_check" 2> /dev/null || break
-  sleep 1
-done
-if [[ $od_drawn != yes ]]; then
-  wait "$od_check" || true
-  cat open-design-proof.log >&2
-  docker exec "$sandbox" sh -c 'tail -n 60 /home/pn/.gtmworks/open-design/*.log; ls -la /home/pn/.gtmworks' >&2 || true
-  fail 'an Agent makes a design with Open Design from a Conversation'
-fi
-sandbox_ps=$(docker exec "$sandbox" ps -eo comm=,args=) || fail 'list the work sandbox processes'
-engine_ps=$(docker exec "$engine_id" ps -eo comm=,args=) || fail 'list the Engine processes'
-grep -q '/opt/open-design/app/dist/cli\.js mcp --daemon-url' <<< "$sandbox_ps" \
-  || { printf '%s\n' "$sandbox_ps" >&2; fail "Open Design's MCP command is a process of the work sandbox"; }
-grep -q '/opt/open-design/app/dist/cli\.js --no-open' <<< "$sandbox_ps" \
-  || { printf '%s\n' "$sandbox_ps" >&2; fail "Open Design's daemon is a process of the work sandbox"; }
-if grep -q 'open-design/app\|dist/cli\.js' <<< "$engine_ps"; then printf '%s\n' "$engine_ps" >&2; fail 'no process of the Engine runs Open Design'; fi
-awk '$1 == "ssh" && /pn@sandbox/ && /open-design-mcp/ {found=1} END {exit !found}' <<< "$engine_ps" \
-  || { printf '%s\n' "$engine_ps" >&2; fail 'the Engine reaches Open Design over ssh into the sandbox'; }
-wait "$od_check" || { cat open-design-proof.log >&2; fail 'an Agent makes a design with Open Design and returns its file'; }
-cat open-design-proof.log
-docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's file is in the Agent's own folder of the Company's work folder"
-# No provider credential in the sandbox: the Engine's model key and the Agent's provider key are in no process environment
-# and no file there, no provider key variable is set for any process, and no sign-in or key file of the Engine's kind (no
-# auth.json, no .env, no Hermes home) is in the work user's home or the work folder, where a synced sign-in would land.
-# Each scan is read whole first and a scan that fails fails the check: under pipefail a `grep -q` that stops reading early
-# could fail the pipe on a match. They run as the work user, who owns every process and file there: the sandbox drops every
-# capability, so its root reads none of the work user's private folders.
-sandbox_env=$(docker exec --user pn "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
-if grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null; then
-  fail 'no process of the sandbox holds a provider credential'
-fi
-sandbox_files=$(docker exec --user pn "$sandbox" sh -c 'grep -rIl -e fake-model-key -e "$1" /home /work /tmp /run 2> /dev/null; true' sh "sk-or-v1-$od_marker") || fail "scan the sandbox's files"
-[[ -z $sandbox_files ]] || { printf '%s\n' "$sandbox_files" >&2; fail 'no file of the sandbox holds a provider credential'; }
-sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
-[[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }
 # The Library shows the Company's work folder (#395): an Agent's file and picture in its own folder are listed, previewed
 # and downloaded with the same bytes through gtmworks; the Engine reads that folder and cannot write to it, as root or as
 # its own user, and nothing it tried reaches the sandbox.
@@ -920,6 +867,79 @@ for folder in .engines/*/; do
   done
 done
 [[ $engines_scanned -ge 2 ]] || fail 'the scan covers every Engine'
+}
+
+# open-design: the Open Design app (#544, ADR 0025), an area of its own beside agents, which it would take past its time
+# limit. The install, its first run and the second Company are made as the agents area makes them; the first Company's
+# main Agent then gets Open Design and makes a design from a Conversation.
+open_design() {
+cd "$root"
+area_setup
+reset_install
+install_source open-design-install.log || fail 'first install'
+complete_setup || fail 'emailed sign-in and invitation links on the local install'
+engine_id=$(first_engine_id) || fail 'the Engine container'
+engine_key=$(first_engine_key)
+# The Engine answers a Run with no subscription through the fake model provider served from the web container (#378).
+point_engine_at_fake_model "$engine_id"
+second_company || fail 'company add makes the second Company'
+engine_node "$engine_key" - prepare < scripts/check-install-profiles.mjs | tee prepare-profiles.log || fail 'two companies get two profiles on two Engines with the work tools on, each with one shared space'
+first=$(tail -n 1 prepare-profiles.log)
+[[ $first =~ ^co-[0-9a-f]{32}$ ]] || fail "the first company's profile name"
+sandbox=gtmworks-sandbox-first
+# The Open Design app (#544, ADR 0025): turned on for the Agent through the driver, then, after an Engine restart that
+# connects it, the Agent is asked for a design from a Conversation. Open Design's daemon in the sandbox draws it through
+# its `hermes` runtime, a Run on the Agent's design profile on the Engine over the socket the Engine's ssh session
+# forwards. While the call holds, the host's Docker lists both containers' processes: Open Design's MCP command and its
+# daemon are processes of the sandbox, and the Engine holds only the ssh client. The design's file is in the Agent's own
+# folder of the Company's work folder, and the sandbox holds no provider credential: the fake model's key, which is the
+# Engine's model access here, is in no process environment and no file of the sandbox.
+od_marker="open-design-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+engine_node "$engine_key" - open-design-add "$od_marker" < scripts/check-install-profiles.mjs \
+  || { docker exec "$sandbox" sh -c 'tail -n 40 /home/pn/.gtmworks/open-design/*.log' >&2 || true; fail 'Open Design is turned on for an Agent and Test lists its tools'; }
+docker restart "$engine_id" > /dev/null || fail 'restart the Engine'
+engine_healthy "$engine_id" 60 || fail 'the Engine is healthy after its restart'
+engine_node "$engine_key" - open-design "$od_marker" < scripts/check-install-profiles.mjs > open-design-proof.log 2>&1 &
+od_check=$!
+od_file="/work/$first/open-design/projects/$od_marker/index.html"
+od_drawn=''
+for attempt in $(seq 1 600); do
+  docker exec "$sandbox" test -f "$od_file" 2> /dev/null && { od_drawn=yes; break; }
+  kill -0 "$od_check" 2> /dev/null || break
+  sleep 1
+done
+if [[ $od_drawn != yes ]]; then
+  wait "$od_check" || true
+  cat open-design-proof.log >&2
+  docker exec "$sandbox" sh -c 'tail -n 60 /home/pn/.gtmworks/open-design/*.log; ls -la /home/pn/.gtmworks' >&2 || true
+  fail 'an Agent makes a design with Open Design from a Conversation'
+fi
+sandbox_ps=$(docker exec "$sandbox" ps -eo comm=,args=) || fail 'list the work sandbox processes'
+engine_ps=$(docker exec "$engine_id" ps -eo comm=,args=) || fail 'list the Engine processes'
+grep -q '/opt/open-design/app/dist/cli\.js mcp --daemon-url' <<< "$sandbox_ps" \
+  || { printf '%s\n' "$sandbox_ps" >&2; fail "Open Design's MCP command is a process of the work sandbox"; }
+grep -q '/opt/open-design/app/dist/cli\.js --no-open' <<< "$sandbox_ps" \
+  || { printf '%s\n' "$sandbox_ps" >&2; fail "Open Design's daemon is a process of the work sandbox"; }
+if grep -q 'open-design/app\|dist/cli\.js' <<< "$engine_ps"; then printf '%s\n' "$engine_ps" >&2; fail 'no process of the Engine runs Open Design'; fi
+awk '$1 == "ssh" && /pn@sandbox/ && /open-design-mcp/ {found=1} END {exit !found}' <<< "$engine_ps" \
+  || { printf '%s\n' "$engine_ps" >&2; fail 'the Engine reaches Open Design over ssh into the sandbox'; }
+wait "$od_check" || { cat open-design-proof.log >&2; fail 'an Agent makes a design with Open Design and returns its file'; }
+cat open-design-proof.log
+docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's file is in the Agent's own folder of the Company's work folder"
+# No provider credential in the sandbox: the Engine's model key and the Agent's provider key are in no process environment
+# and no file there, no provider key variable is set for any process, and no sign-in or key file of the Engine's kind (no
+# auth.json, no .env, no Hermes home) is in the work user's home or the work folder, where a synced sign-in would land.
+# Each scan is read whole first and a scan that fails fails the check: under pipefail a `grep -q` that stops reading early
+# could fail the pipe on a match. They run as the work user, who owns every process and file there: the sandbox drops every
+# capability, so its root reads none of the work user's private folders.
+sandbox_env=$(docker exec --user pn "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
+if grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null; then
+  fail 'no process of the sandbox holds a provider credential'
+fi
+sandbox_files=$(docker exec --user pn "$sandbox" sh -c 'grep -rIl -e fake-model-key -e "$1" /home /work /tmp /run 2> /dev/null; true' sh "sk-or-v1-$od_marker") || fail "scan the sandbox's files"
+[[ -z $sandbox_files ]] || { printf '%s\n' "$sandbox_files" >&2; fail 'no file of the sandbox holds a provider credential'; }
+sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
+[[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }
 }
 
 # backup: backup and restore (#386, #409, ADR 0018): a backup of the install's own data and of every Company Engine,
@@ -2487,10 +2507,11 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sandbox_rollback); (sizes); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (open_design); (backup); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sandbox_rollback); (sizes); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
+ open-design) open_design;;
  backup) backup;;
  proxy) proxy;;
  rollback) rollback;;
@@ -2505,5 +2526,5 @@ case "${1:-all}" in
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | open-design | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac
