@@ -81,7 +81,7 @@ test('the Owner chooses the Company default and one Agent\'s own model, each rea
  // nothing, so the default model is chosen only once it has its handlers.
  await hydrated(page);
  // OpenRouter's entry (`anthropic/claude-opus-4.6`), not Anthropic's own `claude-opus-4-6` the same test's key adds.
- await page.getByRole('radio',{name:/^anthropic\/claude-opus-4\.6/}).click();
+ await page.getByRole('radiogroup',{name:/default/i}).getByRole('radio',{name:/^anthropic\/claude-opus-4\.6/}).click();
  await expect.poll(()=>fake.settings.profiles.get(space)?.model).toBe('anthropic/claude-opus-4.6');
  // The Company's own profile is written after its shared space, so it is waited for as the space is.
  await expect.poll(()=>fake.settings.profiles.get(co)?.model).toBe('anthropic/claude-opus-4.6');

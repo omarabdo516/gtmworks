@@ -25,6 +25,7 @@ import { readProviderOrder } from '@/lib/provider-order.mjs';
 import { engineOf } from '@/lib/company-engine.mjs';
 import { readWorkSandbox } from '@/lib/hermes.mjs';
 import { readCompanyModels } from '@/lib/engine-settings.mjs';
+import { readFallbackModel } from '@/lib/fallback-model.mjs';
 import { readProviderModels } from '@/lib/provider-models.mjs';
 import { readCompanyKeys } from '@/lib/provider-keys.mjs';
 import { readCompanySpeech } from '@/lib/company-speech.mjs';
@@ -36,7 +37,7 @@ import { LearningSection } from './settings-learning';
 import { SkillPage } from './settings-skill-page';
 import { readAgentInstructions } from '@/lib/agent-instructions.mjs';
 import { readAgentVoice, type AgentVoice as AgentVoiceRead } from '@/lib/agent-voice.mjs';
-import { CompanyProviders, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, DefaultEffort, SpeechToText, DefaultModel, EachAgent, AgentModel } from './settings-lazy';
+import { CompanyProviders, MemberNote, AgentAbout as AgentAboutField, AgentInstructions as AgentInstructionsField, AgentInstructionsReadOnly as AgentInstructionsRead, AgentSkills, AgentSaveBar, AgentVoice as AgentVoiceField, AgentEffort, AgentMorning, AgentVoiceSpeed, DefaultEffort, SpeechToText, DefaultModel, FallbackModel, EachAgent, AgentModel } from './settings-lazy';
 import { MadeLine, OpenedMark } from './agent-made';
 import { madeColumns, madeOf } from '@/lib/agent-made';
 import { isNewFor } from '@/lib/sidebar.mjs';
@@ -97,6 +98,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // The Company's default model, each Agent's own and the Owner's model choices (#29), and the providers the Engine takes a
  // key for with whether each has one. Both are read on the server; no key value is ever one of the fields.
  const models=section==='models'?await (async()=>{ try { return await readCompanyModels(db,{company:company.id,owner}); } catch { return {models:null}; } })():null;
+ // The Company's Fallback model (#622), read for every Member; undefined when unread.
+ const fallback=section==='models'?await readFallbackModel(db,company.id).catch(()=>undefined):undefined;
  const names=section==='models'?await readProviderNames(db,company.id):{};
  // The Owner's order of the Providers and which are switched off (#619), read for every Member; null when unread.
  const order=section==='models'?await readProviderOrder(db,company.id):null;
@@ -175,6 +178,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
      subscriptions={{available:subscriptions?.profiles!=null,signIns:subscriptions?.signIns??null,accounts:subscriptions&&'accounts' in subscriptions?subscriptions.accounts:null,noEngine:subscriptions?.noEngine===true}}/>}
     speech={<SpeechToText company={company.id} owner={owner} data={speech}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default}/>:null}
+    fallbackModel={models?.models&&fallback!==undefined?<FallbackModel company={company.id} owner={owner} model={fallback} options={models.models.default.options}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models}/>:null}
     defaultEffort={<DefaultEffort/>}/>;
  // "Change the time" on the morning's card (#183; design-reference: checkin-settings) opens this page on Time, or on the
@@ -411,11 +415,11 @@ function AccountSection({t,theme,personName,role,roleName,companyName,company,me
 
 // The company's sections whose features come later (#29–#33): each keeps the reference's heading, its explanation and
 // its parts in place, empty and marked "Soon", with no sample figures. Learning (#28) has its own section.
-function SoonSection({t,section,ro,providers,speech,defaultModel,eachAgent,defaultEffort}:{t:T,section:OverlaySection,ro:ReactNode,providers:ReactNode,speech:ReactNode,defaultModel:ReactNode,eachAgent:ReactNode,defaultEffort:ReactNode}) {
+function SoonSection({t,section,ro,providers,speech,defaultModel,fallbackModel,eachAgent,defaultEffort}:{t:T,section:OverlaySection,ro:ReactNode,providers:ReactNode,speech:ReactNode,defaultModel:ReactNode,fallbackModel:ReactNode,eachAgent:ReactNode,defaultEffort:ReactNode}) {
  // The Company's Providers, list and details (#617), then the defaults every Agent starts with and speech-to-text below
  // the list, as the approved Providers layout puts them (spec #610).
  if(section==='models') return <><Head title={t('settingsModels')} info={t('settingsModelsSub')}/>{ro}
   {providers}{defaultModel??<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}
-  {defaultEffort}{eachAgent}{speech}</>;
+  {fallbackModel}{defaultEffort}{eachAgent}{speech}</>;
  return null;
 }

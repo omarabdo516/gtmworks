@@ -511,7 +511,7 @@ Next: the first real Company goes live on gtmworks, then keys for sandbox tools,
 - ⚪ Presenter videos made from a Card
 - ⚪ Ad campaigns, Results and a monthly Diagnosis
 - ⚪ Monthly plan, Brand check, Segments, Key dates, Offerings
-- ⚪ Several model accounts with failover
+- ✅ Several model accounts with failover
 - ⚪ Stronger Agent memory
 - ⚪ Talk to an Agent live by voice
 - ⚪ Business lines inside a Company (only if real mixing shows the need)

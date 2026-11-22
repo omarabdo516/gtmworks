@@ -144,6 +144,55 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
  </section>;
 }
 
+// The Company's Fallback model (#622; GLOSSARY: Fallback model): None first, the default, then the same choices as the
+// default model, which are the models some Provider has switched on. The Owner picks one; every other Member reads the
+// choice (they get no list of choices, so theirs names the provider by its id). For the Owner, a choice no Provider
+// offers any more stays drawn, with a line saying Agents cannot move to it.
+export function FallbackModel({company,owner,model,options}:{company:string,owner:boolean,model:string|null,options:ModelOption[]}) {
+ const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
+ const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [missed,setMissed]=useState<string[]>([]);
+ const choose=async(value:string|null)=>{
+  if(busy) return;
+  setBusy(true); setError('');
+  const answer=await send('/api/fallback-model',{company,value});
+  setBusy(false);
+  if(!answer.ok) { setError(answer.error||'fallbackFailed'); return; }
+  // Agents whose profile did not take it now are named; the worker gives it to them later, so no retry is offered.
+  const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as {name?:unknown}[]).map(entry=>String(entry?.name||'')).filter(Boolean):[];
+  setMissed(failed);
+  if(!failed.length) toast(t('settingsFallbackSaved'));
+  router.refresh();
+ };
+ const held=model&&model.includes('/')&&!options.some(option=>modelOf(option)===model)?(()=>{ const at=model.indexOf('/'); return {provider:model.slice(0,at),providerName:model.slice(0,at),model:model.slice(at+1)}; })():null;
+ const rows:(ModelOption|null)[]=[null,...options,...(held?[held]:[])];
+ const valueOf=(option:ModelOption|null)=>option?modelOf(option):null;
+ const idOf=(option:ModelOption|null)=>option?`mdl-fb-${option.provider}-${option.model}`:'mdl-fb-none';
+ const chosenIndex=rows.findIndex(option=>valueOf(option)===model);
+ const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
+  const step=moveChoice(event,rtl); if(step===null) return;
+  const next=Math.max(0,Math.min(rows.length-1,(chosenIndex<0?index:chosenIndex)+step));
+  if(next!==chosenIndex) choose(valueOf(rows[next]));
+  document.getElementById(idOf(rows[next]))?.focus();
+ };
+ const row=(option:ModelOption|null,index:number)=>{
+  const value=valueOf(option); const on=value===model;
+  const text=option
+   ?<><ProviderLogo provider={option.provider} name={option.providerName}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span>
+     <span className="panel-row__d">{option===held&&owner?t('settingsFallbackOff'):<bdi>{option.providerName}</bdi>}</span></span></>
+   :<span className="panel-row__text"><span className="panel-row__t">{t('settingsFallbackNone')}</span><span className="panel-row__d">{t('settingsFallbackNoneHint')}</span></span>;
+  const meta=on?<span className="panel-row__meta"><span aria-hidden="true">✓</span>{option?t('settingsFallbackMark'):null}</span>:null;
+  return owner
+   ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={value??'none'} aria-checked={on} tabIndex={on?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(value); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
+   : on?<div className="panel-row" id={idOf(option)} key={value??'none'} aria-current="true">{text}{meta}</div>:null;
+ };
+ return <section className="dp-sec" aria-labelledby="md-h-fallback" id="md-fallback"><Label id="md-h-fallback" info={t('settingsFallbackHint')}>{t('settingsFallback')}</Label>
+  <div className="panel-card" role={owner?'radiogroup':undefined} aria-labelledby="md-h-fallback">{rows.map(row)}</div>
+  {error&&<p className="set-err" role="alert">{t(error==='settingModelNotEnabled'?'settingsModelsNotEnabled':error==='fallbackNotAllowed'?'settingsModelsOwnerOnly':'settingsFallbackError')}</p>}
+  {missed.length>0&&<p className="set-err" role="alert">{t('settingsFallbackNotReached',missed.join(', '))}</p>}
+  {!owner&&<p className="set-hint">{t('settingsModelsOwnerOnly')}</p>}
+ </section>;
+}
+
 // The thinking level every new Agent starts with (#179): the Engine has no setting that gives a new profile a level, so a
 // new profile has none and reads as the reference's Medium. The reference's read-only form for every Role: the level and
 // its line, with nothing to change (design-reference/app.js 7362-7366).
