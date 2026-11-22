@@ -439,3 +439,20 @@
 .gw .sov .set-advanced__body { display: flex; flex-direction: column; gap: var(--s6); padding-top: var(--s3); }
 @media (prefers-reduced-motion: reduce) { .gw .sov .set-advanced__s .sov-icon { transition: none; } }
 
+
+/* About (#616): What's new as rows of the shipped release notes, each with its day, and the earlier ones behind one row
+   that opens them in place (a native details, so pointer, keyboard and touch all open it). The rows keep panel-row's
+   dividers across the list and the row that opens the rest. */
+.gw .sov .ab-notes { list-style: none; margin: 0; padding: 0; }
+.gw .sov .ab-note { align-items: flex-start; padding-block: 10px; }
+.gw .sov .ab-note .panel-row__text { gap: 2px; }
+.gw .sov .ab-note .panel-row__meta { white-space: nowrap; line-height: 1.5; }
+.gw .sov .ab-notes + .ab-older > summary::before, .gw .sov .ab-older .ab-notes > .panel-row:first-child::before { content: ""; position: absolute; top: 0; inset-inline: var(--s2); height: 0.5px; background: var(--gw-border-2); }
+.gw .sov .ab-older > summary { list-style: none; cursor: pointer; color: var(--gw-text-2); }
+.gw .sov .ab-older > summary::-webkit-details-marker { display: none; }
+.gw .sov .ab-older > summary:hover { background: var(--gw-bg-hover); }
+.gw .sov .ab-older__chev { flex: none; color: var(--gw-text-3); transition: transform var(--gw-dur-fast) ease; }
+@media (prefers-reduced-motion: reduce) { .gw .sov .ab-older__chev { transition: none; } }
+.gw .sov .ab-older[open] .ab-older__chev { transform: rotate(90deg); }
+[dir="rtl"] .gw .sov .ab-older[open] .ab-older__chev { transform: rotate(-90deg); }
+.gw .sov .ab-version { font-size: var(--gw-fs-sm); color: var(--gw-text-2); font-variant-numeric: tabular-nums; }
