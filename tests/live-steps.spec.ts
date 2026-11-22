@@ -63,7 +63,8 @@ test('while Lead works, its step now and its steps so far are on screen live, a 
  // The reply lands with the session's own record of the Run's steps, drawn once where the live list was.
  const sent=Date.parse(String(rows(`select created_at from public.conversation_messages where conversation_id='${conversation}' and author='person'`)[0].created_at))/1000;
  const call=(id:string,name:string,args:object)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
- fake.settings.sessions.set(conversation,{profile,messages:[
+ const session=fake.settings.runs.find(each=>each.id===run)?.session as string;
+ fake.settings.sessions.set(session,{profile,messages:[
   {role:'user',content:text,timestamp:sent+0.5},
   {role:'assistant',content:'',tool_calls:[call('call_1','web_search',{query:'accounting courses Cairo'}),call('call_2','read_file',{path:'campaigns.csv'})],timestamp:sent+1},
   {role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:sent+2},
