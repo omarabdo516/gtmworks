@@ -2,8 +2,14 @@
  {
   "issue": 613,
   "date": "2026-11-22",
-  "en": { "title": "Find a setting by its name", "body": "In Settings, press / or use the search above the sections to type a setting's name, in English or Arabic, and open it with Enter; you only ever see the sections your role can open." },
-  "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد بالعربي أو بالإنجليزي، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
+  "en": { "title": "Find a setting by its name", "body": "In Settings, press / or use the search above the sections to type a setting's name as your interface language shows it, and open it with Enter; you only ever see the sections your role can open." },
+  "ar": { "title": "دوّر على أي إعداد باسمه", "body": "في الإعدادات، دوس / أو استخدم البحث اللي فوق الأقسام واكتب اسم الإعداد زي ما هو مكتوب بلغة الواجهة، وافتحه بـ Enter؛ وهتشوف بس الأقسام اللي دورك يقدر يفتحها." }
+ },
+ {
+  "issue": 535,
+  "date": "2026-11-22",
+  "en": { "title": "Ran overnight no longer misses runs", "body": "Each routine result is now kept as soon as its run ends, so the morning card lists what ran overnight, up to 200 results, even for a routine that runs every 15 minutes." },
+  "ar": { "title": "«اشتغل بالليل» مبقاش بيفوّت تشغيلات", "body": "كل نتيجة روتين بقت بتتحفظ أول ما تشغيلتها تخلص، فبطاقة الصبح بتعرض اللي اشتغل بالليل لحد 200 نتيجة، حتى لو الروتين بيشتغل كل ربع ساعة." }
  },
  {
   "issue": 556,
