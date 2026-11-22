@@ -1,5 +1,11 @@
 [
  {
+  "issue": 622,
+  "date": "2026-11-22",
+  "en": { "title": "Choose a fallback model", "body": "In Settings you can now pick a fallback model: when every account for an agent’s model has run out, the request goes on with it instead. It is None until you pick one, and then agents never move to another kind of provider; when nothing is left, the chat says so once." },
+  "ar": { "title": "اختار موديل بديل", "body": "من الإعدادات بقيت تقدر تختار موديل بديل: لما كل حسابات موديل الوكيل يخلص استخدامها، الطلب بيكمّل عليه بداله. هو «ولا حاجة» لحد ما تختار، وساعتها الوكلاء عمرهم ما بيروحوا لنوع مزوّد تاني؛ ولما مايفضلش حاجة، الشات بيقول كده مرة واحدة." }
+ },
+ {
   "issue": 621,
   "date": "2026-11-22",
   "en": { "title": "A request goes on when a subscription runs out", "body": "When one ChatGPT or Claude subscription has no quota left, the same request now goes on with the next one of its kind in your providers order, skipping any you switched off; the Activity log notes the move and Settings shows which ran out." },
