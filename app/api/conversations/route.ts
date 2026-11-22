@@ -6,6 +6,7 @@ import { answerQuestion, closeOpenRuns, decidePermission, sendMessage, startQueu
 import { engineOf, onProfile } from '@/lib/company-engine.mjs';
 import { engineFor } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
+import { readModelAccess, offeredModels, modelEnabled } from '@/lib/provider-models.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { conversationColumns, uuid } from '@/lib/conversations';
@@ -156,6 +157,15 @@ async function access(db:Database,body:Record<string,unknown>) {
 // provider and a model; null goes back to the Agent's own.
 async function pickModel(db:Database,body:Record<string,unknown>) {
  if(typeof body.conversation!=='string'||!uuid.test(body.conversation)) return refuse('conversationFailed',400);
+ // A model no Provider of the Company has switched on is not offered, so it is not kept either (#620). Only the Owner
+ // picks (set_conversation_model checks it again), so anyone else is refused before the Providers are read.
+ const choice=body.choice as {provider?:unknown,model?:unknown}|null|undefined;
+ if(choice&&typeof choice==='object'&&typeof choice.provider==='string'&&typeof choice.model==='string') {
+  if((await db.rpc('is_company_owner',{c:body.company})).data!==true) return refuse('conversationNotAllowed',403);
+  const access=await readModelAccess(db,{company:body.company as string}).catch(()=>null);
+  if(!access) return refuse('conversationFailed',503);
+  if(!modelEnabled(access,{provider:choice.provider,model:choice.model})) return refuse('conversationModelNotEnabled',409);
+ }
  const {data,error}=await db.rpc('set_conversation_model',{c:body.company,conversation:body.conversation,choice:body.choice??null});
  if(error) return error.code==='22023'?refuse('conversationFailed',400):refuseFor(error.code);
  return reply({model:data});
@@ -170,7 +180,9 @@ async function models(db:Database,person:string,company:string,conversation:stri
  if(!found||!pinned) return refuse('conversationNotFound',404);
  const connection=onProfile(pinned,company,await engineOf(company,service()));
  const read=connection&&await engineFor(connection).models?.()||{state:'unreachable',current:null,models:[]};
- return reply({state:read.state,models:read.models,current:found.model??read.current});
+ // Only the models a Provider of the Company has switched on, each once (#620).
+ const access=read.state==='found'?await readModelAccess(db,{company}).catch(()=>null):null;
+ return reply({state:read.state,models:offeredModels(read.models,access),current:found.model??read.current});
 }
 
 // Reading the record also closes any of its runs Hermes has ended (lib/conversation-runs.mjs, as the worker does), so

@@ -1560,5 +1560,17 @@
   "providersStatus": "Status",
   "providersAdvanced": "Advanced",
   "providersEngineId": "Name in the agent engine",
-  "providersOwnerOnly": "Only the Owner connects, disconnects or gives a key. You see each provider’s state."
+  "providersOwnerOnly": "Only the Owner connects, disconnects, gives a key or switches a model. You see each provider’s state.",
+  "providersModels": "Models",
+  "providersModelsHint": "Only models switched on here are offered when you choose a model for a chat or an Agent. A model stays offered while any provider of its kind has it on.",
+  "providersModelsNone": "This provider lists no models yet.",
+  "providersModelsUnread": "Couldn’t read this provider’s models right now.",
+  "providersModelSwitch": "{0} on {1}",
+  "providersModelOn": "On",
+  "providersModelOff": "Off",
+  "providersModelOnSaved": "{0} is offered again",
+  "providersModelOffSaved": "{0} is off on this provider",
+  "providersModelError": "Couldn’t save that switch. Try again.",
+  "settingsModelsNotEnabled": "No provider has that model switched on. Turn it on in Providers first.",
+  "conversationModelNotEnabled": "No provider has that model switched on any more, so this chat stays on the model it had."
 }

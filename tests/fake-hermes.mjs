@@ -130,6 +130,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    {env:'OPENROUTER_BASE_URL',provider:'openrouter',label:'OpenRouter',primary:false,password:false,category:'provider'},
    {env:'FIRECRAWL_API_KEY',provider:'',label:'',primary:false,password:true,category:'tool'}],
   providerModels:/** @type {Record<string,string[]>} */({openrouter:['anthropic/claude-opus-4.6','openai/gpt-5.5'],anthropic:['claude-opus-4-6']}),
+  // The models a signed-in subscription lists beside the profile's own (#620); none by default.
+  subscriptionModels:/** @type {Record<string,string[]>} */({}),
   modelNeedsKey:false,
   // Models a Run may not run on (#158): a Run naming one is answered 400 before it is made, as the pinned release answers a
   // provider or model it cannot resolve (api_server_runs.py 803-809).
@@ -700,7 +702,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!home) return send(response,404,{detail:`Profile '${scoped}' does not exist.`});
     const own=settings.profiles.get(scoped)||{provider:'auto',model:''};
     const signedIn=['openai-codex','anthropic'].filter(id=>home.credentials[id]||settings.defaultCredentials[id]);
-    const providers=signedIn.map(slug=>({slug,name:slug,is_current:slug===own.provider,models:own.provider===slug&&own.model?[own.model]:[],source:'authenticated'}));
+    const providers=signedIn.map(slug=>({slug,name:slug,is_current:slug===own.provider,models:[...new Set([...settings.subscriptionModels[slug]||[],...own.provider===slug&&own.model?[own.model]:[]])],source:'authenticated'}));
     const env=(scoped==='default'?settings.defaultEnv:settings.profiles.get(scoped).env)||{};
     for(const row of settings.envRows.filter(row=>row.primary&&env[row.env]&&!signedIn.includes(row.provider)))
      providers.push({slug:row.provider,name:row.label,is_current:row.provider===own.provider,models:settings.providerModels[row.provider]||[],source:'env'});

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { AppTile } from '@/components/app-tile';
 import { markOf as letterOf } from '@/lib/app-mark.mjs';
+import { entryId } from '@/lib/provider-entry.mjs';
 import { SettingsIcon } from './settings-icons';
 import { InfoTip } from './settings-info';
 import { toast } from './toast';
@@ -23,6 +24,8 @@ type KeyRow={provider:string,label:string,set:boolean};
 export type Named={agent:string|null,name:string|null};
 export type ProviderKeysData={keys:KeyRow[]|null,waiting:Named[]|null,leftover:Named[]|null,unknown:Named[]|null};
 type ProvidersSubscriptions={available:boolean,signIns:CompanySignIns['signIns'],noEngine:boolean};
+// Each Provider's models with the Owner's switch, by the Provider's id (lib/provider-models.mjs); null when unread.
+export type ProviderModelsData=Record<string,{model:string,enabled:boolean}[]>;
 
 // Each subscription shows its product's mark, the reference's ChatGPT and Claude (#424).
 const subscriptionLogo:Record<SubscriptionProvider,string>={'openai-codex':'openai',anthropic:'claude'};
@@ -34,14 +37,14 @@ type Entry={id:string,kind:'subscription'|'key',provider:string,name:string,stat
 // _normalize_pool_priorities, v0.23.0), so the first row is the one the Agents use first.
 function entriesOf(t:(key:string)=>string,signIns:CompanySignIns['signIns'],keys:KeyRow[]|null):Entry[] {
  const signed=subscriptions.filter(provider=>signIns&&signIns[provider].state!=='notConnected')
-  .map(provider=>({id:`sub-${provider}`,kind:'subscription' as const,provider,name:t(subscriptionName[provider]),state:signIns![provider].state}));
- const held=(keys??[]).filter(row=>row.set).map(row=>({id:`key-${row.provider}`,kind:'key' as const,provider:row.provider,name:row.label,state:'set' as const}));
+  .map(provider=>({id:entryId('subscription',provider),kind:'subscription' as const,provider,name:t(subscriptionName[provider]),state:signIns![provider].state}));
+ const held=(keys??[]).filter(row=>row.set).map(row=>({id:entryId('key',row.provider),kind:'key' as const,provider:row.provider,name:row.label,state:'set' as const}));
  return [...signed,...held];
 }
 const tileOf=(entry:{kind:Entry['kind'],provider:string,name:string}):{key:string,mark:string}=>({key:entry.kind==='subscription'?subscriptionLogo[entry.provider as SubscriptionProvider]:entry.provider,mark:entry.kind==='subscription'?'':letterOf(entry.name)});
 const partial=(state:Entry['state'])=>state==='mainAgentOnly'||state==='someAgentsOnly';
 
-export function CompanyProviders({company,companyName,owner,subscriptions:subs,keys}:{company:string,companyName:string,owner:boolean,subscriptions:ProvidersSubscriptions,keys:ProviderKeysData|null}) {
+export function CompanyProviders({company,companyName,owner,subscriptions:subs,keys,models=null}:{company:string,companyName:string,owner:boolean,subscriptions:ProvidersSubscriptions,keys:ProviderKeysData|null,models?:ProviderModelsData|null}) {
  const {t,language}=useI18n(); const rtl=language==='ar';
  const entries=entriesOf(t,subs.signIns,keys?.keys??null);
  // What the Owner can still connect: a subscription not signed in, a provider with no key.
@@ -104,6 +107,7 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
      {entry.kind==='subscription'
       ?<SubscriptionDetail company={company} companyName={companyName} owner={owner} provider={entry.provider as SubscriptionProvider} name={entry.name} state={entry.state as SubscriptionState} keyed={(keys?.keys??[]).some(row=>row.set&&row.provider==='anthropic')}/>
       :<KeyDetail company={company} owner={owner} row={{provider:entry.provider,label:entry.name,set:true}}/>}
+     <ProviderModels company={company} owner={owner} entry={entry.id} name={entry.name} models={models?models[entry.id]??[]:null}/>
     </div>)}
     {owner&&<div className="pv-detail" id="pv-d-add" role="region" aria-labelledby="pv-d-add-name" hidden={shown!=='add'}>
      {backButton}
@@ -163,6 +167,40 @@ function KeyDetail({company,owner,row}:{company:string,owner:boolean,row:KeyRow}
    <div className="md-key" id={`mdl-key-row-${row.provider}`}><KeyActions company={company} owner={owner} row={row}/></div>
   </div>
   <Advanced id={`pv-d-key-${row.provider}`} provider={row.provider}><p className="set-hint">{t('settingsModelsKeyWhat')} {t('settingsModelsProviderKeysHint')}</p></Advanced>
+ </>;
+}
+
+// The models this Provider offers, each with its switch (#620): the Owner turns one off and the chat's "+" menu and every
+// Agent's model choice stop offering it once no Provider of its kind has it on. Every other Role reads each switch.
+// A switch shows its new state at once and goes back, with a line, when the change was not kept.
+function ProviderModels({company,owner,entry,name,models}:{company:string,owner:boolean,entry:string,name:string,models:{model:string,enabled:boolean}[]|null}) {
+ const {t}=useI18n(); const router=useRouter();
+ const [shown,setShown]=useState<Record<string,boolean>>({}); const [busy,setBusy]=useState(''); const [error,setError]=useState('');
+ const id=`pv-d-${entry}-models`;
+ const turn=async(model:string,enabled:boolean)=>{
+  if(busy) return;
+  setBusy(model); setError(''); setShown(current=>({...current,[model]:enabled}));
+  let ok=false; let code='';
+  try {
+   const response=await fetch('/api/provider-models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company,entry,model,enabled})});
+   ok=response.ok; if(!ok) code=String(((await response.json().catch(()=>null)) as {error?:unknown}|null)?.error||'');
+  } catch { ok=false; }
+  setBusy('');
+  if(!ok) { setShown(current=>{ const next={...current}; delete next[model]; return next; }); setError(code==='providerModelNotAllowed'?'providersOwnerOnly':'providersModelError'); return; }
+  toast(t(enabled?'providersModelOnSaved':'providersModelOffSaved',model));
+  router.refresh();
+ };
+ return <>
+  <h6 className="pv-group" id={`${id}-h`}>{t('providersModels')}</h6>
+  {models===null?<div className="panel-card"><p className="panel-empty">{t('providersModelsUnread')}</p></div>
+   :!models.length?<div className="panel-card"><p className="panel-empty">{t('providersModelsNone')}</p></div>
+   :<ul className="panel-card" id={id} aria-labelledby={`${id}-h`}>{models.map(({model,enabled})=>{ const on=shown[model]??enabled; const title=`${id}-${model.replace(/[^A-Za-z0-9_-]/g,'_')}`;
+    return <li className="panel-row" key={model}><span className="panel-row__text"><span className="panel-row__t" id={title}><bdi dir="ltr">{model}</bdi></span></span>
+     {owner?<button type="button" className="switch" role="switch" aria-checked={on} aria-label={t('providersModelSwitch',model,name)} disabled={!!busy} onClick={()=>turn(model,!on)}/>
+      :<span className="panel-row__meta">{t(on?'providersModelOn':'providersModelOff')}</span>}
+    </li>; })}</ul>}
+  {error&&<p className="set-err" role="alert">{t(error)}</p>}
+  <p className="set-hint">{t('providersModelsHint')}</p>
  </>;
 }
 

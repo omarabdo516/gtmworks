@@ -7,7 +7,7 @@ import { toast } from './toast';
 import { Advanced } from './settings-info';
 import { Label } from './settings-overlay-parts';
 import { AppTile } from '@/components/app-tile';
-import { markOf } from '@/lib/app-mark.mjs';
+import { markOf, modelMarkOf } from '@/lib/app-mark.mjs';
 
 // The "Subscription and models" section's defaults and speech-to-text (#29; its Providers are settings-providers.tsx) and an Agent's "Thinks with" rows: the Engine's model options for the
 // Company's space and for each Agent's own profile, the model written to that profile and read back, and the Owner's
@@ -47,6 +47,7 @@ function reasonKey(code:string) {
  if(code==='settingNotAllowed') return 'settingsModelsOwnerOnly';
  if(code==='settingAgentShared'||code==='settingSubagentsOff') return 'settingsModelsShared';
  if(code==='settingNoDefault'||code==='settingNoEngine') return 'settingsModelsNoChoice';
+ if(code==='settingModelNotEnabled') return 'settingsModelsNotEnabled';
  return 'settingsModelsError';
 }
 
@@ -181,7 +182,7 @@ export function AgentModel({company,agent,name,model,options,choosable,owner}:{c
   document.getElementById(idOf(options[next]))?.focus();
  };
  const row=(option:ModelOption,index:number)=>{
-  const choice=modelOf(option); const on=choice===model; const text=<span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span>;
+  const choice=modelOf(option); const on=choice===model; const text=<><AppTile app={{key:modelMarkOf(option),mark:markOf(option.providerName)}}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span></>;
   return owner
    ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{on&&<span className="panel-row__meta" aria-hidden="true">✓</span>}</button>
    : <div className="panel-row" key={choice} aria-current={on?'true':undefined}>{text}{on&&<span className="panel-row__meta" aria-hidden="true">✓</span>}</div>;

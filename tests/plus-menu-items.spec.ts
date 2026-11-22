@@ -33,6 +33,9 @@ test.beforeAll(async({browser},testInfo)=>{
  fake=await laneHermes();
  const klaviyo={url:'https://mcp.klaviyo.example/mcp',auth:'oauth',...appConfig(appByKey('klaviyo')!,`${appOrigin}/api/apps/callback/klaviyo`).mcp_servers.klaviyo};
  fake.settings.profiles.set(profile,{soul:'',provider:'anthropic',model:'claude-opus-4-6',key:fake.settings.key,config:{mcp_servers:{klaviyo}},credentials:{anthropic:'signed-in'},env:{OPENROUTER_API_KEY:'set'}} as never);
+ // The Company holds the OpenRouter key in its shared space too, as a key set writes it, so it is one of the Company's
+ // Providers and its models are offered (#620).
+ fake.settings.profiles.set(`cs-${company.replaceAll('-','')}`,{soul:'',provider:'openrouter',model:'openai/gpt-5.5',key:fake.settings.key,config:{},credentials:{},env:{OPENROUTER_API_KEY:'set'}} as never);
  fake.settings.appTokens.add(`${profile}:klaviyo`);
  query(`update public.people set language='en' where id in ('${omar}','${manager}','${contributor}')`);
  query(`update public.companies set work_mode='team' where id='${company}'`);
@@ -42,8 +45,11 @@ test.beforeAll(async({browser},testInfo)=>{
   const connection=randomUUID();
   query(`do $$ begin
    insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','${connection}','Lead','General',true,'${profile}');
-   insert into public.company_profiles(company_id,profile,tools_confirmed) select id,'${profile}',true from public.companies where id='${company}'
-    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false;
+   -- Its profile already shares the Company's Skills folder, so a Run does not wait for that (the shared space below).
+   insert into public.company_profiles(company_id,profile,tools_confirmed,skills_shared) select id,'${profile}',true,true from public.companies where id='${company}'
+    on conflict (company_id) do update set profile=excluded.profile,tools_confirmed=true,tools_pending=false,skills_shared=true;
+   -- The Company's shared space, where its keys are written, so the OpenRouter key is one of its Providers (#620).
+   insert into public.company_shared_spaces(company_id,folder) values ('${company}','/opt/data/profiles/cs-${company.replaceAll('-','')}/skills') on conflict do nothing;
    insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${manager}','${lead}'),('${company}','${contributor}','${lead}');
    -- The Company is in use (a Manager wrote to Lead), so Lead's chat is the empty chat these tests open, not the
    -- first Conversation Lead opens on a new Company (#434).
