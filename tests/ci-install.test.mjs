@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { load } from 'js-yaml';
@@ -340,4 +341,40 @@ test('the sandbox-rollback area rolls a failed update of two sandbox-enabled Com
   assert.match(area, /\{\{\.Config\.Image\}\}' "gtmworks-\$part-\$slug"\) == "\$sandbox"/, 'and every sandbox and exit runs it');
   assert.equal(commitOf('sandbox-rollback').stdout, '', 'it updates from this release, so no fixed commit is built');
   assert.match(lib, /for fixture in [^;]*\brollback-release-install\b/, 'a later area takes its install down');
+});
+
+// #540: whether a container publishes a host port is read from its real bindings, never from how many ports it lists.
+// Docker lists an exposed, unpublished port with a null binding (`{"2222/tcp":null}`), so a count failed a correct
+// sandbox. A stand-in `docker` answers `inspect` with the two fields exactly as Docker 28.5.1 and 29.10.0 both printed
+// them for `--expose 2222`, `-p 2222`, `-p 127.0.0.1:2223:2222` and no port (recorded 2026-11-21).
+test('publishes_host_port holds for a real binding only, on Docker 28 and Docker 29 output alike', () => {
+  const dir = mkdtempSync(`${tmpdir()}/host-port-`);
+  try {
+    writeFileSync(`${dir}/docker`, '#!/bin/sh\n[ "$1" = inspect ] || exit 2\n[ -n "$INSPECT" ] || exit 1\nprintf "%s\\n" "$INSPECT"\n');
+    chmodSync(`${dir}/docker`, 0o755);
+    const publishes = inspect => {
+      const out = spawnSync('bash', ['-c', '. scripts/ci-install-lib.sh; publishes_host_port some-container'], {
+        encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, INSPECT: inspect },
+      });
+      assert.ok(out.status === 0 || out.status === 1, out.stderr);
+      return out.status === 0;
+    };
+    // `.NetworkSettings.Ports` then `.HostConfig.PortBindings`, as `docker inspect` printed them.
+    assert.equal(publishes('{} {}'), false, 'no port at all');
+    assert.equal(publishes('{"2222/tcp":null} {}'), false, 'an exposed, unpublished port is listed with no binding');
+    assert.equal(publishes('{"2222/tcp":[{"HostIp":"127.0.0.1","HostPort":"2223"}]} {"2222/tcp":[{"HostIp":"127.0.0.1","HostPort":"2223"}]}'), true, 'a fixed host port');
+    assert.equal(publishes('{"2222/tcp":[{"HostIp":"0.0.0.0","HostPort":"32768"}]} {"2222/tcp":[{"HostIp":"","HostPort":""}]}'), true, 'a host port Docker chose');
+    assert.equal(publishes('null {"2222/tcp":[{"HostIp":"","HostPort":""}]}'), true, 'a binding asked for on a container that is not running');
+    assert.equal(publishes(''), true, 'a container docker cannot inspect fails the check');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('every "publishes no host port" check of the proof asks publishes_host_port, and none counts ports', () => {
+  assert.doesNotMatch(script + lib, /len \.NetworkSettings\.Ports/, 'no check counts the ports a container lists');
+  assert.doesNotMatch(script, /\.NetworkSettings\.Ports/, 'the proof reads bindings only through the lib');
+  const checks = script.split('\n').filter(line => /publishes no (host )?port/.test(line) && !/^\s*\|\|/.test(line));
+  assert.ok(checks.length > 0);
+  for (const line of checks) assert.match(line, /publishes_host_port /, line);
 });

@@ -114,7 +114,7 @@ if grep -qF "$engine_key" <<< "$logs"; then fail 'the Engine key must not appear
 engine_id=$(first_engine_id) || fail 'the first Engine container'
 [[ -n $engine_id ]] || fail 'the first Engine container'
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine_id") == $(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1) ]] || fail 'the Engine runs the template image'
-[[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine_id") != *HostPort* ]] || fail 'the Engine publishes no host port'
+! publishes_host_port "$engine_id" || fail 'the Engine publishes no host port'
 # The Engine joins the install network and its Company's work network, and nothing else (#393).
 engine_networks=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine_id" | grep . | sort)
 [[ $engine_networks == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only (got: $engine_networks)"
@@ -132,7 +132,7 @@ sandbox_id=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$') || fail 'the
 [[ $(docker inspect -f '{{.Config.Image}}' "$sandbox_id") == "$(cat .work-sandbox-image)" ]] || fail 'the sandbox runs the image the install recorded'
 [[ $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox_id") == healthy ]] || fail 'the sandbox is healthy'
 [[ $(docker network inspect gtmworks-work-first -f '{{.Internal}}') == true ]] || fail "the sandbox's network has no way out"
-[[ $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$sandbox_id") == 0 ]] || fail 'the sandbox publishes no host port'
+! publishes_host_port "$sandbox_id" || fail 'the sandbox publishes no host port'
 [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$sandbox_id") == gtmworks-work-first ]] || fail "the Company's work folder is the sandbox's own volume"
 [[ $(docker exec "$sandbox_id" id -un) == pn ]] || fail 'the sandbox runs as its own ordinary user'
 # From the Engine's network nothing else of the install is reachable (db, auth, REST, storage, the gateway), and a
@@ -168,7 +168,7 @@ exit_id=$(docker ps -q --filter 'name=^gtmworks-exit-first$') || fail 'the first
 # The only mounts are anonymous volumes the image itself may declare: no folder of the server and no volume of the
 # install. The port the image exposes for its sshd is listed unpublished; no host port is bound.
 exit_mounts=$(docker inspect -f '{{range .Mounts}}{{println .Type .Name}}{{end}}' "$exit_id" | grep . || true)
-[[ -z $(grep -Ev '^volume [0-9a-f]{64}$' <<< "$exit_mounts") && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$exit_id") != *HostPort* ]] \
+[[ -z $(grep -Ev '^volume [0-9a-f]{64}$' <<< "$exit_mounts") ]] && ! publishes_host_port "$exit_id" \
   || fail "the exit mounts no folder and no volume of the install, and publishes no port (mounts: $exit_mounts)"
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$exit_id" | grep . | sort) == $'gtmworks-exit-first\ngtmworks-work-first' ]] \
   || fail 'the exit joins the work network and its own outbound network only'
@@ -320,7 +320,7 @@ engine_key=$(first_engine_key)
 # its reply with no manual connection step. A fake model provider served from the web container stands in for a
 # subscription.
 engine_id=$(first_engine_id) || fail 'the Engine container'
-[[ -n $engine_id && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine_id") != *HostPort* ]] || fail 'the Engine publishes no host port'
+[[ -n $engine_id ]] && ! publishes_host_port "$engine_id" || fail 'the Engine publishes no host port'
 point_engine_at_fake_model "$engine_id"
 # `gtmworks company add` (#382, ADR 0018): an email no Person has is refused before anything is made; an Engine
 # that never becomes healthy leaves nothing behind and says so in one line; the same command again makes the
@@ -377,7 +377,7 @@ second_company=$(db -c "select id from public.companies where name='Second Compa
 # The second Engine is the template's own: pinned image, its own volume, key and network, no host port, and the
 # app and the worker join its network.
 [[ $(docker inspect -f '{{.Config.Image}}' "$second_container") == *'nousresearch/hermes-agent:v0.23.0@sha256:'* ]] || fail 'the second Engine runs the pinned Hermes image'
-[[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$second_container") != *HostPort* ]] || fail 'the second Engine publishes no host port'
+! publishes_host_port "$second_container" || fail 'the second Engine publishes no host port'
 second_sandbox=$(printf '%s' "$second_container" | sed 's/^gtmworks-engine-/gtmworks-sandbox-/')
 second_work_network=$(printf '%s' "$second_container" | sed 's/^gtmworks-engine-/gtmworks-work-/')
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$second_container" | grep . | sort) == $(printf '%s\n' "$second_network" "$second_work_network" | sort) ]] || fail 'the second Engine joins its own network and its work network only'
@@ -443,7 +443,7 @@ for folder in .engines/*/; do
   if [[ $slug == first ]]; then want_memory=$(sandbox_memory_bytes) want_cpus=$(sandbox_nano_cpus); else want_memory=1610612736 want_cpus=1500000000; fi
   [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == "$want_memory" ]] || fail "the sandbox of $slug has the memory its Company was given, or the install's default"
   [[ $(docker inspect -f '{{.HostConfig.NanoCpus}}' "$sandbox") == "$want_cpus" ]] || fail "the sandbox of $slug has the CPUs its Company was given, or the install's default"
-  [[ $(docker inspect -f '{{len .NetworkSettings.Ports}}' "$sandbox") == 0 ]] || fail "the sandbox of $slug publishes no host port"
+  ! publishes_host_port "$sandbox" || fail "the sandbox of $slug publishes no host port"
   if docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$sandbox" | grep -q 'docker.sock'; then fail "the sandbox of $slug mounts no Docker socket"; fi
   # Each Company's exit (#394), from the same template: the same image, healthy, an ordinary user with no capability,
   # no new privilege, no mount and no port, on its Company's work network and its own outbound network only.
@@ -454,7 +454,7 @@ for folder in .engines/*/; do
   [[ $(docker exec "$exit_id" id -u) == 1000 ]] || fail "the exit of $slug runs as an ordinary user"
   [[ $(docker inspect -f '{{join .HostConfig.CapDrop ","}}' "$exit_id") == ALL && $(docker inspect -f '{{join .HostConfig.SecurityOpt ","}}' "$exit_id") == *no-new-privileges* ]] \
     || fail "the exit of $slug drops every capability and has no new privileges"
-  [[ -z $(docker inspect -f '{{range .Mounts}}{{println .Type .Name}}{{end}}' "$exit_id" | grep . | grep -Ev '^volume [0-9a-f]{64}$') && $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$exit_id") != *HostPort* ]] \
+  [[ -z $(docker inspect -f '{{range .Mounts}}{{println .Type .Name}}{{end}}' "$exit_id" | grep . | grep -Ev '^volume [0-9a-f]{64}$') ]] && ! publishes_host_port "$exit_id" \
     || fail "the exit of $slug mounts no folder and no volume of the install, and publishes no port"
   [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$exit_id" | grep . | sort) == $(printf '%s\n' "gtmworks-exit-$slug" "gtmworks-work-$slug" | sort) ]] \
     || fail "the exit of $slug joins its work network and its own outbound network only"
@@ -1302,7 +1302,7 @@ engine=$(first_engine_id)
 [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' "$engine") == gtmworks-install_hermes ]] || fail 'the Engine keeps the volume the previous release used'
 hermes_image=$(sed -n 's/^ *image: //p' scripts/engine-template.yml | head -n 1)
 [[ $(docker inspect -f '{{.Config.Image}}' "$engine") == "$hermes_image" ]] || fail 'the Engine runs the template image'
-[[ $(docker inspect -f '{{json .NetworkSettings.Ports}}' "$engine") != *HostPort* ]] || fail 'the Engine publishes no host port'
+! publishes_host_port "$engine" || fail 'the Engine publishes no host port'
 [[ $(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$engine" | grep . | sort) == $'gtmworks-engine-first\ngtmworks-work-first' ]] || fail "the Engine joins its install network and its work network only"
 for service in web worker; do
   docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx gtmworks-engine-first \

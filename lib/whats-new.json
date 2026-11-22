@@ -6,6 +6,12 @@
   "ar": { "title": "التحديث اللي يفشل بيسيب ملفات المحرك زي ما كانت", "body": "لما التحديث يقف قبل ما محركات الوكلاء تشتغل، مثلاً عشان تغيير في قاعدة البيانات فشل، ملفات المحرك بتاعة النسخة اللي شغّالة عندك بترجع مكانها، فإضافة شركة أو الاسترجاع أو التحديث الجاي بيستخدموا محرك النسخة دي نفسها تاني." }
  },
  {
+  "issue": 535,
+  "date": "2026-11-22",
+  "en": { "title": "Ran overnight no longer misses runs", "body": "Each routine result is now kept as soon as its run ends, so the morning card lists what ran overnight, up to 200 results, even for a routine that runs every 15 minutes." },
+  "ar": { "title": "«اشتغل بالليل» مبقاش بيفوّت تشغيلات", "body": "كل نتيجة روتين بقت بتتحفظ أول ما تشغيلتها تخلص، فبطاقة الصبح بتعرض اللي اشتغل بالليل لحد 200 نتيجة، حتى لو الروتين بيشتغل كل ربع ساعة." }
+ },
+ {
   "issue": 556,
   "date": "2026-11-22",
   "en": { "title": "A card dropped far away stays in view", "body": "When you carry a card across the Marketing board and drop it in a column far from where it was, the board now stays where you dropped it instead of jumping back to the card's old place first." },
