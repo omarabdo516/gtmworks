@@ -1,7 +1,7 @@
 [
  {
   "issue": 577,
-  "date": "2026-11-21",
+  "date": "2026-11-22",
   "en": { "title": "Every app shows its own logo", "body": "In Connect apps and Settings, Apps, every app now shows its company's official logo instead of letters, in the same tile and clear in the light and the dark theme." },
   "ar": { "title": "كل تطبيق بقى بلوجو شركته", "body": "في «وصّل التطبيقات» وفي الإعدادات، التطبيقات، كل تطبيق بقى بيظهر باللوجو الرسمي بتاع شركته بدل الحروف، في نفس المربع، وواضح في الوضع الفاتح والغامق." }
  },
