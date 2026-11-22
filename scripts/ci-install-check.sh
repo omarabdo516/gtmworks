@@ -2155,13 +2155,7 @@ release_image "$before_sandbox" localhost:5000/gtmworks:0.0.0-staged "$RUNNER_TE
 before=$(publish 0.0.0-staged) || fail 'push the release before the staged removal'
 ( cd "$RUNNER_TEMP/staged-previous-release" && node scripts/release-assets.mjs "$before" "$root/release-before-staged" ) || fail 'the release before the staged removal files'
 publish_releases
-# A release whose work sandbox does not start: this release with a sandbox image that exits at once.
-docker build -q -t localhost:5000/gtmworks-sandbox:0.0.3-broken - > /dev/null <<DOCKERFILE || fail 'build a work sandbox image that does not start'
-FROM $sandbox
-ENTRYPOINT ["sh","-c","echo this work sandbox does not start >&2; exit 1"]
-DOCKERFILE
-broken_sandbox=$(publish_sandbox 0.0.3-broken) || fail 'push the work sandbox image that does not start'
-node scripts/release-assets.mjs "$first" release-broken-sandbox "$broken_sandbox" || fail 'the release files whose work sandbox does not start'
+publish_broken_sandbox_release
 publish_broken_engine_release
 dir="$PWD/staged-release-install"
 mkdir "$dir" && cp release-before-staged/docker-compose.install.yml release-before-staged/install.sh "$dir/" || fail 'the release before the staged removal folder'
@@ -2248,6 +2242,116 @@ compose exec -T web node --input-type=module -e "
   const engine=await engineOf('$company'); const read=await readToolsets({address:engine.address,key:engine.key,profile:companyProfile('$company')});
   console.log(read.state,(read.toolsets||[]).join(' ')); if(read.state!=='found'||toolsDiffer(read.toolsets,{subagents:false})) process.exit(1);" < /dev/null \
   || fail "the Company profile's Engine offers the one fixed set of tools after the cutover"
+}
+
+# sandbox-rollback: a failed update of a release that already runs a work sandbox for each of two Companies (#504). This
+# release is installed from its own two files, gets a second Company, then takes two updates that fail after the sandboxes
+# were begun: one whose work sandbox image does not start and one whose Engine image does not start. Each puts the previous
+# release's own Engines and sandboxes back (restore_previous_engine, ADR 0023), which reads each Engine's own sandbox key
+# before starting it and counts a sandbox restored only once its own Engine reaches it over SSH. After each, every Company's
+# Engine reaches its own sandbox over SSH, as its Agents' commands do, that sandbox takes its own Engine's key and no other
+# Company's, every sandbox and exit runs the image the install recorded before, and each work folder keeps what it held; an
+# Agent of each Company then runs a command in its own sandbox. Its own area, as the other update areas run near their
+# 12-minute limit.
+sandbox_rollback() {
+cd "$root"
+reset_install
+trap - EXIT
+set +o pipefail
+fail_prefix='release install check failed: '
+start_registry
+publish_releases
+# A release whose work sandbox does not start, and one whose Engine does not start, both made from this one. Only the first
+# pins another sandbox image, so it is the failure that proves the image recorded before comes back; the second keeps it.
+publish_broken_sandbox_release
+publish_broken_engine_release
+echo "this release: $first; its sandbox image: $sandbox; broken sandbox: $broken_sandbox; broken Engine: $broken_engine"
+dir="$PWD/rollback-release-install"
+docker run --rm -v "$PWD:/work" alpine:3.21 rm -rf /work/rollback-release-install || fail 'remove an earlier rollback install folder'
+mkdir "$dir" && cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" "$dir/" || fail 'the rollback install folder'
+sh "$dir/install.sh" || fail 'install this release from its own files'
+cd "$dir"
+[[ $(cat .work-sandbox-image) == "$sandbox" ]] || fail 'the install records the work sandbox image its release pins'
+code=$(sed -n 's/^SETUP_CODE=//p' .env.install)
+docker run --rm -i --network host --env-file <(grep -E '^(NEXT_PUBLIC_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' .env.install) \
+  -e SETUP_CODE="$code" -e APP_ORIGIN=http://localhost:3000 -e MAIL_URL=http://127.0.0.1:8025 \
+  node:22.14.0-alpine3.21 node --input-type=module - < "$root/scripts/check-install-proxy.mjs" || fail 'first run before the failed updates'
+second_company install.sh || fail 'company add makes the second Company'
+for attempt in $(seq 1 240); do
+  db -F ' ' -c "select c.id,a.profile,e.address from public.companies c join public.hermes_agents a on a.company_id=c.id and a.is_default join public.company_engines e on e.id=c.engine_id order by e.created_at" > engines.txt
+  [[ $(grep -c . engines.txt || true) -ge 2 ]] && break
+  [[ $attempt == 240 ]] && fail 'two Companies get a main Agent each on their own Engine'
+  sleep 1
+done
+# What each Company's main Agent was told before the updates, in its own Engine's profile: the code word
+# scripts/check-install-engines.mjs looks for after them.
+while read -r company profile address; do
+  container=${address#*://}; container=${container%%:*}
+  tell_engine "$container" "$profile" "backup-${company//-/}" < /dev/null || fail "write a memory in the Engine of $company"
+done < engines.txt
+# What each Company has before the updates: its Engine's image, its sandbox key's public half, and a file in its work folder.
+rollback_marker="rollback-work-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+: > companies-before
+for folder in .engines/*/; do
+  name=$(engine_value "$folder" NAME); slug=${name#gtmworks-engine-}
+  public=$(sandbox_public_of "$(engine_value "$folder" VOLUME)") || fail "read the sandbox key of $name"
+  [[ $public == ssh-ed25519\ * ]] || fail "the Engine $name has a sandbox key"
+  docker exec "gtmworks-sandbox-$slug" sh -ec 'printf "%s" "$1" > "/work/$1.txt"' sh "$rollback_marker-$slug" || fail "write in the work folder of $name"
+  # The public key is the line's last field: it holds spaces of its own.
+  echo "$slug $(docker inspect -f '{{.Config.Image}}' "$name") $public" >> companies-before
+done
+[[ $(grep -c . companies-before) == 2 ]] || fail 'this release runs an Engine and a sandbox for each Company'
+[[ $(cut -d' ' -f4 companies-before | sort -u | grep -c .) == 2 ]] || fail 'each Engine has a sandbox key of its own'
+web=$(compose ps -q web)
+for failing in sandbox engine; do
+  cp "$root/release-broken-$failing/docker-compose.install.yml" "$root/release-broken-$failing/install.sh" . || fail "the release files whose $failing does not start in place"
+  if GTMWORKS_ENGINE_WAIT=40 sh install.sh update > update.log 2>&1; then fail_update "the update whose $failing does not start must fail"; fi
+  grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update "the update whose $failing does not start says the previous release keeps serving"
+  # The release files of a failed update stay in the folder, as a real one leaves them: the previous release's own go
+  # back with its command (scripts/get.sh); here they go back by hand.
+  cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail "this release files back after the $failing failure"
+  [[ $(compose ps -q web) == "$web" ]] || fail_update "the update whose $failing does not start leaves this release's app serving"
+  probe "after the update whose $failing does not start"
+  [[ $(cat .work-sandbox-image) == "$sandbox" ]] || fail_update "the update whose $failing does not start keeps the work sandbox image recorded before"
+  while read -r slug image public; do
+    name="gtmworks-engine-$slug"
+    [[ $(docker inspect -f '{{.Config.Image}}' "$name") == "$image" ]] || fail_update "the update whose $failing does not start runs the Engine $name from its image again"
+    engine_healthy "$name" 60 || fail_update "the Engine $name is healthy after the update whose $failing does not start"
+    for part in sandbox exit; do
+      engine_healthy "gtmworks-$part-$slug" 60 || fail_update "the $part of $name is healthy after the update whose $failing does not start"
+      [[ $(docker inspect -f '{{.Config.Image}}' "gtmworks-$part-$slug") == "$sandbox" ]] || fail_update "the $part of $name runs the image recorded before the update whose $failing does not start"
+    done
+    [[ $(sandbox_public_of "$(engine_value ".engines/$slug" VOLUME)") == "$public" ]] || fail_update "the Engine $name keeps its own sandbox key"
+    # Its sandbox takes its own Engine's key, and the other Company's Engine's key is not among the ones it takes.
+    keys=$(docker exec "gtmworks-sandbox-$slug" cat /home/pn/.ssh/authorized_keys) || fail_update "read the keys the sandbox of $name takes"
+    grep -qF " $(cut -d' ' -f2 <<< "$public")" <<< "$keys" || fail_update "the sandbox of $name takes its own Engine's key after the update whose $failing does not start"
+    while read -r other _ other_public; do
+      [[ $other == "$slug" ]] && continue
+      if grep -qF " $(cut -d' ' -f2 <<< "$other_public")" <<< "$keys"; then fail_update "the sandbox of $name takes no other Company's Engine key"; fi
+    done < companies-before
+    # The Engine reaches its own sandbox as every Agent's command does: over SSH, as its own user, with its own key and
+    # the host key its known_hosts pins.
+    reached=$(docker exec -u hermes "$name" ssh -i /opt/data/ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+      -o UserKnownHostsFile=/opt/data/.ssh/known_hosts -o LogLevel=ERROR -o ConnectTimeout=10 -p 2222 pn@sandbox hostname) \
+      || fail_update "the Engine $name reaches its sandbox over SSH after the update whose $failing does not start"
+    [[ $reached == "$(docker exec "gtmworks-sandbox-$slug" hostname)" ]] || fail_update "the Engine $name reaches its own Company's sandbox after the update whose $failing does not start"
+    [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$rollback_marker-$slug.txt") == "$rollback_marker-$slug" ]] || fail_update "the work folder of $name keeps what it held after the update whose $failing does not start"
+  done < companies-before
+done
+# Each Company's main Agent runs a command in its own sandbox after both failed updates and still remembers what its own
+# Engine was told; the job reads each sandbox for the file, and no other Company's sandbox has it.
+agent_marker="sandbox-rollback-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+compose exec -T web node --input-type=module - sandbox "$agent_marker" < "$root/scripts/check-install-engines.mjs" > sandbox-rollback.log 2>&1 \
+  || { cat sandbox-rollback.log; fail "each Company's Agent runs a command in its own sandbox after the failed updates and still remembers"; }
+cat sandbox-rollback.log
+while read -r company profile address; do
+  slug=${address#http://gtmworks-engine-}; slug=${slug%%:*}; file="$agent_marker-${company//-/}"
+  [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$file.txt") == "$file" ]] || fail "the Agent of $company ran its command in its own Company's sandbox"
+  while read -r other _; do
+    [[ $other == "$slug" ]] && continue
+    if docker exec "gtmworks-sandbox-$other" test -e "/work/$file.txt"; then fail "the file of $company's Agent is in no other Company's sandbox"; fi
+  done < companies-before
+done < engines.txt
 }
 
 # sizes: the measured sizes (#400). The README's two server sizes and the install's default sandbox limits come from these
@@ -2383,7 +2487,7 @@ echo "capacity: engine memory $memory_before before and $memory_after after 20 a
 # in a subshell of its own (#411): an area's fail_prefix, EXIT trap, HOME or cwd cannot reach the next one, and an area
 # that relies on the prefix or the trap sets it at its start.
 case "${1:-all}" in
- all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sizes); (engines_update); (one_line); (updater); (measure);;
+ all) (first_install); (companies); (agents); (backup); (proxy); (rollback); (update); (previous_archive); (release_update); (sandbox_update); (staged_update); (sandbox_rollback); (sizes); (engines_update); (one_line); (updater); (measure);;
  first-install) first_install;;
  companies) companies;;
  agents) agents;;
@@ -2395,10 +2499,11 @@ case "${1:-all}" in
  release-update) release_update;;
  sandbox-update) sandbox_update;;
  staged-update) staged_update;;
+ sandbox-rollback) sandbox_rollback;;
  sizes) sizes;;
  engines-update) engines_update;;
  one-line) one_line;;
  updater) updater;;
  measure) measure;;
- *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+ *) echo 'usage: bash scripts/ci-install-check.sh [first-install | companies | agents | backup | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

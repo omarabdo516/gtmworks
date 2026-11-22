@@ -1,1 +1,1 @@
-| `hermes.test.mjs` | Testing a connection authenticates the profile; wrong keys and outages never offer agent features. | 0.3 s | hermes-connections.spec.ts | keep |
+| `hermes.test.mjs` | Testing a connection authenticates the profile; wrong keys and outages never offer agent features. | 0.3 s | none: since #342 removed `hermes-connections.spec.ts`, no other test checks what a connection test reads from the Engine's answers; hermes-address.test.mjs checks only that a public HTTP address is refused before any request | keep |

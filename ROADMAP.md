@@ -22,7 +22,7 @@ The order Omar set on 2026-11-21 (rs 0082, rounds 3 and 4):
 
 Blocked now: no release since 2026-11-21 07:28 UTC (#572), so lines marked "waiting for the release" are merged but not yet on a running install.
 
-In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199), Stop for Handover chains (#478).
+In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 
 ---
 
@@ -39,7 +39,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199), S
 - 🟡 **Backup and restore.** A backup holds every Company's database rows, Engine and work folder, and restores into an empty install. Merged; waiting for the release (#572). [#33, #357, #349, #386, #399]
 - 🟡 **Fewer keys in the app.** The app and the worker get only the values they read. Merged; waiting for the release (#572). [#446, #539]
 - 🟡 **Server sizes measured.** The README states two sizes (with and without video) from the install job's numbers. Merged; waiting for the release (#572). [#400]
-- 🟡 **Safer failed updates.** An update from the single-Engine layout whose new Engine does not start can leave the old app without its Engine; a failed migration leaves new Engine files on disk; no proof for a rolled-back update with two Companies. [#502, #554, #504]
+- 🟡 **Safer failed updates.** A failed migration leaves new Engine files on disk. [#554]
 - 🟡 **A disk limit for each work sandbox.** Today one Company can fill the install's disk. [#507]
 
 ## 2. Team and Agents
@@ -58,7 +58,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199), S
 - 🟡 **Full power first.** An Agent gets the Engine's whole power, publishing and spending included when a Member asks; a limit is added only after a real problem. Agent levels were removed. Merged; waiting for the release (#572). [#391, ADR 0020 "full power", decision 0053]
 - 🟡 **Standing permissions with Revoke.** "Always allow" answers are listed with who and when, and an Owner or Manager can revoke one. Merged; waiting for the release (#572). [#163, #164, #165, #166, #499]
 - ✅ **The Agent's details show its files and its screen.** [#21, #194, #195, #208]
-- 🟡 **Stop ends the whole Handover chain.** The Spec for no-limit Handovers (#474) is still open for this part. [#474, #478]
+- 🟡 **Stop ends the whole Handover chain.** Stop in a chat, or on a channel message's Run, also stops every Handover started from it down the whole chain, each shown as stopped, and nothing more starts after it. Merged; waiting for the release (#572). [#474, #478, PR #571]
 - 🟡 **Add a file for the Agent to work from.** The files tab is disabled today; needs a proof on the pinned Engine first. [#196]
 - 🟡 **The Agent's screen: watch and wake.** Watch the Agent's browser in a large view, and "Wake it". [#197]
 - 🟡 **The Agent's screen: take control.** Take control for one session, then "Done". [#198]

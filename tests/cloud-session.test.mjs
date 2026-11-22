@@ -3,30 +3,36 @@ import assert from 'node:assert/strict';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 
 // #485: every Claude Code cloud session brings the whole local app up with one repo-owned command. The SessionStart hook
 // (scripts/cloud-session-setup.sh) prepares the machine; `npm run cloud:up` starts the stack and the app.
 const root=process.cwd();
 const json=path=>JSON.parse(readFileSync(join(root,path),'utf8'));
 
-// A copy of the hook script in a folder of its own, with stand-ins for npm, docker, dockerd and pgrep that write each
-// call to calls.log: what the script would run, with nothing installed or started.
+// A copy of the hook script in a folder of its own, with stand-ins for npm, docker, dockerd, pgrep and ps that write each
+// call to calls.log: what the script would run, with nothing installed or started. Its Docker run folder is run/ (the
+// machine's /var/run), and proc/<pid> holds the name of each process the stand-in ps reports as running.
 function machine() {
  const dir=mkdtempSync(join(tmpdir(),'cloud-session-'));
  mkdirSync(join(dir,'scripts')); mkdirSync(join(dir,'bin'));
  copyFileSync(join(root,'scripts/cloud-session-setup.sh'),join(dir,'scripts/cloud-session-setup.sh'));
  writeFileSync(join(dir,'package-lock.json'),'{"lockfileVersion":3}\n');
  const stub=(name,body)=>{ writeFileSync(join(dir,'bin',name),`#!/usr/bin/env bash\necho "${name} $*" >> "${dir}/calls.log"\n${body}\n`); chmodSync(join(dir,'bin',name),0o755); };
- // Only the tools the script needs, so a machine without dockerd is one where the stand-in is gone.
- for(const tool of ['bash','cat','cut','dirname','id','mkdir','nohup','seq','setsid','sha256sum','sleep','tail','touch']) symlinkSync(execFileSync('bash',['-c',`command -v ${tool}`],{encoding:'utf8'}).trim(),join(dir,'bin',tool));
+ // Only the tools the script needs, so a machine without dockerd is one where the stand-in is gone; each the system's
+ // own, not a wrapper an agent session puts first on its PATH.
+ for(const tool of ['bash','cat','cut','dirname','flock','grep','id','mkdir','nohup','seq','rm','setsid','sha256sum','sleep','tail','touch','tr']) symlinkSync(execFileSync('bash',['-c',`command -v ${tool}`],{encoding:'utf8',env:{PATH:'/usr/local/bin:/usr/bin:/bin'}}).trim(),join(dir,'bin',tool));
  stub('npm','mkdir -p node_modules');
  // No daemon answers until the stand-in dockerd has run once.
  stub('docker',`[[ -f "${dir}/dockerd-started" ]]`);
  stub('dockerd',`touch "${dir}/dockerd-started"`);
- stub('pgrep',`[[ -f "${dir}/dockerd-started" ]]`);
+ // pgrep finds dockerd once the stand-in has run, or when proc/ lists one.
+ stub('pgrep',`[[ -f "${dir}/dockerd-started" ]] || grep -qx dockerd "${dir}"/proc/* 2> /dev/null`);
+ // \`ps -o comm= -p <pid>\` prints the process's name, or fails when no such process runs.
+ stub('ps',`[[ -f "${dir}/proc/\${@: -1}" ]] && cat "${dir}/proc/\${@: -1}"`);
+ mkdirSync(join(dir,'run/docker/containerd'),{recursive:true}); mkdirSync(join(dir,'proc'));
  const run=(args=[],env={})=>spawnSync('bash',[join(dir,'scripts/cloud-session-setup.sh'),...args],{cwd:dir,encoding:'utf8',
-  env:{PATH:join(dir,'bin'),HOME:dir,TMPDIR:dir,...env}});
+  env:{PATH:join(dir,'bin'),HOME:dir,TMPDIR:dir,GTMWORKS_DOCKER_RUN_DIR:join(dir,'run'),...env}});
  const calls=()=>existsSync(join(dir,'calls.log'))?readFileSync(join(dir,'calls.log'),'utf8').trim().split('\n'):[];
  return {dir,run,calls,done:()=>rmSync(dir,{recursive:true,force:true,maxRetries:5})};
 }
@@ -80,6 +86,91 @@ test('`docker` waits for the daemon it started, and names the failure when none 
   assert.notEqual(none.status,0);
   assert.match(none.stderr,/no Docker daemon answers and dockerd is not installed/);
  } finally { m.done(); }
+});
+
+// #522: a restored VM keeps the pid files of the daemons that ran before it stopped, and their pid (180 in every report)
+// can belong to another process by then. dockerd and its containerd take any live pid as theirs still running and never
+// start, so the start removes a pid file whose process is not a running containerd or dockerd, and containerd's sockets.
+const containerdFiles=['containerd.pid','containerd.sock','containerd.sock.ttrpc','containerd-debug.sock'];
+// A machine whose containerd.pid says 180 and docker.pid 181; `processes` names what runs under each pid now.
+function withStalePids(processes,check) {
+ const m=machine();
+ const containerd=join(m.dir,'run/docker/containerd');
+ for(const file of containerdFiles) writeFileSync(join(containerd,file),file==='containerd.pid'?'180\n':'');
+ writeFileSync(join(containerd,'containerd.toml'),'');
+ writeFileSync(join(m.dir,'run/docker.pid'),'181');
+ for(const [pid,name] of Object.entries(processes)) writeFileSync(join(m.dir,'proc',pid),`${name}\n`);
+ const containerdLeft=()=>containerdFiles.filter(file=>existsSync(join(containerd,file)));
+ const dockerPidLeft=()=>existsSync(join(m.dir,'run/docker.pid'));
+ try { check({...m,containerd,containerdLeft,dockerPidLeft}); } finally { m.done(); }
+}
+
+test('`docker` removes pid files whose pid is another process, and containerd\'s sockets, before it starts dockerd',()=>{
+ // 180 is now the session's worker, 181 runs nothing at all.
+ for(const processes of [{180:'claude'},{180:'claude',181:'node'},{}]) withStalePids(processes,m=>{
+  const result=m.run(['docker']);
+  assert.equal(result.status,0,result.stderr);
+  assert.deepEqual(m.containerdLeft(),[],JSON.stringify(processes));
+  assert.equal(m.dockerPidLeft(),false);
+  assert.ok(existsSync(join(m.containerd,'containerd.toml')),'only the pid file and the sockets go');
+  assert.ok(m.calls().some(call=>call.startsWith('dockerd')));
+  assert.match(result.stdout,/Removing the stale .*containerd\.pid \(pid 180 is (claude|not running)\)/);
+ });
+ // The hook's start, in a cloud session, clears them the same way.
+ withStalePids({180:'claude'},m=>{
+  assert.equal(m.run([],{CLAUDE_CODE_REMOTE:'true'}).status,0);
+  assert.deepEqual(m.containerdLeft(),[]);
+  assert.equal(m.dockerPidLeft(),false);
+ });
+});
+
+test('`docker` leaves the pid files of a containerd or dockerd that really runs',()=>{
+ withStalePids({180:'containerd',181:'dockerd'},m=>{
+  // The hook's start returns at once (dockerd runs, it only has not answered yet); `docker` would wait for it.
+  assert.equal(m.run([],{CLAUDE_CODE_REMOTE:'true'}).status,0);
+  assert.deepEqual(m.containerdLeft(),containerdFiles);
+  assert.equal(m.dockerPidLeft(),true);
+  assert.equal(m.calls().filter(call=>call.startsWith('dockerd')).length,0,'a running dockerd is not started twice');
+ });
+ // A live containerd keeps its files while a stale docker.pid still goes.
+ withStalePids({180:'containerd',181:'bash'},m=>{
+  assert.equal(m.run(['docker']).status,0);
+  assert.deepEqual(m.containerdLeft(),containerdFiles);
+  assert.equal(m.dockerPidLeft(),false);
+ });
+ // A daemon that answers: nothing is looked at or removed.
+ withStalePids({},m=>{
+  writeFileSync(join(m.dir,'dockerd-started'),'');
+  assert.equal(m.run(['docker']).status,0);
+  assert.deepEqual(m.containerdLeft(),containerdFiles);
+  assert.equal(m.dockerPidLeft(),true);
+ });
+});
+
+test('a slow dockerd keeps the start\'s lock until it shows, so a second start launches no second daemon',async()=>{
+ const m=machine();
+ try {
+  // This dockerd takes 7 seconds before the process list shows it.
+  writeFileSync(join(m.dir,'bin/dockerd'),`#!/usr/bin/env bash\necho "dockerd $*" >> "${m.dir}/calls.log"\nsleep 7\ntouch "${m.dir}/dockerd-started"\n`);
+  const start=()=>new Promise(resolve=>{
+   const child=spawn('bash',[join(m.dir,'scripts/cloud-session-setup.sh')],{cwd:m.dir,env:{PATH:join(m.dir,'bin'),HOME:m.dir,TMPDIR:m.dir,GTMWORKS_DOCKER_RUN_DIR:join(m.dir,'run'),CLAUDE_CODE_REMOTE:'true'}});
+   child.on('exit',resolve);
+  });
+  const first=start();
+  await new Promise(resolve=>setTimeout(resolve,500));
+  const codes=await Promise.all([first,start()]);
+  assert.deepEqual(codes,[0,0]);
+  assert.equal(m.calls().filter(call=>call.startsWith('dockerd')).length,1,m.calls().join('\n'));
+ } finally { m.done(); }
+});
+
+test('outside a cloud session the hook leaves stale pid files alone',()=>{
+ withStalePids({},m=>{
+  assert.equal(m.run([]).status,0);
+  assert.deepEqual(m.containerdLeft(),containerdFiles);
+  assert.equal(m.dockerPidLeft(),true);
+  assert.deepEqual(m.calls(),[]);
+ });
 });
 
 test('`browser` installs Chromium only when the Playwright build it needs is missing',()=>{
