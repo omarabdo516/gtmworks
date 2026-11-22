@@ -176,6 +176,37 @@ test('a Card dropped in another column or moved with Shift and an arrow lands on
  } finally { await viewer.close(); }
 });
 
+test('a Card carried until its own place is out of the window and dropped in another column leaves the board where it is (#556)',async({page})=>{
+ const id=cardIn('Far drop','أفكار');
+ await page.setViewportSize({width:900,height:800});
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+ const at=await pickUp(page,id);
+ await page.mouse.move(at.x+40,at.y,{steps:2});
+ // The columns scrolled while it is carried until its place in Ideas is off the window's left edge, where dnd-kit
+ // would bring it back into view before a drop animation; In progress is then in the board's view.
+ const board=page.locator('#board-cols');
+ await board.evaluate((el,id)=>{ el.style.scrollSnapType='none'; /* held where it is put */ el.scrollLeft+=el.querySelector(`.kcard[data-card-id="${id}"]`)!.getBoundingClientRect().right+16; },id);
+ await expect.poll(()=>card(page,id).evaluate(el=>el.getBoundingClientRect().right)).toBeLessThan(0);
+ const body=(await page.locator('#board-cols > .col[data-column="progress"] .col__body').boundingBox())!;
+ const view=(await board.boundingBox())!;
+ expect(body.x).toBeGreaterThanOrEqual(view.x); expect(body.x+body.width).toBeLessThanOrEqual(view.x+view.width);
+ await page.mouse.move(body.x+body.width/2,body.y+body.height/2,{steps:6});
+ // From the release until the Card is drawn in its new column and has landed, the board never scrolls back.
+ const scrolls=board.evaluate((el,id)=>new Promise<{atDrop:number,least:number}>(done=>{
+  window.addEventListener('mouseup',()=>{ const atDrop=el.scrollLeft; let least=atDrop; const since=performance.now();
+   const read=()=>{ least=Math.min(least,el.scrollLeft); const there=el.querySelector(`[data-column="progress"] .kcard[data-card-id="${id}"]`);
+    if(there&&performance.now()-since>500) done({atDrop,least}); else requestAnimationFrame(read); };
+   read();
+  },{capture:true,once:true});
+ }),id);
+ await page.waitForTimeout(50);
+ await page.mouse.up();
+ const seen=await scrolls;
+ expect(seen.least).toBeGreaterThanOrEqual(seen.atDrop-1);
+ await page.reload();
+ expect(await columnOf(page,id)).toBe('progress');
+});
+
 test('the progress bars grow in when the board opens and the class that does it is gone after a second, leaving the edge fade; with reduced motion they are drawn at their value',async({page})=>{
  const id=cardIn('Bar','كتابة',{done:1,open:1});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
