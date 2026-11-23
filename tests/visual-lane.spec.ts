@@ -6,7 +6,7 @@ import { signIn, openNavigation } from './sign-in';
 import { idle } from './navigation-measure';
 import { appOrigin } from './lane.mjs';
 import { asAdmin } from './slow-reads';
-import { localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
+import { localQuery, localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { laneHermes } from './lane-hermes';
 import { toolConfig } from '../lib/agent-toolsets.mjs';
 
@@ -133,8 +133,9 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
   },
   // Meta Ads's page in Settings: Lead's proposal of a faster model for it waiting on Omar's OK (#178), and after Tools the
   // one standing permission Omar gave it (#166), Always allow on the Meta Ads app's create_campaign, kept in Meta Ads's
-  // own profile in the Engine. One screen holds both: the lane keeps fifteen. The June campaign's Run is over, so Meta Ads
-  // is idle: left open, the lane's worker ended it at its own pace and the page drew Meta Ads busy or idle by the race (#572).
+  // own profile in the Engine. One screen holds both: the lane keeps fifteen. The June campaign's Run and the Run in which
+  // Lead proposed are over, so both Agents are idle: left open, the lane's worker ended each at its own pace and the page
+  // drew Meta Ads (#572) or Lead in the sidebar (#641) busy or idle by the race.
   'settings-proposal': {
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
        ('${standing(1)}','${rsLearning}','${standing(5)}','Lead','General',true,'visual-standing-lead'),
@@ -157,10 +158,12 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
        ('${rsLearning}','${standing(7)}','person','${omar}',null,'عمر','حملة يونيو بطيئة في التقارير.','${standing(8)}','visual-standing-change','2026-06-10T11:26:00Z');
       insert into public.agent_change_proposals(company_id,conversation_id,run_id,call_id,agent_id,proposed_by,asked_by,change,value,reason,created_at) values
        ('${rsLearning}','${standing(7)}','visual-standing-change','call-0','${standing(2)}','${standing(1)}','${omar}','model','"google/gemini-2.5-pro"',
-        'التقارير بتقرا أرقام كتير وبتتأخر عن ميعادها. Gemini 2.5 Pro أسرع في الأرقام الكبيرة.','2026-06-10T11:30:00Z');`,
+        'التقارير بتقرا أرقام كتير وبتتأخر عن ميعادها. Gemini 2.5 Pro أسرع في الأرقام الكبيرة.','2026-06-10T11:30:00Z');
+      insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome,recorded_at) values
+       ('${rsLearning}','${standing(7)}','visual-standing-change','completed','2026-06-10T11:30:00Z');`,
     unset: `delete from public.agent_change_proposals where conversation_id='${standing(7)}';
       delete from public.reply_cards where conversation_id='${standing(3)}';
-      delete from public.conversation_run_ends where conversation_id='${standing(3)}';
+      delete from public.conversation_run_ends where conversation_id in ('${standing(3)}','${standing(7)}');
       delete from public.conversation_messages where conversation_id in ('${standing(3)}','${standing(7)}');
       delete from public.conversations where id in ('${standing(3)}','${standing(7)}');
       delete from public.agent_profiles where agent_id='${standing(2)}';
@@ -170,6 +173,15 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
   },
 };
 for (const screen of screens) if (screen.state && !screenStates[screen.state]) throw new Error(`${screen.name}: no state "${screen.state}"`);
+
+// The lane's worker closes every open Run it can read from an Engine, at its own pace. A screen with no Engine keeps its
+// open Runs open (its Agent stays working on every run); a screen with the fake Engine would draw its Agent working or
+// idle by the race (#572, #641). So a state that brings an Engine ends every Run it writes, and this says which it left.
+function expectNoOpenRun(screen: string, baseURL: string | undefined) {
+  const open = localQuery(`select cv.agent_name as agent, o.run from public.conversations cv cross join lateral public.conversation_open_run(cv.id) o
+    where cv.company_id='${rsLearning}' order by cv.agent_name, o.run`, baseURL) as { agent: string, run: string }[];
+  if (open.length) throw new Error(`${screen}: the state brings an Engine, so the lane's worker would end these open Runs mid-picture; record each one's end: ${open.map(row => `${row.agent} (${row.run})`).join(', ')}`);
+}
 
 // The shell scrolls inside its own frame, so a page taller than the window would be cut at the fold. Grow the window until
 // nothing scrolls, so the whole screen is compared.
@@ -224,10 +236,11 @@ for (const screen of screens) {
     });
 
     for (const width of widths) for (const theme of themes) {
-      test(`${screen.name} ${width} ${theme}`, async () => {
+      test(`${screen.name} ${width} ${theme}`, async ({ baseURL }) => {
         forgetBlocked(context);
         const state = screen.state ? screenStates[screen.state] : undefined;
         if (state) { asAdmin(state.unset); asAdmin(state.set); }
+        if (state?.engine) expectNoOpenRun(screen.name, baseURL);
         // A screen whose data the Engine holds draws it from the lane's fake Engine, made for this picture alone.
         const engine = state?.engine ? await laneHermes() : null;
         if (engine) state!.engine!(engine);
