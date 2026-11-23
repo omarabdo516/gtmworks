@@ -8,7 +8,7 @@ import { signIn } from './sign-in';
 
 // #132: the chat moves as the approved reference does, on the lane's fake Hermes holding a Run open. What arrives during
 // the visit (the person's own message once sent, the Agent's reply, the card for an Agent Lead made) rises once, and
-// asking for the record again never replays it; the working line's words breathe; what the chat held when it was
+// asking for the record again never replays it; the live working line's words breathe (#646); what the chat held when it was
 // opened moves nothing. A Viewer of the general channel sees the same rise and breathing, and has no send arrow.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
@@ -73,9 +73,10 @@ test('in a Conversation the sent message, the reply and the card for the Agent L
  const mine=page.locator('.turn--user').filter({hasText:text});
  await expect(mine).toBeVisible();
  expect(await motionOf(mine)).toEqual(rises);
- // While Lead works, the line's words breathe, and still say who it works for.
- await expect(page.locator('.thinking .shimmer')).toHaveText(/^Lead is working on a reply for .+…$/);
- expect(await motion(page,'.thinking .shimmer')).toEqual(breathes);
+ // While Lead works, the live line's words breathe (#646): its Run has made no call yet.
+ await expect(page.locator('.activity .shimmer')).toHaveText('Thinking…');
+ await expect(page.locator('.activity .activity__who')).toHaveText('Lead');
+ expect(await motion(page,'.activity .shimmer')).toEqual(breathes);
  // Lead makes an Agent during the Run, as lead_create_agent writes it; then the Run ends with its reply. The made Agent is
  // tied to this Conversation by a test-only trigger, in the transaction that writes the reply (close_conversation_run; the
  // app's lead_create_agent writes it itself, during the Run), so the open chat, which
@@ -154,8 +155,9 @@ test('in the general channel a Viewer sees the working line breathe and the repl
   const theirs=page.locator('.turn--peer').filter({hasText:text.slice(6)});
   await expect(theirs).toBeVisible({timeout:20000});
   expect(await theirs.evaluate(element=>getComputedStyle(element).animationName)).toBe('gw-rise');
-  await expect(page.locator('.thinking .shimmer')).toHaveText('Lead is working on a reply…',{timeout:20000});
-  expect(await motion(page,'.thinking .shimmer')).toEqual(breathes);
+  await expect(page.locator('.activity .shimmer')).toHaveText('Thinking…',{timeout:20000});
+  await expect(page.locator('.activity .activity__who')).toHaveText('Lead');
+  expect(await motion(page,'.activity .shimmer')).toEqual(breathes);
   fake.settings.pendingReads=0;
   const reply=page.locator('.turn--agent').filter({hasText:'Reply to:'});
   await expect(reply).toBeVisible({timeout:30000});
@@ -193,8 +195,9 @@ test('with reduced motion the working line\'s words are still and fully drawn',a
   await signIn(page,'omar@example.com',`/c/rs-learning/chat/${lead}`);
   await page.getByLabel('Message',{exact:true}).fill('Plan the week');
   await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.locator('.thinking .shimmer')).toHaveText(/^Lead is working on a reply/,{timeout:20000});
-  expect(await page.locator('.thinking .shimmer').evaluate(element=>[getComputedStyle(element).animationName,getComputedStyle(element).opacity])).toEqual(['none','1']);
+  await expect(page.locator('.activity .shimmer')).toHaveText('Thinking…',{timeout:20000});
+  await expect(page.locator('.activity .activity__who')).toHaveText('Lead');
+  expect(await page.locator('.activity .shimmer').evaluate(element=>[getComputedStyle(element).animationName,getComputedStyle(element).opacity])).toEqual(['none','1']);
   expect(await page.locator('.send-fly').count()).toBe(0);
  } finally { fake.settings.pendingReads=0; await context.close(); }
 });

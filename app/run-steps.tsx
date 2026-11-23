@@ -13,9 +13,10 @@ export type StepsText=(key:string,...values:unknown[])=>string;
 export type StepsBidiText=(key:string,...values:ReactNode[])=>ReactNode[];
 const justFor=700; const arabicPlural=new Intl.PluralRules('ar');
 
-export function StepsList({steps,c,cb}:{steps:RunSteps,c:StepsText,cb:StepsBidiText}) {
+// `opened`: drawn open, as the live list it takes the place of was (#646); `toggled` hears each press.
+export function StepsList({steps,c,cb,opened=false,toggled}:{steps:RunSteps,c:StepsText,cb:StepsBidiText,opened?:boolean,toggled?:(open:boolean)=>void}) {
  const {language}=useI18n(); const list=useId();
- const [open,setOpen]=useState(false); const [openedAt,setOpenedAt]=useState<number|null>(null);
+ const [open,setOpen]=useState(opened); const [openedAt,setOpenedAt]=useState<number|null>(null);
  useEffect(()=>{ if(openedAt===null) return; const timer=setTimeout(()=>setOpenedAt(null),justFor); return ()=>clearTimeout(timer); },[openedAt]);
  const count=steps.list.length;
  // Egyptian Arabic takes the plural for three to ten (أدوات, دقايق, ثواني) and the singular otherwise, as the reference
@@ -26,7 +27,7 @@ export function StepsList({steps,c,cb}:{steps:RunSteps,c:StepsText,cb:StepsBidiT
  const secondsText=c(plural(seconds)?'stepsSecondsMany':'stepsSeconds',seconds); const minutesText=c(plural(minutes)?'stepsMinutesMany':'stepsMinutes',minutes);
  const took=steps.seconds===null?null:!minutes?secondsText:seconds?c('stepsMinutesSeconds',minutesText,secondsText):minutesText;
  return <div className="steps">
-  <button type="button" className="steps__toggle" aria-expanded={open} aria-controls={list} onClick={()=>{ setOpen(!open); setOpenedAt(open?null:Date.now()); }}>
+  <button type="button" className="steps__toggle" aria-expanded={open} aria-controls={list} onClick={()=>{ setOpen(!open); setOpenedAt(open?null:Date.now()); toggled?.(!open); }}>
    <span>{took?c('stepsUsedTook',used,took):used}</span><ShellIcon name="chevronDown" className="chev"/>
   </button>
   <ol className={`steps__list${open&&openedAt!==null?' is-just':''}`} id={list} hidden={!open}>{steps.list.map((step,index)=>

@@ -15,6 +15,7 @@ import { HandedRow } from '@/app/handed-row';
 import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
 import { StepsList } from '@/app/run-steps';
+import { ActivityLine, LiveTurn, useLanding, useLiveSteps } from '@/app/run-activity';
 import { showRoutines } from '@/app/details-routines';
 import { formOf, scheduleLabel } from '@/lib/routine-schedule.mjs';
 import { MadeCard, RequestCard } from '@/app/agent-card';
@@ -172,7 +173,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // An Owner's answer to a proposal from the chat comes back to this chat (#19).
  const here=usePathname();
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
- const {conversation,messages,pending,failed,working}=record;
+ const {conversation,messages,pending,failed,working:runner}=record;
  const modelCause=record.noModel?'noModel' as const:record.modelRefused?refusalCause[record.modelRefused.reason]:null;
  const answer=async(card:number,choice:number|number[],answerKey:string)=>{
   const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
@@ -239,7 +240,14 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  // what the Conversation held when it opened stays still, unless it was opened by the first message just sent into it.
  const drawn=arrivals(messages);
  const {rises}=useArrivals([...drawn,...madeArrivals(messages),...ruleArrivals(messages)],{fresh:useSentIntoNewChat(conversation.id)});
- const rise=(index:number)=>rises(drawn[index])?' msg-in':'';
+ // While the Agent works, the line under the transcript and the turn's steps follow its Run live (#646). The reply that
+ // lands after live steps were drawn takes their place without rising in again, its list open if the live one was.
+ const working=pending&&!record.asking;
+ // An Agent's reply, not a decision drawn as its message.
+ const newest=messages.findLast(message=>message.author==='agent'&&message.kind!=='decided')?.id??null;
+ const landing=useLanding({working,live:useLiveSteps({company,conversation:conversation.id},working),newest});
+ const live=landing.view;
+ const rise=(index:number)=>rises(drawn[index])&&!(messages[index].author==='agent'&&landing.landed(messages[index].id))?' msg-in':'';
  // A message's time: in UTC on the server and the first browser render, hidden (globals.css), then in the reader's own
  // zone, so the page hydrates without a text mismatch outside UTC (#520).
  const zone=useZone();
@@ -265,7 +273,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
   </li>:<Fragment key={`${message.kind||'m'}${message.id}`}><li className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
    <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}{when(message.created_at,'sender__time')}</div>
-   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb}/>}
+   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={landing.opened(message.id)}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {/* A tool the Engine could not run because the Company's work sandbox is down (#398): one plain line under the reply,
        which the Conversation still gave. */}
@@ -277,8 +285,10 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='handed'?handed(card,`handed${message.id}:${card.name}:${card.goal}`,'p')
     :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
     :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect}/>)}
-  </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}</ol>
-  {pending&&!record.asking&&<p className="thinking convo-status" role="status"><span className="shimmer">{working?c('conversationWorkingFor',conversation.agent_name,working):t('conversationWorking',conversation.agent_name)}</span></p>}
+  </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}
+   {working&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
+  {working&&(live?<ActivityLine view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>
+   :<p className="thinking convo-status" role="status"><span className="shimmer">{runner?c('conversationWorkingFor',conversation.agent_name,runner):t('conversationWorking',conversation.agent_name)}</span></p>)}
   {failed&&(modelCause
    // The Company has no model at all (#422), or a model error a retry cannot fix (#457): sending again cannot work, so
    // the line says its cause and where the Owner fixes it.

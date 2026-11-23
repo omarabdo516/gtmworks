@@ -70,5 +70,7 @@
   "stepsUsedTook": "{0} · {1}",
   "stepLine": "{0} · {1}",
   "stepDone": "Done",
-  "stepSkipped": "Skipped"
+  "stepSkipped": "Skipped",
+  "activityThinking": "Thinking",
+  "activityWriting": "Writing the reply"
 }

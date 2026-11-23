@@ -71,6 +71,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 
 - ✅ **Conversations with an Agent.** One person's private exchange with one Agent; any Member except a Viewer may start one. [#6, #8, #25, #39]
 - ✅ **Cards inside replies.** Draft card, review card, question card, "Handed to you" card, and "Used N tools" under a reply. [#136, #137, #138, #139, #140, #141]
+- ✅ **Each step live while an Agent works.** The line under the transcript names the Agent and the tool it runs now, and the turn's steps list fills in before the reply, in a Conversation and a channel alike, read from the Run's own event stream in the Engine. [#646]
 - ✅ **Permission requests in the chat.** "Allow once / Always allow / Don't allow", also waiting in "Waiting on you" and in channels. [#163, #165, #321]
 - ✅ **Composer.** "+" menu, `@` and `/` suggestions, image attach, commands such as /campaign, /report, /review, /article. [#153, #154, #155, #156, #158, #159]
 - ✅ **Dictation in Egyptian Arabic.** The Owner picks a speech-to-text provider; Deepgram Nova-3 first. [#160, #430, #435]
