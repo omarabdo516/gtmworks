@@ -101,6 +101,8 @@ test('the integration job runs as 7 shards, each uploading its own artifacts, an
   // and --shard becomes the shard's spec files (#653, tests/browser-shards.test.mjs).
   const ci = readFileSync('ci.sh', 'utf8');
   assert.match(ci, /\[\[ -n \$shard \]\] && \[\[ \$shard != 1\/\* \]\] && proxy=false/);
+  // A shard's files would widen any filter given beside them, so a shard takes no other argument.
+  assert.match(ci, /\[\[ -n \$shard && \$# -gt 0 \]\] && \{ echo "the browser suite runs a shard with no other arguments: \$\*" >&2; exit 2; \}/);
   assert.match(ci, /if \[\[ \$proxy == true \]\]; then npm run test:e2e:proxy; fi/);
   assert.match(ci, /npm run test:e2e -- "\$\{files\[@\]\}" "\$@"\n/);
 });

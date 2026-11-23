@@ -143,6 +143,8 @@ case "${1:-check}" in
     else args+=("$arg"); fi
   done
   set -- "${args[@]}"
+  # A shard is its spec files, which Playwright would add to any other filter given beside it rather than narrow.
+  [[ -n $shard && $# -gt 0 ]] && { echo "the browser suite runs a shard with no other arguments: $*" >&2; exit 2; }
   proxy=true
   [[ -n $shard ]] && [[ $shard != 1/* ]] && proxy=false
   files=()
