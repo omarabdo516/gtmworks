@@ -10,14 +10,17 @@
 //   node scripts/browser-shards.mjs times <report.json>...
 //                                                  writes tests/browser-shard-times.json from Playwright JSON reports
 //
-// The times are each file's seconds summed over its tests and their retries; a file with none counts as the middle
-// measured one. Refresh them from a run's `browser-times-<i>` artifacts (each shard's `times.json`) when the
+// The times are each file's seconds summed over its tests and their retries, the mean over the runs given; a file with
+// none counts as the middle measured one. Shard 1 also counts the proxy suite it runs first. Refresh them from a run's `browser-times-<i>` artifacts (each shard's `times.json`) when the
 // shards drift apart.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export const TIMES = 'tests/browser-shard-times.json';
+// Shard 1 runs the proxy suite before its spec files (ci.sh): on run 45086161119 its tests started 15 to 79 s after
+// the other shards'.
+export const PROXY_SECONDS = 60;
 
 // A spec file: its name, its number of tests, whether they run in parallel mode, and whether it is a first-run file,
 // run after every other file. A bare name is one file of one test, run in order.
@@ -36,9 +39,9 @@ export function shardSeconds(files, seconds, workers) {
   return length;
 }
 
-// The spec files in `count` shards for `workers` workers each, each shard's names in file order. The same files and
-// times give the same split.
-export function shardFiles(specs, times, count, workers = 1) {
+// The spec files in `count` shards for `workers` workers each, each shard's names in file order; `before` holds the
+// seconds each shard spends before its spec files. The same files and times give the same split.
+export function shardFiles(specs, times, count, workers = 1, before = []) {
   const known = Object.values(times).sort((a, b) => a - b);
   const middle = known.length ? known[Math.floor((known.length - 1) / 2)] : 1;
   const seconds = spec => times[spec.file] ?? middle;
@@ -46,7 +49,7 @@ export function shardFiles(specs, times, count, workers = 1) {
     .sort((a, b) => seconds(b) - seconds(a) || a.file.localeCompare(b.file));
   const shards = Array.from({ length: count }, () => []);
   for (const spec of files) {
-    const lengths = shards.map(shard => shardSeconds([...shard, spec], seconds, workers));
+    const lengths = shards.map((shard, n) => (before[n] ?? 0) + shardSeconds([...shard, spec], seconds, workers));
     shards[lengths.indexOf(Math.min(...lengths))].push(spec);
   }
   return shards.map(shard => shard.map(spec => spec.file).sort());
@@ -62,12 +65,17 @@ function eachSpec(report, onSpec) {
 }
 
 // Each spec file's seconds from Playwright JSON reports: every result of every test, retries included, as the shard
-// spends them.
+// spends them; a file in the reports of more than one run counts its mean.
 export function measuredTimes(reports) {
-  const times = {};
-  for (const report of reports) eachSpec(report, (file, spec) => {
-    for (const run of spec.tests ?? []) for (const result of run.results ?? []) times[file] = (times[file] ?? 0) + result.duration / 1000;
-  });
+  const runs = {};
+  for (const report of reports) {
+    const seconds = {};
+    eachSpec(report, (file, spec) => {
+      for (const run of spec.tests ?? []) for (const result of run.results ?? []) seconds[file] = (seconds[file] ?? 0) + result.duration / 1000;
+    });
+    for (const [file, s] of Object.entries(seconds)) (runs[file] ??= []).push(s);
+  }
+  const times = Object.fromEntries(Object.entries(runs).map(([file, all]) => [file, all.reduce((a, b) => a + b, 0) / all.length]));
   return Object.fromEntries(Object.entries(times).sort(([a], [b]) => a.localeCompare(b)).map(([file, s]) => [file, Math.max(1, Math.round(s))]));
 }
 
@@ -101,6 +109,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     const workers = Number(process.env.GTMWORKS_TEST_LANES || 1);
     const times = JSON.parse(readFileSync(TIMES, 'utf8'));
-    for (const file of shardFiles(suiteFiles(), times, total, workers)[current - 1]) console.log(`tests/${file}`);
+    for (const file of shardFiles(suiteFiles(), times, total, workers, [PROXY_SECONDS])[current - 1]) console.log(`tests/${file}`);
   }
 }

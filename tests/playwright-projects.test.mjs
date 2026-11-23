@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { listedSpecs } from './playwright-list.mjs';
@@ -160,11 +161,22 @@ test('the real config retries a failed browser test once on CI and never locally
  }
 });
 
-// CI runs the browser suite as --shard=<i>/6 (#335, #404), and the chat's open time in a job of its own with a machine
-// to itself (#421): the six shards leave the `alone` project empty, so the shards and that job together list every test
-// that runs on a pull request exactly once, and the budgets keep their own job on main.
-test('the six shards and the chat-open job together run every browser test exactly once (#335, #319, #404, #421)', () => {
- const shards = [1, 2, 3, 4, 5, 6].map(shard => listed(list([`--shard=${shard}/6`], true)));
+// CI runs the browser suite as `ci.sh integration --shard=<i>/7` (#335, #404), each shard the spec files
+// scripts/browser-shards.mjs gives it (#653), and the chat's open time in a job of its own with a machine to itself
+// (#421): the seven shards leave the `alone` project empty, so the shards and that job together list every test that
+// runs on a pull request exactly once, and the budgets keep their own job on main. The split runs as in CI: four lanes,
+// and the shard's own JSON report file set, which the split's own listing must leave alone.
+test('the seven shards and the chat-open job together run every browser test exactly once (#335, #319, #404, #421, #653)', () => {
+ const dir = mkdtempSync(join(tmpdir(), 'browser-shards-'));
+ const report = join(dir, 'times.json');
+ const env = { ...process.env, NODE_TEST_CONTEXT: undefined, CI: 'true', GTMWORKS_TEST_LANES: '4', PLAYWRIGHT_JSON_OUTPUT_FILE: report };
+ const shards = [1, 2, 3, 4, 5, 6, 7].map(shard => {
+  const split = spawnSync(process.execPath, ['scripts/browser-shards.mjs', `${shard}/7`], { encoding: 'utf8', env });
+  assert.equal(split.status, 0, split.stderr);
+  return listed(list(split.stdout.trim().split('\n'), true));
+ });
+ assert.equal(existsSync(report), false, 'the split writes nothing to the shard\'s report');
+ rmSync(dir, { recursive: true, force: true });
  for (const shard of shards) assert.ok(shard.length > 0, 'every shard has tests');
  const elsewhere = listed(list([], true)).sort();
  assert.deepEqual(shards.flat().sort(), elsewhere);

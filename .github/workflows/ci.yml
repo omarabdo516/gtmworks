@@ -446,8 +446,8 @@ jobs:
           cache-from: type=gha,scope=sandbox-browser
           cache-to: type=gha,mode=max,scope=sandbox-browser
 
-  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 6
-  # shards at the same time (#335; six since #404), each on a runner and stacks of its own. ci.sh gives each shard its
+  # The rest of the whole-app browser suite: the production-shaped proxy suite in the image and the journeys, in 7
+  # shards at the same time (#335; six since #404, seven since #653), each on a runner and stacks of its own. ci.sh gives each shard its
   # spec files split by measured time (scripts/browser-shards.mjs, #653), not Playwright's count-based --shard. The
   # proxy suite runs in shard 1 only (ci.sh). The browser comes from the cache the fast job keeps: a shard never
   # downloads a browser or a system package during a run. The image is the one the image job built (#403): a shard
@@ -460,7 +460,7 @@ jobs:
       # Every shard runs to the end, so one red shard still shows the others' failures.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7]
     # 10.6 min measured for the slowest shard on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
     timeout-minutes: 12
     permissions:
@@ -545,7 +545,7 @@ jobs:
           SUPABASE_IMAGES_ARCHIVE: ${{ runner.temp }}/supabase-images/images.tar
           # Each test's time, from which `node scripts/browser-shards.mjs times` refreshes the split's measured times (#653).
           PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-report/times.json
-        run: ./ci.sh integration --shard=${{ matrix.shard }}/6
+        run: ./ci.sh integration --shard=${{ matrix.shard }}/7
       # The screenshots the journeys write (card and phone checks) are uploaded so a review can see them.
       - name: upload journey screenshots
         if: always()

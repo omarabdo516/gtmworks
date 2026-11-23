@@ -1,9 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { measuredTimes, shardFiles, shardSeconds } from '../scripts/browser-shards.mjs';
 
 // The browser shards split the suite by measured time, not by test count (#653): Playwright's own --shard cuts the
@@ -39,6 +36,13 @@ test('a shard runs as Playwright runs it: a file in order holds one worker, a pa
   assert.deepEqual(shardFiles([engine, chat, firstRun], times, 2, 4), [['engine.spec.ts', 'first-run.spec.ts'], ['chat.spec.ts']]);
 });
 
+test('a shard that spends time before its spec files, as shard 1 does on the proxy suite, takes less of them', () => {
+  const times = { 'a.spec.ts': 100, 'b.spec.ts': 100, 'c.spec.ts': 100, 'd.spec.ts': 100 };
+  // 150 s before shard 1's files: of four files of 100 s it takes one (250 s), and shard 2 three (300 s), since a second
+  // would bring shard 1 to 350 s.
+  assert.deepEqual(shardFiles(Object.keys(times), times, 2, 1, [150, 0]).map(files => files.length), [1, 3]);
+});
+
 test('a spec file with no measured time counts as the middle measured one, and the split is the same on every run', () => {
   const times = { 'a.spec.ts': 10, 'b.spec.ts': 50, 'c.spec.ts': 90 };
   const files = ['new.spec.ts', 'a.spec.ts', 'b.spec.ts', 'c.spec.ts'];
@@ -47,11 +51,14 @@ test('a spec file with no measured time counts as the middle measured one, and t
   assert.deepEqual(shardFiles([...files].reverse(), times, 2), shardFiles(files, times, 2));
 });
 
-test('the measured times are each file\'s seconds from the shards\' JSON reports, retries included', () => {
+test('the measured times are each file\'s seconds from the shards\' JSON reports, retries included, and its mean over runs', () => {
   const result = ms => ({ duration: ms });
   const shard1 = { suites: [{ suites: [{ specs: [{ file: 'board.spec.ts', tests: [{ results: [result(20400), result(19600)] }] }] }] }] };
   const shard2 = { suites: [{ specs: [{ file: 'app.spec.ts', tests: [{ results: [result(1200)] }, { results: [result(300)] }] }] }] };
   assert.deepEqual(measuredTimes([shard1, shard2]), { 'app.spec.ts': 2, 'board.spec.ts': 40 });
+  // Two runs' reports: a file in both counts its mean.
+  const again = { suites: [{ specs: [{ file: 'board.spec.ts', tests: [{ results: [result(20000)] }] }] }] };
+  assert.deepEqual(measuredTimes([shard1, shard2, again]), { 'app.spec.ts': 2, 'board.spec.ts': 30 });
 });
 
 test('the measured times name only spec files the suite has', () => {
@@ -61,22 +68,4 @@ test('the measured times name only spec files the suite has', () => {
     assert.doesNotThrow(() => readFileSync(`tests/${file}`), `tests/${file} exists`);
     assert.ok(Number.isInteger(seconds) && seconds > 0, `${file}: whole seconds`);
   }
-});
-
-test('a shard lists its spec files as ci.sh runs it in CI, where the shard\'s JSON report has a file of its own', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'browser-shards-'));
-  const report = join(dir, 'times.json');
-  const env = { ...process.env, CI: 'true', GTMWORKS_TEST_LANES: '4', PLAYWRIGHT_JSON_OUTPUT_FILE: report };
-  const shards = [1, 2, 3, 4, 5, 6].map(shard => {
-    const run = spawnSync('node', ['scripts/browser-shards.mjs', `${shard}/6`], { encoding: 'utf8', env });
-    assert.equal(run.status, 0, run.stderr);
-    return run.stdout.trim().split('\n');
-  });
-  const files = shards.flat();
-  for (const file of files) assert.match(file, /^tests\/[a-z0-9-]+\.spec\.ts$/, file);
-  assert.equal(new Set(files).size, files.length, 'no spec file is in two shards');
-  assert.ok(files.includes('tests/engine-conversation.spec.ts') && files.includes('tests/first-run.spec.ts'));
-  // Listing writes nothing to the shard's report: only the run itself does.
-  assert.equal(existsSync(report), false);
-  rmSync(dir, { recursive: true, force: true });
 });
