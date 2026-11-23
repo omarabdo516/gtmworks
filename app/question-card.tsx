@@ -97,12 +97,13 @@ export function QuestionCard({card,fresh,answer,chips=false,waitingFor=null,team
  // Agent's shows the team's wait line over its options as plain rows (design-reference: ask1HTML's wait line,
  // cardHTML's `.opt--static`).
  if(!answer) {
+  const wait=waitingFor?t('questionWaitFor',waitingFor):t('questionWaitTeam');
   if(chipCard) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
    {ask1Head}
-   <div className="card__outcome"><ShellIcon name="clock"/><span>{waitingFor?t('questionWaitFor',waitingFor):t('questionWaitTeam')}</span></div>
+   <div className="card__outcome"><ShellIcon name="clock"/><span>{wait}</span></div>
   </div>;
   return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
-   {head(waitingFor?t('questionWaitFor',waitingFor):t('questionWaitTeam'))}
+   {head(wait)}
    {lettered&&<div className="qcard__opts">{card.choices.map((choice,index)=><div key={index} className="opt opt--static">
     <span className="opt__key" aria-hidden="true">{keys[index]}</span><span className="opt__t">{choice}</span>
    </div>)}</div>}
