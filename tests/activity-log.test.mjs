@@ -18,6 +18,13 @@ test('Card, Member and Agent rows say who changed what', () => {
  const back = describeEntry({ subject: 'card', action: 'card_moved_back', details: { old_column: 'planned', new_column: 'progress' } });
  assert.deepEqual([back.act, back.from, back.to], [['logActMovedBack'], { key: 'boardColPlanned' }, { key: 'boardColProgress' }]);
  assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActMovedBack')), ['moved the card back', 'رجّع البطاقة مكانها']);
+ // Archiving and restoring a Card (#670) name the column it left for the archive, and the column it came back to.
+ const cardArchived = describeEntry({ subject: 'card', action: 'card_archived', details: { column: 'progress' } });
+ assert.deepEqual([cardArchived.act, cardArchived.from, cardArchived.to], [['logActArchived'], { key: 'boardColProgress' }, { key: 'logArchive' }]);
+ const cardRestored = describeEntry({ subject: 'card', action: 'card_restored', details: { column: 'done' } });
+ assert.deepEqual([cardRestored.act, cardRestored.from, cardRestored.to], [['logActRestored'], { key: 'logArchive' }, { key: 'boardColDone' }]);
+ assert.deepEqual(['en', 'ar'].map(language => ['logActArchived', 'logActRestored', 'logArchive'].map(key => i18n(language).t(key))),
+  [['archived the card', 'restored the card', 'Archived'], ['أرشف البطاقة', 'رجّع البطاقة', 'الأرشيف']]);
  const handed = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'next_actor', old: omar, new: writer } }, { name: id => ({ [omar]: 'عمر', [writer]: 'وكيل المحتوى' })[id] });
  assert.deepEqual([handed.act, handed.from, handed.to], [['logActHandedOver'], { text: 'عمر' }, { text: 'وكيل المحتوى' }]);
  const caption = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'caption', old: 'a', new: 'b' } });

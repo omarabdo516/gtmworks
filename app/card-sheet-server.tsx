@@ -46,7 +46,9 @@ export async function cardSheet(db:Db,{company,card,slug,me,canWrite,t,language}
 // A Card with no chat gets its Agent when the reader sees it, to start one with. A Card a channel put on the board shows
 // that channel to its members; a Member outside it gets the lock, the channel's name and no message.
 async function sheetChat(db:Db,company:string,card:number,me:string):Promise<SheetChat> {
- const {data:row}=await db.from('work_cards').select('agent_id,conversation_id,channel_id,title').eq('company_id',company).eq('id',card).maybeSingle();
+ // An archived Card (#670) is out of the reader's current Cards and is read through archived_cards, under the same rights.
+ const {data:current}=await db.from('work_cards').select('agent_id,conversation_id,channel_id,title').eq('company_id',company).eq('id',card).maybeSingle();
+ const {data:row}=current?{data:current}:await db.rpc('archived_cards',{c:company}).select('agent_id,conversation_id,channel_id,title').eq('id',card).maybeSingle();
  if(!row) return {kind:'none'};
  if(row.channel_id) {
   const channel=await channelRecord(db,me,company,row.channel_id);

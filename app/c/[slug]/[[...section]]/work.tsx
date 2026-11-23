@@ -37,7 +37,7 @@ import { modelCauseOf, modelOutcome } from '@/lib/model-causes';
 import { ModelLine } from '@/app/model-line';
 import type { WaitingItem } from '@/lib/approval-queue';
 import '@/app/board.css';
-type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // An open Card's notes (#22): each note's current text, the Runs its Agent mentions started and their replies in the
 // log, the Agents those are drawn with, the reader and the moment the page was drawn (for the edit countdown).
 type CardNotes={me:string,owner:boolean,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
@@ -51,13 +51,16 @@ export type UndoMove=(form:FormData)=>Promise<UndoResult>;
 export type PlaceResult={ok:true}|{error:string};
 export type PlaceCard=(form:FormData)=>Promise<PlaceResult>;
 export type IdeaResult={card:number}|{failed:true};
+// Archiving or restoring Cards (#670): the Cards the database archived or restored, or none.
+export type ArchiveResult={state:'done',cards:number[]}|{state:'refused'};
+type ArchiveCards=(form:FormData)=>Promise<ArchiveResult>;
 export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
-export type WorkProps={workAction:WorkAction,placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[]};
+export type WorkProps={workAction:WorkAction,placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:Card[],archiveCards?:ArchiveCards};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
 export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
  const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
- const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
+ const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const [showArchived,setShowArchived]=useState(false); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
  const base=`/c/${p.slug}/work`; const card=p.cards.find(c=>c.id===p.cardId); const shown=p.cards.filter(c=>!project||String(c.project_id)===project); const visible=shown.filter(c=>!month||!c.go_live||c.go_live.slice(0,7)===month); const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="company" value={p.company}/></>;
  if(card&&composing) setComposing(false);
  // A card made from a message is marked with its mode, in the colour of the agent it was sent to.
@@ -134,6 +137,26 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    router.refresh();
   });
  };
+ // Archiving and restoring (#670; design-reference-card: cwArchive, cwUndo, cwRestore): the database decides, and the
+ // toast says what happened. "Undo" restores the Cards just archived to their columns and starts nothing.
+ const archiveForm=(ids:number[],intent:'archive'|'restore')=>{ const form=new FormData(); form.set('company',p.company); form.set('slug',p.slug); form.set('intent',intent); for(const id of ids) form.append('card',String(id)); return form; };
+ const restore=(ids:number[])=>{ if(!p.archiveCards) return;
+  void p.archiveCards(archiveForm(ids,'restore')).then(result=>{
+   if(result.state!=='done') { toast(t('cardRestoreRefused'),{icon:'x'}); return; }
+   toast(t('cardRestoredToast'),{icon:'restore'}); router.refresh();
+  });
+ };
+ const archive=(ids:number[])=>{ if(!p.archiveCards) return;
+  void p.archiveCards(archiveForm(ids,'archive')).then(result=>{
+   if(result.state!=='done') { toast(t('cardArchiveRefused'),{icon:'x'}); return; }
+   toast(t('cardArchivedToast'),{icon:'archive',action:{label:t('cardUndo'),run:()=>restore(result.cards)}}); router.refresh();
+  });
+ };
+ const archivedCards=p.archived||[];
+ const firstName=(person:string|null|undefined)=>p.members.find(m=>m.person_id===person)?.people?.name?.trim().split(/\s+/)[0]||'';
+ // The archive list follows the board's Agent and Project filters, as the reference's does.
+ const archivedShown=archivedCards.filter(c=>(!project||String(c.project_id)===project)&&(filter==='all'||c.agent_id===filter));
+ const archivedOf=(c:Card)=>c.archived_at?{by:firstName(c.archived_by),at:date(c.archived_at,language,{month:'short'})}:undefined;
  // A move lands the Card once the server took its place and it is drawn there (#131): from where it was let go after a
  // drop, from 6px above after a key, with the board scrolling to it smoothly.
  const move=(id:number,to:string,before:number|null=null,letGo:{left:number,top:number}|true|null=null,byKeys=false):Promise<boolean>=>{
@@ -268,11 +291,12 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // A Card opened over the board (#116; design-reference: renderSheetHead): its channel's mark, else its Agent, and where it stands.
  const sheetView=(c:Card,sheet:CardSheetData)=>{ const agent=agentOfCard(c); const own=cardAgentOf(c); const column=columnOfCard(c); const chat=chatOf(c);
   return <CardSheet key={c.id} send={workAction} slug={p.slug} company={p.company} title={c.title} sheet={sheet} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
+   archived={archivedOf(c)} archive={p.archiveCards&&{archive:()=>archive([c.id]),restore:()=>restore([c.id])}}
    people={p.members.filter(member=>member.person_id!==p.me&&member.people?.name).map(member=>({id:member.person_id,name:member.people!.name,role:member.role}))} agents={companyAgents}
    face={c.channel_id?<span className="hp-hash hp-hash--lg" aria-hidden="true"><ShellIcon name="hash"/></span>:own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={28}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
    who={c.channel_id?<>{t('boardCardChannel')} <bdi>#{c.title}</bdi></>:own?<bdi>{own.name}</bdi>:agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
    badge={column==='waiting'?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{chat?chatBadge(chat):p.approvableIds.includes(c.id)?t('boardWaitingYou'):p.canCreate?waitingOn(c.next_actor):t('boardWaitingTeam')}</span>:<span className="badge">{columnName(column)}</span>}/>; };
- const sheet=p.sheet; const sheetCard=sheet&&p.cards.find(c=>c.id===sheet.id);
+ const sheet=p.sheet; const sheetCard=sheet&&(p.cards.find(c=>c.id===sheet.id)??archivedCards.find(c=>c.id===sheet.id));
  const ideasStage=stagesIn('ideas')[0]?.id;
  // "+" on Ideas opens that column's form and a second press closes it (#188); Cancel and Escape come back to it too.
  const closeIdea=()=>{ setAddingIdea(false); addButton.current?.focus({preventScroll:true}); };
@@ -298,12 +322,19 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     {companyAgents.map(a=><button type="button" key={a.id} className="chip" aria-pressed={filter===a.id} onClick={()=>setAgentFilter(a.id)}><span className="chip__face" aria-hidden="true"><CompanyAgentFace agent={a} size={22}/></span><bdi>{a.name}</bdi></button>)}
    </div>
    {boardFilters}
+   {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={t('boardArchivedCount',archivedCards.length)} title={t('boardArchived')} onClick={()=>setShowArchived(!showArchived)}><ShellIcon name="archive"/>{showArchived&&<span className="num">{archivedCards.length}</span>}</button>}
    <span className="board-tools__summary">{!p.canCreate?<><BoardIcon name="eye"/>{t('boardReadOnly')}</>:waitingTotal?<><span className="dot dot--waiting" aria-hidden="true"/>{(p.waiting||[]).some(item=>item.kind!=='approval')?t('thingsWaitingOnYou',waitingTotal):t(waitingTotal>1?'boardWaitingMany':'boardWaitingOne',waitingTotal)}</>:<><BoardIcon name="check"/>{t('boardNothingWaiting')}</>}</span>
    <BoardPager/>
   </div>
   {moving&&<p role="status" className="board-status">{t('movingCard')}</p>}
-  {!p.cards.length&&!items.length&&<div className="board-bare" role="note"><p>{t('boardEmpty',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</p>{p.canCreate&&<Link className="btn btn--secondary btn--sm" href={`/c/${p.slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</span></Link>}</div>}
-  <KanbanBoard label={t('workBoard')} busy={moving} cards={boardColumns.flatMap(column=>inColumn(column)).map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
+  {showArchived&&<div className="arch">{archivedShown.length?<ul className="panel-card arch-list" aria-label={t('boardArchivedCards')}>{archivedShown.map(c=>{ const own=cardAgentOf(c); const agent=agentOfCard(c); const at=archivedOf(c);
+   return <li key={c.id} className="arch-row"><Link className="arch-open" href={`${base}/board?card=${c.id}`} scroll={false}>
+    {own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={24}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={24}/></span>:<span className="arch-none" aria-hidden="true"/>}
+    <span className="od-field"><span className="arch-t authored-title" dir="auto">{c.title}</span><span className="arch-d">{columnName(columnOfCard(c))} · <bdi>{at?.by}</bdi> · <span className="num">{at?.at}</span></span></span></Link>
+    {p.canCreate&&p.archiveCards&&<button type="button" className="ib" aria-label={t('boardRestoreCard',c.title)} title={t('cardRestoreShort')} onClick={()=>restore([c.id])}><ShellIcon name="restore"/></button>}</li>; })}</ul>
+   :<div className="col-empty arch-empty"><b>{t(archivedCards.length?'boardArchivedNoMatch':'boardArchivedEmpty')}</b></div>}</div>}
+  {!showArchived&&!p.cards.length&&!items.length&&<div className="board-bare" role="note"><p>{t('boardEmpty',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</p>{p.canCreate&&<Link className="btn btn--secondary btn--sm" href={`/c/${p.slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</span></Link>}</div>}
+  {!showArchived&&<KanbanBoard label={t('workBoard')} busy={moving} cards={boardColumns.flatMap(column=>inColumn(column)).map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
    {boardColumns.map(column=>{ const list=inColumn(column); const extra=column==='waiting'&&!ownList?items:[]; const stages=stagesIn(column);
     // Mentions of the reader (#22 in a note, #200 in a channel) wait apart from what needs their reply.
     const groups=[{id:'mn-h-mentions',label:'waitingMentions',items:extra.filter(item=>item.kind==='mention'||item.kind==='channel_mention')},{id:'mn-h',label:'waitingNeedsReply',items:extra.filter(item=>item.kind!=='mention'&&item.kind!=='channel_mention'&&!answeredHere(item))}].filter(group=>group.items.length);
@@ -326,7 +357,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
      {list.map(c=><div key={c.id} className="column" data-stage-id={c.stage_id} data-stage-name={stageName(c)}>{cardView(c)}</div>)}
      {!list.length&&!extra.length&&!(column==='ideas'&&addingIdea)&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
     </KanbanColumn>; })}
-  </KanbanBoard>
+  </KanbanBoard>}
  </div>;
  return <div className="work-root">{(placeError||p.message)&&!sheetCard&&<p role="alert" className="work-error">{placeError||p.message}</p>}{!card&&<>{p.section==='settings/work'?<div className="tabs"><Link className="button" href={`/c/${p.slug}/settings`}>{t('general')}</Link><Link className="button" href={`/c/${p.slug}/settings/members`}>{t('members')}</Link><Link className="button active" href={`/c/${p.slug}/settings/work`}>{t('work')}</Link></div>:null}{p.section==='settings/work'&&<section className="panel"><h2>{t('workStages')}</h2>{p.stages.map(s=><form action={workAction} className="settings-row" key={s.id}>{hidden('stage-settings')}<input type="hidden" name="stage" value={s.id}/><input dir="auto" aria-label={t('stageName', s.name)} name="name" defaultValue={s.name}/><input aria-label={t('stageOrder', s.name)} name="position" type="number" defaultValue={s.position}/><button>{t('save')}</button></form>)}<h2>{t('labels')}</h2>{p.labels.map(l=><form action={workAction} className="settings-row" key={l.id}>{hidden('label-settings')}<input type="hidden" name="label" value={l.id}/><input dir="auto" aria-label={t('labelName', l.name)} name="name" defaultValue={l.name}/><input dir="auto" aria-label={t('labelColor', l.name)} name="color" type="color" defaultValue={l.color}/><button>{t('save')}</button></form>)}</section>}
   {p.section==='work/board'&&board}
