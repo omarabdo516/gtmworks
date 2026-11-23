@@ -144,15 +144,19 @@ _Avoid_: event, cohort, run, season event
 ### How content is organised
 
 **Card / بطاقة**:
-One item of work in a company's workflow, with its stage, owner and activity. The Arabic plural is «بطاقات».
-_Avoid_: كارت, كروت
+One item of work on the board, with a title, a description, one assignee, a status (the column it is in), a result and comments everyone who sees it reads. A person or an Agent makes it; none is made by itself. Its files, Versions and log stay with it. The Arabic plural is «بطاقات».
+_Avoid_: كارت, كروت, task, ticket
 
-**Mode / وضع**:
-What a new card asks its agent to do: plan first (write a plan and wait for approval), do it now, or just answer. A person chooses it with the first message when the card is created, and the card shows it.
-_Avoid_: type, status, priority
+**Assignee / المسؤول**:
+The one Agent or Member a Card waits on to be done. A Card assigned to an Agent starts by itself unless it is an idea or waits for another Card; one assigned to a Member is in their "Waiting on you" until it is live or done.
+_Avoid_: next actor, owner, assigned to several
+
+**Archived / مؤرشف**:
+Out of the board, the lists and the counts, with everything in it kept, until a person restores it. Cards, Conversations and team channels are archived, never deleted. Archiving a Card stops the Agent working on it and releases the Cards that wait for it.
+_Avoid_: deleted, removed, hidden, closed
 
 **Attachment / مرفق**:
-A file or reference image a person attaches to a card's first message or to a reply. It stays inside the company's storage; a person reads it by its number on the card, and only members of that company reach it. A design version is not an attachment.
+A file or reference image attached to a card or to one of its comments. It stays inside the company's storage; a person reads it by its number on the card, and only members of that company reach it. A design version is not an attachment.
 _Avoid_: upload, evidence file
 
 **Version / نسخة**:
