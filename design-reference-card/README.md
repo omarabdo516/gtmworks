@@ -2,7 +2,7 @@
 
 Approved by Omar on 2026-11-23 (third round in Open Design). It is the reference for the Card, the board, New card, All conversations, and archiving a Conversation or a team channel; `design-reference/` stays the reference for every other screen. The other screens in this copy are not approved here.
 
-Open it: `python3 -m http.server -d design/prototypes/card 8800`, then `http://127.0.0.1:8800/index.html`. Language: `localStorage` `gtm-lang` (`ar`, `en`); theme: `gtm-theme-v2` (`light`, `dark`). Nobody edits it; `sha256sum -c SHA256SUMS` proves it. A change needs a new approval.
+Open it: `python3 -m http.server -d design-reference-card 8800`, then `http://127.0.0.1:8800/index.html`. Language: `localStorage` `gtm-lang` (`ar`, `en`); theme: `gtm-theme-v2` (`light`, `dark`). Nobody edits it; `sha256sum -c SHA256SUMS` proves it. A change needs a new approval.
 
 | State | Card |
 | --- | --- |
