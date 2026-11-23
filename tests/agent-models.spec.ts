@@ -204,17 +204,25 @@ const markedWithin=(page:Page,model:string)=>page.evaluate(model=>new Promise<nu
 }),model);
 // Every page read the router makes (an RSC request), from the moment it is started.
 const pageReads=(page:Page)=>{ const reads:string[]=[]; page.on('request',request=>{ if(request.headers()['rsc']==='1'||request.url().includes('_rsc=')) reads.push(request.url()); }); return reads; };
+// The overlay's links prefetch every section once the page is drawn (lib/link.tsx), later on a loaded machine: wait
+// until the Models section's has gone and no read has started for 2 s, so only reads after the save are counted.
+async function prefetchesSettled(reads:string[]) {
+ await expect.poll(()=>reads.some(url=>url.includes('section=models')),{timeout:30000}).toBe(true);
+ let seen=-1;
+ await expect.poll(()=>{ const now=reads.length; const still=now===seen; seen=now; return still; },{timeout:30000,intervals:[2000]}).toBe(true);
+ return reads.length;
+}
 
 test('a model choice is marked and says Saving at once while the Engine writes it, then is confirmed with no page read', async({page})=>{
  language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ const reads=pageReads(page);
  await writerPage(page);
  const before=fake.settings.profiles.get(writerProfile)?.model;
  const next=before==='openai/gpt-5.5'?'anthropic/claude-opus-4.6':'openai/gpt-5.5';
  await expect(modelRow(page,before!)).toHaveAttribute('aria-checked','true');
  // A click before React has hydrated the rows does nothing.
  await page.waitForFunction(()=>Object.getOwnPropertyNames(document.querySelector('#set-model [role=radio]')||{}).some(name=>name.startsWith('__reactProps$')));
- await page.waitForLoadState('networkidle');
- const reads=pageReads(page);
+ const drawn=await prefetchesSettled(reads);
  fake.settings.modelWriteDelay=3000;
  try {
   expect(await markedWithin(page,next)).toBeLessThan(150);
@@ -226,7 +234,7 @@ test('a model choice is marked and says Saving at once while the Engine writes i
   await expect(modelRow(page,next)).toHaveAttribute('aria-checked','true');
   expect(fake.settings.profiles.get(writerProfile)?.model).toBe(next);
   await page.waitForTimeout(1500);
-  expect(reads,'no page is read again after the save').toEqual([]);
+  expect(reads.slice(drawn),'no page is read again after the save').toEqual([]);
  } finally { fake.settings.modelWriteDelay=0; }
  // The save's steps are one line of the web log (docs/production-logs.md: agent_setting_saved), the Engine's 3 s in its
  // write step, and no value in it.
