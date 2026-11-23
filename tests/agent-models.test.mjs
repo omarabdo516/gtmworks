@@ -129,6 +129,12 @@ test('a Company reads its default model and each Agent\'s own, with the Engine\'
   // The main Agent's `co-` profile is its own (#425): its Owner gets the choices that profile lists.
   assert.ok(read.models.agents.find(agent=>agent.name==='Lead').options.length>0);
   assert.ok(calls.some(call=>call.name==='company_agent_models'&&call.args.c===company));
+  // One Agent's page asks the Engine for that Agent's choices only, never the shared space's (#661).
+  const before=requestsTo(fake,'/api/model/options').length;
+  const one=await readCompanyModels(db,{company,agent:writer,owner:true,hermes:install(fake),driver:driver(fake)});
+  assert.deepEqual(one.models.default.options,[]);
+  assert.ok(one.models.agents[0].options.length>0);
+  assert.equal(requestsTo(fake,'/api/model/options').length-before,1,'one Engine read of the model list, the Agent\'s own');
   // A member who is not the Owner gets the values and no choices to make.
   const member=await readCompanyModels(database({owner:false}).db,{company,hermes:install(fake),driver:driver(fake),owner:false});
   assert.deepEqual(member.models.agents.map(agent=>agent.options),[[],[],[]]);
@@ -239,9 +245,15 @@ test('one Agent\'s model is written to its own profile and remembered as its cho
    agent:writer,model:'openrouter/anthropic/claude-opus-4.6',
   }]);
   assert.deepEqual(logged().map(row=>[row.agent,row.new_value]),[[writer,'openrouter/anthropic/claude-opus-4.6']]);
+  // The answer names the model the profile now runs on, so the page shows it with no read of itself (#661).
+  assert.equal(chosen.running,'openrouter/anthropic/claude-opus-4.6');
   // Following the default again writes the default to that profile and forgets the choice.
-  const follow=await changeCompanySetting(db,{company,agent:writer,setting:'model',value:null,hermes:install(fake),driver:driver(fake)});
+  const marks=[]; const timing={mark:step=>marks.push(step)};
+  const follow=await changeCompanySetting(db,{company,agent:writer,setting:'model',value:null,hermes:install(fake),driver:driver(fake),timing});
   assert.equal(follow.state,'written',JSON.stringify(follow));
+  assert.deepEqual([follow.model,follow.running],[null,'openrouter/openai/gpt-5.5'],'it follows the default, and runs on it');
+  // Each step of the save is marked for the agent_setting_saved line, in the order it ran.
+  assert.deepEqual(marks,['queue','owner','reads','engineWrite','record']);
   assert.equal(fake.settings.profiles.get(own(writer)).model,'openai/gpt-5.5');
   assert.deepEqual(calls.filter(call=>call.name==='set_agent_model').at(-1).args,{agent:writer,model:null});
   // The main Agent on the Company profile chooses its own as well (#425): written to `co-` and remembered as its choice.

@@ -19,9 +19,11 @@ export type CompanyModelAgent={id:string,name:string,own:boolean,choosable:boole
 export type CompanyModels={default:{model:string|null,options:ModelOption[]},agents:CompanyModelAgent[]};
 export function readCompanyModels(db:SupabaseClient,request:{company:string,agent?:string|null,owner?:boolean,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{models:CompanyModels|null}>;
 export function readAgentSettings(db:SupabaseClient,request:{company:string,agent?:string|null,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<{agents:AgentSettings[]|null}>;
+// The steps one save marks for its agent_setting_saved line (#661).
+export type SaveTiming={mark:(step:string)=>void};
 export type CompanySettingOutcome={state:'written',[key:string]:unknown}
  |{state:'invalid',problem?:string}
  |{state:'notAllowed'|'unknown'|'installOnly'|'noEngine'|'shared'|'subagentsOff'|'noDefault'|'agentUnknown'|'refused'|'unreachable'|'failed'|'mismatch'};
-export function changeCompanySetting(db:SupabaseClient,request:{company:string,agent?:string|null,setting:unknown,value:unknown,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<CompanySettingOutcome>;
-export function changeCompanySettings(db:SupabaseClient,request:{company:string,agent?:string|null,settings:Record<string,unknown>,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<CompanySettingOutcome>;
-export function changeLearningMode(db:SupabaseClient,request:{company:string,agent?:string|null,mode:unknown,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[]}):Promise<CompanySettingOutcome>;
+export function changeCompanySetting(db:SupabaseClient,request:{company:string,agent?:string|null,setting:unknown,value:unknown,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[],timing?:SaveTiming}):Promise<CompanySettingOutcome>;
+export function changeCompanySettings(db:SupabaseClient,request:{company:string,agent?:string|null,settings:Record<string,unknown>,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[],timing?:SaveTiming}):Promise<CompanySettingOutcome>;
+export function changeLearningMode(db:SupabaseClient,request:{company:string,agent?:string|null,mode:unknown,hermes?:{address:string,key:string}|null,driver?:object,list?:EngineSetting[],timing?:SaveTiming}):Promise<CompanySettingOutcome>;

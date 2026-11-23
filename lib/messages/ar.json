@@ -1345,6 +1345,7 @@
   "settingsModelsShared": "الوكيل ده بيشتغل على بروفايل الشركة المشترك، فبيمشي على الافتراضي.",
   "settingsModelsChoose": "موديل {0}",
   "settingsModelsModelField": "موديل {0}",
+  "settingsSaving": "بيتحفظ…",
   "settingsModelsSaved": "اتحفظ الموديل.",
   "settingsModelsError": "مقدرناش نحفظ الموديل ده. جرّب تاني.",
   "settingsThinksHint": "محرّك الوكلاء بيعرض الموديلات اللي بروفايل الوكيل ده يقدر يستخدمها. هيشتغل على المختار من رسالته الجاية.",

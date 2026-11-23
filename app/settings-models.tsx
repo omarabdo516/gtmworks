@@ -8,6 +8,7 @@ import { Advanced } from './settings-info';
 import { Label } from './settings-overlay-parts';
 import { AppTile } from '@/components/app-tile';
 import { markOf, modelMarkOf } from '@/lib/app-mark.mjs';
+import { holdSaved, savedAt, send, useSave, useSaved, type Answer } from './settings-saved';
 
 // The "Subscription and models" section's defaults and speech-to-text (#29; its Providers are settings-providers.tsx) and an Agent's "Thinks with" rows: the Engine's model options for the
 // Company's space and for each Agent's own profile, the model written to that profile and read back, and the Owner's
@@ -20,14 +21,6 @@ export type AgentModels={id:string,name:string,own:boolean,choosable:boolean,mod
 export type ModelsData={default:{model:string|null,options:ModelOption[]},agents:AgentModels[]};
 import type { Named } from './settings-providers';
 
-type Answer={ok:boolean,error:string,data:Record<string,unknown>|null};
-async function send(path:string,body:object):Promise<Answer> {
- try {
-  const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const answer=await response.json().catch(()=>null);
-  return {ok:response.ok,error:response.ok?'':String((answer as {error?:unknown}|null)?.error||''),data:answer&&typeof answer==='object'?answer as Record<string,unknown>:null};
- } catch { return {ok:false,error:'',data:null}; }
-}
 const modelOf=(option:ModelOption)=>`${option.provider}/${option.model}`;
 // A provider's logo, or its first letter where it has none (#424). A key row names it (label); a model choice already
 // says its provider in words, so there it has no label and stays out of the radio's name.
@@ -99,26 +92,29 @@ export function SpeechToText({company,owner,data}:{company:string,owner:boolean,
 }
 
 // The Company's default model: the Engine's list for the Company's shared space. The Owner chooses one; every other
-// member reads the choice with the default marked.
-export function DefaultModel({company,owner,models}:{company:string,owner:boolean,models:ModelsData['default']}) {
- const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
- const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+// member reads the choice with the default marked. The choice is marked at once and says "Saving" until the Engine has
+// it (#661); every Agent the default reached then shows it too, with no read of the page.
+export function DefaultModel({company,owner,models,readAt}:{company:string,owner:boolean,models:ModelsData['default'],readAt:number}) {
+ const {t,language}=useI18n(); const rtl=language==='ar';
+ const saved=useSave<string|null>(defaultKey(company),models.model,readAt);
  // The Agents a default did not reach, and the value to send them again: the shared space takes it but an Agent's profile
  // can refuse, so the Owner sees which Agents stayed on the old model and can retry the same default.
  const [missed,setMissed]=useState<string[]>([]); const [retry,setRetry]=useState('');
  const choose=async(value:string)=>{
-  if(busy) return;
-  setBusy(true); setError('');
-  const answer=await send('/api/agent-settings',{company,setting:'model',value});
-  setBusy(false);
-  if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
+  const answer=await saved.save(value,()=>send('/api/agent-settings',{company,setting:'model',value}));
+  if(!answer.ok) return;
+  const at=savedAt(answer);
+  for(const entry of Array.isArray(answer.data?.agents)?answer.data.agents as {agent?:unknown,written?:unknown}[]:[]) {
+   if(entry?.written===true&&typeof entry.agent==='string') holdSaved(agentModelKey(company,entry.agent),{model:value,choice:null},at);
+  }
   const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as {name?:unknown}[]).map(entry=>String(entry?.name||'')).filter(Boolean):[];
-  if(failed.length) { setMissed(failed); setRetry(value); router.refresh(); return; }
+  if(failed.length) { setMissed(failed); setRetry(value); return; }
   setMissed([]); setRetry('');
-  toast(t('settingsModelsSaved')); router.refresh();
+  toast(t('settingsModelsSaved'));
  };
+ const current=saved.value;
  const idOf=(option:ModelOption)=>`mdl-def-${option.provider}-${option.model}`;
- const chosenIndex=owner?models.options.findIndex(option=>modelOf(option)===models.model):-1;
+ const chosenIndex=owner?models.options.findIndex(option=>modelOf(option)===current):-1;
  const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
   const step=moveChoice(event,rtl); if(step===null) return;
   const next=chosenIndex<0?index:Math.max(0,Math.min(models.options.length-1,index+step));
@@ -126,19 +122,19 @@ export function DefaultModel({company,owner,models}:{company:string,owner:boolea
   document.getElementById(idOf(models.options[next]))?.focus();
  };
  const row=(option:ModelOption,index:number)=>{
-  const choice=modelOf(option); const on=choice===models.model; const text=<><ProviderLogo provider={option.provider} name={option.providerName}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span></>;
-  const meta=on?<span className="panel-row__meta"><span aria-hidden="true">✓</span>{t('settingsModelsDefaultMark')}</span>:null;
+  const choice=modelOf(option); const on=choice===current; const text=<><ProviderLogo provider={option.provider} name={option.providerName}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span></>;
+  const meta=on?(saved.saving?<Saving/>:<span className="panel-row__meta"><span aria-hidden="true">✓</span>{t('settingsModelsDefaultMark')}</span>):null;
   return owner
-   ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
+   ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{meta}</button>
    : <div className="panel-row" key={choice} aria-current={on?'true':undefined}>{text}{meta}</div>;
  };
  return <section className="dp-sec" aria-labelledby="md-h-default"><Label id="md-h-default" info={t('settingsModelsDefaultHint')}>{t('settingsModelsDefault')}</Label>
-  {models.options.length?<div className="panel-card" role={owner?'radiogroup':undefined} aria-labelledby="md-h-default">{models.options.map(row)}</div>
+  {models.options.length?<div className="panel-card" role={owner?'radiogroup':undefined} aria-labelledby="md-h-default" aria-busy={saved.saving||undefined}>{models.options.map(row)}</div>
    :<div className="panel-card"><p className="panel-empty">{t('settingsModelsNoChoice')}</p></div>}
-  {error&&<p className="set-err" role="alert">{t(reasonKey(error))}</p>}
+  {saved.error&&<p className="set-err" role="alert">{t(reasonKey(saved.error))}</p>}
   {missed.length>0&&<div className="set-err" role="alert">
    <p>{t('settingsModelsNotReached',missed.join(', '))}</p>
-   <button type="button" className="btn btn--secondary btn--sm" disabled={busy} onClick={()=>choose(retry)}>{t('settingsModelsRetry')}</button>
+   <button type="button" className="btn btn--secondary btn--sm" disabled={saved.saving} onClick={()=>choose(retry)}>{t('settingsModelsRetry')}</button>
   </div>}
   {!owner&&<p className="set-hint">{t('settingsModelsOwnerOnly')}</p>}
  </section>;
@@ -206,24 +202,31 @@ export function DefaultEffort() {
   </div></div></section>;
 }
 
+// What one Agent's save confirmed, held under these keys until the page is read again (app/settings-saved.ts, #661): its
+// model with its own choice, the Company default, its sub-agents switch and each sub-agent setting.
+type HeldModel={model:string|null,choice:string|null};
+const agentModelKey=(company:string,agent:string)=>`model:${company}:${agent}`;
+const defaultKey=(company:string)=>`model:${company}:default`;
+const settingKey=(company:string,agent:string,setting:string)=>`setting:${company}:${agent}:${setting}`;
+// The model a save leaves the Agent on, from the route's answer: its own choice, or the default it follows.
+const heldModelOf=(answer:Answer,fallback:HeldModel):HeldModel=>({model:typeof answer.data?.running==='string'?answer.data.running:fallback.model,choice:typeof answer.data?.model==='string'?answer.data.model:null});
+// The "Saving" mark a control shows on its row while the Engine writes and reads the value back (#661).
+function Saving({id}:{id?:string}) { const {t}=useI18n(); return <span className="panel-row__meta is-saving" id={id} role="status">{t('settingsSaving')}</span>; }
+
 // One Agent's model rows, for its "Thinks with" section (#29): the Engine's choices for that Agent's own profile, the main
 // Agent's `co-` one included (#425). An Agent that shares a profile it does not keep has no model of its own and says so.
-export function AgentModel({company,agent,name,model,options,choosable,owner}:{company:string,agent:string,name:string,model:string|null,options:ModelOption[],choosable:boolean,owner:boolean}) {
- const {t,language}=useI18n(); const rtl=language==='ar'; const router=useRouter();
- const [busy,setBusy]=useState(false); const [error,setError]=useState('');
- const choose=async(value:string|null)=>{
-  if(busy) return;
-  setBusy(true); setError('');
-  const answer=await send('/api/agent-settings',{company,agent,setting:'model',value});
-  setBusy(false);
-  if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
-  toast(t('settingsModelsSaved')); router.refresh();
+export function AgentModel({company,agent,name,model,choice,options,choosable,owner,readAt}:{company:string,agent:string,name:string,model:string|null,choice:string|null,options:ModelOption[],choosable:boolean,owner:boolean,readAt:number}) {
+ const {t,language}=useI18n(); const rtl=language==='ar';
+ const saved=useSave<HeldModel>(agentModelKey(company,agent),{model,choice},readAt);
+ const choose=async(value:string)=>{
+  const answer=await saved.save({model:value,choice:value},()=>send('/api/agent-settings',{company,agent,setting:'model',value}),found=>heldModelOf(found,{model:value,choice:value}));
+  if(answer.ok) toast(t('settingsModelsSaved'));
  };
- if(!choosable) return <div className="panel-card"><p className="ro-text" id="set-model">{model||t('settingsModelsNoModel')}</p></div>;
- if(!owner) return <div className="panel-card"><p className="ro-text" id="set-model">{model||t('settingsModelsNoModel')}</p></div>;
+ const current=saved.value.model;
+ if(!choosable||!owner) return <div className="panel-card"><p className="ro-text" id="set-model">{current||t('settingsModelsNoModel')}</p></div>;
  if(!options.length) return <div className="panel-card"><p className="panel-empty">{t('settingsModelsNoChoice')}</p></div>;
  const idOf=(option:ModelOption)=>`set-model-${option.provider}-${option.model}`;
- const chosenIndex=options.findIndex(option=>modelOf(option)===model);
+ const chosenIndex=options.findIndex(option=>modelOf(option)===current);
  const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
   const step=moveChoice(event,rtl); if(step===null) return;
   const next=chosenIndex<0?index:Math.max(0,Math.min(options.length-1,index+step));
@@ -231,125 +234,141 @@ export function AgentModel({company,agent,name,model,options,choosable,owner}:{c
   document.getElementById(idOf(options[next]))?.focus();
  };
  const row=(option:ModelOption,index:number)=>{
-  const choice=modelOf(option); const on=choice===model; const text=<><AppTile app={{key:modelMarkOf(option),mark:markOf(option.providerName)}}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span></>;
-  return owner
-   ? <button type="button" className="panel-row" role="radio" id={idOf(option)} key={choice} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} disabled={busy} onClick={()=>{ if(!on) choose(choice); }} onKeyDown={event=>move(event,index)}>{text}{on&&<span className="panel-row__meta" aria-hidden="true">✓</span>}</button>
-   : <div className="panel-row" key={choice} aria-current={on?'true':undefined}>{text}{on&&<span className="panel-row__meta" aria-hidden="true">✓</span>}</div>;
+  const value=modelOf(option); const on=value===current; const text=<><AppTile app={{key:modelMarkOf(option),mark:markOf(option.providerName)}}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{option.model}</bdi></span><span className="panel-row__d"><bdi>{option.providerName}</bdi></span></span></>;
+  return <button type="button" className="panel-row" role="radio" id={idOf(option)} key={value} aria-checked={on} tabIndex={on||(chosenIndex<0&&index===0)?0:-1} onClick={()=>{ if(!on) choose(value); }} onKeyDown={event=>move(event,index)}>{text}{on&&(saved.saving?<Saving id="set-model-saving"/>:<span className="panel-row__meta" aria-hidden="true">✓</span>)}</button>;
  };
  return <div className="md-agent-model" id="set-model">
-  <div className="panel-card" role={owner?'radiogroup':undefined} aria-label={t('settingsModelsChoose',name)}>{options.map(row)}</div>
-  {error&&<p className="set-err" role="alert">{t(reasonKey(error))}</p>}
-  {!owner&&<p className="set-hint">{t('settingsModelsOwnerOnly')}</p>}
+  <div className="panel-card" role="radiogroup" aria-label={t('settingsModelsChoose',name)} aria-busy={saved.saving||undefined}>{options.map(row)}</div>
+  {saved.error&&<p className="set-err" role="alert">{t(reasonKey(saved.error))}</p>}
  </div>;
 }
 
 // Each Agent's model, with the Owner's sub-agents switch and the Engine's sub-agent settings while it is on. A member
 // below Owner reads the value and no control.
-export function EachAgent({company,owner,models}:{company:string,owner:boolean,models:ModelsData}) {
+export function EachAgent({company,owner,models,readAt}:{company:string,owner:boolean,models:ModelsData,readAt:number}) {
  const {t}=useI18n();
+ const defaultModel=useSaved(defaultKey(company),models.default.model,readAt);
  return <section className="dp-sec" aria-labelledby="md-h-each"><Label id="md-h-each" info={t('settingsModelsEachHint')}>{t('settingsModelsEach')}</Label>
-  <div className="panel-card md-agents">{models.agents.map(agent=><AgentRow key={agent.id} company={company} owner={owner} agent={agent} defaultModel={models.default.model}/>)}</div>
+  <div className="panel-card md-agents">{models.agents.map(agent=><AgentRow key={agent.id} company={company} owner={owner} agent={agent} defaultModel={defaultModel} readAt={readAt}/>)}</div>
   {!owner&&<p className="set-hint">{t('settingsModelsOwnerOnly')}</p>}
  </section>;
 }
 
-function AgentRow({company,owner,agent,defaultModel}:{company:string,owner:boolean,agent:AgentModels,defaultModel:string|null}) {
- const {t}=useI18n(); const router=useRouter();
- const [busy,setBusy]=useState(false); const [error,setError]=useState('');
- const change=async(body:object,ok:string)=>{
-  if(busy) return;
-  setBusy(true); setError('');
-  const answer=await send('/api/agent-settings',{company,agent:agent.id,...body});
-  setBusy(false);
-  if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
-  toast(t(ok)); router.refresh();
+// One Agent's sub-agent settings as its own profile holds them (GET /api/agent-settings), or null when they cannot be read.
+async function subagentSettings(company:string,agent:string):Promise<ModelSetting[]|null> {
+ try {
+  const response=await fetch(`/api/agent-settings?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`);
+  const read=response.ok?await response.json() as {agents?:{settings?:unknown}[]}:null;
+  return Array.isArray(read?.agents?.[0]?.settings)?read.agents[0].settings as ModelSetting[]:null;
+ } catch { return null; }
+}
+
+function AgentRow({company,owner,agent,defaultModel,readAt}:{company:string,owner:boolean,agent:AgentModels,defaultModel:string|null,readAt:number}) {
+ const {t}=useI18n();
+ const model=useSave<HeldModel>(agentModelKey(company,agent.id),{model:agent.model,choice:agent.choice},readAt);
+ // Turning sub-agents on reads that Agent's sub-agent settings alone, which a profile without them never read (#661).
+ const sub=useSave<{on:boolean,settings:ModelSetting[]}>(`subagents:${company}:${agent.id}`,{on:agent.subagents,settings:agent.settings},readAt);
+ const chooseModel=async(value:string|null)=>{
+  const optimistic={model:value??defaultModel,choice:value};
+  const answer=await model.save(optimistic,()=>send('/api/agent-settings',{company,agent:agent.id,setting:'model',value}),found=>heldModelOf(found,optimistic));
+  if(answer.ok) toast(t('settingsModelsSaved'));
  };
- const chosen=agent.choice??'';
- const label=agent.model||(agent.choice?agent.choice:defaultModel)||t('settingsModelsNoModel');
+ const switchSubagents=async()=>{
+  const next={on:!sub.value.on,settings:sub.value.settings};
+  const answer=await sub.save(next,async()=>{
+   const written=await send('/api/agent-settings',{company,agent:agent.id,setting:'subagents',value:next.on});
+   if(!written.ok||!next.on) return written;
+   const settings=await subagentSettings(company,agent.id);
+   return settings?{...written,data:{...written.data,settings:settings.filter(setting=>setting.key.startsWith('delegation.'))}}:written;
+  },answer=>({on:next.on,settings:Array.isArray(answer.data?.settings)?answer.data.settings as ModelSetting[]:next.settings}));
+  if(answer.ok) toast(t('settingsSubagentsSaved'));
+ };
+ const held=model.value;
+ const label=held.model||(held.choice?held.choice:defaultModel)||t('settingsModelsNoModel');
+ const subagents=sub.value.on;
+ const error=model.error||sub.error;
  return <div className="md-agent" id={`mdl-agent-${agent.id}`}>
   <div className="panel-row">
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>
-    <span className="panel-row__d" id={`mdl-agent-${agent.id}-model`}>{agent.choice?<>{t('settingsModelsOwn')} · <bdi dir="ltr">{agent.model}</bdi></>:<>{t('settingsModelsFollows')} · <bdi dir="ltr">{label}</bdi></>}{agent.effort&&<> · {t(effortLabelKey(agent.effort))}</>}</span></span>
+    <span className="panel-row__d" id={`mdl-agent-${agent.id}-model`}>{held.choice?<>{t('settingsModelsOwn')} · <bdi dir="ltr">{held.model}</bdi></>:<>{t('settingsModelsFollows')} · <bdi dir="ltr">{label}</bdi></>}{agent.effort&&<> · {t(effortLabelKey(agent.effort))}</>}</span></span>
+   {model.saving&&<Saving id={`mdl-agent-${agent.id}-saving`}/>}
    {owner&&agent.choosable?<label className="md-agent__pick"><span className="set-label">{t('settingsModelsModelField',agent.name)}</span>
-    <select className="set-input" value={chosen} disabled={busy} aria-label={t('settingsModelsModelField',agent.name)}
-     onChange={event=>change({setting:'model',value:event.target.value||null},'settingsModelsSaved')}>
+    <select className="set-input" value={held.choice??''} aria-busy={model.saving||undefined} aria-label={t('settingsModelsModelField',agent.name)}
+     onChange={event=>chooseModel(event.target.value||null)}>
      <option value="">{t('settingsModelsFollows')}</option>
      {agent.options.map(option=><option key={modelOf(option)} value={modelOf(option)}>{option.model}</option>)}
     </select></label>
-   :<span className="panel-row__meta"><bdi dir="ltr">{agent.model||t('settingsModelsNoModel')}</bdi></span>}
+   :<span className="panel-row__meta"><bdi dir="ltr">{held.model||t('settingsModelsNoModel')}</bdi></span>}
   </div>
   {agent.choosable&&<div className="panel-row">
    <span className="panel-row__text"><span className="panel-row__t" id={`mdl-sub-${agent.id}-t`}>{t('settingsSubagents')}</span>
-    <span className="panel-row__d" id={`mdl-sub-${agent.id}-state`}>{t(agent.subagents?'settingsSubagentsOn':'settingsSubagentsOff')}</span></span>
-   {owner?<button type="button" className="switch" role="switch" id={`mdl-sub-${agent.id}`} aria-checked={agent.subagents} aria-labelledby={`mdl-sub-${agent.id}-t`} disabled={busy} onClick={()=>change({setting:'subagents',value:!agent.subagents},'settingsSubagentsSaved')}/>
-    :<span className="panel-row__meta">{t(agent.subagents?'settingsSubagentsOn':'settingsSubagentsOff')}</span>}
+    <span className="panel-row__d" id={`mdl-sub-${agent.id}-state`}>{t(sub.saving?'settingsSaving':subagents?'settingsSubagentsOn':'settingsSubagentsOff')}</span></span>
+   {owner?<button type="button" className="switch" role="switch" id={`mdl-sub-${agent.id}`} aria-checked={subagents} aria-busy={sub.saving||undefined} aria-labelledby={`mdl-sub-${agent.id}-t`} onClick={switchSubagents}/>
+    :<span className="panel-row__meta">{t(subagents?'settingsSubagentsOn':'settingsSubagentsOff')}</span>}
   </div>}
-  {/* The sub-agents' own model, provider, limits and level are rarely changed (#614): under Advanced, closed at first. */}
-  {agent.subagents&&<Advanced id={`mdl-sub-${agent.id}-advanced`}><SubagentFields company={company} owner={owner} agent={agent}/></Advanced>}
+  {/* The sub-agents' own model, provider, limits and level are rarely changed (#614): under Advanced, closed at first.
+      Drawn once the switch is confirmed on, with the settings that profile holds. */}
+  {subagents&&!sub.saving&&<Advanced id={`mdl-sub-${agent.id}-advanced`}><SubagentFields company={company} owner={owner} agent={agent} settings={sub.value.settings} readAt={readAt}/></Advanced>}
   {error&&<p className="set-err" role="alert">{t(reasonKey(error))}</p>}
   {!agent.choosable&&<p className="set-hint">{t('settingsModelsShared')}</p>}
  </div>;
 }
 
 const effortLabel=(choice:string)=>choice?`settingsEffort${choice[0].toUpperCase()}${choice.slice(1)}`:'settingsEffortInherit';
-function SubagentFields({company,owner,agent}:{company:string,owner:boolean,agent:AgentModels}) {
- const {t}=useI18n(); const router=useRouter();
- const [busy,setBusy]=useState(false); const [error,setError]=useState('');
- const setting=(key:string)=>agent.settings.find(found=>found.key===key);
- const write=async(key:string,value:string|number)=>{
-  if(busy) return;
-  setBusy(true); setError('');
-  const answer=await send('/api/agent-settings',{company,agent:agent.id,setting:key,value});
-  setBusy(false);
-  if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
-  toast(t('settingsSubagentsSaved')); router.refresh();
- };
- // The sub-agent model is two Engine keys: its model id and the provider it runs on (config_defaults.py 1316-1317), so
- // one choice from the list saves both in one request.
- const writeMany=async(settings:Record<string,string|number>)=>{
-  if(busy) return;
-  setBusy(true); setError('');
-  const answer=await send('/api/agent-settings',{company,agent:agent.id,settings});
-  setBusy(false);
-  if(!answer.ok) { setError(answer.error||'settingFailed'); return; }
-  toast(t('settingsSubagentsSaved')); router.refresh();
- };
- const writeModel=async(value:string)=>{
-  const chosen=agent.options.find(option=>modelOf(option)===value);
-  await writeMany(chosen?{'delegation.provider':chosen.provider,'delegation.model':chosen.model}:{'delegation.provider':'','delegation.model':''});
- };
+// A field's "Saving" line under its label while the Engine writes it (#661).
+function FieldSaving({on}:{on:boolean}) { const {t}=useI18n(); return on?<span className="set-hint is-saving" role="status">{t('settingsSaving')}</span>:null; }
+function SubagentFields({company,owner,agent,settings,readAt}:{company:string,owner:boolean,agent:AgentModels,settings:ModelSetting[],readAt:number}) {
+ const {t}=useI18n();
+ const setting=(key:string)=>settings.find(found=>found.key===key);
  const model=setting('delegation.model'); const provider=setting('delegation.provider');
+ const effort=setting('delegation.reasoning_effort');
+ const children=setting('delegation.max_concurrent_children'); const depth=setting('delegation.max_spawn_depth');
+ // The sub-agent model is two Engine keys: its model id and the provider it runs on (config_defaults.py 1316-1317), so
+ // one choice from the list saves both in one request, and both are held as one value.
+ const pair=useSave<{provider:string,model:string}>(settingKey(company,agent.id,'delegation.model'),{provider:typeof provider?.value==='string'?provider.value:'',model:typeof model?.value==='string'?model.value:''},readAt);
+ const level=useSave<string>(settingKey(company,agent.id,'delegation.reasoning_effort'),String(effort?.value??''),readAt);
+ const atOnce=useSave<unknown>(settingKey(company,agent.id,'delegation.max_concurrent_children'),children?.value??children?.default??'',readAt);
+ const deep=useSave<unknown>(settingKey(company,agent.id,'delegation.max_spawn_depth'),depth?.value??depth?.default??'',readAt);
+ const done=(answer:Answer)=>{ if(answer.ok) toast(t('settingsSubagentsSaved')); };
+ const writePair=async(next:{provider:string,model:string})=>done(await pair.save(next,()=>send('/api/agent-settings',{company,agent:agent.id,settings:{'delegation.provider':next.provider,'delegation.model':next.model}})));
+ const writeModel=(value:string)=>{
+  const chosen=agent.options.find(option=>modelOf(option)===value);
+  return writePair(chosen?{provider:chosen.provider,model:chosen.model}:{provider:'',model:''});
+ };
+ const heldModel=pair.value.model; const heldProvider=pair.value.provider;
  const providers=[...new Map(agent.options.map(option=>[option.provider,option.providerName])).entries()];
- const heldModel=typeof model?.value==='string'?model.value:'';
- const heldProvider=typeof provider?.value==='string'?provider.value:'';
  const heldChoice=heldModel?agent.options.find(option=>option.model===heldModel&&(!heldProvider||option.provider===heldProvider)):undefined;
  const modelChoices=[...agent.options, ...(heldModel&&!heldChoice?[{provider:heldProvider,providerName:heldProvider,model:heldModel}]:[])];
- const providerNames=typeof provider?.value==='string'&&provider.value&&!providers.some(([slug])=>slug===provider.value)?[...providers,[provider.value,provider.value]]:providers;
- const effort=setting('delegation.reasoning_effort');
- const numbers:Record<string,ModelSetting|undefined>={max_concurrent_children:setting('delegation.max_concurrent_children'),max_spawn_depth:setting('delegation.max_spawn_depth')};
+ const providerNames=heldProvider&&!providers.some(([slug])=>slug===heldProvider)?[...providers,[heldProvider,heldProvider]]:providers;
+ const numbers=[['max_concurrent_children',children,atOnce],['max_spawn_depth',depth,deep]] as const;
+ const error=pair.error||level.error||atOnce.error||deep.error;
  return <div className="sub-step md-subagent" id={`mdl-sub-${agent.id}-settings`}>
   <div className="set-field"><label className="set-label" htmlFor={`mdl-sub-${agent.id}-model`}>{t('settingSubagentModel')}</label>
-   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-model`} value={heldChoice?modelOf(heldChoice):heldModel?`${heldProvider}/${heldModel}`:''} disabled={busy} onChange={event=>writeModel(event.target.value)}>
+   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-model`} value={heldChoice?modelOf(heldChoice):heldModel?`${heldProvider}/${heldModel}`:''} aria-busy={pair.saving||undefined} onChange={event=>writeModel(event.target.value)}>
     <option value="">{t('settingsModelsFollows')}</option>
     {modelChoices.map(choice=><option key={modelOf(choice)} value={modelOf(choice)}>{choice.model}</option>)}
    </select>:<p className="ro-text">{(heldModel?`${heldProvider}${heldProvider?'/':''}${heldModel}`:'')||t('settingsModelsFollows')}</p>}
+   <FieldSaving on={pair.saving}/>
   </div>
   <div className="set-field"><label className="set-label" htmlFor={`mdl-sub-${agent.id}-provider`}>{t('settingSubagentProvider')}</label>
-   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-provider`} value={String(provider?.value??'')} disabled={busy} onChange={event=>{ const next=event.target.value; writeMany(next?{'delegation.provider':next,'delegation.model':heldModel}:{'delegation.provider':'','delegation.model':''}); }}>
+   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-provider`} value={heldProvider} aria-busy={pair.saving||undefined} onChange={event=>{ const next=event.target.value; writePair(next?{provider:next,model:heldModel}:{provider:'',model:''}); }}>
     <option value="">{t('settingsModelsFollows')}</option>
     {providerNames.map(([slug,name])=><option key={slug} value={slug}>{name}</option>)}
-   </select>:<p className="ro-text">{String(provider?.value??'')||'—'}</p>}
+   </select>:<p className="ro-text">{heldProvider||'—'}</p>}
   </div>
-  {Object.entries(numbers).map(([key,entry])=>entry&&<div className="set-field" key={key}><label className="set-label" htmlFor={`mdl-sub-${agent.id}-${key}`}>{t(entry.label)}</label>
-   {owner?<input className="set-input" id={`mdl-sub-${agent.id}-${key}`} type="number" inputMode="numeric" min={1} defaultValue={String(entry.value??entry.default??'')} disabled={busy}
-    onBlur={event=>{ const next=Number(event.target.value); if(Number.isInteger(next)&&next>=1&&next!==entry.value) write(entry.key,next); }}/>
-    :<p className="ro-text">{String(entry.value??entry.default??'')}</p>}
+  {numbers.map(([key,entry,saved])=>entry&&<div className="set-field" key={key}><label className="set-label" htmlFor={`mdl-sub-${agent.id}-${key}`}>{t(entry.label)}</label>
+   {/* Keyed by the value it shows, so a save that fails puts the field back on the value held before it. */}
+   {owner?<input className="set-input" id={`mdl-sub-${agent.id}-${key}`} key={String(saved.value)} type="number" inputMode="numeric" min={1} defaultValue={String(saved.value)} aria-busy={saved.saving||undefined}
+    onBlur={event=>{ const next=Number(event.target.value); if(Number.isInteger(next)&&next>=1&&next!==saved.value) saved.save(next,()=>send('/api/agent-settings',{company,agent:agent.id,setting:entry.key,value:next})).then(done); }}/>
+    :<p className="ro-text">{String(saved.value)}</p>}
+   <FieldSaving on={saved.saving}/>
    {key==='max_concurrent_children'&&<span className="set-hint">{t('settingsSubagentsAtOnce',String(entry.default??10))}</span>}
   </div>)}
   {effort&&<div className="set-field"><label className="set-label" htmlFor={`mdl-sub-${agent.id}-effort`}>{t(effort.label)}</label>
-   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-effort`} value={String(effort.value??'')} disabled={busy} onChange={event=>write('delegation.reasoning_effort',event.target.value)}>
+   {owner?<select className="set-input" id={`mdl-sub-${agent.id}-effort`} value={level.value} aria-busy={level.saving||undefined} onChange={event=>{ const next=event.target.value; level.save(next,()=>send('/api/agent-settings',{company,agent:agent.id,setting:'delegation.reasoning_effort',value:next})).then(done); }}>
     {(effort.choices??['']).map(choice=><option key={choice||'inherit'} value={choice}>{t(effortLabel(choice))}</option>)}
-   </select>:<p className="ro-text">{t(effortLabel(String(effort.value??'')))}</p>}
+   </select>:<p className="ro-text">{t(effortLabel(level.value))}</p>}
+   <FieldSaving on={level.saving}/>
   </div>}
   {error&&<p className="set-err" role="alert">{t(reasonKey(error))}</p>}
  </div>;

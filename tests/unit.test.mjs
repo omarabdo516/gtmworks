@@ -280,6 +280,15 @@ test('a chat open writes one line of each step\'s whole milliseconds, with ids o
  assert.deepEqual(entry,{event:'chat_opened',at:'2026-11-18T10:00:00.000Z',company:'0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90',conversation:null,ms:{frame:12,sidebar:81,done:301}});
 });
 
+test('a setting save writes one line of each step\'s whole milliseconds, with ids and the setting\'s name only',async()=>{
+ const {settingSaveLine}=await import('../lib/diagnostics.mjs');
+ const entry=JSON.parse(settingSaveLine({company:'0B7E3A52-1c4d-4f6a-9b8e-2d5c7f1a3e90',setting:'model',status:200,steps:{signIn:9.6,queue:11.2,owner:40,reads:310.4,engineWrite:NaN,value:3,done:812.5}},{now:new Date('2026-11-23T10:00:00Z')}));
+ assert.deepEqual(entry,{event:'agent_setting_saved',at:'2026-11-23T10:00:00.000Z',company:'0b7e3a52-1c4d-4f6a-9b8e-2d5c7f1a3e90',setting:'model',status:200,ms:{signIn:10,queue:11,owner:40,reads:310,done:813}});
+ // A setting name that is not one of ours, or any value, never reaches the line.
+ assert.equal(JSON.parse(settingSaveLine({company:'nope',setting:'sk-ant-secret value',status:'x',steps:{}})).setting,null);
+ assert.equal(JSON.parse(settingSaveLine({company:'nope',setting:'model',status:'x',steps:{}})).company,null);
+});
+
 test('a redirect from a server action is not logged as a failure',async()=>{
  const {withActionLog}=await import('../lib/diagnostics.mjs');
  const lines=[]; const redirect=Object.assign(new Error('NEXT_REDIRECT'),{digest:'NEXT_REDIRECT;replace;/c/x;307;'});
