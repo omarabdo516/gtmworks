@@ -37,7 +37,7 @@ async function memberClient(email:string) {
 }
 const asking=()=>{
  const fake=fakeEngine();
- // A Conversation's question may take several picks, as Omar's did; a Channel's card offers one (#354).
+ // A Conversation's question may take several picks, as Omar's did; the Channel's here takes one.
  fake.settings.questions=input=>input.includes('Which Agents')?[{text:'Which of them do we make now?',choices:['Writer','Analyst'],multiple:!input.startsWith('@')&&!input.includes(': @'),said:five}]:[];
  fake.settings.reply=(_input,answers)=>`Making ${answers.join(', ')} now.`;
  return fake;

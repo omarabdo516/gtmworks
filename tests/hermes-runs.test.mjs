@@ -231,6 +231,18 @@ test('a free answer: an open-ended or several-pick question is answered with the
  } finally { await fake.close(); }
 });
 
+// #648, as measured on the pinned release (tools/clarify_tool.py _clean_answer): a several-pick question takes its picks
+// as one JSON array of the choices' texts; any other text is one typed answer.
+test('several picks: a several-pick question is answered with the picked choices as the one JSON array Hermes decodes',async()=>{
+ const fake=await fakeHermes(); asks(fake,[{question:'Which of them do we make now?',choices:['Reel','Carousel','Story','Post'],multi_select:true}]);
+ try {
+  const engine=engineFor(connection(fake)); const run=/** @type {string} */(await engine.start({conversation:'s',input:'Plan the ads',idempotencyKey:'k'}));
+  const {question}=await engine.read(run);
+  assert.equal(await engine.answer(run,/** @type {string} */(question?.id),['Reel','Story']),'answered');
+  assert.deepEqual(sentAnswers(fake).map(([status,body])=>[status,body.answer]),[[200,'["Reel","Story"]']]);
+ } finally { await fake.close(); }
+});
+
 test('a time limit: once Hermes stops waiting the Run reads with no question and goes on to its reply, and a late answer is gone',async()=>{
  const fake=await fakeHermes(); asks(fake,[{question:'Which audience first?',choices:['Parents','Students']}]);
  try {

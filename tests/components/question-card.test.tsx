@@ -23,7 +23,7 @@ const words = {
  en: { letters: ['A', 'B', 'C', 'D'], hint: 'Pick one, or write your answer in the message', answered: 'Answered', closed: 'This question can no longer be answered', inWords: 'Write your answer in the message', orType: 'or type the answer below' },
  ar: { letters: ['أ', 'ب', 'ج', 'د'], hint: 'اختار واحدة، أو اكتب رأيك في الرسالة', answered: 'اتجاوب', closed: 'السؤال ده مبقاش ينفع يتجاوب', inWords: 'اكتب ردك في الرسالة', orType: 'أو اكتب الإجابة تحت' },
 };
-const drawn = (card: Card, language: 'en' | 'ar', answer?: (card: number, choice: number, key: string) => Promise<string | null>, chips = false) =>
+const drawn = (card: Card, language: 'en' | 'ar', answer?: (card: number, choice: number | number[], key: string) => Promise<string | null>, chips = false) =>
  render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false} answer={answer} chips={chips}/>
   <div data-testid="icons"><ShellIcon name="check"/></div></div></LanguageProvider>);
 const keys = (group: Element) => [...group.querySelectorAll('.opt__key')].map(key => key.textContent);
@@ -126,11 +126,103 @@ test.each(['en', 'ar'] as const)('in the %s interface, a question the Engine no 
  expect(group.element().querySelectorAll('.opt')).toHaveLength(0);
 });
 
-test.each([['open-ended', asked([])], ['several may be picked', asked(angles.slice(0, 3), { multiple: true })]] as const)('a question that is %s is answered in words: no lettered buttons and the hint says to write', async (_, card) => {
+test('an open-ended question is answered in words: no lettered buttons and the hint says to write', async () => {
+ const card = asked([]);
  const screen = await drawn(card, 'en', async () => null);
  const group = screen.getByRole('group', { name: card.question });
  await expect.element(group.getByText(words.en.inWords, { exact: true })).toBeVisible();
  expect(group.getByRole('button').elements()).toEqual([]);
+});
+
+// #648: a question where several may be picked draws every choice on the lettered card (design-reference: cardHTML's
+// choice branch), each a toggle, and a Send that sends the picks as one answer; it can still be answered in words. The
+// main Agent's asks it on the same card, since a chip is one pick.
+const picks = { en: { hint: 'Pick one or more, then send, or write your answer in the message', send: 'Send picks' }, ar: { hint: 'اختار واحدة أو أكتر وابعت، أو اكتب ردك في الرسالة', send: 'ابعت اختياراتك' } };
+test.each([['en', false], ['ar', false], ['en', true], ['ar', true]] as const)('in the %s interface (main Agent: %s), a several-pick question draws every choice as a lettered toggle and a Send that waits for a pick', async (language, chips) => {
+ const card = asked(angles, { multiple: true });
+ const screen = await drawn(card, language, async () => null, chips);
+ const group = screen.getByRole('group', { name: card.question });
+ await expect.element(group.getByText(picks[language].hint, { exact: true })).toBeVisible();
+ const toggles = [...group.element().querySelectorAll('.qcard__opts button.opt')] as HTMLButtonElement[];
+ expect(toggles.map(toggle => toggle.querySelector('.opt__t')?.textContent)).toEqual(angles);
+ expect(toggles.map(toggle => toggle.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'false', 'false']);
+ expect(keys(group.element())).toEqual(words[language].letters);
+ await expect.element(group.getByRole('button', { name: picks[language].send, exact: true })).toBeDisabled();
+ expect(group.element().querySelectorAll('.chip'), 'no chips: a chip is one pick').toHaveLength(0);
+});
+
+test.each(['en', 'ar'] as const)('in the %s interface, two of four picked and sent close the card with both picks, each with its check, sending them once', async language => {
+ const card = asked(angles, { multiple: true });
+ const answer = vi.fn(async () => null);
+ const screen = await drawn(card, language, answer);
+ const group = screen.getByRole('group', { name: card.question });
+ await group.getByRole('button', { name: angles[3] }).click();
+ await group.getByRole('button', { name: angles[1] }).click();
+ await group.getByRole('button', { name: angles[2] }).click();
+ await group.getByRole('button', { name: angles[1] }).click();
+ await expect.element(group.getByRole('button', { name: angles[2] })).toHaveAttribute('aria-pressed', 'true');
+ await expect.element(group.getByRole('button', { name: angles[1] })).toHaveAttribute('aria-pressed', 'false');
+ await group.getByRole('button', { name: picks[language].send, exact: true }).click();
+ const resolved = screen.getByRole('group', { name: `${card.question}: ${words[language].answered}` });
+ await expect.element(resolved).toBeVisible();
+ expect(answer).toHaveBeenCalledExactlyOnceWith(42, [2, 3], expect.stringMatching(/^[0-9a-f-]{36}$/));
+ expect(resolved.getByRole('button').elements(), 'nothing left to click').toEqual([]);
+ const rows = [...resolved.element().querySelectorAll('.opt.is-chosen')];
+ expect(rows.map(row => row.querySelector('.opt__t')?.textContent)).toEqual([angles[2], angles[3]]);
+ expect(rows.map(row => row.querySelector('.opt__key')?.textContent)).toEqual(words[language].letters.slice(2, 4));
+ expect(rows.every(row => row.querySelector('.opt__check'))).toBe(true);
+});
+
+// #651: in a channel, where typed words are not taken, the several-pick card asks for picks alone; one someone else must
+// answer shows its choices under the wait line, the main Agent's naming the Member it was asked of.
+const teamPicks = { en: { hint: 'Pick one or more, then send', team: 'Waiting for someone on the team to pick', sara: 'Waiting for Sara' }, ar: { hint: 'اختار واحدة أو أكتر وابعت', team: 'مستني حد من الفريق يختار', sara: 'مستني Sara' } };
+const inChannel = (card: Card, language: 'en' | 'ar', props: Partial<ComponentProps<typeof ReplyCard>>) =>
+ render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false} team {...props}/></div></LanguageProvider>);
+test.each([['en', false], ['ar', false], ['en', true], ['ar', true]] as const)('in the %s interface (main Agent: %s), a channel\'s several-pick question asks for picks alone, and sends them', async (language, chips) => {
+ const card = asked(angles, { multiple: true });
+ const answer = vi.fn(async () => null);
+ const screen = await inChannel(card, language, { answer, chips });
+ const group = screen.getByRole('group', { name: card.question });
+ await expect.element(group.getByText(teamPicks[language].hint, { exact: true })).toBeVisible();
+ await group.getByRole('button', { name: angles[2] }).click();
+ await group.getByRole('button', { name: angles[0] }).click();
+ await group.getByRole('button', { name: picks[language].send, exact: true }).click();
+ expect(answer).toHaveBeenCalledExactlyOnceWith(42, [0, 2], expect.stringMatching(/^[0-9a-f-]{36}$/));
+});
+test.each([['en', null], ['ar', null], ['en', 'Sara'], ['ar', 'Sara']] as const)('in the %s interface, a channel\'s several-pick question for someone else (%s) shows its choices under the wait line', async (language, waitingFor) => {
+ const card = asked(angles, { multiple: true });
+ const screen = await inChannel(card, language, { chips: waitingFor !== null, waitingFor });
+ const group = screen.getByRole('group', { name: card.question });
+ await expect.element(group.getByText(waitingFor ? teamPicks[language].sara : teamPicks[language].team, { exact: true })).toBeVisible();
+ expect([...group.element().querySelectorAll('.opt--static .opt__t')].map(row => row.textContent)).toEqual(angles);
+ expect(group.element().querySelectorAll('button'), 'nothing to press').toHaveLength(0);
+});
+
+test('a refused send leaves the picks to send again, and says why', async () => {
+ const card = asked(angles, { multiple: true });
+ const answer = vi.fn(async () => 'questionTaken');
+ const screen = await drawn(card, 'en', answer);
+ const group = screen.getByRole('group', { name: card.question });
+ await group.getByRole('button', { name: angles[0] }).click();
+ await group.getByRole('button', { name: picks.en.send, exact: true }).click();
+ await expect.element(group.getByRole('alert')).toBeVisible();
+ await expect.element(group.getByRole('button', { name: angles[0] })).toHaveAttribute('aria-pressed', 'true');
+ await expect.element(group.getByRole('button', { name: picks.en.send, exact: true })).toBeEnabled();
+});
+
+test.each(['en', 'ar'] as const)('in the %s interface, a several-pick question answered before the page was drawn shows its picks, each with its check', async language => {
+ const picked = await drawn(asked(angles, { multiple: true, state: 'answered', answer: [angles[0], angles[3]] } as Partial<Question>), language);
+ const rows = [...picked.getByRole('group', { name: `اختار زاوية الإعلان: ${words[language].answered}` }).element().querySelectorAll('.opt.is-chosen')];
+ expect(rows.map(row => [row.querySelector('.opt__key')?.textContent, row.querySelector('.opt__t')?.textContent, !!row.querySelector('.opt__check')]))
+  .toEqual([[words[language].letters[0], angles[0], true], [words[language].letters[3], angles[3], true]]);
+});
+
+test.each(['en', 'ar'] as const)('in the %s interface, a several-pick question answered in words before the page was drawn shows the typed words with no letter', async language => {
+ const typed = await drawn(asked(angles, { multiple: true, state: 'answered', answer: 'Only the video, this week' } as Partial<Question>), language);
+ const row = typed.getByRole('group', { name: `اختار زاوية الإعلان: ${words[language].answered}` }).element().querySelector('.opt.is-chosen');
+ expect(row?.classList.contains('opt--typed')).toBe(true);
+ expect(row?.querySelector('.opt__key')).toBeNull();
+ expect(row?.querySelector('.opt__t')?.textContent).toBe('Only the video, this week');
 });
 
 // #143: the main Agent's question is the same Engine question drawn in the reference's chip form (ask1HTML): the
@@ -192,8 +284,8 @@ test.each(['en', 'ar'] as const)('in the %s interface, a question the main Agent
  expect(group.element().querySelector('.ask1__opts')).toBeNull();
 });
 
-test('the main Agent\'s question with no single choice to pick is answered in words: no chips, and the hint says to write', async () => {
- for (const card of [asked([], { question: 'What should it do?' } as Partial<Question>), asked(angles.slice(0, 3), { multiple: true, question: 'Which angles?' } as Partial<Question>)]) {
+test('the main Agent\'s question with no choice to pick is answered in words: no chips, and the hint says to write', async () => {
+ for (const card of [asked([], { question: 'What should it do?' } as Partial<Question>)]) {
   const screen = await drawn(card, 'en', async () => null, true);
   const group = screen.getByRole('group', { name: card.question });
   await expect.element(group.getByText(words.en.inWords, { exact: true })).toBeVisible();

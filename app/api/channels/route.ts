@@ -28,15 +28,17 @@ async function permit(db:Awaited<ReturnType<typeof supabase>>,body:Record<string
  return reply(decided);
 }
 
-// A pick on the question a channel's Agent waits on (#149): the card and the choice's index, never its text, and one key
-// per card on the page, so a second click is the same claim. Any Member of the channel who may write claims it, except
-// the main Agent's own question, which only the Member it was addressed to may answer (answer_channel_question). The
-// answer then goes to the waiting Run.
+// A pick on the question a channel's Agent waits on (#149): the card and the choice's index, never its text, or on a
+// question where several may be picked the picked choices' indexes (#651), and one key per card on the page, so a second
+// click is the same claim. Any Member of the channel who may write claims it, except the main Agent's own question, which
+// only the Member it was addressed to may answer (answer_channel_question). The answer then goes to the waiting Run.
 async function answer(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
  if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('channelFailed',400);
- if(!(typeof body.choice==='number'&&Number.isSafeInteger(body.choice)&&body.choice>=0&&body.choice<4)) return refuse('channelFailed',400);
+ const isChoiceIndex=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0&&value<4;
+ const picks=Array.isArray(body.choice)&&body.choice.length>=1&&body.choice.length<=4&&body.choice.every(isChoiceIndex)?body.choice as number[]:null;
+ if(!(isChoiceIndex(body.choice)||picks)) return refuse('channelFailed',400);
  if(typeof body.answerKey!=='string'||!uuid.test(body.answerKey)) return refuse('channelFailed',400);
- const answered=await answerChannelQuestion(db,service(),{company:body.company as string,channel:body.channel as string,card:body.card,choice:body.choice,answerKey:body.answerKey,later:after});
+ const answered=await answerChannelQuestion(db,service(),{company:body.company as string,channel:body.channel as string,card:body.card,...(picks?{picks}:{choice:body.choice as number}),answerKey:body.answerKey,later:after});
  if('code' in answered) return refuse(...(refusals[answered.code||'']||['channelFailed',500]));
  // Another Member or another tab was first: the pick is not recorded, so the card says so and reads the channel again.
  if(answered.state==='taken'||answered.state==='closed') return refuse(answered.state==='taken'?'questionTaken':'questionClosed',409);

@@ -18,10 +18,10 @@ select json_build_object(
  'question_closed_by_run_end',exists(select 1 from pg_trigger where tgrelid='public.channel_runs'::regclass
    and tgname='channel_runs_close_questions')
   and position('channel_question:' in pg_get_functiondef('public.close_ended_channel_questions()'::regprocedure))>0,
- 'members_answer',has_function_privilege('authenticated','public.answer_channel_question(uuid,uuid,bigint,int,text,uuid)','execute')
-  and not has_function_privilege('service_role','public.answer_channel_question(uuid,uuid,bigint,int,text,uuid)','execute')
-  and not has_function_privilege('anon','public.answer_channel_question(uuid,uuid,bigint,int,text,uuid)','execute')
-  and position('addressed_to' in pg_get_functiondef('public.answer_channel_question(uuid,uuid,bigint,int,text,uuid)'::regprocedure))>0,
+ 'members_answer',has_function_privilege('authenticated','public.answer_channel_question(uuid,uuid,bigint,int,text,uuid,int[])','execute')
+  and not has_function_privilege('service_role','public.answer_channel_question(uuid,uuid,bigint,int,text,uuid,int[])','execute')
+  and not has_function_privilege('anon','public.answer_channel_question(uuid,uuid,bigint,int,text,uuid,int[])','execute')
+  and position('addressed_to' in pg_get_functiondef('public.answer_channel_question(uuid,uuid,bigint,int,text,uuid,int[])'::regprocedure))>0,
  'members_done_it',has_function_privilege('authenticated','public.mark_channel_hand_done(uuid,uuid,bigint)','execute')
   and not has_function_privilege('service_role','public.mark_channel_hand_done(uuid,uuid,bigint)','execute')
   and not has_function_privilege('anon','public.mark_channel_hand_done(uuid,uuid,bigint)','execute')

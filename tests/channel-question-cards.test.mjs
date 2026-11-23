@@ -75,7 +75,7 @@ function runDatabase() {
      if (card.key === args.answer_key) return { data: 'claimed', error: null };
      if (card.state !== 'open') return { data: card.state === 'closed' ? 'closed' : 'taken', error: null };
      card.state = 'sending'; card.key = args.answer_key; card.by = person;
-     card.content = { ...card.content, answer: card.content.choices[args.choice] }; card.at = '2026-06-10T09:41:00Z';
+     card.content = { ...card.content, answer: args.picks ? args.picks.map(pick => card.content.choices[pick]) : card.content.choices[args.choice] }; card.at = '2026-06-10T09:41:00Z';
      return { data: 'claimed', error: null };
     }
     if (name === 'mark_channel_hand_done') {
@@ -96,12 +96,11 @@ function runDatabase() {
 const queued = () => { /** @type {Promise<void>[]} */ const work = []; return { later: (/** @type {()=>Promise<void>} */ deliver) => { work.push(deliver()); }, settle: () => Promise.all(work) }; };
 
 test('a question no card can settle is answered empty and keeps no card, so the Run is never held open', async () => {
- // #354: a card offers one pick among the choices it can show. A question with none, or one the Engine allows several
- // answers to, leaves the team nothing to press, so it is answered empty as a note's is and no card waits in "Waiting on
- // you" for an answer no one can give. The Run's next read carries its reply.
+ // #354: a card offers the choices it can show. A question with none leaves the team nothing to press, so it is answered
+ // empty as a note's is and no card waits in "Waiting on you" for an answer no one can give. The Run's next read carries
+ // its reply.
  for (const [what, question] of [
   ['no choices', { text: 'Which audience?', choices: [] }],
-  ['several at once', { text: 'Which audiences?', choices: ['Parents', 'Students'], multiple: true }],
   ['no words', { text: '  ', choices: ['One'] }],
  ]) {
   const fake = fakeEngine();
@@ -165,4 +164,25 @@ test('a channel Run is offered the handed step, and "Done it" is kept once and s
  assert.equal(fake.runs.length, 2, 'and it starts as soon as the press is kept');
  assert.equal(fake.runs.at(-1)?.key, `channel:${pressed.message}`, 'under the message the press wrote, as a Run of the channel');
  assert.equal(db.replies.at(-1)?.message, pressed.message, 'its reply lands under that message');
+});
+
+test('a channel question where several may be picked keeps its card, and the picks reach the Engine as one answer', async () => {
+ // #651: as a Conversation's (#648), a Member picks several of its choices and sends them as one answer: the Engine is
+ // never answered with nothing, and it takes the choices' texts, in the order they were offered.
+ const fake = fakeEngine();
+ fake.settings.questions = () => [{ text: 'Which audiences?', choices: ['Parents', 'Students', 'Teachers'], multiple: true }];
+ fake.settings.reply = (input, answers) => `Reply to ${input} (${answers.map(answer => JSON.stringify(answer)).join(', ')})`;
+ const db = runDatabase();
+ assert.deepEqual(await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor }), { started: 1, closed: 0 }, 'the Run waits on its question');
+ assert.deepEqual([...db.cards.values()].map(card => [card.content.choices, card.content.multiple, card.state]), [[['Parents', 'Students', 'Teachers'], true, 'open']], 'the question keeps its card for the team');
+ assert.deepEqual(fake.answers, [], 'nothing is answered with nothing');
+
+ const work = queued();
+ const answered = await answerChannelQuestion(db.member('p-3'), /** @type {any} */(db), { company, channel, card: 1, picks: [0, 2], answerKey: 'a1000000-0000-0000-0000-000000000003', hermes, engineFor: fake.engineFor, later: work.later });
+ assert.deepEqual(answered, { state: 'claimed' }, 'the Member sends the picks as one answer');
+ await work.settle();
+ assert.deepEqual(fake.answers.map(answer => answer.text), [['Parents', 'Teachers']], 'the Engine takes the picked choices\' texts');
+ assert.equal(db.cards.get(1)?.state, 'answered', 'the card reads answered for everyone');
+ assert.deepEqual(await driveChannelRuns(/** @type {any} */(db), { hermes, engineFor: fake.engineFor }), { started: 0, closed: 1 }, 'the same Run goes on to its reply');
+ assert.deepEqual(db.replies.map(reply => reply.body), ['Reply to Omar: @Ads plan it (["Parents","Teachers"])']);
 });
