@@ -14,6 +14,8 @@ Omar's decision of 2026-11-23 (grill on the Card). He wants a Card, its details 
 - A Card has one assignee, an Agent or a Member. Assigned to an Agent, outside Ideas and waiting for nothing, it starts by itself.
 - An Agent reads, makes, assigns, moves, comments on, stops, sends for review and finishes Cards through gtmworks's own tools in its Runs. No Card is made by itself from a chat, a channel or a Handover.
 - Cards, Conversations and team channels are archived and restored, never deleted.
+- A Card's description is one Markdown text, with to-do items ticked in place, because Markdown is what the Engine's Agents read and write. Nothing is offered that Markdown cannot hold.
+- The look is the approved prototype in `design/prototypes/card/`: symbols for states, each with its name in a tooltip, and words only where a person must read to act.
 
 ## Considered options
 
