@@ -135,8 +135,14 @@ test('Settings offer no way to connect an outside Hermes, in any section, the ac
  await signIn(page,'omar@example.com','/c/rs-learning/settings');
  const overlay=page.getByRole('dialog',{name:'Settings'});
  await expect(overlay.locator('.sov-nav .sb-item')).toHaveText(sections);
+ // Each section is drawn before the next click (#630): the breadcrumb's last crumb names it, so no click lands on a page
+ // being replaced.
+ const lastCrumb=overlay.getByRole('navigation',{name:'Breadcrumb'}).getByRole('listitem').last();
  for(const item of await overlay.locator('.sov-nav .sb-item').all()) {
+  const name=(await item.textContent())!.trim();
   await item.click();
+  await expect(item).toHaveAttribute('aria-current','page');
+  await expect(lastCrumb).toHaveText(name);
   await expect(overlay.getByLabel(/Hermes address|Engine address|API key/i)).toHaveCount(0);
   await expect(overlay.getByRole('button',{name:/^Connect (a )?Hermes|^Attach agent$/i})).toHaveCount(0);
  }

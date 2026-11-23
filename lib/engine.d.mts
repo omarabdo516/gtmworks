@@ -16,6 +16,8 @@ export type PermissionChoice='once'|'always'|'deny';
 export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[],allows?:string[]};
 // `said`: what the Agent wrote in the message that paused the Run on its question or permission (#647), as its words.
 export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,said?:string,noModel?:true,modelRefused?:'credit'|'key'|'model'|'access'};
+// Typed words, or the texts of the choices picked on a question where several may be picked (#648).
+export type QuestionAnswer=string|string[];
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
 export type AnsweredPermission='answered'|'gone'|'unreachable';
 // `routine`: the Routine a create through the Engine's scheduling tool made (#205), its name and schedule as the Engine shows them.
@@ -71,7 +73,7 @@ export type Engine={
  dictation?():Promise<DictationSettings>,
  read(run:string):Promise<RunState>,
  stop(run:string):Promise<boolean>,
- answer(run:string,question:string,text:string):Promise<AnsweredQuestion>,
+ answer(run:string,question:string,text:QuestionAnswer):Promise<AnsweredQuestion>,
  permit(run:string,permission:string,choice:PermissionChoice):Promise<AnsweredPermission>,
  session(session:string):Promise<SessionRead>,
  steps?(run:string,read?:{signal?:AbortSignal}):AsyncIterable<RunEvent>,

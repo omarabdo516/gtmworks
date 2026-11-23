@@ -996,6 +996,9 @@
 .gw .opt--static:hover { background: none; }
 .gw .opt--static:hover .opt__key { background: var(--gw-bg-tertiary); color: var(--gw-text-2); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset; }
 .gw .opt.is-chosen .opt__key { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+/* A pick on a question where several may be picked (#648): the chosen row's filled letter and check, still a toggle. */
+.gw .opt[aria-pressed="true"] .opt__key { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+.gw .reply-card .opt:disabled { cursor: default; }
 .gw .reply-card .opt--typed { grid-template-columns: minmax(0, 1fr) auto; }
 .gw .opt--typed .opt__t { white-space: pre-line; overflow-wrap: anywhere; }
 .gw .opt__check { width: 16px; height: 16px; color: var(--gw-text-2); }

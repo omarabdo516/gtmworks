@@ -84,13 +84,16 @@ async function stop(db:Database,body:Record<string,unknown>) {
  return reply(stopped);
 }
 
-// A pick on the question the Agent waits on (#138): the card and the choice's index, never its text, and one key per
-// card on the page, so a second click is the same claim. Only the Conversation's person claims it (answer_question);
+// A pick on the question the Agent waits on (#138): the card and the choice's index, never its text, or on a question
+// where several may be picked the picked choices' indexes (#648), and one key per card on the page, so a second click is
+// the same claim. Only the Conversation's person claims it (answer_question);
 // the answer then goes to the waiting Run. Typed words answer it through send.
 async function answer(db:Database,body:Record<string,unknown>) {
  if(![body.conversation,body.answerKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
- if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||!(typeof body.choice==='number'&&Number.isSafeInteger(body.choice)&&body.choice>=0&&body.choice<4)) return refuse('conversationFailed',400);
- const answered=await answerQuestion(db,service(),{company:body.company as string,conversation:body.conversation as string,card:body.card,choice:body.choice,answerKey:body.answerKey as string});
+ const isChoiceIndex=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0&&value<4;
+ const picks=Array.isArray(body.choice)&&body.choice.length>=1&&body.choice.length<=4&&body.choice.every(isChoiceIndex)?body.choice as number[]:null;
+ if(!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)||!(isChoiceIndex(body.choice)||picks)) return refuse('conversationFailed',400);
+ const answered=await answerQuestion(db,service(),{company:body.company as string,conversation:body.conversation as string,card:body.card,...(picks?{picks}:{choice:body.choice as number}),answerKey:body.answerKey as string});
  if('code' in answered) return answered.code==='22023'?refuse('conversationFailed',400):refuseFor(answered.code);
  // Another tab or the Engine was first: the pick is not recorded, so the card says so and reads the record again.
  if(answered.state==='taken'||answered.state==='closed') return refuse(answered.state==='taken'?'questionTaken':'questionClosed',409);

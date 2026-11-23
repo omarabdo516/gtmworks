@@ -1,4 +1,4 @@
-import type { PermissionChoice } from './engine.mjs';
+import type { PermissionChoice , QuestionAnswer } from './engine.mjs';
 import type { AppState } from './app-catalogue.mjs';
 export type { PermissionChoice };
 // The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
@@ -37,7 +37,7 @@ type ReviewItem={text:string,fine:boolean,note:string};
 type Question={id:number,kind:'question',title:string,question:string,choices:string[],multiple:boolean};
 export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{label:string,value:string}[]}
  |{id:number,kind:'review',title:string,line:string,items:ReviewItem[],decision:string}
- |(Question&({state:'open'}|{state:'answered',answer:string}|{state:'closed'}))
+ |(Question&({state:'open'}|{state:'answered',answer:QuestionAnswer}|{state:'closed'}))
  |(Hand&({state:'open'}|{state:'done',at:string,failed?:true}))
  |(Permission&({state:'open'}|{state:'decided',choice:PermissionChoice,at:string}|{state:'closed'}))
  |(Connect&{state:'open'|'connected'|'postponed'});
@@ -52,7 +52,7 @@ const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow,apps:AppStates)=>
  draft:({id,title,content})=>{ const {line,rows}=content as {line:string,rows:{label:string,value:string}[]}; return {id,kind:'draft',title,line,rows}; },
  review:({id,title,content})=>{ const {line,items,decision}=content as {line:string,items:ReviewItem[],decision:string}; return {id,kind:'review',title,line,items,decision}; },
  question:({id,title,content,state})=>{
-  const {question,choices,multiple,answer}=content as {question:string,choices:string[],multiple:boolean,answer?:string};
+  const {question,choices,multiple,answer}=content as {question:string,choices:string[],multiple:boolean,answer?:QuestionAnswer};
   const asked:Question={id,kind:'question',title,question,choices,multiple};
   return state==='open'?{...asked,state:'open'}:state==='closed'||answer===undefined?{...asked,state:'closed'}:{...asked,state:'answered',answer};
  },
@@ -144,8 +144,9 @@ export const saidParts=(row:Pick<ReplyCardRow,'said_before'>):Pick<PlacedCard,'s
 // closed).
 export function questionParts(row:ReplyCardRow,card:ReplyCard):Pick<PlacedCard,'answer'> {
  if(card.kind!=='question') return {};
- const {answer}=row.content as {answer?:string};
- return answer!==undefined&&row.answered_at?{answer:{body:answer,at:row.answered_at,delivered:card.state!=='closed'}}:{};
+ const {answer}=row.content as {answer?:QuestionAnswer};
+ // Several picks (#648) read as the person's message one per line, in the order they were offered.
+ return answer!==undefined&&row.answered_at?{answer:{body:typeof answer==='string'?answer:answer.join('\n'),at:row.answered_at,delivered:card.state!=='closed'}}:{};
 }
 // What the Engine stops a Run for, a question (#138) or a request to allow an action (#163), is the Agent's own turn
 // after the message of that Run, before its reply.

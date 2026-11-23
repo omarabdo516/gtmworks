@@ -175,7 +175,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const {t,language}=useI18n(); const {c,cb}=useConversationText();
  const {conversation,messages,pending,failed,working:runner}=record;
  const modelCause=record.noModel?'noModel' as const:record.modelRefused?refusalCause[record.modelRefused.reason]:null;
- const answer=async(card:number,choice:number,answerKey:string)=>{
+ const answer=async(card:number,choice:number|number[],answerKey:string)=>{
   const failure=await postMessage({company,conversation:conversation.id,intent:'answer',card,choice,answerKey});
   asked();
   return failure;
