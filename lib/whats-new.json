@@ -1,7 +1,7 @@
 [
  {
   "issue": 646,
-  "date": "2026-11-22",
+  "date": "2026-11-23",
   "en": { "title": "See each step while an Agent works", "body": "While an Agent works on a reply, the line under the chat now shows the tool it is using right now, and the steps it finished fill in above the reply as they happen, in a Conversation and in a channel." },
   "ar": { "title": "شوف كل خطوة والوكيل شغّال", "body": "والوكيل بيشتغل على الرد، السطر اللي تحت الشات بقى بيوريك الأداة اللي بيستخدمها دلوقتي، والخطوات اللي خلّصها بتظهر فوق الرد أول بأول، في المحادثة وفي القناة." }
  },
