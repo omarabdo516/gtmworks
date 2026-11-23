@@ -1,5 +1,11 @@
 [
  {
+  "issue": 660,
+  "date": "2026-11-23",
+  "en": { "title": "New Agents start right away", "body": "An Agent Lead makes now starts with the company's Providers as they are, so it no longer waits for an API key you already gave, and the ones that waited start on their own; one that truly has no model says so and opens Providers." },
+  "ar": { "title": "الوكلاء الجداد بيشتغلوا على طول", "body": "الوكيل اللي Lead بيعمله بقى بيبدأ بمزوّدين الشركة زي ما هم، فمبقاش يستنى مفتاح API إنت ادّيته قبل كده، واللي كانوا مستنيين بيشتغلوا لوحدهم؛ واللي فعلاً مفيش موديل يشتغل عليه بيقول كده ويفتحلك المزوّدين." }
+ },
+ {
   "issue": 646,
   "date": "2026-11-23",
   "en": { "title": "See each step while an Agent works", "body": "While an Agent works on a reply, the line under the chat now shows the tool it is using right now, and the steps it finished fill in above the reply as they happen, in a Conversation and in a channel." },
