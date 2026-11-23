@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(14);
 -- #660. RS Learning (1) holds a key; Lead on the Company's own profile; two Agents waiting for a model from before the
 -- update: one on a profile the Engine made, one on a profile it has not made yet. R&S Consultations (2) holds no key.
 insert into public.agent_profiles(agent_id,company_id,tools_confirmed,tools_pending) values
@@ -40,6 +40,11 @@ set local role service_role;
 select is(public.release_agent_key_wait('e6600000-0000-0000-0000-000000000001','ag-e6600000000000000000000000000001',3),false,'a key change since the count read leaves the wait');
 reset role;
 select is((select count(*)::int from public.agent_key_waits where agent_id='e6600000-0000-0000-0000-000000000001'),1,'so it is still waiting');
+update public.company_key_holds set changing=true where company_id='10000000-0000-0000-0000-000000000001' and provider='opencode-go';
+set local role service_role;
+select is(public.release_agent_key_wait('e6600000-0000-0000-0000-000000000001','ag-e6600000000000000000000000000001',4),false,'a key change still under way, begun before the count was read, leaves the wait');
+reset role;
+update public.company_key_holds set changing=false where company_id='10000000-0000-0000-0000-000000000001' and provider='opencode-go';
 set local role service_role;
 select is(public.release_agent_key_wait('e6600000-0000-0000-0000-000000000001','ag-e6600000000000000000000000000001',4),true,'once the Engine says its profile answers, its wait ends');
 reset role;

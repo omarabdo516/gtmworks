@@ -59,6 +59,21 @@ test('a profile that already has a model keeps it, and is only given the key', a
  } finally { await fake.close(); }
 });
 
+test('a model of its own the profile cannot answer with is replaced by Lead\'s', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,space,main,waiter);
+  fake.settings.profiles.get(space).env={OPENROUTER_API_KEY:known};
+  fake.settings.defaultCredentials.anthropic='test-only-claude-oauth';
+  fake.settings.subscriptionModels.anthropic=['claude-sonnet-4-6'];
+  Object.assign(fake.settings.profiles.get(main),{provider:'anthropic',model:'claude-sonnet-4-6'});
+  // A model whose provider the Company holds no account of.
+  Object.assign(fake.settings.profiles.get(waiter),{provider:'openai-codex',model:'gpt-5.5'});
+  assert.deepEqual(await pass(database([row(waiter)]),fake),{released:1});
+  assert.deepEqual([fake.settings.profiles.get(waiter).provider,fake.settings.profiles.get(waiter).model],['anthropic','claude-sonnet-4-6']);
+ } finally { await fake.close(); }
+});
+
 test('an Agent the Company\'s accounts give no model stays waiting, and is asked again at most once a minute', async () => {
  const fake=await fakeHermes();
  try {

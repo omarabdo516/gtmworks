@@ -117,6 +117,24 @@ test('in a Company with a provider key and a subscription, an Agent Lead makes a
  } finally { await fake.close(); }
 });
 
+test('a new profile that answers already on the Company\'s subscription is still given the Company\'s key, and keeps its model', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,space,main,writer);
+  await change(sessions(fake),fake,{intent:'set',value:known});
+  fake.settings.defaultCredentials.anthropic='test-only-claude-oauth';
+  fake.settings.subscriptionModels.anthropic=['claude-sonnet-4-6'];
+  // The Engine seeds the new profile with a model the root's subscription answers.
+  const created=fake.settings.profiles.set.bind(fake.settings.profiles);
+  fake.settings.profiles.set=(name,profile)=>created(name,name===later?{...profile,provider:'anthropic',model:'claude-sonnet-4-6'}:profile);
+  const {calls}=await leadMakes(fake);
+  fake.settings.profiles.set=created;
+  assert.deepEqual([calls.at(-1)[1].own_profile,calls.at(-1)[1].own_answers],[true,undefined]);
+  assert.equal(envOf(fake,later).OPENROUTER_API_KEY,known,'the key its Fallback model may need');
+  assert.deepEqual([fake.settings.profiles.get(later).provider,fake.settings.profiles.get(later).model],['anthropic','claude-sonnet-4-6'],'its model kept');
+ } finally { await fake.close(); }
+});
+
 test('a Company with no account that gives a model still makes the Agent waiting on its own profile, with nothing written to it', async () => {
  const fake=await fakeHermes();
  try {

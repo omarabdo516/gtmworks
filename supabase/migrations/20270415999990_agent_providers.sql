@@ -28,7 +28,8 @@ revoke all on function public.agent_key_wait_work() from public,anon,authenticat
 grant execute on function public.agent_key_wait_work() to service_role;
 
 -- The Engine says the Agent's profile answers: its wait ends, under the lock key changes take, unless a change of the
--- Company's keys began or ended since `seen`. True when a wait ended.
+-- Company's keys began or ended since `seen`, or one is still under way (it may have begun before `seen` was read).
+-- True when a wait ended.
 create function public.release_agent_key_wait(agent uuid, engine_profile text, seen bigint) returns boolean
 language plpgsql security definer set search_path='' as $$
 declare c uuid;
@@ -36,7 +37,7 @@ begin
  perform pg_advisory_xact_lock(hashtextextended('hermes_agents',0));
  select p.company_id into c from public.agent_profiles p where p.agent_id=agent and p.profile=engine_profile;
  if not found or seen is null then return false; end if;
- if exists(select 1 from public.company_key_holds h where h.company_id=c and h.version>seen) then return false; end if;
+ if exists(select 1 from public.company_key_holds h where h.company_id=c and (h.version>seen or h.changing)) then return false; end if;
  delete from public.agent_key_waits w where w.agent_id=agent and w.company_id=c;
  return found;
 end $$;
