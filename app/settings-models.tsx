@@ -100,13 +100,19 @@ export function DefaultModel({company,owner,models,readAt}:{company:string,owner
  // The Agents a default did not reach, and the value to send them again: the shared space takes it but an Agent's profile
  // can refuse, so the Owner sees which Agents stayed on the old model and can retry the same default.
  const [missed,setMissed]=useState<string[]>([]); const [retry,setRetry]=useState('');
- const choose=async(value:string)=>{
-  const answer=await saved.save(value,()=>send('/api/agent-settings',{company,setting:'model',value}));
-  if(!answer.ok) return;
+ // Every Agent the default reached now runs on it, and its row says so with no read of the page.
+ const holdFollowers=(answer:Answer,value:string)=>{
   const at=savedAt(answer);
   for(const entry of Array.isArray(answer.data?.agents)?answer.data.agents as {agent?:unknown,written?:unknown}[]:[]) {
    if(entry?.written===true&&typeof entry.agent==='string') holdSaved(agentModelKey(company,entry.agent),{model:value,choice:null},at);
   }
+ };
+ const choose=async(value:string)=>{
+  const answer=await saved.save(value,()=>send('/api/agent-settings',{company,setting:'model',value}));
+  if(!answer.ok) return;
+  // The Agents a newer choice will reach are its answer's to name, not this one's.
+  if(!answer.newest) { holdFollowers(answer,value); return; }
+  holdFollowers(answer,value);
   const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as {name?:unknown}[]).map(entry=>String(entry?.name||'')).filter(Boolean):[];
   if(failed.length) { setMissed(failed); setRetry(value); return; }
   setMissed([]); setRetry('');
@@ -220,7 +226,7 @@ export function AgentModel({company,agent,name,model,choice,options,choosable,ow
  const saved=useSave<HeldModel>(agentModelKey(company,agent),{model,choice},readAt);
  const choose=async(value:string)=>{
   const answer=await saved.save({model:value,choice:value},()=>send('/api/agent-settings',{company,agent,setting:'model',value}),found=>heldModelOf(found,{model:value,choice:value}));
-  if(answer.ok) toast(t('settingsModelsSaved'));
+  if(answer.ok&&answer.newest) toast(t('settingsModelsSaved'));
  };
  const current=saved.value.model;
  if(!choosable||!owner) return <div className="panel-card"><p className="ro-text" id="set-model">{current||t('settingsModelsNoModel')}</p></div>;
@@ -271,7 +277,7 @@ function AgentRow({company,owner,agent,defaultModel,readAt}:{company:string,owne
  const chooseModel=async(value:string|null)=>{
   const optimistic={model:value??defaultModel,choice:value};
   const answer=await model.save(optimistic,()=>send('/api/agent-settings',{company,agent:agent.id,setting:'model',value}),found=>heldModelOf(found,optimistic));
-  if(answer.ok) toast(t('settingsModelsSaved'));
+  if(answer.ok&&answer.newest) toast(t('settingsModelsSaved'));
  };
  const switchSubagents=async()=>{
   const next={on:!sub.value.on,settings:sub.value.settings};
@@ -281,7 +287,7 @@ function AgentRow({company,owner,agent,defaultModel,readAt}:{company:string,owne
    const settings=await subagentSettings(company,agent.id);
    return settings?{...written,data:{...written.data,settings:settings.filter(setting=>setting.key.startsWith('delegation.'))}}:written;
   },answer=>({on:next.on,settings:Array.isArray(answer.data?.settings)?answer.data.settings as ModelSetting[]:next.settings}));
-  if(answer.ok) toast(t('settingsSubagentsSaved'));
+  if(answer.ok&&answer.newest) toast(t('settingsSubagentsSaved'));
  };
  const held=model.value;
  const label=held.model||(held.choice?held.choice:defaultModel)||t('settingsModelsNoModel');
@@ -329,7 +335,7 @@ function SubagentFields({company,owner,agent,settings,readAt}:{company:string,ow
  const level=useSave<string>(settingKey(company,agent.id,'delegation.reasoning_effort'),String(effort?.value??''),readAt);
  const atOnce=useSave<unknown>(settingKey(company,agent.id,'delegation.max_concurrent_children'),children?.value??children?.default??'',readAt);
  const deep=useSave<unknown>(settingKey(company,agent.id,'delegation.max_spawn_depth'),depth?.value??depth?.default??'',readAt);
- const done=(answer:Answer)=>{ if(answer.ok) toast(t('settingsSubagentsSaved')); };
+ const done=(answer:Answer&{newest:boolean})=>{ if(answer.ok&&answer.newest) toast(t('settingsSubagentsSaved')); };
  const writePair=async(next:{provider:string,model:string})=>done(await pair.save(next,()=>send('/api/agent-settings',{company,agent:agent.id,settings:{'delegation.provider':next.provider,'delegation.model':next.model}})));
  const writeModel=(value:string)=>{
   const chosen=agent.options.find(option=>modelOf(option)===value);

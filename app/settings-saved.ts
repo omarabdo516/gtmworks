@@ -39,24 +39,29 @@ export const savedAt=(answer:Answer)=>{ const at=Number(answer.data?.savedAt); r
 
 /**
  * One saved value: `value` is what the control shows (the choice being saved while `saving`), `error` the route's code
- * of the last save that failed. A second choice made while one is saving is sent after it; only the newest one's answer
- * clears the "Saving" state or shows an error.
+ * of the last save that failed. A second choice made while one is saving is marked at once and sent once the first has
+ * answered, so the Engine ends on the last choice; only the newest one's answer clears the "Saving" state or shows an
+ * error, and the answer says whether it is that newest one (`newest`).
  */
 export function useSave<T>(key:string,server:T,readAt:number) {
  const confirmed=useSaved(key,server,readAt);
  const [pending,setPending]=useState<{value:T}|null>(null);
  const [error,setError]=useState('');
  const latest=useRef(0);
- const save=async(value:T,request:()=>Promise<Answer>,confirmedOf:(answer:Answer)=>T=()=>value)=>{
+ const before=useRef<Promise<unknown>>(Promise.resolve());
+ const save=async(value:T,request:()=>Promise<Answer>,confirmedOf:(answer:Answer)=>T=()=>value):Promise<Answer&{newest:boolean}>=>{
   const turn=++latest.current;
   setPending({value}); setError('');
-  const answer=await request();
+  const sent=before.current.then(request);
+  before.current=sent.catch(()=>null);
+  const answer=await sent;
   if(answer.ok) holdSaved(key,confirmedOf(answer),savedAt(answer));
-  if(turn===latest.current) {
+  const newest=turn===latest.current;
+  if(newest) {
    setPending(null);
    if(!answer.ok) setError(answer.error||'settingFailed');
   }
-  return answer;
+  return {...answer,newest};
  };
  return {value:pending?pending.value:confirmed,saving:pending!==null,error,save};
 }

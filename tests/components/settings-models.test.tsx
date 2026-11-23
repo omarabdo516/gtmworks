@@ -354,3 +354,24 @@ test('turning sub-agents on reads that Agent\'s sub-agent settings alone, and a 
   await expect.element(toggle).toHaveAttribute('aria-checked', 'true');
   expect(refresh).not.toHaveBeenCalled();
 });
+
+test('a second model choice made while the first is saving is sent after it, and the row ends on the last one', async () => {
+  const answers: ((status: number, body: object) => void)[] = [];
+  const sent: unknown[] = [];
+  vi.stubGlobal('fetch', (_url: string, init?: RequestInit) => {
+    sent.push(JSON.parse(String(init?.body)));
+    return new Promise<Response>(resolve => { answers.push((status, body) => resolve(new Response(JSON.stringify(body), { status }))); });
+  });
+  const three = [...options, { provider: 'openrouter', providerName: 'OpenRouter', model: 'google/gemini-3' }];
+  const screen = await renderNode(<AgentModel readAt={Date.now()} choice={null} company={company} agent="a-twice" name="Writer" model="openrouter/openai/gpt-5.5" options={three} choosable owner/>);
+  await screen.getByRole('radio', { name: /claude-opus-4-6/ }).click();
+  await screen.getByRole('radio', { name: /gemini-3/ }).click();
+  await expect.element(screen.getByRole('radio', { name: /gemini-3/ })).toHaveAttribute('aria-checked', 'true');
+  expect(sent).toHaveLength(1);
+  answers[0](200, { model: 'anthropic/claude-opus-4-6', running: 'anthropic/claude-opus-4-6', savedAt: Date.now() });
+  await expect.poll(() => sent.length).toBe(2);
+  await expect.element(screen.getByText(en.settingsSaving)).toBeVisible();
+  answers[1](200, { model: 'openrouter/google/gemini-3', running: 'openrouter/google/gemini-3', savedAt: Date.now() + 1 });
+  await expect.element(screen.getByText(en.settingsSaving)).not.toBeInTheDocument();
+  await expect.element(screen.getByRole('radio', { name: /gemini-3/ })).toHaveAttribute('aria-checked', 'true');
+});

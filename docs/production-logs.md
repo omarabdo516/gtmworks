@@ -16,10 +16,11 @@ password, anything shaped like a token, and short digit runs such as authenticat
 - `"event":"agent_setting_saved"`: one line per `POST /api/agent-settings` (an Agent's or the Company's model, sub-agents
   or other Engine setting, or a learning mode), written once its answer has gone. Fields: `company`, `setting` (the
   setting's name, `settings` for several at once, `learning` for a mode), `status` (the answer's HTTP status) and `ms`,
-  each step's elapsed milliseconds from the request's start: `signIn`, `allowed` (the route's Role check), `queue` (the
-  wait behind the Company's other setting writes), `owner` (the Owner check), `reads` (the Providers, the Agents and the
-  Engine's profile list), `engineWrite` (the Engine's write and read-back), `record` (the choice and the Company log) and
-  `done`. A step that did not run is left out. Never a value, a body or a key.
+  each step's elapsed milliseconds from the request's start, so a step's own time is its mark less the one before it:
+  `signIn`, `allowed` (the route's Role check), `queue` (the wait behind the Company's other setting writes), `owner`
+  (the Owner check, for one setting), then for a model only `reads` (the Providers, the Agents and the Engine's profile
+  list, read side by side), `engineWrite` (every profile's write and read-back) and `record` (the choice and the Company
+  log), and `done`. A step that is not marked is left out. Never a value, a body or a key.
 
 New server actions are exported as `export const name=withActionLog('name',async function name(...){...})`; a unit test fails
 for one that is not.
