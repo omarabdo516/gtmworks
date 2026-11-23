@@ -337,7 +337,7 @@ test('turning sub-agents on reads that Agent\'s sub-agent settings alone, and a 
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     sent.push({ url, method: init?.method ?? 'GET' });
     if (init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify(fail ? { error: 'settingFailed' } : { setting: 'subagents', savedAt: Date.now() }), { status: fail ? 502 : 200 }));
-    return Promise.resolve(new Response(JSON.stringify({ agents: [{ id: 'a-sub', settings }] }), { status: 200 }));
+    return Promise.resolve(new Response(JSON.stringify({ agents: [{ id: 'a-sub', settings }], readAt: Date.now() }), { status: 200 }));
   });
   const screen = await renderNode(<EachAgent readAt={Date.now()} company={company} owner models={{ default: { model: 'openrouter/openai/gpt-5.5', options }, agents: [agent({ id: 'a-sub' })] }}/>);
   const toggle = screen.getByRole('switch', { name: en.settingsSubagents });
@@ -374,4 +374,18 @@ test('a second model choice made while the first is saving is sent after it, and
   answers[1](200, { model: 'openrouter/google/gemini-3', running: 'openrouter/google/gemini-3', savedAt: Date.now() + 1 });
   await expect.element(screen.getByText(en.settingsSaving)).not.toBeInTheDocument();
   await expect.element(screen.getByRole('radio', { name: /gemini-3/ })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('a default that missed an Agent keeps its Retry when a newer choice then fails', async () => {
+  const answers: ((status: number, body: object) => void)[] = [];
+  vi.stubGlobal('fetch', () => new Promise<Response>(resolve => { answers.push((status, body) => resolve(new Response(JSON.stringify(body), { status }))); }));
+  const screen = await renderNode(<DefaultModel readAt={Date.now()} company={company} owner models={{ model: 'openrouter/openai/gpt-5.5', options: [...options, { provider: 'openrouter', providerName: 'OpenRouter', model: 'google/gemini-3' }] }}/>);
+  await screen.getByRole('radio', { name: /claude-opus-4-6/ }).click();
+  await screen.getByRole('radio', { name: /gemini-3/ }).click();
+  answers[0](200, { agents: [], failed: [{ agent: 'a-2', name: 'Critic' }], savedAt: Date.now() });
+  await expect.poll(() => answers.length).toBe(2);
+  answers[1](502, { error: 'settingFailed' });
+  await expect.element(screen.getByText(en.settingsModelsNotReached.replace('{0}', 'Critic'))).toBeVisible();
+  await expect.element(screen.getByRole('radio', { name: /claude-opus-4-6/ })).toHaveAttribute('aria-checked', 'true');
+  await expect.element(screen.getByRole('button', { name: en.settingsModelsRetry })).toBeVisible();
 });

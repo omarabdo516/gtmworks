@@ -110,13 +110,12 @@ export function DefaultModel({company,owner,models,readAt}:{company:string,owner
  const choose=async(value:string)=>{
   const answer=await saved.save(value,()=>send('/api/agent-settings',{company,setting:'model',value}));
   if(!answer.ok) return;
-  // The Agents a newer choice will reach are its answer's to name, not this one's.
-  if(!answer.newest) { holdFollowers(answer,value); return; }
   holdFollowers(answer,value);
+  // Every answer that saved names the Agents it missed, so a newer choice that then fails still leaves the Retry for them.
   const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as {name?:unknown}[]).map(entry=>String(entry?.name||'')).filter(Boolean):[];
   if(failed.length) { setMissed(failed); setRetry(value); return; }
   setMissed([]); setRetry('');
-  toast(t('settingsModelsSaved'));
+  if(answer.newest) toast(t('settingsModelsSaved'));
  };
  const current=saved.value;
  const idOf=(option:ModelOption)=>`mdl-def-${option.provider}-${option.model}`;
@@ -261,11 +260,12 @@ export function EachAgent({company,owner,models,readAt}:{company:string,owner:bo
 }
 
 // One Agent's sub-agent settings as its own profile holds them (GET /api/agent-settings), or null when they cannot be read.
-async function subagentSettings(company:string,agent:string):Promise<ModelSetting[]|null> {
+// `readAt` is the server's time that read started, so it stands over the fields' saves held from before it.
+async function subagentSettings(company:string,agent:string):Promise<{settings:ModelSetting[],readAt:number}|null> {
  try {
   const response=await fetch(`/api/agent-settings?company=${encodeURIComponent(company)}&agent=${encodeURIComponent(agent)}`);
-  const read=response.ok?await response.json() as {agents?:{settings?:unknown}[]}:null;
-  return Array.isArray(read?.agents?.[0]?.settings)?read.agents[0].settings as ModelSetting[]:null;
+  const read=response.ok?await response.json() as {agents?:{settings?:unknown}[],readAt?:unknown}:null;
+  return Array.isArray(read?.agents?.[0]?.settings)&&typeof read.readAt==='number'?{settings:read.agents[0].settings as ModelSetting[],readAt:read.readAt}:null;
  } catch { return null; }
 }
 
@@ -273,20 +273,20 @@ function AgentRow({company,owner,agent,defaultModel,readAt}:{company:string,owne
  const {t}=useI18n();
  const model=useSave<HeldModel>(agentModelKey(company,agent.id),{model:agent.model,choice:agent.choice},readAt);
  // Turning sub-agents on reads that Agent's sub-agent settings alone, which a profile without them never read (#661).
- const sub=useSave<{on:boolean,settings:ModelSetting[]}>(`subagents:${company}:${agent.id}`,{on:agent.subagents,settings:agent.settings},readAt);
+ const sub=useSave<{on:boolean,settings:ModelSetting[],readAt:number}>(`subagents:${company}:${agent.id}`,{on:agent.subagents,settings:agent.settings,readAt},readAt);
  const chooseModel=async(value:string|null)=>{
   const optimistic={model:value??defaultModel,choice:value};
   const answer=await model.save(optimistic,()=>send('/api/agent-settings',{company,agent:agent.id,setting:'model',value}),found=>heldModelOf(found,optimistic));
   if(answer.ok&&answer.newest) toast(t('settingsModelsSaved'));
  };
  const switchSubagents=async()=>{
-  const next={on:!sub.value.on,settings:sub.value.settings};
+  const next={...sub.value,on:!sub.value.on};
   const answer=await sub.save(next,async()=>{
    const written=await send('/api/agent-settings',{company,agent:agent.id,setting:'subagents',value:next.on});
    if(!written.ok||!next.on) return written;
-   const settings=await subagentSettings(company,agent.id);
-   return settings?{...written,data:{...written.data,settings:settings.filter(setting=>setting.key.startsWith('delegation.'))}}:written;
-  },answer=>({on:next.on,settings:Array.isArray(answer.data?.settings)?answer.data.settings as ModelSetting[]:next.settings}));
+   const read=await subagentSettings(company,agent.id);
+   return read?{...written,data:{...written.data,settings:read.settings.filter(setting=>setting.key.startsWith('delegation.')),readAt:read.readAt}}:written;
+  },answer=>({on:next.on,settings:Array.isArray(answer.data?.settings)?answer.data.settings as ModelSetting[]:next.settings,readAt:typeof answer.data?.readAt==='number'?answer.data.readAt:next.readAt}));
   if(answer.ok&&answer.newest) toast(t('settingsSubagentsSaved'));
  };
  const held=model.value;
@@ -314,7 +314,7 @@ function AgentRow({company,owner,agent,defaultModel,readAt}:{company:string,owne
   </div>}
   {/* The sub-agents' own model, provider, limits and level are rarely changed (#614): under Advanced, closed at first.
       Drawn once the switch is confirmed on, with the settings that profile holds. */}
-  {subagents&&!sub.saving&&<Advanced id={`mdl-sub-${agent.id}-advanced`}><SubagentFields company={company} owner={owner} agent={agent} settings={sub.value.settings} readAt={readAt}/></Advanced>}
+  {subagents&&!sub.saving&&<Advanced id={`mdl-sub-${agent.id}-advanced`}><SubagentFields company={company} owner={owner} agent={agent} settings={sub.value.settings} readAt={Math.max(readAt,sub.value.readAt)}/></Advanced>}
   {error&&<p className="set-err" role="alert">{t(reasonKey(error))}</p>}
   {!agent.choosable&&<p className="set-hint">{t('settingsModelsShared')}</p>}
  </div>;

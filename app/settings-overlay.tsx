@@ -330,7 +330,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
         (#179): the eight the Engine accepts, saved with the same bar, read as text by every other Role. */}
     <Group id="set-h-thinks" title={t('settingsGroupThinking')} info={t('settingsThinksHint')}>
      {agentModel?.models?.agents[0]?<>
-      <AgentModel company={company} agent={agent.id} name={agent.name} model={agentModel.models.agents[0].model} choice={agentModel.models.agents[0].choice} options={agentModel.models.agents[0].options} choosable={agentModel.models.agents[0].choosable} owner={owner} readAt={readAt}/>
+      <AgentModel key={agent.id} company={company} agent={agent.id} name={agent.name} model={agentModel.models.agents[0].model} choice={agentModel.models.agents[0].choice} options={agentModel.models.agents[0].options} choosable={agentModel.models.agents[0].choosable} owner={owner} readAt={readAt}/>
       <AgentEffort agent={agent.id} effort={agentModel.models.agents[0].effort} editable={effortEditable}/>
      </>:<div className="panel-card"><p className="panel-empty">{t('settingsModelsUnread')}</p></div>}</Group>
     {/* The Agent's voice (#162): its language and its real voice with Listen; the speed is in Advanced. */}

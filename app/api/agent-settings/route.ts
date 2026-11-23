@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { settingSaveLine } from '@/lib/diagnostics.mjs';
-import { changeCompanySetting, changeCompanySettings, changeLearningMode, readAgentSettings } from '@/lib/engine-settings.mjs';
+import { changeCompanySetting, changeCompanySettings, changeLearningMode, engineSettings, readAgentSettings } from '@/lib/engine-settings.mjs';
 
 // The Engine settings gtmworks shows and changes (#125). Any active Member reads the listed settings of one Agent (or of
 // every Agent); only an active Owner writes one, which lib/engine-settings.mjs checks again on the server and writes
@@ -11,6 +11,7 @@ import { changeCompanySetting, changeCompanySettings, changeLearningMode, readAg
 // setting is never a credential: the reader drops every value whose key ends api_key, and no value is logged here.
 // A learning mode (#28) is the one write that is two settings at once, both write approvals: `mode` "ask" or "auto",
 // for the whole Company or one Agent, with the same Owner check, read-back and log rows.
+const loggedSettings=new Set<unknown>(['subagents',...engineSettings.map(entry=>entry.key)]);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 // The service answers an outcome, and this route decides its status and error code: a refused Role, an Agent not there,
@@ -43,7 +44,9 @@ export async function GET(request:NextRequest) {
   const agent=request.nextUrl.searchParams.get('agent');
   if(agent!==null&&!uuid.test(agent)) return reply({error:'settingInvalid'},400);
   if(!await routeAllowed(db,'app/api/agent-settings/route.ts','GET',company,user.id)) return reply({error:'settingNotAllowed'},403);
-  return reply(await readAgentSettings(db,{company,agent}));
+  // `readAt` is when this read started, so the page lets it stand over a save it held from before (app/settings-saved.ts).
+  const readAt=Date.now();
+  return reply({...await readAgentSettings(db,{company,agent}),readAt});
  } catch { return reply({error:'settingFailed'},502); }
 }
 // Each save's steps (#661), written once the answer has gone as one agent_setting_saved line (docs/production-logs.md).
@@ -66,7 +69,8 @@ async function save(request:NextRequest,timing:ReturnType<typeof saveClock>,seen
   const raw=await request.text(); if(raw.length>8000) return reply({error:'settingInvalid'},400);
   const body=JSON.parse(raw);
   if(typeof body?.company!=='string'||!uuid.test(body.company)) return reply({error:'settingInvalid'},400);
-  seen.company=body.company; seen.setting=body.mode!==undefined?'learning':body.settings!==undefined?'settings':body.setting;
+  // Only a setting name this route knows reaches the log line; anything else a caller sent is logged as none.
+  seen.company=body.company; seen.setting=body.mode!==undefined?'learning':body.settings!==undefined?'settings':loggedSettings.has(body.setting)?body.setting:null;
   if(body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return reply({error:'settingInvalid'},400);
   // A learning mode is "ask" or "auto" for the Company or one Agent; "follow" gives one Agent back to the Company's own
   // mode (#28), so it names that Agent.
