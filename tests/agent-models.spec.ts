@@ -89,8 +89,9 @@ test('the Owner chooses the Company default and one Agent\'s own model, each rea
  await expect.poll(()=>fake.settings.profiles.get(co)?.model).toBe('anthropic/claude-opus-4.6');
  await page.getByRole('combobox',{name:'Model for Writer'}).selectOption({label:'anthropic/claude-opus-4.6'});
  await expect.poll(()=>fake.settings.profiles.get(writerProfile)?.model).toBe('anthropic/claude-opus-4.6');
- // The page shows the Agent's own choice once the whole save has answered; the record and the log row follow it.
+ // The page shows the Agent's own choice at once (#661), and the record and the log row are there once its "Saving" goes.
  await expect(page.locator(`#mdl-agent-${writer}-model`)).toContainText('Its own choice');
+ await expect(page.locator(`#mdl-agent-${writer}-saving`)).toHaveCount(0);
  expect(JSON.parse(query(`select coalesce(model_choice,'-') as choice from public.agent_profiles where agent_id='${writer}'`))[0].choice).toBe('openrouter/anthropic/claude-opus-4.6');
  const rows=JSON.parse(query(`select details->>'setting' as setting from public.company_log where source='hermes_agent_audit' and action='agent_setting_changed' order by id`)) as {setting:string}[];
  expect(rows.map(row=>row.setting)).toContain('model');
