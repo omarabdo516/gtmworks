@@ -7,3 +7,4 @@ export function withActionLog<A extends unknown[], R>(action: string, run: (...a
 export function limiter(max?: number, windowMs?: number, clock?: () => number): () => boolean;
 export function clientErrorResponse(request: Request, options?: { write?: Write; env?: Env; allowed?: () => boolean }): Promise<Response>;
 export function chatOpenLine(open: { company: string; conversation: string; steps: Record<string, number> }, options?: { now?: Date }): string;
+export function settingSaveLine(save: { company: unknown; setting: unknown; status: number; steps: Record<string, number> }, options?: { now?: Date }): string;

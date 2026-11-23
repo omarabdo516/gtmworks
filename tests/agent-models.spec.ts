@@ -2,6 +2,8 @@ import { test, expect, freshSeed, type Locator, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
+import { readFile } from 'node:fs/promises';
+import { serverLogOf } from './lane.mjs';
 
 // #29, on the app: the Owner gives a provider key, chooses the Company's default model and one Agent's own, and turns
 // sub-agents on for that Agent; each Engine write names the profile it belongs to and is logged. A Manager and a
@@ -87,8 +89,9 @@ test('the Owner chooses the Company default and one Agent\'s own model, each rea
  await expect.poll(()=>fake.settings.profiles.get(co)?.model).toBe('anthropic/claude-opus-4.6');
  await page.getByRole('combobox',{name:'Model for Writer'}).selectOption({label:'anthropic/claude-opus-4.6'});
  await expect.poll(()=>fake.settings.profiles.get(writerProfile)?.model).toBe('anthropic/claude-opus-4.6');
- // The page shows the Agent's own choice once the whole save has answered; the record and the log row follow it.
+ // The page shows the Agent's own choice at once (#661), and the record and the log row are there once its "Saving" goes.
  await expect(page.locator(`#mdl-agent-${writer}-model`)).toContainText('Its own choice');
+ await expect(page.locator(`#mdl-agent-${writer}-saving`)).toHaveCount(0);
  expect(JSON.parse(query(`select coalesce(model_choice,'-') as choice from public.agent_profiles where agent_id='${writer}'`))[0].choice).toBe('openrouter/anthropic/claude-opus-4.6');
  const rows=JSON.parse(query(`select details->>'setting' as setting from public.company_log where source='hermes_agent_audit' and action='agent_setting_changed' order by id`)) as {setting:string}[];
  expect(rows.map(row=>row.setting)).toContain('model');
@@ -185,4 +188,80 @@ test('every provider and subscription shows its logo from the install, in both t
   await testInfo.attach(`models-${theme}`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
  }
  expect(outside).toEqual([]);
+});
+
+// #661: a model choice shows at once. With the Engine's write held back 3 s, the chosen row is marked and says "Saving"
+// within 150 ms of the click, nothing goes grey, and once the Engine answers the row is confirmed with no read of the
+// page: neither the chat behind the window nor any other settings section is read again.
+const writerPage=(page:Page)=>signIn(page,'omar@example.com',`/c/rs-learning/settings?agent=${writer}`);
+const modelRow=(page:Page,model:string)=>page.getByRole('radiogroup',{name:/Writer/}).getByRole('radio',{name:new RegExp(`^${model.replaceAll('.','\\.').replaceAll('/','\\/')}`)});
+// Clicks the row in the page itself and times, frame by frame, how long until it is marked and says Saving.
+const markedWithin=(page:Page,model:string)=>page.evaluate(model=>new Promise<number>(resolve=>{
+ const row=document.getElementById(`set-model-openrouter-${model}`)!;
+ const start=performance.now(); row.click();
+ const check=()=>{ if(row.getAttribute('aria-checked')==='true'&&row.querySelector('.is-saving')) resolve(performance.now()-start); else requestAnimationFrame(check); };
+ check();
+}),model);
+// Every page read the router makes (an RSC request), from the moment it is started.
+const pageReads=(page:Page)=>{ const reads:string[]=[]; page.on('request',request=>{ if(request.headers()['rsc']==='1'||request.url().includes('_rsc=')) reads.push(request.url()); }); return reads; };
+// The overlay's links prefetch every section once the page is drawn (lib/link.tsx), later on a loaded machine: wait
+// until the Models section's has gone and no read has started for 2 s, so only reads after the save are counted.
+async function prefetchesSettled(reads:string[]) {
+ await expect.poll(()=>reads.some(url=>url.includes('section=models')),{timeout:30000}).toBe(true);
+ let seen=-1;
+ await expect.poll(()=>{ const now=reads.length; const still=now===seen; seen=now; return still; },{timeout:30000,intervals:[2000]}).toBe(true);
+ return reads.length;
+}
+
+test('a model choice is marked and says Saving at once while the Engine writes it, then is confirmed with no page read', async({page})=>{
+ language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ const reads=pageReads(page);
+ await writerPage(page);
+ const before=fake.settings.profiles.get(writerProfile)?.model;
+ const next=before==='openai/gpt-5.5'?'anthropic/claude-opus-4.6':'openai/gpt-5.5';
+ await expect(modelRow(page,before!)).toHaveAttribute('aria-checked','true');
+ // A click before React has hydrated the rows does nothing.
+ await page.waitForFunction(()=>Object.getOwnPropertyNames(document.querySelector('#set-model [role=radio]')||{}).some(name=>name.startsWith('__reactProps$')));
+ const drawn=await prefetchesSettled(reads);
+ fake.settings.modelWriteDelay=3000;
+ try {
+  expect(await markedWithin(page,next)).toBeLessThan(150);
+  await expect(page.locator('#set-model-saving')).toHaveText('Saving…');
+  await expect(page.locator('#set-model [role=radio]:disabled')).toHaveCount(0);
+  await expect(modelRow(page,before!)).toHaveAttribute('aria-checked','false');
+  // Confirmed once the Engine answers and the route has read the model back: the mark stays and Saving goes.
+  await expect(page.locator('#set-model-saving')).toHaveCount(0,{timeout:10000});
+  await expect(modelRow(page,next)).toHaveAttribute('aria-checked','true');
+  expect(fake.settings.profiles.get(writerProfile)?.model).toBe(next);
+  await page.waitForTimeout(1500);
+  expect(reads.slice(drawn),'no page is read again after the save').toEqual([]);
+ } finally { fake.settings.modelWriteDelay=0; }
+ // The save's steps are one line of the web log (docs/production-logs.md: agent_setting_saved), the Engine's 3 s in its
+ // write step, and no value in it.
+ const saved=async()=>(await readFile(serverLogOf(),'utf8').catch(()=>'')).split('\n').filter(entry=>entry.includes('"agent_setting_saved"')&&entry.includes(company)).map(entry=>JSON.parse(entry.slice(entry.indexOf('{'))) as {setting:string,status:number,ms:Record<string,number>}).find(entry=>entry.ms.engineWrite>=3000);
+ await expect.poll(saved).toMatchObject({setting:'model',status:200});
+ const steps=(await saved())!.ms;
+ expect(Object.keys(steps)).toEqual(expect.arrayContaining(['signIn','allowed','queue','owner','reads','engineWrite','record','done']));
+ expect(JSON.stringify(await saved())).not.toContain(next);
+ // Opened again, the page reads what the Engine holds.
+ await page.reload();
+ await expect(modelRow(page,next)).toHaveAttribute('aria-checked','true');
+});
+
+test('a model save the Engine refuses puts the row back on the old model and says why', async({page})=>{
+ language(`update public.people set language='en' where id='20000000-0000-0000-0000-000000000001'`);
+ await writerPage(page);
+ const before=fake.settings.profiles.get(writerProfile)?.model??'';
+ const next=before==='openai/gpt-5.5'?'anthropic/claude-opus-4.6':'openai/gpt-5.5';
+ await page.waitForFunction(()=>Object.getOwnPropertyNames(document.querySelector('#set-model [role=radio]')||{}).some(name=>name.startsWith('__reactProps$')));
+ fake.settings.modelWriteDelay=1000; fake.settings.failStep='model';
+ try {
+  await modelRow(page,next).click();
+  await expect(page.locator('#set-model-saving')).toHaveText('Saving…');
+  await expect(page.locator('#set-model').getByRole('alert')).toHaveText('Couldn’t save that model. Try again.',{timeout:10000});
+  await expect(modelRow(page,before)).toHaveAttribute('aria-checked','true');
+  await expect(modelRow(page,next)).toHaveAttribute('aria-checked','false');
+  await expect(page.locator('#set-model-saving')).toHaveCount(0);
+ } finally { fake.settings.modelWriteDelay=0; fake.settings.failStep=''; }
+ expect(fake.settings.profiles.get(writerProfile)?.model).toBe(before);
 });

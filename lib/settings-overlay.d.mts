@@ -23,3 +23,4 @@ export function usageTotals(rows: UsageCountRow[], company: string): { tokens: n
 export function usageModels(rows: UsageCountRow[], company: string): UsageModel[];
 export function usageHeaviest<T extends UsageCountRow>(rows: T[], company: string): T | null;
 export function usageEmpty(rows: UsageCountRow[]): boolean;
+export function pageReadAt(): number;

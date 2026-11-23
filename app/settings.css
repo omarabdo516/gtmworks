@@ -118,6 +118,9 @@
 .gw :is(.sov, .modal.team-dlg) .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; text-align: start; }
 .gw :is(.sov, .modal.team-dlg) .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
 .gw :is(.sov, .modal.team-dlg) .panel-row__meta { font-size: var(--gw-fs-xs); color: var(--gw-text-3); flex: none; display: inline-flex; align-items: center; gap: 4px; --od-icon-size: 14px; }
+/* A choice the Engine is still writing (#661): marked at once, its row saying Saving with a slow pulse until confirmed. */
+.gw .sov .is-saving { color: var(--gw-text-2); animation: gw-breathe 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .gw .sov .is-saving { animation: none; } }
 .gw :is(.sov, .modal.team-dlg) .panel-empty { margin: 0; padding: 10px var(--s2); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
 .gw :is(.sov, .apps-sheet) .ro-note { display: flex; align-items: flex-start; gap: 6px; padding: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); --od-icon-size: 16px; }
 .gw :is(.sov, .apps-sheet) .ro-note .sov-icon { margin-top: 3px; color: var(--gw-text-3); }
