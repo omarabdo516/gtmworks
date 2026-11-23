@@ -144,15 +144,15 @@ _Avoid_: event, cohort, run, season event
 ### How content is organised
 
 **Card / بطاقة**:
-One item of work on the board, with a title, a description, one assignee, a status (the column it is in), a result and comments everyone who sees it reads. A person or an Agent makes it; none is made by itself. Its files, Versions and log stay with it. The Arabic plural is «بطاقات».
+One item of work on the board, with a title, a description, an assignee or nobody yet, a status (the column it is in), a result and comments everyone who sees it reads. A person or an Agent makes it. Its files, Versions and log stay with it. The Arabic plural is «بطاقات».
 _Avoid_: كارت, كروت, task, ticket
 
 **Assignee / المسؤول**:
-The one Agent or Member a Card waits on to be done. A Card assigned to an Agent starts by itself unless it is an idea or waits for another Card; one assigned to a Member is in their "Waiting on you" until it is live or done.
+The one Agent or Member whose job a Card is. A Card has at most one; an idea often has none.
 _Avoid_: next actor, owner, assigned to several
 
 **Archived / مؤرشف**:
-Out of the board, the lists and the counts, with everything in it kept, until a person restores it. Cards, Conversations and team channels are archived, never deleted. Archiving a Card stops the Agent working on it and releases the Cards that wait for it.
+Out of the board, the lists and the counts, with everything in it kept, until a person restores it. Said of a Card, a Conversation or a team channel; none of them is deleted.
 _Avoid_: deleted, removed, hidden, closed
 
 **Attachment / مرفق**:

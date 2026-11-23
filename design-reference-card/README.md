@@ -2,7 +2,7 @@
 
 Approved by Omar on 2026-11-23 (third round in Open Design). It is the reference for the Card, the board, New card, All conversations, and archiving a Conversation or a team channel; `design-reference/` stays the reference for every other screen. The other screens in this copy are not approved here.
 
-Open it: `python3 -m http.server -d design-reference-card 8800`, then `http://127.0.0.1:8800/index.html`. Language: `localStorage` `gtm-lang` (`ar`, `en`); theme: `gtm-theme-v2` (`light`, `dark`). Nobody edits it; `sha256sum -c SHA256SUMS` proves it. A change needs a new approval.
+Open it: `python3 -m http.server -d design-reference-card 8800`, then `http://127.0.0.1:8800/index.html`. Language: `localStorage` `gtm-lang` (`ar`, `en`); theme: `gtm-theme-v2` (`light`, `dark`). Nobody edits it; `(cd design-reference-card && sha256sum -c SHA256SUMS)` proves it. A change needs a new approval.
 
 | State | Card |
 | --- | --- |
@@ -34,4 +34,14 @@ Open it: `python3 -m http.server -d design-reference-card 8800`, then `http://12
 | Curved arrow (grey) | Sent back |
 | Eye (grey) | Read only |
 
-Every symbol has its name in a tooltip (long press on a phone) and as its accessible name. Where this copy and the spec differ, the spec decides: the code-card states shown here are not built (#36), and a real to-do tick box follows DESIGN.md's touch target.
+Every symbol has its name in a tooltip (long press on a phone) and as its accessible name. ## Where this copy is not the rule
+
+The files are kept exactly as approved. The spec decides wherever it differs, and a built screen does not copy these:
+
+- The code-card states are not built (#36), and a real to-do tick box follows DESIGN.md's touch target.
+- A Card waiting for an archived one stays waiting here; archiving releases it. One released while In progress starts here without a new Run; it gets one.
+- A message queued while an Agent answers does not restore an archived Conversation here; it does.
+- A very long title can push the Card's details out of reach; on a phone the tab order of the Card does not follow what is seen.
+- A paste that mixes plain and formatted text loses the plain part.
+- A link to a Card (`#card=`) does not open it on load.
+- Channels made in onboarding, files on a Card made by an Agent's screen, and a routine's manual result are other screens' behaviour and are not approved here.
