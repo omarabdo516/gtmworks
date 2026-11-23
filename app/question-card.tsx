@@ -7,8 +7,9 @@
 //
 // A question where several may be picked (#648) draws the same lettered rows, each a toggle (aria-pressed) whose letter
 // fills and whose check shows once picked, and a Send that sends the picks as one answer, in the order they were offered;
-// it can still be answered in words. Answered, every pick stays, each with its check. The main Agent asks it on this card
-// too, since a chip is one pick.
+// it can still be answered in words, except in a channel (`team`, #651), where typed words are not taken. Answered,
+// every pick stays, each with its check. The main Agent asks it on this card too, since a chip is one pick, and while it
+// waits for the Member it was asked of, its wait line names them.
 // Every word on it but the hint, the letters and "Answered" is the Engine's, so it is laid out in its own direction.
 // The reference's description under each choice and its cost chip have no source in the Engine and are not drawn.
 //
@@ -101,7 +102,7 @@ export function QuestionCard({card,fresh,answer,chips=false,waitingFor=null,team
    <div className="card__outcome"><ShellIcon name="clock"/><span>{waitingFor?t('questionWaitFor',waitingFor):t('questionWaitTeam')}</span></div>
   </div>;
   return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
-   {head(t('questionWaitTeam'))}
+   {head(waitingFor?t('questionWaitFor',waitingFor):t('questionWaitTeam'))}
    {lettered&&<div className="qcard__opts">{card.choices.map((choice,index)=><div key={index} className="opt opt--static">
     <span className="opt__key" aria-hidden="true">{keys[index]}</span><span className="opt__t">{choice}</span>
    </div>)}</div>}
@@ -115,7 +116,7 @@ export function QuestionCard({card,fresh,answer,chips=false,waitingFor=null,team
   {error&&<p className="qcard__error" role="alert">{t(error)}</p>}
  </div>;
  if(several) return <div className={frame} {...place} role="group" aria-label={card.question} dir="auto">
-  {head(t('questionHintPicks'))}
+  {head(t(team?'questionHintPicksTeam':'questionHintPicks'))}
   <div className="qcard__opts">{card.choices.map((choice,index)=><button key={index} type="button" className="opt" aria-pressed={toggled.includes(index)} disabled={picked!==null} onClick={()=>toggle(index)}>
    <span className="opt__key" aria-hidden="true">{keys[index]}</span><span className="opt__t">{choice}</span>{toggled.includes(index)&&<ShellIcon name="check" className="opt__check"/>}
   </button>)}</div>

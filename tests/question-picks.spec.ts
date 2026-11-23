@@ -62,3 +62,38 @@ test('a several-pick question draws its choices: two of four picked are sent as 
   await fake.close();
  }
 });
+
+// #651: in a channel the same question keeps its card for the team. The Owner picks two of the four and sends them, which
+// reach Hermes as the one JSON array, and every Member reads the card answered with both picks, after a reload too.
+test('a channel\'s several-pick question keeps its card: two of four picked are sent as one answer and shown with their checks',async({page})=>{
+ const stamp=Date.now(), agent=randomUUID(), name=`Formats${stamp}`;
+ const general='69000000-0000-0000-0000-000000000001';
+ const fake=await laneHermes();
+ try {
+  fake.settings.questions=input=>input.includes(`posts ${stamp}`)?[{question:`Which of them do we make now ${stamp}?`,choices:formats,multi_select:true}]:[];
+  fake.settings.reply=(input:string,answers:(string|null)[]=[])=>`Reply to: ${input}${answers.length?` (${answers.join(', ')})`:''}`;
+  query(`insert into public.hermes_agents(id,company_id,name,speciality,profile,is_default) values ('${agent}','${rs}','${name}','Ads','picks-${stamp}',false)`);
+  await signIn(page,'omar@example.com',`/c/rs-learning/channels/${general}`);
+  await page.getByRole('textbox',{name:'Write your message in the channel'}).fill(`@${name} plan the December posts ${stamp}`);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  const card=page.getByRole('group',{name:`Which of them do we make now ${stamp}?`,exact:true});
+  await expect(card).toBeVisible({timeout:30000});
+  // Typed words are not taken in a channel, so the card asks for picks alone.
+  await expect(card).toContainText('Pick one or more, then send');
+  await expect(card).not.toContainText('write your answer');
+  await expect(card.locator('.qcard__opts .opt .opt__t')).toHaveText(formats);
+  await card.getByRole('button',{name:'Post'}).click();
+  await card.getByRole('button',{name:'Carousel'}).click();
+  await card.getByRole('button',{name:'Send picks',exact:true}).click();
+  const answered=page.getByRole('group',{name:`Which of them do we make now ${stamp}?: Answered`,exact:true});
+  await expect(answered.locator('.opt.is-chosen .opt__t')).toHaveText(['Carousel','Post']);
+  await expect(page.locator('.msg[data-author=agent]').filter({hasText:`plan the December posts ${stamp} (["Carousel","Post"])`})).toBeVisible({timeout:30000});
+  expect(fake.settings.answers.map(answer=>[answer.status,answer.body.answer])).toEqual([[200,JSON.stringify(['Carousel','Post'])]]);
+  await page.reload();
+  await expect(answered.locator('.opt.is-chosen .opt__t')).toHaveText(['Carousel','Post']);
+  await expect(answered.locator('.opt.is-chosen .opt__check')).toHaveCount(2);
+ } finally {
+  query(`delete from public.hermes_agents where id='${agent}'`);
+  await fake.close();
+ }
+});

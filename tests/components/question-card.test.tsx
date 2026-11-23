@@ -173,6 +173,31 @@ test.each(['en', 'ar'] as const)('in the %s interface, two of four picked and se
  expect(rows.every(row => row.querySelector('.opt__check'))).toBe(true);
 });
 
+// #651: in a channel, where typed words are not taken, the several-pick card asks for picks alone; one someone else must
+// answer shows its choices under the wait line, the main Agent's naming the Member it was asked of.
+const teamPicks = { en: { hint: 'Pick one or more, then send', team: 'Waiting for someone on the team to pick', sara: 'Waiting for Sara' }, ar: { hint: 'اختار واحدة أو أكتر وابعت', team: 'مستني حد من الفريق يختار', sara: 'مستني Sara' } };
+const inChannel = (card: Card, language: 'en' | 'ar', props: Partial<ComponentProps<typeof ReplyCard>>) =>
+ render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false} team {...props}/></div></LanguageProvider>);
+test.each([['en', false], ['ar', false], ['en', true], ['ar', true]] as const)('in the %s interface (main Agent: %s), a channel\'s several-pick question asks for picks alone, and sends them', async (language, chips) => {
+ const card = asked(angles, { multiple: true });
+ const answer = vi.fn(async () => null);
+ const screen = await inChannel(card, language, { answer, chips });
+ const group = screen.getByRole('group', { name: card.question });
+ await expect.element(group.getByText(teamPicks[language].hint, { exact: true })).toBeVisible();
+ await group.getByRole('button', { name: angles[2] }).click();
+ await group.getByRole('button', { name: angles[0] }).click();
+ await group.getByRole('button', { name: picks[language].send, exact: true }).click();
+ expect(answer).toHaveBeenCalledExactlyOnceWith(42, [0, 2], expect.stringMatching(/^[0-9a-f-]{36}$/));
+});
+test.each([['en', null], ['ar', null], ['en', 'Sara'], ['ar', 'Sara']] as const)('in the %s interface, a channel\'s several-pick question for someone else (%s) shows its choices under the wait line', async (language, waitingFor) => {
+ const card = asked(angles, { multiple: true });
+ const screen = await inChannel(card, language, { chips: waitingFor !== null, waitingFor });
+ const group = screen.getByRole('group', { name: card.question });
+ await expect.element(group.getByText(waitingFor ? teamPicks[language].sara : teamPicks[language].team, { exact: true })).toBeVisible();
+ expect([...group.element().querySelectorAll('.opt--static .opt__t')].map(row => row.textContent)).toEqual(angles);
+ expect(group.element().querySelectorAll('button'), 'nothing to press').toHaveLength(0);
+});
+
 test('a refused send leaves the picks to send again, and says why', async () => {
  const card = asked(angles, { multiple: true });
  const answer = vi.fn(async () => 'questionTaken');

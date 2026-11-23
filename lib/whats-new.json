@@ -1,5 +1,11 @@
 [
  {
+  "issue": 651,
+  "date": "2026-11-23",
+  "en": { "title": "Pick several answers in a channel", "body": "When an Agent in a channel asks a question where several choices fit, the team now sees every choice: pick one or more and press Send picks." },
+  "ar": { "title": "اختار أكتر من إجابة في القناة", "body": "لما وكيل في قناة يسأل سؤال ينفع تختار فيه أكتر من حاجة، الفريق بقى يشوف كل الاختيارات: اختار واحدة أو أكتر ودوس ابعت اختياراتك." }
+ },
+ {
   "issue": 648,
   "date": "2026-11-22",
   "en": { "title": "Pick several answers to a question", "body": "When an Agent asks a question where several choices fit, its card now shows every choice: pick one or more and press Send, or write your answer in the message as before." },
