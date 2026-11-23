@@ -461,7 +461,8 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7]
-    # 10.6 min measured for the slowest shard on run 44636876755: 12 min is 1.5 times it, capped at 12 (#410).
+    # 10.0 min measured for the slowest of the seven shards on run 45088411177 (#653): 12 min is 1.5 times it, capped at
+    # 12 (#410).
     timeout-minutes: 12
     permissions:
       contents: read

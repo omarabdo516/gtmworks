@@ -14,7 +14,7 @@ Every job of the full check — `changes`, `fast`, `supabase-images`, `image`, `
 | `supabase-images` | 0.1 min | 3 min |
 | `image` | 3.4 min, with the work sandbox image (run 44726291691) | 6 min |
 | `database` | 2.1 min | 4 min |
-| `integration` | 10.6 min, its slowest shard | 12 min |
+| `integration` | 10.0 min, its slowest of seven shards split by measured time (run 45088411177, #653; from 12 min and cancelled with six split by test count, run 45065303461) | 12 min |
 | `chat-open` | 5 min, an estimate until its first run | 8 min |
 | `install` | 10.0 min, its slowest area (updater, run 44967491326; agents-sandbox 9.5, agents 8.1, backup-engines 8.0 and backup 7.0 min once #553 split agents and backup in two, from 11.3 min for backup on run 44897434186) | 12 min |
 | `check` | 0.1 min | 3 min |
