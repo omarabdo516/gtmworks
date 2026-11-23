@@ -29,7 +29,8 @@ insert into decisions
  select fn,'checks','answers for a Card its Agent hides from the caller, or from the person it names, as for a Card that does not exist' from unnest(array[
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
-  'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
+  'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)',
+  'public.archived_cards(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[])']) fn
  union all select 'public.channel_board_card(uuid)','exempt','a channel member reads the one Card their channel put on the board only while they see its Agent (can_see_agent), as the board shows it (#151); anyone else reads nothing'
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
