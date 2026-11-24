@@ -1687,5 +1687,20 @@
   "allConversationsSelectAll": "اختار كل اللي ظاهر",
   "allConversationsSelectOne": "اختار {0}",
   "allConversationsArchiveSelected": "أرشفهم",
-  "allConversationsRestoreSelected": "رجّعهم"
+  "allConversationsRestoreSelected": "رجّعهم",
+  "boardSelectCards": "اختار كذا بطاقة",
+  "boardSelecting": "اختيار كذا بطاقة",
+  "boardSelectedCount": "{0} متختارين",
+  "boardSelectAllShown": "اختار كل اللي ظاهر",
+  "boardArchiveSelected": "أرشفهم",
+  "boardRestoreSelected": "رجّعهم",
+  "boardSelectCard": "اختار {0}",
+  "boardArchiveDone": "أرشف كل اللي في «{0}»",
+  "boardArchiveAll": "أرشف الكل",
+  "cardsArchivedToast": "{0} اتأرشفوا",
+  "cardsRestoredToast": "{0} رجعوا",
+  "boardArchiveLeftOne": "ماتأرشفتش: {0}. يمكن اتغيّرت في الوقت ده، أو مش مسموح لك تأرشفها.",
+  "boardArchiveLeftMany": "ماتأرشفوش: {0}. يمكن اتغيّروا في الوقت ده، أو مش مسموح لك تأرشفهم.",
+  "boardRestoreLeftOne": "مارجعتش: {0}. يمكن اتغيّرت في الوقت ده، أو مش مسموح لك ترجّعها.",
+  "boardRestoreLeftMany": "مارجعوش: {0}. يمكن اتغيّروا في الوقت ده، أو مش مسموح لك ترجّعهم."
 }

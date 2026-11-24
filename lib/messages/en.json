@@ -1687,5 +1687,20 @@
   "allConversationsSelectAll": "Select all shown",
   "allConversationsSelectOne": "Select {0}",
   "allConversationsArchiveSelected": "Archive",
-  "allConversationsRestoreSelected": "Restore"
+  "allConversationsRestoreSelected": "Restore",
+  "boardSelectCards": "Select several cards",
+  "boardSelecting": "Selecting cards",
+  "boardSelectedCount": "{0} selected",
+  "boardSelectAllShown": "Select all shown",
+  "boardArchiveSelected": "Archive",
+  "boardRestoreSelected": "Restore",
+  "boardSelectCard": "Select {0}",
+  "boardArchiveDone": "Archive everything in {0}",
+  "boardArchiveAll": "Archive all",
+  "cardsArchivedToast": "{0} archived",
+  "cardsRestoredToast": "{0} restored",
+  "boardArchiveLeftOne": "Not archived: {0}. It changed meanwhile, or you may not archive it.",
+  "boardArchiveLeftMany": "Not archived: {0}. They changed meanwhile, or you may not archive them.",
+  "boardRestoreLeftOne": "Not restored: {0}. It changed meanwhile, or you may not restore it.",
+  "boardRestoreLeftMany": "Not restored: {0}. They changed meanwhile, or you may not restore them."
 }

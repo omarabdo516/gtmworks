@@ -344,3 +344,34 @@
   /* 44px touch targets on a phone. */
   .gw .board-view .ib { min-width: 44px; height: 44px; }
 }
+/* Select mode (#672; design-reference-card: .board.is-selecting, .kcard.is-sel, .kt-check, .bsel, .sel-box, .col__act):
+   each Card is one toggle over its whole face with its box at the top end, the bar above the columns counts the
+   selection, and the archive list's rows take a 44px box before them. */
+.gw .board-view .kcard.is-sel { cursor: pointer; }
+.gw .board-view .kcard .kcard__pick { display: block; width: 100%; padding: 0; padding-inline-end: 28px; border: 0; background: none; font-family: inherit; text-align: start; cursor: pointer; }
+.gw .board-view .kcard:has(.kcard__pick:focus-visible) { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .board-view .kcard[class] > .kt-check {
+  position: absolute; top: 12px; inset-inline-end: 12px; width: 20px; height: 20px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center; background: var(--gw-bg-pane); box-shadow: var(--gw-border-1) 0 0 0 1.5px inset; pointer-events: none;
+}
+.gw .board-view .kcard:has(.kcard__pick[aria-pressed="true"]) { box-shadow: 0 0 0 2px var(--gw-text-1); }
+.gw .board-view .kcard:has(.kcard__pick[aria-pressed="true"]) > .kt-check { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+.gw .board-view .kt-check .gw-icon, .gw .board-view .sel-box .gw-icon { width: 14px; height: 14px; }
+.gw .board-view .bsel { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin: 0 var(--s8) var(--s4); padding-block: var(--s2); padding-inline: var(--s4) var(--s2); border-radius: var(--gw-r-full); background: var(--gw-bg-pane); box-shadow: var(--b-shadow-card, #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px); font-size: var(--gw-fs-sm); }
+.gw .board-view .bsel__n b { font-weight: 600; }
+.gw .board-view .bsel .btn .gw-icon { width: 14px; height: 14px; }
+.gw .board-view .link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 0; border-radius: var(--gw-r-xs); background: none; font: inherit; font-size: var(--gw-fs-sm); color: var(--gw-text-2); cursor: pointer; }
+@media (hover: hover) { .gw .board-view .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); } }
+.gw .board-view .bsel-left { margin: 0 var(--s8) var(--s4); }
+.gw .board-view .sel-box { width: 44px; height: 44px; flex: none; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--gw-r-sm); background: none; color: inherit; cursor: pointer; }
+.gw .board-view .sel-box > span { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; box-shadow: var(--gw-border-1) 0 0 0 1.5px inset; }
+.gw .board-view .sel-box[aria-checked="true"] > span { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+@media (hover: hover) { .gw .board-view .sel-box:hover { background: var(--gw-bg-hover); } }
+.gw .board-view .col__head .col__act { margin-inline-start: auto; min-width: 28px; height: 28px; padding: 0; color: var(--gw-text-3); }
+@media (max-width: 1023px) { .gw .board-view :is(.bsel, .bsel-left) { margin-inline: var(--s5); } }
+@media (max-width: 767px) {
+  .gw .board-view :is(.bsel, .bsel-left) { margin-inline: var(--s4); }
+  .gw .board-view .bsel { border-radius: var(--gw-r-lg); }
+  .gw .board-view .col__head .col__act { min-width: 44px; height: 44px; }
+  .gw .board-view .link-btn { min-height: 44px; }
+}

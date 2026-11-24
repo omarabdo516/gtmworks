@@ -33,9 +33,10 @@ export function KanbanColumn({column,name,count,waiting=false,head,children,...p
 export function KanbanCard({children,id,column,isOverlay=false,disabled=false,blocked,className='',...props}:Omit<ComponentProps<'div'>,'id'>&{id:number,column:string,isOverlay?:boolean,disabled?:boolean,blocked?:(to:string)=>boolean}) {
  const {attributes,listeners,setNodeRef,isDragging}=useDraggable({id,disabled:disabled||isOverlay,data:{column,blocked}});
  const {place,carrying,returning}=useContext(DropMark);
- // The card's link is the one stop for the keyboard; the draggable box itself is not a second one.
- const {role:_role,tabIndex:_tab,'aria-describedby':_hint,'aria-roledescription':_kind,...rest}=attributes;
- void _role; void _tab; void _hint; void _kind;
+ // The card's link is the one stop for the keyboard; the draggable box itself is not a second one. A Card that cannot be
+ // carried is still pressed (a Viewer's link, select mode's toggle, #672), so the box does not call it disabled.
+ const {role:_role,tabIndex:_tab,'aria-describedby':_hint,'aria-roledescription':_kind,'aria-disabled':_off,...rest}=attributes;
+ void _role; void _tab; void _hint; void _kind; void _off;
  const before=carrying&&!isOverlay&&place.before===id;
  return <div {...props} ref={isOverlay?undefined:setNodeRef} {...(isOverlay?{}:rest)} {...(isOverlay?{}:listeners)} data-card-id={isOverlay?undefined:id} aria-hidden={isOverlay||undefined}
   className={`kcard card ${className}${(isDragging||returning===id)&&!isOverlay?' is-drag-src':''}${before?' is-drop-before':''}${isOverlay?' kcard--ghost':''}`}>{children}</div>;

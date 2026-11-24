@@ -61,7 +61,7 @@ const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boa
 export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
  const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
- const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const [showArchived,setShowArchived]=useState(false); const [confirming,setConfirming]=useState<{cards:number[],stops:ArchiveStop[]}|null>(null); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
+ const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const [showArchived,setShowArchived]=useState(false); const [confirming,setConfirming]=useState<{cards:number[],stops:ArchiveStop[]}|null>(null); const [selected,setSelected]=useState<Map<number,string>|null>(null); const [left,setLeft]=useState<{restore:boolean,titles:string[]}|null>(null); const selectToggle=useRef<HTMLButtonElement>(null); const selectAllButton=useRef<HTMLButtonElement>(null); const selectedAct=useRef<HTMLButtonElement>(null); const [focusTo,setFocusTo]=useState<{to:'toggle'|'all'|'act'}|null>(null); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
  const base=`/c/${p.slug}/work`; const card=p.cards.find(c=>c.id===p.cardId); const shown=p.cards.filter(c=>!project||String(c.project_id)===project); const visible=shown.filter(c=>!month||!c.go_live||c.go_live.slice(0,7)===month); const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="company" value={p.company}/></>;
  if(card&&composing) setComposing(false);
  // A card made from a message is marked with its mode, in the colour of the agent it was sent to.
@@ -141,25 +141,42 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // Archiving and restoring (#670; design-reference-card: cwArchive, cwUndo, cwRestore): the database decides, and the
  // toast says what happened. "Undo" restores the Cards just archived to their columns and starts nothing.
  const archiveForm=(ids:number[],intent:'stops'|'archive'|'restore')=>{ const form=new FormData(); form.set('company',p.company); form.set('slug',p.slug); form.set('intent',intent); for(const id of ids) form.append('card',String(id)); return form; };
+ // Several at once (#672; design-reference-card: cwArchive's "N archived", cwRestore's "N restored"): a Card the
+ // database left as it was, because it changed meanwhile or the person may not change it, is named on the board.
+ const titleOf=(id:number)=>selected?.get(id)??p.cards.find(c=>c.id===id)?.title??(p.archived||[]).find(c=>c.id===id)?.title??'';
+ const leftOf=(ids:number[],done:number[],restoring:boolean)=>{ const titles=ids.filter(id=>!done.includes(id)).map(titleOf); setLeft(ids.length>1&&titles.length?{restore:restoring,titles}:null); };
+ const leftLine=(l:{restore:boolean,titles:string[]})=>{ const [before,after]=t(`board${l.restore?'Restore':'Archive'}Left${l.titles.length>1?'Many':'One'}`,'\u0000').split('\u0000');
+  return <>{before}{l.titles.map((title,n)=><Fragment key={n}>{n>0&&t('boardNamesJoin')}{language==='ar'?<>«<bdi>{title}</bdi>»</>:<>“<bdi>{title}</bdi>”</>}</Fragment>)}{after}</>; };
+ const endSelecting=()=>{ if(selected) { setSelected(null); setFocusTo({to:'toggle'}); } };
  const restore=(ids:number[])=>{ if(!p.archiveCards) return;
   void p.archiveCards(archiveForm(ids,'restore')).then(result=>{
-   if(result.state!=='done') { toast(t('cardRestoreRefused'),{icon:'x'}); return; }
-   toast(t('cardRestoredToast'),{icon:'restore'}); router.refresh();
+   const done=result.state==='done'?result.cards:[]; leftOf(ids,done,true); endSelecting();
+   if(!done.length) { if(ids.length===1) toast(t('cardRestoreRefused'),{icon:'x'}); return; }
+   toast(done.length>1?t('cardsRestoredToast',done.length):t('cardRestoredToast'),{icon:'restore'}); router.refresh();
   });
  };
  const archiveNow=(ids:number[])=>{ if(!p.archiveCards) return;
   void p.archiveCards(archiveForm(ids,'archive')).then(result=>{
-   if(result.state!=='done') { toast(t('cardArchiveRefused'),{icon:'x'}); return; }
-   toast(t('cardArchivedToast'),{icon:'archive',action:{label:t('cardUndo'),run:()=>restore(result.cards)}}); router.refresh();
+   const done=result.state==='done'?result.cards:[]; leftOf(ids,done,false); endSelecting();
+   if(!done.length) { if(ids.length===1) toast(t('cardArchiveRefused'),{icon:'x'}); return; }
+   toast(done.length>1?t('cardsArchivedToast',done.length):t('cardArchivedToast'),{icon:'archive',action:{label:t('cardUndo'),run:()=>restore(done)}}); router.refresh();
   });
  };
  // #671 (design-reference-card: cwArchive, cwConfirm): the database first says what archiving would stop; only when
- // something does, one confirmation names each thing, and only "Archive and stop" archives.
- const archive=(ids:number[])=>{ if(!p.archiveCards) return;
+ // something does, one confirmation names each thing across every Card being archived, and only "Archive and stop" archives.
+ const archive=(ids:number[])=>{ if(!p.archiveCards||!ids.length) return; setLeft(null);
   void p.archiveCards(archiveForm(ids,'stops')).then(result=>{
    if(result.state==='stops'&&result.stops.length) setConfirming({cards:ids,stops:result.stops}); else archiveNow(ids);
   });
  };
+ // Select mode (#672; design-reference-card: bsel-toggle, sel-card, bsel-all): each Card shown is one press that selects
+ // it, with the mouse, a tap, or Space or Enter; "Select all shown" adds every Card the board or the archive list shows.
+ // The keyboard goes where the reference sends it: to "Select all shown" on entering, to the bar's Archive after it, and
+ // back to the select icon when the mode ends.
+ const canSelect=!!(p.canCreate&&p.archiveCards&&!p.focus);
+ const startSelecting=()=>{ setLeft(null); setSelected(new Map()); setFocusTo({to:'all'}); };
+ const flip=(c:{id:number,title:string})=>setSelected(now=>{ if(!now) return now; const next=new Map(now); if(next.has(c.id)) next.delete(c.id); else next.set(c.id,c.title); return next; });
+ useEffect(()=>{ if(focusTo) ({toggle:selectToggle,all:selectAllButton,act:selectedAct})[focusTo.to].current?.focus(); },[focusTo]);
  const stopFace=(agent:string|null)=>{ const own=agent?agentById.get(agent):undefined; return own?<CompanyAgentFace agent={own} size={24}/>:null; };
  const archivedCards=p.archived||[];
  const firstName=(person:string|null|undefined)=>p.members.find(m=>m.person_id===person)?.people?.name?.trim().split(/\s+/)[0]||'';
@@ -218,9 +235,11 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // made from a message has its mode and a Card read from the board's data keeps its brief, so neither takes this line.
  const maker=makerOf(c); const from=column==='ideas'&&!brief&&c.agent_id&&!c.mode?p.members.find(m=>m.person_id===maker)?.people?.name?.split(' ')[0]:undefined;
  const idea=from?t('boardNewIdeaFrom',from):null;
-  return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate} className={mine?'approval-card':''} data-mine={mine||undefined} data-stage-id={c.stage_id} data-stage-name={stageName(c)}>
+  const picking=!!selected&&!isOverlay; const chosen=!!selected?.has(c.id);
+  return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate||!!selected} className={`${mine?'approval-card':''}${picking?' is-sel':''}`} data-mine={mine||undefined} data-stage-id={c.stage_id} data-stage-name={stageName(c)}>
    {c.mode&&<span className="kcard__kind">{modeChip(c)}</span>}
-   <Link className="authored-title kcard__title" dir="auto" href={p.focus?`${base}/board/${c.id}`:`${base}/board?card=${c.id}`} scroll={!!p.focus} draggable={false} tabIndex={isOverlay?-1:undefined} aria-label={crew.length>1?t('boardWorkedOnCard',c.title,names.join(t('boardNamesJoin'))):undefined} aria-describedby="board-drag-hint" aria-keyshortcuts={p.canCreate?'Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown':undefined} onKeyDown={isOverlay?undefined:keys(c)}><strong>{c.title}</strong></Link>
+   {picking?<><button type="button" className="authored-title kcard__title kcard__pick" dir="auto" aria-pressed={chosen} onClick={()=>flip(c)}><strong>{c.title}</strong></button><span className="kt-check" aria-hidden="true">{chosen&&<ShellIcon name="check"/>}</span></>
+   :<Link className="authored-title kcard__title" dir="auto" href={p.focus?`${base}/board/${c.id}`:`${base}/board?card=${c.id}`} scroll={!!p.focus} draggable={false} tabIndex={isOverlay?-1:undefined} aria-label={crew.length>1?t('boardWorkedOnCard',c.title,names.join(t('boardNamesJoin'))):undefined} aria-describedby="board-drag-hint" aria-keyshortcuts={p.canCreate?'Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown':undefined} onKeyDown={isOverlay?undefined:keys(c)}><strong>{c.title}</strong></Link>}
    {column==='waiting'&&chat?<>
     {chat.kind==='hand'&&<span className="wtag wtag--hand"><ShellIcon name="hand"/>{t('handBadge')}</span>}
     <span className={`badge${chat.mine?' badge--wait':''}${chat.mine&&fresh.has(c.id)?' is-new':''}`}>{chat.mine?<span className="dot dot--waiting" aria-hidden="true"/>:<BoardIcon name="clock"/>}{chatBadge(chat)}</span>
@@ -331,16 +350,25 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     {companyAgents.map(a=><button type="button" key={a.id} className="chip" aria-pressed={filter===a.id} onClick={()=>setAgentFilter(a.id)}><span className="chip__face" aria-hidden="true"><CompanyAgentFace agent={a} size={22}/></span><bdi>{a.name}</bdi></button>)}
    </div>
    {boardFilters}
-   {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={t('boardArchivedCount',archivedCards.length)} title={t('boardArchived')} onClick={()=>setShowArchived(!showArchived)}><ShellIcon name="archive"/>{showArchived&&<span className="num">{archivedCards.length}</span>}</button>}
+   {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={t('boardArchivedCount',archivedCards.length)} title={t('boardArchived')} onClick={()=>{ setShowArchived(!showArchived); setSelected(null); }}><ShellIcon name="archive"/>{showArchived&&<span className="num">{archivedCards.length}</span>}</button>}
+   {canSelect&&!selected&&<button ref={selectToggle} type="button" className="ib" aria-label={t('boardSelectCards')} title={t('boardSelectCards')} onClick={startSelecting}><ShellIcon name="multiSel"/></button>}
    <span className="board-tools__summary">{!p.canCreate?<><BoardIcon name="eye"/>{t('boardReadOnly')}</>:waitingTotal?<><span className="dot dot--waiting" aria-hidden="true"/>{(p.waiting||[]).some(item=>item.kind!=='approval')?t('thingsWaitingOnYou',waitingTotal):t(waitingTotal>1?'boardWaitingMany':'boardWaitingOne',waitingTotal)}</>:<><BoardIcon name="check"/>{t('boardNothingWaiting')}</>}</span>
    <BoardPager/>
   </div>
+  {selected&&<div className="bsel" role="region" aria-label={t('boardSelecting')}>
+   <span className="bsel__n" aria-live="polite">{t('boardSelectedCount','\u0000').split('\u0000')[0]}<b className="num">{selected.size}</b>{t('boardSelectedCount','\u0000').split('\u0000')[1]}</span>
+   <button ref={selectAllButton} type="button" className="link-btn" onClick={()=>{ const shownNow=showArchived?archivedShown:boardColumns.flatMap(inColumn); setSelected(now=>{ const next=new Map(now); for(const c of shownNow) next.set(c.id,c.title); return next; }); setFocusTo({to:'act'}); }}>{t('boardSelectAllShown')}</button>
+   <span className="od-fill"/>
+   <button type="button" className="btn btn--secondary btn--sm" onClick={endSelecting}>{t('cancel')}</button>
+   <button ref={selectedAct} type="button" className="btn btn--primary btn--sm" disabled={!selected.size} onClick={()=>{ const ids=[...selected.keys()]; if(showArchived) restore(ids); else archive(ids); }}><ShellIcon name={showArchived?'restore':'archive'}/><span>{t(showArchived?'boardRestoreSelected':'boardArchiveSelected')}</span></button>
+  </div>}
+  {left&&<p role="alert" className="work-error bsel-left">{leftLine(left)}</p>}
   {moving&&<p role="status" className="board-status">{t('movingCard')}</p>}
   {showArchived&&<div className="arch">{archivedShown.length?<ul className="panel-card arch-list" aria-label={t('boardArchivedCards')}>{archivedShown.map(c=>{ const own=cardAgentOf(c); const agent=agentOfCard(c); const at=archivedOf(c);
-   return <li key={c.id} className="arch-row"><Link className="arch-open" href={`${base}/board?card=${c.id}`} scroll={false}>
+   return <li key={c.id} className="arch-row">{selected&&<button type="button" className="sel-box" role="checkbox" aria-checked={selected.has(c.id)} aria-label={t('boardSelectCard',c.title)} onClick={()=>flip(c)}><span>{selected.has(c.id)&&<ShellIcon name="check"/>}</span></button>}<Link className="arch-open" href={`${base}/board?card=${c.id}`} scroll={false}>
     {own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={24}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={24}/></span>:<span className="arch-none" aria-hidden="true"/>}
     <span className="od-field"><span className="arch-t authored-title" dir="auto">{c.title}</span><span className="arch-d">{columnName(columnOfCard(c))} · <bdi>{at?.by}</bdi> · <span className="num">{at?.at}</span></span></span></Link>
-    {p.canCreate&&p.archiveCards&&<button type="button" className="ib" aria-label={t('boardRestoreCard',c.title)} title={t('cardRestoreShort')} onClick={()=>restore([c.id])}><ShellIcon name="restore"/></button>}</li>; })}</ul>
+    {p.canCreate&&p.archiveCards&&!selected&&<button type="button" className="ib" aria-label={t('boardRestoreCard',c.title)} title={t('cardRestoreShort')} onClick={()=>restore([c.id])}><ShellIcon name="restore"/></button>}</li>; })}</ul>
    :<div className="col-empty arch-empty"><b>{t(archivedCards.length?'boardArchivedNoMatch':'boardArchivedEmpty')}</b></div>}</div>}
   {!showArchived&&!p.cards.length&&!items.length&&<div className="board-bare" role="note"><p>{t('boardEmpty',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</p>{p.canCreate&&<Link className="btn btn--secondary btn--sm" href={`/c/${p.slug}/chat`}><BoardIcon name="chat"/><span>{t('boardTalkTo',identities.find(a=>a.role==='account_manager')?.name||'Lead')}</span></Link>}</div>}
   {!showArchived&&<KanbanBoard label={t('workBoard')} busy={moving} cards={boardColumns.flatMap(column=>inColumn(column)).map(c=>({id:c.id,title:c.title,column:columnOfCard(c)}))} columnName={columnName} renderOverlay={id=>cardView(p.cards.find(card=>card.id===id)!,true)} onMove={move}>
@@ -358,8 +386,9 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
       {!ownEntries.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
      </KanbanColumn>;
     }
-    const add=column==='ideas'&&p.canCreate&&ideasStage?<button ref={addButton} type="button" className="circle-btn add-btn add-card" aria-label={t('boardAddIdea')} title={t('boardAddIdea')} aria-expanded={addingIdea} onClick={toggleIdea}><BoardIcon name="plus"/></button>:null;
-    return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add} data-stage-name={stages.length===1?stages[0].name:undefined}>
+    const archiveAll=column==='done'&&canSelect&&!selected&&list.length?<button type="button" className="ib ib--sm col__act" aria-label={t('boardArchiveDone',columnName(column))} title={t('boardArchiveAll')} onClick={()=>archive(list.map(c=>c.id))}><ShellIcon name="archive"/></button>:null;
+    const add=column==='ideas'&&p.canCreate&&ideasStage&&!selected?<button ref={addButton} type="button" className="circle-btn add-btn add-card" aria-label={t('boardAddIdea')} title={t('boardAddIdea')} aria-expanded={addingIdea} onClick={toggleIdea}><BoardIcon name="plus"/></button>:null;
+    return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add??archiveAll} data-stage-name={stages.length===1?stages[0].name:undefined}>
      {extra.filter(answeredHere).map(itemView)}
      {groups.map((group,n)=><div key={group.id} className="mn-group" role="group" aria-labelledby={group.id}><h3 className="mn-h" id={group.id}><BoardIcon name="at"/><span>{t(group.label)}</span> <span className="num">{group.items.length}</span></h3>{group.items.map(itemView)}{(list.length>0||n<groups.length-1)&&<div className="mn-sep" role="separator"/>}</div>)}
      {column==='ideas'&&addingIdea&&ideasStage&&<AddIdea company={p.company} slug={p.slug} stage={ideasStage} agents={companyAgents} preferred={filter==='all'?'':filter} addIdea={p.addIdea} onClose={closeIdea}/>}
