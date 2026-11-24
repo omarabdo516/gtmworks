@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useSyncExternalStore } from 'react';
 import type { FaceState } from '@/components/face-life';
+import type { ChannelMessage } from '@/lib/channels';
 
 // What the chat a person has open knows of its Agents before any read of the server does (#700, spec #694): the Agent
 // listens while the person types to it, thinks until its Run's first step, works after it, and is done for a moment
@@ -93,4 +94,21 @@ export function shownState(shared:FaceState,chat:ChatKnows):FaceState {
  if(chat.run) return chat.run;
  if(chat.listening&&(shared==='idle'||shared==='asleep')) return 'listening';
  return shared;
+}
+
+// A channel's called Agents as its own page or a Card's sheet watches them (#700): the Agent working now (the first call
+// still open, since a message's Agents answer one after another, #152) thinks until its Run's first step (`stepped`) and
+// works after it; a question or a request it waits on, a failure or a stop has ended its Run for the face, and a reply
+// ended it well. An Agent's newest call tells; one waiting its turn behind another's tells nothing yet.
+export function channelRuns(messages:ChannelMessage[],stepped:boolean):Record<string,WatchedRun> {
+ const calls=messages.map(message=>message.author==='person'?message.mentions??(message.mention?[message.mention]:[]):[]);
+ const now=calls.find(called=>called.some(mention=>mention.state==='open'))?.find(mention=>mention.state==='open');
+ const watched:Record<string,WatchedRun>={};
+ for(const mention of calls.flat()) {
+  if(!mention.face) continue;
+  if(mention.state!=='open') watched[mention.face]=mention.state==='answered'?'well':'ended';
+  else if(mention.questions.length||mention.permissions.length) watched[mention.face]='ended';
+  else if(mention===now) watched[mention.face]=stepped?'working':'thinking';
+ }
+ return watched;
 }

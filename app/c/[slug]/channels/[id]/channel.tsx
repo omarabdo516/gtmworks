@@ -24,7 +24,7 @@ import type { AnswerQuestion } from '@/app/question-card';
 import type { MarkHandDone } from '@/app/hand-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
 import { ActivityLine, LiveTurn, useLanding, useLiveSteps } from '@/app/run-activity';
-import { useReportRuns, type WatchedRun } from '@/lib/live-runs';
+import { channelRuns, useReportRuns } from '@/lib/live-runs';
 import { offeredChoices } from '@/lib/conversations';
 import { useArrivals, type Arrival } from '@/lib/arrivals';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
@@ -170,17 +170,8 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  // rising in again, its list open if the live one was.
  const steps=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
  const landing=useLanding({working:!!workingNow,live:steps,newest:messages.findLast(message=>message.author==='agent')?.id??null});
- // Each called Agent's face while the channel is open (#700, lib/live-runs): the one working now thinks until its Run's
- // first step and works after it; a question or a request it waits on, a failure or a stop has ended it for the face,
- // and a reply ended it well. An Agent's newest call tells; one waiting its turn behind another's tells nothing yet.
- const watched:Record<string,WatchedRun>={};
- for(const message of messages) for(const mention of mentionsOf(message)) {
-  if(!mention.face) continue;
-  if(mention.state!=='open') watched[mention.face]=mention.state==='answered'?'well':'ended';
-  else if(mention.questions.length||mention.permissions.length) watched[mention.face]='ended';
-  else if(mention===workingNow) watched[mention.face]=steps&&(steps.steps.length||steps.now)?'working':'thinking';
- }
- useReportRuns(watched);
+ // Each called Agent's face while the channel is open (#700, lib/live-runs channelRuns).
+ useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
  const live=landing.view;
  const landedHere=(message:ChannelMessage)=>message.author==='agent'&&landing.landed(message.id);
  const boardColumn=board?t(columnLabel(board.column,writer)):'';

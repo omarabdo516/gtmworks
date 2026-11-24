@@ -80,6 +80,12 @@ export function AgentTile({agent,href,current,named,title,children}:{agent:strin
 // (`agent`): the failure there is seen by them and the Agent wakes for them (#699). It is told once the page has mounted,
 // never while the page is drawn on the server or prefetched, and the sidebar asks again at once so the face follows. It
 // is the sidebar's to tell: a part drawn outside the Shell has no faces of the sidebar to change, and tells nothing.
+// An Agent's live face outside the sidebar that shows what its tile does (#700): the state the sidebar last read, with
+// what the chat this person has open knows of it, as an empty chat's big face draws it.
+export function SharedFace({agent,size}:{agent:string|null|undefined,size:number}) {
+ return <AgentFace agent={agent} size={size} state={useAgentState(agent??'')} live/>;
+}
+
 export function OpenedHere({company,agent,place}:{company:string,agent?:string|null,place?:FailurePlace|null}) {
  const refresh=useContext(Now)?.refresh;
  const opened=agent||place?JSON.stringify({company,...(agent?{agent}:{}),...(place?{place}:{})}):null;
