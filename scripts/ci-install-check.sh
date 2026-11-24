@@ -2386,8 +2386,8 @@ compose exec -T web node --input-type=module -e "
 # before starting it and counts a sandbox restored only once its own Engine reaches it over SSH. After each, every Company's
 # Engine reaches its own sandbox over SSH, as its Agents' commands do, that sandbox takes its own Engine's key and no other
 # Company's, every sandbox and exit runs the image the install recorded before, and each work folder keeps what it held; the
-# install records again the release that keeps serving (#583), so a backup with that release's files succeeds and one with
-# the failed release's files is refused. An Agent of each Company then runs a command in its own sandbox. Its own area,
+# install records again the release that keeps serving (#583), a backup with the failed release's files is refused, and
+# one with that release's files after both succeeds. An Agent of each Company then runs a command in its own sandbox. Its own area,
 # as the other update areas run near their 12-minute limit.
 sandbox_rollback() {
 cd "$root"
@@ -2483,11 +2483,13 @@ for failing in sandbox engine; do
     [[ $reached == "$(docker exec "gtmworks-sandbox-$slug" hostname)" ]] || fail_update "the Engine $name reaches its own Company's sandbox after the update whose $failing does not start"
     [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$rollback_marker-$slug.txt") == "$rollback_marker-$slug" ]] || fail_update "the work folder of $name keeps what it held after the update whose $failing does not start"
   done < companies-before
-  # The Owner backs up with the files of the release that keeps serving, without running the failed update again (#583).
-  mkdir -p "$dir/backup-$failing"
-  sh install.sh backup "$dir/backup-$failing" > backup.log 2>&1 || { cat backup.log; fail "a backup with this release's files after the update whose $failing does not start"; }
-  [[ -f $(sed -n 's/^Backup: //p' backup.log | tail -n 1) ]] || { cat backup.log; fail "the backup after the update whose $failing does not start writes its archive"; }
 done
+# The Owner backs up with the files of the release that keeps serving, without running a failed update again (#583). One
+# backup, after both: each failure above checked the record a backup reads, and a backup restarts every Engine, which the
+# area's 12 minutes have room for once. The Agents' commands below then run on the Engines it started again.
+mkdir -p "$dir/backup"
+sh install.sh backup "$dir/backup" > backup.log 2>&1 || { cat backup.log; fail "a backup with this release's files after the failed updates"; }
+[[ -f $(sed -n 's/^Backup: //p' backup.log | tail -n 1) ]] || { cat backup.log; fail 'the backup after the failed updates writes its archive'; }
 # Each Company's main Agent runs a command in its own sandbox after both failed updates and still remembers what its own
 # Engine was told; the job reads each sandbox for the file, and no other Company's sandbox has it.
 agent_marker="sandbox-rollback-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
