@@ -50,9 +50,12 @@ export function useArchivedList<C extends Listed>(company:string,first:ArchivedP
   setLoading(false);
   if(ask!==asked.current) return;
   if(!next) return 'failed';
-  const known=new Set(page.items.map(c=>c.id));
-  setHeld({for:wanted,from:served,page:{items:[...page.items,...next.items.filter(c=>!known.has(c.id))],next:next.next}});
+  // Built from the rows held when it answers, so a Card restored meanwhile stays out.
+  setHeld(now=>{ const items=(now?.for===wanted&&now.from===served&&now.page?now.page:page).items; const known=new Set(items.map(c=>c.id));
+   return {for:wanted,from:served,page:{items:[...items,...next.items.filter(c=>!known.has(c.id))],next:next.next}}; });
  };
- const drop=(ids:number[])=>setHeld(now=>now?.page?{...now,page:{...now.page,items:now.page.items.filter(c=>!ids.includes(c.id))}}:now);
+ // The rows shown, from the server's first page too, lose the Cards restored from them at once.
+ const drop=(ids:number[])=>{ if(!page) return; const shown=page; setHeld(now=>{ const base=now?.for===wanted&&now.from===served&&now.page?now.page:shown;
+  return {for:wanted,from:served,page:{...base,items:base.items.filter(c=>!ids.includes(c.id))}}; }); };
  return {page,settled,loading,more,drop,searched:wanted!==blank};
 }

@@ -63,3 +63,11 @@ test('the board read again with the same first page keeps the pages "Show more" 
  await screen.rerender(workView({ ...props, archived: { first: { items: [archived(0, 'Just archived'), archived(1, 'Weekly report')], next: { at: '2026-11-29T09:00:00Z', id: 1 } }, total: 4, named: [] } }));
  await expect.poll(rows).toEqual(['Just archived', 'Weekly report']);
 });
+
+test('a Card restored from the list leaves it at once, before the board is read again', async () => {
+ const props = { ...board(vi.fn<ReadArchived<Card>>(async () => null)), archiveCards: vi.fn(async () => ({ state: 'done' as const, done: [2] })) };
+ await showWork(props);
+ await page.getByRole('button', { name: 'Archived · 3' }).click();
+ await page.getByRole('button', { name: 'Restore June ads' }).click();
+ await expect.poll(rows).toEqual(['Weekly report']);
+});
