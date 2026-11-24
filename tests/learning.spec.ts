@@ -63,26 +63,27 @@ const wrote=async(name:string,value:boolean)=>{
  await expect.poll(()=>fake.settings.profiles.get(name)!.config.memory?.write_approval,reread).toBe(value);
  await expect.poll(()=>fake.settings.profiles.get(name)!.config.skills?.write_approval,reread).toBe(value);
 };
-// A mode's radio is marked only once its save is answered and the page has read the server again (router.refresh), so
-// each choice here follows those two answers in turn instead of a fixed wait (#447): the save's own answer, which must
-// be 200 (a refused or mismatched save fails here, naming the save, not as a radio that never turns), and then the
-// re-read the browser starts after it, read to its end. The radio is checked after both with the default timeout.
+// A mode's radio is marked at once with a "Saving" line and held on the page once its save is answered (#663), so each
+// choice here waits for the save's own answer, which must be 200 (a refused or mismatched save fails here, naming the
+// save, not as a radio that never turns), and for the "Saving" line to go; the page is never read again for it.
 const saving=async(page:import('@playwright/test').Page,click:()=>Promise<void>)=>{
- let answered=false;
+ const reads:string[]=[];
+ const read=(request:import('@playwright/test').Request)=>{
+  const headers=request.headers();
+  if(request.method()==='GET'&&headers.rsc==='1'&&!headers['next-router-prefetch']&&new URL(request.url()).pathname==='/c/rs-learning/settings') reads.push(request.url());
+ };
  const save=page.waitForResponse(response=>{
   const request=response.request();
-  return request.method()==='POST'&&new URL(response.url()).pathname==='/api/agent-settings'&&(answered=true);
+  return request.method()==='POST'&&new URL(response.url()).pathname==='/api/agent-settings';
  },{timeout:30000});
- const refreshed=page.waitForResponse(response=>{
-  const headers=response.request().headers();
-  return answered&&response.request().method()==='GET'&&headers.rsc==='1'&&!headers['next-router-prefetch']
-   &&new URL(response.url()).pathname==='/c/rs-learning/settings';
- },{timeout:30000});
- refreshed.catch(()=>{}); // a failed save fails the test before this wait is read
- await click();
- const answer=await save;
- expect(answer.status(),`the save of ${answer.request().postData()} answered`).toBe(200);
- await (await refreshed).finished();
+ page.on('request',read);
+ try {
+  await click();
+  const answer=await save;
+  expect(answer.status(),`the save of ${answer.request().postData()} answered`).toBe(200);
+  await expect(page.locator('.ln-saving, .ln-ag .is-saving')).toHaveCount(0);
+ } finally { page.off('request',read); }
+ expect(reads,'a mode save reads no page again').toEqual([]);
 };
 const choice=(agent:string)=>JSON.parse(query(`select learning_mode_choice as choice from public.agent_profiles where agent_id='${agent}'`))[0].choice;
 
@@ -126,7 +127,7 @@ test('the Owner switches the Company\'s mode and one Agent\'s, and each profile 
  await expect(overlay.locator('.ln-ag').filter({hasText:'Lead'})).toContainText('Asks first');
  await expect.poll(()=>choice(writer),reread).toBe('auto');
  // The Writer pins "Asks first", then the Company turns by itself: the Writer's own choice stands. The group reads
- // mixed once the page has re-read the profiles, and only then do the Engine's profiles hold the Company's turn.
+ // mixed from the Agents' held modes once the Company's save is answered, with no read of the page.
  await saving(page,()=>writerModes.getByRole('radio',{name:'Asks first',exact:true}).click());
  await wrote(writerProfile,true);
  await expect(writerModes.getByRole('radio',{name:'Asks first',exact:true})).toHaveAttribute('aria-checked','true');
