@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(48);
+select plan(53);
 -- #675 (spec #667). RS Learning's seeded Members: the Owner (1), the Manager (2), a Contributor (3), the Viewer (4) and a
 -- second Contributor (5). A team channel "spring" holds the Manager, Contributor 3 and the Viewer, with Ads in it; the
 -- Owner and Contributor 5 are outside it. Karim is a Manager of Aleem only.
@@ -79,6 +79,7 @@ select ok((select archived_at is not null from public.channels where id='e675000
 select is_empty($$select * from public.archive_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'archiving it again changes nothing');
 select is((select state from public.reply_cards where channel_message_id=current_setting('test.asks')::bigint and kind='question'),'closed','its question closes unanswered');
 select is((select state from public.channel_permissions where message_id=current_setting('test.asks')::bigint),'closed','its request closes undecided');
+select is((select state from public.reply_cards where channel_message_id=current_setting('test.hand')::bigint and kind='hand'),'closed','its handed step stops waiting');
 select is_empty($$select * from public.channel_archive_stops('e6750000-0000-0000-0000-000000000011')$$,'nothing is left to name');
 
 -- The Run working closes later, as stopped, through its own close: its end is kept and the channel stays archived.
@@ -94,6 +95,10 @@ select is_empty($$select * from public.waiting_list('10000000-0000-0000-0000-000
 select is((select array_agg(kind order by kind) from public.channel_sidebar('10000000-0000-0000-0000-000000000001')),array['general'],'it leaves its Members'' channel list, with its unread count');
 select is((select array_agg(name||':'||archived_by_name) from public.archived_channels('10000000-0000-0000-0000-000000000001')),array['spring:مدير'],'its Members find it under Archived, with who archived it');
 select is((select count(*)::int from public.channel_messages where channel_id='e6750000-0000-0000-0000-000000000011'),3,'and read every message in it');
+select is((select array_agg(title) from public.conversation_list('10000000-0000-0000-0000-000000000001',archived=>true) where kind='channel'),array['spring'],
+ 'All conversations lists it under Archived');
+select is_empty($$select * from public.conversation_list('10000000-0000-0000-0000-000000000001') where kind='channel' and title='spring'$$,'and not under Current');
+select is((public.conversation_counts('10000000-0000-0000-0000-000000000001')->>'archived')::int,1,'and counts it there');
 select is((select archived_by::text from public.channels where id='e6750000-0000-0000-0000-000000000011'),'20000000-0000-0000-0000-000000000002','reading it says it is archived');
 select throws_ok($$select public.post_channel_message('e6750000-0000-0000-0000-000000000011','e6751000-0000-0000-0000-000000000009','one more')$$,'42501','channelArchived','a Member cannot write in it');
 select is(public.answer_channel_question('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011',
@@ -107,6 +112,7 @@ select is((select actor_id::text||':'||actor_name||':'||(details->>'channel') fr
 -- Outside Members see nothing of it, the Owner included.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select is_empty($$select * from public.archived_channels('10000000-0000-0000-0000-000000000001')$$,'a Member outside it finds nothing under Archived');
+select is((public.conversation_counts('10000000-0000-0000-0000-000000000001')->>'archived')::int,0,'nor counts anything there');
 select is_empty($$select * from public.company_log where action in ('channel_archived','channel_restored')$$,'and no log row of it');
 select is_empty($$select * from public.channels where id='e6750000-0000-0000-0000-000000000011'$$,'and no channel');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

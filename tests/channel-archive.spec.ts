@@ -67,15 +67,16 @@ test('the Manager archives a team channel after one confirmation naming what wai
  expect(rows(`select archived_at from public.channels where id='${channel}'`)).toEqual([{archived_at:null}]);
 });
 
-test('its Members read the archived channel and cannot write; the Owner outside it sees nothing; the Manager restores it',async({page,browser})=>{
+test('with nothing waiting it archives without asking; its Members read it and cannot write; the Owner outside it sees nothing; the Manager restores it',async({page,browser})=>{
  await signIn(page,'manager@example.com',path);
  const details=page.getByRole('complementary',{name:'Channel details'});
+ // The first archive closed the handed step and nothing works there now, so archiving asks nothing.
  await expect(async()=>{
-  if(!await page.getByRole('dialog',{name:'Archive the channel?'}).count()) await details.getByRole('button',{name:'Archive the channel'}).click();
-  await expect(page.getByRole('dialog',{name:'Archive the channel?'})).toBeVisible({timeout:2000});
+  if(!await details.getByRole('button',{name:'Restore the channel'}).count()) await details.getByRole('button',{name:'Archive the channel'}).click();
+  await expect(details.getByRole('button',{name:'Restore the channel'})).toBeVisible({timeout:2000});
  }).toPass({timeout:30000});
- await page.getByRole('dialog',{name:'Archive the channel?'}).getByRole('button',{name:'Archive and stop'}).click();
- await expect(details.getByRole('button',{name:'Restore the channel'})).toBeVisible();
+ await expect(page.getByRole('dialog',{name:'Archive the channel?'})).toHaveCount(0);
+ await expect(page.locator('.toast')).toContainText('Archived');
 
  const contributor=await as(browser,'reviewer@example.com',path);
  try {
@@ -84,6 +85,11 @@ test('its Members read the archived channel and cannot write; the Owner outside 
   await expect(contributor.page.getByRole('textbox',{name:'Write your message in the channel'})).toHaveCount(0);
   await expect(contributor.page.getByRole('button',{name:/channel$/})).toHaveCount(0);
   await expect(contributor.page.locator('.sidebar .ch-item')).toHaveText(['general']);
+  // All conversations lists it under Archived, and no longer under Current (design-reference-card: renderConvos).
+  await contributor.page.goto('/c/rs-learning/conversations?tab=archived');
+  await expect(contributor.page.getByRole('list',{name:'Archived'}).getByRole('link',{name:/Spring launch/})).toBeVisible();
+  await contributor.page.goto('/c/rs-learning/conversations');
+  await expect(contributor.page.getByRole('link',{name:/Spring launch/})).toHaveCount(0);
   await contributor.page.goto('/c/rs-learning/log');
   await expect(contributor.page.getByText('archived the channel').first()).toBeVisible();
  } finally { await contributor.close(); }

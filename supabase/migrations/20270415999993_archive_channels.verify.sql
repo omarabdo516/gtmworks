@@ -1,4 +1,4 @@
--- #675: an archived team channel is a time and a person on it; its Members' list and waits leave it out, a Member's
+-- #675: an archived team channel is a time and a person on it; its Members' lists leave it out, its work stops, a Member's
 -- message there is refused, its log rows are read by its Members alone, and the four functions are the signed-in
 -- person's own, run as their definer with an empty search path.
 select json_build_object(
@@ -17,5 +17,6 @@ select json_build_object(
  'role_checked',position('public.can_manage_company(k.company_id)' in pg_get_functiondef('public.archive_channel(uuid,uuid)'::regprocedure))>0
   and position('public.can_manage_company(k.company_id)' in pg_get_functiondef('public.restore_channel(uuid,uuid)'::regprocedure))>0,
  'sidebar_current',position('archived_at is null' in pg_get_functiondef('public.channel_sidebar(uuid)'::regprocedure))>0,
- 'waits_current',position('archived_at is null' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
+ 'work_stopped',position('public.stop_card_work(' in pg_get_functiondef('public.archive_channel(uuid,uuid)'::regprocedure))>0,
+ 'listed_by_archive',position('k.archived_at is not null)=archived' in pg_get_functiondef('public.conversation_list(uuid,text,boolean,timestamptz,uuid,integer,text,text)'::regprocedure))>0
 );

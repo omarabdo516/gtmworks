@@ -15,7 +15,8 @@ create temporary table decisions(fn text primary key, decision text not null che
 insert into decisions
  select fn,'asks','lists current channels only, or archived ones only, or archives, restores or refuses by archived_at' from unnest(array[
   'public.channel_sidebar(uuid)','public.archived_channels(uuid)','public.channel_archive_stops(uuid)','public.archive_channel(uuid,uuid)',
-  'public.restore_channel(uuid,uuid)','public.refuse_archived_channel_message()']) fn
+  'public.restore_channel(uuid,uuid)','public.refuse_archived_channel_message()',
+  'public.conversation_list(uuid,text,boolean,timestamptz,uuid,integer,text,text)','public.conversation_counts(uuid)']) fn
  union all select fn,'exempt','answers for the one channel its caller names, archived or not, since its Members still read an archived channel; it lists no channels' from unnest(array[
   'public.channel_member(uuid,uuid)','public.channel_agent(uuid,uuid,uuid)','public.channel_agent_list(uuid)','public.channel_members(uuid)',
   'public.channel_can_show_cards(uuid,uuid,uuid)','public.channel_can_hand_over(uuid,uuid,uuid)','public.channel_mentions_in(uuid,uuid,text)',
