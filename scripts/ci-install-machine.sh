@@ -50,7 +50,7 @@ start() {
   fi
   docker run -d --privileged --name install-docker ${network[@]+"${network[@]}"} \
     -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 \
-    -v "$PWD:$PWD" docker:28.5.1-dind ${network[@]+--registry-mirror=http://install-mirror:5000} > /dev/null
+    -v "$PWD:$PWD" docker:28.5.1-dind ${network[@]+--registry-mirror=http://install-mirror:5000 --insecure-registry=install-mirror:5000} > /dev/null
   for _ in $(seq 1 60); do docker --host "$machine" info > /dev/null 2>&1 && break; sleep 1; done
   docker --host "$machine" info > /dev/null || { echo 'install check failed: DinD readiness' >&2; exit 1; }
   ((${#network[@]})) || return 0
@@ -58,6 +58,8 @@ start() {
   for _ in $(seq 1 30); do mirror_answers && return; sleep 1; done
   echo 'install images: the mirror does not answer; the machine pulls from the registry' >&2
 }
+# An image named on the mirror itself, as `warm` pulls it: Docker Hub's one-part names live under library/.
+on_mirror() { local name=${1%%[:@]*}; [[ $name == */* ]] || name=library/$name; printf 'install-mirror:5000/%s%s\n' "$name" "${1#"${1%%[:@]*}"}"; }
 mirror_answers() { docker exec install-docker wget -q -O /dev/null http://install-mirror:5000/v2/ > /dev/null 2>&1; }
 
 case ${1:-} in
@@ -71,7 +73,9 @@ case ${1:-} in
   start "$2"
   # A pull the mirror does not serve leaves nothing in the storage, so a mirror that does not answer saves nothing.
   mirror_answers || { echo 'install images: the mirror does not answer, so nothing is kept' >&2; stop; exit 1; }
-  for image in $(mirrored); do docker --host "$machine" pull -q "$image" > /dev/null; done
+  # Each image is pulled by its name on the mirror, never through Docker Hub's: a mirror that fails midway then fails the
+  # pull, where a registry-mirror pull would quietly come from the registry and leave the kept storage short of it.
+  for image in $(mirrored); do docker --host "$machine" pull -q "$(on_mirror "$image")" > /dev/null; done
   # The mirror stops before it is removed, so every write it made is whole when the cache saves the storage.
   stop
   echo "install images: $(mirrored | wc -l) kept in the mirror ($(du -sh "$2" | cut -f1))"

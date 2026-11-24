@@ -188,6 +188,11 @@ test('the image job builds the work sandbox image only when no image of its file
   assert.equal(save.uses, 'actions/cache/save@v4');
   assert.equal(save.if, build.if);
   assert.deepEqual(save.with, { path: lookup.with.path, key: lookup.with.key });
+  // A failed upload only warns, so the job looks the entry up and is red without it.
+  const kept = image.steps[image.steps.indexOf(save) + 1];
+  assert.equal(kept.name, 'the work sandbox image is kept');
+  assert.equal(kept.if, build.if);
+  assert.deepEqual(kept.with, { ...lookup.with, 'fail-on-cache-miss': true });
   assert.equal(image.steps.some(step => step.with?.name === 'gtmworks-sandbox-image'), false, 'no artifact of it');
 });
 

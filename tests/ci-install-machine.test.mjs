@@ -77,7 +77,7 @@ test('start runs the mirror on the kept storage, then the machine with that mirr
   assert.match(mirror, /-e REGISTRY_PROXY_TTL=0 /, 'what it keeps never expires: a digest is the same bytes forever');
   assert.match(mirror, / registry:3\.1\.2@sha256:[0-9a-f]{64}$/, 'the mirror\'s own image is pinned');
   assert.match(machine, /^run -d --privileged --name install-docker --network install-net .*-p 127\.0\.0\.1:2375:2375 /);
-  assert.match(machine, / docker:28\.5\.1-dind --registry-mirror=http:\/\/install-mirror:5000$/);
+  assert.match(machine, / docker:28\.5\.1-dind --registry-mirror=http:\/\/install-mirror:5000 --insecure-registry=install-mirror:5000$/);
   assert.equal(info, '--host tcp://127.0.0.1:2375 info', 'it waits for the machine');
   assert.equal(answers, 'exec install-docker wget -q -O /dev/null http://install-mirror:5000/v2/', 'and for the mirror, as the machine sees it');
 }));
@@ -101,6 +101,12 @@ test('warm pulls every mirrored image through the machine, then removes the mach
   const out = call(['warm', join(dir, 'install-mirror')]);
   assert.equal(out.status, 0, out.stderr);
   const pulls = calls().filter(line => line.startsWith('--host tcp://127.0.0.1:2375 pull -q '));
-  assert.deepEqual(pulls.map(line => line.split(' ').at(-1)), lines(run('mirrored')), 'each mirrored image once');
+  const names = pulls.map(line => line.split(' ').at(-1));
+  assert.equal(names.length, lines(run('mirrored')).length, 'each mirrored image once');
+  // By its name on the mirror, so a pull the mirror cannot serve fails instead of coming from Docker Hub.
+  assert.ok(names.includes('install-mirror:5000/library/nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284'), names.join(' '));
+  assert.ok(names.includes('install-mirror:5000/supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00'));
+  assert.ok(names.includes('install-mirror:5000/library/alpine:3.21'));
+  for (const name of names) assert.match(name, /^install-mirror:5000\//);
   assert.deepEqual(calls().slice(-3), ['stop install-mirror', 'rm -fv install-docker install-mirror', 'network rm install-net'], 'the mirror stops, so the storage is whole before it is saved');
 }));

@@ -485,6 +485,16 @@ jobs:
         with:
           path: ${{ runner.temp }}/gtmworks-sandbox-image.tar
           key: ${{ steps.sandbox.outputs.key }}
+      # A failed upload is only a warning in actions/cache/save, which would leave this job green and every install area
+      # without its image: the job looks its own entry up and is red when it is not there.
+      - name: the work sandbox image is kept
+        if: ${{ steps.sandbox.outputs.key != '' && steps.sandbox-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/gtmworks-sandbox-image.tar
+          key: ${{ steps.sandbox.outputs.key }}
+          lookup-only: true
+          fail-on-cache-miss: true
       # The release builds the work sandbox for linux/amd64 and linux/arm64; this builds only its browser stage for both
       # (#572: arm64's Chromium is in another folder, and only the release found it missing). It downloads no package
       # under emulation, and its own layer cache makes it nearly free while the base and the step do not change.
