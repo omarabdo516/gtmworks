@@ -81,7 +81,7 @@ language sql stable security definer set search_path='' as $$
  order by h.created_at,h.id;
 $$;
 
--- 20270415997200's channel_handovers.
+-- channel_handovers as 20270415999950 left it (no_access among the model causes).
 create or replace function public.channel_handovers(ch uuid)
 returns table(id bigint, message bigint, from_agent uuid, from_name text, from_connection uuid, to_agent uuid, to_name text,
  to_connection uuid, goal text, summary text, reply text, state text, target_outcome text, created_at timestamptz, answered_at timestamptz,
@@ -98,7 +98,7 @@ language sql stable security definer set search_path='' as $$
   left join public.agent_looks tl on tl.agent_id=h.to_agent and tl.company_id=h.company_id
   cross join lateral (select coalesce(f.name,fl.kept_name) as from_name,coalesce(t.name,tl.kept_name) as to_name) n
   cross join lateral (select case when h.state in ('done','failed') and h.reply is null
-   and coalesce(h.follow_up_outcome,h.target_outcome) in ('no_model','no_credit','key_refused','model_missing')
+   and coalesce(h.follow_up_outcome,h.target_outcome) in ('no_model','no_credit','key_refused','model_missing','no_access')
    then coalesce(h.follow_up_outcome,h.target_outcome) end as ended) e
  where m.channel_id=ch and h.company_id=m.company_id and auth.uid() is not null and public.in_channel(ch)
   and n.from_name is not null and n.to_name is not null
