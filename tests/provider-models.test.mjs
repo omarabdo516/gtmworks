@@ -256,3 +256,31 @@ test('an OpenCode Go key is sent only over HTTPS or to this machine, and an addr
   assert.deepEqual(switches['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
  } finally { await fake.close(); }
 });
+
+test('an OpenCode Go key served no model offers none, and an address the Engine could not read is not swapped for OpenCode\'s own', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:[]});
+ try {
+  seedGo(fake,go.base);
+  const {db}=database();
+  assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'],[],'OpenCode answered that it serves none');
+  for(const name of [space,main]) delete fake.settings.profiles.get(name).env.OPENCODE_GO_API_KEY;
+  const set=await setProviderKey(install(fake),{space,profiles:[main],provider:'opencode-go',value:goKey});
+  assert.deepEqual([set.model,set.profiles[main]],[null,'noModel'],'no model OpenCode refuses is set');
+ } finally { await go.close(); await fake.close(); }
+});
+
+test('an OpenCode Go address the Engine could not read keeps the Engine\'s list rather than asking OpenCode\'s own address', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:['glm-5.3']});
+ try {
+  seedGo(fake,go.base);
+  fake.settings.revealFail.add('OPENCODE_GO_BASE_URL');
+  const {db}=database();
+  // Every address this process asks, so a read of OpenCode's public address would show.
+  const real=globalThis.fetch; const asked=[];
+  globalThis.fetch=(url,init)=>{ asked.push(String(url)); return real(url,init); };
+  try {
+   assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+  } finally { globalThis.fetch=real; }
+  assert.deepEqual(asked.filter(url=>url.includes('/models')&&!url.includes('/api/model/options')),[],'neither OpenCode\'s own address nor the unread one is asked');
+ } finally { await go.close(); await fake.close(); }
+});
