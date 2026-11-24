@@ -391,10 +391,14 @@ test('An Agent face hops when its tile is pressed, lifts on hover, and shows its
   // The chat a hovered tile leads to is prepared before the press, as navigation.spec.ts opens its pages. The hop carries
   // to that page however long it takes to draw (#529), so a busy runner changes nothing here.
   await tile.hover(); await idle(page);
-  // Each hop as it starts, with where its face is; a face that hops twice for one press is counted.
+  // Each hop as it starts, with where its face is; a face that hops twice for one press is counted. A batch of records
+  // can hold several changes of one face (a greeting the hop then replaces, #700): each record's new value is the next
+  // record's old value for that face, and the face's own value after its last.
   await page.evaluate(()=>{ const hops:string[]=[]; (window as unknown as {hops:string[]}).hops=hops;
    const seen=new Map<Element,number>(); (window as unknown as {twice:()=>number}).twice=()=>[...seen.values()].filter(count=>count>1).length;
-   new MutationObserver(records=>{ for(const record of records) { const face=record.target as HTMLElement; if(face.dataset.moment!=='press'||record.oldValue==='press') continue;
+   new MutationObserver(records=>{ for(const [index,record] of records.entries()) { const face=record.target as HTMLElement;
+    const next=records.slice(index+1).find(later=>later.target===face), value=next?next.oldValue:face.getAttribute('data-moment');
+    if(value!=='press'||record.oldValue==='press') continue;
     seen.set(face,(seen.get(face)??0)+1);
     hops.push(face.closest('.agent-tile')?'tile':face.closest('.empty-chat')?'chat':face.closest('.head-pill')?'pill':'other'); } })
     .observe(document.body,{subtree:true,attributes:true,attributeFilter:['data-moment'],attributeOldValue:true}); });

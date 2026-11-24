@@ -91,9 +91,13 @@ test('the unread count rises on a new message and clears when the Member opens t
   await expect(item.getByLabel('2 new messages',{exact:true})).toHaveText('2',{timeout:15000});
   await expect(channels(contributor.page).filter({hasText:'December campaign'}).locator('.sb-unread')).toHaveCount(0);
  } finally { await contributor.close(); }
+ // Opening the channel reads it: the page asks for it fresh, and that answer is the read (app/c/[slug]/channels/[id]).
+ // The Member stays until it has come back, as a person reading the channel does, before going Home.
+ const read=page.waitForResponse(response=>response.request().method()==='GET'&&response.url().includes('/api/channels?')&&response.url().includes(`channel=${channel}`));
  await item.click();
  await expect(page.locator('.turn--peer .bubble--peer')).toHaveText(['Morning, team','The brief is ready']);
  await expect(item.locator('.sb-unread')).toHaveCount(0);
+ expect((await read).ok()).toBe(true);
  await page.goto('/c/rs-learning/home');
  await expect(channels(page).filter({hasText:'December campaign'})).toBeVisible();
  await expect(channels(page).filter({hasText:'December campaign'}).locator('.sb-unread')).toHaveCount(0);
