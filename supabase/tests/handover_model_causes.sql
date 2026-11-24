@@ -28,19 +28,19 @@ create temporary table followed(outcome text, input text);
 insert into followed select substr(h.call_id,6), b.input from public.agent_handovers h, public.begin_handover(h.id) b where h.run_id='run-owner' and h.parent_id is null;
 
 select is((select input from followed where outcome='no_model') like
- '%Ads in this conversation, and it did not finish: it could not reply: the company has no AI subscription or model key connected yet. The Owner can connect one in Providers.%',true,
+ '%Ads in this conversation, and it did not finish: it could not reply, because the company has no AI subscription or model key connected yet. The Owner can connect one in Providers.%',true,
  'with no model, Lead hears that none is connected and where the Owner connects one');
 select is((select input from followed where outcome='no_credit') like
- '%it could not reply: the company''s model key has no credit left. The Owner can check the agent''s model in Providers.%',true,
+ '%it could not reply, because the company''s model key has no credit left. The Owner can check Ads''s model in Providers.%',true,
  'out of credit, Lead hears the key has no credit left');
 select is((select input from followed where outcome='key_refused') like
- '%it could not reply: the model provider refused the company''s key or sign-in. The Owner can check the agent''s model in Providers.%',true,
+ '%it could not reply, because the model provider refused the company''s key or sign-in. The Owner can check Ads''s model in Providers.%',true,
  'a refused key, Lead hears the provider refused it');
 select is((select input from followed where outcome='model_missing') like
- '%it could not reply: its model is not available from the provider. The Owner can check the agent''s model in Providers.%',true,
+ '%it could not reply, because its model is not available from the provider. The Owner can check Ads''s model in Providers.%',true,
  'a missing model, Lead hears it is not available');
 select is((select input from followed where outcome='no_access') like
- '%it could not reply: every account it can use has run out of usage for now. The Owner can add an account or choose a fallback model in Providers.%',true,
+ '%it could not reply, because every account it can use has run out of usage for now. The Owner can add an account or choose a fallback model in Providers.%',true,
  'every account out of usage, Lead hears so and what the Owner can add');
 select is((select string_agg(outcome,',' order by outcome) from followed
  where input like '%say the job did not finish and why, and what you suggest.%'),
@@ -58,7 +58,7 @@ insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,fro
   'a6020000-0000-0000-0000-000000000013','a6020000-0000-0000-0000-000000000012','The numbers ('||o||')','done',o,
   (select id from public.agent_handovers where call_id='call-chain'),now()
  from unnest(array['no_credit','failed']) o;
-select is((select (input like '%Ads did not finish: it could not reply: the company''s model key has no credit left. The Owner can check the agent''s model in Providers.%')
+select is((select (input like '%Ads did not finish: it could not reply, because the company''s model key has no credit left. The Owner can check Ads''s model in Providers.%')
   and (input like '%Ads did not finish: it failed before answering.%')
  from public.begin_handover((select id from public.agent_handovers where call_id='call-chain'))),true,
  'an asked Agent whose jobs it handed on could not reach their model hears why, and a plain failure as before');

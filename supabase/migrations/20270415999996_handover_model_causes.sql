@@ -9,20 +9,20 @@
 -- input it returns changes.
 
 -- How an asked Agent's leg that did not complete ended, as the clause after "did not finish: it", ending its sentence:
--- `before` is what it did not get to (reporting anything, answering).
-create function public.handover_not_finished(outcome text, before text) returns text
+-- `agent` is the asked Agent's name, and `unreached` what it did not get to (reporting anything, answering).
+create function public.handover_not_finished(outcome text, agent text, unreached text) returns text
 language sql immutable set search_path='' as $$
  select case coalesce(outcome,'failed')
-  when 'stopped' then 'was stopped before ' || before || '.'
-  when 'lost' then 'could not be found before ' || before || '.'
-  when 'no_model' then 'could not reply: the company has no AI subscription or model key connected yet. The Owner can connect one in Providers.'
-  when 'no_credit' then 'could not reply: the company''s model key has no credit left. The Owner can check the agent''s model in Providers.'
-  when 'key_refused' then 'could not reply: the model provider refused the company''s key or sign-in. The Owner can check the agent''s model in Providers.'
-  when 'model_missing' then 'could not reply: its model is not available from the provider. The Owner can check the agent''s model in Providers.'
-  when 'no_access' then 'could not reply: every account it can use has run out of usage for now. The Owner can add an account or choose a fallback model in Providers.'
-  else 'failed before ' || before || '.' end;
+  when 'stopped' then 'was stopped before ' || unreached || '.'
+  when 'lost' then 'could not be found before ' || unreached || '.'
+  when 'no_model' then 'could not reply, because the company has no AI subscription or model key connected yet. The Owner can connect one in Providers.'
+  when 'no_credit' then 'could not reply, because the company''s model key has no credit left. The Owner can check ' || agent || '''s model in Providers.'
+  when 'key_refused' then 'could not reply, because the model provider refused the company''s key or sign-in. The Owner can check ' || agent || '''s model in Providers.'
+  when 'model_missing' then 'could not reply, because its model is not available from the provider. The Owner can check ' || agent || '''s model in Providers.'
+  when 'no_access' then 'could not reply, because every account it can use has run out of usage for now. The Owner can add an account or choose a fallback model in Providers.'
+  else 'failed before ' || unreached || '.' end;
 $$;
-revoke all on function public.handover_not_finished(text,text) from public,anon,authenticated,service_role;
+revoke all on function public.handover_not_finished(text,text,text) from public,anon,authenticated,service_role;
 
 -- 20270415990000's begin_handover, with each ending read through handover_not_finished.
 do $$
@@ -31,10 +31,10 @@ begin
  def:=pg_get_functiondef('public.begin_handover(bigint)'::regprocedure);
  was:=E'case coalesce(c.target_outcome,''failed'') when ''stopped'' then ''was stopped'' when ''lost'' then ''could not be found'' else ''failed'' end\n      || '' before answering.''';
  if position(was in def)=0 then raise exception 'begin_handover changed: %',def; end if;
- def:=replace(def,was,'public.handover_not_finished(c.target_outcome,''answering'')');
+ def:=replace(def,was,'public.handover_not_finished(c.target_outcome,coalesce(nullif(btrim(t.name),''''),''the agent''),''answering'')');
  was:=E'case coalesce(r.target_outcome,''failed'') when ''stopped'' then ''was stopped'' when ''lost'' then ''could not be found'' else ''failed'' end\n   || '' before reporting anything.''';
  if position(was in def)=0 then raise exception 'begin_handover changed: %',def; end if;
- def:=replace(def,was,'public.handover_not_finished(r.target_outcome,''reporting anything'')');
+ def:=replace(def,was,'public.handover_not_finished(r.target_outcome,target.name,''reporting anything'')');
  was:='say the job did not finish, and what you suggest.';
  if position(was in def)=0 then raise exception 'begin_handover changed: %',def; end if;
  execute replace(def,was,'say the job did not finish and why, and what you suggest.');
