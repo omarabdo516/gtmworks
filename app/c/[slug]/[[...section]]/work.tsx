@@ -11,6 +11,7 @@ import { TaskList, TaskListRow } from '@/components/paperclip/TaskList';
 import { BoardIcon } from '@/components/board-icon';
 import { ShellIcon } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
+import { useRemovedAgents } from '@/lib/agent-looks-client';
 import { CardDialog } from '@/app/card-dialog';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
 import { toast } from '@/app/toast';
@@ -37,7 +38,7 @@ import type { WaitingItem } from '@/lib/approval-queue';
 import { ArchiveConfirm } from '@/app/archive-confirm';
 import type { ArchiveAnswer, ArchiveIntent, ArchiveStop } from '@/lib/archive-stops';
 import '@/app/board.css';
-type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,kept_agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // An open Card's notes (#22): each note's current text, the Runs its Agent mentions started and their replies in the
 // log, the Agents those are drawn with, the reader and the moment the page was drawn (for the edit countdown).
 type CardNotes={me:string,owner:boolean,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
@@ -80,8 +81,11 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const agentOfCard=(c:Card)=>{ const creator=makerOf(c); return cardAgent(c,p.assignees,agentIds)??(creator&&agentIds.has(creator)?creator:null); };
  // The chips are the Company's Agents the reader sees, in the sidebar's order (#190); a Card is under its own Agent's.
  const companyAgents=p.cardAgents||[];
- const agentById=useMemo(()=>new Map((p.cardAgents||[]).map(a=>[a.id,a])),[p.cardAgents]);
- const cardAgentOf=(c:Card)=>c.agent_id?agentById.get(c.agent_id):undefined;
+ // A Card keeps the Agent it was made with when that Agent is removed (#702): it and the crews name a removed Agent by
+ // the name kept beside its look, in that look; the chips do not.
+ const removed=useRemovedAgents();
+ const agentById=useMemo(()=>new Map([...Object.entries(removed).map(([id,name]):[string,CardAgent]=>[id,{id,connection_id:'',name,speciality:''}]),...(p.cardAgents||[]).map((a):[string,CardAgent]=>[a.id,a])]),[p.cardAgents,removed]);
+ const cardAgentOf=(c:Card)=>{ const agent=c.agent_id??c.kept_agent_id; return agent?agentById.get(agent):undefined; };
  // A filter on an Agent the reader no longer sees reads as All (design-reference: 5741).
  const filter=companyAgents.some(a=>a.id===agentFilter)?agentFilter:'all';
  const asked=p.show?p.cards.find(c=>c.id===p.show):undefined;
@@ -325,7 +329,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    <MessageRow activity={comment?{...a,details:{...a.details,body:comment.body}}:a} members={p.members} slug={p.slug} anchor={`note-${id}`} files={p.attachments.filter(f=>f.comment_id===id)}
     note={comment&&notes?(files,time)=><NoteText note={comment} me={notes.me} canWrite={p.canCreate} company={p.company} slug={p.slug} drawnAt={notes.drawnAt} surface="card" meta={time}>{files}</NoteText>:undefined}/>
    {reply?<NoteReplyRow name={agentOf(reply.actor_id)?.name||reply.actor_name||''} face={agentOf(reply.actor_id)?.connection_id||null} body={reply.body} at={reply.created_at}/>
-    :run&&!run.outcome?<NoteReplyRow name={agentOf(run.agent_id)?.name||run.agent_name} face={agentOf(run.agent_id)?.connection_id||null} working={p.members.find(m=>m.person_id===a.actor_id)?.people?.name?.split(' ')[0]||''}/>
+    :run&&!run.outcome?<NoteReplyRow name={agentOf(run.agent_id)?.name||run.agent_name} face={agentOf(run.agent_id)?.id||null} working={p.members.find(m=>m.person_id===a.actor_id)?.people?.name?.split(' ')[0]||''}/>
     :run&&cause?<li className="note" role="alert" data-outcome={modelOutcome(cause)}><ModelLine cause={cause} agent={agentOf(run.agent_id)?.name||run.agent_name} slug={p.slug} owner={!!notes?.owner}/></li>:null}
   </Fragment>; };
  // A Card opened over the board (#116; design-reference: renderSheetHead): its channel's mark, else its Agent, and where it stands.

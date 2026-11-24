@@ -26,7 +26,7 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 // through conversation_handovers by this Conversation's person whether or not they see that Agent; while its two Runs
 // move, the record says so (`handover`), so the chat keeps asking for the follow-up reply, and once it ended without
 // finishing the row says so (`failed`, #375).
-export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,agent_name:string,hermes_session_id?:string|null,good_morning?:number|null,good_morning_day?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>,session?:(agent:string,session:string)=>Promise<{turns:{at:number,seconds:number,steps:RunStep[]}[],usage:SessionUsage|null}|null>) {
+export async function conversationRecord(db:Database,person:string,company:string,found:{id:string,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,hermes_session_id?:string|null,good_morning?:number|null,good_morning_day?:string|null,hermes_agents:unknown},apps?:(agent:string)=>Promise<AppStates>,session?:(agent:string,session:string)=>Promise<{turns:{at:number,seconds:number,steps:RunStep[]}[],usage:SessionUsage|null}|null>) {
  const conversation=found.id;
  // The session is read beside the database, so the Engine adds no wait of its own to opening the chat.
  const read=session&&found.agent_id&&found.hermes_session_id?session(found.agent_id,found.hermes_session_id).catch(()=>null):Promise.resolve(null);

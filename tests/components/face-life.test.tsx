@@ -15,7 +15,7 @@ const follow = (event: React.MouseEvent<HTMLAnchorElement>) => { event.preventDe
 const start = location.href;
 afterEach(async () => { vi.restoreAllMocks(); await reducedMotion(false); history.replaceState(null, '', start); });
 
-const looks: CompanyLooks = { agents: { a: { shape: 'circle', colour: 'indigo', temperament: 'calm' }, b: { shape: 'squircle', colour: 'jade', temperament: 'neat' } }, requests: {} };
+const looks: CompanyLooks = { agents: { a: { shape: 'circle', colour: 'indigo', temperament: 'calm' }, b: { shape: 'squircle', colour: 'jade', temperament: 'neat' } }, requests: {}, removed: {} };
 const Company = ({ children }: { children: React.ReactNode }) => <div className="gw"><LooksProvider looks={looks}>{children}</LooksProvider></div>;
 const faceIn = (selector: string) => document.querySelector<HTMLElement>(`${selector} .face`)!;
 const lean = (face: Element) => { const eyes = getComputedStyle(face.querySelector('.f-eyes')!), light = getComputedStyle(face.querySelector('.f-specs')!); return [eyes.getPropertyValue('--lx'), light.getPropertyValue('--lx')]; };

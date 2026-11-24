@@ -187,7 +187,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
     <Turn message={message} rise={landedHere(message)?'':rise(`${message.author}:${message.id}`)} opened={message.author==='agent'&&landing.opened(message.id)} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
-     <div className="sender"><span aria-hidden="true"><AgentFace agent={mention.face} size={20}/></span><bdi>{mention.agent}</bdi></div>
+     <div className="sender"><span aria-hidden="true"><AgentFace agent={mention.face} name={mention.agent} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {/* What the Agent wrote before it asked, in the same message (#647), is its words above the card. */}
      {mention.questions.map(card=><Fragment key={`question${card.id}`}><Said words={card.said}/><ReplyCard card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
        team
@@ -238,7 +238,7 @@ function Turn({message,rise,opened=false,time,c,slug,name,cb,drawnCards,memberNa
   return message.model?<>{row}<li className="note" role="alert" data-outcome={modelOutcome(message.model.cause)}><ModelLine cause={message.model.cause} agent={message.model.agent} slug={slug} owner={owner}/></li></>:row;
  }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
-  <div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
+  <div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} name={message.name} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={opened}/>}
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)} done={done} team/>)}
@@ -351,7 +351,7 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
     <h3 className="dp-label" id="ch-h-h"><span>{c('channelHandoffs')} <span className="muted num">{count(handoffs.length)}</span></span></h3>
     <ul className="panel-card">
      {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.stopped?{'data-stopped':''}:handoff.failed?{'data-failed':''}:{})}>
-      <span className="handed__faces"><AgentFace agent={handoff.from.face} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><AgentFace agent={handoff.to.face} size={20}/></span>
+      <span className="handed__faces"><AgentFace agent={handoff.from.face} name={handoff.from.name} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><AgentFace agent={handoff.to.face} name={handoff.to.name} size={20}/></span>
       <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandoverAsked',handoff.from.name,handoff.to.name)}</span>
        <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.stopped?<><span className="handed__failed is-stopped">{c('channelHandedStopped')}</span>{' · '}</>:handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}{time(handoff.at)}</span></span>
      </li>)}

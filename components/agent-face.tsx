@@ -11,8 +11,14 @@ import { faceStateChanged, watchFace, type FaceState } from './face-life';
 // it is alive (components/face-life); under 24px it is a still orb with eyes. Its expression is `state`; `live` lets the
 // Run open in the Conversation this person reads show it thinking and then done (lib/live-runs), unless it waits on
 // them. `dot` adds the state dot. The face is silent for assistive technology: the name and the state in words beside
-// it say who and how.
-export function AgentFace({agent,size,state='idle',dot=false,live=false}:{agent:string|null|undefined,size:number,state?:FaceState,dot?:boolean,live?:boolean}) {
+// it say who and how. A record that names no Agent, only the name it keeps (#702: one detached before its Agent's id
+// was kept), shows that name's first letter, as a person does.
+export function AgentFace({agent,name,...face}:{agent:string|null|undefined,name?:string,size:number,state?:FaceState,dot?:boolean,live?:boolean}) {
+ if(!agent&&name!==undefined) return <span dir="auto" className="avatar" aria-hidden="true" style={{width:face.size,height:face.size,fontSize:Math.max(9,Math.round(face.size/2))}}>{Array.from(name.trim())[0]||'؟'}</span>;
+ return <Orb agent={agent} {...face}/>;
+}
+
+function Orb({agent,size,state='idle',dot=false,live=false}:{agent:string|null|undefined,size:number,state?:FaceState,dot?:boolean,live?:boolean}) {
  const look=useAgentLook(agent);
  const run=useLiveRun(live?agent??undefined:undefined);
  const shown:FaceState=run&&state!=='waiting'?run:state;

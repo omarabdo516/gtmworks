@@ -73,7 +73,7 @@ function ChatHead({panel,slug,agent,conversation,title,writer,board}:{panel:Deta
  const record=live?.record; const corner=record?record.board:board;
  // The pill shakes once when its Card starts waiting while the chat is open (design-reference: syncWaitMarks).
  const fresh=useNewlyWaiting(corner?.column==='waiting'?[corner.card]:[]);
- return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><AgentFace agent={conversation.agent_id} size={32} live/></span>} title={record?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
+ return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} live/></span>} title={record?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
 }
 
 // The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): archive the Conversation, or

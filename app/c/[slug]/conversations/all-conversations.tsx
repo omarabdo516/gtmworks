@@ -88,7 +88,7 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
    ?<button type="button" className="sel-box" role="checkbox" aria-checked={selected.has(chat.id)} aria-label={t('allConversationsSelectOne',chat.title)} onClick={()=>toggle(chat.id)}><span>{selected.has(chat.id)&&<ShellIcon name="check"/>}</span></button>
    :<span className="sel-box" aria-hidden="true"/>)}
   <Link className="cv-open" href={`/c/${slug}/${chat.kind==='channel'?'channels':'conversations'}/${chat.id}`}>
-   {chat.face?<span className="cv-face" aria-hidden="true" title={chat.face.name}><AgentFace agent={chat.face.id} size={28}/></span>:<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>}
+   {chat.face?<span className="cv-face" aria-hidden="true" title={chat.face.name}><AgentFace agent={chat.face.id} name={chat.face.name} size={28}/></span>:<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>}
    <span className="od-field"><span className="cv-t od-truncate">{chat.kind==='channel'?'#':''}<bdi>{chat.title}</bdi></span>{chat.line&&<span className="cv-d od-truncate"><bdi>{chat.line}</bdi></span>}</span>
    {browser&&<time className="cv-time num" dateTime={chat.at}>{time(chat.at)}</time>}
   </Link>

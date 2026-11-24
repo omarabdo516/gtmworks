@@ -2,8 +2,8 @@
  {
   "issue": 694,
   "date": "2026-11-24",
-  "en": { "title": "Every Agent has a face of its own", "body": "Each Agent is now a living orb in its own colour, shape and temperament that breathes, blinks, looks toward your pointer and shows when it is thinking, working, done or waiting on you, the same face everywhere, and it stays still with reduced motion." },
-  "ar": { "title": "كل وكيل بقى ليه وش بتاعه", "body": "كل وكيل بقى كورة حيّة بلونه وشكله وطبعه، بتتنفس وبترمش وبتبص ناحية الماوس، وبتوريك إمتى بيفكر أو شغال أو خلص أو مستنيك، ونفس الوش في كل حتة، ومبتتحركش لو مختار حركة أقل." }
+  "en": { "title": "Every Agent has a face of its own", "body": "Each Agent is now a living orb in its own colour, shape and temperament that breathes, blinks, looks toward your pointer and shows when it is thinking, working, done or waiting on you, the same face everywhere, kept in old conversations, channels, cards and the log after the Agent is removed, and it stays still with reduced motion." },
+  "ar": { "title": "كل وكيل بقى ليه وش بتاعه", "body": "كل وكيل بقى كورة حيّة بلونه وشكله وطبعه، بتتنفس وبترمش وبتبص ناحية الماوس، وبتوريك إمتى بيفكر أو شغال أو خلص أو مستنيك، ونفس الوش في كل حتة، وبيفضل في المحادثات والقنوات والبطاقات والسجل القديمة حتى لو الوكيل اتشال، ومبتتحركش لو مختار حركة أقل." }
  },
  {
   "issue": 667,

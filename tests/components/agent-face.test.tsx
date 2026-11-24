@@ -27,6 +27,7 @@ const looks: CompanyLooks = {
   coming: { shape: 'circle', colour: 'teal', temperament: 'neat' },
  },
  requests: { 7: 'coming' },
+ removed: {},
 };
 const Company = ({ children }: { children: React.ReactNode }) => <div className="gw"><LooksProvider looks={looks}>{children}</LooksProvider></div>;
 const faceOf = (agent: string, index = 0) => [...document.querySelectorAll<HTMLElement>('.face')].filter(face => face.dataset.agent === agent)[index];
@@ -131,4 +132,16 @@ test('a legacy role agent shows its name\'s first letter, as a person does, and 
  expect(option.element().querySelector('.face')).toBeNull();
  await option.click();
  await expect.poll(() => new FormData(document.querySelector('form')!).get('person')).toBe(writer.id);
+});
+
+// #702: a record that names no Agent (a Conversation detached before its Agent's id was kept) shows the first letter of
+// the name it keeps, as a person does; one that names its Agent shows its look, its Agent removed or not.
+test('a record that names no Agent shows the first letter of the name it keeps', async () => {
+ await render(<Company><AgentFace agent={null} name="  Ads" size={24}/><AgentFace agent="" name="عمر" size={20}/><AgentFace agent="ads" name="Ads" size={24}/></Company>);
+ expect([...document.querySelectorAll('.avatar')].map(letter => letter.textContent)).toEqual(['A', 'ع']);
+ expect(document.querySelectorAll('.face')).toHaveLength(1);
+ expect(faceOf('ads').dataset.colour).toBe('rose');
+ const letter = document.querySelector<HTMLElement>('.avatar')!;
+ expect(letter.getAttribute('aria-hidden')).toBe('true');
+ expect([letter.getBoundingClientRect().width, letter.getBoundingClientRect().height]).toEqual([24, 24]);
 });
