@@ -123,7 +123,7 @@ test('the Run goes to the design profile with its key over the newest socket tha
 test('the daemon keeps an Agent\'s files in its own folder and its route in the work user\'s home', () => {
  const paths=agentPaths(`/work/${agent}`,'/home/pn');
  assert.deepEqual(paths,{agent,data:`/work/${agent}/open-design`,route:`/home/pn/.gtmworks/open-design/${agent}.json`,port:`/home/pn/.gtmworks/open-design/${agent}.port`,
-  lock:`/home/pn/.gtmworks/open-design/${agent}.lock`,log:`/home/pn/.gtmworks/open-design/${agent}.log`,socket:`/home/pn/.gtmworks/engine-${agent}.sock`});
+  lock:`/home/pn/.gtmworks/open-design/${agent}.lock`,stuck:`/home/pn/.gtmworks/open-design/${agent}.stuck`,log:`/home/pn/.gtmworks/open-design/${agent}.log`,socket:`/home/pn/.gtmworks/engine-${agent}.sock`});
  assert.equal(agentPaths(`/work/${agent}/sub`,'/home/pn'),null);
  assert.equal(agentPaths('/tmp','/home/pn'),null);
 });
@@ -290,4 +290,44 @@ test('a read the Engine holds is given up when the outage runs out, not a second
   await assert.rejects(runOnEngine(held.route,{input:'x',cwd,signal:new AbortController().signal,outage:150,pace:20}),/lost the Company's Engine/);
   assert.ok(Date.now()-started<950,`gave up after ${Date.now()-started} ms`);
  } finally { held.close(); }
+});
+
+// A read is bounded in wall-clock time, not only between bytes (#634): an Engine that drips its answer and never ends it
+// is given up when the outage runs out.
+test('a read the Engine drips without end is given up when the outage runs out', async () => {
+ const home=mkdtempSync(join(tmpdir(),'od-drip-'));
+ const socket=`${home}/engine.sock`;
+ const timers=[];
+ const engine=createServer((request,response)=>{
+  response.setHeader('Content-Type','application/json');
+  if(request.method==='POST'&&request.url.endsWith('/v1/runs')) { response.statusCode=202; return response.end(JSON.stringify({run_id:'run-drip'})); }
+  if(request.method==='GET') { response.write(' '); timers.push(setInterval(()=>response.write(' '),40)); return; }
+  response.end('{}');
+ });
+ await new Promise(resolve=>engine.listen(socket,resolve));
+ try {
+  const started=Date.now();
+  await assert.rejects(runOnEngine({sockets:[socket],profile:`od-${agent}`,key:'k'.repeat(43)},{input:'x',cwd,signal:new AbortController().signal,outage:300,pace:20}),/lost the Company's Engine/);
+  assert.ok(Date.now()-started<2000,`gave up after ${Date.now()-started} ms`);
+ } finally { for(const timer of timers) clearInterval(timer); engine.closeAllConnections(); engine.close(); }
+});
+
+// A daemon group that outlived its kill is kept on record, and no start makes another daemon while it lives (#634).
+test('a start waits out a daemon group that outlived its kill, and forgets it once it is gone', async () => {
+ const { spawn } = await import('node:child_process');
+ const { earlierDaemonStopping } = await import('../sandbox/open-design/daemon.mjs');
+ const home=mkdtempSync(join(tmpdir(),'od-stuck-'));
+ const record=`${home}/agent.stuck`;
+ assert.equal(earlierDaemonStopping(record),false,'no record, nothing stopping');
+ const left=spawn(process.execPath,['-e',"process.stdout.write('ready'); setInterval(()=>{},1000)"],{detached:true,stdio:['ignore','pipe','ignore']});
+ try {
+  await new Promise(resolve=>left.stdout.once('data',resolve));
+  writeFileSync(record,`${left.pid}\n`);
+  assert.equal(earlierDaemonStopping(record),true);
+  assert.equal(existsSync(record),true,'kept while the group lives');
+ } finally { try { process.kill(-left.pid,'SIGKILL'); } catch {} }
+ await new Promise(resolve=>left.once('exit',resolve));
+ await new Promise(resolve=>setTimeout(resolve,50));
+ assert.equal(earlierDaemonStopping(record),false);
+ assert.equal(existsSync(record),false,'forgotten once it is gone');
 });

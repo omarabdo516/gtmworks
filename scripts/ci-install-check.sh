@@ -665,7 +665,7 @@ SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh > companies-repeat.log 2>
 # Engine of the install is scanned, the first and each Company's own (#382). The agents and agents-sandbox areas each end
 # with it (#553).
 scan_engines() {
-engines_env_found=0
+engines_scanned=0
 for folder in .engines/*/; do
   [ -f "$folder/.env" ] || continue
   name=$(engine_value "$folder" NAME)

@@ -26,7 +26,7 @@ export function agentPaths(cwd,home=homedir()) {
  const agent=found[1];
  const keep=`${home}/.gtmworks/open-design`;
  return {agent,data:`${cwd}/open-design`,route:`${keep}/${agent}.json`,port:`${keep}/${agent}.port`,lock:`${keep}/${agent}.lock`,
-  log:`${keep}/${agent}.log`,socket:`${home}/.gtmworks/engine-${agent}.sock`};
+  stuck:`${keep}/${agent}.stuck`,log:`${keep}/${agent}.log`,socket:`${home}/.gtmworks/engine-${agent}.sock`};
 }
 
 // The socket the Engine's ssh session forwarded for this Agent is moved to a name of this session's own before the MCP
@@ -95,6 +95,16 @@ export async function stopGroup(child,{grace=10_000}={}) {
  return false;
 }
 
+// A daemon group that outlived its kill is kept on record in the work user's home, outside any lock, and no start makes
+// another daemon while it lives; the record goes once the group is gone.
+/** @param {string} record */
+export function earlierDaemonStopping(record) {
+ const pid=Number.parseInt((()=>{ try { return readFileSync(record,'utf8'); } catch { return ''; } })(),10);
+ if(Number.isInteger(pid)&&pid>0&&groupAlive(pid)) return true;
+ rmSync(record,{force:true});
+ return false;
+}
+
 /** @param {{profile:string,key:string,cwd?:string,home?:string}} given */
 export async function ensureDaemon({profile,key,cwd=process.cwd(),home=homedir()}) {
  const paths=agentPaths(cwd,home);
@@ -106,6 +116,7 @@ export async function ensureDaemon({profile,key,cwd=process.cwd(),home=homedir()
  return locked(paths.lock,async()=>{
   const known=readPort(paths.port);
   if(known&&await answers(known)) return `http://127.0.0.1:${known}`;
+  if(earlierDaemonStopping(paths.stuck)) throw new Error(`Open Design's earlier daemon is still stopping; its log is ${paths.log}.`);
   mkdirSync(paths.data,{recursive:true});
   // The design runtime is the Company's Engine (hermes-engine.mjs); a project starts with it chosen.
   const config=`${paths.data}/app-config.json`;
@@ -126,6 +137,7 @@ export async function ensureDaemon({profile,key,cwd=process.cwd(),home=homedir()
   // A daemon that never answered is stopped whole, a child it left included, before the lock goes, so the next start
   // makes the only one.
   const stopped=await stopGroup(child);
+  if(!stopped&&child.pid) writeFileSync(paths.stuck,`${child.pid}\n`,{mode:0o600});
   rmSync(paths.port,{force:true});
   throw new Error(`Open Design's daemon did not start${stopped?'':' and could not be stopped'}; its log is ${paths.log}.`);
  });

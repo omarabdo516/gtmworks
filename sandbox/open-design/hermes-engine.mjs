@@ -66,6 +66,9 @@ function callOn(socket,route,method,path,body,timeout,signal) {
    response.on('end',()=>{ let json=null; try { json=JSON.parse(data); } catch { json=null; } resolve({status:response.statusCode??0,json}); });
    response.on('error',reject);
   });
+  // The time limit bounds the whole call, not only the wait between bytes, so an answer dripped without end is given up too.
+  const deadline=setTimeout(()=>sent.destroy(new Error('timeout')),timeout);
+  sent.on('close',()=>clearTimeout(deadline));
   sent.on('timeout',()=>sent.destroy(new Error('timeout')));
   sent.on('error',reject);
   if(text) sent.write(text);
