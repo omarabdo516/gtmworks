@@ -11,12 +11,10 @@ import { TaskList, TaskListRow } from '@/components/paperclip/TaskList';
 import { BoardIcon } from '@/components/board-icon';
 import { ShellIcon } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
-import { CompanyAgentFace } from '@/components/company-agent-face';
 import { CardDialog } from '@/app/card-dialog';
 import { CardSheet, type CardSheetData } from '@/app/card-sheet';
 import { toast } from '@/app/toast';
 import { useFlagToast } from '@/app/use-flag-toast';
-import { roleAgents } from '@/lib/role-agents';
 import { useAgentIdentities } from '@/lib/agent-identities-client';
 const NewCard=lazy(()=>import('./new-card'));
 import AddIdea from './add-idea';
@@ -67,13 +65,14 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const base=`/c/${p.slug}/work`; const card=p.cards.find(c=>c.id===p.cardId); const shown=p.cards.filter(c=>!project||String(c.project_id)===project); const visible=shown.filter(c=>!month||!c.go_live||c.go_live.slice(0,7)===month); const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="company" value={p.company}/></>;
  if(card&&composing) setComposing(false);
  // A card made from a message is marked with its mode, in the colour of the agent it was sent to.
- const modeChip=(c:Card)=>{ if(!c.mode) return null; const role=p.assignees.filter(x=>x.card_id===c.id).map(x=>p.agents.find(a=>a.person_id===x.person_id)?.role).find(Boolean); const color=roleAgents.find(r=>r.key===role)?.color; return <span className="mode-chip" data-mode={c.mode} style={{borderColor:color}}><i style={{background:color}}/>{c.mode==='plan'?t('modePlan'):c.mode==='do'?t('modeDo'):t('modeAnswer')}</span>; };
+ const modeChip=(c:Card)=>{ if(!c.mode) return null; return <span className="mode-chip" data-mode={c.mode}><i/>{c.mode==='plan'?t('modePlan'):c.mode==='do'?t('modeDo'):t('modeAnswer')}</span>; };
  // ---- the board (ADR 0013): six columns over the stages, "Waiting on you" first ----
  const rtl=language==='ar';
  const columnName=(column:string)=>t(columnLabel(column,p.canCreate));
  const agentIds=new Set([...p.agents.map(a=>a.person_id),...identities.map(a=>a.id)]);
  const agentName=(id:string)=>identities.find(a=>a.id===id)?.name||p.members.find(m=>m.person_id===id)?.people?.name||'';
- const agentRole=(id:string)=>identities.find(a=>a.id===id)?.role||p.agents.find(a=>a.person_id===id)?.role||p.members.find(m=>m.person_id===id)?.agent_role||'account_manager';
+ // A legacy role agent shows its name's first letter, as a person does (#697).
+ const letter=(id:string,size:number)=><span dir="auto" className="avatar" role="img" aria-label={agentName(id)} style={{width:size,height:size}}>{Array.from(agentName(id).trim())[0]||'؟'}</span>;
  const columnOfCard=(c:Card)=>columnOf(c,p.stages);
  // A card's Agent: its assigned Agent, else the Agent that made it (a card an Agent filed through the API). The person
  // who added an idea is the writer of its own log row (#188), so the Card can say "New idea from …".
@@ -190,7 +189,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const startSelecting=()=>{ setLeft(null); setSelected(new Map()); setFocusTo({to:'all'}); };
  const flip=(c:{id:number,title:string})=>{ dropAsking(); setSelected(now=>{ if(!now) return now; const next=new Map(now); if(next.has(c.id)) next.delete(c.id); else next.set(c.id,c.title); return next; }); };
  useEffect(()=>{ if(focusTo) ({toggle:selectToggle,all:selectAllButton,act:selectedAct})[focusTo.to].current?.focus(); },[focusTo]);
- const stopFace=(agent:string|null)=>{ const own=agent?agentById.get(agent):undefined; return own?<CompanyAgentFace agent={own} size={24}/>:null; };
+ const stopFace=(agent:string|null)=>{ const own=agent?agentById.get(agent):undefined; return own?<AgentFace agent={own.id} size={24}/>:null; };
  const archivedCards=p.archived||[];
  const firstName=(person:string|null|undefined)=>p.members.find(m=>m.person_id===person)?.people?.name?.trim().split(/\s+/)[0]||'';
  // The archive list follows the board's Agent and Project filters, as the reference's does.
@@ -264,8 +263,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     <span className="badge badge--live"><span className="dot" aria-hidden="true"/>{t('boardLive')}</span><span className="kcard__t" dir="auto">{stageName(c)}</span>
    </>:progress?<span className="kcard__prog"><span className="kcard__t" dir="auto">{progress.next||stageName(c)} · <span className="num">{progress.pct}%</span></span><span className="bar" role="progressbar" aria-label={t('boardProgress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.pct}><span className="bar__fill" style={{transform:`scaleX(${progress.pct/100})`}}/></span></span>
    :brief?<span className="kcard__t" dir="auto">{brief}</span>:idea?<span className="kcard__t" dir="auto">{idea}</span>:null}
-   {crew.length>1&&<span className="kcard__crew"><span className="fstack" aria-hidden="true">{crew.map(a=><CompanyAgentFace key={a.id} agent={a} size={18}/>)}</span><span className="kcard__crew-t">{t('boardWorkedOn')} {crew.map((a,i)=><Fragment key={a.id}>{i>0&&t('boardNamesJoin')}<bdi>{a.name}</bdi></Fragment>)}</span></span>}
-   {own?<ChatCardFoot agent={own} job={job} due={due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}/>:<span className="kcard__foot">{agent&&<span className="kcard__agent card-avatars"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={18}/><bdi className="od-truncate">{agentName(agent)}</bdi></span>}{job&&<span>{agent?'· ':''}<bdi>{job}</bdi></span>}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>}
+   {crew.length>1&&<span className="kcard__crew"><span className="fstack" aria-hidden="true">{crew.map(a=><AgentFace key={a.id} agent={a.id} size={18}/>)}</span><span className="kcard__crew-t">{t('boardWorkedOn')} {crew.map((a,i)=><Fragment key={a.id}>{i>0&&t('boardNamesJoin')}<bdi>{a.name}</bdi></Fragment>)}</span></span>}
+   {own?<ChatCardFoot agent={own} job={job} due={due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}/>:<span className="kcard__foot">{agent&&<span className="kcard__agent card-avatars">{letter(agent,18)}<bdi className="od-truncate">{agentName(agent)}</bdi></span>}{job&&<span>{agent?'· ':''}<bdi>{job}</bdi></span>}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>}
   </KanbanCard>; };
  // A learning suggestion (#25; design-reference: lnRowHTML) is decided where it waits: the rule, its Agent, who told it,
  // and Decline or Make it team-wide.
@@ -275,7 +274,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const ruleView=(item:WaitingItem)=><div key={`${item.kind}:${item.id}`} className="mcard mcard--rule" data-kind={item.kind} role="group" aria-label={t('waitingRuleLabel',item.body,item.asked_by)}>
   <span className="mcard__top"><span className="od-fill mcard__who"><b>{t('waitingRuleKind')}</b></span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
   <span className="mcard__q" dir="auto">{item.suggestion?.rule??item.title}</span>
-  <span className="ln-meta"><span className="ln-who">{item.suggestion?.agent&&<span aria-hidden="true"><CompanyAgentFace agent={item.suggestion.agent} size={16}/></span>}<bdi>{item.body}</bdi></span><span aria-hidden="true">·</span><span>{named('waitingRuleToldBy',item.asked_by)}</span><span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t('waitingRuleBadge')}</span></span>
+  <span className="ln-meta"><span className="ln-who">{item.suggestion?.agent&&<span aria-hidden="true"><AgentFace agent={item.suggestion.agent.id} size={16}/></span>}<bdi>{item.body}</bdi></span><span aria-hidden="true">·</span><span>{named('waitingRuleToldBy',item.asked_by)}</span><span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t('waitingRuleBadge')}</span></span>
   <form action={decideAgentRule} className="ln-acts"><input type="hidden" name="company" value={p.company}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="item" value={item.id}/>
    <button className="btn btn--secondary btn--sm" name="intent" value="reject">{t('waitingRuleDecline')}</button>
    <button className="btn btn--primary btn--sm" name="intent" value="approve">{t('waitingRuleApprove')}</button></form>
@@ -286,7 +285,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   return <div key={`${item.kind}:${item.id}`} className="mcard mcard--rule" data-kind={item.kind} role="group" aria-label={t('waitingAccessLabel',item.asked_by,item.title)}>
   <span className="mcard__top"><span className="od-fill mcard__who"><b>{t('waitingAccessKind')}</b></span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
   <span className="mcard__q" dir="auto">{named2('waitingAccessAsks',item.asked_by,item.title)}</span>
-  <span className="ln-meta"><span className="ln-who">{item.agent&&<span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={16}/></span>}<bdi>{item.title}</bdi></span>{item.body&&<><span aria-hidden="true">·</span><bdi>{item.body}</bdi></>}<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t('boardWaitingYou')}</span></span>
+  <span className="ln-meta"><span className="ln-who">{item.agent&&<span aria-hidden="true"><AgentFace agent={item.agent.id} size={16}/></span>}<bdi>{item.title}</bdi></span>{item.body&&<><span aria-hidden="true">·</span><bdi>{item.body}</bdi></>}<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{t('boardWaitingYou')}</span></span>
   <form action={answerAgentAccess} className="ln-acts"><input type="hidden" name="company" value={p.company}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="request" value={item.id}/>
    <button className="btn btn--secondary btn--sm" name="intent" value="no">{t('waitingAccessNo')}</button>
    <button className="btn btn--primary btn--sm" name="intent" value="open">{named('waitingAccessOpen',first)}</button></form>
@@ -312,7 +311,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // Conversation at its card. A permission request (#165) names its Agent with its face and opens the Conversation, or
 // the channel, at its card. A channel's question or handed step (#149) does the same, in its channel.
  const itemView=(item:WaitingItem)=>answeredHere(item)?decidedHere[item.kind](item):<Link key={`${item.kind}:${item.id}`} className="mcard" data-kind={item.kind} href={chatPlace(p.slug,item)??`${base}/board/${item.card_id}${item.note_id?`#note-${item.note_id}`:''}`}>
-  <span className="mcard__top">{inChannel(item)&&<span className="avatar mcard__av" aria-hidden="true">{Array.from(item.asked_by.trim())[0]||'؟'}</span>}<span className="od-fill mcard__who">{item.kind==='question'||item.kind==='channel_question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionIn',item.title)}</>:inChannel(item)?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionInChannel',`#${!item.title||item.title==='general'?t('shellGeneralChannel'):item.title}`)}</>:item.agent?<span className="ln-who"><span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={16}/></span><b dir="auto">{item.asked_by}</b></span>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
+  <span className="mcard__top">{inChannel(item)&&<span className="avatar mcard__av" aria-hidden="true">{Array.from(item.asked_by.trim())[0]||'؟'}</span>}<span className="od-fill mcard__who">{item.kind==='question'||item.kind==='channel_question'?<b>{item.asked_by?t('waitingQuestionFrom',item.asked_by):t('waitingQuestion')}</b>:item.kind==='mention'?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionIn',item.title)}</>:inChannel(item)?<><b dir="auto">{item.asked_by}</b> {named('waitingMentionInChannel',`#${!item.title||item.title==='general'?t('shellGeneralChannel'):item.title}`)}</>:item.agent?<span className="ln-who"><span aria-hidden="true"><AgentFace agent={item.agent.id} size={16}/></span><b dir="auto">{item.asked_by}</b></span>:<b dir="auto">{item.asked_by}</b>}</span><span className="mcard__time num">{date(item.created_at,language,{month:'short'})}</span></span>
   {(item.kind==='hand'||item.kind==='channel_hand')&&<span className="wtag wtag--hand"><ShellIcon name="hand"/>{t('handBadge')}</span>}
   <span className="mcard__q od-clamp-3" dir="auto">{item.kind==='mention'?item.body:inChannel(item)?marked(item.body):<>{item.title}{item.body&&<> {item.body}</>}</>}</span>
  </Link>;
@@ -334,7 +333,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   return <CardSheet key={c.id} send={workAction} slug={p.slug} company={p.company} title={c.title} sheet={sheet} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
    archived={archivedOf(c)} archive={p.archiveCards&&{archive:()=>archive([c.id]),restore:()=>restore([c.id])}}
    people={p.members.filter(member=>member.person_id!==p.me&&member.people?.name).map(member=>({id:member.person_id,name:member.people!.name,role:member.role}))} agents={companyAgents}
-   face={c.channel_id?<span className="hp-hash hp-hash--lg" aria-hidden="true"><ShellIcon name="hash"/></span>:own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={28}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={28}/></span>:null}
+   face={c.channel_id?<span className="hp-hash hp-hash--lg" aria-hidden="true"><ShellIcon name="hash"/></span>:own?<span aria-hidden="true"><AgentFace agent={own.id} size={28}/></span>:agent?<span aria-hidden="true">{letter(agent,28)}</span>:null}
    who={c.channel_id?<>{t('boardCardChannel')} <bdi>#{c.title}</bdi></>:own?<bdi>{own.name}</bdi>:agent?<bdi>{agentName(agent)}</bdi>:c.channel?<bdi>{c.channel}</bdi>:null}
    badge={column==='waiting'?<span className="badge badge--wait"><span className="dot dot--waiting" aria-hidden="true"/>{chat?chatBadge(chat):p.approvableIds.includes(c.id)?t('boardWaitingYou'):p.canCreate?waitingOn(c.next_actor):t('boardWaitingTeam')}</span>:<span className="badge">{columnName(column)}</span>}/>; };
  const sheet=p.sheet; const sheetCard=sheet&&(p.cards.find(c=>c.id===sheet.id)??archivedCards.find(c=>c.id===sheet.id));
@@ -360,7 +359,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    </div>
    <div className="od-rail" role="group" aria-label={t('boardFilterByAgent')}>
     <button type="button" className="chip chip--plain" aria-pressed={filter==='all'} onClick={()=>setAgentFilter('all')}>{t('boardAll')}</button>
-    {companyAgents.map(a=><button type="button" key={a.id} className="chip" aria-pressed={filter===a.id} onClick={()=>setAgentFilter(a.id)}><span className="chip__face" aria-hidden="true"><CompanyAgentFace agent={a} size={22}/></span><bdi>{a.name}</bdi></button>)}
+    {companyAgents.map(a=><button type="button" key={a.id} className="chip" aria-pressed={filter===a.id} onClick={()=>setAgentFilter(a.id)}><span className="chip__face" aria-hidden="true"><AgentFace agent={a.id} size={22}/></span><bdi>{a.name}</bdi></button>)}
    </div>
    {boardFilters}
    {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={t('boardArchivedCount',archivedCards.length)} title={t('boardArchived')} onClick={()=>{ setShowArchived(!showArchived); dropAsking(); setSelected(null); }}><ShellIcon name="archive"/>{showArchived&&<span className="num">{archivedCards.length}</span>}</button>}
@@ -379,7 +378,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   {moving&&<p role="status" className="board-status">{t('movingCard')}</p>}
   {showArchived&&<div className="arch">{archivedShown.length?<ul className="panel-card arch-list" aria-label={t('boardArchivedCards')}>{archivedShown.map(c=>{ const own=cardAgentOf(c); const agent=agentOfCard(c); const at=archivedOf(c);
    return <li key={c.id} className="arch-row">{selected&&<button type="button" className="sel-box" role="checkbox" aria-checked={selected.has(c.id)} aria-label={t('boardSelectCard',c.title)} onClick={()=>flip(c)}><span>{selected.has(c.id)&&<ShellIcon name="check"/>}</span></button>}<Link className="arch-open" href={`${base}/board?card=${c.id}`} scroll={false}>
-    {own?<span aria-hidden="true"><CompanyAgentFace agent={own} size={24}/></span>:agent?<span aria-hidden="true"><AgentFace id={agent} role={agentRole(agent)} name={agentName(agent)} size={24}/></span>:<span className="arch-none" aria-hidden="true"/>}
+    {own?<span aria-hidden="true"><AgentFace agent={own.id} size={24}/></span>:agent?<span aria-hidden="true">{letter(agent,24)}</span>:<span className="arch-none" aria-hidden="true"/>}
     <span className="od-field"><span className="arch-t authored-title" dir="auto">{c.title}</span><span className="arch-d">{columnName(columnOfCard(c))} · <bdi>{at?.by}</bdi> · <span className="num">{at?.at}</span></span></span></Link>
     {p.canCreate&&p.archiveCards&&!selected&&<button type="button" className="ib" aria-label={t('boardRestoreCard',c.title)} title={t('cardRestoreShort')} onClick={()=>restore([c.id])}><ShellIcon name="restore"/></button>}</li>; })}</ul>
    :<div className="col-empty arch-empty"><b>{t(archivedCards.length?'boardArchivedNoMatch':'boardArchivedEmpty')}</b></div>}</div>}

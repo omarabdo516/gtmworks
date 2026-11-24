@@ -49,7 +49,7 @@ test('two handovers are drawn in the details newest first, each with both faces,
   `Lead asked AdsPlan the Meta ads for the March intake · ${timeOf('2026-06-10T09:08:00Z', 'en')}`,
   `Lead asked AdsWrite the launch email · ${timeOf('2026-06-10T09:04:00Z', 'en')}`,
  ]);
- expect(rows.map(row => row.querySelectorAll('.agent-face').length)).toEqual([2, 2]);
+ expect(rows.map(row => row.querySelectorAll('.face').length)).toEqual([2, 2]);
  expect(rows[0].querySelector('.handed__faces .gw-icon path')?.getAttribute('d')).toBe('M5 12h14');
 });
 
@@ -92,7 +92,7 @@ test('the transcript draws the row, then the other Agent\'s answer marked "to Le
  expect(items.map(row => row.getAttribute('data-author') ?? (row.hasAttribute('data-handover') ? 'handoff' : row.tagName.toLowerCase()))).toEqual(['person', 'agent', 'handoff', 'agent', 'agent']);
  const row = items[2];
  expect(row.textContent).toBe('Lead asked AdsPlan the Meta ads for the March intake');
- expect(row.querySelectorAll('.agent-face').length).toBe(2);
+ expect(row.querySelectorAll('.face').length).toBe(2);
  expect(row.querySelector('.gw-icon path')?.getAttribute('d')).toBe('M5 12h14');
  expect(items[3].querySelector('.sender')?.textContent).toContain('Ads');
  expect(items[3].querySelector('.sender__to')?.textContent).toBe('to Lead');
@@ -291,18 +291,18 @@ for (const [language, line, to] of [['en', 'Writer asked Ads', 'to Writer'], ['a
   const row = list.querySelector('[data-handover]')!;
   expect(row.querySelector('.handed__t')?.textContent).toBe(line);
   expect(row.querySelector('.handed__d')?.textContent).toBe('Last campaign\'s leads and cost per lead');
-  expect([...row.querySelectorAll('.agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['Writer', 'Ads']);
+  expect([...row.querySelectorAll('.face')].map(face => (face as HTMLElement).dataset.agent)).toEqual(['c-3', 'c-2']);
   const turns = [...list.querySelectorAll('.turn--agent')];
   expect(turns.map(turn => turn.querySelector('.sender bdi')?.textContent)).toEqual(['Writer', 'Ads', 'Writer']);
   // Ads wears the face the row draws for it, though it is not one of the channel's Agents, and says whom it answered.
-  expect(turns[1].querySelector('.sender .agent-face')?.innerHTML).toBe(row.querySelectorAll('.agent-face')[1].innerHTML);
+  expect(turns[1].querySelector<HTMLElement>('.sender .face')?.dataset.agent).toBe('c-2');
   expect(turns[1].querySelector('.sender__to')?.textContent).toBe(to);
   expect(turns[1].querySelector('.bubble')?.textContent).toBe('412 leads at EGP 21 each.');
   expect(turns[2].querySelector('.sender__to')).toBeNull();
   // The details list it under Handoffs with both faces and the same words.
   const listed = screen.container.querySelector('#ch-h-h ~ .panel-card .panel-row')!;
   expect(listed.querySelector('.panel-row__t')?.textContent).toBe(line);
-  expect(listed.querySelectorAll('.agent-face').length).toBe(2);
+  expect(listed.querySelectorAll('.face').length).toBe(2);
   // The names read in the theme's first text colour, and the job and the "to" line in its quiet one.
   const [first, quiet] = theme === 'dark' ? ['rgb(245, 245, 245)', 'rgba(245, 245, 245, 0.6)'] : ['rgb(28, 28, 28)', 'rgba(28, 28, 28, 0.64)'];
   expect(getComputedStyle(row.querySelector('.handed__t bdi')!).color).toBe(first);

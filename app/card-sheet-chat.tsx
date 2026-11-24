@@ -5,7 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import channelEn from '@/lib/messages/channel.en.json';
 import channelAr from '@/lib/messages/channel.ar.json';
 import { ShellIcon } from '@/components/shell-icon';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { HandedRow } from '@/app/handed-row';
 import { MessageBox, newId, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { ConversationComposer, ConversationTurns, useConversationRecord } from '@/app/conversation-thread';
@@ -66,7 +66,7 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
  const [before,after]=t('sheetChatEmptyLine','\u0000').split('\u0000');
  return <>
   <div {...panel}><div className="transcript__col"><div className="empty-chat empty-chat--sheet">
-   <div className="empty-chat__faces"><span aria-hidden="true"><CompanyAgentFace agent={chat.agent} size={52}/></span></div>
+   <div className="empty-chat__faces"><span aria-hidden="true"><AgentFace agent={chat.agent.id} size={52} live/></span></div>
    <h2>{t('sheetChatEmpty')}</h2>
    <p>{before}<bdi>{chat.agent.name}</bdi>{after}</p>
   </div></div></div>
@@ -76,7 +76,7 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
    if(failure) return failure;
    // Its first message rises in, as one sent in an open Conversation does (#132).
    sentIntoNewChat(id);
-   setStarted({conversation:{id,agent_id:chat.agent.id,agent_name:chat.agent.name,face:chat.agent.connection_id},messages:[{id:0,author:'person',author_name:'',body:message,created_at:new Date().toISOString()}],
+   setStarted({conversation:{id,agent_id:chat.agent.id,agent_name:chat.agent.name,face:chat.agent.id},messages:[{id:0,author:'person',author_name:'',body:message,created_at:new Date().toISOString()}],
     usage:null,pending:true,failed:false,working:null,canStop:false});
    router.refresh();
    return null;
@@ -125,9 +125,9 @@ function SheetChannel({slug,channel,company,shown}:{slug:string,channel:ChannelR
     {messages.map(message=>message.author==='note'
      ? <li key={message.id} className="note note--icon" data-kind={message.kind}><ShellIcon name={message.kind==='card'?'board':'team'} className="note__icon"/><span>{message.kind==='card'?c('channelCardNote',t('boardColProgress')):c('channelInviteNote',firstName(message.actor),message.name,name)}</span></li>
      : message.author==='handoff'
-     ? <HandedRow key={message.id} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}} title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} ending={message} said={{stopped:c('channelHandedStopped'),failed:c('channelHandedFailed')}}/>
+     ? <HandedRow key={message.id} from={{id:message.from.face,name:message.from.name}} to={{id:message.to.face,name:message.to.name}} title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} ending={message} said={{stopped:c('channelHandedStopped'),failed:c('channelHandedFailed')}}/>
      : message.author==='agent'
-     ? <li key={message.id} className="turn turn--agent msg" data-author="agent"><div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}</div><div className="bubble bubble--agent" dir="auto">{message.body}</div></li>
+     ? <li key={message.id} className="turn turn--agent msg" data-author="agent"><div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}</div><div className="bubble bubble--agent" dir="auto">{message.body}</div></li>
      : <li key={message.id} className={`turn ${message.mine?'turn--user':'turn--peer'} msg`} data-author="person">
       {!message.mine&&<div className="sender"><span className="me__av lg-av" style={{'--av':'20px'} as CSSProperties} aria-hidden="true">{Array.from(message.name.trim())[0]||'?'}</span><bdi>{firstName(message.name)}</bdi></div>}
       {!!message.body.trim()&&<div className={`bubble ${message.mine?'bubble--user':'bubble--peer'}`} dir="auto">{message.body}</div>}

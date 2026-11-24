@@ -207,9 +207,9 @@ test('a channel handover is drawn as the row, the other Agent\'s answer marked w
   'Lead: Ads planned the March intake.',
  ]);
  const row = record?.messages.find(message => message.author === 'handoff');
- assert.deepEqual(row, { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'c-a-1' }, to: { name: 'Ads', face: 'c-a-2' },
+ assert.deepEqual(row, { id: 'handover-7', author: 'handoff', from: { name: 'Lead', face: 'a-1' }, to: { name: 'Ads', face: 'a-2' },
   goal: 'Plan the Meta ads for the March intake', at: '2026-06-10T10:01:00Z' });
- assert.deepEqual(record?.handoffs, [{ id: 7, from: { name: 'Lead', face: 'c-a-1' }, to: { name: 'Ads', face: 'c-a-2' },
+ assert.deepEqual(record?.handoffs, [{ id: 7, from: { name: 'Lead', face: 'a-1' }, to: { name: 'Ads', face: 'a-2' },
   goal: 'Plan the Meta ads for the March intake', at: '2026-06-10T10:01:00Z' }]);
  assert.equal(record?.handover, false, 'a finished handover is not still moving');
 });

@@ -231,7 +231,7 @@ for (const [language, line, arrow] of [['en', 'Lead asked Ads', 'M5 12h14'], ['a
  expect(row?.textContent).toContain(line);
  expect(row?.textContent).toContain('Ads');
  expect(row?.textContent).toContain('Plan the Meta ads for the March intake');
- expect(row?.querySelectorAll('.agent-face').length).toBe(2);
+ expect(row?.querySelectorAll('.face').length).toBe(2);
  expect(row?.querySelector('.gw-icon path')?.getAttribute('d')).toBe(arrow);
 });
 
@@ -255,9 +255,9 @@ for (const [language, line, to] of [['en', 'Writer asked Ads', 'to Writer'], ['a
   const row = turns[0].querySelector('[data-handover]');
   expect(row?.querySelector('.handed__t')?.textContent).toBe(line);
   expect(row?.querySelector('.handed__d')?.textContent).toBe('Last campaign\'s leads and cost per lead');
-  expect([...row!.querySelectorAll('.agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['Writer', 'Ads']);
+  expect([...row!.querySelectorAll('.face')].map(face => (face as HTMLElement).dataset.agent)).toEqual(['c-2', 'c-3']);
   // The answer wears the asked Agent's own face, the one the row draws for it, and says whom it went to.
-  expect(turns[1].querySelector('.sender .agent-face')?.innerHTML).toBe(row!.querySelectorAll('.agent-face')[1].innerHTML);
+  expect(turns[1].querySelector<HTMLElement>('.sender .face')?.dataset.agent).toBe('c-3');
   expect(turns[1].querySelector('.sender__to')?.textContent).toBe(to);
   expect(turns[1].querySelector('.bubble')?.textContent).toBe('1,240 leads at EGP 7.30 each.');
   expect(turns[0].querySelector('.sender__to')).toBeNull();
@@ -298,7 +298,7 @@ for (const [language, first, second, toAds, toWriter] of [['en', 'Writer asked A
   expect(items[0].querySelector('[data-handover] .handed__t')?.textContent).toBe(first);
   const step = items[1];
   expect(step.querySelector('.handed__d')?.textContent).toBe('Check the figures');
-  expect([...step.querySelectorAll('.agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['Ads', 'Critic']);
+  expect([...step.querySelectorAll('.face')].map(face => (face as HTMLElement).dataset.agent)).toEqual(['c-3', 'c-4']);
   expect(step.closest('.turn')).toBeNull();
  });
 // #478: Stop ends the whole chain. Writer asked Ads and Ads asked Critic when the person pressed Stop: both steps say
@@ -358,13 +358,10 @@ test('a job command\'s answer in the main Agent\'s chat is drawn from the Agent 
  const screen = await render(view(record));
  const turns = [...screen.container.querySelectorAll('.turn--agent')];
  expect(turns.map(turn => turn.querySelector('.sender bdi')?.textContent)).toEqual(['Mona', 'Reach']);
- const handedFaces = [...turns[0].querySelectorAll('.handed__faces .agent-face')];
- expect(handedFaces.map(face => face.getAttribute('aria-label'))).toEqual(['Mona', 'Reach']);
- const replyFace = turns[1].querySelector('.agent-face');
- expect(replyFace?.getAttribute('aria-label')).toBe('Reach');
- // The drawing is keyed by the Agent's connection, so the reply wears the same face the row shows for it.
- expect(replyFace?.innerHTML).toBe(handedFaces[1].innerHTML);
- expect(replyFace?.innerHTML).not.toBe(handedFaces[0].innerHTML);
+ const handedFaces = [...turns[0].querySelectorAll<HTMLElement>('.handed__faces .face')];
+ expect(handedFaces.map(face => face.dataset.agent)).toEqual(['c-2', 'c-3']);
+ // The face is asked for by the Agent's id, so the reply wears the face the row shows for it.
+ expect(turns[1].querySelector<HTMLElement>('.sender .face')?.dataset.agent).toBe('c-3');
 });
 
 // A handed job keeps the chat asking for Lead's follow-up reply, even though the Run that handed it over has ended.
@@ -437,7 +434,8 @@ test('a Conversation opened with its history moves nothing but the working line\
  const made = { id: 4, author: 'agent' as const, author_name: 'Mona', body: 'Made it.', created_at: at, cards: [{ kind: 'made' as const, agent: { id: 'ag-9', connection_id: 'c-9', name: 'Reach', job: 'Runs Meta ads', apps: [], fresh: false, created_at: at } }] };
  await render(inShell(talk([sent, made], { pending: true, working: 'Omar' })));
  await expect.element(page.getByRole('status')).toBeVisible();
- const moving = [...document.querySelectorAll('.transcript *')].filter(element => getComputedStyle(element).animationName !== 'none');
+ // An Agent's face lives by itself (components/face-life), as it does on every page; nothing else moves.
+ const moving = [...document.querySelectorAll('.transcript *')].filter(element => !element.closest('.fw') && getComputedStyle(element).animationName !== 'none');
  expect(moving.map(element => element.className)).toEqual(['shimmer']);
  const words = document.querySelector('.thinking .shimmer')!;
  const style = getComputedStyle(words);

@@ -5,7 +5,8 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { useLeave } from '@/lib/motion';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/paperclip/ui/dialog';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
+import { LooksProvider } from '@/lib/agent-looks-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
 import { newId, postMessage } from '@/app/conversation-composer';
@@ -70,8 +71,9 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
       <button key={kind} type="button" className="chip" aria-pressed={category===kind} onClick={()=>setCategory(kind)}>{t(`category.${kind}`)}<span className="chip__n">{roles.filter(role=>kind==='all'||role.category===kind).length}</span></button>)}</div>
      {failure&&<p role="alert" className="composer-error">{say(failure)}</p>}
     </div>
-    <div className="tpl-grid" aria-live="polite">{shown.length?shown.map(role=><article key={role.id} className="tpl" aria-labelledby={`tpl-t-${role.id}`}>
-     <div className="tpl__top"><span className="tpl__face" aria-hidden="true"><CompanyAgentFace agent={{connection_id:role.name,name:role.role}} size={44}/></span>
+    {/* Each role's face is the look its Agent would be made with now (lib/ready-roles: readyRoleLooks). */}
+    <LooksProvider looks={{agents:Object.fromEntries(roles.map(role=>[`ready-${role.id}`,role.look])),requests:{}}}><div className="tpl-grid" aria-live="polite">{shown.length?shown.map(role=><article key={role.id} className="tpl" aria-labelledby={`tpl-t-${role.id}`}>
+     <div className="tpl__top"><span className="tpl__face" aria-hidden="true"><AgentFace agent={`ready-${role.id}`} size={44}/></span>
       <div className="tpl__titles"><h3 className="tpl__role" id={`tpl-t-${role.id}`}>{role.role}</h3><span className="tpl__cat">{t(`category.${role.category}`)}{alone?'':` · ${t('team')}`}</span></div></div>
      <p className="tpl__line">{role.line}</p>
      {role.handoff&&<p className="tpl__hand"><ShellIcon name="hand"/><span>{role.handoff}</span></p>}
@@ -82,7 +84,7 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
      </div>
     </article>):<div className="tpl-empty"><b>{needle?t('noMatch',query.trim()):t('noneHere')}</b><span>{t('emptyHint')}</span>
      <div className="tpl-empty__acts">{needle&&<button type="button" className="btn btn--secondary btn--sm" onClick={()=>{setQuery('');search.current?.focus();}}>{t('clear')}</button>}
-      <button type="button" className="btn btn--secondary btn--sm" onClick={()=>leave()}>{ask?t('askLead',lead):t('scratch')}</button></div></div>}</div>
+      <button type="button" className="btn btn--secondary btn--sm" onClick={()=>leave()}>{ask?t('askLead',lead):t('scratch')}</button></div></div>}</div></LooksProvider>
     <footer className="modal__foot"><span className="modal__foot-t">{t('notFound')}</span><button type="button" className="btn btn--secondary" onClick={()=>leave()}>{ask?t('askLead',lead):t('scratch')}</button></footer>
    </div>
   </DialogContent>

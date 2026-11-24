@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShellIcon } from '@/components/shell-icon';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ArchiveConfirm } from '@/app/archive-confirm';
 import { archiveChannels } from '@/app/channel-archive-actions';
 import type { ArchiveStop, ArchiveStopKind } from '@/lib/archive-stops';
@@ -47,7 +47,7 @@ export function ChannelArchive({company,channel,archived,agents,c,refresh}:{comp
   setFailed('');
   if(read.stops.length) setStops(read.stops); else await archive();
  };
- const face=(agent:string|null)=>{ const found=agents.find(one=>one.id===agent); return found?<CompanyAgentFace agent={found} size={24}/>:null; };
+ const face=(agent:string|null)=>{ const found=agents.find(one=>one.id===agent); return found?<AgentFace agent={found.id} size={24}/>:null; };
  return <section className="dp-sec" aria-labelledby="ch-h-arc">
   <h3 className="dp-label" id="ch-h-arc"><span>{c('channelArchiveSection')}</span></h3>
   <div className="panel-card ch-arc">

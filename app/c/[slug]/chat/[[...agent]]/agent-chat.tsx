@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, newId, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import { AgentEmptyChat, type EmptyChat } from '@/app/agent-empty-chat';
@@ -70,7 +70,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
  const opening=newAgent&&!picked;
  return <div className="convo">{first&&agent&&<FirstRunToast mode={first} agent={agent.name} invites={invites}/>}
   <div className="chat">
-   <HeadPill panel={panel} agent={current?.name} face={current&&<span aria-hidden="true"><CompanyAgentFace agent={current} size={24}/></span>} title={t('newChat')}/>
+   <HeadPill panel={panel} agent={current?.name} face={current&&<span aria-hidden="true"><AgentFace agent={current.id} size={32} live/></span>} title={t('newChat')}/>
    <div className="transcript" ref={transcript}><div className="transcript__col">
     {current&&team&&<PrivateLine agent={current.name}/>}
     {current?<AgentEmptyChat agent={current} empty={shown.empty} askOf={askOf} suggest={writer?text=>box.current?.insert(text):undefined} picker={agents.length>1?{agents:agents.map(choice=>({id:choice.agent.id,connection_id:choice.agent.connection_id,name:choice.agent.name})),onPick:pick,disabled:sending,chipRef:element=>{chip.current=element}}:undefined}/>:<div className="empty-chat"><p role="note">{t('conversationNoAgent')}</p></div>}

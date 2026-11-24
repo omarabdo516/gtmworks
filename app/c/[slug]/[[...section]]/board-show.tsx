@@ -2,7 +2,7 @@
 // A chat's Card on the board (#144), kept apart from the board's server actions so a component test reaches only client
 // modules.
 import { useEffect, useState, type ReactNode } from 'react';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 
 // A Card's own Agent (work_cards.agent_id), the one whose chat put it on the board.
 export type CardAgent={id:string,connection_id:string,name:string,speciality:string};
@@ -33,5 +33,5 @@ export function useShowCard(show:number|undefined,{hides,showAll,board}:{hides:b
 
 // The foot of a Card a chat put on the board: its Agent whole, then the Agent's job (the reference's chan), then its date.
 export function ChatCardFoot({agent,job,due}:{agent:CardAgent,job:string,due?:ReactNode}) {
- return <span className="kcard__foot"><span className="kcard__agent kcard__agent--own card-avatars"><span aria-hidden="true"><CompanyAgentFace agent={agent} size={18}/></span><bdi>{agent.name}</bdi></span>{job&&<span className="kcard__job od-truncate">· <bdi>{job}</bdi></span>}{due}</span>;
+ return <span className="kcard__foot"><span className="kcard__agent kcard__agent--own card-avatars"><span aria-hidden="true"><AgentFace agent={agent.id} size={18}/></span><bdi>{agent.name}</bdi></span>{job&&<span className="kcard__job od-truncate">· <bdi>{job}</bdi></span>}{due}</span>;
 }

@@ -212,13 +212,13 @@ test('an Agent the Member already writes to shows the faces of every Agent they 
  const line = screen.container.querySelector('.empty-chat p')!;
  expect(line.textContent).toBe('Pick the agent you want to talk to, or type @ in your message to call any of them.');
  expect(line.querySelector('bdi')?.textContent).toBe('@');
- expect(screen.container.querySelectorAll('.empty-chat__faces svg')).toHaveLength(3);
+ expect(screen.container.querySelectorAll('.empty-chat__faces .face')).toHaveLength(3);
  expect(chips(screen).map(chip => chip.textContent)).toEqual(['Lead', 'SEO', 'Meta Ads']);
  expect(chips(screen).map(chip => chip.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true']);
  expect(screen.container.querySelector('.agent-picker')?.getAttribute('aria-label')).toBe('Pick an agent');
  expect(suggestions(screen).map(button => button.textContent)).toEqual(['Tell me what you can doand the tools you need', 'Start with a first jobPlan a Meta campaign for our next offer, with a budget you suggest']);
  // A chip carries a face of its own, hidden from the reader who hears the Agent's name beside it.
- expect(chips(screen).every(chip => chip.querySelector('.chip__face[aria-hidden="true"] svg'))).toBe(true);
+ expect(chips(screen).every(chip => chip.querySelector('.chip__face[aria-hidden="true"] .face'))).toBe(true);
 });
 
 test('a Viewer sees the faces, the line and the picker of the known empty chat, and no suggestions', async () => {

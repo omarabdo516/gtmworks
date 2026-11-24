@@ -1,7 +1,7 @@
 'use client';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { MadeLine } from '@/app/agent-made';
@@ -32,7 +32,7 @@ export type AgentPicker={agents:PickerAgent[],onPick:(id:string)=>void,disabled?
 export function AgentEmptyChat({agent,empty,askOf=null,suggest,picker}:{agent:Agent,empty:EmptyChat,askOf?:string[]|null,suggest?:(text:string)=>void,picker?:AgentPicker}) {
  const {t,language}=useI18n();
  if(empty.state==='fresh') return <LeadWelcome agent={agent} askOf={askOf} suggest={suggest}/>;
- const face=<div className="empty-chat__faces" aria-hidden="true"><CompanyAgentFace agent={agent} size={64}/></div>;
+ const face=<div className="empty-chat__faces" aria-hidden="true"><AgentFace agent={agent.id} size={96} live/></div>;
  // design-reference: mainEmptyHTML. Its daily check-in, its handing work to another Agent and the suggestion that
  // promises it wait for those parts (gap rows 7 and 4).
  if(empty.state==='main') {
@@ -64,12 +64,12 @@ export function AgentEmptyChat({agent,empty,askOf=null,suggest,picker}:{agent:Ag
  // sentence, or says what to write when it has none.
  const general=[[t('suggestTellMe'),t('suggestTellMeD')],[t('suggestFirstJob'),empty.example??t('suggestFirstJobD')]];
  return <div className="empty-chat">
-  <div className="empty-chat__faces" aria-hidden="true">{picker?picker.agents.map(other=><CompanyAgentFace key={other.id} agent={other} size={40}/>):<CompanyAgentFace agent={agent} size={64}/>}</div>
+  <div className="empty-chat__faces" aria-hidden="true">{picker?picker.agents.map(other=><AgentFace key={other.id} agent={other.id} size={40}/>):<AgentFace agent={agent.id} size={96} live/>}</div>
   <h2 tabIndex={-1}>{t('emptyChatHeading')}</h2>
   <p>{t('emptyChatPickLead')} <bdi>@</bdi> {t('emptyChatPickTail')}</p>
   {picker&&<div className="agent-picker" role="group" aria-label={t('agentPickerLabel')}>
    {picker.agents.map(other=><button key={other.id} type="button" className="chip" aria-pressed={other.id===agent.id} aria-disabled={picker.disabled?true:undefined} onClick={()=>{ if(!picker.disabled) picker.onPick(other.id); }} ref={other.id===agent.id?picker.chipRef:undefined}>
-    <span className="chip__face" aria-hidden="true"><CompanyAgentFace agent={other} size={22}/></span><bdi>{other.name}</bdi></button>)}
+    <span className="chip__face" aria-hidden="true"><AgentFace agent={other.id} size={22}/></span><bdi>{other.name}</bdi></button>)}
   </div>}
   {suggest&&<div className="suggest">{general.map(([title,second])=><button key={title} type="button" onClick={()=>suggest(`${title}: ${second}`)}><b>{title}</b><span>{second}</span></button>)}</div>}
  </div>;

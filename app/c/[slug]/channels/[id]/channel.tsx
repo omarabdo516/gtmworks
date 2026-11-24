@@ -7,9 +7,8 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { dayOf } from '@/lib/activity-log.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { named } from '@/lib/bidi';
-import { AgentFaceDot } from '@/app/agent-face-dot';
 import { statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { HandedRow } from '@/app/handed-row';
@@ -188,7 +187,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
     <Turn message={message} rise={landedHere(message)?'':rise(`${message.author}:${message.id}`)} opened={message.author==='agent'&&landing.opened(message.id)} time={time} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
-     <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:mention.face,name:mention.agent}} size={20}/></span><bdi>{mention.agent}</bdi></div>
+     <div className="sender"><span aria-hidden="true"><AgentFace agent={mention.face} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {/* What the Agent wrote before it asked, in the same message (#647), is its words above the card. */}
      {mention.questions.map(card=><Fragment key={`question${card.id}`}><Said words={card.said}/><ReplyCard card={card} fresh={!drawnCards.has(card.id)} chips={card.chips}
        team
@@ -234,12 +233,12 @@ function Turn({message,rise,opened=false,time,c,slug,name,cb,drawnCards,memberNa
  // and that it did not finish when so (#375). One that ended with no reply for a cause a retry cannot fix (#428, #530)
  // says so under its row, as a Conversation does.
  if(message.author==='handoff') {
-  const row=<HandedRow className={rise.trim()} from={{connection_id:message.from.face,name:message.from.name}} to={{connection_id:message.to.face,name:message.to.name}}
+  const row=<HandedRow className={rise.trim()} from={{id:message.from.face,name:message.from.name}} to={{id:message.to.face,name:message.to.name}}
    title={named(c,'channelHandoverAsked',message.from.name,message.to.name)} goal={message.goal} ending={message} said={{stopped:c('channelHandedStopped'),failed:c('channelHandedFailed')}}/>;
   return message.model?<>{row}<li className="note" role="alert" data-outcome={modelOutcome(message.model.cause)}><ModelLine cause={message.model.cause} agent={message.model.agent} slug={slug} owner={owner}/></li></>:row;
  }
  if(message.author==='agent') return <li className={`turn turn--agent msg${rise}`} data-author="agent">
-  <div className="sender"><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:message.face,name:message.name}} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
+  <div className="sender"><span aria-hidden="true"><AgentFace agent={message.face} size={20}/></span><bdi>{message.name}</bdi>{message.to&&<span className="sender__to">{c('channelSenderTo',message.to)}</span>}<time className="sender__time" dateTime={message.at}>{time(message.at)}</time></div>
   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={opened}/>}
   <div className="bubble bubble--agent" dir="auto">{message.body}</div>
   {message.cards?.map(card=><ReplyCard key={`reply${card.id}`} card={card} fresh={!drawnCards.has(card.id)} done={done} team/>)}
@@ -326,12 +325,12 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
    <section className="dp-sec" aria-labelledby="ch-h-a">
     <h3 className="dp-label" id="ch-h-a"><span>{t('agents')} <span className="muted num">{count(agents.length)}</span></span></h3>
     <ul className="panel-card">
-     {agents.length?agents.map(agent=><li key={agent.id} className="panel-row"><AgentFaceDot agent={agent} size={28} status={agent.state}/>
+     {agents.length?agents.map(agent=><li key={agent.id} className="panel-row"><AgentFace agent={agent.id} size={28} state={agent.state} dot/>
       <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>{agent.only?<span className="panel-row__d">{c('channelShownHere')}</span>:<span className="panel-row__d">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{' · '}</>}{t(statusKeys[agent.state])}</span>}</span>
       {manage&&remove(`tm-rm-${agent.id}`,agent.name,{agent:agent.id,present:false},'tm-add-open')}</li>)
      :empty(team?c('channelNoAgentsYet'):c('channelNoAgents'))}
      {manage&&addRow('tm-add-open',addingAgent,c('channelAddAgent'),()=>void pick(!addingAgent,setAddingAgent))}
-     {manage&&addingAgent&&choices&&(agentCandidates.length?agentCandidates.map(candidate=><li key={candidate.id} className="panel-row tm-cand"><span aria-hidden="true"><CompanyAgentFace agent={candidate} size={28}/></span>
+     {manage&&addingAgent&&choices&&(agentCandidates.length?agentCandidates.map(candidate=><li key={candidate.id} className="panel-row tm-cand"><span aria-hidden="true"><AgentFace agent={candidate.id} size={28}/></span>
       <span className="panel-row__text"><span className="panel-row__t"><bdi>{candidate.name}</bdi></span><span className="panel-row__d"><bdi>{candidate.speciality||t('newAgent')}</bdi></span></span>
       <button type="button" className="btn btn--secondary btn--sm" id={`tm-add-${candidate.id}`} onClick={()=>void change({agent:candidate.id,present:true},'tm-add-open')}>{c('channelAdd')}</button></li>)
       :empty(c('channelEveryAgentHere')))}
@@ -352,7 +351,7 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
     <h3 className="dp-label" id="ch-h-h"><span>{c('channelHandoffs')} <span className="muted num">{count(handoffs.length)}</span></span></h3>
     <ul className="panel-card">
      {handoffs.slice(0,4).map(handoff=><li key={handoff.id} className="panel-row" {...(handoff.stopped?{'data-stopped':''}:handoff.failed?{'data-failed':''}:{})}>
-      <span className="handed__faces"><CompanyAgentFace agent={{connection_id:handoff.from.face,name:handoff.from.name}} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={{connection_id:handoff.to.face,name:handoff.to.name}} size={20}/></span>
+      <span className="handed__faces"><AgentFace agent={handoff.from.face} size={20}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><AgentFace agent={handoff.to.face} size={20}/></span>
       <span className="panel-row__text"><span className="panel-row__t">{named(c,'channelHandoverAsked',handoff.from.name,handoff.to.name)}</span>
        <span className="panel-row__d">{handoff.goal&&<><bdi>{handoff.goal}</bdi>{' · '}</>}{handoff.stopped?<><span className="handed__failed is-stopped">{c('channelHandedStopped')}</span>{' · '}</>:handoff.failed&&<><span className="handed__failed">{c('channelHandedFailed')}</span>{' · '}</>}{time(handoff.at)}</span></span>
      </li>)}

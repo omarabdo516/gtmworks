@@ -101,10 +101,10 @@ export type StoredHandover={id:number,message:number,from_agent:string,from_name
 // of its own: its answer is the Agent's that asked it, whose own answer follows.
 const handoverModel=(row:StoredHandover)=>{ const cause=modelCauseOf(row.model_end); return cause?{model:{cause,agent:row.model_agent??row.to_name}}:{}; };
 export const handoverLines=(rows:StoredHandover[]):ChannelMessage[]=>rows.flatMap((row):ChannelMessage[]=>[
- {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
+ {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_agent},to:{name:row.to_name,face:row.to_agent},goal:row.goal,at:row.created_at,
   ...handoverEnding(row),...handoverModel(row)},
- ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
- ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,body:row.reply,at:row.closed_at}]:[]),
+ ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_agent,body:row.summary,at:row.answered_at,to:row.from_name}]:[]),
+ ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_agent,body:row.reply,at:row.closed_at}]:[]),
 ]);
 // The lines in the order they were written: a note is drawn where it happened, after a message written at the same
 // moment (the sort is stable, and the messages come first), and a handover's row after the reply that made it.
@@ -219,13 +219,13 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // One Agent's turn under a message (#152): its Run's state, the questions that Run asked (#149) and the requests it
  // asked (its own, never a sibling's).
  const mentionOf=(run:StoredRun):ChannelMention=>({agent:run.agent_name,
-  face:seen.find(agent=>agent.id===run.agent_id)?.connection_id||run.agent_id||run.agent_name,state:stateOf(run.outcome),
+  face:run.agent_id||'',state:stateOf(run.outcome),
   questions:questionsOf.get(`${run.message_id}:${run.ordinal??1}`)??[],
   permissions:asked.filter(row=>row.message_id===run.message_id&&(row.ordinal??1)===(run.ordinal??1))
    .flatMap(row=>{ const card=replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null}); return card?[{...card,...saidParts(row)}]:[]; }) as ChannelPermission[]});
  const written:[ChannelMessage[],ChannelMessage[]]=[
   ordered.map((message):ChannelMessage=>{
-   if(message.author==='agent') return {id:message.id,author:'agent',name:message.author_name,face:seen.find(agent=>agent.id===message.agent_id)?.connection_id||message.agent_id||message.author_name,body:message.body,at:message.created_at,
+   if(message.author==='agent') return {id:message.id,author:'agent',name:message.author_name,face:message.agent_id||'',body:message.body,at:message.created_at,
     ...(stepsOf.has(message.id)?{steps:stepsOf.get(message.id)}:{}),...(message.reply_to!==null&&cardsOf.has(`${message.reply_to}:${message.reply_ordinal??1}`)?{cards:cardsOf.get(`${message.reply_to}:${message.reply_ordinal??1}`)}:{})};
    const mentions=(runsOf.get(message.id)??[]).map(mentionOf);
    return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,
@@ -261,7 +261,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
   ...(found.archived_at?{archived:{at:found.archived_at as string,by:people.find(member=>member.person===found.archived_by)?.name??''}}:{}),
   managers,
   messages,
-  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
+  handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_agent},to:{name:row.to_name,face:row.to_agent},goal:row.goal,at:row.created_at,
   ...handoverEnding(row)})),
   open:((openRuns||[]) as {agent_id:string|null}[]).length>0,
   handover:((handed||[]) as StoredHandover[]).some(row=>row.state!=='done'&&row.state!=='failed'),

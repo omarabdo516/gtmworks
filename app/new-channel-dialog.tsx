@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/paperclip/ui/dialog';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import { newId } from '@/app/conversation-composer';
 import { channelChoices, createChannel } from '@/app/channel-actions';
@@ -78,7 +78,7 @@ export default function NewChannelDialog({slug,company,person,close,opener}:{slu
       <div className="panel-card" role="group" aria-labelledby="tm-pick-l">{pool.map(agent=>{
        const on=agents.includes(agent.id);
        return <button key={agent.id} type="button" className="panel-row tm-pick" role="checkbox" id={`tm-pick-${agent.id}`} aria-checked={on} onClick={()=>setAgents(list=>toggle(list,agent.id))}>
-        <span aria-hidden="true"><CompanyAgentFace agent={agent} size={28}/></span>
+        <span aria-hidden="true"><AgentFace agent={agent.id} size={28}/></span>
         <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span><span className="panel-row__d"><bdi>{agent.speciality||t('newAgent')}</bdi></span></span>
         <span className="tm-check" aria-hidden="true">{on&&<ShellIcon name="check"/>}</span></button>;
       })}</div></div>

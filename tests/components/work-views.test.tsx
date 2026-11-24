@@ -113,7 +113,7 @@ test('the chips are All and the Company\'s Agents, the main Agent first, and no 
  const screen = await showWork(crewBoard({ canCreate: false }));
  const tools = screen.getByRole('group', { name: 'Filter by agent' });
  expect(tools.getByRole('button').elements().map(chip => chip.textContent)).toEqual(['All', 'Lead', 'Ads', 'SEO']);
- expect(tools.getByRole('button').elements().slice(1).map(chip => chip.querySelector('.chip__face[aria-hidden="true"] .agent-face')?.getAttribute('aria-label'))).toEqual(['Lead', 'Ads', 'SEO']);
+ expect(tools.getByRole('button').elements().slice(1).map(chip => chip.querySelector<HTMLElement>('.chip__face[aria-hidden="true"] .face')?.dataset.agent)).toEqual([lead.id, ads.id, seo.id]);
 });
 
 // Rewritten for #190 from "the Agent filter shows only that Agent's cards, and All brings the others back": the filter
@@ -136,7 +136,7 @@ test('pressing an Agent\'s chip keeps only its Cards in every column and the foc
 
 test('a Card\'s foot shows its Agent\'s face and name before the channel and the date; a Card with no Agent shows the channel and the date alone', async () => {
  await showWork(crewBoard());
- expect(foot(2).querySelector('.kcard__agent .agent-face')!.getAttribute('aria-label')).toBe('SEO');
+ expect(foot(2).querySelector<HTMLElement>('.kcard__agent .face')!.dataset.agent).toBe(seo.id);
  expect(foot(2).textContent).toBe('SEO· InstagramJun 4');
  expect(foot(4).querySelector('.kcard__agent')).toBeNull();
  expect(foot(4).textContent).toBe('FacebookJun 4');
@@ -145,7 +145,7 @@ test('a Card\'s foot shows its Agent\'s face and name before the channel and the
 test('a Card two Agents worked on carries both faces and "Worked on it", and says it in its name; a one-Agent Card has no crew line', async () => {
  const screen = await showWork(crewBoard());
  const crew = document.querySelector('#board-cols .kcard[data-card-id="1"] .kcard__crew')!;
- expect([...crew.querySelectorAll('.fstack[aria-hidden="true"] .agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['SEO', 'Ads']);
+ expect([...crew.querySelectorAll<HTMLElement>('.fstack[aria-hidden="true"] .face')].map(face => face.dataset.agent)).toEqual([seo.id, ads.id]);
  expect(crew.querySelector('.kcard__crew-t')!.textContent).toBe('Worked on it: SEO, Ads');
  expect(crew.nextElementSibling).toBe(foot(1));
  await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر · Worked on it: SEO, Ads', exact: true })).toBeVisible();
@@ -182,7 +182,7 @@ test.each([['en', 'Handed to you'], ['ar', 'اتسلّمتلك']] as const)('in 
 // #165: a permission request waits on its person as an item of its own: its Agent's face and name on top, what it asks
 // under them, and it opens the Conversation at its card, or a channel's request the channel.
 test.each(['en', 'ar'] as const)('in the %s interface, a permission request names its Agent with its face and opens its chat at the card', async language => {
- const agent = { connection_id: 'c-ads', name: 'Ads' };
+ const agent = { id: 'a-ads', name: 'Ads' };
  const asked = { kind: 'permission', id: 51, title: 'delete the old exports', body: '', asked_by: 'Ads', card_id: null, conversation_id: 'c-7', created_at: '2026-06-10T09:00:00Z', agent };
  const inChannel = { ...asked, kind: 'channel_permission', id: 6, title: 'delete the old backups', conversation_id: null, channel_id: 'ch-1' };
  await showWork(workProps({ waiting: [asked, inChannel] }), { language });

@@ -34,7 +34,7 @@ const stored = {
 const replied = '2026-06-10T09:42:00Z';
 type TiedCard = { id: number, column: string, made?: string, wait?: { person: string, kind: 'question' | 'hand', title: string } };
 // A handover as conversation_handovers answers it (#475): both Agents named, the job, how far it got and its answer.
-type StoredHandover = { id: number, run: string, from_name: string, from_connection: string, to_agent: string, to_name: string, to_connection: string, goal: string, answer: string | null,
+type StoredHandover = { id: number, run: string, from_agent: string, from_name: string, from_connection: string, to_agent: string, to_name: string, to_connection: string, goal: string, answer: string | null,
  state: string, target_outcome: string | null, answers_person: boolean, created_at: string, answered_at: string | null };
 function database(card: TiedCard | null, messages: typeof stored = stored, agent_handovers: StoredHandover[] = [], snapshot: { id: number, state: string }[] = agent_handovers) {
  // The messages and how their runs ended are read through the Conversation, in one statement (lib/conversation-record.ts).
@@ -111,8 +111,8 @@ test('a chain that asks the chat\'s own Agent back still puts the board line und
  await page.viewport(1440, 900);
  const messages = { ...leadStored, conversation_messages: leadStored.conversation_messages.map(message => message.author === 'agent' ? { ...message, agent_id: 'a-lead' } : message) };
  const chain = [
-  { id: 1, run: 'r1', from_name: 'Lead', from_connection: 'c-0', to_agent: 'a-ads', to_name: 'Ads', to_connection: 'c-3', goal: 'Plan the Meta ads', answer: 'Three ad sets.', state: 'done', target_outcome: 'completed', answers_person: false, created_at: '2026-06-10T09:41:03Z', answered_at: '2026-06-10T09:42:00Z', parent: null },
-  { id: 2, run: 'run-ads', from_name: 'Ads', from_connection: 'c-3', to_agent: 'a-lead', to_name: 'Lead', to_connection: 'c-0', goal: 'Say the budget', answer: 'EGP 9,000.', state: 'done', target_outcome: 'completed', answers_person: false, created_at: '2026-06-10T09:41:20Z', answered_at: '2026-06-10T09:41:40Z', parent: 1 },
+  { id: 1, run: 'r1', from_agent: 'a-lead', from_name: 'Lead', from_connection: 'c-0', to_agent: 'a-ads', to_name: 'Ads', to_connection: 'c-3', goal: 'Plan the Meta ads', answer: 'Three ad sets.', state: 'done', target_outcome: 'completed', answers_person: false, created_at: '2026-06-10T09:41:03Z', answered_at: '2026-06-10T09:42:00Z', parent: null },
+  { id: 2, run: 'run-ads', from_agent: 'a-ads', from_name: 'Ads', from_connection: 'c-3', to_agent: 'a-lead', to_name: 'Lead', to_connection: 'c-0', goal: 'Say the budget', answer: 'EGP 9,000.', state: 'done', target_outcome: 'completed', answers_person: false, created_at: '2026-06-10T09:41:20Z', answered_at: '2026-06-10T09:41:40Z', parent: 1 },
  ];
  const record = await conversationRecord(database({ id: 9, column: 'progress', made: '2026-06-10T09:41:02Z' }, messages, chain), 'p-3', 'co-1', { id: 'cv-9', agent_id: 'a-lead', agent_name: 'Lead', hermes_agents: { connection_id: 'c-0', is_default: true } });
  const boarded = record.messages.findIndex(message => message.kind === 'boarded');
@@ -123,14 +123,14 @@ test('a chain that asks the chat\'s own Agent back still puts the board line und
 // #375: the record says a handover did not finish when its target's leg ended without a report, though Lead followed it
 // up, or when the handover itself ended failed; one that finished says nothing of it, and none of them keeps the chat
 // asking. The row under Lead's reply then says the job did not finish.
-const handedTo = (state: string, target_outcome: string | null): StoredHandover => ({ id: 1, run: 'r1', from_name: 'Lead', from_connection: 'c-0', to_agent: 'a-ads', to_name: 'Ads', to_connection: 'c-3',
+const handedTo = (state: string, target_outcome: string | null): StoredHandover => ({ id: 1, run: 'r1', from_agent: 'a-lead', from_name: 'Lead', from_connection: 'c-0', to_agent: 'a-ads', to_name: 'Ads', to_connection: 'c-3',
  goal: 'Plan the Meta ads for the March intake', answer: null, state, target_outcome, answers_person: false, created_at: '2026-06-10T09:41:03Z', answered_at: null });
 const handedRecord = (handover: StoredHandover) => conversationRecord(database(null, leadStored, [handover]), 'p-3', 'co-1', { id: 'cv-9', agent_id: 'a-lead', agent_name: 'Lead', hermes_agents: { connection_id: 'c-0', is_default: true } });
 const handedCard = (record: ConversationRecord) => record.messages.flatMap(message => message.cards ?? []).find(card => card.kind === 'handed');
 test('the record marks a handover that did not finish, whichever leg ended it, and leaves a finished one unmarked', async () => {
  for (const [state, outcome, failed] of [['done', 'completed', false], ['done', 'failed', true], ['done', 'stopped', true], ['done', 'lost', true], ['failed', 'completed', true], ['failed', 'failed', true]] as const) {
   const record = await handedRecord(handedTo(state, outcome));
-  expect(handedCard(record), `${state}/${outcome}`).toEqual({ kind: 'handed', from: { name: 'Lead', face: 'c-0' }, name: 'Ads', face: 'c-3', goal: 'Plan the Meta ads for the March intake', ...(failed ? { failed: true } : {}) });
+  expect(handedCard(record), `${state}/${outcome}`).toEqual({ kind: 'handed', from: { name: 'Lead', face: 'a-lead' }, name: 'Ads', face: 'a-ads', goal: 'Plan the Meta ads for the March intake', ...(failed ? { failed: true } : {}) });
   expect(record.handover, `${state}/${outcome}`).toBeUndefined();
  }
  const moving = await handedRecord(handedTo('target', null));

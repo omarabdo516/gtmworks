@@ -8,7 +8,7 @@ import { commandList, insertToken, tokenAtCaret } from '@/lib/composer-mentions.
 import { useI18n } from '@/lib/i18n-client';
 import { statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { firstName } from '@/lib/channels';
 import { AppTile } from '@/components/app-tile';
 import { markOf, modelMarkOf } from '@/lib/app-mark.mjs';
@@ -114,7 +114,7 @@ export function MentionPop({listId,label,items,index,pick}:{listId:string,label:
    {item.person&&<><span className="me__av lg-av" style={{'--av':'22px'} as CSSProperties} aria-hidden="true">{Array.from(item.person.name.trim())[0]||'?'}</span>
     <span className="menu__t">{item.person.name}{item.person.role&&<span className="menu__d">{t(roleLabels[item.person.role])}{item.person.role==='viewer'&&` · ${t('mentionReadsOnly')}`}</span>}</span>
     <bdi className="menu__hint" dir="auto">@{firstName(item.person.name)}</bdi></>}
-   {item.agent&&<><span aria-hidden="true"><CompanyAgentFace agent={item.agent} size={22}/></span>
+   {item.agent&&<><span aria-hidden="true"><AgentFace agent={item.agent.id} size={24} state={item.agent.status}/></span>
     <span className="menu__t"><bdi>{item.agent.name}</bdi>{(item.agent.status||item.agent.speciality)&&<span className="menu__d">{item.agent.status&&t(statusKeys[item.agent.status])}{item.agent.status&&item.agent.speciality&&' · '}{item.agent.speciality&&<bdi>{item.agent.speciality}</bdi>}</span>}</span></>}
    {item.command&&<><ShellIcon name="slash"/><span className="menu__t">{t(item.command.label,item.command.agent)}</span><span className="menu__hint menu__code">{item.command.command}</span></>}
   </button>);
@@ -306,7 +306,7 @@ function PlusMenu({open,setOpen,callable,channel,model,attach,pickFile,insert,fi
      <span className="me__av lg-av" style={{'--av':'20px'} as CSSProperties} aria-hidden="true">{Array.from(person.name.trim())[0]||'?'}</span><span className="menu__t">{person.name}</span><bdi className="menu__hint" dir="auto">{handle}</bdi></button>; })}</>}
    {agents.length>0&&<div className="menu__label">{t('plusCallAgent')}</div>}
    {agents.map(agent=><button key={agent.id} type="button" className="menu__item" role="menuitem" onClick={()=>pick(`@${agent.name} `)}>
-    <span aria-hidden="true"><CompanyAgentFace agent={agent} size={20}/></span><bdi className="menu__t">{agent.name}</bdi><bdi className="menu__hint">@{agent.name}</bdi></button>)}
+    <span aria-hidden="true"><AgentFace agent={agent.id} size={20}/></span><bdi className="menu__t">{agent.name}</bdi><bdi className="menu__hint">@{agent.name}</bdi></button>)}
    {team&&<button type="button" className="menu__item" role="menuitem" onClick={newChannel}>
     <ShellIcon name="hash"/><span className="menu__t">{t('shellNewChannel')}<span className="menu__d">{t('plusNewChannelSub')}</span></span></button>}
    <div className="menu__sep" role="separator"/>

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(47);
+select plan(51);
 -- #696 (spec #694, ADR 0027): every Agent's look (shape, colour, temperament), given in the transaction that makes the
 -- Agent and kept by its id. RS Learning (1) has Lead, its main Agent, on the Company's own profile; the Owner (…01) and
 -- the Manager (…02) each talk to it. Aleem (3) has its own Lead.
@@ -159,6 +159,21 @@ reset role;
 select is(pg_temp.look('hook'),'circle sky caring','its look stays');
 set local role authenticated;
 select throws_ok($$select public.change_agent_look('10000000-0000-0000-0000-000000000001',(select agent from named where name='hook'),'colour','rose')$$,'P0002','agentLookNotFound','and is changed no more');
+reset role;
+
+-- 13. A ready-made role's face in the gallery is the face its Agent is made with (#697): a Member of Aleem reads the look
+-- each role would take now, and none of another Company.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
+select results_eq($$select template,shape,colour,temperament from public.ready_made_looks('10000000-0000-0000-0000-000000000003',array['meta','coder'])$$,
+ $$values ('meta','circle','violet','energetic'),('coder','circle','violet','calm')$$,'a Member of Aleem sees each role in the colour Aleem uses least and the role''s temperament');
+select is_empty($$select 1 from public.ready_made_looks('10000000-0000-0000-0000-000000000001',array['meta'])$$,'and nothing of a Company they are not in');
+reset role;
+insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,template) values
+ ('d6960000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000003','d6960000-0000-0000-0000-0000000000cd','Reach','Runs the ads','co-10000000000000000000000000000003','meta');
+select is((select shape||' '||colour||' '||temperament from public.agent_looks where agent_id='d6960000-0000-0000-0000-000000000013'),'circle violet energetic','the Agent made from it has the face the gallery showed');
+set local role authenticated;
+select results_eq($$select colour from public.ready_made_looks('10000000-0000-0000-0000-000000000003',array['meta'])$$,$$values ('sky')$$,'and the gallery moves on to the next colour');
 reset role;
 select * from finish();
 rollback;

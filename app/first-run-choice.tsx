@@ -7,7 +7,7 @@ import { useLeave } from '@/lib/motion';
 import { askComposerFocus } from '@/lib/composer-focus';
 import { inviteError } from '@/lib/invite.mjs';
 import { inviteRoles } from '@/lib/member-roles.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 import type { FirstRunFinish } from '@/lib/first-run-choice';
 export type { FirstRunState, FirstRunFinish } from '@/lib/first-run-choice';
@@ -26,7 +26,7 @@ const isolateEmails=(text:string):ReactNode[]=>text.split(/([\w.+-]+@[\w.-]+)/).
 // answer is kept on the Company only when the second step ends; once it is saved the question leaves with the dialog's
 // exit and the workspace opens on the Owner's Conversation with the main Agent (#130; design-reference: closeDlg). A save
 // that fails keeps the question with its error. The action comes as a prop, so its component test needs no server.
-export default function FirstRunChoice({slug,company,companyName,personName,lead,brand,mark,finish}:{slug:string,company:string,companyName:string,personName:string,lead:{name:string,connection_id:string}|null,brand:ReactNode,mark:ReactNode,finish:FirstRunFinish}) {
+export default function FirstRunChoice({slug,company,companyName,personName,lead,brand,mark,finish}:{slug:string,company:string,companyName:string,personName:string,lead:{id:string,name:string}|null,brand:ReactNode,mark:ReactNode,finish:FirstRunFinish}) {
  const {t,language}=useI18n();
  const [mode,setMode]=useState<Mode|null>(null);
  const [step,setStep]=useState<'mode'|'invite'>('mode');
@@ -57,7 +57,7 @@ export default function FirstRunChoice({slug,company,companyName,personName,lead
  const art=(choice:Mode)=><span className="fr-art" aria-hidden="true">
   <span className="fr-ppl"><span className="me__av">{initial}</span>{choice==='team'&&<><span className="me__av fr-ppl__more"/><span className="me__av fr-ppl__more"/></>}</span>
   <span className="fr-art__plus"><ShellIcon name="plus"/></span>
-  {lead?<CompanyAgentFace agent={lead} size={32}/>:<span className="me__av"/>}
+  {lead?<AgentFace agent={lead.id} size={32}/>:<span className="me__av"/>}
  </span>;
  const choices:[Mode,string,string][]=[['alone',t('firstRunAlone'),t('firstRunAloneHint',name)],['team',t('firstRunTeam'),t('firstRunTeamHint',name)]];
  // While the invitations are on their way the step stays: going back then would not stop the answer being saved (#186).

@@ -4,7 +4,7 @@ import { Suspense, memo, use, useCallback, useEffect, useMemo, useRef, useState,
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { ShellIcon } from '@/components/shell-icon';
-import { LiveFaceWrap } from '@/app/agent-face-dot';
+import { AgentFace } from '@/components/agent-face';
 import { MadeLine } from '@/app/agent-made';
 import type { Made } from '@/lib/agent-made';
 import { onComposerFocus } from '@/lib/composer-focus';
@@ -111,7 +111,7 @@ export function AgentDetails({panel,agent,details,tab:first,slug,suggest}:{panel
  };
  return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={<Link className="circle-btn" id="dp-settings" href={overlayHref(slug,'agents',{agent:agent.id})} aria-haspopup="dialog" aria-label={t('chatAgentSettings',agent.name)} title={t('settings')} onClick={()=>rememberOpener('dp-settings')}><ShellIcon name="gear"/></Link>}>
   <div className="dp-id">
-   <LiveFaceWrap agent={agent} size={64} lg><Later details={details} part="dot"/></LiveFaceWrap>
+   <Later details={details} part="face" agent={agent.id}/>
    <div>
     <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
     <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}<Later details={details} part="state"/></span></div>
@@ -126,13 +126,14 @@ export function AgentDetails({panel,agent,details,tab:first,slug,suggest}:{panel
 
 // One part of the details once they are read; until then an idle state and an empty tab. Kept apart (memo), so the panel
 // drawn again while a part still streams in does not draw that part a second time beside its streamed copy (#172).
-const Later=memo(function Later({details,part}:{details:Details,part:'dot'|'state'|Tab}) {
- return 'then' in details?<Suspense fallback={part==='dot'||part==='state'?<Part view={{status:'idle'}} part={part}/>:null}><Read details={details} part={part}/></Suspense>:<Part view={details} part={part}/>;
+const Later=memo(function Later({details,part,agent}:{details:Details,part:'face'|'state'|Tab,agent?:string}) {
+ return 'then' in details?<Suspense fallback={part==='face'||part==='state'?<Part view={{status:'idle'}} part={part} agent={agent}/>:null}><Read details={details} part={part} agent={agent}/></Suspense>:<Part view={details} part={part} agent={agent}/>;
 });
-const Read=({details,part}:{details:Promise<AgentDetailsView>,part:'dot'|'state'|Tab})=><Part view={use(details)} part={part}/>;
-function Part({view,part}:{view:Pick<AgentDetailsView,'status'>&Partial<AgentDetailsView>,part:'dot'|'state'|Tab}) {
+const Read=({details,part,agent}:{details:Promise<AgentDetailsView>,part:'face'|'state'|Tab,agent?:string})=><Part view={use(details)} part={part} agent={agent}/>;
+function Part({view,part,agent}:{view:Pick<AgentDetailsView,'status'>&Partial<AgentDetailsView>,part:'face'|'state'|Tab,agent?:string}) {
  const {t}=useI18n();
- if(part==='dot') return <span className={`dot dot--${view.status}`}/>;
+ // The details head's face (72px), in the state the server read, thinking while a Run is open in this Conversation.
+ if(part==='face') return <AgentFace agent={agent} size={72} state={view.status} dot live/>;
  if(part==='state') return <>{t(statusKeys[view.status])}</>;
  return <>{view.tabs?.[part]}</>;
 }

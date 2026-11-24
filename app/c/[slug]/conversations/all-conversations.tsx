@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { recentDay } from '@/lib/sidebar.mjs';
 import { ShellIcon } from '@/components/shell-icon';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { conversationListPage } from '@/app/all-conversations-actions';
 import { toast } from '@/app/toast';
 import { useConversationArchive, type ArchivedChat } from '@/app/conversation-archive';
@@ -88,7 +88,7 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
    ?<button type="button" className="sel-box" role="checkbox" aria-checked={selected.has(chat.id)} aria-label={t('allConversationsSelectOne',chat.title)} onClick={()=>toggle(chat.id)}><span>{selected.has(chat.id)&&<ShellIcon name="check"/>}</span></button>
    :<span className="sel-box" aria-hidden="true"/>)}
   <Link className="cv-open" href={`/c/${slug}/${chat.kind==='channel'?'channels':'conversations'}/${chat.id}`}>
-   {chat.face?<span className="cv-face" aria-hidden="true" title={chat.face.name}><CompanyAgentFace agent={chat.face} size={28}/></span>:<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>}
+   {chat.face?<span className="cv-face" aria-hidden="true" title={chat.face.name}><AgentFace agent={chat.face.id} size={28}/></span>:<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>}
    <span className="od-field"><span className="cv-t od-truncate">{chat.kind==='channel'?'#':''}<bdi>{chat.title}</bdi></span>{chat.line&&<span className="cv-d od-truncate"><bdi>{chat.line}</bdi></span>}</span>
    {browser&&<time className="cv-time num" dateTime={chat.at}>{time(chat.at)}</time>}
   </Link>

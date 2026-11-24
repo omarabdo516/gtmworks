@@ -115,7 +115,7 @@ test('a connected app\'s card shows the faces of the Agents that use it', async 
   const screen = await render(<AppsList place={settings} owner items={items} text={text}/>);
   const card = screen.getByRole('article', { name: 'Klaviyo' });
   expect(card.element().querySelector('.app__state .fstack')?.getAttribute('aria-hidden')).toBe('true');
-  expect([...card.element().querySelectorAll('.fstack .agent-face')].map(face => face.getAttribute('aria-label'))).toEqual(['Lead', 'Helper']);
+  expect([...card.element().querySelectorAll<HTMLElement>('.fstack .face')].map(face => face.dataset.agent)).toEqual([lead, helper]);
   expect(screen.getByRole('article', { name: 'Notion' }).element().querySelector('.fstack')).toBeNull();
 });
 

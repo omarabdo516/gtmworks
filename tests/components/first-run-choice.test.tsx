@@ -17,7 +17,7 @@ afterEach(() => { vi.useRealTimers(); finish.mockReset(); finish.mockResolvedVal
 
 const show = (language: Language = 'en') => render(<LanguageProvider language={language}>
  <FirstRunChoice slug="acme-abcd1234" company="10000000-0000-0000-0000-000000000090" companyName="Acme" personName="Omar"
-  lead={{ name: 'Lead', connection_id: 'f0000000-0000-0000-0000-000000000090' }} brand={<>gtm<span>works</span></>} mark={<span/>} finish={finish}/>
+  lead={{ id: 'f0000000-0000-0000-0000-000000000090', name: 'Lead' }} brand={<>gtm<span>works</span></>} mark={<span/>} finish={finish}/>
 </LanguageProvider>);
 const fields = () => [...document.querySelectorAll<HTMLInputElement>('.fr-row input[type=email]')];
 const roles = () => [...document.querySelectorAll<HTMLSelectElement>('.fr-row select')];

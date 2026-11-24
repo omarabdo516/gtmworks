@@ -7,7 +7,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { createClient } from '@supabase/supabase-js';
-import { AgentFaceDot } from './agent-face-dot';
+import { AgentFace } from '@/components/agent-face';
 import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
 import { pickSection, pageReadAt, overlayHref, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, agentTab, agentTabFocus, type OverlaySection, type AgentTab } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
@@ -228,8 +228,6 @@ function MembersSection({t,company,solo,members,invitations,agents,allowed,invit
  return <><Head title={t('members')}/>{ro}{solo?invite:canManage?table:list}</>;
 }
 
-// What a face needs of an Agent: the client component is handed no more of the row than it draws.
-const face=({id,connection_id,name}:Agent)=>({id,connection_id,name});
 
 // The simplest way to change an Agent is to tell it in its chat (#18): that sentence is optional help (#614), and the
 // link to the chat stays on the page as an action.
@@ -246,7 +244,7 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiti
   {!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsAgentsRO')}</span></p>}
   <TalkTip t={t} talk={canWrite&&other?{href:`/c/${slug}/chat/${other.id}`,name:other.name}:undefined}/>
   <div className="panel-card sov-ags">{agents.length?agents.map(agent=><Link key={agent.id} className="panel-row sov-ag" id={`sov-ag-${agent.id}`} href={overlayHref(slug,'agents',{agent:agent.id})}>
-   <AgentFaceDot agent={face(agent)} size={36} status={stateOf(agent.id)}/>
+   <AgentFace agent={agent.id} size={36} state={stateOf(agent.id)} dot/>
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi>{agent.is_default&&<> <span className="badge sov-badge">{t('mainAgent')}</span></>}</span>
     {agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
    {/* An Agent with a change waiting for this Owner ends its row with it in place of its state (#178). */}
@@ -286,7 +284,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
  return <>
   {isNewFor(agent,userId)&&<OpenedMark company={company} agent={agent.id}/>}
   <BackLink className="link-btn sov-back" id="sov-back" slug={slug} agent={agent.id}><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></BackLink>
-  <div className="sov-agent-id"><AgentFaceDot agent={face(agent)} size={48} status={status} lg/><div className="od-fill">
+  <div className="sov-agent-id"><AgentFace agent={agent.id} size={48} state={status} dot/><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
    <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(statusKeys[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>
   <AgentTabs slug={slug} agent={agent.id} tab={tab} label={agent.name}/>

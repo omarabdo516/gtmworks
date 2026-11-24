@@ -170,18 +170,27 @@ export const motionTable = [
   { built: '.gw .fr.is-closing', file: 'app/first-run-choice.css', html: '<div class="gw"><div class="fr is-closing" role="dialog"></div></div>' },
   { built: '.gw .fr__col > *', file: 'app/first-run-choice.css', html: '<div class="gw"><form class="fr__col"><div class="fr__head"></div></form></div>' },
   { built: '.gw .cr-kind', file: 'app/first-run-choice.css', html: '<div class="gw"><label class="cr-kind fr-choice"></label></div>' },
-  // An Agent at work on its sidebar tile (#184): its eyes scan, three dots think; when the Run ends, a check pops and draws.
-  // The dot's ping is a ::after, which a row cannot name: tests/components/agent-face-dot.test.tsx reads it.
-  { built: '.gw .face.is-thinking .face__f', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap is-thinking"><svg class="agent-face face is-thinking"><g class="face__f"></g></svg></span></div>' },
-  // A face of 24px or more looks, blinks and hops, and a tile's or the title pill's face lifts on hover (#133).
-  { built: '.gw .face--look .face__f', file: 'app/shell.css', html: '<div class="gw"><svg class="agent-face face face--look"><g class="face__f"></g></svg></div>' },
-  { built: '.gw .face--look .face__eye', file: 'app/shell.css', html: '<div class="gw"><svg class="agent-face face face--look"><g class="face__f"><circle class="face__eye"></circle></g></svg></div>' },
-  { built: '.gw .face.is-happy', file: 'app/shell.css', html: '<div class="gw"><svg class="agent-face face face--look is-happy"></svg></div>' },
-  { built: '.gw .agent-tile .face--look', file: 'app/shell.css', html: '<div class="gw"><a class="agent-tile" href="#"><span class="face-wrap"><svg class="agent-face face face--look"></svg></span></a></div>' },
-  { built: '.gw .head-pill .face--look', file: 'app/shell.css', html: '<div class="gw"><button type="button" class="head-pill"><span><svg class="agent-face face face--look"></svg></span></button></div>' },
-  { built: '.gw .face-wrap .think', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="think"></span></span></div>' },
-  { built: '.gw .face-wrap .think i', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="think"><i></i></span></span></div>' },
-  { built: '.gw .face-wrap .done-ck', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="done-ck"></span></span></div>' },
+  // An Agent's face, the orb (#697, app/face.css): it lifts on a tile's or the chat head's hover, its posture eases between
+  // states, it breathes as its temperament does, its colour flows, its glow, inner light, swirl and veil fade with its
+  // expression, its highlight and eyes ease toward the pointer and its eyes open, close and smile. The dot of an Agent at
+  // work sends a ring, a ::after.
+  { built: '.gw .face', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis"></span></div>' },
+  { built: '.gw .f-pose', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><span class="f-pose"></span></span></div>' },
+  { built: '.gw .f-breath', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><span class="f-breath"></span></span></div>' },
+  { built: '.gw .face[data-temperament="energetic"] .f-breath', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="energetic"><span class="f-breath"></span></span></div>' },
+  { built: '.gw .f-glow', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="f-glow"></i></span></div>' },
+  { built: '.gw .f-flows', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="l f-flows"></i></span></div>' },
+  { built: '.gw .f-core', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="l f-core"></i></span></div>' },
+  { built: '.gw .f-swirl', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="l f-swirl"></i></span></div>' },
+  { built: '.gw .f-veil', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="l f-veil"></i></span></div>' },
+  { built: '.gw .f-specs', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><span class="f-specs"></span></span></div>' },
+  { built: '.gw .f-eyes', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><span class="f-eyes"></span></span></div>' },
+  { built: '.gw .e-open', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><span class="f-eye"><i class="e-open"></i></span></span></div>' },
+  { built: '.gw .e-arc path', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><span class="f-eye"><svg class="e-arc"><path class="e-happy"></path></svg></span></span></div>' },
+  { built: '.gw .face[data-state="thinking"] .f-gaze', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-state="thinking"><span class="f-gaze"></span></span></div>' },
+  { built: '.gw .face[data-state="working"] .f-glow', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-state="working"><i class="f-glow"></i></span></div>' },
+  { built: '.gw .face[data-state="waiting"] .f-pose', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-state="waiting"><span class="f-pose"></span></span></div>' },
+  { built: '.gw .dot--working::after', file: 'app/face.css', html: '<div class="gw"><span class="fw"><span class="dot dot--working"></span></span></div>' },
   // The conversation (#132): a message or a line that arrives while the chat is open rises in, so does the card for an
   // Agent Lead just made; the working line's words breathe; on send the arrow's copy flies off, and the button's new
   // icon pops in when it turns between send and stop.
@@ -190,6 +199,5 @@ export const motionTable = [
   { built: '.gw .thinking .shimmer', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><p class="thinking convo-status" role="status"><span class="shimmer">Lead is working…</span></p></div></div>' },
   { built: '.gw.send-fly', file: 'app/shell.css', html: '<span class="gw send-fly" aria-hidden="true"><svg class="gw-icon"></svg></span>' },
   { built: '.gw .composer__send .gw-icon.is-morph', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__send" aria-label="Send"><svg class="gw-icon is-morph"></svg></button></div></div></div>' },
-  { built: '.gw .face-wrap .done-ck .gw-icon path', file: 'app/shell.css', html: '<div class="gw"><span class="face-wrap"><span class="done-ck"><svg class="gw-icon"><path></path></svg></span></span></div>' },
 ];
 

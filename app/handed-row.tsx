@@ -1,10 +1,10 @@
 'use client';
 import type { ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n-client';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { ShellIcon } from '@/components/shell-icon';
 
-type Face={connection_id:string,name:string};
+type Face={id:string,name:string};
 
 // A job one Agent handed another (#317 in a Conversation, #150 in a channel; design-reference: the handoff row,
 // `.handoff`): a quiet line with both faces and an arrow pointing the way the interface reads, "Handed to {Agent}", and
@@ -19,7 +19,7 @@ export function HandedRow({as:Row='li',from,to,title,goal,ending,said,className}
  const {language}=useI18n();
  const end=ending.stopped?'stopped':ending.failed?'failed':null;
  return <Row className={className?`handed ${className}`:'handed'} role="note" data-handover {...(end?{[`data-${end}`]:''}:{})}>
-  <span className="handed__faces"><CompanyAgentFace agent={from} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><CompanyAgentFace agent={to} size={18}/></span>
+  <span className="handed__faces"><AgentFace agent={from.id} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><AgentFace agent={to.id} size={18}/></span>
   <span className="handed__t">{title}</span>
   {goal&&<span className="handed__d"><bdi>{goal}</bdi></span>}
   {end&&<span className={end==='stopped'?'handed__failed is-stopped':'handed__failed'}>{said[end]}</span>}
