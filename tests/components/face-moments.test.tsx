@@ -14,12 +14,16 @@ import type { MadeAgent } from '@/lib/conversations';
 import '@/app/globals.css';
 import '@/app/tokens.css';
 import '@/app/shell.css';
+import { fakeClock, untilDrawn } from './fake-clock';
 
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 // The three moments (#701; design-reference-orb section 4): birth for the person who asked, a greeting the first time a
 // day on this device, and perking up when its name is written after @. What is seen: the face plays the moment or not.
-const reducedMotion = (on: boolean) => cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }] });
+const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+// Turning reduced motion on stops a moment that plays (components/face-life), and the page hears of it at its next
+// frames, so a test waits for that before it opens anything.
+const reducedMotion = async (on: boolean) => { await cdp().send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }] }); await frame(); await frame(); };
 beforeEach(() => { try { localStorage.clear(); } catch { /* blocked */ } });
 afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await reducedMotion(false); });
 
@@ -29,7 +33,10 @@ const faceOf = (selector: string) => document.querySelector<HTMLElement>(`${sele
 // A moment plays: the face carries it, and its body moves (with reduced motion, still frames instead and nothing moves).
 const plays = (face: HTMLElement | null, moment: string) => face?.dataset.moment === moment;
 const moves = (face: HTMLElement) => face.querySelector('.f-act')!.getAnimations().length > 0;
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// The page's timers stand still (./fake-clock), so a moment is still playing when it is looked at in a busy browser.
+beforeEach(() => { fakeClock(); });
+const tick = () => new Promise(resolve => { const channel = new MessageChannel(); channel.port1.onmessage = resolve; channel.port2.postMessage(0); });
+const settled = async () => { for (let at = 0; at < 10; at++) await tick(); };
 
 // --- Greeting: the chat's head and its empty chat greet the first time a day that chat is opened on this device.
 let opened = 0;
@@ -45,44 +52,45 @@ const openChat = async (agent: string) => { opened++; const screen = await rende
 
 test('an Agent greets the first time a day its chat is opened on this device, on the head and the empty chat only', async () => {
  const first = await openChat('g1');
- await expect.poll(() => plays(faceOf('#head'), 'greet')).toBe(true);
+ await untilDrawn(() => plays(faceOf('#head'), 'greet'), 'the greeting');
  expect(plays(faceOf('#empty'), 'greet')).toBe(true);
  expect(moves(faceOf('#head'))).toBe(true);
  expect(faceOf('#other').dataset.moment).toBeUndefined();
  await first.unmount();
  // Opened again the same day: no greeting.
  await openChat('g1');
- await wait(50);
+ await settled();
  expect(faceOf('#head').dataset.moment).toBeUndefined();
 });
 
 test('the next day the same chat greets again', async () => {
- vi.useFakeTimers({ toFake: ['Date'] });
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
  vi.setSystemTime(new Date(2026, 10, 24, 23, 58));
  const today = await openChat('g2');
- await expect.poll(() => plays(faceOf('#head'), 'greet')).toBe(true);
+ await untilDrawn(() => plays(faceOf('#head'), 'greet'), 'the greeting');
  await today.unmount();
  vi.setSystemTime(new Date(2026, 10, 25, 0, 3));
  await openChat('g2');
- await expect.poll(() => plays(faceOf('#head'), 'greet')).toBe(true);
+ await untilDrawn(() => plays(faceOf('#head'), 'greet'), 'the next day\'s greeting');
 });
 
 test('with browser storage blocked an Agent greets at most once in the page', async () => {
  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
  const first = await openChat('g3');
- await expect.poll(() => plays(faceOf('#head'), 'greet')).toBe(true);
+ await untilDrawn(() => plays(faceOf('#head'), 'greet'), 'the greeting');
  await first.unmount();
  await openChat('g3');
- await wait(50);
+ await settled();
  expect(faceOf('#head').dataset.moment).toBeUndefined();
 });
 
 test('with reduced motion the greeting shows its still frames and nothing moves', async () => {
  await reducedMotion(true);
  await openChat('g4');
- await expect.poll(() => plays(faceOf('#head'), 'greet')).toBe(true);
- await expect.poll(() => faceOf('#head').classList.contains('is-look')).toBe(true);
+ await untilDrawn(() => plays(faceOf('#head'), 'greet'), 'the greeting');
+ vi.advanceTimersByTime(10);
+ expect(faceOf('#head').classList.contains('is-look')).toBe(true);
  expect(moves(faceOf('#head'))).toBe(false);
 });
 
@@ -110,7 +118,7 @@ function Page({ agent, fresh }: { agent: string, fresh: boolean }) {
 test('a made Agent is born once for the person who asked, on its card and its tile; a reload mid-birth does not play it again', async () => {
  const asks = server();
  const first = await render(<Page agent="b1" fresh/>);
- await expect.poll(() => plays(faceOf('#card'), 'birth')).toBe(true);
+ await untilDrawn(() => plays(faceOf('#card'), 'birth'), 'the birth');
  expect(plays(faceOf('#tile'), 'birth')).toBe(true);
  expect(moves(faceOf('#card'))).toBe(true);
  // One ask for the page, whatever the places.
@@ -124,8 +132,8 @@ test('a made Agent is born once for the person who asked, on its card and its ti
   <a id="tile2" data-birth href="#"><AgentFace agent="b1" size={56}/><reloaded.Birth agent="b1"/></a>
   <div id="card2"><MadeCard slug="rs" agent={made('b1', true)}/></div>
  </Company>);
- await expect.poll(() => asks.length).toBe(2);
- await wait(50);
+ await untilDrawn(() => asks.length === 2, 'the second ask');
+ await settled();
  expect(faceOf('#card2').dataset.moment).toBeUndefined();
  expect(faceOf('#tile2').dataset.moment).toBeUndefined();
 });
@@ -133,7 +141,7 @@ test('a made Agent is born once for the person who asked, on its card and its ti
 test('another Member, for whom the Agent is not new, sees no birth and asks nothing', async () => {
  const asks = server();
  await render(<Page agent="b2" fresh={false}/>);
- await wait(100);
+ await settled();
  expect(asks).toEqual([]);
  expect(faceOf('#card').dataset.moment).toBeUndefined();
  expect(faceOf('#tile').dataset.moment).toBeUndefined();
@@ -143,8 +151,9 @@ test('with reduced motion a birth shows its still frames and nothing moves', asy
  server();
  await reducedMotion(true);
  await render(<Page agent="b3" fresh/>);
- await expect.poll(() => plays(faceOf('#card'), 'birth')).toBe(true);
- await expect.poll(() => ['is-shut', 'is-look'].some(frame => faceOf('#card').classList.contains(frame))).toBe(true);
+ await untilDrawn(() => plays(faceOf('#card'), 'birth'), 'the birth');
+ vi.advanceTimersByTime(10);
+ expect(faceOf('#card').classList.contains('is-shut')).toBe(true);
  expect(moves(faceOf('#card'))).toBe(false);
 });
 
@@ -159,27 +168,28 @@ for (const channel of [false, true]) test(`an Agent perks up in the @ list each 
  const screen = await composer(channel);
  const field = screen.getByRole('textbox');
  await userEvent.type(field, '@Rea');
- await expect.poll(() => rowFace('Reach')).not.toBeNull();
+ await untilDrawn(() => !!rowFace('Reach'), 'the list');
  expect(rowFace('Reach')!.dataset.moment).toBeUndefined();
  await userEvent.type(field, 'ch');
- await expect.poll(() => plays(rowFace('Reach'), 'perk')).toBe(true);
+ await untilDrawn(() => plays(rowFace('Reach'), 'perk'), 'the perk');
  expect(moves(rowFace('Reach')!)).toBe(true);
  // Written again: it perks again.
- await expect.poll(() => rowFace('Reach')?.dataset.moment, { timeout: 3000 }).toBeUndefined();
+ vi.advanceTimersByTime(1300);
+ expect(rowFace('Reach')?.dataset.moment).toBeUndefined();
  await userEvent.type(field, '{Backspace}');
  await userEvent.type(field, 'h');
- await expect.poll(() => plays(rowFace('Reach'), 'perk')).toBe(true);
+ await untilDrawn(() => plays(rowFace('Reach'), 'perk'), 'the second perk');
  // A name of two words perks on its first word, all that can be written before the space.
  await userEvent.clear(field);
  await userEvent.type(field, '@meta');
- await expect.poll(() => plays(rowFace('Meta Ads'), 'perk')).toBe(true);
+ await untilDrawn(() => plays(rowFace('Meta Ads'), 'perk'), 'the perk on a first word');
 });
 
 test('the @ list tells a screen reader the Agent it points at', async () => {
  const screen = await composer(false);
  const field = screen.getByRole('textbox');
  await userEvent.type(field, '@');
- await expect.element(field).toHaveAttribute('aria-activedescendant');
+ await untilDrawn(() => !!field.element().getAttribute('aria-activedescendant'), 'the list');
  const active = () => document.getElementById(field.element().getAttribute('aria-activedescendant')!);
  expect(active()?.getAttribute('aria-selected')).toBe('true');
  expect(active()?.textContent).toContain('Reach');

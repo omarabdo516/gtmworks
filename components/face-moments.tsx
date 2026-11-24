@@ -29,7 +29,7 @@ export function Birth({agent}:{agent:string}) {
 // browser storage blocked the page remembers it instead, so it greets at most once until the page loads again.
 const greetedHere=new Map<string,string>();
 const today=()=>{ const now=new Date(); return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`; };
-export function greetsNow(agent:string) {
+function greetsNow(agent:string) {
  const day=today(), key=`gw-greeted:${agent}`;
  let kept:string|null|undefined;
  try { kept=window.localStorage.getItem(key); } catch { kept=undefined; }
