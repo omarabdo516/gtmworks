@@ -1,0 +1,5 @@
+| `agent-look.spec.ts` | On the running app the Owner changes an Agent's look from the Look row in Settings: the sidebar's face changes at once behind the window, the row says Custom, a reload keeps it and the Activity log names the colour changed; a Manager sees the new look on their next read with no pencil and no Change; the Owner resets it from the pencil on the details' face and the keyboard goes back there. (#698) | — | components/agent-look.test.tsx (the window itself); supabase/tests/agent_looks.sql (who may change a look) | new (#698) |
+
+## Cases
+
+| `agent-look.spec.ts` "the Owner changes a look from Settings and the details; it is kept, logged, and a Manager sees it with no way to change it" | stays | Added with #698. Only the whole app shows a press in the window reaching a face another provider draws (the sidebar under Shell behind Settings), the look read back by a new page and by another Member, the Activity log's row from the database function, and the Manager's page with no control. `components/agent-look.test.tsx` guards the window itself and `supabase/tests/agent_looks.sql` who may change a look. |
