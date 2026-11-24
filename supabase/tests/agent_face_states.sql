@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(29);
 -- The one state read of #699 (spec #694): for the reader, every Agent they see is waiting, working, stuck, asleep or idle.
 -- RS Learning's Agents, each set up for one case. The Contributor (…03) and the Viewer (…04) are shown Ads, Reach,
 -- Writer and Critic; SEO is hidden from them. Aleem's Lead is another Company's.
@@ -169,6 +169,26 @@ insert into public.agent_handovers(company_id,conversation_id,run_id,call_id,fro
  from chat c, named n where c.name='Old' and n.name='New';
 set local role authenticated;
 select is((select state from pg_temp.states() where name='New'),'working','an Agent handed work by Lead is working');
+
+-- A Routine running on the Engine is the Agent's work while the worker keeps seeing it (routine_runs_open, refreshed on
+-- each of its passes): working to every reader who sees the Agent, and nothing more of it. A record the worker stopped
+-- refreshing (it crashed, or its Engine went away) holds for two minutes, then the Agent is no longer working.
+reset role;
+insert into public.routine_runs_open(company_id,agent_id,profile,routine_id,started_at,seen_at)
+ select '10000000-0000-0000-0000-000000000001',agent,'ag-'||md5('critic'),'abc123',now()-interval '5 minutes',now()-interval '10 seconds'
+ from named where name='Critic';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is((select state from pg_temp.states() where name='Critic'),'working','an Agent running a Routine is working');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select results_eq($$select state,waiting,failed_at from public.agent_face_states('10000000-0000-0000-0000-000000000001') where agent=(select agent from named where name='Critic')$$,
+ $$values ('working',false,null::timestamptz)$$,'to the Contributor too, and nothing more of the Routine');
+reset role;
+update public.routine_runs_open set seen_at=now()-interval '3 minutes' where routine_id='abc123' and profile='ag-'||md5('critic');
+set local role authenticated;
+select is((select state from pg_temp.states() where name='Critic'),'idle','a Routine the worker no longer sees running leaves the Agent working no more');
+select ok((select last_work_at >= now()-interval '5 minutes' from public.agent_face_states('10000000-0000-0000-0000-000000000001') where agent=(select agent from named where name='Critic')),
+ 'and its start is the Agent''s newest work');
 
 -- The previous release's read still answers on this schema, in its own shape.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);

@@ -5,6 +5,7 @@ import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
 import { markConversationSessions } from '../lib/conversation-archive.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { driveGoodMornings } from '../lib/good-morning-runs.mjs';
+import { keepRunningRoutines } from '../lib/routine-runs.mjs';
 import { selfHosted as isSelfHosted } from '../lib/company-engine.mjs';
 import { engineFor } from '../lib/engine.mjs';
 import { keepCompanyProfiles, keepAgentProfiles, moveAgentProfiles, releaseKeyWaits, checkAgentTools, abandonConversationReservations, keepLeadSouls } from '../lib/company-profiles.mjs';
@@ -44,6 +45,8 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  loop('Conversation archive marks',()=>markConversationSessions(db),5000),
  // Each finished run of a Company's Good morning job becomes that morning's message for its Members (#183).
  loop('Good morning',()=>driveGoodMornings(db),30000),
+ // Which Routines each Agent runs now, so its face shows it working (#699); the database counts each set two minutes.
+ loop('Running Routines',()=>keepRunningRoutines(db),15000),
  selfHosted&&loop('Hermes',async()=>{ await keepCompanyProfiles(db,{waiting}); await keepLeadSouls(db,{}); },2000),
  selfHosted&&loop('Agent profiles',async()=>{ await keepAgentProfiles(db,{}); await keepSharedSkills(db,{}); await keepAgentRules(db,{}); await moveAgentProfiles(db,{waiting:moving,driverFor:connection=>engineFor(connection)}); await releaseKeyWaits(db,{waiting:keyWaits,driverFor:connection=>engineFor(connection)}); },2000),
  selfHosted&&loop('Agent tools',()=>checkAgentTools(db,{}),300000),

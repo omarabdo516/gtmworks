@@ -16,7 +16,7 @@ insert into isolation_matrix(name) values
  ('held_agent_changes'),('hermes_agents'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_agent_temperaments'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
- ('note_runs'),('provider_names'),('provider_order'),('reply_cards'),('role_permissions'),('routine_results'),('stopped_runs'),
+ ('note_runs'),('provider_names'),('provider_order'),('reply_cards'),('role_permissions'),('routine_results'),('routine_runs_open'),('stopped_runs'),
  ('waiting_items'),
  ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_moves'),('work_card_visits'),('work_cards'),
  ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_stages'),('work_versions');
@@ -76,6 +76,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
    "conversation_id": "'e3370000-0000-0000-0000-00000000000c'"}$$),
  -- A Routine result kept as it ended (#535) names its profile and its Routine's Engine id.
  ('routine_results', $${"profile": "'ag-' || md5('isolation')", "routine_id": "'abcdef'"}$$),
+ -- A Routine the worker saw running (#699) names its profile, its Routine's Engine id and its start.
+ ('routine_runs_open', $${"profile": "'ag-' || md5('isolation')", "routine_id": "'abcdef'", "started_at": "now()"}$$),
  ('company_provider_models', $${"entry": "'key-openrouter'", "model": "'openai/gpt-5.5'", "enabled": "false"}$$),
  -- The Company's Fallback model (#622) names a provider id and a model.
  ('company_fallback_models', $${"provider": "'anthropic'", "model": "'claude-sonnet-4-6'"}$$),
