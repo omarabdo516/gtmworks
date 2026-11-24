@@ -146,8 +146,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   archivedSessions:/** @type {Set<string>} */(new Set()),
   sessionMarks:/** @type {{profile:string,session:string,body:any,authorization?:string}[]} */([]),
   sessionMarkStatus:/** @type {number|null} */(null),
-  // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value.
-  reveals:/** @type {{profile:string,key:string}[]} */([]),
+  // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value. A key in revealFail is
+  // answered 500, as an Engine that could not read the .env.
+  reveals:/** @type {{profile:string,key:string}[]} */([]),revealFail:/** @type {Set<string>} */(new Set()),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -634,6 +635,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const env=named==='default'?settings.defaultEnv:settings.profiles.get(named)?.env||{};
     const value=env?.[body?.key];
     settings.reveals.push({profile:named,key:body?.key});
+    if(settings.revealFail.has(body?.key)) return send(response,500,{detail:'Internal Server Error'});
     return value===undefined?send(response,404,{detail:`${body?.key} not found in .env`}):send(response,200,{key:body.key,value});
    }
    if(url.pathname==='/api/env') {

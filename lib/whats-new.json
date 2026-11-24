@@ -6,6 +6,12 @@
   "ar": { "title": "النشاط بيبيّن إمتى الموديل البديل ردّ", "body": "لما كل حسابات موديل الوكيل يخلص استخدامها والموديل البديل بتاع الشركة يرد على الطلب بداله، النشاط دلوقتي بيبيّن ده مرة واحدة باسم gtmworks، ومعاه الموديل اللي الطلب كان رايحله والموديل اللي ردّ." }
  },
  {
+  "issue": 643,
+  "date": "2026-11-24",
+  "en": { "title": "OpenCode Go checks which models it serves you", "body": "An OpenCode Go key now lists, offers and starts on only the models OpenCode itself says it serves that key, so an older model OpenCode refuses is no longer offered; when OpenCode cannot be asked, the Engine's own list is shown as before." },
+  "ar": { "title": "OpenCode Go بيتأكد من الموديلات اللي بيقدّمهالك", "body": "مفتاح OpenCode Go دلوقتي بيعرض ويبدأ بس بالموديلات اللي OpenCode نفسه بيقول إنه بيقدّمها للمفتاح ده، فالموديلات القديمة اللي OpenCode بيرفضها مبقتش بتظهر؛ ولو OpenCode ماردّش، بتظهر قايمة المحرّك نفسه زي الأول." }
+ },
+ {
   "issue": 638,
   "date": "2026-11-24",
   "en": { "title": "Every model of a partly connected subscription has its switch", "body": "A subscription signed in on an Agent's profile now lists every model it reaches under Providers, even when the Company also holds an API key of the same provider, each with its switch." },
