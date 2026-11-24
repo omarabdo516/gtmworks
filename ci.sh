@@ -261,7 +261,7 @@ case "${1:-check}" in
   DOCKER_HOST=$machine docker info > /dev/null
   # Pulls inside this machine stall here (the nested network behind rootless Docker), so every image the job runs comes
   # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
-  # The list is scripts/ci-install-machine.sh's, the one CI's mirror keeps the Docker Hub part of (#608).
+  # The list is scripts/ci-install-machine.sh's, which also starts CI's machine (#608).
   images=$(bash scripts/ci-install-machine.sh images)
   # The work sandbox image every Company's sandbox runs (#392, #393): CI builds it in the run's image job and loads that
   # build; here it is built on this host from the committed checkout's sandbox/Dockerfile on every run (Docker reuses the

@@ -93,7 +93,7 @@ test('the change touches database, app and install files', () => {
 
 test('a draft that changes database, app and install files starts the image, database, integration, chat-open and install jobs', () => {
   assert.deepEqual(started({ event: 'pull_request', draft: true, files: heavyFiles }),
-    ['changes', 'chat-open', 'check', 'database', 'fast', 'image', 'install', 'install-images', 'integration', 'supabase-images']);
+    ['changes', 'chat-open', 'check', 'database', 'fast', 'image', 'install', 'integration', 'supabase-images']);
 });
 
 test('a draft that changes only screens starts only changes, fast and check', () => {

@@ -234,48 +234,6 @@ jobs:
           path: ${{ runner.temp }}/supabase-images
           key: ${{ steps.images.outputs.key }}
 
-  # The Docker Hub images every install area pulls (#608): Postgres and the API's images, the proxy, the mail catcher,
-  # the Engine and the checks' helpers, listed once in scripts/ci-install-machine.sh and kept in the Actions cache as a
-  # pull-through mirror's storage, under a key made of that list. With the key cached it only looks the key up; after a
-  # key change it pulls each image once through the mirror on an isolated Docker machine and saves the storage. It runs
-  # beside the image job: with the key cached it ends long before it, so the install areas it holds wait for nothing
-  # more, and only the run after a key change waits for its pulls, once for every area. Each area then serves those
-  # images from its own runner instead of pulling them, and pulls from the registry only when the storage is missing. Like supabase-images it only warms a cache: it never fails a run, and it is no part of the full check.
-  install-images:
-    needs: [changes]
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-latest
-    # A key change pulls every image once: 15 minutes lets it finish and save, and the job never fails a run.
-    timeout-minutes: 15
-    continue-on-error: true
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: install images cache key
-        id: images
-        run: echo "key=$(bash scripts/ci-install-machine.sh key)" >> "$GITHUB_OUTPUT"
-      - name: look the key up
-        id: lookup
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/install-mirror
-          key: ${{ steps.images.outputs.key }}
-          lookup-only: true
-      - name: pull the images through the mirror
-        if: ${{ steps.lookup.outputs.cache-hit != 'true' }}
-        run: bash scripts/ci-install-machine.sh warm "$RUNNER_TEMP/install-mirror"
-      - name: save the install images
-        if: ${{ steps.lookup.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/install-mirror
-          key: ${{ steps.images.outputs.key }}
-      # A failed pull leaves the machine and the mirror behind; a reused runner removes them (a hosted one is discarded).
-      - name: remove the isolated Docker machine
-        if: ${{ always() && runner.environment != 'github-hosted' }}
-        run: bash scripts/ci-install-machine.sh stop
-
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
     needs: [changes]
@@ -757,7 +715,7 @@ jobs:
   # in scripts/ci-install-check.sh.
   install:
     name: install-${{ matrix.area }}
-    needs: [changes, image, install-images]
+    needs: [changes, image]
     if: ${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
     strategy:
@@ -820,7 +778,7 @@ jobs:
   # install proof (#408, Omar, 2026-11-19), on a fresh isolated Docker machine of its own and with the run's one image.
   # `check` does not wait for it.
   install-measure:
-    needs: [changes, image, install-images]
+    needs: [changes, image]
     if: ${{ !cancelled() && needs.image.result == 'success' && ((github.event_name == 'push' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false')) || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     # The measurement installs the stack and makes twenty more Agent profiles.

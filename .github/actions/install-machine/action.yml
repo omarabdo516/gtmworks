@@ -1,7 +1,6 @@
 # The machine and the images every install area starts from (#406, #411), written once so the `install` matrix and the
-# `install-measure` job cannot drift apart: one isolated Docker machine for the area alone, the Docker Hub images the
-# install pulls served from a mirror beside it (#608), and the app and work sandbox images the run's `image` job made,
-# loaded into that machine under the tags a source install names.
+# `install-measure` job cannot drift apart: one isolated Docker machine for the area alone, and the app and work sandbox
+# images the run's `image` job made (#608), loaded into that machine under the tags a source install names.
 name: Install machine
 description: Start the isolated Docker machine an install area runs on and load the run's images into it.
 inputs:
@@ -11,25 +10,11 @@ inputs:
 runs:
   using: composite
   steps:
-    # The pinned Docker Hub images the install pulls (Postgres, the API, the proxy, the Engine and the checks' helpers)
-    # come through a pull-through mirror whose storage the Actions cache keeps under their list's key (#608), which the
-    # `install-images` job fills; the machine pulls through it as from the registry, so every digest pin holds, and on a
-    # miss it pulls from the registry as before.
-    - name: the upstream images key
-      id: upstream
-      shell: bash
-      run: echo "key=$(bash scripts/ci-install-machine.sh key)" >> "$GITHUB_OUTPUT"
-    - name: restore the upstream images
-      uses: actions/cache/restore@v4
-      with:
-        path: ${{ runner.temp }}/install-mirror
-        key: ${{ steps.upstream.outputs.key }}
-    # One isolated Docker machine for this area alone, with the mirror as its registry mirror: the area of
-    # scripts/ci-install-check.sh the job names runs on it, and the job's last step removes both, also after a failure,
-    # on a runner that is reused.
+    # One isolated Docker machine for this area alone: the area of scripts/ci-install-check.sh the job names runs on it,
+    # and the job's last step removes it, also after a failure, on a runner that is reused.
     - name: start the isolated Docker machine
       shell: bash
-      run: bash scripts/ci-install-machine.sh start "$RUNNER_TEMP/install-mirror"
+      run: bash scripts/ci-install-machine.sh start
     # The image the run built once (#403), loaded under the tag the source install's compose file names.
     - name: download the image
       uses: actions/download-artifact@v4

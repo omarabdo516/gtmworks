@@ -442,9 +442,9 @@ test('the install proof runs on one Docker machine per area and a GitHub-hosted 
  // is left for a runner that is reused.
  const steps=installJob().steps;
  const at=test=>steps.findIndex(test);
- // The machine starts through scripts/ci-install-machine.sh, beside the mirror it pulls through (#608).
+ // The machine starts through scripts/ci-install-machine.sh, which every job that starts one uses (#608).
  const machine=readFileSync('scripts/ci-install-machine.sh','utf8');
- const start=at(step=>/bash scripts\/ci-install-machine\.sh start /.test(step.run||''));
+ const start=at(step=>/^bash scripts\/ci-install-machine\.sh start$/.test((step.run||'').trim()));
  assert.match(machine,/run -d --privileged --name install-docker/);
  const proof=at(step=>step.env?.INSTALL_REF);
  const removes=steps.flatMap((step,index)=>/rm -fv install-docker|ci-install-machine\.sh stop/.test(step.run||'')?[index]:[]);

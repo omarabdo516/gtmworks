@@ -147,7 +147,7 @@ test('the install job runs as one matrix of nine areas on a fresh Docker machine
   const { install, check } = jobs;
   assert.equal(install.name, 'install-${{ matrix.area }}');
   assert.deepEqual(install.strategy, { 'fail-fast': false, matrix: { area: ['first-install', 'companies', 'agents', 'agents-sandbox', 'open-design', 'backup', 'backup-engines', 'proxy', 'rollback', 'update', 'previous-archive', 'release-update', 'sandbox-update', 'staged-update', 'sandbox-rollback', 'sizes', 'engines-update', 'one-line', 'updater'] } });
-  assert.deepEqual(install.needs, ['changes', 'image', 'install-images']);
+  assert.deepEqual(install.needs, ['changes', 'image']);
   assert.ok(check.needs.includes('install'), 'the required check waits for the proof');
   const env = check.steps.at(-1).env;
   assert.equal(env.INSTALL_RUN, '${{ needs.changes.outputs.install }}');
@@ -247,7 +247,7 @@ test('ci.yml decides the suites in its first job, gates each suite on it, and ju
   // A manual run builds the image even with nothing asked: the measurement runs on every manual run (#408).
   assert.equal(jobs.image.if, "${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}");
   // The install proof is one job under today's install condition and a successful image build (#406).
-  assert.deepEqual(jobs.install.needs, ['changes', 'image', 'install-images']);
+  assert.deepEqual(jobs.install.needs, ['changes', 'image']);
   assert.equal(jobs.install.if, "${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}");
   // The browser suite takes the image the image job built, and does not start when that build failed (#403).
   assert.deepEqual(jobs.integration.needs, ['changes', 'image']);
