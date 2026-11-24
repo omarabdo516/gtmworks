@@ -219,7 +219,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} refresh={refresh}/></div>;
 }
 
-// A message's or a handover's time, in the reader's own zone: the server draws it in UTC, hidden, and the page redraws it
+// A message's or a Handover's time, in the reader's own zone: the server draws it in UTC, hidden, and the page redraws it
 // once it hydrates, so it hydrates without a text mismatch outside UTC (#586, as the Conversation page does since #520).
 function When({at,className}:{at:string,className?:string}) {
  const {language}=useI18n(); const zone=useZone();

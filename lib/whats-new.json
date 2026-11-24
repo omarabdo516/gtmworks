@@ -1,5 +1,11 @@
 [
  {
+  "issue": 586,
+  "date": "2026-11-24",
+  "en": { "title": "A Channel opens cleanly in your own time zone", "body": "Outside UTC, a Channel's message and Handover times now appear straight in your own time zone, without the page redrawing itself as it opens." },
+  "ar": { "title": "القناة بتفتح نضيف بتوقيتك انت", "body": "لو انت برا توقيت UTC، مواعيد الرسايل والتسليمات في القناة دلوقتي بتظهر على طول بتوقيتك انت، من غير ما الصفحة ترسم نفسها من الأول وهي بتفتح." }
+ },
+ {
   "issue": 667,
   "date": "2026-11-24",
   "en": { "title": "Archive cards, conversations and channels", "body": "Archive a card, several at once or everything in Done, a conversation, or a team channel, with Undo: whatever an Agent was doing there stops and nobody waits on it any more, nothing is deleted, and All conversations lists every conversation and channel with their own Archived tab to restore them from." },

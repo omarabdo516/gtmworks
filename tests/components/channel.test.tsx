@@ -538,7 +538,7 @@ test('a question the called Agent asks while the channel is open rises in its ow
 });
 
 // #586: the server draws the page in UTC and the reader is in Cairo, two hours ahead in November. Each message's time, and
-// each handover's in the details, is drawn in UTC, hidden, until the page hydrates, then in the reader's own zone, with no
+// each Handover's in the details, is drawn in UTC, hidden, until the page hydrates, then in the reader's own zone, with no
 // hydration mismatch (as the Conversation page does since #520).
 test('a message\'s time the server drew in UTC shows in the reader\'s own zone once the channel hydrates, with no hydration error', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
