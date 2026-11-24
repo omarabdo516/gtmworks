@@ -14,7 +14,11 @@ select fn,body ~ '\yarchived_at\y' as asks from source where body ~ 'public\.wor
 create temporary table decisions(fn text primary key, decision text not null check (decision in ('asks','exempt')), reason text not null check (btrim(reason)<>''));
 insert into decisions
  select fn,'asks','reads only current Cards, or only archived ones, by archived_at' from unnest(array[
-  'public.channel_board_card(uuid)','public.archived_cards(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[])']) fn
+  'public.channel_board_card(uuid)','public.archived_cards(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[])',
+  'public.card_archive_stops(uuid,bigint[])']) fn
+ union all select fn,'asks','starts no work on an archived Card and keeps no wait on one (#671): it reads a Card only to ask whether it is archived' from unnest(array[
+  'public.begin_note_start(bigint)','public.answer_note_start(bigint,integer,text)','public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)',
+  'public.record_conversation_turn(uuid,uuid,text,uuid)']) fn
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself: it answers whether the Agent is hidden, for a current or an archived Card alike'
  union all select fn,'exempt','answers for the one Card, or the one Conversation, its caller already read, so an archived Card opened from its link reads its chat and wait as it was' from unnest(array[
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)','public.card_chat_person(uuid,bigint)']) fn

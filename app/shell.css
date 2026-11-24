@@ -120,6 +120,11 @@
    (tests/navigation.spec.ts). The row that becomes current then fades to its fill, as every row does (#135). */
 .gw a:has(.link-pending) { transition: none; }
 .gw .sb-item .od-fill { flex: 1 1 0; min-width: 0; }
+/* All conversations (#673; design-reference-card: .sb-all): a quieter row over the channels and the recent chats, its
+   chevron pointing onward in either direction. */
+.gw .sb-all { color: var(--gw-text-2); margin-bottom: 12px; }
+.gw .sb-all .gw-icon:last-child { color: var(--gw-text-3); width: 14px; height: 14px; }
+[dir="ltr"] .gw .sb-all .gw-icon:last-child { transform: scaleX(-1); }
 /* The approvals entry: its own link to the Inbox, drawn as the reference's count pill. It stays at zero, quieter,
    so the Inbox is always reachable. */
 .gw .sb-count {
