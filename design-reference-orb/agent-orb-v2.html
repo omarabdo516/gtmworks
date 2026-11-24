@@ -1,0 +1,1401 @@
+<!doctype html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>وكلاء ليهم شخصية · Agent orb O2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
+   Put this @layer first; product CSS outside the layer wins ordinary layout rules.
+   Native hidden and closed-dialog states take precedence over component display rules. */
+@layer od-layout {
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+  dialog:not([open]) { display: none !important; }
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-icon { display: inline-block; inline-size: var(--od-icon-size, 1em); block-size: var(--od-icon-size, 1em); flex: none; }
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-nowrap  { white-space: nowrap; }
+}
+:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
+/* ================= gtmworks tokens (tokens.css) ================= */
+:root {
+  --bg-chrome: #FCFCFC; --bg-sidebar: #F5F5F5; --bg-pane: #FFFFFF; --bg-elevated: #FFFFFF;
+  --bg-hover: #1C1C1C0F; --bg-active: #1C1C1C14; --bg-tertiary: #1C1C1C0F; --bg-subtle: #1C1C1C08;
+  --bg-secondary-hover: #1C1C1C1A; --bg-elevated-hover: #F1F1F1; --bg-active-solid: #E9E9E9; --bg-scrim: #00000066;
+  --text-1: #1C1C1C; --text-2: #1C1C1CB8; --text-3: #1C1C1CA3; --text-4: #1C1C1C80;
+  --border-1: #1C1C1C3D; --border-2: #1C1C1C1F; --border-3: #1C1C1C14;
+  --primary: #1C1C1C; --primary-hover: #363636; --on-primary: #FCFCFC; --primary-disabled: #1C1C1C26;
+  --btn-secondary-bg: #1C1C1C0F; --btn-secondary-ring: transparent; --btn-secondary-hover: #1C1C1C1A;
+  --bubble-agent: #1C1C1C0F; --bubble-user: #1C1C1C; --on-bubble-user: #FFFFFF;
+  --accent: #0F766E; --focus: #0F766E; --wait: #DA830E; --wait-text: #985500; --wait-bg: #F5931217;
+  --danger-text: #CD2834; --idle-dot: #B5B5B5;
+  --shadow-pill: #1C1C1C14 0 4px 12px -1px, #1C1C1C0A 0 1px 2px;
+  --shadow-composer: #0000000D 0 2px 8px -1px, #00000008 0 1px 2px;
+  --shadow-card: #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px;
+  --shadow-popover: #1C1C1C1A 0 10px 20px -3px, #1C1C1C14 0 4px 6px -4px;
+  --bubble-ring: #1C1C1C0F 0 0 0 0.5px inset;
+  --font: "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
+  --w-regular: 400; --w-strong: 600;
+  --fs-xs: 12px; --fs-sm: 13px; --fs-base: 14px; --fs-msg: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px;
+  --lh-ar: 1.7; --lh-ui: 1.5;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s10: 40px; --s12: 48px; --s16: 64px;
+  --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-bubble: 18px; --r-composer: 22px; --r-card: 24px; --r-full: 9999px;
+  --dur-fast: 150ms; --dur: 200ms; --dur-slow: 280ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1); --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  color-scheme: light;
+  /* face knobs, light canvas: soft glow, gentle rim, a real shadow under the orb */
+  --glow-k: .2; --rim-k: .42; --sh-l: .4; --sh-d: 0; --o1-glow: .2; --o1-rd: 0; --o1-rl: 1;
+}
+/* the same light values again, so a light panel can sit inside a dark page */
+[data-theme="light"] {
+  --bg-chrome: #FCFCFC; --bg-sidebar: #F5F5F5; --bg-pane: #FFFFFF; --bg-elevated: #FFFFFF;
+  --bg-hover: #1C1C1C0F; --bg-active: #1C1C1C14; --bg-tertiary: #1C1C1C0F; --bg-subtle: #1C1C1C08;
+  --bg-secondary-hover: #1C1C1C1A; --bg-elevated-hover: #F1F1F1; --bg-active-solid: #E9E9E9;
+  --text-1: #1C1C1C; --text-2: #1C1C1CB8; --text-3: #1C1C1CA3; --text-4: #1C1C1C80;
+  --border-1: #1C1C1C3D; --border-2: #1C1C1C1F; --border-3: #1C1C1C14;
+  --primary: #1C1C1C; --primary-hover: #363636; --on-primary: #FCFCFC; --primary-disabled: #1C1C1C26;
+  --btn-secondary-bg: #1C1C1C0F; --btn-secondary-ring: transparent; --btn-secondary-hover: #1C1C1C1A;
+  --bubble-agent: #1C1C1C0F; --bubble-user: #1C1C1C; --on-bubble-user: #FFFFFF;
+  --accent: #0F766E; --focus: #0F766E; --wait: #DA830E; --wait-text: #985500; --wait-bg: #F5931217; --idle-dot: #B5B5B5;
+  --shadow-pill: #1C1C1C14 0 4px 12px -1px, #1C1C1C0A 0 1px 2px;
+  --shadow-composer: #0000000D 0 2px 8px -1px, #00000008 0 1px 2px;
+  --shadow-card: #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px;
+  --shadow-popover: #1C1C1C1A 0 10px 20px -3px, #1C1C1C14 0 4px 6px -4px;
+  --bubble-ring: #1C1C1C0F 0 0 0 0.5px inset;
+  color-scheme: light;
+  --glow-k: .2; --rim-k: .42; --sh-l: .4; --sh-d: 0; --o1-glow: .2; --o1-rd: 0; --o1-rl: 1;
+}
+[data-theme="dark"] {
+  --bg-chrome: #121212; --bg-sidebar: #0E0E0E; --bg-pane: #161616; --bg-elevated: #1F1F1F;
+  --bg-hover: #F5F5F50F; --bg-active: #F5F5F514; --bg-tertiary: #F5F5F50F; --bg-subtle: #F5F5F505;
+  --bg-secondary-hover: #F5F5F51A; --bg-elevated-hover: #2C2C2C; --bg-active-solid: #262626; --bg-scrim: #000000B2;
+  --text-1: #F5F5F5; --text-2: #F5F5F5B8; --text-3: #F5F5F599; --text-4: #F5F5F58A;
+  --border-1: #F5F5F538; --border-2: #F5F5F51A; --border-3: #F5F5F50F;
+  --primary: #F5F5F5; --primary-hover: #DBDBDB; --on-primary: #121212; --primary-disabled: #F5F5F521;
+  --btn-secondary-bg: #F5F5F524; --btn-secondary-ring: #F5F5F55C; --btn-secondary-hover: #F5F5F533;
+  --bubble-agent: #F5F5F50F; --bubble-user: #F5F5F52E; --on-bubble-user: #FFFFFF;
+  --accent: #2CC3AE; --focus: #5EE0CC; --wait: #E8962A; --wait-text: #F0A443; --wait-bg: #F694121F;
+  --danger-text: #FF6463; --idle-dot: #5C5C5C;
+  --shadow-pill: #F5F5F51A 0 0 0 0.5px; --shadow-composer: #F5F5F51A 0 0 0 0.5px; --shadow-card: #F5F5F51A 0 0 0 0.5px;
+  --shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px;
+  --bubble-ring: #F5F5F50F 0 0 0 0.5px inset;
+  color-scheme: dark;
+  /* face knobs, dark canvas: the glow carries the light, the rim is a bright hairline,
+     and the floor shows a coloured pool of light instead of a dark shadow */
+  --glow-k: .5; --rim-k: 1; --sh-l: .7; --sh-d: .34; --o1-glow: .55; --o1-rd: 1; --o1-rl: 0;
+}
+
+/* ================= base ================= */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--font); font-size: var(--fs-base); line-height: 1.6; font-weight: var(--w-regular);
+  color: var(--text-1); background: var(--bg-chrome); -webkit-font-smoothing: antialiased;
+}
+html[lang="en"] body { font-family: "IBM Plex Sans", var(--font); }
+bdi { unicode-bidi: isolate; }
+button, input, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+[data-theme] { color: var(--text-1); }
+
+.page { max-width: 1200px; margin: 0 auto; padding: var(--s8) var(--s8) var(--s16); }
+@media (max-width: 1023px) { .page { padding-inline: var(--s5); } }
+@media (max-width: 767px) { .page { padding: var(--s6) var(--s4) var(--s12); } }
+
+/* ---------- top bar ---------- */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s5) var(--s8); padding-bottom: var(--s6); border-bottom: 0.5px solid var(--border-2); }
+.top__k { margin: 0 0 var(--s1); font-size: var(--fs-xs); color: var(--text-3); }
+.top__t { margin: 0; font-size: var(--fs-xl); font-weight: var(--w-strong); line-height: 1.4; }
+.top__sub { margin: var(--s1) 0 0; max-width: 64ch; color: var(--text-2); line-height: var(--lh-ar); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s5); }
+.ctl { display: flex; align-items: center; gap: var(--s2); }
+.ctl__label { font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r-full); background: var(--bg-pane); box-shadow: var(--border-2) 0 0 0 0.5px inset; border: 0; margin: 0; min-width: 0; }
+.seg label { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border-radius: var(--r-full); font-size: var(--fs-sm); color: var(--text-2); cursor: pointer; white-space: nowrap; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg label:has(input:checked) { background: var(--bg-tertiary); color: var(--text-1); font-weight: var(--w-strong); }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) { .seg label:hover { color: var(--text-1); } }
+
+.switch { display: inline-flex; align-items: center; width: 32px; height: 20px; padding: 2px; flex: none; border-radius: var(--r-full); background: var(--border-1); transition: background-color var(--dur-fast) var(--ease-out); }
+.switch::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF; box-shadow: #1C1C1C1F 0 1px 3px; transition: transform var(--dur) var(--ease-out); }
+.switch[aria-checked="true"] { background: var(--primary); }
+.switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--bg-pane); }
+[dir="ltr"] .switch[aria-checked="true"]::after { transform: translateX(12px); }
+[data-theme="dark"] .switch[aria-checked="true"]::after { background: #121212; }
+.sw-hit { display: inline-flex; align-items: center; gap: var(--s2); min-height: 40px; cursor: pointer; font-size: var(--fs-sm); color: var(--text-1); }
+
+/* ---------- sections ---------- */
+.sec { padding-top: var(--s12); }
+.sec__head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s3) var(--s6); margin-bottom: var(--s4); }
+.sec__n { display: block; font-size: var(--fs-xs); color: var(--text-3); }
+.sec__t { margin: 0; font-size: var(--fs-msg); font-weight: var(--w-strong); line-height: 1.5; }
+.sec__sub { margin: 2px 0 0; max-width: 70ch; font-size: var(--fs-sm); line-height: var(--lh-ar); color: var(--text-2); }
+.sub-h { margin: var(--s8) 0 var(--s3); font-size: var(--fs-base); font-weight: var(--w-strong); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
+@media (max-width: 767px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+.canvas { background: var(--bg-sidebar); border-radius: var(--r-lg); box-shadow: var(--border-3) 0 0 0 0.5px inset; padding: var(--s4); --ring: var(--bg-sidebar); min-width: 0; }
+.canvas__tag { margin: 0; font-size: var(--fs-xs); color: var(--text-3); }
+
+/* buttons (gtmworks 6.1) */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 16px; border-radius: var(--r-full); font-size: var(--fs-base); font-weight: var(--w-strong); white-space: nowrap; transition: background-color var(--dur-fast) var(--ease-out); }
+.btn--primary { background: var(--primary); color: var(--on-primary); }
+.btn--secondary { background: var(--btn-secondary-bg); color: var(--text-1); box-shadow: var(--btn-secondary-ring) 0 0 0 1px inset; }
+@media (hover: hover) { .btn--primary:hover { background: var(--primary-hover); } .btn--secondary:hover { background: var(--btn-secondary-hover); } }
+.link-btn { min-height: 32px; padding: 2px 8px; border-radius: var(--r-xs); font-size: var(--fs-sm); color: var(--text-2); }
+@media (hover: hover) { .link-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-1); } }
+.link-btn:disabled { color: var(--text-4); cursor: default; }
+
+/* chips (gtmworks 6.2): pressed = solid ink */
+.chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.chip { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding-inline: 12px 14px; border-radius: var(--r-full); background: var(--bg-pane); box-shadow: var(--border-2) 0 0 0 0.5px inset; font-size: var(--fs-sm); white-space: nowrap; cursor: pointer; --ring: var(--bg-pane); transition: background-color var(--dur-fast) var(--ease-out); }
+.chip--face { padding-inline: 6px 14px; }
+.chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+@media (hover: hover) { .chip:hover { background: var(--bg-elevated-hover); --ring: var(--bg-elevated-hover); } }
+.chip[aria-pressed="true"], .chip:has(input:checked) { background: var(--primary); color: var(--on-primary); box-shadow: none; --ring: var(--primary); }
+@media (hover: hover) { .chip[aria-pressed="true"]:hover, .chip:has(input:checked):hover { background: var(--primary-hover); --ring: var(--primary-hover); } }
+.chip:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* status dots (gtmworks 6.2), one look per product state */
+.dot { position: relative; display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--idle-dot); }
+.dot--thinking, .dot--working { background: var(--accent); }
+.dot--working::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--accent); animation: dotPing 1.6s var(--ease-out) infinite; }
+@keyframes dotPing { 0% { transform: scale(1); opacity: .55; } 80%, 100% { transform: scale(2.4); opacity: 0; } }
+.dot--done { background: var(--text-1); }
+.dot--waiting { background: var(--wait); }
+.dot--stuck { background: var(--ring, var(--bg-chrome)); box-shadow: inset 0 0 0 2px var(--text-1); }
+.dot--asleep { background: var(--ring, var(--bg-chrome)); box-shadow: inset 0 0 0 2px var(--idle-dot); }
+.fw { position: relative; display: inline-flex; flex: none; }
+.fw > .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; z-index: 4; box-shadow: 0 0 0 2.5px var(--ring, var(--bg-chrome)); }
+.fw > .dot--stuck { box-shadow: inset 0 0 0 2px var(--text-1), 0 0 0 2.5px var(--ring, var(--bg-chrome)); }
+.fw > .dot--asleep { box-shadow: inset 0 0 0 2px var(--idle-dot), 0 0 0 2.5px var(--ring, var(--bg-chrome)); }
+.fw--lg > .dot { width: 12px; height: 12px; bottom: 4px; inset-inline-end: 4px; box-shadow: 0 0 0 3px var(--ring, var(--bg-chrome)); }
+.fw--lg > .dot--stuck { box-shadow: inset 0 0 0 2.5px var(--text-1), 0 0 0 3px var(--ring, var(--bg-chrome)); }
+.fw--lg > .dot--asleep { box-shadow: inset 0 0 0 2.5px var(--idle-dot), 0 0 0 3px var(--ring, var(--bg-chrome)); }
+.face-btn { display: inline-flex; border-radius: 50%; }
+
+/* =====================================================================
+   THE FACE
+   Layers, outside in: floor shadow · act (one-off moments) · pose (state posture)
+   · breath (personality loop) · glow · glass body (deep gradient, flowing colour,
+   inner light, volume shade, swirl, veil, specular, rim) · eyes.
+   Only transform and opacity animate. Under 24px: a still orb with eyes.
+   ===================================================================== */
+.face {
+  --ew: max(2px, calc(var(--s) * var(--eW, .088)));
+  --eh: max(4px, calc(var(--s) * var(--eH, .2)));
+  /* expression knobs: states and moments only change these */
+  --lk: .6; --gk: 1; --sx: 0; --sy: var(--sy0, 0);
+  --eSX: 1; --eSY: 1; --eOpen: 1; --eHappy: 0; --eSleep: 0;
+  --clL: var(--clL0, polygon(-40% -40%, 140% -40%, 140% 140%, -40% 140%));
+  --clR: var(--clR0, polygon(-40% -40%, 140% -40%, 140% 140%, -40% 140%));
+  --core: 1; --gs: 1; --swk: 0; --veil: 0; --veilc: #2B2E3A;
+  position: relative; display: block; flex: none; width: var(--s); height: var(--s);
+  direction: ltr; transition: transform var(--dur) var(--ease-out);
+}
+.face .l, .face i { position: absolute; display: block; pointer-events: none; }
+.f-act, .f-pose, .f-breath { position: absolute; inset: 0; }
+.f-pose { transform-origin: 50% 90%; transition: transform 360ms var(--ease-out); }
+.f-breath { transform-origin: 50% 92%; animation: var(--bn, fBreath) var(--br, 5s) ease-in-out var(--d, 0s) infinite; }
+@keyframes fBreath {
+  0%, 100% { transform: translateY(0) rotate(calc(var(--sw, 0) * -1deg)) scale(1, 1); }
+  50% { transform: translateY(calc(var(--s) * var(--bb, .01) * -1)) rotate(calc(var(--sw, 0) * 1deg)) scale(calc(1 + var(--ba, .02) * .5), calc(1 + var(--ba, .02))); }
+}
+@keyframes fBounce {
+  0%, 100% { transform: translateY(0) scale(1.025, .975); }
+  14% { transform: translateY(0) scale(1, 1); }
+  46% { transform: translateY(calc(var(--s) * var(--bb, .04) * -1)) scale(.99, 1.02); }
+  78% { transform: translateY(0) scale(1, 1); }
+  88% { transform: translateY(0) scale(1.03, .97); }
+}
+
+/* floor: a dark contact shadow on light, a coloured pool of light on dark */
+.f-shadow { left: 17%; right: 17%; top: 97%; height: 15%; }
+.f-shadow::before, .f-shadow::after { content: ""; position: absolute; border-radius: 50%; }
+.f-shadow::before { inset: 0; background: radial-gradient(closest-side, color-mix(in srgb, var(--c4) 55%, #000) 0%, color-mix(in srgb, var(--c4) 20%, transparent) 60%, transparent 100%); opacity: var(--sh-l); }
+.f-shadow::after { inset: -40% -18%; background: radial-gradient(closest-side, var(--c2) 0%, color-mix(in srgb, var(--c2) 30%, transparent) 55%, transparent 100%); opacity: var(--sh-d); }
+
+.f-glow {
+  inset: calc(-30% * var(--pres, 1)); border-radius: 50%;
+  background: radial-gradient(closest-side, var(--c2) 50%, color-mix(in srgb, var(--c2) 45%, transparent) 64%, transparent 100%);
+  opacity: calc(var(--glow-k) * var(--gs) * var(--pres, 1));
+  transition: opacity 500ms var(--ease-out);
+}
+@keyframes glowPulse { from { transform: scale(.94); } to { transform: scale(1.1); } }
+
+.f-body { position: absolute; inset: 0; overflow: hidden; border-radius: 50%; background: var(--c3); isolation: isolate; }
+.face:not([data-shape="circle"]) .f-body { border-radius: 0; -webkit-mask: var(--mask) center / 100% 100% no-repeat; mask: var(--mask) center / 100% 100% no-repeat; }
+.face[data-shape="squircle"] { --mask: var(--mask-squircle); }
+.face[data-shape="blob"] { --mask: var(--mask-blob); }
+.f-base { inset: 0; background: linear-gradient(158deg, var(--c1) 8%, var(--c2) 42%, var(--c3) 72%, var(--c4) 100%); }
+/* flowing colour: one oversized layer carries a light blob (top) and a deep blob (bottom) and turns slowly,
+   so the colour moves inside the glass with a single cheap animation */
+.f-flows { inset: -25%; border-radius: 50%;
+  background:
+    radial-gradient(30% 30% at 24% 20%, color-mix(in srgb, var(--c1) 86%, #fff) 0%, color-mix(in srgb, var(--c1) 60%, transparent) 45%, transparent 100%),
+    radial-gradient(34% 34% at 76% 80%, var(--c4) 0%, color-mix(in srgb, var(--c4) 55%, transparent) 45%, transparent 100%),
+    radial-gradient(26% 26% at 82% 30%, color-mix(in srgb, var(--c2) 80%, var(--c1)) 0%, transparent 100%);
+  opacity: calc(.55 + var(--flk, .55) * .45);
+  animation: fFlow var(--fl, 12s) ease-in-out var(--d, 0s) infinite alternate both; }
+@keyframes fFlow { from { transform: translate(-6%, -3%) rotate(-24deg); } to { transform: translate(6%, 5%) rotate(34deg); } }
+/* inner light: glows up from the lower core, like light caught inside glass */
+.f-core { inset: 0; background: radial-gradient(62% 34% at 50% 98%, color-mix(in srgb, var(--c1) 55%, #fff) 0%, color-mix(in srgb, var(--c1) 70%, transparent) 38%, transparent 100%), radial-gradient(46% 40% at 50% 62%, color-mix(in srgb, var(--c1) 50%, transparent) 0%, transparent 100%); opacity: calc(.62 * var(--core) * var(--pres, 1)); transition: opacity 500ms var(--ease-out); }
+.f-shade { inset: 0; background: radial-gradient(circle at 40% 30%, transparent 58%, color-mix(in srgb, var(--c4) 32%, transparent) 84%, color-mix(in srgb, var(--c4) 62%, transparent) 100%); }
+.f-swirl { inset: 5%; border-radius: 50%; opacity: var(--swk); transition: opacity 420ms var(--ease-out);
+  background: conic-gradient(from 0deg, transparent 0 8%, color-mix(in srgb, var(--c1) 70%, #fff) 24%, transparent 40% 58%, var(--c1) 76%, transparent 92%);
+  -webkit-mask: radial-gradient(closest-side, transparent 30%, #000 54%, #000 68%, transparent 94%); mask: radial-gradient(closest-side, transparent 30%, #000 54%, #000 68%, transparent 94%); }
+.f-veil { inset: 0; background: var(--veilc); opacity: var(--veil); transition: opacity 500ms var(--ease-out); }
+/* specular: leans a little toward the pointer, like a light source */
+.f-specs { position: absolute; inset: 0; transform: translate(calc(var(--lx, 0) * var(--s) * .07), calc(var(--ly, 0) * var(--s) * .05)); transition: transform 420ms var(--ease-out); }
+.f-spec { top: 3%; left: 12%; width: 62%; height: 30%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.34), rgba(255,255,255,.1) 60%, rgba(255,255,255,0)); transform: rotate(-16deg); }
+.f-spec2 { top: 11%; left: 27%; width: 13%; height: 7%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.95), rgba(255,255,255,0)); transform: rotate(-24deg); }
+.f-rim { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.f-rim use { fill: none; stroke: url(#rimLight); stroke-width: 2; opacity: var(--rim-k); }
+.face--big .f-rim use { stroke-width: 3; }
+
+/* eyes: all feeling lives here */
+.f-eyes {
+  position: absolute; left: var(--eX, 50%); top: var(--eYp, 41%); width: 0; height: 0; z-index: 2;
+  transform: translate(
+    calc((var(--lx, 0) * var(--lk) + var(--gx, 0) * var(--gk) + var(--sx)) * var(--s) * .065),
+    calc((var(--ly, 0) * var(--lk) + var(--gy, 0) * var(--gk) + var(--sy)) * var(--s) * .06));
+  transition: transform var(--gd, 300ms) var(--ease-out);
+}
+.f-gaze { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.f-eye { position: absolute; top: calc(var(--eh) / -2); width: var(--ew); height: var(--eh); }
+.f-eye--l { left: calc(var(--s) * var(--eG, .185) * -1 - var(--ew) / 2); }
+.f-eye--r { left: calc(var(--s) * var(--eG, .185) - var(--ew) / 2); }
+.e-open {
+  position: absolute; inset: 0; border-radius: var(--eR, 999px); background: #FFFFFF; opacity: var(--eOpen);
+  box-shadow: 0 0 calc(var(--s) * .05) color-mix(in srgb, var(--c4) 45%, transparent);
+  transition: transform 260ms var(--ease-out), clip-path 260ms var(--ease-out), opacity 140ms linear;
+}
+.f-eye--l .e-open { transform: rotate(var(--eT, 0deg)) scale(var(--eSX), var(--eSY)); clip-path: var(--clL); }
+.f-eye--r .e-open { transform: rotate(calc(var(--eT, 0deg) * -1)) scale(var(--eSX), var(--eSY)); clip-path: var(--clR); }
+.e-arc { position: absolute; left: 50%; top: 50%; width: max(5px, calc(var(--ew) * 2.1)); height: max(5px, calc(var(--ew) * 2.1)); transform: translate(-50%, -50%); overflow: visible; }
+.e-arc path { fill: none; stroke: #FFFFFF; stroke-width: 5; stroke-linecap: round; transition: opacity 140ms linear; }
+.e-happy { opacity: var(--eHappy); }
+.e-sleep { opacity: var(--eSleep); }
+
+/* moments: birth light and done sparkle */
+.f-gather { display: none !important; inset: -46%; border-radius: 50%; opacity: 0; background: radial-gradient(closest-side, transparent 50%, color-mix(in srgb, var(--c1) 70%, #fff) 63%, color-mix(in srgb, var(--c2) 40%, transparent) 72%, transparent 86%); }
+.face.is-birth .f-gather { display: block !important; }
+.f-spark { position: absolute; inset: -20%; pointer-events: none; }
+.f-spark i { width: 16%; height: 16%; opacity: 0; background: linear-gradient(135deg, #FFFFFF 10%, var(--c1) 90%); clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); }
+.f-spark i:nth-child(1) { top: 2%; right: 8%; }
+.f-spark i:nth-child(2) { top: 26%; right: -4%; width: 10%; height: 10%; }
+.f-spark i:nth-child(3) { top: 0; left: 14%; width: 11%; height: 11%; }
+
+/* ---------- states: each one is a set of knob values plus a posture ---------- */
+.face[data-state="listening"] { --lk: .15; --gk: 0; --sy: .62; --eSX: 1.14; --eSY: 1.16; --core: 1.2; --gs: 1.25; }
+.face[data-state="listening"] .f-pose { transform: translateY(4%) scale(1.06); }
+.face[data-state="thinking"] { --lk: 0; --gk: 0; --sy: -.78; --eSX: .92; --eSY: .92; --swk: .55; --core: 1.25; --gs: 1.4; }
+.face[data-state="thinking"] .f-gaze { animation: gazeDrift 2.6s ease-in-out infinite alternate; }
+.face[data-state="thinking"] .f-swirl { animation: spin 3.4s linear infinite; }
+.face[data-state="working"] { --lk: 0; --gk: 0; --sy: .22; --eSX: 1.06; --eSY: .86; --swk: .8; --core: 1.5; --gs: 2.1;
+  --clL: polygon(-40% 20%, 140% 24%, 140% 140%, -40% 140%); --clR: polygon(-40% 24%, 140% 20%, 140% 140%, -40% 140%); }
+.face[data-state="working"] .f-swirl { animation: spin 1.5s linear infinite; }
+.face[data-state="working"] .f-glow { animation: glowPulse 1.3s ease-in-out infinite alternate; }
+.face[data-state="done"] { --lk: .4; --gk: 0; --eOpen: 0; --eHappy: 1; --core: 1.3; --gs: 1.6; }
+.face[data-state="waiting"] { --lk: 0; --gk: 0; --sx: 0; --sy: 0; --eSX: 1.08; --eSY: 1.08; --gs: 1.2; }
+.face[data-state="waiting"] .f-pose { animation: nudge 3.6s ease-in-out infinite; }
+.face[data-state="stuck"] { --lk: 0; --gk: 0; --sy: .32; --eSX: .96; --eSY: .94; --veil: .34; --veilc: #2B2E3A; --core: .55; --gs: .45;
+  --clL: polygon(-40% 46%, 140% 0%, 140% 140%, -40% 140%); --clR: polygon(-40% 0%, 140% 46%, 140% 140%, -40% 140%); }
+.face[data-state="stuck"] .f-pose { transform: rotate(-6deg) translateY(3%); }
+.face[data-state="asleep"] { --lk: 0; --gk: 0; --sy: .22; --eOpen: 0; --eSleep: 1; --veil: .26; --veilc: #8E93A8; --core: .5; --gs: .3; }
+.face[data-state="asleep"] .f-pose { transform: translateY(5%) scale(.985, .96); }
+@keyframes gazeDrift { from { transform: translate(calc(var(--s) * -.035), 0); } to { transform: translate(calc(var(--s) * .035), calc(var(--s) * -.014)); } }
+@keyframes spin { to { transform: rotate(1turn); } }
+@keyframes nudge {
+  0%, 72%, 100% { transform: none; }
+  78% { transform: translateY(-9%) scale(.97, 1.04); }
+  84% { transform: translateY(0) scale(1.05, .95); }
+  90% { transform: translateY(-3%) scale(1, 1); }
+  95% { transform: none; }
+}
+/* moment overlays, set briefly by script (they win over the state) */
+.face.is-wide { --eSX: 1.22; --eSY: 1.24; }
+.face.is-look { --lk: 0; --gk: 0; --sx: 0; --sy: 0; }
+.face.is-up { --sy: -.32; }
+.face.is-squint { --eOpen: 0; --eHappy: 1; --eSleep: 0; }
+.face.is-shut { --eOpen: 0; --eHappy: 0; --eSleep: 1; }
+
+/* under 24px: still orb with eyes, no glow, no motion */
+.face--still, .face--still * { animation: none !important; }
+.face--still .f-eyes { transition: none; }
+/* faces off screen stop moving */
+.face--live:not(.is-vis) * { animation-play-state: paused !important; }
+/* reduced motion: nothing moves; expressions still change as still frames */
+.is-reduced .face, .is-reduced .face *, .is-reduced .o1 * { animation: none !important; transition: none !important; }
+.is-reduced .dot--working::after { animation: none; display: none; }
+.is-reduced .breathe { animation: none !important; }
+
+/* ---------- O1, kept as it was, for the comparison ---------- */
+.o1 { position: relative; display: block; flex: none; width: var(--s); height: var(--s); direction: ltr; }
+.o1 i { position: absolute; display: block; pointer-events: none; }
+.o1__glow { inset: -30%; border-radius: 50%; background: radial-gradient(closest-side, var(--c2) 56%, color-mix(in srgb, var(--c2) 55%, transparent) 66%, transparent 100%); opacity: var(--o1-glow); }
+.o1__body { position: absolute; inset: 0; overflow: hidden; border-radius: 50%; background: var(--c3); isolation: isolate; }
+.o1 .a-base { inset: -30%; background: linear-gradient(160deg, var(--c1) 24%, var(--c2) 52%, var(--c3) 80%); animation: aDrift 11s ease-in-out infinite alternate both; }
+.o1 .a-band { top: 50%; bottom: 6%; left: -25%; right: -25%; background: radial-gradient(closest-side, color-mix(in srgb, var(--c3) 85%, transparent), transparent); animation: aBand 8s ease-in-out infinite alternate both; }
+.o1 .a-gloss { top: 4%; left: 20%; right: 20%; height: 28%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.3), rgba(255,255,255,0)); }
+@keyframes aDrift { from { transform: translate(-7%, -6%) rotate(-12deg); } to { transform: translate(6%, 7%) rotate(14deg); } }
+@keyframes aBand { from { transform: translate(-14%, -4%) scale(1, .9); } to { transform: translate(12%, 6%) scale(1.1, 1.05); } }
+.o1__rim { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.o1__rim use { fill: none; stroke-width: 2; }
+.o1__rim .rd { stroke: url(#o1Rim); opacity: var(--o1-rd); }
+.o1__rim .rl { stroke: var(--c3); opacity: calc(var(--o1-rl) * .5); }
+.o1__eyes { position: absolute; left: 50%; top: 40%; width: 0; height: 0; z-index: 2; }
+.o1__eyes i { top: calc(var(--s) * -.095); width: calc(var(--s) * .085); height: calc(var(--s) * .19); border-radius: 999px; background: #FFFFFF; }
+.o1__eyes i:first-child { left: calc(var(--s) * -.19 - var(--s) * .0425); }
+.o1__eyes i:last-child { left: calc(var(--s) * .19 - var(--s) * .0425); }
+
+/* ================= 1 · before / after ================= */
+.ba { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); align-items: end; padding: var(--s10) 0 var(--s2); }
+.ba__col { display: grid; justify-items: center; gap: var(--s6); }
+.ba__lbl { display: grid; justify-items: center; text-align: center; }
+.ba__k { display: block; font-size: var(--fs-sm); font-weight: var(--w-strong); }
+.ba__d { display: block; font-size: var(--fs-xs); color: var(--text-3); }
+.changes { list-style: none; margin: var(--s5) 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3) var(--s8); }
+@media (max-width: 767px) { .changes { grid-template-columns: minmax(0, 1fr); } }
+.changes li { font-size: var(--fs-sm); line-height: var(--lh-ar); color: var(--text-2); }
+.changes b { color: var(--text-1); font-weight: var(--w-strong); }
+
+/* ================= 2 · meet the team ================= */
+.team { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s4); }
+@media (max-width: 1023px) { .team { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 559px) { .team { grid-template-columns: minmax(0, 1fr); } }
+.team.is-grey .fw { filter: grayscale(1); }
+.tcard { display: grid; justify-items: center; align-content: start; gap: var(--s2); padding: var(--s10) var(--s5) var(--s6); background: var(--bg-pane); border-radius: var(--r-lg); box-shadow: var(--shadow-card); text-align: center; --ring: var(--bg-pane); min-width: 0; }
+.tcard__face { margin-bottom: var(--s6); }
+.tcard__name { margin: 0; font-size: var(--fs-lg); font-weight: var(--w-strong); line-height: 1.5; }
+.tcard__en { font-size: var(--fs-xs); font-weight: var(--w-regular); color: var(--text-3); margin-inline-start: 6px; }
+.tag { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: var(--r-full); background: var(--bg-tertiary); font-size: var(--fs-xs); color: var(--text-1); }
+.tcard__line { margin: var(--s1) 0 0; max-width: 34ch; font-size: var(--fs-base); line-height: var(--lh-ar); color: var(--text-2); }
+.tcard__sig { margin: var(--s2) 0 0; font-size: var(--fs-xs); line-height: 1.6; color: var(--text-3); }
+
+/* ================= 3 · feelings ================= */
+.feel { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: var(--s6); align-items: start; }
+@media (max-width: 899px) { .feel { grid-template-columns: minmax(0, 1fr); } }
+.feel__stage { display: grid; justify-items: center; align-content: center; gap: var(--s2); min-height: 340px; padding: var(--s12) var(--s4) var(--s6); text-align: center; }
+.feel__face { margin-bottom: var(--s6); }
+.feel__st { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-base); font-weight: var(--w-strong); }
+.feel__desc { margin: 0; max-width: 38ch; min-height: calc(2 * 1.7em); font-size: var(--fs-sm); line-height: var(--lh-ar); color: var(--text-2); }
+.feel__ctrl { display: grid; gap: var(--s6); align-content: start; min-width: 0; }
+fieldset.grp { border: 0; margin: 0; padding: 0; min-width: 0; }
+.grp > legend, .grp__l { display: block; padding: 0; margin: 0 0 var(--s3); font-size: var(--fs-base); font-weight: var(--w-strong); }
+.grp__en { margin-inline-start: 6px; font-size: var(--fs-xs); font-weight: var(--w-regular); color: var(--text-3); }
+.states { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: var(--s1); padding: var(--s2); }
+@media (max-width: 1023px) { .states { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 559px) { .states { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.stc { display: grid; justify-items: center; align-content: start; gap: var(--s4); padding: var(--s8) var(--s1) var(--s3); border-radius: var(--r-md); text-align: center; min-width: 0; }
+.stc__w { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-1); white-space: nowrap; }
+.stc__h { display: block; font-size: var(--fs-xs); color: var(--text-3); }
+button.stc { width: 100%; transition: background-color var(--dur-fast) var(--ease-out); }
+@media (hover: hover) { button.stc:hover { background: var(--bg-hover); } }
+
+/* ================= 4 · moments ================= */
+.mom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 400px); gap: var(--s6); align-items: start; }
+@media (max-width: 899px) { .mom { grid-template-columns: minmax(0, 1fr); } }
+.mom__stage { display: flex; align-items: flex-end; justify-content: center; gap: var(--s12); min-height: 320px; padding: var(--s12) var(--s4) var(--s6); }
+.mom__who { display: grid; justify-items: center; gap: var(--s6); text-align: center; min-width: 0; }
+.mom__cap { display: grid; gap: 0; font-size: var(--fs-xs); color: var(--text-3); }
+.mom__cap b { font-size: var(--fs-sm); font-weight: var(--w-strong); color: var(--text-1); }
+.mom__ctrl { display: grid; gap: var(--s5); min-width: 0; }
+.field { display: grid; gap: 6px; }
+.field label { font-size: var(--fs-xs); color: var(--text-2); }
+.input { height: 36px; padding: 0 12px; border-radius: var(--r-sm); background: var(--bg-pane); border: 0.5px solid var(--border-2); font-size: var(--fs-base); color: var(--text-1); outline: none; transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.input:focus-visible { border-color: var(--border-1); box-shadow: 0 0 0 3px var(--bg-active); outline: none; }
+.field__help { font-size: var(--fs-xs); color: var(--text-3); line-height: 1.6; }
+.derived { margin: 0; font-size: var(--fs-sm); color: var(--text-1); }
+.btn-row { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.mlist { margin: 0; display: grid; gap: var(--s3); }
+.mlist div { display: grid; gap: 0; }
+.mlist dt { font-size: var(--fs-sm); font-weight: var(--w-strong); }
+.mlist dd { margin: 0; font-size: var(--fs-sm); color: var(--text-2); line-height: var(--lh-ar); }
+
+/* ================= 5 · in place ================= */
+.inplace { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: var(--s4); align-items: start; }
+.inplace__sbs { display: grid; gap: var(--s4); min-width: 0; }
+@media (max-width: 899px) { .inplace { grid-template-columns: minmax(0, 1fr); } .inplace__sbs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 599px) { .inplace__sbs { grid-template-columns: minmax(0, 1fr); } }
+.sb { background: var(--bg-sidebar); border-radius: var(--r-lg); box-shadow: var(--border-3) 0 0 0 0.5px inset; padding: var(--s3) var(--s3) var(--s4); --ring: var(--bg-sidebar); min-width: 0; }
+.sb__label { margin: 0; padding: 0 var(--s3) var(--s2); font-size: var(--fs-sm); color: var(--text-3); }
+.agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s1); margin: 0; padding: 0; list-style: none; }
+.agent-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; min-height: 112px; padding: var(--s2) var(--s1) 6px; border-radius: var(--r-md); --ring: var(--bg-sidebar); transition: background-color var(--dur-fast) var(--ease-out); }
+.agent-tile[aria-current="true"] { background: var(--bg-active); --ring: var(--bg-active-solid); }
+@media (hover: hover) { .agent-tile:hover { background: var(--bg-hover); --ring: var(--bg-active-solid); } .agent-tile:hover .face { transform: translateY(-2px); } }
+.agent-tile__name { display: block; max-width: 100%; font-size: var(--fs-xs); line-height: 16px; text-align: center; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-tile__main, .agent-tile__new { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-top: -2px; border-radius: var(--r-full); font-size: var(--fs-xs); line-height: 1; white-space: nowrap; }
+.agent-tile__main { background: var(--bg-tertiary); color: var(--text-2); }
+.agent-tile[aria-current="true"] .agent-tile__main { background: var(--bg-pane); }
+.agent-tile__new { background: var(--primary); color: var(--on-primary); font-weight: var(--w-strong); }
+
+.chat { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 600px; min-width: 0; background: var(--bg-chrome); border-radius: var(--r-lg); box-shadow: var(--border-2) 0 0 0 0.5px inset; overflow: hidden; --ring: var(--bg-chrome); }
+@media (max-width: 899px) { .chat { height: 560px; } }
+.chat__head { display: flex; justify-content: center; align-items: center; height: 64px; padding: 0 var(--s4); }
+.head-pill { display: inline-flex; align-items: center; gap: var(--s2); max-width: 100%; min-height: 44px; padding-inline: 7px 14px; border-radius: var(--r-full); background: var(--bg-pane); box-shadow: var(--border-3) 0 0 0 0.5px inset, var(--shadow-pill); font-size: var(--fs-base); --ring: var(--bg-pane); }
+.head-pill__name { font-weight: var(--w-strong); white-space: nowrap; }
+.head-pill__st { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; }
+.log { display: flex; flex-direction: column; gap: var(--s6); min-height: 0; overflow-y: auto; padding: var(--s2) var(--s6) var(--s5); scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
+.log > :first-child { margin-top: auto; }
+@media (max-width: 559px) { .log { padding-inline: var(--s4); } }
+.divider { align-self: center; font-size: var(--fs-xs); color: var(--text-3); }
+.msg { display: grid; justify-items: start; gap: 6px; min-width: 0; }
+.msg__from { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-xs); color: var(--text-2); }
+.msg__time { color: var(--text-3); }
+.bubble { max-width: min(460px, 100%); padding: 8px 14px; border-radius: var(--r-bubble); border-end-start-radius: 6px; background: var(--bubble-agent); box-shadow: var(--bubble-ring); font-size: var(--fs-msg); line-height: var(--lh-ar); overflow-wrap: anywhere; white-space: pre-wrap; }
+.bubble--user { align-self: flex-end; border-end-start-radius: var(--r-bubble); border-end-end-radius: 6px; background: var(--bubble-user); color: var(--on-bubble-user); box-shadow: none; }
+.msg__status { margin: 0; font-size: var(--fs-msg); line-height: var(--lh-ar); color: var(--text-2); }
+.breathe { animation: breathe 1.4s ease-in-out infinite alternate; }
+@keyframes breathe { from { opacity: .5; } to { opacity: 1; } }
+.mention { font-weight: var(--w-strong); }
+
+.composer { position: relative; padding: 0 var(--s4) var(--s4); }
+.composer__pill { display: flex; align-items: flex-end; gap: var(--s2); min-height: 44px; padding: 0 8px; border-radius: var(--r-composer); background: var(--bg-pane); box-shadow: var(--border-2) 0 0 0 0.5px inset, var(--shadow-composer); transition: box-shadow var(--dur-fast) var(--ease-out); }
+.composer__pill:focus-within { box-shadow: var(--border-1) 0 0 0 0.5px inset, var(--shadow-composer); }
+.composer__ta { flex: 1 1 0; min-width: 0; height: 44px; max-height: 120px; padding: 11px 6px; border: 0; background: transparent; resize: none; font-size: var(--fs-msg); line-height: 22px; color: var(--text-1); outline: none; }
+.composer__ta::placeholder { color: var(--text-4); }
+.send { position: relative; display: grid; place-items: center; width: 28px; height: 28px; margin: 8px 0; flex: none; border-radius: 50%; background: var(--primary); color: var(--on-primary); transition: background-color var(--dur-fast) var(--ease-out), transform 90ms var(--ease-out); --od-icon-size: 16px; }
+.send::before { content: ""; position: absolute; inset: -8px; }
+.send:active:not(:disabled) { transform: scale(.94); }
+.send:disabled { background: var(--primary-disabled); color: var(--text-4); cursor: default; }
+@media (hover: hover) { .send:hover:not(:disabled) { background: var(--primary-hover); } }
+.composer__hint { margin: 6px 6px 0; font-size: var(--fs-xs); color: var(--text-3); }
+.menu { position: absolute; bottom: calc(100% - 8px); inset-inline-start: var(--s4); z-index: 10; width: min(288px, calc(100% - 32px)); max-height: 320px; overflow-y: auto; padding: 4px; border-radius: var(--r-md); background: var(--bg-pane); box-shadow: var(--border-2) 0 0 0 0.5px inset, var(--shadow-popover); --ring: var(--bg-pane); }
+.menu__g { margin: 0; padding: 6px 10px 4px; font-size: var(--fs-xs); color: var(--text-3); }
+.menu__i { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 4px 10px; border-radius: var(--r-xs); font-size: var(--fs-sm); }
+.menu__i[aria-selected="true"] { background: var(--bg-hover); }
+@media (hover: hover) { .menu__i:hover { background: var(--bg-hover); } }
+.menu__h { margin-inline-start: auto; font-size: var(--fs-xs); color: var(--text-3); }
+
+.inplace2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: var(--s4); margin-top: var(--s4); align-items: start; }
+@media (max-width: 767px) { .inplace2 { grid-template-columns: minmax(0, 1fr); } }
+.empty { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 520px; background: var(--bg-chrome); border-radius: var(--r-lg); box-shadow: var(--border-2) 0 0 0 0.5px inset; --ring: var(--bg-chrome); overflow: hidden; }
+.empty__body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s3); padding: var(--s12) var(--s6) var(--s5); text-align: center; min-height: 0; }
+.empty__face { margin-bottom: var(--s5); }
+.empty__t { margin: 0; font-size: var(--fs-xl); font-weight: var(--w-strong); line-height: 1.4; }
+.empty__p { margin: 0; max-width: 42ch; font-size: var(--fs-base); line-height: var(--lh-ar); color: var(--text-2); }
+.empty__log { display: flex; flex-direction: column; gap: var(--s4); width: 100%; max-width: 460px; margin-top: var(--s4); text-align: start; }
+.empty__log:empty { display: none; }
+.bcol { background: var(--bg-sidebar); border-radius: var(--r-lg); --ring: var(--bg-pane); min-width: 0; }
+.bcol__head { display: flex; align-items: center; gap: var(--s2); height: 48px; padding-inline: 16px 8px; }
+.bcol__name { font-size: var(--fs-base); font-weight: var(--w-strong); }
+.bcol__n { font-size: var(--fs-xs); color: var(--text-3); }
+.bcol__body { display: grid; gap: var(--s2); padding: 0 8px 8px; }
+.kcard { display: grid; gap: var(--s2); width: 100%; padding: 14px 16px; border-radius: var(--r-md); background: var(--bg-pane); box-shadow: var(--shadow-card); text-align: start; --ring: var(--bg-pane); transition: box-shadow var(--dur-fast) var(--ease-out); }
+@media (hover: hover) { .kcard:hover { box-shadow: var(--shadow-card), var(--shadow-popover); } }
+.kcard__t { font-size: var(--fs-base); font-weight: var(--w-strong); line-height: 1.55; }
+.kcard__s { font-size: var(--fs-sm); color: var(--text-2); }
+.prog { height: 3px; border-radius: 2px; background: var(--bg-active); overflow: hidden; }
+.prog i { display: block; height: 100%; background: var(--text-1); transform: scaleX(.6); transform-origin: right; }
+[dir="ltr"] .prog i { transform-origin: left; }
+.kcard__f { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); min-width: 0; }
+.kcard__f .grow { margin-inline-start: auto; }
+.note { margin: var(--s3) 0 0; font-size: var(--fs-xs); color: var(--text-3); line-height: var(--lh-ar); }
+
+/* ================= 6 · real sizes ================= */
+.strip { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s6) var(--s10); padding: var(--s4) var(--s2) 0; }
+.strip__grp { display: grid; gap: var(--s5); min-width: 0; }
+.strip__h { padding-bottom: 6px; border-bottom: 0.5px solid var(--border-2); font-size: var(--fs-xs); color: var(--text-2); }
+.strip__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s5) var(--s6); }
+.sz { display: grid; justify-items: center; gap: var(--s3); }
+.sz__n { font-size: var(--fs-xs); color: var(--text-3); }
+@media (max-width: 767px) { .strip { gap: var(--s5); } .strip__row { gap: var(--s4); } }
+
+/* ================= 7 · choose the look ================= */
+.look { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--s6); padding: var(--s6); background: var(--bg-pane); border-radius: var(--r-lg); box-shadow: var(--shadow-card); --ring: var(--bg-pane); }
+@media (max-width: 899px) { .look { grid-template-columns: minmax(0, 1fr); padding: var(--s4); } }
+.look__stage { display: grid; justify-items: center; align-content: start; gap: var(--s2); padding: var(--s12) var(--s4) var(--s5); border-radius: var(--r-md); background: var(--bg-sidebar); --ring: var(--bg-sidebar); text-align: center; }
+.look__preview { margin-bottom: var(--s6); }
+.look__name { margin: 0; font-size: var(--fs-lg); font-weight: var(--w-strong); line-height: 1.5; }
+.look__meta { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
+.look__form { display: grid; gap: var(--s6); min-width: 0; }
+.opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: var(--s2); }
+.opts--agents { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); }
+@media (max-width: 479px) { .opts, .opts--agents { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.opt { position: relative; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 12px; border-radius: var(--r-md); background: var(--bg-pane); box-shadow: var(--border-2) 0 0 0 0.5px inset; cursor: pointer; --ring: var(--bg-pane); transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+@media (hover: hover) { .opt:hover { background: var(--bg-elevated-hover); --ring: var(--bg-elevated-hover); } }
+.opt:has(input:checked) { box-shadow: var(--primary) 0 0 0 1.5px inset; }
+.opt:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.opt__txt { display: grid; flex: 1 1 0; min-width: 0; line-height: 1.35; }
+.opt__a { display: block; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.opt:has(input:checked) .opt__a { font-weight: var(--w-strong); }
+.opt__b { display: block; font-size: var(--fs-xs); color: var(--text-3); overflow-wrap: anywhere; }
+.opt__ck { --od-icon-size: 16px; color: var(--text-1); visibility: hidden; }
+.opt:has(input:checked) .opt__ck { visibility: visible; }
+.foot { margin-top: var(--s12); padding-top: var(--s4); border-top: 0.5px solid var(--border-2); display: grid; gap: var(--s1); font-size: var(--fs-xs); color: var(--text-3); line-height: var(--lh-ar); }
+.foot p { margin: 0; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- rim light: brightest on the lower right, where light comes through from behind -->
+    <linearGradient id="rimLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".6"/>
+      <stop offset=".5" stop-color="#FFFFFF" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".95"/>
+    </linearGradient>
+    <linearGradient id="o1Rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".55"/>
+      <stop offset=".45" stop-color="#FFFFFF" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".95"/>
+    </linearGradient>
+    <g id="face-shapes"></g>
+  </defs>
+</svg>
+<div id="app"></div>
+<script>
+(() => {
+'use strict';
+
+/* ================= data ================= */
+const SHAPE_D = {"circle": "M50 0A50 50 0 1 1 50 100A50 50 0 1 1 50 0Z", "squircle": "M99.50 50.00C99.50 56.81 99.44 65.84 99.32 70.42C99.19 75.01 99.01 75.47 98.76 77.50C98.51 79.53 98.20 81.08 97.83 82.60C97.45 84.12 97.01 85.41 96.50 86.62C95.99 87.84 95.41 88.90 94.76 89.89C94.11 90.88 93.39 91.76 92.58 92.58C91.76 93.39 90.88 94.11 89.89 94.76C88.90 95.41 87.84 95.99 86.62 96.50C85.41 97.01 84.12 97.45 82.60 97.83C81.08 98.20 79.53 98.51 77.50 98.76C75.47 99.01 75.01 99.19 70.42 99.32C65.84 99.44 56.81 99.50 50.00 99.50C43.19 99.50 34.16 99.44 29.58 99.32C24.99 99.19 24.53 99.01 22.50 98.76C20.47 98.51 18.92 98.20 17.40 97.83C15.88 97.45 14.59 97.01 13.38 96.50C12.16 95.99 11.10 95.41 10.11 94.76C9.12 94.11 8.24 93.39 7.42 92.58C6.61 91.76 5.89 90.88 5.24 89.89C4.59 88.90 4.01 87.84 3.50 86.62C2.99 85.41 2.55 84.12 2.17 82.60C1.80 81.08 1.49 79.53 1.24 77.50C0.99 75.47 0.81 75.01 0.68 70.42C0.56 65.84 0.50 56.81 0.50 50.00C0.50 43.19 0.56 34.16 0.68 29.58C0.81 24.99 0.99 24.53 1.24 22.50C1.49 20.47 1.80 18.92 2.17 17.40C2.55 15.88 2.99 14.59 3.50 13.38C4.01 12.16 4.59 11.10 5.24 10.11C5.89 9.12 6.61 8.24 7.42 7.42C8.24 6.61 9.12 5.89 10.11 5.24C11.10 4.59 12.16 4.01 13.38 3.50C14.59 2.99 15.88 2.55 17.40 2.17C18.92 1.80 20.47 1.49 22.50 1.24C24.53 0.99 24.99 0.81 29.58 0.68C34.16 0.56 43.19 0.50 50.00 0.50C56.81 0.50 65.84 0.56 70.42 0.68C75.01 0.81 75.47 0.99 77.50 1.24C79.53 1.49 81.08 1.80 82.60 2.17C84.12 2.55 85.41 2.99 86.62 3.50C87.84 4.01 88.90 4.59 89.89 5.24C90.88 5.89 91.76 6.61 92.58 7.42C93.39 8.24 94.11 9.12 94.76 10.11C95.41 11.10 95.99 12.16 96.50 13.38C97.01 14.59 97.45 15.88 97.83 17.40C98.20 18.92 98.51 20.47 98.76 22.50C99.01 24.53 99.19 24.99 99.32 29.58C99.44 34.16 99.50 43.19 99.50 50.00Z", "blob": "M98.45 51.95C98.81 53.70 99.01 55.53 99.00 57.32C98.99 59.11 98.78 60.94 98.40 62.69C98.01 64.43 97.41 66.17 96.68 67.81C95.95 69.44 95.02 71.02 94.02 72.49C93.02 73.97 91.86 75.36 90.67 76.66C89.48 77.95 88.18 79.15 86.87 80.28C85.57 81.41 84.20 82.45 82.84 83.43C81.47 84.41 80.08 85.31 78.68 86.16C77.28 87.01 75.88 87.80 74.46 88.53C73.04 89.26 71.61 89.94 70.16 90.55C68.71 91.15 67.25 91.70 65.78 92.16C64.31 92.62 62.81 93.02 61.32 93.33C59.83 93.64 58.32 93.86 56.82 94.02C55.32 94.17 53.81 94.24 52.32 94.26C50.83 94.28 49.35 94.22 47.88 94.13C46.40 94.05 44.94 93.90 43.48 93.75C42.02 93.60 40.57 93.42 39.10 93.23C37.63 93.05 36.16 92.85 34.66 92.64C33.15 92.42 31.63 92.21 30.07 91.93C28.52 91.66 26.93 91.38 25.33 90.99C23.74 90.61 22.10 90.19 20.50 89.63C18.90 89.08 17.27 88.44 15.73 87.65C14.19 86.86 12.66 85.95 11.28 84.90C9.89 83.85 8.57 82.65 7.42 81.34C6.27 80.04 5.24 78.58 4.39 77.06C3.54 75.54 2.86 73.89 2.33 72.23C1.81 70.57 1.47 68.82 1.25 67.10C1.02 65.38 0.98 63.62 1.00 61.91C1.02 60.20 1.19 58.50 1.37 56.84C1.56 55.18 1.84 53.55 2.11 51.95C2.39 50.35 2.71 48.79 3.03 47.24C3.35 45.68 3.67 44.16 4.02 42.63C4.36 41.10 4.70 39.57 5.10 38.05C5.49 36.52 5.89 34.99 6.38 33.48C6.88 31.96 7.40 30.43 8.04 28.95C8.68 27.47 9.39 25.99 10.21 24.59C11.04 23.18 11.96 21.81 12.98 20.53C14.00 19.25 15.14 18.04 16.34 16.93C17.54 15.81 18.85 14.79 20.20 13.86C21.55 12.93 22.99 12.10 24.44 11.36C25.89 10.61 27.40 9.96 28.92 9.38C30.44 8.79 31.99 8.30 33.55 7.86C35.11 7.41 36.68 7.04 38.27 6.74C39.85 6.43 41.45 6.18 43.05 6.01C44.65 5.85 46.27 5.74 47.88 5.74C49.49 5.74 51.11 5.82 52.70 6.01C54.30 6.21 55.90 6.51 57.45 6.93C58.99 7.35 60.52 7.89 61.98 8.54C63.44 9.19 64.85 9.97 66.19 10.82C67.52 11.67 68.79 12.64 69.99 13.65C71.19 14.65 72.30 15.75 73.38 16.85C74.45 17.95 75.45 19.10 76.44 20.23C77.43 21.36 78.36 22.51 79.32 23.64C80.27 24.77 81.21 25.89 82.19 27.02C83.16 28.15 84.16 29.26 85.17 30.41C86.19 31.57 87.25 32.72 88.30 33.95C89.35 35.18 90.44 36.44 91.45 37.79C92.47 39.14 93.50 40.56 94.40 42.06C95.30 43.56 96.16 45.15 96.84 46.80C97.51 48.45 98.09 50.20 98.45 51.95Z"};
+/* where the eyes sit on each shape: x in %, a vertical nudge in % */
+const EYE_AT = { circle: { x: 50, dy: 0 }, squircle: { x: 50, dy: 0 }, blob: { x: 48, dy: 1.5 } };
+const SHAPES = [
+  { id: 'circle',   ar: 'دايرة',      en: 'Circle' },
+  { id: 'squircle', ar: 'مربع مدوّر', en: 'Squircle' },
+  { id: 'blob',     ar: 'فقاعة',      en: 'Soft blob' },
+];
+/* eight fixed presets, no orange (it means «مستنيك»). Lightest stop vs the white eyes: 3.4:1 or more. */
+const PRESETS = [
+  { id: 'indigo', ar: 'نيلي',   en: 'Indigo', c: ['#8670F0', '#5A58DE', '#2C44B4', '#18236E'] },
+  { id: 'violet', ar: 'بنفسجي', en: 'Violet', c: ['#B062DE', '#8443D0', '#4E2B9C', '#2A165C'] },
+  { id: 'sky',    ar: 'سماوي',  en: 'Sky',    c: ['#2F8FE0', '#2A6AD8', '#2A3FA8', '#162464'] },
+  { id: 'teal',   ar: 'تركواز', en: 'Teal',   c: ['#18918A', '#117A80', '#0D5470', '#073446'] },
+  { id: 'jade',   ar: 'أخضر',   en: 'Jade',   c: ['#2A9457', '#1B8253', '#0E5E57', '#073A36'] },
+  { id: 'rose',   ar: 'وردي',   en: 'Rose',   c: ['#DC4F92', '#C23C86', '#88287A', '#4C1550'] },
+  { id: 'dusk',   ar: 'غروب',   en: 'Dusk',   c: ['#5D6CEE', '#8F52DC', '#C24C96', '#561C58'] },
+  { id: 'slate',  ar: 'رصاصي',  en: 'Slate',  c: ['#6E7C94', '#4D586B', '#2E3548', '#191E2B'] },
+];
+const PRESET = Object.fromEntries(PRESETS.map((p) => [p.id, p]));
+const SHAPE = Object.fromEntries(SHAPES.map((s) => [s.id, s]));
+
+/* temperaments: a handful of numbers per character.
+   eye: width/height/gap as a fraction of the size, y in %, corner radius, tilt.
+   bn/br/ba/bb/sw: breath keyframes, period (s), swell, lift, sway (deg).
+   fl/flk: how fast and how strongly the colour flows. glance: seconds between looks; gs: how it looks; gd: how fast the eyes move (ms). */
+const TEMPERS = {
+  calm:      { ar: 'هادي وواثق', en: 'Calm, confident', eye: { w: .1,   h: .225, g: .19,  y: 42, r: '999px', t: 0 },  bn: 'fBreath', br: 6,   ba: .018, bb: .012, sw: 0,   fl: 14, flk: .5,  glance: 9,   gs: 'steady',  gd: 620, pres: 1.22,
+               eyeAr: 'عين طويلة وثابتة', eyeEn: 'tall, steady eyes' },
+  energetic: { ar: 'نشيط',        en: 'Energetic',      eye: { w: .086, h: .21,  g: .165, y: 39, r: '999px', t: -4 }, bn: 'fBounce', br: 2.4, ba: .022, bb: .045, sw: 0,   fl: 7,  flk: .6,  glance: 2.8, gs: 'dart',    gd: 110, pres: 1,
+               eyeAr: 'عين رفيعة عالية وسريعة', eyeEn: 'slim, high, quick eyes' },
+  warm:      { ar: 'ودود',        en: 'Warm, friendly', eye: { w: .14,  h: .15,  g: .2,   y: 45, r: '999px', t: 0 },  bn: 'fBreath', br: 4.4, ba: .024, bb: .016, sw: 3.5, fl: 10, flk: .55, glance: 5,   gs: 'soft',    gd: 380, pres: 1,
+               eyeAr: 'عين مدورة', eyeEn: 'round eyes' },
+  dreamy:    { ar: 'حالم',        en: 'Dreamy, creative', eye: { w: .112, h: .19, g: .19, y: 43, r: '999px', t: 0, lid: 20, up: -.28 },  bn: 'fBreath', br: 5.2, ba: .02,  bb: .022, sw: 1.5, fl: 5,  flk: .95, glance: 6,   gs: 'up',      gd: 950, pres: 1,
+               eyeAr: 'عين ناعسة باصة لفوق', eyeEn: 'soft-lidded eyes that gaze up' },
+  neat:      { ar: 'منظم',        en: 'Attentive, organised', eye: { w: .118, h: .14, g: .18, y: 42, r: '28%', t: 0 }, bn: 'fBreath', br: 3.6, ba: .01, bb: .006, sw: 0, fl: 12, flk: .45, glance: 4, gs: 'precise', gd: 140, pres: 1,
+               eyeAr: 'عين مستطيلة مظبوطة', eyeEn: 'neat, even, squared eyes' },
+  caring:    { ar: 'صبور',        en: 'Caring, patient', eye: { w: .122, h: .155, g: .172, y: 46, r: '999px', t: 6, droop: 10 },  bn: 'fBreath', br: 5.4, ba: .02,  bb: .012, sw: 0,   fl: 11, flk: .5,  glance: 7,   gs: 'nod',     gd: 620, pres: 1,
+               eyeAr: 'عين حنينة مايلة لتحت', eyeEn: 'gentle, soft-drooping eyes' },
+};
+const TK = Object.keys(TEMPERS);
+const AGENTS = [
+  { id: 'lead',     name: 'Lead',             en: 'Lead',             main: true,  tk: 'calm',
+    line: ['هادي وواثق. بيتنفس على مهله وعينه ثابتة، وأول ما تحتاجه تلاقيه.', 'Calm and confident. Slow breath, steady eyes, and there the moment you need it.'] },
+  { id: 'ads',      name: 'الإعلانات',        en: 'Ads',              tk: 'energetic',
+    line: ['نشيط ومبيهداش. بينط نطة خفيفة وعينه بتلف في كل حتة بتدوّر على فرصة.', 'Energetic and restless. A little bounce, eyes darting around for the next opening.'] },
+  { id: 'leads',    name: 'الليدز والمتابعة', en: 'Leads',            fresh: true, tk: 'warm',
+    line: ['ودود وقريب. عينيه مدورة وبيتمايل بالراحة، كأنه بيسلّم على كل عميل.', 'Warm and friendly. Round eyes and a soft sway, like greeting every customer.'] },
+  { id: 'content',  name: 'المحتوى',          en: 'Content',          tk: 'dreamy',
+    line: ['حالم وفنان. كل شوية يسرح لفوق، وألوانه بتتحرك أكتر من الباقيين.', 'Dreamy and creative. Drifts upward every now and then; its colour flows more than the rest.'] },
+  { id: 'training', name: 'مدير التدريب',     en: 'Training manager', fresh: true, tk: 'neat',
+    line: ['منتبه ومنظم. عينيه مظبوطة ومتساوية، وحركته صغيرة ودقيقة.', 'Attentive and organised. Neat, even eyes and small, precise movements.'] },
+  { id: 'issues',   name: 'مشاكل العملاء',    en: 'Customer issues',  tk: 'caring',
+    line: ['حنين وصبور. عينيه هادية، وبيهز راسه بالراحة وهو بيسمعك.', 'Caring and patient. Gentle eyes, and a slow nod while it listens.'] },
+];
+const AGENT = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+/* nobody chose yet: each Agent gets a look automatically, the same for everyone */
+const AUTO = { lead: 'indigo', ads: 'rose', leads: 'teal', content: 'violet', training: 'jade', issues: 'sky' };
+
+const STATES = ['idle', 'listening', 'thinking', 'working', 'done', 'waiting', 'stuck', 'asleep'];
+const ST = {
+  idle:      { ar: 'فاضي',   en: 'Idle',           dar: 'بيتنفس، بيرمش كل شوية، وبيبص حواليه من وقت للتاني.', den: 'Breathing, a blink now and then, an occasional look around.' },
+  listening: { ar: 'بيسمعك', en: 'Listening',      dar: 'أول ما تكتب له، عينيه بتوسع وبتبص على مكان الكتابة، وبيميل عليك.', den: 'As you type, its eyes widen and turn to the composer, and it leans in.' },
+  thinking:  { ar: 'بيفكر',  en: 'Thinking',       dar: 'لسه بادئ المهمة: عينيه لفوق وبتسرح، والنور بيلف جواه.', den: 'A Run just started: eyes look up and drift, light swirls inside.' },
+  working:   { ar: 'شغال',   en: 'Working',        dar: 'مركّز: عينيه مضيّقة، النور بيلف أسرع، والهالة أقوى.', den: 'Focused: narrowed eyes, a faster swirl, a brighter glow.' },
+  done:      { ar: 'خلص',    en: 'Done',           dar: 'عينيه بتضحك ^ ^، بينط نطة صغيرة وتطلع لمعة.', den: 'Happy closed eyes ^ ^, a little hop and a brief sparkle.' },
+  waiting:   { ar: 'مستنيك', en: 'Waiting on you', dar: 'عنده سؤال أو محتاج موافقة: بيبص لك على طول، وكل كام ثانية بيزقك زقة خفيفة.', den: 'A question or an approval: it looks straight at you and nudges every few seconds.' },
+  stuck:     { ar: 'وقف',    en: 'Stuck',          dar: 'حاجة وقفته: عينيه قلقانة ومايلة، ولونه بيطفى شوية. مفيش أحمر.', den: 'Something stopped it: worried, tilted eyes, colour dims a little. Never red.' },
+  asleep:    { ar: 'نايم',   en: 'Asleep',         dar: 'مفيش شغل من بدري أو المحرك مقفول: عينيه مقفولة ونَفَسه بطيء جداً.', den: 'No work for a long time, or the Engine is off: eyes closed, very slow breath.' },
+  pressed:   { ar: 'لما تدوس', en: 'Pressed',      dar: 'بيتكبس وينط فرحان، وبعدها يبص لك.', den: 'Squashes, hops happily, then looks at you.' },
+};
+const CHAT = {
+  lead:     { a: ['صباح الخير. وزّعت شغل الأسبوع على الفريق، والإعلانات بدأ في حملة رمضان.', "Good morning. I split this week's work across the team, and Ads has started the Ramadan campaign."],
+              u: ['تمام. فيه حاجة محتاجاني النهارده؟', 'Great. Anything that needs me today?'],
+              doing: ['بيراجع شغل الفريق', "Reviewing the team's work"],
+              r: ['راجعت كل حاجة. فيه قرار واحد مستنيك من الليدز والمتابعة، والباقي ماشي.', 'All reviewed. One decision from Leads is waiting on you; everything else is on track.'] },
+  ads:      { a: ['حملة رمضان على Meta Ads شغالة من امبارح، والصرف ماشي في الحدود.', 'The Ramadan campaign on Meta Ads has been live since yesterday, and spend is within limits.'],
+              u: ['جرّب نسخة تانية من الإعلان للستات.', 'Try a second version of the ad for women.'],
+              doing: ['بيجهز نسخة تانية', 'Preparing a second version'],
+              r: ['جهزت نسختين جداد للستات. مش هصرف عليهم غير لما توافق.', "Two new versions for women are ready. I won't spend on them until you approve."] },
+  leads:    { a: ['فيه ليدز جديدة من امبارح، كلمت أغلبهم والباقي هكلمهم الضهر.', "New leads came in yesterday. I've called most of them and will call the rest at noon."],
+              u: ['ركّز على اللي سألوا عن الأسعار.', 'Focus on the ones who asked about prices.'],
+              doing: ['بيرتب الليدز', 'Sorting the leads'],
+              r: ['رتبتهم: اللي سألوا عن الأسعار فوق، وهكلمهم الأول.', "Sorted: the ones who asked about prices are on top, and I'll call them first."] },
+  content:  { a: ['كتبت تلات أفكار بوستات للأسبوع ده، واحدة منهم فيديو قصير.', 'I wrote three post ideas for this week; one is a short video.'],
+              u: ['ابعتلي فكرة الفيديو الأول.', 'Send me the video idea first.'],
+              doing: ['بيكتب الفكرة', 'Writing the idea'],
+              r: ['الفكرة: يوم في حياة عميل، من أول ما يشوف الإعلان لحد ما يشتري. هبعتلك السكريبت كامل.', "The idea: a day in a customer's life, from first seeing the ad to buying. I'll send the full script."] },
+  training: { a: ['جهزت خطة تدريب الأسبوع للفريق الجديد: أربع جلسات، كل جلسة ساعة.', "This week's training plan for the new team is ready: four one-hour sessions."],
+              u: ['ضيف جلسة عن الرد على الاعتراضات.', 'Add a session on handling objections.'],
+              doing: ['بيعدّل الخطة', 'Updating the plan'],
+              r: ['ضفتها يوم الخميس، ومعاها تمرين قصير على أشهر الاعتراضات.', 'Added it on Thursday, with a short drill on the most common objections.'] },
+  issues:   { a: ['فيه تلات شكاوى جديدة: اتنين اتحلوا، وواحدة محتاجة رد منك.', 'Three new complaints: two are solved, one needs your reply.'],
+              u: ['قولي تفاصيل اللي محتاجة رد.', 'Tell me about the one that needs a reply.'],
+              doing: ['بيجمع التفاصيل', 'Gathering the details'],
+              r: ['العميلة استلمت الطلب ناقص. اقترح نبعت الناقص بكرة ونعتذر لها، مستني رأيك.', 'The customer got an incomplete order. I suggest we send the rest tomorrow with an apology; your call.'] },
+};
+const SIZES = [16, 20, 24, 32, 48, 72, 96, 120];
+
+/* ================= state ================= */
+const mqReduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+const S = {
+  lang: 'ar', theme: 'light', reduced: mqReduce.matches, grey: false,
+  sel: 'lead', feelAgent: 'lead', feelState: 'idle',
+  looks: {},
+  live: { lead: 'idle', ads: 'working', leads: 'waiting', content: 'idle', training: 'asleep', issues: 'idle' },
+  newName: 'التقارير',
+  busy: false, mentioned: { a: new Set(), b: new Set() }, menu: null, bornOnce: false,
+};
+const L = (ar, en) => (S.lang === 'ar' ? ar : en);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const rand = (a, b) => a + Math.random() * (b - a);
+const checkIcon = '<svg class="od-icon opt__ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
+const sendIcon = '<svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 19V5M6 11l6-6 6 6"/></svg>';
+
+/* ================= shapes: one outline per shape, used by the rim and as the mask ================= */
+(function installShapes() {
+  const g = document.getElementById('face-shapes');
+  const ns = 'http://www.w3.org/2000/svg';
+  Object.entries(SHAPE_D).forEach(([id, d]) => {
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('id', `shp-${id}`); p.setAttribute('d', d); p.setAttribute('vector-effect', 'non-scaling-stroke');
+    g.appendChild(p);
+    if (id === 'circle') return;
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='${d}'/></svg>`;
+    document.documentElement.style.setProperty(`--mask-${id}`, `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
+  });
+})();
+
+/* ================= who is this Agent: name → temperament, colour, shape ================= */
+function hash(s) { let h = 2166136261 >>> 0; for (const ch of s) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; }
+/* a new Agent gets its personality from its name, so everyone sees the same character */
+function derive(name) {
+  const h = hash(name.trim() || 'agent');
+  const tk = TK[h % TK.length];
+  const b = TEMPERS[tk];
+  const j = (k, n) => 1 + ((((h >>> k) & 15) / 15) - .5) * n;
+  const t = { ...b, eye: { ...b.eye, w: +(b.eye.w * j(4, .14)).toFixed(3), h: +(b.eye.h * j(8, .14)).toFixed(3) },
+    br: +(b.br * j(12, .24)).toFixed(2), glance: +(b.glance * j(16, .3)).toFixed(2), pres: 1 };
+  return { tk, t, preset: PRESETS[(h >>> 20) % PRESETS.length].id };
+}
+function info(id) {
+  if (id === 'new') {
+    const name = S.newName.trim() || L('وكيل جديد', 'New Agent');
+    const d = derive(name);
+    return { id, name, en: '', tk: d.tk, t: d.t, preset: d.preset, shape: 'circle', auto: true };
+  }
+  const A = AGENT[id]; const lk = S.looks[id];
+  return { id, name: A.name, en: A.en, tk: A.tk, t: TEMPERS[A.tk], preset: lk ? lk.preset : AUTO[id], shape: lk ? lk.shape : 'circle', auto: !lk };
+}
+const resolve = (a) => (a === 'sel' ? S.sel : a === 'feel' ? S.feelAgent : a);
+const nameHTML = (id) => `<bdi>${esc(info(id).name)}</bdi>`;
+
+/* ================= the face renderer ================= */
+function faceHTML(a, size, o = {}) {
+  const still = size < 24; const big = size >= 48;
+  const layers = still
+    ? '<i class="l f-base"></i><i class="l f-shade"></i><i class="l f-veil"></i>'
+    : '<i class="l f-base"></i><i class="l f-flows dr"></i><i class="l f-core"></i><i class="l f-shade"></i><i class="l f-swirl"></i><i class="l f-veil"></i>';
+  const eye = (side) => `<span class="f-eye f-eye--${side}"><i class="e-open"></i><svg class="e-arc" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path class="e-happy" d="M3.5 13.5Q10 3 16.5 13.5"/><path class="e-sleep" d="M3.5 8.5Q10 16 16.5 8.5"/></svg></span>`;
+  const attrs = [`data-a="${a}"`, `data-st="${o.st || 'idle'}"`];
+  if (o.po) attrs.push(`data-po="${o.po}"`);
+  if (o.so) attrs.push(`data-so="${o.so}"`);
+  if (o.ctx) attrs.push(`data-ctx="${o.ctx}"`);
+  const delay = -(Math.random() * 12).toFixed(2);
+  return `<span class="fw${size >= 72 ? ' fw--lg' : ''}"><span class="face ${still ? 'face--still' : 'face--live'}${big ? ' face--big' : ''}" ${attrs.join(' ')} style="--s:${size}px;--d:${delay}s" aria-hidden="true">${big ? '<i class="f-shadow"></i><i class="f-gather"></i>' : ''}<span class="f-act"><span class="f-pose"><span class="f-breath">${still ? '' : '<i class="f-glow"></i>'}<span class="f-body">${layers}<span class="f-specs"><i class="f-spec"></i><i class="f-spec2"></i></span><svg class="f-rim" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#shp-circle"/></svg></span><span class="f-eyes"><span class="f-gaze">${eye('l')}${eye('r')}</span></span></span></span></span>${big ? '<span class="f-spark"><i></i><i></i><i></i></span>' : ''}</span>${o.dot ? '<span class="dot" aria-hidden="true"></span>' : ''}</span>`;
+}
+/* O1, unchanged, for the comparison */
+function o1HTML(size, presetId) {
+  const p = PRESET[presetId];
+  return `<span class="o1" style="--s:${size}px;--c1:${p.c[0]};--c2:${p.c[1]};--c3:${p.c[2]}" aria-hidden="true"><i class="o1__glow"></i><span class="o1__body"><i class="a-base"></i><i class="a-band"></i><i class="a-gloss"></i><svg class="o1__rim" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use class="rd" href="#shp-circle"/><use class="rl" href="#shp-circle"/></svg></span><span class="o1__eyes"><i></i><i></i></span></span>`;
+}
+
+/* write identity (colour, shape, temperament) only when it changed; then the state */
+function applyFace(el, silent = true) {
+  const a = resolve(el.dataset.a);
+  const I = info(a);
+  const preset = el.dataset.po || I.preset; const shape = el.dataset.so || I.shape;
+  const key = `${a}|${preset}|${shape}|${I.tk}|${I.t.br}|${I.t.eye.w}|${I.t.eye.h}`;
+  if (el.dataset.key !== key) {
+    const p = PRESET[preset].c; const t = I.t; const e = EYE_AT[shape];
+    const st = el.style;
+    st.setProperty('--c1', p[0]); st.setProperty('--c2', p[1]); st.setProperty('--c3', p[2]); st.setProperty('--c4', p[3]);
+    st.setProperty('--eW', t.eye.w); st.setProperty('--eH', t.eye.h); st.setProperty('--eG', t.eye.g);
+    st.setProperty('--eR', t.eye.r); st.setProperty('--eT', `${t.eye.t}deg`);
+    st.setProperty('--eX', `${e.x}%`); st.setProperty('--eYp', `${t.eye.y + e.dy}%`);
+    st.setProperty('--bn', t.bn); st.setProperty('--br', `${t.br}s`); st.setProperty('--ba', t.ba); st.setProperty('--bb', t.bb);
+    st.setProperty('--sw', t.sw); st.setProperty('--fl', `${t.fl}s`); st.setProperty('--flk', t.flk); st.setProperty('--gd', `${t.gd}ms`);
+    st.setProperty('--pres', t.pres || 1); st.setProperty('--sy0', t.eye.up || 0);
+    const lid = t.eye.lid || 0; const dr = t.eye.droop || 0;
+    const top = (outer) => (lid ? lid : dr ? (outer ? dr : 0) : -40);   /* a resting lid: dreamy is half-closed, caring droops outward */
+    st.setProperty('--clL0', `polygon(-40% ${top(true)}%, 140% ${top(false)}%, 140% 140%, -40% 140%)`);
+    st.setProperty('--clR0', `polygon(-40% ${top(false)}%, 140% ${top(true)}%, 140% 140%, -40% 140%)`);
+    el.dataset.shape = shape; el.dataset.agent = a; el.dataset.key = key;
+    const use = $('.f-rim use', el); if (use) use.setAttribute('href', `#shp-${shape}`);
+    el._t = t; el._nb = 0; el._ng = 0;
+    if (el.dataset.state) applyRates(el);
+  }
+  const want = el.dataset.st === 'live' ? (S.live[a] || 'idle') : el.dataset.st;
+  setState(el, want, silent);
+}
+/* playback speed per state: [colour drift, breath]. Changing the rate keeps the position, so nothing jumps. */
+const RATE = { idle: [1, 1], listening: [1.3, 1.2], thinking: [1.9, 1], working: [3.2, 1.25], done: [1.2, 1.1], waiting: [1, 1], stuck: [.6, .75], asleep: [.35, .45] };
+function applyRates(el) {
+  if (!el.classList.contains('face--live') || !el.getAnimations) return;
+  const R = RATE[el.dataset.state] || RATE.idle;
+  el.getAnimations({ subtree: true }).forEach((an) => {
+    const tg = an.effect && an.effect.target; if (!tg || !tg.classList) return;
+    let r = null;
+    if (tg.classList.contains('dr')) r = R[0];
+    else if (tg.classList.contains('f-breath')) r = R[1];
+    if (r != null && an.playbackRate !== r) { if (an.updatePlaybackRate) an.updatePlaybackRate(r); else an.playbackRate = r; }
+  });
+}
+function setState(el, st, silent = true) {
+  const prev = el.dataset.state;
+  if (prev === st) return;
+  el.dataset.state = st;
+  const dot = el.parentElement && el.parentElement.querySelector(':scope > .dot');
+  if (dot) dot.className = `dot dot--${st}`;
+  if (!el.classList.contains('face--live')) return;
+  applyRates(el);
+  if (st !== 'idle') ungaze(el);
+  if (!silent && st === 'done' && prev) play(el, 'done');
+}
+
+/* ================= moments (Web Animations; each one under 1.2s, never looping) ================= */
+const MOM = {
+  press: { dur: 620, easing: 'cubic-bezier(.3,0,.3,1)',
+    act: [{ transform: 'none' }, { transform: 'translateY(6%) scale(1.14,.84)', offset: .16 }, { transform: 'translateY(-16%) scale(.92,1.1)', offset: .46 }, { transform: 'translateY(0) scale(1.08,.92)', offset: .7 }, { transform: 'translateY(0) scale(.98,1.02)', offset: .86 }, { transform: 'none' }],
+    shadow: [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(1.12)', opacity: 1, offset: .16 }, { transform: 'scale(.66)', opacity: .45, offset: .46 }, { transform: 'scale(1.06)', opacity: 1, offset: .7 }, { transform: 'scale(1)', opacity: 1 }],
+    cls: [['is-squint', 0, 460], ['is-look', 380, 1700], ['is-wide', 460, 1400]] },
+  done: { dur: 560, easing: 'cubic-bezier(.3,0,.3,1)',
+    act: [{ transform: 'none' }, { transform: 'translateY(4%) scale(1.1,.88)', offset: .16 }, { transform: 'translateY(-13%) scale(.94,1.08)', offset: .46 }, { transform: 'translateY(0) scale(1.06,.94)', offset: .72 }, { transform: 'none' }],
+    shadow: [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.72)', opacity: .5, offset: .46 }, { transform: 'scale(1)', opacity: 1 }],
+    spark: true, cls: [] },
+  greet: { dur: 760, easing: 'ease-in-out',
+    act: [{ transform: 'none' }, { transform: 'translateY(-10%) rotate(-5deg) scale(1.02,1.05)', offset: .28 }, { transform: 'translateY(0) rotate(3deg) scale(1.04,.96)', offset: .55 }, { transform: 'translateY(-3%) rotate(-1.5deg)', offset: .78 }, { transform: 'none' }],
+    shadow: [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.78)', opacity: .6, offset: .28 }, { transform: 'scale(1)', opacity: 1, offset: .55 }, { transform: 'scale(.92)', opacity: .9, offset: .78 }, { transform: 'scale(1)', opacity: 1 }],
+    cls: [['is-look', 0, 1600], ['is-up', 0, 560], ['is-wide', 0, 1000]] },
+  perk: { dur: 600, easing: 'cubic-bezier(.2,0,0,1)',
+    act: [{ transform: 'none' }, { transform: 'translateY(-12%) scale(1.1)', offset: .3 }, { transform: 'translateY(-2%) scale(.97,1.04)', offset: .62 }, { transform: 'none' }],
+    shadow: [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.74)', opacity: .55, offset: .3 }, { transform: 'scale(1)', opacity: 1 }],
+    cls: [['is-wide', 0, 1100], ['is-look', 0, 1200]] },
+  nod: { dur: 1100, easing: 'ease-in-out',
+    act: [{ transform: 'none' }, { transform: 'translateY(4%) scale(1,.98)', offset: .25 }, { transform: 'none', offset: .5 }, { transform: 'translateY(3%) scale(1,.985)', offset: .74 }, { transform: 'none' }],
+    cls: [] },
+};
+function addTimedClass(f, cls, from, to) {
+  f._tm = f._tm || [];
+  f._tm.push(setTimeout(() => f.classList.add(cls), from));
+  f._tm.push(setTimeout(() => f.classList.remove(cls), to));
+}
+function clearMoment(f) {
+  (f._tm || []).forEach(clearTimeout); f._tm = [];
+  f.classList.remove('is-wide', 'is-look', 'is-up', 'is-squint', 'is-shut', 'is-birth');
+  (f._an || []).forEach((an) => an.cancel()); f._an = [];
+}
+function play(f, kind) {
+  if (!f || f.classList.contains('face--still')) return;
+  clearMoment(f);
+  if (S.reduced) { stillFrames(f, kind); return; }
+  const act = $('.f-act', f); const sh = $('.f-shadow', f);
+  const anim = (el, kf, opt) => { if (!el) return; const an = el.animate(kf, opt); f._an.push(an); };
+  if (kind === 'birth') { birth(f); return; }
+  const m = MOM[kind]; if (!m) return;
+  anim(act, m.act, { duration: m.dur, easing: m.easing });
+  if (m.shadow) anim(sh, m.shadow, { duration: m.dur, easing: m.easing });
+  m.cls.forEach(([c, a, b]) => addTimedClass(f, c, a, b));
+  if (m.spark) $$('.f-spark i', f).forEach((s, i) => anim(s, [
+    { transform: 'scale(0) rotate(0deg)', opacity: 0 }, { transform: 'scale(1.15) rotate(45deg)', opacity: 1, offset: .4 }, { transform: 'scale(.5) rotate(90deg)', opacity: 0 }],
+    { duration: 640, delay: 120 + i * 80, easing: 'ease-out' }));
+}
+/* birth: light gathers, the orb inflates, then it opens its eyes for the first time and looks at you */
+function birth(f) {
+  const D = 1150;
+  f.classList.add('is-birth'); f._tm.push(setTimeout(() => f.classList.remove('is-birth'), D + 50));
+  const anim = (el, kf, opt) => { if (!el) return; const an = el.animate(kf, opt); f._an.push(an); };
+  anim($('.f-act', f), [
+    { transform: 'scale(.1)', opacity: 0 },
+    { transform: 'scale(.14)', opacity: .9, offset: .22 },
+    { transform: 'scale(.18)', opacity: 1, offset: .34, easing: 'cubic-bezier(.3,0,.2,1)' },
+    { transform: 'scale(1.1)', opacity: 1, offset: .62, easing: 'ease-in-out' },
+    { transform: 'scale(.96,1.03)', opacity: 1, offset: .76 },
+    { transform: 'none', opacity: 1 }], { duration: D });
+  anim($('.f-gather', f), [
+    { transform: 'scale(1.5)', opacity: 0 }, { transform: 'scale(1.05)', opacity: .95, offset: .24 },
+    { transform: 'scale(.5)', opacity: .6, offset: .38 }, { transform: 'scale(.42)', opacity: 0, offset: .5 }, { transform: 'scale(.42)', opacity: 0 }], { duration: D, easing: 'ease-in' });
+  anim($('.f-shadow', f), [
+    { transform: 'scale(.2)', opacity: 0 }, { transform: 'scale(.3)', opacity: .4, offset: .34 },
+    { transform: 'scale(1.06)', opacity: 1, offset: .62 }, { transform: 'scale(1)', opacity: 1 }], { duration: D });
+  $$('.f-eye', f).forEach((e) => anim(e, [
+    { transform: 'scaleY(.06)' }, { transform: 'scaleY(.06)', offset: .7 }, { transform: 'scaleY(1.18)', offset: .82 }, { transform: 'scaleY(1)' }], { duration: D, easing: 'ease-out' }));
+  addTimedClass(f, 'is-look', 0, 2200); addTimedClass(f, 'is-wide', 820, 1900);
+}
+/* reduced motion: the same feelings as still frames, nothing moves */
+function stillFrames(f, kind) {
+  if (kind === 'press') { addTimedClass(f, 'is-squint', 0, 450); addTimedClass(f, 'is-look', 450, 1600); }
+  else if (kind === 'birth') { addTimedClass(f, 'is-shut', 0, 600); addTimedClass(f, 'is-look', 600, 1800); }
+  else if (kind === 'greet') { addTimedClass(f, 'is-look', 0, 1200); addTimedClass(f, 'is-up', 0, 600); }
+  else if (kind === 'perk') { addTimedClass(f, 'is-wide', 0, 1000); }
+}
+function blink(f) {
+  const kf = [{ transform: 'scaleY(1)' }, { transform: 'scaleY(.08)', offset: .45 }, { transform: 'scaleY(1)' }];
+  $$('.f-eye', f).forEach((e) => e.animate(kf, { duration: 150, easing: 'ease-in-out' }));
+}
+
+/* ================= life: blinks and glances, one shared scheduler for every visible face ================= */
+const VIS = new Set();
+let io = null;
+function mount(root) {
+  if (!io) io = new IntersectionObserver((ents) => ents.forEach((e) => {
+    e.target.classList.toggle('is-vis', e.isIntersecting);
+    if (e.isIntersecting) VIS.add(e.target); else VIS.delete(e.target);
+  }), { rootMargin: '80px' });
+  $$('.face', root).forEach((f) => { applyFace(f); if (f.classList.contains('face--live')) io.observe(f); });
+}
+const BLINKS = new Set(['idle', 'listening', 'thinking', 'working', 'waiting', 'stuck']);
+function blinkGap(t) {
+  if (t.gs === 'precise') return 4000;                 /* organised: a blink like a metronome */
+  if (t.gs === 'dart') return rand(1600, 3400);
+  if (t.gs === 'steady') return rand(4200, 7000);
+  return rand(2600, 5600);
+}
+/* look vars live on the eyes and the highlight only, so a look never re-resolves the body's animations */
+const partsOf = (f) => (f._parts || (f._parts = [$('.f-eyes', f), $('.f-specs', f)]));
+function gaze(f, x, y) { const e = partsOf(f)[0]; if (!e) return; e.style.setProperty('--gx', x); e.style.setProperty('--gy', y); }
+function ungaze(f) { const e = partsOf(f)[0]; if (!e) return; e.style.removeProperty('--gx'); e.style.removeProperty('--gy'); }
+function glance(f, t) {
+  const side = Math.random() < .5 ? -1 : 1;
+  const steps = {
+    steady:  [[side * .55, .05, 1700]],
+    dart:    [[side * .8, -.15, 320], [-side * .8, .1, 300]],
+    soft:    [[side * .5, .3, 1300]],
+    up:      [[side * .35, -.95, 2000]],
+    precise: [[side * .6, 0, 700], [-side * .6, 0, 700]],
+    nod:     [[0, .45, 1100]],
+  }[t.gs] || [[side * .5, 0, 1200]];
+  if (t.gs === 'nod') play(f, 'nod');
+  f._busy = true;
+  let at = 0;
+  steps.forEach(([x, y, hold]) => {
+    setTimeout(() => { if (f.dataset.state === 'idle') gaze(f, x, y); }, at);
+    at += hold + t.gd;
+  });
+  setTimeout(() => { ungaze(f); f._busy = false; }, at);
+}
+setInterval(() => {
+  if (S.reduced || document.hidden) return;
+  const now = performance.now();
+  VIS.forEach((f) => {
+    if (!f.isConnected) { VIS.delete(f); return; }
+    const t = f._t; if (!t) return;
+    const st = f.dataset.state;
+    if (!f._nb) f._nb = now + rand(600, 4000);
+    if (!f._ng) f._ng = now + rand(1200, t.glance * 1000);
+    if (BLINKS.has(st) && now >= f._nb) {
+      blink(f); f._nb = now + blinkGap(t);
+      if (t.gs === 'soft' && Math.random() < .3) setTimeout(() => blink(f), 260);   /* warm: a friendly double blink */
+    }
+    if (st === 'idle' && !f._busy && now >= f._ng) { glance(f, t); f._ng = now + t.glance * 1000 * rand(.7, 1.4); }
+  });
+}, 200);
+
+/* pointer: eyes and the specular highlight lean toward it. Read every rect first, then write. */
+const MOT = { mx: null, my: null, raf: 0 };
+function lookFrame() {
+  MOT.raf = 0;
+  const faces = Array.from(VIS);
+  if (MOT.mx == null || S.reduced) { faces.forEach((f) => { f._lx = f._ly = null; partsOf(f).forEach((p) => { if (p) { p.style.removeProperty('--lx'); p.style.removeProperty('--ly'); } }); }); return; }
+  const rects = faces.map((f) => f.getBoundingClientRect());
+  faces.forEach((f, i) => {
+    const r = rects[i]; if (!r.width) return;
+    const dx = MOT.mx - (r.left + r.width / 2); const dy = MOT.my - (r.top + r.height / 2);
+    const dd = Math.hypot(dx, dy) || 1; const k = Math.min(1, dd / 240);
+    const lx = ((dx / dd) * k).toFixed(2); const ly = ((dy / dd) * k).toFixed(2);
+    if (f._lx === lx && f._ly === ly) return;
+    f._lx = lx; f._ly = ly;
+    partsOf(f).forEach((p) => { if (p) { p.style.setProperty('--lx', lx); p.style.setProperty('--ly', ly); } });
+  });
+}
+/* the eyes ease over 110–950ms anyway, so ~16 updates a second look the same and cost a quarter */
+const queueLook = () => { if (MOT.raf) return; MOT.raf = -1; setTimeout(() => { MOT.raf = requestAnimationFrame(lookFrame); }, 60); };
+window.addEventListener('pointermove', (e) => { if (S.reduced || e.pointerType === 'touch') return; MOT.mx = e.clientX; MOT.my = e.clientY; queueLook(); }, { passive: true });
+document.documentElement.addEventListener('pointerleave', () => { MOT.mx = null; queueLook(); });
+window.addEventListener('blur', () => { MOT.mx = null; queueLook(); });
+window.addEventListener('scroll', () => { if (MOT.mx != null) queueLook(); }, { passive: true });
+
+/* the Agent's state in the product («في مكانه» follows it) */
+function setLive(a, st) {
+  S.live[a] = st;
+  $$('.face[data-st="live"]').forEach((f) => { if (resolve(f.dataset.a) === a) applyFace(f, false); });
+  paintLive();
+}
+
+/* ================= page ================= */
+const sec = (n, id, t, sub, extra = '') => `<div class="sec__head"><div><span class="sec__n num">${n}</span><h2 class="sec__t" id="${id}">${t}</h2>${sub ? `<p class="sec__sub">${sub}</p>` : ''}</div>${extra}</div>`;
+const pressFace = (a, size, o = {}, cls = '') => `<button type="button" class="face-btn ${cls}" data-act="press" aria-label="${esc(L('دوس على الوش', 'Press the face'))}">${faceHTML(a, size, o)}</button>`;
+function tile(a) {
+  const A = AGENT[a];
+  return `<li><button type="button" class="agent-tile" data-act="tile" data-id="${a}">${faceHTML(a, 56, { st: 'live', dot: true, ctx: 'sb' })}<bdi class="agent-tile__name">${esc(A.name)}</bdi>${A.main ? `<span class="agent-tile__main" aria-hidden="true">${L('الرئيسي', 'Main')}</span>` : ''}${A.fresh ? `<span class="agent-tile__new" aria-hidden="true">${L('جديد', 'New')}</span>` : ''}</button></li>`;
+}
+const sidebar = (theme) => `<div class="sb" data-theme="${theme}"><p class="sb__label">${L('الوكلاء', 'Agents')} · ${theme === 'dark' ? L('غامق', 'dark') : L('فاتح', 'light')}</p><ul class="agent-grid">${AGENTS.map((a) => tile(a.id)).join('')}</ul></div>`;
+function strip(theme) {
+  const cell = (n) => `<div class="sz">${faceHTML('sel', n, { dot: n >= 32 })}<span class="sz__n num" dir="ltr">${n}px</span></div>`;
+  return `<div class="canvas" data-theme="${theme}"><p class="canvas__tag">${theme === 'dark' ? L('الخلفية الغامقة', 'Dark canvas') : L('الخلفية الفاتحة', 'Light canvas')}</p>
+    <div class="strip">
+      <div class="strip__grp"><div class="strip__h">${L('ثابت · قوايم واختيارات', 'Still · lists and pickers')}</div><div class="strip__row">${SIZES.filter((n) => n < 24).map(cell).join('')}</div></div>
+      <div class="strip__grp"><div class="strip__h">${L('بيتحرك · من 24px وطالع', 'Alive · 24px and up')}</div><div class="strip__row">${SIZES.filter((n) => n >= 24).map(cell).join('')}</div></div>
+    </div></div>`;
+}
+function baCanvas(theme) {
+  return `<div class="canvas" data-theme="${theme}"><p class="canvas__tag">${theme === 'dark' ? L('غامق', 'Dark') : L('فاتح', 'Light')}</p>
+    <div class="ba">
+      <div class="ba__col"><span class="o1-slot"></span><span class="ba__lbl"><span class="ba__k">${L('قبل · O1', 'Before · O1')}</span><span class="ba__d">${L('كرة حلوة بعينين', 'A pretty ball with eyes')}</span></span></div>
+      <div class="ba__col">${pressFace('sel', 120)}<span class="ba__lbl"><span class="ba__k">${L('بعد · O2', 'After · O2')}</span><span class="ba__d">${L('شخصية بتحس', 'A character that feels')}</span></span></div>
+    </div></div>`;
+}
+const sigLine = (t) => L(`نَفَس كل ${t.br} ث · بصّة كل ${t.glance} ث تقريباً · ${t.eyeAr}`, `breath every ${t.br}s · a look every ~${t.glance}s · ${t.eyeEn}`);
+function teamCard(A) {
+  const t = TEMPERS[A.tk];
+  return `<article class="tcard">${pressFace(A.id, 120, {}, 'tcard__face')}
+    <h3 class="tcard__name">${nameHTML(A.id)}${S.lang === 'en' && A.en !== A.name ? `<span class="tcard__en">${esc(A.en)}</span>` : ''}</h3>
+    <span class="tag">${L(t.ar, t.en)}</span>
+    <p class="tcard__line">${L(A.line[0], A.line[1])}</p>
+    <p class="tcard__sig num">${sigLine(t)}</p></article>`;
+}
+function composer(which) {
+  return `<div class="composer">
+    <div class="menu" id="menu-${which}" role="listbox" aria-label="${esc(L('نادي وكيل', 'Mention an Agent'))}" hidden></div>
+    <div class="composer__pill">
+      <textarea class="composer__ta" id="ta-${which}" data-chat="${which}" rows="1" aria-label="" placeholder="" autocomplete="off"></textarea>
+      <button type="button" class="send" data-act="send" data-chat="${which}" aria-label="${esc(L('ابعت', 'Send'))}" disabled>${sendIcon}</button>
+    </div>
+    ${which === 'a' ? `<p class="composer__hint">${L('جرّب تكتب @ واسم وكيل، وبص على وشّه في القايمة جنبك.', "Try typing @ and an Agent's name, and watch its face in the list.")}</p>` : ''}
+  </div>`;
+}
+function optLabel(name, value, a, b, face) {
+  return `<label class="opt">${face}<input type="radio" name="${name}" value="${value}"><span class="opt__txt"><span class="opt__a">${a}</span><span class="opt__b">${b}</span></span>${checkIcon}</label>`;
+}
+function buildPage() {
+  const html = document.documentElement;
+  html.lang = S.lang; html.dir = S.lang === 'ar' ? 'rtl' : 'ltr';
+  document.title = L('وكلاء ليهم شخصية', 'Agents with character');
+  VIS.clear(); if (io) { io.disconnect(); io = null; }
+  $('#app').innerHTML = `
+  <main class="page">
+    <header class="top">
+      <div>
+        <p class="top__k num">${L('الجولة O2', 'Round O2')}</p>
+        <h1 class="top__t">${L('وكلاء ليهم شخصية', 'Agents with character')}</h1>
+        <p class="top__sub">${L('كل وكيل بقى شخصية: ليه طبع، وعينين بتحس، وحركة تعرفه بيها حتى من غير لون. الإحساس كله في العينين وحركة الجسم والنور.', 'Every Agent is now a character: a temperament, eyes that feel, and a way of moving you can recognise even without colour. All the feeling lives in the eyes, the body and the light.')}</p>
+      </div>
+      <div class="controls">
+        <div class="ctl"><span class="ctl__label" id="lbl-lang">${L('اللغة', 'Language')}</span>
+          <fieldset class="seg" aria-labelledby="lbl-lang">
+            <label><input type="radio" name="lang" value="ar">عربي</label>
+            <label><input type="radio" name="lang" value="en">English</label>
+          </fieldset></div>
+        <div class="ctl"><span class="ctl__label" id="lbl-theme">${L('المظهر', 'Theme')}</span>
+          <fieldset class="seg" aria-labelledby="lbl-theme">
+            <label><input type="radio" name="theme" value="light">${L('فاتح', 'Light')}</label>
+            <label><input type="radio" name="theme" value="dark">${L('غامق', 'Dark')}</label>
+          </fieldset></div>
+        <span class="sw-hit"><button type="button" class="switch" role="switch" id="sw-reduced" data-act="reduced" aria-checked="false" aria-labelledby="lbl-reduced"></button><span id="lbl-reduced" data-act="reduced">${L('من غير حركة', 'Reduced motion')}</span></span>
+      </div>
+    </header>
+
+    <section class="sec" aria-labelledby="h1s">
+      ${sec(1, 'h1s', L('قبل وبعد', 'Before and after'), L('نفس الوكيل ونفس المقاس. حرّك الماوس ودوس على الوش الجديد.', 'Same Agent, same size. Move the pointer and press the new face.'))}
+      <div class="pair">${baCanvas('dark')}${baCanvas('light')}</div>
+      <ul class="changes">
+        <li><b>${L('المادة.', 'Material.')}</b> ${L('نور جوه الكرة طالع من تحت، لمعة بتميل ناحية الماوس، حافة منوّرة، وضل ناعم تحتها من 48px.', 'An inner light rising from below, a highlight that leans toward the pointer, a lit rim, and a soft floor shadow from 48px.')}</li>
+        <li><b>${L('الطبع.', 'Temperament.')}</b> ${L('كل وكيل ليه شكل عين ونَفَس وطريقة بصّة، فتعرفه حتى لو الشاشة رمادي.', 'Each Agent has its own eyes, breath and way of looking, so you can tell them apart even in grey.')}</li>
+        <li><b>${L('المشاعر.', 'Feelings.')}</b> ${L('تعبير لكل حالة في المنتج، من «بيسمعك» لحد «نايم»، والنقطة بتقول الحالة دايماً.', 'One expression per product state, from Listening to Asleep, and the dot always says the state too.')}</li>
+        <li><b>${L('اللحظات.', 'Moments.')}</b> ${L('الولادة، التحية، ولما حد ينادي عليه. كل لحظة أقل من ثانية وربع ومبتتكررش.', 'Birth, greeting and being mentioned. Each under 1.2s, never on a loop.')}</li>
+      </ul>
+    </section>
+
+    <section class="sec" aria-labelledby="h2s">
+      ${sec(2, 'h2s', L('اتعرّف على الفريق', 'Meet the team'), L('ستة وكلاء، ست شخصيات. الطبع في العينين والحركة مش في اللون بس: شغّل «من غير ألوان» وشوف.', 'Six Agents, six characters. The temperament is in the eyes and motion, not just the colour: turn on "No colour" and see.'),
+        `<span class="sw-hit"><button type="button" class="switch" role="switch" id="sw-grey" data-act="grey" aria-checked="false" aria-labelledby="lbl-grey"></button><span id="lbl-grey" data-act="grey">${L('من غير ألوان', 'No colour')}</span></span>`)}
+      <div class="team" id="team">${AGENTS.map(teamCard).join('')}</div>
+    </section>
+
+    <section class="sec" aria-labelledby="h3s">
+      ${sec(3, 'h3s', L('المشاعر', 'Feelings'), L('كل حالة في المنتج ليها تعبير. اختار وكيل ودوس على أي حالة عشان تشغّلها.', 'Every product state has its expression. Pick an Agent and press any state to play it.'))}
+      <div class="feel">
+        <div class="canvas feel__stage">
+          ${pressFace('feel', 96, { st: 'idle', dot: true }, 'feel__face')}
+          <p class="feel__st" id="feel-st"></p>
+          <p class="feel__desc" id="feel-desc" aria-live="polite"></p>
+        </div>
+        <div class="feel__ctrl">
+          <fieldset class="grp"><legend>${L('الوكيل', 'Agent')}</legend>
+            <div class="chips">${AGENTS.map((a) => `<label class="chip chip--face">${faceHTML(a.id, 20)}<input type="radio" name="feelagent" value="${a.id}">${nameHTML(a.id)}</label>`).join('')}</div>
+          </fieldset>
+          <div class="grp" role="group" aria-labelledby="lbl-states"><span class="grp__l" id="lbl-states">${L('الحالة', 'State')}</span>
+            <div class="chips">${[...STATES, 'pressed'].map((s) => `<button type="button" class="chip" data-act="feel-state" data-v="${s}" aria-pressed="false">${s === 'pressed' ? '' : `<span class="dot dot--${s}" aria-hidden="true"></span>`}${L(ST[s].ar, ST[s].en)}</button>`).join('')}</div>
+          </div>
+        </div>
+      </div>
+      <h3 class="sub-h">${L('كل الحالات جنب بعض · 48px', 'All states side by side · 48px')}</h3>
+      <div class="canvas"><div class="states">
+        ${STATES.map((s) => `<div class="stc">${faceHTML('feel', 48, { st: s, dot: true })}<span class="stc__w">${L(ST[s].ar, ST[s].en)}</span></div>`).join('')}
+        <button type="button" class="stc" data-act="press" aria-label="${esc(L('لما تدوس · دوس عليه', 'Pressed · press it'))}">${faceHTML('feel', 48, { st: 'idle' })}<span class="stc__w">${L(ST.pressed.ar, ST.pressed.en)}</span><span class="stc__h">${L('دوس عليه', 'Press it')}</span></button>
+      </div></div>
+    </section>
+
+    <section class="sec" aria-labelledby="h4s">
+      ${sec(4, 'h4s', L('لحظات بتتفتكر', 'Moments people remember'), L('لحظات قصيرة بتحصل مرة واحدة، عشان أداة الشغل تفضل هادية.', 'Short moments that play once, so a work tool stays calm.'))}
+      <div class="mom">
+        <div class="canvas mom__stage" id="mom-stage">
+          <div class="mom__who">${faceHTML('lead', 56, { st: 'idle' })}<span class="mom__cap"><b><bdi>Lead</bdi></b>${L('بيعمل الوكيل', 'makes the Agent')}</span></div>
+          <div class="mom__who">${pressFace('new', 96, { st: 'idle', ctx: 'new' })}<span class="mom__cap"><b id="new-name"></b><span id="new-derived"></span></span></div>
+        </div>
+        <div class="mom__ctrl">
+          <div class="field"><label for="new-name-in">${L('اسم الوكيل الجديد', 'New Agent name')}</label>
+            <input class="input" id="new-name-in" type="text" maxlength="24" autocomplete="off">
+            <span class="field__help">${L('الطبع واللون بيطلعوا من الاسم تلقائياً، فكل الناس بتشوفه بنفس الشكل.', 'Temperament and colour come from the name automatically, so everyone sees the same Agent.')}</span></div>
+          <div class="btn-row">
+            <button type="button" class="btn btn--secondary" data-act="moment" data-v="greet">${L('التحية', 'Greeting')}</button>
+            <button type="button" class="btn btn--secondary" data-act="moment" data-v="perk">${L('لما يتنادى', 'Mentioned')}</button>
+            <button type="button" class="btn btn--primary" data-act="moment" data-v="birth">${L('الولادة', 'Birth')}</button>
+          </div>
+          <dl class="mlist">
+            <div><dt>${L('الولادة', 'Birth')}</dt><dd>${L('لما Lead يعمل وكيل جديد: النور بيتجمع، الكرة بتتنفخ، وبعدين يفتح عينيه لأول مرة ويبص لك. مرة واحدة بس.', 'When Lead makes a new Agent: light gathers, the orb inflates, then it opens its eyes for the first time and looks at you. Once.')}</dd></div>
+            <div><dt>${L('التحية', 'Greeting')}</dt><dd>${L('لما تفتح شات الوكيل، بيرفع عينه لك ويسلّم بنطة صغيرة.', "When you open an Agent's chat, it looks up at you with a small hello bounce.")}</dd></div>
+            <div><dt>${L('لما يتنادى', 'Mentioned')}</dt><dd>${L('لما تكتب اسمه بعد @، وشّه في القايمة بيصحصح.', 'When its name is typed after @, its face in the list perks up.')}</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" aria-labelledby="h5s">
+      ${sec(5, 'h5s', L('في مكانه', 'In place'), L('دوس على وكيل يفتح الشات بتاعه ويسلّم عليك. اكتب له وهو هيسمعك، وابعت وشوفه بيفكر ويشتغل ويخلص.', "Press an Agent to open its chat and get a hello. Type and it listens; send and watch it think, work and finish."))}
+      <div class="inplace">
+        <div class="inplace__sbs">${sidebar('dark')}${sidebar('light')}</div>
+        <div class="chat" id="chat-a">
+          <div class="chat__head"><button type="button" class="head-pill" data-act="press-in" aria-label="">${faceHTML('sel', 32, { st: 'live', dot: true })}<bdi class="head-pill__name" data-bind="name"></bdi><span class="head-pill__st" data-bind="status"></span></button></div>
+          <div class="log" id="log-a" aria-live="polite"></div>
+          ${composer('a')}
+        </div>
+      </div>
+      <div class="inplace2">
+        <div class="empty" id="chat-b">
+          <div class="empty__body">
+            ${pressFace('sel', 96, { st: 'live', dot: true }, 'empty__face')}
+            <p class="empty__t" data-bind="ask"></p>
+            <p class="empty__p" data-bind="ask-p"></p>
+            <div class="empty__log" id="log-b" aria-live="polite"></div>
+          </div>
+          ${composer('b')}
+        </div>
+        <div class="bcol">
+          <div class="bcol__head"><span class="bcol__name">${L('شغالين عليه', 'In progress')}</span><span class="bcol__n num">1</span></div>
+          <div class="bcol__body">
+            <button type="button" class="kcard" data-act="press-in">
+              <span class="kcard__t">${L('إعلان فيديو رمضان · نسخة الستات', 'Ramadan video ad · version for women')}</span>
+              <span class="kcard__s">${L('بيجهز النسخة التانية', 'Preparing the second version')}</span>
+              <span class="prog" aria-hidden="true"><i></i></span>
+              <span class="kcard__f">${faceHTML('ads', 24, { st: 'working' })}<bdi>${esc(AGENT.ads.name)}</bdi><span aria-hidden="true">·</span><bdi>Meta Ads</bdi><span class="grow">${L('الخميس', 'Thursday')}</span></span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <p class="note">${L('الرسايل في الشات أمثلة للنموذج.', 'Chat messages are sample content for the prototype.')}</p>
+    </section>
+
+    <section class="sec" aria-labelledby="h6s">
+      ${sec(6, 'h6s', L('المقاسات الحقيقية', 'Real sizes'), L('تحت 24px الكرة بتثبت: لون وعينين بس، من غير نور ولا حركة. من 48px بيظهر الضل تحتها.', 'Below 24px the orb holds still: colour and eyes only, no glow and no motion. From 48px the floor shadow appears.'))}
+      <div class="pair" style="grid-template-columns: minmax(0, 1fr);">${strip('light')}${strip('dark')}</div>
+    </section>
+
+    <section class="sec" aria-labelledby="h7s">
+      ${sec(7, 'h7s', L('اختار الشكل', 'Choose the look'), L('الشكل واللون بيتحفظوا على الوكيل نفسه، فكل اللي في المساحة بيشوفوه زي بعض. اختيارك بيتطبق على الصفحة كلها مرة واحدة.', 'Shape and colour are saved on the Agent itself, so everyone in the workspace sees it the same way. Your pick updates every place on the page at once.'))}
+      <div class="look">
+        <div class="look__stage">
+          ${pressFace('sel', 120, {}, 'look__preview')}
+          <p class="look__name" data-bind="name-p"></p>
+          <p class="look__meta" data-bind="meta" aria-live="polite"></p>
+          <button type="button" class="link-btn" data-act="reset">${L('رجّعه تلقائي', 'Reset to automatic')}</button>
+        </div>
+        <div class="look__form">
+          <fieldset class="grp"><legend>${L('الوكيل', 'Agent')}<span class="grp__en">${L('Agent', 'الوكيل')}</span></legend>
+            <div class="opts opts--agents">${AGENTS.map((a) => optLabel('agent', a.id, nameHTML(a.id), L(TEMPERS[a.tk].ar, TEMPERS[a.tk].en), faceHTML(a.id, 20))).join('')}</div>
+          </fieldset>
+          <fieldset class="grp"><legend>${L('الشكل', 'Shape')}<span class="grp__en">${L('Shape', 'الشكل')}</span></legend>
+            <div class="opts">${SHAPES.map((s) => optLabel('shape', s.id, L(s.ar, s.en), L(s.en, s.ar), faceHTML('sel', 20, { so: s.id }))).join('')}</div>
+          </fieldset>
+          <fieldset class="grp"><legend>${L('اللون', 'Colour')}<span class="grp__en">${L('Colour', 'اللون')}</span></legend>
+            <div class="opts">${PRESETS.map((p) => optLabel('preset', p.id, L(p.ar, p.en), L(p.en, p.ar), faceHTML('sel', 20, { po: p.id }))).join('')}</div>
+          </fieldset>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <p>${L('الألوان تمانية ثابتة ومفيهاش برتقاني (ده لـ«مستنيك» بس). أقل تباين بين العينين البيض وأفتح درجة في أي لون 3.4:1.', 'Eight fixed colours, none orange (that means "waiting on you"). The lowest contrast between the white eyes and the lightest stop of any preset is 3.4:1.')}</p>
+      <p>${L('الحركة كلها تحريك وشفافية بس، وبتقف للوشوش اللي برّه الشاشة، وتحت 24px، ومع «من غير حركة». الحالة بتبان على النقطة دايماً.', 'All motion is transform and opacity; it stops for faces off screen, below 24px and with reduced motion. The dot always shows the state.')}</p>
+    </footer>
+  </main>`;
+  $('#new-name-in').value = S.newName;
+  $$('.o1-slot').forEach((s) => { s.outerHTML = o1HTML(120, info(S.sel).preset); });
+  renderLog();
+  mount(document);
+  observeMoments();
+}
+
+/* ================= chat ================= */
+const fromLine = (a, time, face) => `<div class="msg__from">${face}<bdi>${esc(info(a).name)}</bdi>${time ? `<span class="msg__time num">${time}</span>` : ''}</div>`;
+function renderLog() {
+  const a = S.sel; const c = CHAT[a];
+  $('#log-a').innerHTML = `<span class="divider">${L('النهارده', 'Today')}</span>
+    <div class="msg">${fromLine(a, L('9:40 ص', '9:40 AM'), faceHTML(a, 24))}<div class="bubble">${esc(L(c.a[0], c.a[1]))}</div></div>
+    <div class="bubble bubble--user">${esc(L(c.u[0], c.u[1]))}</div>`;
+  $('#log-b').innerHTML = '';
+}
+function scrollLog(which) { const lg = which === 'a' ? $('#log-a') : null; if (lg) lg.scrollTop = lg.scrollHeight; }
+function autosize(ta) { ta.style.height = '44px'; ta.style.height = `${Math.min(120, ta.scrollHeight)}px`; }
+function send(which) {
+  const ta = $(`#ta-${which}`); if (!ta) return;
+  const txt = ta.value.trim(); if (!txt || S.busy) return;
+  ta.value = ''; autosize(ta); updateSend(which); closeMenu(); S.mentioned[which].clear();
+  const a = S.sel; const c = CHAT[a];
+  const log = which === 'a' ? $('#log-a') : $('#log-b');
+  if (which === 'b') log.innerHTML = '';
+  const u = document.createElement('div'); u.className = 'bubble bubble--user'; u.textContent = txt; log.appendChild(u);
+  const row = document.createElement('div'); row.className = 'msg';
+  row.innerHTML = `${fromLine(a, '', faceHTML(a, 24, { st: 'live' }))}<p class="msg__status breathe">${L('بيفكر…', 'Thinking…')}</p>`;
+  log.appendChild(row); mount(row); scrollLog(which);
+  S.busy = true; setLive(a, 'thinking');
+  const status = $('.msg__status', row);
+  setTimeout(() => { setLive(a, 'working'); status.textContent = L(`شغال: ${c.doing[0]}…`, `Working: ${c.doing[1]}…`); }, 1400);
+  setTimeout(() => {
+    const b = document.createElement('div'); b.className = 'bubble'; b.textContent = L(c.r[0], c.r[1]);
+    status.replaceWith(b); setLive(a, 'done'); scrollLog(which);
+  }, 3500);
+  setTimeout(() => {
+    const f = $('.face', row); if (f) { f.dataset.st = 'idle'; applyFace(f); }
+    S.busy = false; setLive(a, 'idle');
+    [$('#ta-a'), $('#ta-b')].forEach((t) => { if (t && t.value.trim()) setLive(a, 'listening'); });
+  }, 5800);
+}
+function updateSend(which) { const ta = $(`#ta-${which}`); const b = $(`.send[data-chat="${which}"]`); if (ta && b) b.disabled = !ta.value.trim() || S.busy; }
+function onType(ta) {
+  const which = ta.dataset.chat; autosize(ta); updateSend(which);
+  if (!S.busy) {
+    const any = [$('#ta-a'), $('#ta-b')].some((t) => t && t.value.trim());
+    const cur = S.live[S.sel];
+    if (any && cur !== 'listening') setLive(S.sel, 'listening');
+    else if (!any && cur === 'listening') setLive(S.sel, 'idle');
+  }
+  /* @mentions: a newly typed name makes that Agent perk up in the list */
+  const now = new Set(AGENTS.filter((A) => ta.value.includes(`@${A.name}`) || ta.value.toLowerCase().includes(`@${A.en.toLowerCase()}`)).map((A) => A.id));
+  now.forEach((id) => { if (!S.mentioned[which].has(id)) perkInList(id); });
+  S.mentioned[which] = now;
+  updateMenu(ta);
+}
+function perkInList(id) { $$('.sb .face, .menu .face').forEach((f) => { if (f.dataset.agent === id) play(f, 'perk'); }); }
+function updateMenu(ta) {
+  const which = ta.dataset.chat; const menu = $(`#menu-${which}`);
+  const before = ta.value.slice(0, ta.selectionStart);
+  const m = before.match(/@([^@\n]{0,24})$/);
+  if (!m) { closeMenu(); return; }
+  const q = m[1].trim().toLowerCase();
+  const items = AGENTS.filter((A) => !q || A.name.toLowerCase().startsWith(q) || A.en.toLowerCase().startsWith(q));
+  if (!items.length || items.some((A) => A.name === m[1].trim())) { closeMenu(); return; }
+  const same = S.menu && S.menu.which === which && S.menu.ids.join() === items.map((A) => A.id).join();
+  S.menu = { which, ids: items.map((A) => A.id), idx: same ? S.menu.idx : 0, start: before.length - m[0].length };
+  if (!same) {
+    menu.innerHTML = `<p class="menu__g">${L('نادي وكيل', 'Mention an Agent')}</p>${items.map((A, i) => `<button type="button" class="menu__i" role="option" data-act="mention" data-id="${A.id}" aria-selected="${i === 0}">${faceHTML(A.id, 24, { st: 'live' })}<bdi>${esc(A.name)}</bdi><span class="menu__h" dir="ltr">@${esc(A.en)}</span></button>`).join('')}`;
+    mount(menu);
+  }
+  menu.hidden = false;
+  $$('.menu__i', menu).forEach((b, i) => b.setAttribute('aria-selected', String(i === S.menu.idx)));
+}
+function closeMenu() { $$('.menu').forEach((m) => { m.hidden = true; m.innerHTML = ''; }); S.menu = null; }
+function pickMention(id) {
+  if (!S.menu) return;
+  const ta = $(`#ta-${S.menu.which}`); const A = AGENT[id];
+  const after = ta.value.slice(ta.selectionStart);
+  ta.value = `${ta.value.slice(0, S.menu.start)}@${A.name} ${after}`;
+  const pos = S.menu.start + A.name.length + 2;
+  closeMenu(); ta.focus(); ta.setSelectionRange(pos, pos); onType(ta);
+}
+function openChat(id) {
+  if (S.sel !== id) { S.sel = id; }
+  if (S.live[id] === 'asleep') S.live[id] = 'idle';   /* opening a sleeping Agent's chat wakes it up */
+  renderLog(); paint(); mount($('#log-a'));
+  $$('#chat-a .chat__head .face, #chat-b .empty__face .face').forEach((f) => play(f, 'greet'));
+}
+
+/* ================= moments section ================= */
+function observeMoments() {
+  const st = $('#mom-stage'); if (!st || !('IntersectionObserver' in window)) return;
+  const o = new IntersectionObserver((ents) => {
+    if (ents.some((e) => e.isIntersecting) && !S.bornOnce) { S.bornOnce = true; o.disconnect(); setTimeout(doBirth, 250); }
+  }, { threshold: .6 });
+  o.observe(st);
+}
+function doBirth() {
+  const f = $('#mom-stage .face[data-ctx="new"]'); const lead = $('#mom-stage .face[data-agent="lead"]');
+  if (!f) return;
+  play(f, 'birth');
+  if (lead && !S.reduced) {   /* Lead turns to watch the new Agent form */
+    const a = lead.getBoundingClientRect(); const b = f.getBoundingClientRect();
+    const sx = Math.sign((b.left + b.width / 2) - (a.left + a.width / 2)) * .75;
+    gaze(lead, sx, .2); lead._busy = true;
+    setTimeout(() => { ungaze(lead); lead._busy = false; }, 1800);
+  }
+}
+
+/* ================= paint: sync controls, words and faces to the state ================= */
+function paintLive() {
+  const st = S.live[S.sel] || 'idle'; const name = info(S.sel).name;
+  $$('[data-bind="status"]').forEach((n) => { n.innerHTML = `<span class="dot dot--${st}" aria-hidden="true"></span>${esc(L(ST[st].ar, ST[st].en))}`; });
+  $$('.head-pill').forEach((b) => b.setAttribute('aria-label', `${name} · ${L(ST[st].ar, ST[st].en)}`));
+  $$('.agent-tile').forEach((t) => {
+    const id = t.dataset.id; const A = AGENT[id]; const s = S.live[id] || 'idle';
+    if (id === S.sel) t.setAttribute('aria-current', 'true'); else t.removeAttribute('aria-current');
+    t.setAttribute('aria-label', [A.name, A.main ? L('الرئيسي', 'Main') : '', A.fresh ? L('جديد', 'New') : '', L(ST[s].ar, ST[s].en)].filter(Boolean).join(' · '));
+  });
+  ['a', 'b'].forEach(updateSend);
+}
+function paint() {
+  const root = document.documentElement;
+  root.dataset.theme = S.theme;
+  root.classList.toggle('is-reduced', S.reduced);
+  const I = info(S.sel);
+  const setRadio = (name, v) => $$(`input[name="${name}"]`).forEach((i) => { i.checked = i.value === v; });
+  setRadio('lang', S.lang); setRadio('theme', S.theme); setRadio('agent', S.sel); setRadio('shape', I.shape); setRadio('preset', I.preset); setRadio('feelagent', S.feelAgent);
+  $('#sw-reduced').setAttribute('aria-checked', String(S.reduced));
+  $('#sw-grey').setAttribute('aria-checked', String(S.grey));
+  $('#team').classList.toggle('is-grey', S.grey);
+  $$('[data-bind="name"]').forEach((n) => { n.textContent = I.name; });
+  $$('[data-bind="ask"]').forEach((n) => { n.innerHTML = L(`اسأل ${nameHTML(S.sel)} عن أي حاجة`, `Ask ${nameHTML(S.sel)} anything`); });
+  $$('[data-bind="ask-p"]').forEach((n) => { n.textContent = L('اكتب طلبك وهو هيسمعك، ولما يخلص هيقولك.', "Type your request; it listens, and tells you when it's done."); });
+  $$('[data-bind="name-p"]').forEach((n) => { n.innerHTML = nameHTML(S.sel); });
+  $$('.composer__ta').forEach((ta) => { const ph = L(`اكتب لـ ${I.name}…`, `Write to ${I.name}…`); ta.placeholder = ph; ta.setAttribute('aria-label', ph); });
+  const lbl = `${L(PRESET[I.preset].ar, PRESET[I.preset].en)} · ${L(SHAPE[I.shape].ar, SHAPE[I.shape].en)}`;
+  $('[data-bind="meta"]').textContent = I.auto ? L(`تلقائي: ${lbl}`, `Automatic: ${lbl}`) : L(`اتختار: ${lbl}`, `Chosen: ${lbl}`);
+  $('[data-act="reset"]').disabled = I.auto;
+  /* feelings */
+  const fs = S.feelState; const showSt = fs === 'pressed' ? 'idle' : fs;
+  $('#feel-st').innerHTML = fs === 'pressed' ? esc(L(ST.pressed.ar, ST.pressed.en)) : `<span class="dot dot--${showSt}" aria-hidden="true"></span>${esc(L(ST[fs].ar, ST[fs].en))}`;
+  $('#feel-desc').textContent = L(ST[fs].dar, ST[fs].den);
+  $$('[data-act="feel-state"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === fs)));
+  /* the newborn */
+  const N = info('new');
+  $('#new-name').innerHTML = `<bdi>${esc(N.name)}</bdi>`;
+  $('#new-derived').textContent = L(`طبعه: ${TEMPERS[N.tk].ar} · لونه: ${PRESET[N.preset].ar}`, `${TEMPERS[N.tk].en} · ${PRESET[N.preset].en}`);
+  /* O1 keeps the same Agent's colours */
+  $$('.o1').forEach((o) => { const p = PRESET[I.preset].c; o.style.setProperty('--c1', p[0]); o.style.setProperty('--c2', p[1]); o.style.setProperty('--c3', p[2]); });
+  $$('.face').forEach((f) => applyFace(f));
+  paintLive();
+}
+
+/* ================= events ================= */
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'tile') openChat(b.dataset.id);
+  else if (act === 'press') play($('.face', b), 'press');
+  else if (act === 'press-in') play($('.face--live', b), 'press');
+  else if (act === 'feel-state') {
+    const v = b.dataset.v; S.feelState = v;
+    const f = $('.feel__stage .face');
+    if (v === 'pressed') { f.dataset.st = 'idle'; applyFace(f); paint(); play(f, 'press'); return; }
+    if (f.dataset.st === v && v === 'done') { setState(f, 'idle'); }
+    f.dataset.st = v; paint(); applyFace(f, false);
+  }
+  else if (act === 'moment') {
+    const v = b.dataset.v; const f = $('#mom-stage .face[data-ctx="new"]');
+    if (v === 'birth') doBirth(); else play(f, v);
+  }
+  else if (act === 'send') send(b.dataset.chat);
+  else if (act === 'mention') pickMention(b.dataset.id);
+  else if (act === 'reset') { delete S.looks[S.sel]; paint(); play($('.look__preview .face'), 'press'); $('input[name="shape"]:checked').focus(); }
+  else if (act === 'reduced') { S.reduced = !S.reduced; $$('.face').forEach(clearMoment); paint(); queueLook(); }
+  else if (act === 'grey') { S.grey = !S.grey; paint(); }
+});
+document.addEventListener('change', (e) => {
+  const i = e.target; if (!(i instanceof HTMLInputElement) || i.type !== 'radio') return;
+  const v = i.value;
+  if (i.name === 'lang') { S.lang = v; closeMenu(); buildPage(); paint(); $('input[name="lang"]:checked').focus(); return; }
+  if (i.name === 'theme') S.theme = v;
+  else if (i.name === 'feelagent') { S.feelAgent = v; paint(); play($('.feel__stage .face'), 'greet'); return; }
+  else if (i.name === 'agent') { S.sel = v; renderLog(); paint(); mount($('#log-a')); play($('.look__preview .face'), 'greet'); return; }
+  else if (i.name === 'shape' || i.name === 'preset') {
+    const cur = info(S.sel);
+    S.looks[S.sel] = { preset: cur.preset, shape: cur.shape, [i.name]: v };
+    paint(); play($('.look__preview .face'), 'press'); return;
+  }
+  paint();
+});
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.classList && t.classList.contains('composer__ta')) onType(t);
+  else if (t.id === 'new-name-in') { S.newName = t.value; paint(); }
+});
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t.classList && t.classList.contains('composer__ta')) {
+    if (S.menu && S.menu.which === t.dataset.chat) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); const n = S.menu.ids.length;
+        S.menu.idx = (S.menu.idx + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
+        $$(`#menu-${S.menu.which} .menu__i`).forEach((b, i) => b.setAttribute('aria-selected', String(i === S.menu.idx)));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(S.menu.ids[S.menu.idx]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(t.dataset.chat); }
+  }
+});
+document.addEventListener('focusout', (e) => {
+  const t = e.target;
+  if (t.classList && t.classList.contains('composer__ta')) setTimeout(() => { if (!document.activeElement || !document.activeElement.closest('.composer')) closeMenu(); }, 120);
+});
+document.addEventListener('keyup', (e) => { if (e.target.classList && e.target.classList.contains('composer__ta') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) updateMenu(e.target); });
+mqReduce.addEventListener('change', (m) => { S.reduced = m.matches; paint(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) VIS.forEach((f) => { f._nb = 0; f._ng = 0; }); });
+
+buildPage();
+paint();
+})();
+</script>
+</body>
+</html>

@@ -31,6 +31,18 @@ A named worker running in Hermes, attached to a Company with a free name and spe
 The Company's default Agent, the one people talk to first, and the manager of the Company's team: it hands a job to the Agent that does it, offers to make an Agent for recurring or specialist work no Agent does, and does small one-off jobs itself. On a new Company it opens the first Conversation, with a few questions about the Company and the first Agents it proposes to make (Omar, 2026-11-20). The bundled Engine names it Lead; a Company has one at a time, and an Owner may make another of its Agents the main one. The Agent that was main when its Company moved to a profile per Agent keeps the Company's first profile, `co-<company id>`, with everything in it; every other Agent gets `ag-<agent id>`.
 _Avoid_: default bot, assistant, orchestrator
 
+**Look / شكل الوكيل**:
+An Agent's shape, colour and temperament, the same for everyone in its Company. It is given when the Agent is made and stays its own, after the Agent is removed too. Each of the three is automatic until an Owner picks it, and may be reset to automatic. Only an Owner changes it.
+_Avoid_: avatar, theme, skin, picture
+
+**Temperament / طبع**:
+The character an Agent's face carries: calm, energetic, warm, dreamy, neat or caring, shown by its eyes, its breath and the way it looks around. It changes nothing in how the Agent works or writes.
+_Avoid_: personality, mood, tone, soul
+
+**Expression / تعبير**:
+What an Agent's face shows of its state, as far as the reader may know it: idle, listening (the reader is typing to it), thinking, working, done, waiting on the reader, stuck (its last Run the reader can see failed; a person stopping it is not being stuck) or asleep (no work for 7 days).
+_Avoid_: emotion, mood, status icon
+
 **Agent request / طلب وكيل**:
 A Manager's or Contributor's ask for a new Agent, which the main Agent prepares in their Conversation and which waits in every Owner's "Waiting on you". An Owner makes it, exactly as when the Owner asks the main Agent, or says no with a reason that goes back to the Member's Conversation. Only an Owner makes Agents.
 _Avoid_: proposal, ticket
