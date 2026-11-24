@@ -16,9 +16,8 @@ const refresh = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh, replace: vi.fn(), prefetch: vi.fn() }) }));
 vi.mock('@/lib/link', () => ({ default: ({ onClick, ...props }: ComponentProps<'a'> & { replace?: boolean }) => <a {...Object.fromEntries(Object.entries(props).filter(([name]) => name !== 'replace'))} onClick={event => { onClick?.(event); event.preventDefault(); }}/> }));
 const fetchMock = vi.fn(async (_input:string|URL|Request, _init?:RequestInit) => new Response('{}', { status: 200 }));
-afterEach(() => { fetchMock.mockClear(); refresh.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => { fetchMock.mockReset(); fetchMock.mockImplementation(async () => new Response('{}', { status: 200 })); refresh.mockReset(); vi.unstubAllGlobals(); });
 
-const company = '10000000-0000-0000-0000-000000000001';
 const lead = '3a000000-0000-0000-0000-000000000011';
 const writer = '3a000000-0000-0000-0000-000000000021';
 const rule = 'من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها';
@@ -36,10 +35,14 @@ const data: CompanyLearning = {
  ],
  lessons: [],
 };
+// Each screen is its own Company, so a mode one test saved is never held over another's page (app/settings-saved.ts).
+let companies = 0;
+let company = '';
 const screen = (language:'en'|'ar' = 'en', { canManage = true, owner = true, value = data }: { canManage?: boolean, owner?: boolean, value?: CompanyLearning } = {}) => {
  vi.stubGlobal('fetch', fetchMock);
+ company = `10000000-0000-0000-0000-${String(++companies).padStart(12, '0')}`;
  return render(<LanguageProvider language={language}>
-  <LearningSection t={i18n(language).t} slug="rs-learning" company={company} canManage={canManage} owner={owner} data={value}/>
+  <LearningSection t={i18n(language).t} slug="rs-learning" company={company} canManage={canManage} owner={owner} data={value} readAt={Date.now()}/>
  </LanguageProvider>);
 };
 // Two rendering updates: long enough for the browser to drop the focus from a button that can no longer take it.
@@ -146,28 +149,72 @@ test('one Agent\'s mode is one Tab stop and the arrow keys move and select it; a
  await expect.element(auto).toHaveAttribute('aria-checked', 'true');
  expect(auto.element().tabIndex).toBe(0);
  expect(ask.element().tabIndex).toBe(-1);
- // The request is held open: the choice the arrow reached keeps the focus while it is sent (#588), and a second
- // press waits for the first.
- let answer!: (response:Response) => void;
- fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { answer = resolve; }));
+ // The request is held open: the choice the arrow reached is marked at once and keeps the focus (#588); a second press is
+ // marked at once too and sent once the first has answered, so the profile ends on the last choice (#663).
+ const answers: ((response:Response) => void)[] = [];
+ fetchMock.mockImplementation(() => new Promise<Response>(resolve => { answers.push(resolve); }));
  auto.element().focus();
  await userEvent.keyboard('{ArrowRight}');
  await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
  expect(await bodyOf(0)).toEqual({ company, agent: writer, mode: 'ask' });
+ await expect.element(ask).toHaveAttribute('aria-checked', 'true');
+ await expect.element(view.getByRole('status')).toHaveTextContent(i18n('en').t('settingsSaving'));
  await twoFrames();
  expect(document.activeElement?.id).toBe(`ln-${writer}-ask`);
- await expect.element(ask).toHaveAttribute('aria-disabled', 'true');
+ expect(ask.element().getAttribute('aria-disabled')).toBeNull();
  await userEvent.keyboard('{ArrowLeft}');
+ await expect.element(auto).toHaveAttribute('aria-checked', 'true');
  expect(fetchMock.mock.calls).toHaveLength(1);
- expect(document.activeElement?.id).toBe(`ln-${writer}-ask`);
- answer(new Response('{}', { status: 200 }));
- await expect.poll(() => refresh.mock.calls.length).toBe(1);
- await expect.element(ask).not.toHaveAttribute('aria-disabled');
+ expect(document.activeElement?.id).toBe(`ln-${writer}-auto`);
+ answers[0](new Response(JSON.stringify({ mode: 'ask', follows: false, savedAt: Date.now() }), { status: 200 }));
+ await expect.poll(() => fetchMock.mock.calls.length).toBe(2);
+ expect(await bodyOf(1)).toEqual({ company, agent: writer, mode: 'auto' });
+ answers[1](new Response(JSON.stringify({ mode: 'auto', follows: false, savedAt: Date.now() }), { status: 200 }));
+ await expect.element(view.getByRole('status')).not.toBeInTheDocument();
+ await expect.element(auto).toHaveAttribute('aria-checked', 'true');
+ expect(refresh).not.toHaveBeenCalled();
  await view.unmount();
  // A mode the screen does not know leaves the first choice as the group's one Tab stop.
- const unknown = await render(<LanguageProvider language="en"><AgentLearningMode company={company} agent={writer} labelId="ln-t" mode={null} follows={false}/></LanguageProvider>);
+ const unknown = await render(<LanguageProvider language="en"><AgentLearningMode agent={writer} labelId="ln-t" mode={null} follows={false} onChoose={() => {}}/></LanguageProvider>);
  expect(unknown.getByRole('radio', { name: 'Learns on its own' }).element().tabIndex).toBe(0);
  expect(unknown.getByRole('radio', { name: 'Asks first' }).element().tabIndex).toBe(-1);
+});
+
+// #663: a mode is marked at once with a "Saving" line and held on the page; nothing reads the page again.
+test('a Company mode shows on every Agent row it reached, and the Agent on its own mode keeps it, with no read of the page', async () => {
+ let answer!: (response:Response) => void;
+ fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { answer = resolve; }));
+ const view = await screen();
+ const leadRow = document.getElementById(`ln-ag-t-${lead}`)!.closest('.ln-ag')!;
+ const writerRow = document.getElementById(`ln-ag-t-${writer}`)!.closest('.ln-ag')!;
+ expect(leadRow.textContent).toContain('Asks first');
+ await companyModes(view).getByRole('radio', { name: /^Learns on its own/ }).click();
+ await expect.element(companyModes(view).getByRole('radio', { name: /^Learns on its own/ })).toHaveAttribute('aria-checked', 'true');
+ await expect.element(view.getByRole('status')).toHaveTextContent(i18n('en').t('settingsSaving'));
+ answer(new Response(JSON.stringify({ mode: 'auto', agents: [{ agent: lead, name: 'Lead', written: true }], space: true, savedAt: Date.now() }), { status: 200 }));
+ await expect.element(view.getByRole('status')).not.toBeInTheDocument();
+ await expect.poll(() => leadRow.querySelector('.panel-row__d')?.textContent).toBe('Learns on its own');
+ expect(writerRow.querySelector('.panel-row__d')?.textContent).toBe('Learns on its own');
+ // Both Agents now learn on their own, so the Company's card stays marked.
+ await expect.element(companyModes(view).getByRole('radio', { name: /^Learns on its own/ })).toHaveAttribute('aria-checked', 'true');
+ expect(refresh).not.toHaveBeenCalled();
+ // An Agent's own choice then makes the Company mixed, again with no read of the page.
+ await view.getByRole('radiogroup', { name: 'Writer' }).getByRole('radio', { name: 'Asks first', exact: true }).click();
+ await expect.poll(() => writerRow.querySelector('.panel-row__d')?.textContent).toBe('Asks first');
+ await expect.element(view.getByText(i18n('en').t('settingsLearnMixed'))).toBeVisible();
+ expect(companyModes(view).getByRole('radio').elements().every(element => element.getAttribute('aria-checked') === 'false')).toBe(true);
+ expect(refresh).not.toHaveBeenCalled();
+});
+
+test('a mode save that fails goes back to the mode held before it and says why', async () => {
+ fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ error: 'settingMismatch' }), { status: 502 }));
+ const view = await screen();
+ const writerModes = view.getByRole('radiogroup', { name: 'Writer' });
+ await writerModes.getByRole('radio', { name: 'Asks first', exact: true }).click();
+ await expect.element(view.getByRole('alert')).toHaveTextContent(i18n('en').t('settingsLearnModeFailed'));
+ await expect.element(writerModes.getByRole('radio', { name: 'Learns on its own', exact: true })).toHaveAttribute('aria-checked', 'true');
+ expect(document.getElementById(`ln-ag-t-${writer}`)!.closest('.ln-ag')!.querySelector('.panel-row__d')?.textContent).toBe('Learns on its own');
+ expect(refresh).not.toHaveBeenCalled();
 });
 
 test('a Company whose Agents disagree reads as mixed, and an Agent whose profile cannot be read says so', async () => {

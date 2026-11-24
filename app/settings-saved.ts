@@ -9,6 +9,8 @@ import { useRef, useState, useSyncExternalStore } from 'react';
 
 type Held={value:unknown,at:number};
 const held=new Map<string,Held>();
+// Bumped by every hold, so a control that reads many keys at once (useSavedEach) sees each new one.
+let version=0;
 const listeners=new Set<()=>void>();
 const subscribe=(listener:()=>void)=>{ listeners.add(listener); return ()=>{ listeners.delete(listener); }; };
 
@@ -16,14 +18,21 @@ const subscribe=(listener:()=>void)=>{ listeners.add(listener); return ()=>{ lis
 export function holdSaved(key:string,value:unknown,at:number) {
  const was=held.get(key);
  if(was&&was.at>at) return;
- held.set(key,{value,at});
+ held.set(key,{value,at}); version++;
  listeners.forEach(listener=>listener());
 }
 
+// The server's value, unless a save confirmed after the page was read (`readAt`) holds another.
+const shownOf=<T,>(entry:Held|undefined,server:T,readAt:number):T=>entry&&entry.at>readAt?entry.value as T:server;
 /** The value the page shows: the server's, unless a save confirmed after that page was read (`readAt`) holds another. */
 export function useSaved<T>(key:string,server:T,readAt:number):T {
- const entry=useSyncExternalStore(subscribe,()=>held.get(key),()=>undefined);
- return entry&&entry.at>readAt?entry.value as T:server;
+ return shownOf(useSyncExternalStore(subscribe,()=>held.get(key),()=>undefined),server,readAt);
+}
+
+/** useSaved for a list read together: each entry's server value, unless a save confirmed after `readAt` holds another. */
+export function useSavedEach<T>(entries:{key:string,server:T}[],readAt:number):T[] {
+ useSyncExternalStore(subscribe,()=>version,()=>0);
+ return entries.map(({key,server})=>shownOf(held.get(key),server,readAt));
 }
 
 export type Answer={ok:boolean,error:string,data:Record<string,unknown>|null};
