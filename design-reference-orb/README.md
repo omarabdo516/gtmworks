@@ -17,7 +17,7 @@ Open a file in a browser. Each has its own controls: language, theme, reduced mo
 | The pencil on the details' face (Owner), and any other Role's | 1, Where it opens from |
 | "Change its look" on a made Agent's card, and its birth | 1 |
 | The "Look" row in Settings | 1 |
-| The window | opens from any of those; 2 shows it for six Agents |
+| The window | opens from the Owner's pencil, "Change its look" and the Look row (another Role's face only hops); 2 shows it for six Agents |
 
 Where the build differs, by decision 0067 and ADR 0027:
 
@@ -26,3 +26,11 @@ Where the build differs, by decision 0067 and ADR 0027:
 - Greeting plays the first time a day on a device; "done" only for work that ended well in front of the reader.
 - In the second file, the editable Name in Settings and the "Won't do without asking you" line on the made Agent's card are the sample's, not approved.
 - A face near or behind the window once drew its glow cut off in a square in a headless browser; the build must not.
+
+Faults of the samples' own code, not to be copied (the files stay frozen):
+
+- "Done" picked in Feelings does not play its hop and sparkle; the build plays them.
+- A draft typed to another Agent while one finishes makes the wrong Agent listen; listening follows the Agent being written to.
+- Turning reduced motion on leaves a moment already playing, and a queued second blink; the build stops both.
+- The @ list tells a screen reader nothing about the active name, and the window's big preview cannot be pressed from the keyboard; the build does both.
+- Saves that answer out of order: a failed save may undo a newer good pick, and a failed reset may lose the shape and temperament kept before it. In the build an older answer never undoes a newer pick.
