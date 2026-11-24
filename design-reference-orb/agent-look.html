@@ -1,0 +1,1415 @@
+<!doctype html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>غيّر شكل الوكيل · O3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
+   Put this @layer first; product CSS outside the layer wins ordinary layout rules.
+   Native hidden and closed-dialog states take precedence over component display rules. */
+@layer od-layout {
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+  dialog:not([open]) { display: none !important; }
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-icon { display: inline-block; inline-size: var(--od-icon-size, 1em); block-size: var(--od-icon-size, 1em); flex: none; }
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-nowrap  { white-space: nowrap; }
+}
+:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
+/* ================= gtmworks tokens (tokens.css) ================= */
+:root {
+  --bg-chrome: #FCFCFC; --bg-sidebar: #F5F5F5; --bg-pane: #FFFFFF; --bg-elevated: #FFFFFF;
+  --bg-hover: #1C1C1C0F; --bg-active: #1C1C1C14; --bg-tertiary: #1C1C1C0F; --bg-subtle: #1C1C1C08;
+  --bg-secondary-hover: #1C1C1C1A; --bg-elevated-hover: #F1F1F1; --bg-active-solid: #E9E9E9; --bg-scrim: #00000066;
+  --text-1: #1C1C1C; --text-2: #1C1C1CB8; --text-3: #1C1C1CA3; --text-4: #1C1C1C80;
+  --border-1: #1C1C1C3D; --border-2: #1C1C1C1F; --border-3: #1C1C1C14;
+  --primary: #1C1C1C; --primary-hover: #363636; --on-primary: #FCFCFC; --primary-disabled: #1C1C1C26;
+  --btn-secondary-bg: #1C1C1C0F; --btn-secondary-ring: transparent; --btn-secondary-hover: #1C1C1C1A;
+  --bubble-agent: #1C1C1C0F; --bubble-user: #1C1C1C; --on-bubble-user: #FFFFFF;
+  --accent: #0F766E; --focus: #0F766E; --wait: #DA830E; --wait-text: #985500; --wait-bg: #F5931217;
+  --danger-text: #CD2834; --idle-dot: #B5B5B5;
+  --shadow-pill: #1C1C1C14 0 4px 12px -1px, #1C1C1C0A 0 1px 2px;
+  --shadow-composer: #0000000D 0 2px 8px -1px, #00000008 0 1px 2px;
+  --shadow-card: #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px;
+  --shadow-popover: #1C1C1C1A 0 10px 20px -3px, #1C1C1C14 0 4px 6px -4px;
+  --bubble-ring: #1C1C1C0F 0 0 0 0.5px inset;
+  --font: "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
+  --w-regular: 400; --w-strong: 600;
+  --fs-xs: 12px; --fs-sm: 13px; --fs-base: 14px; --fs-msg: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px;
+  --lh-ar: 1.7; --lh-ui: 1.5;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s10: 40px; --s12: 48px; --s16: 64px;
+  --r-xs: 6px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-bubble: 18px; --r-composer: 22px; --r-card: 24px; --r-full: 9999px;
+  --dur-fast: 150ms; --dur: 200ms; --dur-slow: 280ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1); --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  color-scheme: light;
+  /* face knobs, light canvas: soft glow, gentle rim, a real shadow under the orb */
+  --glow-k: .2; --rim-k: .42; --sh-l: .4; --sh-d: 0; --o1-glow: .2; --o1-rd: 0; --o1-rl: 1;
+}
+/* the same light values again, so a light panel can sit inside a dark page */
+[data-theme="light"] {
+  --bg-chrome: #FCFCFC; --bg-sidebar: #F5F5F5; --bg-pane: #FFFFFF; --bg-elevated: #FFFFFF;
+  --bg-hover: #1C1C1C0F; --bg-active: #1C1C1C14; --bg-tertiary: #1C1C1C0F; --bg-subtle: #1C1C1C08;
+  --bg-secondary-hover: #1C1C1C1A; --bg-elevated-hover: #F1F1F1; --bg-active-solid: #E9E9E9;
+  --text-1: #1C1C1C; --text-2: #1C1C1CB8; --text-3: #1C1C1CA3; --text-4: #1C1C1C80;
+  --border-1: #1C1C1C3D; --border-2: #1C1C1C1F; --border-3: #1C1C1C14;
+  --primary: #1C1C1C; --primary-hover: #363636; --on-primary: #FCFCFC; --primary-disabled: #1C1C1C26;
+  --btn-secondary-bg: #1C1C1C0F; --btn-secondary-ring: transparent; --btn-secondary-hover: #1C1C1C1A;
+  --bubble-agent: #1C1C1C0F; --bubble-user: #1C1C1C; --on-bubble-user: #FFFFFF;
+  --accent: #0F766E; --focus: #0F766E; --wait: #DA830E; --wait-text: #985500; --wait-bg: #F5931217; --idle-dot: #B5B5B5;
+  --shadow-pill: #1C1C1C14 0 4px 12px -1px, #1C1C1C0A 0 1px 2px;
+  --shadow-composer: #0000000D 0 2px 8px -1px, #00000008 0 1px 2px;
+  --shadow-card: #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px;
+  --shadow-popover: #1C1C1C1A 0 10px 20px -3px, #1C1C1C14 0 4px 6px -4px;
+  --bubble-ring: #1C1C1C0F 0 0 0 0.5px inset;
+  color-scheme: light;
+  --glow-k: .2; --rim-k: .42; --sh-l: .4; --sh-d: 0; --o1-glow: .2; --o1-rd: 0; --o1-rl: 1;
+}
+[data-theme="dark"] {
+  --bg-chrome: #121212; --bg-sidebar: #0E0E0E; --bg-pane: #161616; --bg-elevated: #1F1F1F;
+  --bg-hover: #F5F5F50F; --bg-active: #F5F5F514; --bg-tertiary: #F5F5F50F; --bg-subtle: #F5F5F505;
+  --bg-secondary-hover: #F5F5F51A; --bg-elevated-hover: #2C2C2C; --bg-active-solid: #262626; --bg-scrim: #000000B2;
+  --text-1: #F5F5F5; --text-2: #F5F5F5B8; --text-3: #F5F5F599; --text-4: #F5F5F58A;
+  --border-1: #F5F5F538; --border-2: #F5F5F51A; --border-3: #F5F5F50F;
+  --primary: #F5F5F5; --primary-hover: #DBDBDB; --on-primary: #121212; --primary-disabled: #F5F5F521;
+  --btn-secondary-bg: #F5F5F524; --btn-secondary-ring: #F5F5F55C; --btn-secondary-hover: #F5F5F533;
+  --bubble-agent: #F5F5F50F; --bubble-user: #F5F5F52E; --on-bubble-user: #FFFFFF;
+  --accent: #2CC3AE; --focus: #5EE0CC; --wait: #E8962A; --wait-text: #F0A443; --wait-bg: #F694121F;
+  --danger-text: #FF6463; --idle-dot: #5C5C5C;
+  --shadow-pill: #F5F5F51A 0 0 0 0.5px; --shadow-composer: #F5F5F51A 0 0 0 0.5px; --shadow-card: #F5F5F51A 0 0 0 0.5px;
+  --shadow-popover: #000000 0 10px 20px -3px, #F5F5F51A 0 0 0 0.5px;
+  --bubble-ring: #F5F5F50F 0 0 0 0.5px inset;
+  color-scheme: dark;
+  /* face knobs, dark canvas: the glow carries the light, the rim is a bright hairline,
+     and the floor shows a coloured pool of light instead of a dark shadow */
+  --glow-k: .5; --rim-k: 1; --sh-l: .7; --sh-d: .34; --o1-glow: .55; --o1-rd: 1; --o1-rl: 0;
+}
+
+/* ================= base ================= */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--font); font-size: var(--fs-base); line-height: 1.6; font-weight: var(--w-regular);
+  color: var(--text-1); background: var(--bg-chrome); -webkit-font-smoothing: antialiased;
+}
+html[lang="en"] body { font-family: "IBM Plex Sans", var(--font); }
+bdi { unicode-bidi: isolate; }
+button, input, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+[data-theme] { color: var(--text-1); }
+
+.page { max-width: 1200px; margin: 0 auto; padding: var(--s8) var(--s8) var(--s16); }
+@media (max-width: 1023px) { .page { padding-inline: var(--s5); } }
+@media (max-width: 767px) { .page { padding: var(--s6) var(--s4) var(--s12); } }
+
+/* ---------- top bar ---------- */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s5) var(--s8); padding-bottom: var(--s6); border-bottom: 0.5px solid var(--border-2); }
+.top__k { margin: 0 0 var(--s1); font-size: var(--fs-xs); color: var(--text-3); }
+.top__t { margin: 0; font-size: var(--fs-xl); font-weight: var(--w-strong); line-height: 1.4; }
+.top__sub { margin: var(--s1) 0 0; max-width: 64ch; color: var(--text-2); line-height: var(--lh-ar); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s5); }
+.ctl { display: flex; align-items: center; gap: var(--s2); }
+.ctl__label { font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r-full); background: var(--bg-pane); box-shadow: var(--border-2) 0 0 0 0.5px inset; border: 0; margin: 0; min-width: 0; }
+.seg label { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border-radius: var(--r-full); font-size: var(--fs-sm); color: var(--text-2); cursor: pointer; white-space: nowrap; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg label:has(input:checked) { background: var(--bg-tertiary); color: var(--text-1); font-weight: var(--w-strong); }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) { .seg label:hover { color: var(--text-1); } }
+
+.switch { display: inline-flex; align-items: center; width: 32px; height: 20px; padding: 2px; flex: none; border-radius: var(--r-full); background: var(--border-1); transition: background-color var(--dur-fast) var(--ease-out); }
+.switch::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF; box-shadow: #1C1C1C1F 0 1px 3px; transition: transform var(--dur) var(--ease-out); }
+.switch[aria-checked="true"] { background: var(--primary); }
+.switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--bg-pane); }
+[dir="ltr"] .switch[aria-checked="true"]::after { transform: translateX(12px); }
+[data-theme="dark"] .switch[aria-checked="true"]::after { background: #121212; }
+.sw-hit { display: inline-flex; align-items: center; gap: var(--s2); min-height: 40px; cursor: pointer; font-size: var(--fs-sm); color: var(--text-1); }
+
+/* ---------- sections ---------- */
+.sec { padding-top: var(--s12); }
+.sec__head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s3) var(--s6); margin-bottom: var(--s4); }
+.sec__n { display: block; font-size: var(--fs-xs); color: var(--text-3); }
+.sec__t { margin: 0; font-size: var(--fs-msg); font-weight: var(--w-strong); line-height: 1.5; }
+.sec__sub { margin: 2px 0 0; max-width: 70ch; font-size: var(--fs-sm); line-height: var(--lh-ar); color: var(--text-2); }
+.sub-h { margin: var(--s8) 0 var(--s3); font-size: var(--fs-base); font-weight: var(--w-strong); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
+@media (max-width: 767px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+.canvas { background: var(--bg-sidebar); border-radius: var(--r-lg); box-shadow: var(--border-3) 0 0 0 0.5px inset; padding: var(--s4); --ring: var(--bg-sidebar); min-width: 0; }
+.canvas__tag { margin: 0; font-size: var(--fs-xs); color: var(--text-3); }
+
+/* buttons (gtmworks 6.1) */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 16px; border-radius: var(--r-full); font-size: var(--fs-base); font-weight: var(--w-strong); white-space: nowrap; transition: background-color var(--dur-fast) var(--ease-out); }
+.btn--primary { background: var(--primary); color: var(--on-primary); }
+.btn--secondary { background: var(--btn-secondary-bg); color: var(--text-1); box-shadow: var(--btn-secondary-ring) 0 0 0 1px inset; }
+@media (hover: hover) { .btn--primary:hover { background: var(--primary-hover); } .btn--secondary:hover { background: var(--btn-secondary-hover); } }
+.link-btn { min-height: 32px; padding: 2px 8px; border-radius: var(--r-xs); font-size: var(--fs-sm); color: var(--text-2); }
+@media (hover: hover) { .link-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-1); } }
+.link-btn:disabled { color: var(--text-4); cursor: default; }
+
+/* chips (gtmworks 6.2): pressed = solid ink */
+.chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.chip { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding-inline: 12px 14px; border-radius: var(--r-full); background: var(--bg-pane); box-shadow: var(--border-2) 0 0 0 0.5px inset; font-size: var(--fs-sm); white-space: nowrap; cursor: pointer; --ring: var(--bg-pane); transition: background-color var(--dur-fast) var(--ease-out); }
+.chip--face { padding-inline: 6px 14px; }
+.chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+@media (hover: hover) { .chip:hover { background: var(--bg-elevated-hover); --ring: var(--bg-elevated-hover); } }
+.chip[aria-pressed="true"], .chip:has(input:checked) { background: var(--primary); color: var(--on-primary); box-shadow: none; --ring: var(--primary); }
+@media (hover: hover) { .chip[aria-pressed="true"]:hover, .chip:has(input:checked):hover { background: var(--primary-hover); --ring: var(--primary-hover); } }
+.chip:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* status dots (gtmworks 6.2), one look per product state */
+.dot { position: relative; display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--idle-dot); }
+.dot--thinking, .dot--working { background: var(--accent); }
+.dot--working::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--accent); animation: dotPing 1.6s var(--ease-out) infinite; }
+@keyframes dotPing { 0% { transform: scale(1); opacity: .55; } 80%, 100% { transform: scale(2.4); opacity: 0; } }
+.dot--done { background: var(--text-1); }
+.dot--waiting { background: var(--wait); }
+.dot--stuck { background: var(--ring, var(--bg-chrome)); box-shadow: inset 0 0 0 2px var(--text-1); }
+.dot--asleep { background: var(--ring, var(--bg-chrome)); box-shadow: inset 0 0 0 2px var(--idle-dot); }
+.fw { position: relative; display: inline-flex; flex: none; }
+.fw > .dot { position: absolute; bottom: 1px; inset-inline-end: 1px; z-index: 4; box-shadow: 0 0 0 2.5px var(--ring, var(--bg-chrome)); }
+.fw > .dot--stuck { box-shadow: inset 0 0 0 2px var(--text-1), 0 0 0 2.5px var(--ring, var(--bg-chrome)); }
+.fw > .dot--asleep { box-shadow: inset 0 0 0 2px var(--idle-dot), 0 0 0 2.5px var(--ring, var(--bg-chrome)); }
+.fw--lg > .dot { width: 12px; height: 12px; bottom: 4px; inset-inline-end: 4px; box-shadow: 0 0 0 3px var(--ring, var(--bg-chrome)); }
+.fw--lg > .dot--stuck { box-shadow: inset 0 0 0 2.5px var(--text-1), 0 0 0 3px var(--ring, var(--bg-chrome)); }
+.fw--lg > .dot--asleep { box-shadow: inset 0 0 0 2.5px var(--idle-dot), 0 0 0 3px var(--ring, var(--bg-chrome)); }
+.face-btn { display: inline-flex; border-radius: 50%; }
+
+/* =====================================================================
+   THE FACE
+   Layers, outside in: floor shadow · act (one-off moments) · pose (state posture)
+   · breath (personality loop) · glow · glass body (deep gradient, flowing colour,
+   inner light, volume shade, swirl, veil, specular, rim) · eyes.
+   Only transform and opacity animate. Under 24px: a still orb with eyes.
+   ===================================================================== */
+.face {
+  --ew: max(2px, calc(var(--s) * var(--eW, .088)));
+  --eh: max(4px, calc(var(--s) * var(--eH, .2)));
+  /* expression knobs: states and moments only change these */
+  --lk: .6; --gk: 1; --sx: 0; --sy: var(--sy0, 0);
+  --eSX: 1; --eSY: 1; --eOpen: 1; --eHappy: 0; --eSleep: 0;
+  --clL: var(--clL0, polygon(-40% -40%, 140% -40%, 140% 140%, -40% 140%));
+  --clR: var(--clR0, polygon(-40% -40%, 140% -40%, 140% 140%, -40% 140%));
+  --core: 1; --gs: 1; --swk: 0; --veil: 0; --veilc: #2B2E3A;
+  position: relative; display: block; flex: none; width: var(--s); height: var(--s);
+  direction: ltr; transition: transform var(--dur) var(--ease-out);
+}
+.face .l, .face i { position: absolute; display: block; pointer-events: none; }
+.f-act, .f-pose, .f-breath { position: absolute; inset: 0; }
+.f-pose { transform-origin: 50% 90%; transition: transform 360ms var(--ease-out); }
+.f-breath { transform-origin: 50% 92%; animation: var(--bn, fBreath) var(--br, 5s) ease-in-out var(--d, 0s) infinite; }
+@keyframes fBreath {
+  0%, 100% { transform: translateY(0) rotate(calc(var(--sw, 0) * -1deg)) scale(1, 1); }
+  50% { transform: translateY(calc(var(--s) * var(--bb, .01) * -1)) rotate(calc(var(--sw, 0) * 1deg)) scale(calc(1 + var(--ba, .02) * .5), calc(1 + var(--ba, .02))); }
+}
+@keyframes fBounce {
+  0%, 100% { transform: translateY(0) scale(1.025, .975); }
+  14% { transform: translateY(0) scale(1, 1); }
+  46% { transform: translateY(calc(var(--s) * var(--bb, .04) * -1)) scale(.99, 1.02); }
+  78% { transform: translateY(0) scale(1, 1); }
+  88% { transform: translateY(0) scale(1.03, .97); }
+}
+
+/* floor: a dark contact shadow on light, a coloured pool of light on dark */
+.f-shadow { left: 17%; right: 17%; top: 97%; height: 15%; }
+.f-shadow::before, .f-shadow::after { content: ""; position: absolute; border-radius: 50%; }
+.f-shadow::before { inset: 0; background: radial-gradient(closest-side, color-mix(in srgb, var(--c4) 55%, #000) 0%, color-mix(in srgb, var(--c4) 20%, transparent) 60%, transparent 100%); opacity: var(--sh-l); }
+.f-shadow::after { inset: -40% -18%; background: radial-gradient(closest-side, var(--c2) 0%, color-mix(in srgb, var(--c2) 30%, transparent) 55%, transparent 100%); opacity: var(--sh-d); }
+
+.f-glow {
+  inset: calc(-30% * var(--pres, 1)); border-radius: 50%;
+  background: radial-gradient(closest-side, var(--c2) 50%, color-mix(in srgb, var(--c2) 45%, transparent) 64%, transparent 100%);
+  opacity: calc(var(--glow-k) * var(--gs) * var(--pres, 1));
+  transition: opacity 500ms var(--ease-out);
+}
+@keyframes glowPulse { from { transform: scale(.94); } to { transform: scale(1.1); } }
+
+.f-body { position: absolute; inset: 0; overflow: hidden; border-radius: 50%; background: var(--c3); isolation: isolate; }
+.face:not([data-shape="circle"]) .f-body { border-radius: 0; -webkit-mask: var(--mask) center / 100% 100% no-repeat; mask: var(--mask) center / 100% 100% no-repeat; }
+.face[data-shape="squircle"] { --mask: var(--mask-squircle); }
+.face[data-shape="blob"] { --mask: var(--mask-blob); }
+.f-base { inset: 0; background: linear-gradient(158deg, var(--c1) 8%, var(--c2) 42%, var(--c3) 72%, var(--c4) 100%); }
+/* flowing colour: one oversized layer carries a light blob (top) and a deep blob (bottom) and turns slowly,
+   so the colour moves inside the glass with a single cheap animation */
+.f-flows { inset: -25%; border-radius: 50%;
+  background:
+    radial-gradient(30% 30% at 24% 20%, color-mix(in srgb, var(--c1) 86%, #fff) 0%, color-mix(in srgb, var(--c1) 60%, transparent) 45%, transparent 100%),
+    radial-gradient(34% 34% at 76% 80%, var(--c4) 0%, color-mix(in srgb, var(--c4) 55%, transparent) 45%, transparent 100%),
+    radial-gradient(26% 26% at 82% 30%, color-mix(in srgb, var(--c2) 80%, var(--c1)) 0%, transparent 100%);
+  opacity: calc(.55 + var(--flk, .55) * .45);
+  animation: fFlow var(--fl, 12s) ease-in-out var(--d, 0s) infinite alternate both; }
+@keyframes fFlow { from { transform: translate(-6%, -3%) rotate(-24deg); } to { transform: translate(6%, 5%) rotate(34deg); } }
+/* inner light: glows up from the lower core, like light caught inside glass */
+.f-core { inset: 0; background: radial-gradient(62% 34% at 50% 98%, color-mix(in srgb, var(--c1) 55%, #fff) 0%, color-mix(in srgb, var(--c1) 70%, transparent) 38%, transparent 100%), radial-gradient(46% 40% at 50% 62%, color-mix(in srgb, var(--c1) 50%, transparent) 0%, transparent 100%); opacity: calc(.62 * var(--core) * var(--pres, 1)); transition: opacity 500ms var(--ease-out); }
+.f-shade { inset: 0; background: radial-gradient(circle at 40% 30%, transparent 58%, color-mix(in srgb, var(--c4) 32%, transparent) 84%, color-mix(in srgb, var(--c4) 62%, transparent) 100%); }
+.f-swirl { inset: 5%; border-radius: 50%; opacity: var(--swk); transition: opacity 420ms var(--ease-out);
+  background: conic-gradient(from 0deg, transparent 0 8%, color-mix(in srgb, var(--c1) 70%, #fff) 24%, transparent 40% 58%, var(--c1) 76%, transparent 92%);
+  -webkit-mask: radial-gradient(closest-side, transparent 30%, #000 54%, #000 68%, transparent 94%); mask: radial-gradient(closest-side, transparent 30%, #000 54%, #000 68%, transparent 94%); }
+.f-veil { inset: 0; background: var(--veilc); opacity: var(--veil); transition: opacity 500ms var(--ease-out); }
+/* specular: leans a little toward the pointer, like a light source */
+.f-specs { position: absolute; inset: 0; transform: translate(calc(var(--lx, 0) * var(--s) * .07), calc(var(--ly, 0) * var(--s) * .05)); transition: transform 420ms var(--ease-out); }
+.f-spec { top: 3%; left: 12%; width: 62%; height: 30%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.34), rgba(255,255,255,.1) 60%, rgba(255,255,255,0)); transform: rotate(-16deg); }
+.f-spec2 { top: 11%; left: 27%; width: 13%; height: 7%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.95), rgba(255,255,255,0)); transform: rotate(-24deg); }
+.f-rim { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.f-rim use { fill: none; stroke: url(#rimLight); stroke-width: 2; opacity: var(--rim-k); }
+.face--big .f-rim use { stroke-width: 3; }
+
+/* eyes: all feeling lives here */
+.f-eyes {
+  position: absolute; left: var(--eX, 50%); top: var(--eYp, 41%); width: 0; height: 0; z-index: 2;
+  transform: translate(
+    calc((var(--lx, 0) * var(--lk) + var(--gx, 0) * var(--gk) + var(--sx)) * var(--s) * .065),
+    calc((var(--ly, 0) * var(--lk) + var(--gy, 0) * var(--gk) + var(--sy)) * var(--s) * .06));
+  transition: transform var(--gd, 300ms) var(--ease-out);
+}
+.f-gaze { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.f-eye { position: absolute; top: calc(var(--eh) / -2); width: var(--ew); height: var(--eh); }
+.f-eye--l { left: calc(var(--s) * var(--eG, .185) * -1 - var(--ew) / 2); }
+.f-eye--r { left: calc(var(--s) * var(--eG, .185) - var(--ew) / 2); }
+.e-open {
+  position: absolute; inset: 0; border-radius: var(--eR, 999px); background: #FFFFFF; opacity: var(--eOpen);
+  box-shadow: 0 0 calc(var(--s) * .05) color-mix(in srgb, var(--c4) 45%, transparent);
+  transition: transform 260ms var(--ease-out), clip-path 260ms var(--ease-out), opacity 140ms linear;
+}
+.f-eye--l .e-open { transform: rotate(var(--eT, 0deg)) scale(var(--eSX), var(--eSY)); clip-path: var(--clL); }
+.f-eye--r .e-open { transform: rotate(calc(var(--eT, 0deg) * -1)) scale(var(--eSX), var(--eSY)); clip-path: var(--clR); }
+.e-arc { position: absolute; left: 50%; top: 50%; width: max(5px, calc(var(--ew) * 2.1)); height: max(5px, calc(var(--ew) * 2.1)); transform: translate(-50%, -50%); overflow: visible; }
+.e-arc path { fill: none; stroke: #FFFFFF; stroke-width: 5; stroke-linecap: round; transition: opacity 140ms linear; }
+.e-happy { opacity: var(--eHappy); }
+.e-sleep { opacity: var(--eSleep); }
+
+/* moments: birth light and done sparkle */
+.f-gather { display: none !important; inset: -46%; border-radius: 50%; opacity: 0; background: radial-gradient(closest-side, transparent 50%, color-mix(in srgb, var(--c1) 70%, #fff) 63%, color-mix(in srgb, var(--c2) 40%, transparent) 72%, transparent 86%); }
+.face.is-birth .f-gather { display: block !important; }
+.f-spark { position: absolute; inset: -20%; pointer-events: none; }
+.f-spark i { width: 16%; height: 16%; opacity: 0; background: linear-gradient(135deg, #FFFFFF 10%, var(--c1) 90%); clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); }
+.f-spark i:nth-child(1) { top: 2%; right: 8%; }
+.f-spark i:nth-child(2) { top: 26%; right: -4%; width: 10%; height: 10%; }
+.f-spark i:nth-child(3) { top: 0; left: 14%; width: 11%; height: 11%; }
+
+/* ---------- states: each one is a set of knob values plus a posture ---------- */
+.face[data-state="listening"] { --lk: .15; --gk: 0; --sy: .62; --eSX: 1.14; --eSY: 1.16; --core: 1.2; --gs: 1.25; }
+.face[data-state="listening"] .f-pose { transform: translateY(4%) scale(1.06); }
+.face[data-state="thinking"] { --lk: 0; --gk: 0; --sy: -.78; --eSX: .92; --eSY: .92; --swk: .55; --core: 1.25; --gs: 1.4; }
+.face[data-state="thinking"] .f-gaze { animation: gazeDrift 2.6s ease-in-out infinite alternate; }
+.face[data-state="thinking"] .f-swirl { animation: spin 3.4s linear infinite; }
+.face[data-state="working"] { --lk: 0; --gk: 0; --sy: .22; --eSX: 1.06; --eSY: .86; --swk: .8; --core: 1.5; --gs: 2.1;
+  --clL: polygon(-40% 20%, 140% 24%, 140% 140%, -40% 140%); --clR: polygon(-40% 24%, 140% 20%, 140% 140%, -40% 140%); }
+.face[data-state="working"] .f-swirl { animation: spin 1.5s linear infinite; }
+.face[data-state="working"] .f-glow { animation: glowPulse 1.3s ease-in-out infinite alternate; }
+.face[data-state="done"] { --lk: .4; --gk: 0; --eOpen: 0; --eHappy: 1; --core: 1.3; --gs: 1.6; }
+.face[data-state="waiting"] { --lk: 0; --gk: 0; --sx: 0; --sy: 0; --eSX: 1.08; --eSY: 1.08; --gs: 1.2; }
+.face[data-state="waiting"] .f-pose { animation: nudge 3.6s ease-in-out infinite; }
+.face[data-state="stuck"] { --lk: 0; --gk: 0; --sy: .32; --eSX: .96; --eSY: .94; --veil: .34; --veilc: #2B2E3A; --core: .55; --gs: .45;
+  --clL: polygon(-40% 46%, 140% 0%, 140% 140%, -40% 140%); --clR: polygon(-40% 0%, 140% 46%, 140% 140%, -40% 140%); }
+.face[data-state="stuck"] .f-pose { transform: rotate(-6deg) translateY(3%); }
+.face[data-state="asleep"] { --lk: 0; --gk: 0; --sy: .22; --eOpen: 0; --eSleep: 1; --veil: .26; --veilc: #8E93A8; --core: .5; --gs: .3; }
+.face[data-state="asleep"] .f-pose { transform: translateY(5%) scale(.985, .96); }
+@keyframes gazeDrift { from { transform: translate(calc(var(--s) * -.035), 0); } to { transform: translate(calc(var(--s) * .035), calc(var(--s) * -.014)); } }
+@keyframes spin { to { transform: rotate(1turn); } }
+@keyframes nudge {
+  0%, 72%, 100% { transform: none; }
+  78% { transform: translateY(-9%) scale(.97, 1.04); }
+  84% { transform: translateY(0) scale(1.05, .95); }
+  90% { transform: translateY(-3%) scale(1, 1); }
+  95% { transform: none; }
+}
+/* moment overlays, set briefly by script (they win over the state) */
+.face.is-wide { --eSX: 1.22; --eSY: 1.24; }
+.face.is-look { --lk: 0; --gk: 0; --sx: 0; --sy: 0; }
+.face.is-up { --sy: -.32; }
+.face.is-squint { --eOpen: 0; --eHappy: 1; --eSleep: 0; }
+.face.is-shut { --eOpen: 0; --eHappy: 0; --eSleep: 1; }
+
+/* under 24px: still orb with eyes, no glow, no motion */
+.face--still, .face--still * { animation: none !important; }
+.face--still .f-eyes { transition: none; }
+/* faces off screen stop moving */
+.face--live:not(.is-vis) * { animation-play-state: paused !important; }
+/* reduced motion: nothing moves; expressions still change as still frames */
+.is-reduced .face, .is-reduced .face *, .is-reduced .o1 * { animation: none !important; transition: none !important; }
+.is-reduced .dot--working::after { animation: none; display: none; }
+.is-reduced .breathe { animation: none !important; }
+
+/* =====================================================================
+   O3 · «غيّر الشكل»: the dialog and the places that open it.
+   Everything below comes from the approved prototype (index.html): the same
+   tokens, radii, buttons, toast, details panel, made-Agent card, settings rows
+   and motion. The face above is O2, unchanged.
+   ===================================================================== */
+:root, [data-theme="light"] { --shadow-modal: #1C1C1C1A 0 20px 32px -5px, #1C1C1C1A 0 8px 12px -6px; --sys-fg: #17181a; }
+[data-theme="dark"] { --shadow-modal: #000000 0 20px 32px -5px, #F5F5F51A 0 0 0 0.5px; --sys-fg: #F5F5F5; }
+:root { --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px); }
+html.is-embed { --safe-t: 50px; --safe-b: 29px; scrollbar-width: none; }
+html.is-embed::-webkit-scrollbar, html.is-embed .lk-body::-webkit-scrollbar { display: none; }
+html.is-embed .lk-body { scrollbar-width: none; }
+.page { max-width: 1280px; }
+html.is-embed .page { padding-top: calc(var(--safe-t) + var(--s2)); }
+html.is-embed .sec:first-child { padding-top: var(--s4); }
+
+/* motion, from index.html */
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes modalOut { to { opacity: 0; transform: translateY(4px); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes toastOut { to { opacity: 0; transform: translate(-50%, -4px); } }
+@keyframes spot { 0%, 45% { box-shadow: 0 0 0 2px var(--text-1); } 100% { box-shadow: 0 0 0 2px transparent; } }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes sheetDown { to { transform: translateY(100%); } }
+
+/* buttons from index.html */
+.btn { height: 36px; min-height: 0; padding: 0 var(--s4); }
+.btn--sm { height: 30px; padding: 0 var(--s3); font-size: var(--fs-sm); }
+.btn--primary:disabled, .btn--secondary:disabled { background: var(--primary-disabled); color: var(--text-4); box-shadow: none; cursor: default; }
+.link-btn { display: inline-flex; align-items: center; gap: 4px; --od-icon-size: 14px; }
+.circle-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: none; border-radius: var(--r-full); background: var(--bg-pane); box-shadow: var(--border-3) 0 0 0 0.5px inset, var(--border-3) 0 0 0 0.5px; color: var(--text-1); --od-icon-size: 18px; transition: background-color var(--dur-fast) var(--ease-out); }
+@media (hover: hover) { .circle-btn:hover { background: var(--bg-elevated-hover); } }
+.ib { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 36px; padding: 0 9px; flex: none; border-radius: var(--r-full); color: var(--text-2); --od-icon-size: 18px; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.ib::before { content: ""; position: absolute; inset: -4px; }
+@media (hover: hover) { .ib:hover { background: var(--bg-hover); color: var(--text-1); } }
+.badge { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; height: 22px; padding: 0 var(--s2); border-radius: var(--r-full); font-size: var(--fs-xs); background: var(--bg-tertiary); color: var(--text-1); --od-icon-size: 13px; white-space: nowrap; }
+.badge--made { background: var(--primary); color: var(--on-primary); font-weight: var(--w-strong); }
+/* keyboard rings only after keys; a click or tap keeps just the chosen look */
+html[data-input="pointer"] :is(.lk, .places, .lk-dlg) :focus-visible { outline: none; }
+
+/* frame: the page's own controls (as O2) */
+.controls .seg { flex: none; }
+.sw-hit { white-space: nowrap; }
+.sec__head .chips { justify-content: flex-end; }
+@media (max-width: 599px) { .ctl--width { display: none; } .sec__head .chips { justify-content: flex-start; } }
+.cap { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); min-height: 32px; margin: 0; font-size: var(--fs-xs); color: var(--text-3); }
+.cap .link-btn { font-size: var(--fs-xs); }
+
+/* ================= the places ================= */
+.places { display: grid; grid-template-columns: minmax(0, 656px) minmax(0, 1fr); gap: var(--s6) var(--s4); align-items: start; }
+.place { display: grid; gap: var(--s2); min-width: 0; align-content: start; }
+.places__col { display: grid; gap: var(--s6); min-width: 0; align-content: start; }
+.dp-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
+@media (max-width: 1120px) { .places { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 699px) { .dp-pair { grid-template-columns: minmax(0, 1fr); } }
+
+/* details panel (index.html · details) */
+.dp { background: var(--bg-chrome); border-radius: var(--r-lg); box-shadow: var(--border-2) 0 0 0 0.5px inset; --ring: var(--bg-chrome); min-width: 0; padding-bottom: var(--s4); }
+.dp-top { display: flex; align-items: center; justify-content: flex-end; height: var(--s16); padding: var(--s3); }
+.dp-id { display: flex; flex-direction: column; align-items: center; gap: var(--s3); padding: var(--s1) var(--s4) var(--s3); text-align: center; }
+.dp-id > div { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.dp-id__name { display: inline-flex; align-items: center; gap: var(--s2); font-size: var(--fs-lg); font-weight: var(--w-strong); line-height: 1.4; max-width: 100%; }
+.dp-id__name bdi { min-width: 0; overflow-wrap: anywhere; }
+.dp-id__badge { font-weight: var(--w-regular); }
+.dp-id__role { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0 4px; font-size: var(--fs-sm); line-height: 1.5; color: var(--text-2); }
+.dp-face { position: relative; margin-bottom: var(--s1); }
+.dp-face::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; }
+/* the Owner's pencil: always there, at the corner across from the state dot */
+.fw > .pen { position: absolute; bottom: 2px; inset-inline-start: 2px; z-index: 4; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--bg-pane); color: var(--text-1); box-shadow: 0 0 0 2.5px var(--ring, var(--bg-chrome)), var(--border-1) 0 0 0 0.5px inset; --od-icon-size: 13px; pointer-events: none; }
+.segmented { display: flex; justify-content: center; gap: 2px; padding: var(--s1) var(--s4) 10px; }
+.segmented > span { padding: 4px 10px; border-radius: var(--r-full); font-size: var(--fs-sm); line-height: 18px; color: var(--text-2); white-space: nowrap; }
+.segmented > .is-on { background: var(--bg-tertiary); color: var(--text-1); }
+.dp-sections { display: flex; flex-direction: column; gap: 10px; padding: 10px var(--s4) 0; }
+.dp-label { margin: 0; padding-inline: var(--s3) 6px; font-size: var(--fs-sm); color: var(--text-2); }
+.panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--r-md); background: var(--bg-pane); border: 0.5px solid var(--border-3); margin: 0; }
+.panel-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px var(--s2); border-radius: var(--r-sm); }
+.panel-row__text { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
+.panel-row__t { font-size: var(--fs-sm); line-height: 1.5; color: var(--text-1); overflow-wrap: anywhere; }
+.panel-row__d { font-size: var(--fs-xs); line-height: 1.5; color: var(--text-3); }
+
+/* chat with the made-Agent card (index.html · chat, cards) */
+.chatm { display: grid; background: var(--bg-chrome); border-radius: var(--r-lg); box-shadow: var(--border-2) 0 0 0 0.5px inset; --ring: var(--bg-chrome); min-width: 0; }
+.chatm__head { display: flex; justify-content: center; align-items: center; height: var(--s16); padding: 0 var(--s4); }
+.head-pill { display: inline-flex; align-items: center; gap: var(--s2); max-width: 100%; min-height: 44px; padding-inline: 7px 14px; border-radius: var(--r-full); background: var(--bg-pane); box-shadow: var(--border-3) 0 0 0 0.5px inset, var(--shadow-pill); font-size: var(--fs-base); --ring: var(--bg-pane); }
+.head-pill__name { font-weight: var(--w-strong); white-space: nowrap; }
+.chatm__log { display: flex; flex-direction: column; gap: var(--s6); padding: var(--s2) var(--s6) var(--s6); min-width: 0; }
+@media (max-width: 599px) { .chatm__log { padding-inline: var(--s4); } }
+.divider { align-self: center; font-size: var(--fs-xs); color: var(--text-3); }
+.turn { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s2); width: 100%; min-width: 0; }
+.turn--user { align-items: flex-end; }
+.sender { display: flex; align-items: center; gap: 6px; padding-inline-start: 4px; font-size: var(--fs-xs); line-height: 16px; color: var(--text-2); }
+.bubble { max-width: min(460px, 100%); padding: 8px 14px; border-radius: var(--r-bubble); font-size: var(--fs-msg); line-height: var(--lh-ar); box-shadow: var(--bubble-ring); overflow-wrap: anywhere; }
+.bubble--agent { background: var(--bubble-agent); color: var(--text-1); border-end-start-radius: 6px; }
+.bubble--user { background: var(--bubble-user); color: var(--on-bubble-user); border-end-end-radius: 6px; box-shadow: none; }
+.card { width: 100%; max-width: 100%; background: var(--bg-pane); border-radius: var(--r-card); box-shadow: var(--shadow-card); display: flex; flex-direction: column; overflow: clip; --ring: var(--bg-pane); }
+.hcard__top { padding: var(--s4) var(--s4) 0; }
+.card__head { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4) var(--s1); }
+.card__titles { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; padding: 2px 0; }
+.card__title { font-size: var(--fs-base); font-weight: var(--w-strong); line-height: 1.5; }
+.card__sub { font-size: var(--fs-sm); line-height: 1.6; color: var(--text-2); }
+.kv { margin: var(--s3) var(--s4) 0; padding: 2px 0; border-top: 1px solid var(--border-3); border-bottom: 1px solid var(--border-3); }
+.kv__row { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: var(--s3); padding: var(--s2) 0; font-size: var(--fs-sm); line-height: 1.7; }
+.kv__row + .kv__row { border-top: 1px solid var(--border-3); }
+.kv dt { color: var(--text-2); }
+.kv dd { margin: 0; color: var(--text-1); overflow-wrap: anywhere; }
+@media (max-width: 599px) { .kv__row { grid-template-columns: 96px minmax(0, 1fr); } }
+.ac-never { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ac-never li { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 var(--s2); border-radius: var(--r-full); background: var(--bg-tertiary); font-size: var(--fs-xs); color: var(--text-1); --od-icon-size: 13px; }
+.ac-never .od-icon { color: var(--text-2); }
+.card__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2) var(--s3); padding: 14px var(--s4) var(--s4); }
+.ac-actions .btn { flex: 0 1 auto; padding-inline: var(--s5); }
+.ac-look { min-height: 36px; padding-inline: var(--s2); }
+.ac-tip { display: flex; align-items: center; gap: 6px; margin: -6px 0 0; padding: 0 var(--s4) var(--s4); font-size: var(--fs-xs); line-height: 1.5; color: var(--text-3); --od-icon-size: 13px; }
+
+/* settings · the Agent's page (index.html · settings overlay) */
+.setm { background: var(--bg-chrome); border-radius: var(--r-lg); box-shadow: var(--border-2) 0 0 0 0.5px inset; overflow: hidden; --ring: var(--bg-pane); }
+.setm.is-spot { animation: spot 1.6s var(--ease-out); }
+.sov-bar { display: flex; align-items: center; gap: var(--s2); min-height: 56px; padding-block: var(--s2); padding-inline: var(--s6) var(--s3); border-bottom: 0.5px solid var(--border-3); }
+.sov-crumbs ol { display: flex; align-items: center; gap: var(--s2); margin: 0; padding: 0; list-style: none; min-width: 0; font-size: var(--fs-base); line-height: 1.5; }
+.sov-crumbs li { display: flex; align-items: center; gap: var(--s2); min-width: 0; color: var(--text-3); white-space: nowrap; }
+.sov-crumbs li + li::before { content: "/"; color: var(--text-4); }
+.sov-crumb__cur { margin: 0; font-size: var(--fs-base); font-weight: var(--w-strong); line-height: 1.5; color: var(--text-1); }
+.sov-crumb__cur:focus { outline: none; }
+.setm__page { width: min(720px, 100%); margin-inline: auto; padding: var(--s6) var(--s6) var(--s8); display: flex; flex-direction: column; gap: var(--s6); }
+.sov-tabs { justify-content: flex-start; padding: 0; }
+.sx { display: flex; flex-direction: column; gap: var(--s3); }
+.sx-head { display: flex; align-items: center; gap: var(--s2); min-height: 32px; padding-inline: 2px; }
+.sx-h { margin: 0; font-size: var(--fs-msg); font-weight: var(--w-strong); line-height: 1.5; }
+.sx-card { display: flex; flex-direction: column; border-radius: var(--r-md); background: var(--bg-pane); border: 0.5px solid var(--border-2); }
+.sx-card > * + * { border-top: 0.5px solid var(--border-3); }
+.sr { display: flex; align-items: center; gap: var(--s3); width: 100%; min-height: 60px; padding: var(--s3) var(--s4); text-align: start; color: var(--text-1); }
+.sr-name { flex: 1 1 0; min-width: 0; display: grid; gap: 2px; align-content: center; }
+.sr-name > * { display: block; }
+.sr-t { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-base); line-height: 1.5; }
+.sr-d { min-width: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text-2); }
+.sr-ctl { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: var(--s2); max-width: 64%; min-width: 0; }
+.sr-val { font-size: var(--fs-sm); line-height: 1.5; color: var(--text-2); text-align: end; overflow-wrap: anywhere; }
+.sr-in { display: block; width: 240px; max-width: 100%; height: 32px; padding: 0 10px; border-radius: var(--r-sm); border: 0.5px solid var(--border-2); background: var(--bg-chrome); color: var(--text-1); font-size: var(--fs-sm); outline: none; transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.sr-in:focus { border-color: var(--border-1); box-shadow: 0 0 0 3px var(--bg-active); }
+.lk-hit { position: relative; }
+.lk-hit::before { content: ""; position: absolute; inset: -7px -4px; }
+@media (max-width: 760px) {
+  .sov-bar { padding-inline: var(--s4) var(--s2); }
+  .setm__page { padding: var(--s5) var(--s4) var(--s6); gap: var(--s5); }
+  .sr { padding-inline: var(--s3); gap: var(--s2); }
+  .sr--in { flex-wrap: wrap; }
+  .sr--in .sr-ctl { flex: 1 1 100%; max-width: none; }
+  .sr--in .sr-in { width: 100%; height: 40px; font-size: 16px; }
+}
+
+/* ================= the dialog «غيّر شكل …» ================= */
+.lk-dlg {
+  margin: auto; padding: 0; border: 0; inset: 0;
+  width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px);
+  border-radius: var(--r-lg); background: var(--bg-chrome); color: var(--text-1); box-shadow: var(--shadow-modal); overflow: visible;
+}
+/* no clip on the dialog itself: its content has no fill at the corners, and a clipping ancestor made a moving face's glow show as a square */
+.lk-dlg > .lk { border-radius: inherit; }
+.lk-dlg::backdrop { background: var(--bg-scrim); }
+.lk-dlg[open] { animation: rise var(--dur-slow) var(--ease-out); }
+.lk-dlg[open]::backdrop { animation: fadeIn var(--dur) var(--ease-out); }
+.lk-dlg.is-closing { animation: modalOut 190ms var(--ease-in) forwards; }
+.lk-dlg.is-closing::backdrop { opacity: 0; transition: opacity 190ms var(--ease-in); }
+.lk { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-width: 0; background: var(--bg-chrome); color: var(--text-1); --ring: var(--bg-chrome); }
+.lk-dlg > .lk { max-height: calc(100dvh - 48px); }
+.lk-head { display: flex; align-items: center; gap: var(--s2); min-height: 60px; padding: var(--s3) var(--s3) var(--s2); padding-inline: var(--s5) var(--s3); }
+.lk-title { flex: 1 1 0; min-width: 0; margin: 0; font-size: var(--fs-lg); font-weight: var(--w-strong); line-height: 1.5; overflow-wrap: anywhere; }
+.lk--inline .lk-head { padding-inline-end: var(--s5); }
+.lk-stage { display: grid; place-items: center; margin: 0 var(--s5); padding: var(--s8) 0; border-radius: var(--r-md); background: var(--bg-sidebar); --ring: var(--bg-sidebar); }
+.lk-prev { cursor: pointer; }
+.lk-body { display: grid; gap: var(--s5); align-content: start; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s5) var(--s5) var(--s4); scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
+.lk-grp { border: 0; margin: 0; padding: 0; min-width: 0; }
+.lk-lg { display: block; padding: 0; margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: var(--w-strong); line-height: 1.5; color: var(--text-1); }
+.lk-lg__v { font-weight: var(--w-regular); color: var(--text-2); }
+.lk-lg__v::before { content: " · "; }
+
+/* tiles: shape and temperament. One small face, its name under it; chosen = ink ring + check badge + bold name */
+.lk-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
+.lk-tile {
+  position: relative; display: grid; justify-items: center; align-content: start; gap: 6px; min-width: 0; min-height: 68px;
+  padding: 10px var(--s1) var(--s2); border-radius: var(--r-md); background: var(--bg-pane); box-shadow: var(--border-2) 0 0 0 0.5px inset;
+  text-align: center; cursor: pointer; --ring: var(--bg-pane);
+  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.lk-tiles--t .lk-tile { min-height: 84px; padding-top: var(--s3); }
+.lk-tile input, .lk-sw input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+@media (hover: hover) { .lk-tile:hover { background: var(--bg-elevated-hover); --ring: var(--bg-elevated-hover); } }
+.lk-tile:has(input:checked) { box-shadow: var(--primary) 0 0 0 1.5px inset; }
+.lk-tile:has(input:focus-visible), .lk-sw:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+html[data-input="pointer"] :is(.lk-tile, .lk-sw):has(input:focus-visible) { outline: none; }
+.lk-tile__t { display: block; max-width: 100%; font-size: var(--fs-sm); line-height: 1.4; color: var(--text-1); overflow-wrap: anywhere; }
+.lk-tile:has(input:checked) .lk-tile__t { font-weight: var(--w-strong); }
+.lk-ck { position: absolute; top: 6px; inset-inline-end: 6px; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--primary); color: var(--on-primary); --od-icon-size: 12px; opacity: 0; transform: scale(.6); transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); pointer-events: none; }
+.lk-tile:has(input:checked) .lk-ck { opacity: 1; transform: none; }
+.lk-tile .fw { pointer-events: none; }
+
+/* colour swatches: an orb carrying the eyes; chosen = an ink ring around it, and its name in the group label */
+.lk-sws { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s1) var(--s2); }
+.lk-sw { position: relative; display: grid; place-items: center; height: 44px; border-radius: var(--r-full); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+@media (hover: hover) { .lk-sw:hover { background: var(--bg-hover); } }
+.lk-sw__o { display: inline-flex; border-radius: 50%; pointer-events: none; transition: box-shadow var(--dur-fast) var(--ease-out); }
+.lk-sw:has(input:checked) .lk-sw__o { box-shadow: 0 0 0 2.5px var(--bg-chrome), 0 0 0 4.5px var(--text-1); }
+
+.lk-say { margin: var(--s3) 0 0; min-height: calc(1em * 1.7); font-size: var(--fs-sm); line-height: var(--lh-ar); color: var(--text-2); }
+.lk-foot { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3) calc(var(--s2) + var(--safe-b)); border-top: 0.5px solid var(--border-3); }
+.lk-foot .link-btn { min-height: 36px; padding-inline: var(--s2); }
+.lk-foot .od-fill { flex: 1 1 0; }
+.lk--inline .lk-foot { padding-bottom: var(--s2); }
+
+/* phone: the same dialog becomes a bottom sheet; the face stays in view while the choices scroll */
+@media (max-width: 599px) {
+  .lk-dlg { width: 100%; max-height: calc(100dvh - var(--safe-t) - 8px); margin: auto 0 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .lk-dlg > .lk { max-height: calc(100dvh - var(--safe-t) - 8px); }
+  .lk-dlg[open] { animation: sheetUp var(--dur-slow) var(--ease-out); }
+  .lk-dlg.is-closing { animation: sheetDown 190ms var(--ease-in) forwards; }
+  .lk-head { min-height: 56px; padding-inline: var(--s4) var(--s2); }
+  .lk-head .ib { min-width: 44px; height: 44px; }
+  .lk-stage { margin-inline: var(--s4); padding: var(--s6) 0 var(--s8); }
+  .lk-body { padding-inline: var(--s4); }
+  .lk-foot .link-btn { min-height: 44px; }
+  .ac-look, .ac-actions .btn { min-height: 44px; }
+}
+
+/* toast (index.html) */
+.toast { position: fixed; top: calc(72px + var(--safe-t)); left: 50%; transform: translateX(-50%); z-index: 100; display: inline-flex; align-items: center; gap: var(--s2); max-width: calc(100vw - 32px); padding: 7px 14px; border-radius: var(--r-full); background: var(--primary); color: var(--on-primary); font-size: var(--fs-sm); line-height: 1.5; box-shadow: var(--shadow-pill); --od-icon-size: 16px; animation: toastIn var(--dur) var(--ease-out); white-space: nowrap; }
+.toast.is-leaving { animation: toastOut 140ms var(--ease-in) forwards; }
+
+/* ================= the compare strip: the same dialog for all six ================= */
+.cmp { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: var(--s4); padding: var(--s4); }
+.lk--inline { border-radius: var(--r-lg); box-shadow: var(--shadow-card); overflow: hidden; }
+
+/* ================= phone width: the page inside a handset (platform-neutral shell) ================= */
+.phone-stage { display: grid; justify-items: center; gap: var(--s3); padding: var(--s8) 0 var(--s4); }
+.phone-frame { position: relative; width: calc(390px + 20px); height: calc(844px + 20px); padding: 10px; border-radius: 52px; background: linear-gradient(145deg, rgba(255,255,255,.2), transparent 17%), linear-gradient(160deg, #3f4146 0%, #202227 48%, #0b0c0f 100%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.13), inset 0 0 0 2px rgba(0,0,0,.85), 0 32px 68px -20px rgba(10,12,16,.52), 0 10px 24px -10px rgba(10,12,16,.32); isolation: isolate; direction: ltr; }
+.hardware-button { position: absolute; width: 4px; border-radius: 3px; background: linear-gradient(90deg, #08090b, #2a2d33 60%, #08090b); }
+.hardware-button.volume { left: -3px; top: 222px; height: 86px; }
+.hardware-button.power { right: -3px; top: 270px; height: 82px; }
+.phone-screen { position: relative; width: 390px; height: 844px; overflow: hidden; border-radius: 42px; background: var(--bg-chrome); }
+.phone-ifr { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg-chrome); }
+.camera-dot { position: absolute; z-index: 20; top: 13px; left: 50%; width: 10px; height: 10px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(circle at 38% 35%, #344154 0 12%, #0a0c10 34%, #000 76%); pointer-events: none; }
+.status-bar { position: absolute; z-index: 15; inset: 0 0 auto; height: 50px; display: grid; grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); align-items: start; padding: 14px 20px 0; color: var(--sys-fg); opacity: .8; pointer-events: none; font-family: system-ui, sans-serif; }
+.status-time { justify-self: start; font-size: 14px; font-weight: 600; line-height: 15px; }
+.status-icons { justify-self: end; display: inline-flex; align-items: center; height: 15px; gap: 6px; }
+.status-icons svg { display: block; flex: none; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
+.status-icons .connectivity, .status-icons .wifi { width: 15px; height: 12px; }
+.status-icons .battery { width: 19px; height: 11px; }
+.gesture-indicator { position: absolute; z-index: 20; left: 50%; bottom: 8px; width: 96px; height: 4px; transform: translateX(-50%); border-radius: 99px; background: var(--sys-fg); opacity: .86; pointer-events: none; }
+
+/* reduced motion: nothing moves, the dialog and toasts appear and leave at once */
+.is-reduced :is(.lk-dlg, .lk-dlg::backdrop, .toast, .setm, .lk-ck, .lk-tile, .lk-sw, .lk-sw__o) { animation: none !important; transition: none !important; }
+.is-reduced .lk-dlg[open], .is-reduced .lk-dlg[open]::backdrop, .is-reduced .lk-dlg.is-closing { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .lk-dlg[open], .lk-dlg[open]::backdrop, .lk-dlg.is-closing, .toast, .setm.is-spot { animation: none; } }
+
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- rim light: brightest on the lower right, where light comes through from behind -->
+    <linearGradient id="rimLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".6"/>
+      <stop offset=".5" stop-color="#FFFFFF" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".95"/>
+    </linearGradient>
+    <linearGradient id="o1Rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".55"/>
+      <stop offset=".45" stop-color="#FFFFFF" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".95"/>
+    </linearGradient>
+    <g id="face-shapes"></g>
+  </defs>
+</svg>
+<div id="app"></div>
+<dialog class="lk-dlg" id="lk-dlg"></dialog>
+<div id="toast-host" aria-live="polite" role="status"></div>
+<script>
+(() => {
+'use strict';
+/* the page as written, before anything renders: the phone frame loads this same file at 390px */
+const SRC = '<!doctype html>\n' + document.documentElement.outerHTML;
+
+/* ================= data ================= */
+const SHAPE_D = {"circle": "M50 0A50 50 0 1 1 50 100A50 50 0 1 1 50 0Z", "squircle": "M99.50 50.00C99.50 56.81 99.44 65.84 99.32 70.42C99.19 75.01 99.01 75.47 98.76 77.50C98.51 79.53 98.20 81.08 97.83 82.60C97.45 84.12 97.01 85.41 96.50 86.62C95.99 87.84 95.41 88.90 94.76 89.89C94.11 90.88 93.39 91.76 92.58 92.58C91.76 93.39 90.88 94.11 89.89 94.76C88.90 95.41 87.84 95.99 86.62 96.50C85.41 97.01 84.12 97.45 82.60 97.83C81.08 98.20 79.53 98.51 77.50 98.76C75.47 99.01 75.01 99.19 70.42 99.32C65.84 99.44 56.81 99.50 50.00 99.50C43.19 99.50 34.16 99.44 29.58 99.32C24.99 99.19 24.53 99.01 22.50 98.76C20.47 98.51 18.92 98.20 17.40 97.83C15.88 97.45 14.59 97.01 13.38 96.50C12.16 95.99 11.10 95.41 10.11 94.76C9.12 94.11 8.24 93.39 7.42 92.58C6.61 91.76 5.89 90.88 5.24 89.89C4.59 88.90 4.01 87.84 3.50 86.62C2.99 85.41 2.55 84.12 2.17 82.60C1.80 81.08 1.49 79.53 1.24 77.50C0.99 75.47 0.81 75.01 0.68 70.42C0.56 65.84 0.50 56.81 0.50 50.00C0.50 43.19 0.56 34.16 0.68 29.58C0.81 24.99 0.99 24.53 1.24 22.50C1.49 20.47 1.80 18.92 2.17 17.40C2.55 15.88 2.99 14.59 3.50 13.38C4.01 12.16 4.59 11.10 5.24 10.11C5.89 9.12 6.61 8.24 7.42 7.42C8.24 6.61 9.12 5.89 10.11 5.24C11.10 4.59 12.16 4.01 13.38 3.50C14.59 2.99 15.88 2.55 17.40 2.17C18.92 1.80 20.47 1.49 22.50 1.24C24.53 0.99 24.99 0.81 29.58 0.68C34.16 0.56 43.19 0.50 50.00 0.50C56.81 0.50 65.84 0.56 70.42 0.68C75.01 0.81 75.47 0.99 77.50 1.24C79.53 1.49 81.08 1.80 82.60 2.17C84.12 2.55 85.41 2.99 86.62 3.50C87.84 4.01 88.90 4.59 89.89 5.24C90.88 5.89 91.76 6.61 92.58 7.42C93.39 8.24 94.11 9.12 94.76 10.11C95.41 11.10 95.99 12.16 96.50 13.38C97.01 14.59 97.45 15.88 97.83 17.40C98.20 18.92 98.51 20.47 98.76 22.50C99.01 24.53 99.19 24.99 99.32 29.58C99.44 34.16 99.50 43.19 99.50 50.00Z", "blob": "M98.45 51.95C98.81 53.70 99.01 55.53 99.00 57.32C98.99 59.11 98.78 60.94 98.40 62.69C98.01 64.43 97.41 66.17 96.68 67.81C95.95 69.44 95.02 71.02 94.02 72.49C93.02 73.97 91.86 75.36 90.67 76.66C89.48 77.95 88.18 79.15 86.87 80.28C85.57 81.41 84.20 82.45 82.84 83.43C81.47 84.41 80.08 85.31 78.68 86.16C77.28 87.01 75.88 87.80 74.46 88.53C73.04 89.26 71.61 89.94 70.16 90.55C68.71 91.15 67.25 91.70 65.78 92.16C64.31 92.62 62.81 93.02 61.32 93.33C59.83 93.64 58.32 93.86 56.82 94.02C55.32 94.17 53.81 94.24 52.32 94.26C50.83 94.28 49.35 94.22 47.88 94.13C46.40 94.05 44.94 93.90 43.48 93.75C42.02 93.60 40.57 93.42 39.10 93.23C37.63 93.05 36.16 92.85 34.66 92.64C33.15 92.42 31.63 92.21 30.07 91.93C28.52 91.66 26.93 91.38 25.33 90.99C23.74 90.61 22.10 90.19 20.50 89.63C18.90 89.08 17.27 88.44 15.73 87.65C14.19 86.86 12.66 85.95 11.28 84.90C9.89 83.85 8.57 82.65 7.42 81.34C6.27 80.04 5.24 78.58 4.39 77.06C3.54 75.54 2.86 73.89 2.33 72.23C1.81 70.57 1.47 68.82 1.25 67.10C1.02 65.38 0.98 63.62 1.00 61.91C1.02 60.20 1.19 58.50 1.37 56.84C1.56 55.18 1.84 53.55 2.11 51.95C2.39 50.35 2.71 48.79 3.03 47.24C3.35 45.68 3.67 44.16 4.02 42.63C4.36 41.10 4.70 39.57 5.10 38.05C5.49 36.52 5.89 34.99 6.38 33.48C6.88 31.96 7.40 30.43 8.04 28.95C8.68 27.47 9.39 25.99 10.21 24.59C11.04 23.18 11.96 21.81 12.98 20.53C14.00 19.25 15.14 18.04 16.34 16.93C17.54 15.81 18.85 14.79 20.20 13.86C21.55 12.93 22.99 12.10 24.44 11.36C25.89 10.61 27.40 9.96 28.92 9.38C30.44 8.79 31.99 8.30 33.55 7.86C35.11 7.41 36.68 7.04 38.27 6.74C39.85 6.43 41.45 6.18 43.05 6.01C44.65 5.85 46.27 5.74 47.88 5.74C49.49 5.74 51.11 5.82 52.70 6.01C54.30 6.21 55.90 6.51 57.45 6.93C58.99 7.35 60.52 7.89 61.98 8.54C63.44 9.19 64.85 9.97 66.19 10.82C67.52 11.67 68.79 12.64 69.99 13.65C71.19 14.65 72.30 15.75 73.38 16.85C74.45 17.95 75.45 19.10 76.44 20.23C77.43 21.36 78.36 22.51 79.32 23.64C80.27 24.77 81.21 25.89 82.19 27.02C83.16 28.15 84.16 29.26 85.17 30.41C86.19 31.57 87.25 32.72 88.30 33.95C89.35 35.18 90.44 36.44 91.45 37.79C92.47 39.14 93.50 40.56 94.40 42.06C95.30 43.56 96.16 45.15 96.84 46.80C97.51 48.45 98.09 50.20 98.45 51.95Z"};
+/* where the eyes sit on each shape: x in %, a vertical nudge in % */
+const EYE_AT = { circle: { x: 50, dy: 0 }, squircle: { x: 50, dy: 0 }, blob: { x: 48, dy: 1.5 } };
+const SHAPES = [
+  { id: 'circle',   ar: 'دايرة',      en: 'Circle' },
+  { id: 'squircle', ar: 'مربع مدوّر', en: 'Squircle' },
+  { id: 'blob',     ar: 'فقاعة',      en: 'Soft blob' },
+];
+/* eight fixed presets, no orange (it means «مستنيك»). Lightest stop vs the white eyes: 3.4:1 or more. */
+const PRESETS = [
+  { id: 'indigo', ar: 'نيلي',   en: 'Indigo', c: ['#8670F0', '#5A58DE', '#2C44B4', '#18236E'] },
+  { id: 'violet', ar: 'بنفسجي', en: 'Violet', c: ['#B062DE', '#8443D0', '#4E2B9C', '#2A165C'] },
+  { id: 'sky',    ar: 'سماوي',  en: 'Sky',    c: ['#2F8FE0', '#2A6AD8', '#2A3FA8', '#162464'] },
+  { id: 'teal',   ar: 'تركواز', en: 'Teal',   c: ['#18918A', '#117A80', '#0D5470', '#073446'] },
+  { id: 'jade',   ar: 'أخضر',   en: 'Jade',   c: ['#2A9457', '#1B8253', '#0E5E57', '#073A36'] },
+  { id: 'rose',   ar: 'وردي',   en: 'Rose',   c: ['#DC4F92', '#C23C86', '#88287A', '#4C1550'] },
+  { id: 'dusk',   ar: 'غروب',   en: 'Dusk',   c: ['#5D6CEE', '#8F52DC', '#C24C96', '#561C58'] },
+  { id: 'slate',  ar: 'رصاصي',  en: 'Slate',  c: ['#6E7C94', '#4D586B', '#2E3548', '#191E2B'] },
+];
+const PRESET = Object.fromEntries(PRESETS.map((p) => [p.id, p]));
+const SHAPE = Object.fromEntries(SHAPES.map((s) => [s.id, s]));
+
+/* temperaments: a handful of numbers per character.
+   eye: width/height/gap as a fraction of the size, y in %, corner radius, tilt.
+   bn/br/ba/bb/sw: breath keyframes, period (s), swell, lift, sway (deg).
+   fl/flk: how fast and how strongly the colour flows. glance: seconds between looks; gs: how it looks; gd: how fast the eyes move (ms). */
+const TEMPERS = {
+  calm:      { ar: 'هادي وواثق', en: 'Calm, confident', eye: { w: .1,   h: .225, g: .19,  y: 42, r: '999px', t: 0 },  bn: 'fBreath', br: 6,   ba: .018, bb: .012, sw: 0,   fl: 14, flk: .5,  glance: 9,   gs: 'steady',  gd: 620, pres: 1.22,
+               eyeAr: 'عين طويلة وثابتة', eyeEn: 'tall, steady eyes' },
+  energetic: { ar: 'نشيط',        en: 'Energetic',      eye: { w: .086, h: .21,  g: .165, y: 39, r: '999px', t: -4 }, bn: 'fBounce', br: 2.4, ba: .022, bb: .045, sw: 0,   fl: 7,  flk: .6,  glance: 2.8, gs: 'dart',    gd: 110, pres: 1,
+               eyeAr: 'عين رفيعة عالية وسريعة', eyeEn: 'slim, high, quick eyes' },
+  warm:      { ar: 'ودود',        en: 'Warm, friendly', eye: { w: .14,  h: .15,  g: .2,   y: 45, r: '999px', t: 0 },  bn: 'fBreath', br: 4.4, ba: .024, bb: .016, sw: 3.5, fl: 10, flk: .55, glance: 5,   gs: 'soft',    gd: 380, pres: 1,
+               eyeAr: 'عين مدورة', eyeEn: 'round eyes' },
+  dreamy:    { ar: 'حالم',        en: 'Dreamy, creative', eye: { w: .112, h: .19, g: .19, y: 43, r: '999px', t: 0, lid: 20, up: -.28 },  bn: 'fBreath', br: 5.2, ba: .02,  bb: .022, sw: 1.5, fl: 5,  flk: .95, glance: 6,   gs: 'up',      gd: 950, pres: 1,
+               eyeAr: 'عين ناعسة باصة لفوق', eyeEn: 'soft-lidded eyes that gaze up' },
+  neat:      { ar: 'منظم',        en: 'Attentive, organised', eye: { w: .118, h: .14, g: .18, y: 42, r: '28%', t: 0 }, bn: 'fBreath', br: 3.6, ba: .01, bb: .006, sw: 0, fl: 12, flk: .45, glance: 4, gs: 'precise', gd: 140, pres: 1,
+               eyeAr: 'عين مستطيلة مظبوطة', eyeEn: 'neat, even, squared eyes' },
+  caring:    { ar: 'صبور',        en: 'Caring, patient', eye: { w: .122, h: .155, g: .172, y: 46, r: '999px', t: 6, droop: 10 },  bn: 'fBreath', br: 5.4, ba: .02,  bb: .012, sw: 0,   fl: 11, flk: .5,  glance: 7,   gs: 'nod',     gd: 620, pres: 1,
+               eyeAr: 'عين حنينة مايلة لتحت', eyeEn: 'gentle, soft-drooping eyes' },
+};
+const TK = Object.keys(TEMPERS);
+const AGENTS = [
+  { id: 'lead',     name: 'Lead',             en: 'Lead',             main: true,  tk: 'calm',
+    line: ['هادي وواثق. بيتنفس على مهله وعينه ثابتة، وأول ما تحتاجه تلاقيه.', 'Calm and confident. Slow breath, steady eyes, and there the moment you need it.'] },
+  { id: 'ads',      name: 'الإعلانات',        en: 'Ads',              tk: 'energetic',
+    line: ['نشيط ومبيهداش. بينط نطة خفيفة وعينه بتلف في كل حتة بتدوّر على فرصة.', 'Energetic and restless. A little bounce, eyes darting around for the next opening.'] },
+  { id: 'leads',    name: 'الليدز والمتابعة', en: 'Leads',            fresh: true, tk: 'warm',
+    line: ['ودود وقريب. عينيه مدورة وبيتمايل بالراحة، كأنه بيسلّم على كل عميل.', 'Warm and friendly. Round eyes and a soft sway, like greeting every customer.'] },
+  { id: 'content',  name: 'المحتوى',          en: 'Content',          tk: 'dreamy',
+    line: ['حالم وفنان. كل شوية يسرح لفوق، وألوانه بتتحرك أكتر من الباقيين.', 'Dreamy and creative. Drifts upward every now and then; its colour flows more than the rest.'] },
+  { id: 'training', name: 'مدير التدريب',     en: 'Training manager', fresh: true, tk: 'neat',
+    line: ['منتبه ومنظم. عينيه مظبوطة ومتساوية، وحركته صغيرة ودقيقة.', 'Attentive and organised. Neat, even eyes and small, precise movements.'] },
+  { id: 'issues',   name: 'مشاكل العملاء',    en: 'Customer issues',  tk: 'caring',
+    line: ['حنين وصبور. عينيه هادية، وبيهز راسه بالراحة وهو بيسمعك.', 'Caring and patient. Gentle eyes, and a slow nod while it listens.'] },
+];
+const AGENT = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+/* nobody chose yet: each Agent gets a look automatically, the same for everyone */
+const AUTO = { lead: 'indigo', ads: 'rose', leads: 'teal', content: 'violet', training: 'jade', issues: 'sky' };
+
+const STATES = ['idle', 'listening', 'thinking', 'working', 'done', 'waiting', 'stuck', 'asleep'];
+const ST = {
+  idle:      { ar: 'فاضي',   en: 'Idle',           dar: 'بيتنفس، بيرمش كل شوية، وبيبص حواليه من وقت للتاني.', den: 'Breathing, a blink now and then, an occasional look around.' },
+  listening: { ar: 'بيسمعك', en: 'Listening',      dar: 'أول ما تكتب له، عينيه بتوسع وبتبص على مكان الكتابة، وبيميل عليك.', den: 'As you type, its eyes widen and turn to the composer, and it leans in.' },
+  thinking:  { ar: 'بيفكر',  en: 'Thinking',       dar: 'لسه بادئ المهمة: عينيه لفوق وبتسرح، والنور بيلف جواه.', den: 'A Run just started: eyes look up and drift, light swirls inside.' },
+  working:   { ar: 'شغال',   en: 'Working',        dar: 'مركّز: عينيه مضيّقة، النور بيلف أسرع، والهالة أقوى.', den: 'Focused: narrowed eyes, a faster swirl, a brighter glow.' },
+  done:      { ar: 'خلص',    en: 'Done',           dar: 'عينيه بتضحك ^ ^، بينط نطة صغيرة وتطلع لمعة.', den: 'Happy closed eyes ^ ^, a little hop and a brief sparkle.' },
+  waiting:   { ar: 'مستنيك', en: 'Waiting on you', dar: 'عنده سؤال أو محتاج موافقة: بيبص لك على طول، وكل كام ثانية بيزقك زقة خفيفة.', den: 'A question or an approval: it looks straight at you and nudges every few seconds.' },
+  stuck:     { ar: 'وقف',    en: 'Stuck',          dar: 'حاجة وقفته: عينيه قلقانة ومايلة، ولونه بيطفى شوية. مفيش أحمر.', den: 'Something stopped it: worried, tilted eyes, colour dims a little. Never red.' },
+  asleep:    { ar: 'نايم',   en: 'Asleep',         dar: 'مفيش شغل من بدري أو المحرك مقفول: عينيه مقفولة ونَفَسه بطيء جداً.', den: 'No work for a long time, or the Engine is off: eyes closed, very slow breath.' },
+  pressed:   { ar: 'لما تدوس', en: 'Pressed',      dar: 'بيتكبس وينط فرحان، وبعدها يبص لك.', den: 'Squashes, hops happily, then looks at you.' },
+};
+
+/* ================= state (O3) ================= */
+const mqReduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+const mqPhone = window.matchMedia('(max-width: 599px)');
+const EMB = window.__EMBED || null;   /* set when this page runs inside the phone frame */
+const S = {
+  lang: 'ar', theme: 'light', reduced: mqReduce.matches, width: 'desktop', role: 'owner', fail: false,
+  sel: 'lead',
+  looks: {},   /* an Agent's chosen look: { preset, shape, tk }; absent = automatic */
+  names: {},
+  live: { lead: 'idle', ads: 'working', leads: 'waiting', content: 'idle', training: 'idle', issues: 'idle' },
+  dlgA: null, opener: null, returnTo: null, bornOnce: false,
+};
+if (EMB) Object.assign(S, EMB, { width: 'desktop' });
+
+const L = (ar, en) => (S.lang === 'ar' ? ar : en);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const rand = (a, b) => a + Math.random() * (b - a);
+const checkIcon = '<svg class="od-icon opt__ck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12.5l4.2 4.2L19 7"/></svg>';
+const sendIcon = '<svg class="od-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 19V5M6 11l6-6 6 6"/></svg>';
+
+/* ================= shapes: one outline per shape, used by the rim and as the mask ================= */
+(function installShapes() {
+  const g = document.getElementById('face-shapes');
+  const ns = 'http://www.w3.org/2000/svg';
+  Object.entries(SHAPE_D).forEach(([id, d]) => {
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('id', `shp-${id}`); p.setAttribute('d', d); p.setAttribute('vector-effect', 'non-scaling-stroke');
+    g.appendChild(p);
+    if (id === 'circle') return;
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='${d}'/></svg>`;
+    document.documentElement.style.setProperty(`--mask-${id}`, `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
+  });
+})();
+
+/* ================= who is this Agent: name → temperament, colour, shape ================= */
+function hash(s) { let h = 2166136261 >>> 0; for (const ch of s) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; }
+/* a new Agent gets its personality from its name, so everyone sees the same character */
+function derive(name) {
+  const h = hash(name.trim() || 'agent');
+  const tk = TK[h % TK.length];
+  const b = TEMPERS[tk];
+  const j = (k, n) => 1 + ((((h >>> k) & 15) / 15) - .5) * n;
+  const t = { ...b, eye: { ...b.eye, w: +(b.eye.w * j(4, .14)).toFixed(3), h: +(b.eye.h * j(8, .14)).toFixed(3) },
+    br: +(b.br * j(12, .24)).toFixed(2), glance: +(b.glance * j(16, .3)).toFixed(2), pres: 1 };
+  return { tk, t, preset: PRESETS[(h >>> 20) % PRESETS.length].id };
+}
+
+/* who is this Agent now: its chosen look, or the automatic one. «id~tk» asks for the same Agent
+   in another temperament (the temperament choices in the dialog). */
+function info(id) {
+  const [base, tko] = String(id).split('~');
+  const A = AGENT[base]; const lk = S.looks[base];
+  const tk = tko || (lk ? lk.tk : A.tk);
+  return { id: base, name: S.names[base] || A.name, en: A.en, tk, t: TEMPERS[tk], preset: lk ? lk.preset : AUTO[base], shape: lk ? lk.shape : 'circle', auto: !lk };
+}
+
+const resolve = (a) => (a === 'sel' ? S.sel : a === 'feel' ? S.feelAgent : a);
+const nameHTML = (id) => `<bdi>${esc(info(id).name)}</bdi>`;
+
+/* ================= the face renderer ================= */
+function faceHTML(a, size, o = {}) {
+  const still = size < 24; const big = size >= 48;
+  const layers = still
+    ? '<i class="l f-base"></i><i class="l f-shade"></i><i class="l f-veil"></i>'
+    : '<i class="l f-base"></i><i class="l f-flows dr"></i><i class="l f-core"></i><i class="l f-shade"></i><i class="l f-swirl"></i><i class="l f-veil"></i>';
+  const eye = (side) => `<span class="f-eye f-eye--${side}"><i class="e-open"></i><svg class="e-arc" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path class="e-happy" d="M3.5 13.5Q10 3 16.5 13.5"/><path class="e-sleep" d="M3.5 8.5Q10 16 16.5 8.5"/></svg></span>`;
+  const attrs = [`data-a="${a}"`, `data-st="${o.st || 'idle'}"`];
+  if (o.po) attrs.push(`data-po="${o.po}"`);
+  if (o.so) attrs.push(`data-so="${o.so}"`);
+  if (o.ctx) attrs.push(`data-ctx="${o.ctx}"`);
+  const delay = -(Math.random() * 12).toFixed(2);
+  return `<span class="fw${size >= 72 ? ' fw--lg' : ''}"><span class="face ${still ? 'face--still' : 'face--live'}${big ? ' face--big' : ''}" ${attrs.join(' ')} style="--s:${size}px;--d:${delay}s" aria-hidden="true">${big ? '<i class="f-shadow"></i><i class="f-gather"></i>' : ''}<span class="f-act"><span class="f-pose"><span class="f-breath">${still ? '' : '<i class="f-glow"></i>'}<span class="f-body">${layers}<span class="f-specs"><i class="f-spec"></i><i class="f-spec2"></i></span><svg class="f-rim" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href="#shp-circle"/></svg></span><span class="f-eyes"><span class="f-gaze">${eye('l')}${eye('r')}</span></span></span></span></span>${big ? '<span class="f-spark"><i></i><i></i><i></i></span>' : ''}</span>${o.dot ? '<span class="dot" aria-hidden="true"></span>' : ''}</span>`;
+}
+
+/* write identity (colour, shape, temperament) only when it changed; then the state */
+function applyFace(el, silent = true) {
+  const a = resolve(el.dataset.a);
+  const I = info(a);
+  const preset = el.dataset.po || I.preset; const shape = el.dataset.so || I.shape;
+  const key = `${a}|${preset}|${shape}|${I.tk}|${I.t.br}|${I.t.eye.w}|${I.t.eye.h}`;
+  if (el.dataset.key !== key) {
+    const p = PRESET[preset].c; const t = I.t; const e = EYE_AT[shape];
+    const st = el.style;
+    st.setProperty('--c1', p[0]); st.setProperty('--c2', p[1]); st.setProperty('--c3', p[2]); st.setProperty('--c4', p[3]);
+    st.setProperty('--eW', t.eye.w); st.setProperty('--eH', t.eye.h); st.setProperty('--eG', t.eye.g);
+    st.setProperty('--eR', t.eye.r); st.setProperty('--eT', `${t.eye.t}deg`);
+    st.setProperty('--eX', `${e.x}%`); st.setProperty('--eYp', `${t.eye.y + e.dy}%`);
+    st.setProperty('--bn', t.bn); st.setProperty('--br', `${t.br}s`); st.setProperty('--ba', t.ba); st.setProperty('--bb', t.bb);
+    st.setProperty('--sw', t.sw); st.setProperty('--fl', `${t.fl}s`); st.setProperty('--flk', t.flk); st.setProperty('--gd', `${t.gd}ms`);
+    st.setProperty('--pres', t.pres || 1); st.setProperty('--sy0', t.eye.up || 0);
+    const lid = t.eye.lid || 0; const dr = t.eye.droop || 0;
+    const top = (outer) => (lid ? lid : dr ? (outer ? dr : 0) : -40);   /* a resting lid: dreamy is half-closed, caring droops outward */
+    st.setProperty('--clL0', `polygon(-40% ${top(true)}%, 140% ${top(false)}%, 140% 140%, -40% 140%)`);
+    st.setProperty('--clR0', `polygon(-40% ${top(false)}%, 140% ${top(true)}%, 140% 140%, -40% 140%)`);
+    el.dataset.shape = shape; el.dataset.agent = a; el.dataset.key = key;
+    const use = $('.f-rim use', el); if (use) use.setAttribute('href', `#shp-${shape}`);
+    el._t = t; el._nb = 0; el._ng = 0;
+    if (el.dataset.state) applyRates(el);
+  }
+  const want = el.dataset.st === 'live' ? (S.live[a] || 'idle') : el.dataset.st;
+  setState(el, want, silent);
+}
+/* playback speed per state: [colour drift, breath]. Changing the rate keeps the position, so nothing jumps. */
+const RATE = { idle: [1, 1], listening: [1.3, 1.2], thinking: [1.9, 1], working: [3.2, 1.25], done: [1.2, 1.1], waiting: [1, 1], stuck: [.6, .75], asleep: [.35, .45] };
+function applyRates(el) {
+  if (!el.classList.contains('face--live') || !el.getAnimations) return;
+  const R = RATE[el.dataset.state] || RATE.idle;
+  el.getAnimations({ subtree: true }).forEach((an) => {
+    const tg = an.effect && an.effect.target; if (!tg || !tg.classList) return;
+    let r = null;
+    if (tg.classList.contains('dr')) r = R[0];
+    else if (tg.classList.contains('f-breath')) r = R[1];
+    if (r != null && an.playbackRate !== r) { if (an.updatePlaybackRate) an.updatePlaybackRate(r); else an.playbackRate = r; }
+  });
+}
+function setState(el, st, silent = true) {
+  const prev = el.dataset.state;
+  if (prev === st) return;
+  el.dataset.state = st;
+  const dot = el.parentElement && el.parentElement.querySelector(':scope > .dot');
+  if (dot) dot.className = `dot dot--${st}`;
+  if (!el.classList.contains('face--live')) return;
+  applyRates(el);
+  if (st !== 'idle') ungaze(el);
+  if (!silent && st === 'done' && prev) play(el, 'done');
+}
+
+/* ================= moments (Web Animations; each one under 1.2s, never looping) ================= */
+const MOM = {
+  press: { dur: 620, easing: 'cubic-bezier(.3,0,.3,1)',
+    act: [{ transform: 'none' }, { transform: 'translateY(6%) scale(1.14,.84)', offset: .16 }, { transform: 'translateY(-16%) scale(.92,1.1)', offset: .46 }, { transform: 'translateY(0) scale(1.08,.92)', offset: .7 }, { transform: 'translateY(0) scale(.98,1.02)', offset: .86 }, { transform: 'none' }],
+    shadow: [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(1.12)', opacity: 1, offset: .16 }, { transform: 'scale(.66)', opacity: .45, offset: .46 }, { transform: 'scale(1.06)', opacity: 1, offset: .7 }, { transform: 'scale(1)', opacity: 1 }],
+    cls: [['is-squint', 0, 460], ['is-look', 380, 1700], ['is-wide', 460, 1400]] },
+  done: { dur: 560, easing: 'cubic-bezier(.3,0,.3,1)',
+    act: [{ transform: 'none' }, { transform: 'translateY(4%) scale(1.1,.88)', offset: .16 }, { transform: 'translateY(-13%) scale(.94,1.08)', offset: .46 }, { transform: 'translateY(0) scale(1.06,.94)', offset: .72 }, { transform: 'none' }],
+    shadow: [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.72)', opacity: .5, offset: .46 }, { transform: 'scale(1)', opacity: 1 }],
+    spark: true, cls: [] },
+  greet: { dur: 760, easing: 'ease-in-out',
+    act: [{ transform: 'none' }, { transform: 'translateY(-10%) rotate(-5deg) scale(1.02,1.05)', offset: .28 }, { transform: 'translateY(0) rotate(3deg) scale(1.04,.96)', offset: .55 }, { transform: 'translateY(-3%) rotate(-1.5deg)', offset: .78 }, { transform: 'none' }],
+    shadow: [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.78)', opacity: .6, offset: .28 }, { transform: 'scale(1)', opacity: 1, offset: .55 }, { transform: 'scale(.92)', opacity: .9, offset: .78 }, { transform: 'scale(1)', opacity: 1 }],
+    cls: [['is-look', 0, 1600], ['is-up', 0, 560], ['is-wide', 0, 1000]] },
+  perk: { dur: 600, easing: 'cubic-bezier(.2,0,0,1)',
+    act: [{ transform: 'none' }, { transform: 'translateY(-12%) scale(1.1)', offset: .3 }, { transform: 'translateY(-2%) scale(.97,1.04)', offset: .62 }, { transform: 'none' }],
+    shadow: [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.74)', opacity: .55, offset: .3 }, { transform: 'scale(1)', opacity: 1 }],
+    cls: [['is-wide', 0, 1100], ['is-look', 0, 1200]] },
+  nod: { dur: 1100, easing: 'ease-in-out',
+    act: [{ transform: 'none' }, { transform: 'translateY(4%) scale(1,.98)', offset: .25 }, { transform: 'none', offset: .5 }, { transform: 'translateY(3%) scale(1,.985)', offset: .74 }, { transform: 'none' }],
+    cls: [] },
+};
+function addTimedClass(f, cls, from, to) {
+  f._tm = f._tm || [];
+  f._tm.push(setTimeout(() => f.classList.add(cls), from));
+  f._tm.push(setTimeout(() => f.classList.remove(cls), to));
+}
+function clearMoment(f) {
+  (f._tm || []).forEach(clearTimeout); f._tm = [];
+  f.classList.remove('is-wide', 'is-look', 'is-up', 'is-squint', 'is-shut', 'is-birth');
+  (f._an || []).forEach((an) => an.cancel()); f._an = [];
+}
+function play(f, kind) {
+  if (!f || f.classList.contains('face--still')) return;
+  clearMoment(f);
+  if (S.reduced) { stillFrames(f, kind); return; }
+  const act = $('.f-act', f); const sh = $('.f-shadow', f);
+  const anim = (el, kf, opt) => { if (!el) return; const an = el.animate(kf, opt); f._an.push(an); };
+  if (kind === 'birth') { birth(f); return; }
+  const m = MOM[kind]; if (!m) return;
+  anim(act, m.act, { duration: m.dur, easing: m.easing });
+  if (m.shadow) anim(sh, m.shadow, { duration: m.dur, easing: m.easing });
+  m.cls.forEach(([c, a, b]) => addTimedClass(f, c, a, b));
+  if (m.spark) $$('.f-spark i', f).forEach((s, i) => anim(s, [
+    { transform: 'scale(0) rotate(0deg)', opacity: 0 }, { transform: 'scale(1.15) rotate(45deg)', opacity: 1, offset: .4 }, { transform: 'scale(.5) rotate(90deg)', opacity: 0 }],
+    { duration: 640, delay: 120 + i * 80, easing: 'ease-out' }));
+}
+/* birth: light gathers, the orb inflates, then it opens its eyes for the first time and looks at you */
+function birth(f) {
+  const D = 1150;
+  f.classList.add('is-birth'); f._tm.push(setTimeout(() => f.classList.remove('is-birth'), D + 50));
+  const anim = (el, kf, opt) => { if (!el) return; const an = el.animate(kf, opt); f._an.push(an); };
+  anim($('.f-act', f), [
+    { transform: 'scale(.1)', opacity: 0 },
+    { transform: 'scale(.14)', opacity: .9, offset: .22 },
+    { transform: 'scale(.18)', opacity: 1, offset: .34, easing: 'cubic-bezier(.3,0,.2,1)' },
+    { transform: 'scale(1.1)', opacity: 1, offset: .62, easing: 'ease-in-out' },
+    { transform: 'scale(.96,1.03)', opacity: 1, offset: .76 },
+    { transform: 'none', opacity: 1 }], { duration: D });
+  anim($('.f-gather', f), [
+    { transform: 'scale(1.5)', opacity: 0 }, { transform: 'scale(1.05)', opacity: .95, offset: .24 },
+    { transform: 'scale(.5)', opacity: .6, offset: .38 }, { transform: 'scale(.42)', opacity: 0, offset: .5 }, { transform: 'scale(.42)', opacity: 0 }], { duration: D, easing: 'ease-in' });
+  anim($('.f-shadow', f), [
+    { transform: 'scale(.2)', opacity: 0 }, { transform: 'scale(.3)', opacity: .4, offset: .34 },
+    { transform: 'scale(1.06)', opacity: 1, offset: .62 }, { transform: 'scale(1)', opacity: 1 }], { duration: D });
+  $$('.f-eye', f).forEach((e) => anim(e, [
+    { transform: 'scaleY(.06)' }, { transform: 'scaleY(.06)', offset: .7 }, { transform: 'scaleY(1.18)', offset: .82 }, { transform: 'scaleY(1)' }], { duration: D, easing: 'ease-out' }));
+  addTimedClass(f, 'is-look', 0, 2200); addTimedClass(f, 'is-wide', 820, 1900);
+}
+/* reduced motion: the same feelings as still frames, nothing moves */
+function stillFrames(f, kind) {
+  if (kind === 'press') { addTimedClass(f, 'is-squint', 0, 450); addTimedClass(f, 'is-look', 450, 1600); }
+  else if (kind === 'birth') { addTimedClass(f, 'is-shut', 0, 600); addTimedClass(f, 'is-look', 600, 1800); }
+  else if (kind === 'greet') { addTimedClass(f, 'is-look', 0, 1200); addTimedClass(f, 'is-up', 0, 600); }
+  else if (kind === 'perk') { addTimedClass(f, 'is-wide', 0, 1000); }
+}
+function blink(f) {
+  const kf = [{ transform: 'scaleY(1)' }, { transform: 'scaleY(.08)', offset: .45 }, { transform: 'scaleY(1)' }];
+  $$('.f-eye', f).forEach((e) => e.animate(kf, { duration: 150, easing: 'ease-in-out' }));
+}
+
+/* ================= life: blinks and glances, one shared scheduler for every visible face ================= */
+const VIS = new Set();
+let io = null;
+function mount(root) {
+  if (!io) io = new IntersectionObserver((ents) => ents.forEach((e) => {
+    e.target.classList.toggle('is-vis', e.isIntersecting);
+    if (e.isIntersecting) VIS.add(e.target); else VIS.delete(e.target);
+  }), { rootMargin: '80px' });
+  $$('.face', root).forEach((f) => { applyFace(f); if (f.classList.contains('face--live')) io.observe(f); });
+}
+const BLINKS = new Set(['idle', 'listening', 'thinking', 'working', 'waiting', 'stuck']);
+function blinkGap(t) {
+  if (t.gs === 'precise') return 4000;                 /* organised: a blink like a metronome */
+  if (t.gs === 'dart') return rand(1600, 3400);
+  if (t.gs === 'steady') return rand(4200, 7000);
+  return rand(2600, 5600);
+}
+/* look vars live on the eyes and the highlight only, so a look never re-resolves the body's animations */
+const partsOf = (f) => (f._parts || (f._parts = [$('.f-eyes', f), $('.f-specs', f)]));
+function gaze(f, x, y) { const e = partsOf(f)[0]; if (!e) return; e.style.setProperty('--gx', x); e.style.setProperty('--gy', y); }
+function ungaze(f) { const e = partsOf(f)[0]; if (!e) return; e.style.removeProperty('--gx'); e.style.removeProperty('--gy'); }
+function glance(f, t) {
+  const side = Math.random() < .5 ? -1 : 1;
+  const steps = {
+    steady:  [[side * .55, .05, 1700]],
+    dart:    [[side * .8, -.15, 320], [-side * .8, .1, 300]],
+    soft:    [[side * .5, .3, 1300]],
+    up:      [[side * .35, -.95, 2000]],
+    precise: [[side * .6, 0, 700], [-side * .6, 0, 700]],
+    nod:     [[0, .45, 1100]],
+  }[t.gs] || [[side * .5, 0, 1200]];
+  if (t.gs === 'nod') play(f, 'nod');
+  f._busy = true;
+  let at = 0;
+  steps.forEach(([x, y, hold]) => {
+    setTimeout(() => { if (f.dataset.state === 'idle') gaze(f, x, y); }, at);
+    at += hold + t.gd;
+  });
+  setTimeout(() => { ungaze(f); f._busy = false; }, at);
+}
+setInterval(() => {
+  if (S.reduced || document.hidden) return;
+  const now = performance.now();
+  VIS.forEach((f) => {
+    if (!f.isConnected) { VIS.delete(f); return; }
+    const t = f._t; if (!t) return;
+    const st = f.dataset.state;
+    if (!f._nb) f._nb = now + rand(600, 4000);
+    if (!f._ng) f._ng = now + rand(1200, t.glance * 1000);
+    if (BLINKS.has(st) && now >= f._nb) {
+      blink(f); f._nb = now + blinkGap(t);
+      if (t.gs === 'soft' && Math.random() < .3) setTimeout(() => blink(f), 260);   /* warm: a friendly double blink */
+    }
+    if (st === 'idle' && !f._busy && now >= f._ng) { glance(f, t); f._ng = now + t.glance * 1000 * rand(.7, 1.4); }
+  });
+}, 200);
+
+/* pointer: eyes and the specular highlight lean toward it. Read every rect first, then write. */
+const MOT = { mx: null, my: null, raf: 0 };
+function lookFrame() {
+  MOT.raf = 0;
+  const faces = Array.from(VIS);
+  if (MOT.mx == null || S.reduced) { faces.forEach((f) => { f._lx = f._ly = null; partsOf(f).forEach((p) => { if (p) { p.style.removeProperty('--lx'); p.style.removeProperty('--ly'); } }); }); return; }
+  const rects = faces.map((f) => f.getBoundingClientRect());
+  faces.forEach((f, i) => {
+    const r = rects[i]; if (!r.width) return;
+    const dx = MOT.mx - (r.left + r.width / 2); const dy = MOT.my - (r.top + r.height / 2);
+    const dd = Math.hypot(dx, dy) || 1; const k = Math.min(1, dd / 240);
+    const lx = ((dx / dd) * k).toFixed(2); const ly = ((dy / dd) * k).toFixed(2);
+    if (f._lx === lx && f._ly === ly) return;
+    f._lx = lx; f._ly = ly;
+    partsOf(f).forEach((p) => { if (p) { p.style.setProperty('--lx', lx); p.style.setProperty('--ly', ly); } });
+  });
+}
+/* the eyes ease over 110–950ms anyway, so ~16 updates a second look the same and cost a quarter */
+const queueLook = () => { if (MOT.raf) return; MOT.raf = -1; setTimeout(() => { MOT.raf = requestAnimationFrame(lookFrame); }, 60); };
+window.addEventListener('pointermove', (e) => { if (S.reduced || e.pointerType === 'touch') return; MOT.mx = e.clientX; MOT.my = e.clientY; queueLook(); }, { passive: true });
+document.documentElement.addEventListener('pointerleave', () => { MOT.mx = null; queueLook(); });
+window.addEventListener('blur', () => { MOT.mx = null; queueLook(); });
+window.addEventListener('scroll', () => { if (MOT.mx != null) queueLook(); }, { passive: true });
+
+/* =====================================================================
+   O3 · «غيّر شكل …»: the dialog, the places that open it, and the page
+   ===================================================================== */
+const ICONS = {
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  chevron: '<path d="M15 6l-6 6 6 6"/>',
+  chevronRight: '<path d="M9 6l6 6-6 6"/>',
+  chat: '<path d="M4 5.5h16v10.5H9l-5 4z"/>',
+  hand: '<path d="M8 11.5V6a1.5 1.5 0 0 1 3 0v5"/><path d="M11 10.5V4.5a1.5 1.5 0 0 1 3 0v6"/><path d="M14 10.5V6a1.5 1.5 0 0 1 3 0v5.5"/><path d="M17 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.6a6 6 0 0 1-4.7-2.3l-3.3-4.2a1.6 1.6 0 0 1 2.4-2.1L8 13.8"/>',
+};
+/* left-to-right interface: «forward» points the other way */
+const icon = (n0, cls = '') => { const n = S.lang !== 'ar' && n0 === 'chevron' ? 'chevronRight' : n0; return `<svg class="od-icon${cls ? ` ${cls}` : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[n] || ''}</svg>`; };
+const isOwner = () => S.role === 'owner';
+const ROLE = {
+  lead: ['منسّق التسويق', 'Marketing lead'], ads: ['وكيل الإعلانات', 'Ads agent'], leads: ['متابعة الليدز', 'Lead follow-up'],
+  content: ['كاتب المحتوى', 'Content writer'], training: ['تدريب الفريق', 'Team training'], issues: ['خدمة العملاء', 'Customer care'],
+};
+/* the last thing each one did, for the details panel */
+const DID = {
+  lead: ['راجع شغل الفريق للأسبوع ده', "Reviewed the team's work for this week"], ads: ['بيجهّز نسخة تانية من إعلان رمضان', 'Preparing a second Ramadan ad'],
+  leads: ['رتّب اللي سألوا عن الأسعار فوق', 'Put the ones who asked about prices on top'], content: ['كتب تلات أفكار بوستات', 'Wrote three post ideas'],
+  training: ['جهّز خطة تدريب الأسبوع', "Prepared this week's training plan"], issues: ['جمع تفاصيل شكوى الطلب الناقص', 'Gathered the incomplete-order complaint'],
+};
+const SHORT = { calm: ['هادي', 'Calm'], energetic: ['نشيط', 'Energetic'], warm: ['ودود', 'Warm'], dreamy: ['حالم', 'Dreamy'], neat: ['منظم', 'Organised'], caring: ['صبور', 'Patient'] };
+/* the chosen temperament in one plain line */
+const SAY = {
+  calm: ['بيتنفس على مهله، وعينه ثابتة عليك.', 'Slow breath, steady eyes on you.'],
+  energetic: ['بينط نطة خفيفة، وعينه بتلف بسرعة.', 'A little bounce, quick darting eyes.'],
+  warm: ['عينه مدورة، وبيتمايل بالراحة.', 'Round eyes and a soft sway.'],
+  dreamy: ['كل شوية يسرح لفوق، وألوانه بتتحرك.', 'Drifts upward now and then; its colour flows.'],
+  neat: ['عينه مظبوطة، وحركته صغيرة ودقيقة.', 'Neat, even eyes; small, precise moves.'],
+  caring: ['عينه حنينة، وبيهز راسه وهو بيسمعك.', 'Gentle eyes, a slow nod while it listens.'],
+};
+const NEVER = () => [L('ينشر حاجة', 'Publish anything'), L('يصرف فلوس', 'Spend money'), L('يبعت لعميل', 'Message a customer')];
+const lookOf = (a) => { const I = info(a); return { preset: I.preset, shape: I.shape, tk: I.tk }; };
+const isAutoLook = (a, l) => l.preset === AUTO[a] && l.shape === 'circle' && l.tk === AGENT[a].tk;
+const wordsOf = (a) => { const I = info(a); return `${I.auto ? L('تلقائي', 'Automatic') : L('مخصّص', 'Custom')} · ${L(PRESET[I.preset].ar, PRESET[I.preset].en)} · ${L(SHORT[I.tk][0], SHORT[I.tk][1])}`; };
+const nameB = (a) => `<bdi data-name="${a}">${esc(info(resolve(a)).name)}</bdi>`;
+const changeLabel = (a) => L(`غيّر شكل ${info(a).name}`, `Change ${info(a).name}'s look`);
+
+/* ================= the dialog's content (one renderer: the modal and the six in the compare strip) ================= */
+function tileR(nm, a, f, v, face, label) {
+  return `<label class="lk-tile">${face}<input type="radio" name="${nm}" value="${v}" data-a="${a}" data-f="${f}"><span class="lk-tile__t">${label}</span><span class="lk-ck">${icon('check')}</span></label>`;
+}
+function swatchR(nm, a, p) {
+  return `<label class="lk-sw"><span class="lk-sw__o">${faceHTML(a, 22, { po: p.id })}</span><input type="radio" name="${nm}" value="${p.id}" data-a="${a}" data-f="preset"><span class="sr-only">${esc(L(p.ar, p.en))}</span></label>`;
+}
+function panelHTML(a, inst, modal) {
+  const nm = `lk-${inst}`; const tid = `lk-t-${inst}`;
+  const inner = `
+    <div class="lk-head"><h2 class="lk-title" id="${tid}">${L(`غيّر شكل ${nameB(a)}`, `Change ${nameB(a)}’s look`)}</h2>${modal ? `<button type="button" class="ib" data-act="close" aria-label="${esc(L('اقفل', 'Close'))}">${icon('x')}</button>` : ''}</div>
+    <div class="lk-stage"><span class="face-btn lk-prev" data-act="press" aria-hidden="true">${faceHTML(a, 120)}</span></div>
+    <div class="lk-body">
+      <fieldset class="lk-grp"><legend class="lk-lg">${L('الشكل', 'Shape')}</legend>
+        <div class="lk-tiles">${SHAPES.map((s) => tileR(`${nm}-shape`, a, 'shape', s.id, faceHTML(a, 28, { so: s.id }), esc(L(s.ar, s.en)))).join('')}</div></fieldset>
+      <fieldset class="lk-grp"><legend class="lk-lg">${L('اللون', 'Colour')}<span class="lk-lg__v" data-bind="pname" data-a="${a}"></span></legend>
+        <div class="lk-sws">${PRESETS.map((p) => swatchR(`${nm}-preset`, a, p)).join('')}</div></fieldset>
+      <fieldset class="lk-grp"><legend class="lk-lg">${L('الطبع', 'Temperament')}</legend>
+        <div class="lk-tiles lk-tiles--t">${TK.map((tk) => tileR(`${nm}-tk`, a, 'tk', tk, faceHTML(`${a}~${tk}`, 32), esc(L(TEMPERS[tk].ar, TEMPERS[tk].en)))).join('')}</div>
+        <p class="lk-say" data-bind="say" data-a="${a}" aria-live="polite"></p></fieldset>
+    </div>
+    <div class="lk-foot">
+      <button type="button" class="link-btn" data-act="reset" data-a="${a}">${L('رجّعه تلقائي', 'Reset to automatic')}</button>
+      <span class="od-fill"></span>
+      <button type="button" class="link-btn" data-act="all" data-a="${a}">${L('كل إعدادات الوكيل', 'All of the Agent’s settings')}${icon('chevron')}</button>
+    </div>`;
+  return modal ? `<div class="lk" data-lk="${a}">${inner}</div>`
+    : `<section class="lk lk--inline" data-lk="${a}" aria-labelledby="${tid}">${inner}</section>`;
+}
+
+/* ================= the places that open it ================= */
+function dpHTML(owner) {
+  const f = faceHTML('sel', 72, { st: 'live', dot: true });
+  const face = owner ? f.replace(/<\/span>$/, `<span class="pen" aria-hidden="true">${icon('pencil')}</span></span>`) : f;
+  const tabs = [L('نشاط', 'Activity'), L('مهام', 'Tasks'), L('ملفات', 'Files'), L('ذاكرة', 'Memory'), L('السجل', 'Log')];
+  return `<div class="dp">
+    <div class="dp-top"><button type="button" class="circle-btn" data-act="to-settings" data-bind="gear-label">${icon('gear')}</button></div>
+    <div class="dp-id">
+      <button type="button" class="face-btn dp-face" data-act="dp-face" data-owner="${owner ? 1 : 0}"${owner ? ' aria-haspopup="dialog"' : ''}>${face}</button>
+      <div><div class="dp-id__name">${nameB('sel')}<span class="badge dp-id__badge" data-bind="main">${L('الرئيسي', 'Main')}</span></div>
+        <div class="dp-id__role" data-bind="role"></div></div>
+    </div>
+    <div class="segmented" aria-hidden="true">${tabs.map((t, i) => `<span${i ? '' : ' class="is-on"'}>${t}</span>`).join('')}</div>
+    <div class="dp-sections" aria-hidden="true"><p class="dp-label">${L('آخر حاجة', 'Latest')}</p>
+      <div class="panel-card"><div class="panel-row"><span class="panel-row__text"><span class="panel-row__t" data-bind="did"></span><span class="panel-row__d">${L('النهارده', 'Today')}</span></span></div></div></div>
+  </div>`;
+}
+function chatHTML() {
+  const a = 'training';
+  const rows = [
+    [L('الشغلانة', 'Job'), L('بيجهّز خطة تدريب كل أسبوع للفريق الجديد ويتابع التمارين.', 'Prepares a weekly training plan for the new team and follows up on the drills.')],
+    [L('التطبيقات', 'Apps'), L('من غير تطبيقات: بيشتغل على اللي تبعتهوله', 'No apps: it works on what you send it')],
+    [L('مش هيعمل من غير ما يسألك', 'Won’t do without asking you'), `<ul class="ac-never">${NEVER().map((x) => `<li>${icon('hand')}<span>${x}</span></li>`).join('')}</ul>`],
+  ];
+  return `<div class="chatm">
+    <div class="chatm__head"><span class="head-pill">${faceHTML('lead', 32, { st: 'live', dot: true })}<bdi class="head-pill__name" data-name="lead">${esc(info('lead').name)}</bdi></span></div>
+    <div class="chatm__log">
+      <span class="divider">${L('النهارده', 'Today')}</span>
+      <div class="turn turn--user"><div class="bubble bubble--user">${L('عايز حد يدرّب الفريق الجديد كل أسبوع.', 'I want someone to train the new team every week.')}</div></div>
+      <div class="turn">
+        <div class="sender" id="chat-lead">${faceHTML('lead', 24)}${nameB('lead')}</div>
+        <div class="bubble bubble--agent">${L(`عملتلك ${nameB(a)}. هيبدأ بخطة الأسبوع ده.`, `I made ${nameB(a)} for you. It starts with this week's plan.`)}</div>
+        <div class="card ac-card" role="group" aria-labelledby="ac-t">
+          <div class="hcard__top"><span class="badge badge--made">${icon('check')}${L('اتعمل · جديد', 'Made · New')}</span></div>
+          <div class="card__head">${faceHTML(a, 48, { ctx: 'born' })}<div class="card__titles"><span class="card__title" id="ac-t">${nameB(a)}</span><span class="card__sub">${L(ROLE[a][0], ROLE[a][1])}</span></div></div>
+          <dl class="kv ac-kv">${rows.map(([k, v]) => `<div class="kv__row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+          <div class="card__actions ac-actions"><button type="button" class="btn btn--primary" data-act="ac-open">${L(`افتح ${nameB(a)}`, `Open ${nameB(a)}`)}</button>${isOwner() ? `<button type="button" class="link-btn ac-look" data-act="open-look" data-a="${a}" aria-haspopup="dialog">${L('غيّر شكله', 'Change its look')}</button>` : ''}</div>
+          <p class="ac-tip">${icon('chat')}<span>${L('عايز تغيّر حاجة فيه؟ قولّه في المحادثة بتاعته.', 'Want to change something? Tell it in its chat.')}</span></p>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function setHTML() {
+  const own = isOwner(); const a = 'sel';
+  const nameRow = own ? `<div class="sr sr--in"><span class="sr-name"><span class="sr-t"><label class="sr-l" for="set-name">${L('الاسم', 'Name')}</label></span></span><span class="sr-ctl"><input class="sr-in" id="set-name" type="text" dir="auto" maxlength="24" autocomplete="off" data-set="name"></span></div>`
+    : `<div class="sr"><span class="sr-name"><span class="sr-t">${L('الاسم', 'Name')}</span></span><span class="sr-ctl"><span class="sr-val">${nameB(a)}</span></span></div>`;
+  const lookRow = `<div class="sr" id="sr-look">${faceHTML(a, 32)}<span class="sr-name"><span class="sr-t">${L('الشكل', 'Look')}</span><span class="sr-d" data-bind="words" data-a="${a}"></span></span>${own ? `<span class="sr-ctl"><button type="button" class="btn btn--secondary btn--sm lk-hit" data-act="open-look" data-a="${a}" aria-haspopup="dialog">${L('غيّر', 'Change')}</button></span>` : ''}</div>`;
+  const roleRow = `<div class="sr"><span class="sr-name"><span class="sr-t">${L('الدور', 'Role')}</span></span><span class="sr-ctl"><span class="sr-val" data-bind="role-only"></span></span></div>`;
+  return `<div class="setm" id="setm">
+    <div class="sov-bar"><nav class="sov-crumbs" aria-label="${esc(L('مكانك في الإعدادات', 'Where you are in settings'))}"><ol><li>${L('الإعدادات', 'Settings')}</li><li>${L('الوكلاء', 'Agents')}</li><li><h3 class="sov-crumb__cur" id="set-cur" tabindex="-1">${nameB(a)}</h3></li></ol></nav></div>
+    <div class="setm__page">
+      <div class="segmented sov-tabs" aria-hidden="true"><span class="is-on">${L('الإعدادات', 'Settings')}</span><span>${L('الذاكرة', 'Memory')}</span></div>
+      <section class="sx" aria-labelledby="sx-id-h"><div class="sx-head"><h4 class="sx-h" id="sx-id-h">${L('الهوية', 'Identity')}</h4></div>
+        <div class="sx-card">${nameRow}${lookRow}${roleRow}</div></section>
+    </div>
+  </div>`;
+}
+
+/* ================= the page ================= */
+const sec = (n, id, t, sub, extra = '') => `<div class="sec__head"><div><span class="sec__n num">${n}</span><h2 class="sec__t" id="${id}">${t}</h2>${sub ? `<p class="sec__sub">${sub}</p>` : ''}</div>${extra}</div>`;
+const seg = (lbl, name, opts, cls = '') => `<div class="ctl${cls}"><span class="ctl__label" id="lbl-${name}">${lbl}</span><fieldset class="seg" aria-labelledby="lbl-${name}">${opts.map(([v, t]) => `<label><input type="radio" name="${name}" value="${v}">${t}</label>`).join('')}</fieldset></div>`;
+const sw = (id, act, label) => `<span class="sw-hit"><button type="button" class="switch" role="switch" id="${id}" data-act="${act}" aria-checked="false" aria-labelledby="${id}-l"></button><span id="${id}-l" data-act="${act}">${label}</span></span>`;
+function topHTML() {
+  return `<header class="top">
+      <div><p class="top__k num">${L('الجولة O3', 'Round O3')}</p>
+        <h1 class="top__t">${L('غيّر شكل الوكيل', 'Change an Agent’s look')}</h1>
+        <p class="top__sub">${L('الشكل واللون والطبع بيتحفظوا مع كل دوسة، والوش بيتغيّر في كل مكان على طول.', 'Shape, colour and temperament save with every press, and the face changes everywhere at once.')}</p></div>
+      <div class="controls">
+        ${seg(L('اللغة', 'Language'), 'lang', [['ar', 'عربي'], ['en', 'English']])}
+        ${seg(L('المظهر', 'Theme'), 'theme', [['light', L('فاتح', 'Light')], ['dark', L('غامق', 'Dark')]])}
+        ${seg(L('العرض', 'Width'), 'width', [['desktop', L('كمبيوتر', 'Desktop')], ['phone', L('موبايل', 'Phone')]], ' ctl--width')}
+        ${seg(L('الدور', 'Role'), 'role', [['owner', L('المالك', 'Owner')], ['other', L('عضو تاني', 'Other')]])}
+        ${sw('sw-reduced', 'reduced', L('من غير حركة', 'Reduced motion'))}
+        ${sw('sw-fail', 'fail', L('الحفظ الجاي يفشل', 'Next save fails'))}
+      </div>
+    </header>`;
+}
+function bodyHTML() {
+  const chips = `<div class="chips">${AGENTS.map((A) => `<label class="chip chip--face">${faceHTML(A.id, 20)}<input type="radio" name="sel" value="${A.id}">${nameB(A.id)}</label>`).join('')}</div>`;
+  return `
+    <section class="sec" aria-labelledby="h1s">
+      ${sec(1, 'h1s', L('الأماكن اللي بتفتحه', 'Where it opens from'), L('دوس على الوش أو على «غيّر». أي اختيار في الحوار بيغيّر الوش هنا ورا الحوار.', 'Press the face or «Change». Every pick in the dialog changes the face here, behind it.'), chips)}
+      <div class="places">
+        <div class="places__col">
+          <div class="dp-pair" id="dp-pair">
+            <div class="place"><p class="cap">${L('لوحة التفاصيل · المالك', 'Details panel · Owner')}</p>${dpHTML(true)}</div>
+            <div class="place"><p class="cap">${L('لوحة التفاصيل · أي دور تاني', 'Details panel · any other Role')}</p>${dpHTML(false)}</div>
+          </div>
+          <div class="place" id="place-set"><p class="cap">${L('الإعدادات · صفحة الوكيل', 'Settings · the Agent’s page')}</p>${setHTML()}</div>
+        </div>
+        <div class="place" id="place-chat"><p class="cap"><span>${L('الشات · بعد ما Lead يعمل وكيل', 'Chat · after Lead makes an Agent')}</span><button type="button" class="link-btn" data-act="birth">${L('شغّل الولادة تاني', 'Play the birth again')}</button></p>${chatHTML()}</div>
+      </div>
+    </section>
+    <section class="sec" aria-labelledby="h2s">
+      ${sec(2, 'h2s', L('الحوار لكل وكيل', 'The dialog for each Agent'), L('نفس الحوار للستة. بص على العينين والنَّفَس في صف الطبع قبل ما تختار.', 'The same dialog for all six. Watch the eyes and the breath in the temperament row before you pick.'))}
+      <div class="canvas cmp">${AGENTS.map((A) => panelHTML(A.id, `c-${A.id}`, false)).join('')}</div>
+    </section>`;
+}
+function phoneHTML() {
+  return `<div class="phone-stage"><div class="phone-frame">
+      <span class="hardware-button volume" aria-hidden="true"></span><span class="hardware-button power" aria-hidden="true"></span>
+      <div class="phone-screen">
+        <iframe class="phone-ifr" title="${esc(L('الصفحة على موبايل 390×844', 'The page on a 390×844 phone'))}"></iframe>
+        <div class="status-bar" aria-hidden="true"><span class="status-time">9:41</span><span></span><span class="status-icons">
+          <svg class="connectivity" viewBox="0 0 15 12"><path d="M1.5 10.5v-2m4 2v-4.5m4 4.5v-7m4 7v-9"/></svg>
+          <svg class="wifi" viewBox="0 0 16 12"><path d="M1.5 4.7a9.2 9.2 0 0 1 13 0M4.2 7.3a5.4 5.4 0 0 1 7.6 0M6.9 10a1.55 1.55 0 0 1 2.2 0"/></svg>
+          <svg class="battery" viewBox="0 0 20 11"><rect x=".75" y="1.25" width="16.5" height="8.5" rx="2"/><path d="M18.5 4v3M3.2 3.4h10.4v4.2H3.2z" fill="currentColor" stroke="none"/></svg></span></div>
+        <span class="camera-dot" aria-hidden="true"></span><span class="gesture-indicator" aria-hidden="true"></span>
+      </div></div></div>`;
+}
+function embedDoc() {
+  const cfg = { lang: S.lang, theme: S.theme, reduced: S.reduced, role: S.role, fail: S.fail, sel: S.sel, looks: S.looks, names: S.names };
+  const js = JSON.stringify(cfg).replace(/</g, '\\u003c');
+  return SRC.replace('<head>', `<head><script>window.__EMBED=${js};<\/script>`);
+}
+function buildPage() {
+  const html = document.documentElement;
+  html.lang = S.lang; html.dir = S.lang === 'ar' ? 'rtl' : 'ltr';
+  html.classList.toggle('is-embed', !!EMB);
+  document.title = L('غيّر شكل الوكيل · O3', 'Change an Agent’s look · O3');
+  closeNow();
+  VIS.clear(); if (io) { io.disconnect(); io = null; }
+  const phone = !EMB && S.width === 'phone' && !mqPhone.matches;
+  $('#app').innerHTML = `<main class="page">${EMB ? '' : topHTML()}${phone ? phoneHTML() : bodyHTML()}</main>`;
+  if (phone) { const f = $('.phone-ifr'); f.srcdoc = embedDoc(); }
+  mount(document);
+  observeBirth();
+}
+
+/* ================= paint: words, choices and faces follow the state ================= */
+function paint() {
+  const root = document.documentElement;
+  root.dataset.theme = S.theme;
+  root.classList.toggle('is-reduced', S.reduced);
+  const setRadio = (name, v) => $$(`input[name="${name}"]`).forEach((i) => { i.checked = i.value === v; });
+  setRadio('lang', S.lang); setRadio('theme', S.theme); setRadio('width', S.width); setRadio('role', S.role); setRadio('sel', S.sel);
+  const r = $('#sw-reduced'); if (r) r.setAttribute('aria-checked', String(S.reduced));
+  const fl = $('#sw-fail'); if (fl) fl.setAttribute('aria-checked', String(S.fail));
+  $$('[data-name]').forEach((n) => { n.textContent = info(resolve(n.dataset.name)).name; });
+  $$('input[data-f]').forEach((i) => { const I = info(resolve(i.dataset.a)); i.checked = I[i.dataset.f] === i.value; });
+  $$('[data-bind="pname"]').forEach((n) => { const I = info(resolve(n.dataset.a)); n.textContent = L(PRESET[I.preset].ar, PRESET[I.preset].en); });
+  $$('[data-bind="say"]').forEach((n) => { const I = info(resolve(n.dataset.a)); n.textContent = L(SAY[I.tk][0], SAY[I.tk][1]); });
+  $$('[data-bind="words"]').forEach((n) => { n.textContent = wordsOf(resolve(n.dataset.a)); });
+  $$('[data-act="reset"]').forEach((b) => { b.disabled = info(resolve(b.dataset.a)).auto; });
+  const sel = S.sel; const st = S.live[sel] || 'idle';
+  $$('[data-bind="role"]').forEach((n) => { n.textContent = `${L(ROLE[sel][0], ROLE[sel][1])} · ${L(ST[st].ar, ST[st].en)}`; });
+  $$('[data-bind="role-only"]').forEach((n) => { n.textContent = L(ROLE[sel][0], ROLE[sel][1]); });
+  $$('[data-bind="did"]').forEach((n) => { n.textContent = L(DID[sel][0], DID[sel][1]); });
+  $$('[data-bind="main"]').forEach((n) => { n.hidden = !AGENT[sel].main; });
+  $$('[data-bind="gear-label"]').forEach((b) => b.setAttribute('aria-label', L(`إعدادات ${info(sel).name}`, `Settings for ${info(sel).name}`)));
+  $$('[data-act="dp-face"]').forEach((b) => b.setAttribute('aria-label', b.dataset.owner === '1' ? changeLabel(sel) : L(`${info(sel).name} · دوس على الوش`, `${info(sel).name} · press the face`)));
+  $$('[data-act="open-look"]').forEach((b) => b.setAttribute('aria-label', changeLabel(resolve(b.dataset.a))));
+  const nm = $('#set-name'); if (nm && document.activeElement !== nm) nm.value = info(sel).name;
+  $$('.face').forEach((f) => applyFace(f));
+}
+
+/* ================= open and close ================= */
+function openDlg(a, opener) {
+  const d = $('#lk-dlg'); if (!d || d.open) return;
+  S.dlgA = a; S.opener = opener || null; S.returnTo = null;
+  d.innerHTML = panelHTML(a, 'dlg', true);
+  d.setAttribute('aria-labelledby', 'lk-t-dlg');
+  mount(d); paint();
+  d.classList.remove('is-closing');
+  d.showModal();
+  /* first focus on the chosen shape, once the dialog has finished appearing */
+  const first = () => { if (!d.open) return; const c = $('input[data-f="shape"]:checked', d) || $('input[data-f]', d); if (c) c.focus(); };
+  if (S.reduced) first(); else setTimeout(first, 290);
+}
+function closeDlg() {
+  const d = $('#lk-dlg'); if (!d || !d.open || d.classList.contains('is-closing')) return;
+  if (S.reduced) { d.close(); return; }
+  d.classList.add('is-closing');
+  setTimeout(() => { d.classList.remove('is-closing'); if (d.open) d.close(); }, 190);
+}
+function closeNow() { const d = $('#lk-dlg'); if (d && d.open) { S.opener = null; S.returnTo = null; d.classList.remove('is-closing'); d.close(); } }
+function onClosed() {
+  const d = $('#lk-dlg');
+  const host = $('#toast-host'); if (host && host.parentElement !== document.body) document.body.appendChild(host);
+  d.innerHTML = ''; S.dlgA = null;
+  const o = S.opener; const go = S.returnTo; S.opener = null; S.returnTo = null;
+  if (go) go();
+  else if (o && o.isConnected) o.focus();
+}
+
+/* ================= picking saves at once; a failed save puts the pick back ================= */
+function commit(a, root, revert) {
+  paint();
+  if (root) play($('.lk-prev .face', root), 'press');
+  const fail = S.fail;
+  if (fail) { S.fail = false; paint(); }
+  sync();
+  if (!fail) return;   /* success: nothing but the face changing */
+  setTimeout(() => {
+    if (revert() === false) return;
+    const ae = document.activeElement;
+    paint(); sync();
+    if (ae && ae.matches && ae.matches('input[data-f]') && !ae.checked) { const c = $(`input[name="${ae.name}"]:checked`); if (c) c.focus(); }
+    toast(L('ما اتحفظش. جرّب تاني.', 'Couldn’t save. Try again.'));
+  }, 700);
+}
+function pick(i) {
+  const a = i.dataset.a; const f = i.dataset.f; const v = i.value;
+  const before = info(a); const prev = lookOf(a);
+  S.looks[a] = { ...prev, [f]: v };
+  commit(a, i.closest('.lk'), () => {
+    if (info(a)[f] !== v) return false;   /* already changed again */
+    const back = { ...lookOf(a), [f]: prev[f] };
+    if (before.auto && isAutoLook(a, back)) delete S.looks[a]; else S.looks[a] = back;
+    return true;
+  });
+}
+function resetLook(b) {
+  const root = b.closest('.lk'); const a = root.dataset.lk; if (info(a).auto) return;
+  const prev = lookOf(a);
+  delete S.looks[a];
+  commit(a, root, () => { if (S.looks[a]) return false; S.looks[a] = prev; return true; });
+  const c = $('input[data-f="shape"]:checked', root); if (c) c.focus();
+}
+
+/* ================= toast (index.html) ================= */
+let toastTimer = 0;
+function toast(text, ic = 'x') {
+  const host = $('#toast-host');
+  const top = $$('dialog[open]').pop(); const home = top || document.body;
+  if (host.parentElement !== home) home.appendChild(host);
+  host.innerHTML = `<div class="toast">${icon(ic)}<span>${esc(text)}</span></div>`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    const el = host.firstElementChild;
+    if (!el || S.reduced) { host.innerHTML = ''; return; }
+    el.classList.add('is-leaving');
+    setTimeout(() => { if (host.firstElementChild === el) host.innerHTML = ''; }, 140);
+  }, 2800);
+}
+
+/* ================= going places ================= */
+function toSettings(a, fromDlg) {
+  const go = () => {
+    S.sel = a; paint();
+    const box = $('#setm'); if (!box) return;
+    box.scrollIntoView({ block: 'center', behavior: S.reduced ? 'auto' : 'smooth' });
+    const h = $('#set-cur'); if (h) h.focus({ preventScroll: true });
+    box.classList.remove('is-spot'); void box.offsetWidth; box.classList.add('is-spot');
+  };
+  if (fromDlg) { S.returnTo = go; closeDlg(); } else go();
+}
+function openAgent(a) {
+  S.sel = a; paint();
+  const p = $('#dp-pair'); if (p) p.scrollIntoView({ block: 'center', behavior: S.reduced ? 'auto' : 'smooth' });
+  $$('.dp-face .face').forEach((f) => play(f, 'greet'));
+}
+/* the newborn on the card: the approved birth, once, when the card comes into view */
+function observeBirth() {
+  const card = $('.ac-card'); if (!card || !('IntersectionObserver' in window)) return;
+  const o = new IntersectionObserver((ents) => {
+    if (ents.some((e) => e.isIntersecting) && !S.bornOnce) { S.bornOnce = true; o.disconnect(); setTimeout(doBirth, 250); }
+  }, { threshold: .6 });
+  o.observe(card);
+}
+function doBirth() {
+  const f = $('.ac-card .face[data-ctx="born"]'); const lead = $('#chat-lead .face');
+  if (!f) return;
+  play(f, 'birth');
+  if (lead && !S.reduced) { gaze(lead, 0, .7); lead._busy = true; setTimeout(() => { ungaze(lead); lead._busy = false; }, 1800); }
+}
+
+/* ================= the phone frame: the same page at 390 × 844 ================= */
+function sync() { if (EMB && window.parent !== window) window.parent.postMessage({ type: 'o3-sync', looks: S.looks, names: S.names, fail: S.fail, sel: S.sel }, '*'); }
+function postCfg() { const f = $('.phone-ifr'); if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'o3-cfg', cfg: { theme: S.theme, reduced: S.reduced, fail: S.fail } }, '*'); }
+window.addEventListener('message', (e) => {
+  const m = e.data; if (!m || typeof m !== 'object') return;
+  if (m.type === 'o3-sync' && !EMB) { S.looks = m.looks || {}; S.names = m.names || {}; S.fail = !!m.fail; S.sel = m.sel || S.sel; paint(); }
+  else if (m.type === 'o3-cfg' && EMB) { Object.assign(S, m.cfg); $$('.face').forEach(clearMoment); paint(); queueLook(); }
+});
+
+/* ================= events ================= */
+document.addEventListener('pointerdown', () => { document.documentElement.dataset.input = 'pointer'; }, true);
+document.addEventListener('keydown', (e) => { if (!e.metaKey && !e.ctrlKey && !(e.target instanceof HTMLInputElement && e.target.type === 'text')) document.documentElement.dataset.input = 'key'; }, true);
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'press') play($('.face', b), 'press');
+  else if (act === 'dp-face') { play($('.face', b), 'press'); if (b.dataset.owner === '1') setTimeout(() => openDlg(S.sel, b), S.reduced ? 0 : 160); }
+  else if (act === 'open-look') openDlg(resolve(b.dataset.a), b);
+  else if (act === 'close') closeDlg();
+  else if (act === 'reset') resetLook(b);
+  else if (act === 'all') toSettings(b.closest('.lk').dataset.lk, !!b.closest('dialog'));
+  else if (act === 'to-settings') toSettings(S.sel, false);
+  else if (act === 'ac-open') openAgent('training');
+  else if (act === 'birth') doBirth();
+  else if (act === 'reduced') { S.reduced = !S.reduced; $$('.face').forEach(clearMoment); paint(); queueLook(); postCfg(); }
+  else if (act === 'fail') { S.fail = !S.fail; paint(); postCfg(); }
+});
+document.addEventListener('change', (e) => {
+  const i = e.target; if (!(i instanceof HTMLInputElement) || i.type !== 'radio') return;
+  if (i.dataset.f) { pick(i); return; }
+  const v = i.value;
+  if (i.name === 'sel') { S.sel = v; paint(); $$('.dp-face .face').forEach((f) => play(f, 'greet')); return; }
+  if (i.name === 'theme') { S.theme = v; paint(); postCfg(); return; }
+  if (i.name === 'lang') S.lang = v; else if (i.name === 'role') S.role = v; else if (i.name === 'width') S.width = v;
+  buildPage(); paint();
+  const back = $(`input[name="${i.name}"]:checked`); if (back) back.focus();
+});
+/* arrow keys walk one group, the same way in both directions of reading; Tab moves to the next group */
+document.addEventListener('keydown', (e) => {
+  const i = e.target;
+  if (!(i instanceof HTMLInputElement) || !i.dataset.f) return;
+  const list = $$(`input[name="${i.name}"]`); const k = list.indexOf(i); const n = list.length;
+  const rtl = document.documentElement.dir === 'rtl';
+  const step = { ArrowDown: 1, ArrowUp: -1, ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];
+  let to = null;
+  if (step) to = (k + step + n) % n; else if (e.key === 'Home') to = 0; else if (e.key === 'End') to = n - 1;
+  if (to == null) return;
+  e.preventDefault();
+  const t = list[to]; t.focus();
+  if (!t.checked) { t.checked = true; t.dispatchEvent(new Event('change', { bubbles: true })); }
+});
+/* feel a temperament before picking it: hovering or focusing its little face plays its look and a blink */
+function sample(tile) {
+  const f = $('.face', tile); if (!f || S.reduced || !f._t || f._busy) return;
+  blink(f); glance(f, f._t); f._ng = performance.now() + f._t.glance * 1000;
+}
+document.addEventListener('pointerover', (e) => {
+  if (e.pointerType === 'touch') return;
+  const t = e.target.closest('.lk-tiles--t .lk-tile'); if (!t || t.contains(e.relatedTarget)) return;
+  sample(t);
+});
+document.addEventListener('focusin', (e) => { const t = e.target.closest && e.target.closest('.lk-tiles--t .lk-tile'); if (t) sample(t); });
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.id === 'set-name') { S.names[S.sel] = t.value.trim(); if (!S.names[S.sel]) delete S.names[S.sel]; paint(); sync(); }
+});
+const dlg = $('#lk-dlg');
+dlg.addEventListener('cancel', (e) => { e.preventDefault(); closeDlg(); });
+dlg.addEventListener('close', onClosed);
+dlg.addEventListener('click', (e) => { if (e.target === dlg) closeDlg(); });
+mqReduce.addEventListener('change', (m) => { S.reduced = m.matches; paint(); postCfg(); });
+mqPhone.addEventListener('change', () => { if (S.width === 'phone') { buildPage(); paint(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) VIS.forEach((f) => { f._nb = 0; f._ng = 0; }); });
+
+buildPage();
+paint();
+
+})();
+</script>
+</body>
+</html>
