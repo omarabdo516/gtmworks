@@ -3,7 +3,7 @@ import type { BoardColumn } from './board-columns.mjs';
 import { agentStatus, type AgentStatus } from './agent-details.mjs';
 import type { SessionUsage } from './engine.mjs';
 import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
-import { shownReply } from './media-tags.mjs';
+import { replyShown } from './media-tags.mjs';
 import { handoverEnding, messageFiles, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -103,12 +103,11 @@ export type StoredHandover={id:number,message:number,from_agent:string,from_name
 // of its own: its answer is the Agent's that asked it, whose own answer follows.
 const handoverModel=(row:StoredHandover)=>{ const cause=modelCauseOf(row.model_end); return cause?{model:{cause,agent:row.model_agent??row.to_name}}:{}; };
 // A handover's words keep no file of their own (#708): a tag in them is named as a file not attached, never shown.
-const replyText=(words:string)=>{ const text=shownReply(words); return {body:text.body,...(text.missed.length?{missed:text.missed}:{})}; };
 export const handoverLines=(rows:StoredHandover[]):ChannelMessage[]=>rows.flatMap((row):ChannelMessage[]=>[
  {id:`handover-${row.id}`,author:'handoff',from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,
   ...handoverEnding(row),...handoverModel(row)},
- ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,...replyText(row.summary),at:row.answered_at,to:row.from_name}]:[]),
- ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,...replyText(row.reply),at:row.closed_at}]:[]),
+ ...(row.summary&&row.answered_at?[{id:`handover-${row.id}-answer`,author:'agent' as const,name:row.to_name,face:row.to_connection,...replyShown(row.summary),at:row.answered_at,to:row.from_name}]:[]),
+ ...(row.reply&&row.closed_at?[{id:`handover-${row.id}-reply`,author:'agent' as const,name:row.from_name,face:row.from_connection,...replyShown(row.reply),at:row.closed_at}]:[]),
 ]);
 // The lines in the order they were written: a note is drawn where it happened, after a message written at the same
 // moment (the sort is stable, and the messages come first), and a handover's row after the reply that made it.
@@ -230,9 +229,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const written:[ChannelMessage[],ChannelMessage[]]=[
   ordered.map((message):ChannelMessage=>{
    // An Agent's reply carries the files it handed over and names the ones it could not (#708); no tag is shown.
-   if(message.author==='agent') { const text=shownReply(message.body); const files=messageFiles(attached.filter(file=>file.message_id===message.id)); const missed=[...(message.missed_files??[]),...text.missed];
-    return {id:message.id,author:'agent',name:message.author_name,face:seen.find(agent=>agent.id===message.agent_id)?.connection_id||message.agent_id||message.author_name,body:text.body,at:message.created_at,
-    ...(files.length?{files}:{}),...(missed.length?{missed}:{}),
+   if(message.author==='agent') { const files=messageFiles(attached.filter(file=>file.message_id===message.id));
+    return {id:message.id,author:'agent',name:message.author_name,face:seen.find(agent=>agent.id===message.agent_id)?.connection_id||message.agent_id||message.author_name,...replyShown(message.body,message.missed_files),at:message.created_at,
+    ...(files.length?{files}:{}),
     ...(stepsOf.has(message.id)?{steps:stepsOf.get(message.id)}:{}),...(message.reply_to!==null&&cardsOf.has(`${message.reply_to}:${message.reply_ordinal??1}`)?{cards:cardsOf.get(`${message.reply_to}:${message.reply_ordinal??1}`)}:{})}; }
    const mentions=(runsOf.get(message.id)??[]).map(mentionOf);
    return {id:message.id,author:'person',mine:message.person_id===person,name:message.author_name,role:people.find(member=>member.person===message.person_id)?.role??null,body:message.body,at:message.created_at,

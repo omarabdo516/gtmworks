@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { keepReplyFiles, replyFilePath, shownReply } from '../lib/reply-files.mjs';
+import { keepReplyFiles, replyFilePath } from '../lib/reply-files.mjs';
+import { shownReply } from '../lib/media-tags.mjs';
 
 // #708, ADR 0028: an Agent hands a file it made in its own work folder by a `MEDIA:` line in its reply. gtmworks reads
 // the file from that folder only, keeps it with the reply in the place's private folder, and takes the tag out of the
@@ -59,6 +60,14 @@ test('a missing file, one over the size served and a relative path are told apar
  assert.equal(kept.reply,'and and.');
 });
 
+test('a path from the Agent\'s folder with a space or no extension is still a tag, and a reply keeps twenty names at most',async()=>{
+ const d=drivers();
+ const kept=await keep(`MEDIA:/work/${profile}/report/my report.pdf\nMEDIA:/work/${profile}/Makefile\n${Array.from({length:25},(_,n)=>`MEDIA:/opt/data/x${n}.pdf`).join('\n')}`,d);
+ assert.equal(kept.reply,'');
+ assert.equal(kept.missed.length,20);
+ assert.deepEqual(kept.missed.slice(0,2),['my report.pdf','Makefile']);
+});
+
 test('a reply of file tags alone keeps an empty text, and the same file named twice is one file',async()=>{
  const d=drivers();
  const kept=await keep(`MEDIA:/work/${profile}/report/market.pdf\nMEDIA:/work/${profile}/report/market.pdf`,d);
@@ -106,7 +115,7 @@ test('a channel reply is closed with its file, kept in the channel\'s folder for
    if(name==='close_channel_run') { closes.push(args); return {data:true,error:null}; }
    return {data:null,error:{message:`unexpected ${name}`}};
   },
-  from:table=>({select:()=>({eq:(_column,id)=>({single:async()=>table==='channel_messages'&&id===7?{data:{channel_id:channel},error:null}:{data:null,error:{message:'no row'}}})})}),
+  from:table=>({select:()=>({eq:(_column,id)=>({eq:(by,c)=>({single:async()=>table==='channel_messages'&&id===7&&by==='company_id'&&c===company?{data:{channel_id:channel},error:null}:{data:null,error:{message:'no row'}}})})})}),
   storage:{from:()=>({upload:async path=>{ uploads.push(path); return {error:null}; }})},
  };
  const engine={read:async()=>({state:'completed',reply:`MEDIA:/work/${profile}/report/market.pdf`,session:null,usage:null,toolCalls:[]})};

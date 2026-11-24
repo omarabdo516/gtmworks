@@ -1,7 +1,7 @@
 import type { PermissionChoice , QuestionAnswer } from './engine.mjs';
 import type { AppState } from './app-catalogue.mjs';
 import { isThumbnail } from './attachments.mjs';
-import { shownReply } from './media-tags.mjs';
+import { replyShown } from './media-tags.mjs';
 export type { PermissionChoice };
 // The conversation record as the page shows it: run ids stay on the server. A note is a person's message addressed to
 // another Member (`to`, no run); a queued message waits for the Agent to finish the current reply (`queued`), or was
@@ -167,9 +167,8 @@ export type StoredFile={id:number,name:string,message_id:number|null,send_key:st
 export const messageFiles=(rows:{id:number,name:string,content_type?:string}[]):MessageFile[]=>rows.map(({id,name,content_type})=>({id,name,...(content_type&&isThumbnail(content_type)?{image:true as const}:{})}));
 export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCard[]=[],agentName='',saved:{run_id:string,rule:SavedRule}[]=[],runSteps:RunStepsRow[]=[],files:StoredFile[]=[]):ConversationMessage[]=>messages.flatMap(message=>{
  const sent=messageFiles(files.filter(row=>row.message_id===message.id));
- const text=message.author==='agent'?shownReply(message.body):{body:message.body,missed:[]};
- const missed=[...(message.missed_files??[]),...text.missed];
- const plain={id:message.id,author:message.author,author_name:message.author_name,body:text.body,...(missed.length?{missed}:{}),lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at,...(message.agent_id?{agent_id:message.agent_id}:{}),...(sent.length?{files:sent}:{})};
+ const text=message.author==='agent'?replyShown(message.body,message.missed_files):{body:message.body};
+ const plain={id:message.id,author:message.author,author_name:message.author_name,...text,lost:message.author==='person'&&ends.some(run=>run.run_id===message.run_id&&run.outcome==='lost'),created_at:message.created_at,...(message.agent_id?{agent_id:message.agent_id}:{}),...(sent.length?{files:sent}:{})};
  const replied=message.author==='agent'||messages.some(other=>other.author==='agent'&&other.run_id===message.run_id);
  // A connect card (#203) sits right under the reply's text, before the run's other cards (design-reference: msgHTML).
  const ofRun=leadCards.filter(row=>row.run_id===message.run_id&&!isAsked(row)).sort((a,b)=>Number(isConnect(b))-Number(isConnect(a))); const cards=ofRun.map(row=>row.card);
@@ -197,7 +196,7 @@ export const withBoardNote=(record:ConversationMessage[],reply:number|undefined)
 // Agent's own reply, which was written after it. It is gtmworks's record, never a message of the Conversation.
 export type HandoverAnswer={id:number,from:string,name:string,face:string,body:string,at:string};
 export const withHandoverAnswers=(record:ConversationMessage[],answers:HandoverAnswer[]):ConversationMessage[]=>
- mergedByTime(record,[...answers].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((answer):ConversationMessage=>{ const text=shownReply(answer.body); return {id:answer.id,author:'agent',author_name:answer.name,face:answer.face,body:text.body,...(text.missed.length?{missed:text.missed}:{}),created_at:answer.at,kind:'handed',to:answer.from}; }),'after');
+ mergedByTime(record,[...answers].sort((a,b)=>a.at.localeCompare(b.at)||a.id-b.id).map((answer):ConversationMessage=>({id:answer.id,author:'agent',author_name:answer.name,face:answer.face,...replyShown(answer.body),created_at:answer.at,kind:'handed',to:answer.from})),'after');
 // #477: a job an asked Agent handed on, made inside that Agent's Run rather than under a reply of the chat, is its own
 // quiet row among the turns (`kind` handedOn), where it was made: after the answer that handed it on was asked for, and
 // before the answer it brought back.
