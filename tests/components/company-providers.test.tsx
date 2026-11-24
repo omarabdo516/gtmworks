@@ -318,15 +318,18 @@ test('a Provider whose models could not be read says so, and one listing none sa
 });
 
 // #643: an OpenCode Go key's models are the ones OpenCode serves it, and its details say the list is OpenCode's own.
-test('an OpenCode Go key says its models come from OpenCode itself, in both languages; another key does not', async () => {
+test('an OpenCode Go key whose list OpenCode gave says its models come from OpenCode itself, in both languages; another key, or a list it did not give, does not', async () => {
   const held = keys({ keys: [{ provider: 'opencode-go', label: 'OpenCode Go', set: true }, { provider: 'anthropic', label: 'Anthropic', set: true }] });
-  const models: ProviderModelsData = { 'key-opencode-go': [{ model: 'glm-5.3', enabled: true }], 'key-anthropic': [{ model: 'claude-opus-4-6', enabled: true }] };
+  const models: ProviderModelsData = { 'key-opencode-go': [{ model: 'glm-5.3', enabled: true, served: true }], 'key-anthropic': [{ model: 'claude-opus-4-6', enabled: true }] };
   for (const [language, words] of [['en', en], ['ar', ar]] as const) {
     const screen = await providers({ signIns: signIns('notConnected', 'notConnected'), keys: held, models }, language);
     expect(document.querySelector('#pv-d-key-opencode-go-models-served')?.textContent).toBe(words.providersModelsServed.replace('{0}', 'OpenCode Go'));
     expect(document.querySelector('#pv-d-key-anthropic-models-served')).toBeNull();
     await screen.unmount();
   }
+  // OpenCode could not be asked: the Engine's list is shown, and the line is not.
+  await providers({ signIns: signIns('notConnected', 'notConnected'), keys: held, models: { ...models, 'key-opencode-go': [{ model: 'glm-5.3', enabled: true }] } });
+  expect(document.querySelector('#pv-d-key-opencode-go-models-served')).toBeNull();
 });
 
 // #618: each subscription account is a Provider of its own, two of one kind apart by the Engine's id, each named by the

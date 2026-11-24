@@ -5,7 +5,6 @@ import { useI18n } from '@/lib/i18n-client';
 import { AppTile } from '@/components/app-tile';
 import { markOf as letterOf } from '@/lib/app-mark.mjs';
 import { entryId } from '@/lib/provider-entry.mjs';
-import { servesOwnList } from '@/lib/served-models.mjs';
 import { SettingsIcon } from './settings-icons';
 import { InfoTip } from './settings-info';
 import { toast } from './toast';
@@ -30,7 +29,8 @@ export type Named={agent:string|null,name:string|null};
 export type ProviderKeysData={keys:KeyRow[]|null,waiting:Named[]|null,leftover:Named[]|null,unknown:Named[]|null};
 type ProvidersSubscriptions={available:boolean,signIns:CompanySignIns['signIns'],accounts?:SubscriptionAccount[]|null,noEngine:boolean};
 // Each Provider's models with the Owner's switch, by the Provider's id (lib/provider-models.mjs); null when unread.
-export type ProviderModelsData=Record<string,{model:string,enabled:boolean}[]>;
+// served: the provider itself said it serves this model to the key (#643).
+export type ProviderModelsData=Record<string,{model:string,enabled:boolean,served?:true}[]>;
 
 // Each subscription shows its product's mark, the reference's ChatGPT and Claude (#424).
 const subscriptionLogo:Record<SubscriptionProvider,string>={'openai-codex':'openai',anthropic:'claude'};
@@ -137,7 +137,7 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
      {entry.kind==='subscription'
       ?<SubscriptionDetail company={company} companyName={companyName} owner={owner} entry={entry} placed={placed} gate={gate} keyed={(keys?.keys??[]).some(row=>row.set&&row.provider==='anthropic')}/>
       :<KeyDetail company={company} owner={owner} entry={entry} placed={placed} gate={gate}/>}
-     <ProviderModels company={company} owner={owner} entry={entryId(entry.kind,entry.provider)} panel={entry.id} name={entry.name} models={models?models[entryId(entry.kind,entry.provider)]??[]:null} served={entry.kind==='key'&&servesOwnList(entry.provider)}/>
+     <ProviderModels company={company} owner={owner} entry={entryId(entry.kind,entry.provider)} panel={entry.id} name={entry.name} models={models?models[entryId(entry.kind,entry.provider)]??[]:null}/>
     </div>)}
     {owner&&<div className="pv-detail" id="pv-d-add" role="region" aria-labelledby="pv-d-add-name" hidden={shown!=='add'}>
      {backButton}
@@ -284,8 +284,9 @@ function PlaceFacts({company,owner,entry,placed,gate}:{company:string,owner:bool
 // A switch shows its new state at once and goes back, with a line, when the change was not kept.
 // `entry` is what the switches are kept by, the Provider's kind (lib/provider-entry.mjs): the pinned Engine lists models per
 // provider, not per account, so two ChatGPT accounts share their kind's switches (#618). `panel` is the details' own id.
-// `served`: the provider says which models it serves this key (#643), so the list is its own, not the Engine's catalogue.
-function ProviderModels({company,owner,entry,panel,name,models,served}:{company:string,owner:boolean,entry:string,panel:string,name:string,models:{model:string,enabled:boolean}[]|null,served:boolean}) {
+function ProviderModels({company,owner,entry,panel,name,models}:{company:string,owner:boolean,entry:string,panel:string,name:string,models:ProviderModelsData[string]|null}) {
+ // The list is the provider's own when it said which models it serves the key (#643), not the Engine's catalogue.
+ const served=!!models?.length&&models.every(row=>row.served);
  const {t}=useI18n(); const router=useRouter();
  const [shown,setShown]=useState<Record<string,boolean>>({}); const [busy,setBusy]=useState(''); const [error,setError]=useState('');
  const id=`pv-d-${panel}-models`;

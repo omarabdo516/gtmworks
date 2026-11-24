@@ -212,8 +212,8 @@ test('an OpenCode Go key offers only the models OpenCode serves it, in Settings 
   seedGo(fake,go.base);
   const {db}=database();
   const switches=await readProviderModels(db,{company,hermes:install(fake)});
-  assert.deepEqual(switches['key-opencode-go'],[{model:'glm-5.3',enabled:true},{model:'gemini-4-argon',enabled:true}],'the Engine\'s ids OpenCode does not serve are gone');
-  assert.deepEqual(switches['key-openrouter'].map(row=>row.model),['anthropic/claude-opus-4.6','openai/gpt-5.5'],'another provider keeps the Engine\'s list');
+  assert.deepEqual(switches['key-opencode-go'],[{model:'glm-5.3',enabled:true,served:true},{model:'gemini-4-argon',enabled:true,served:true}],'the Engine\'s ids OpenCode does not serve are gone');
+  assert.deepEqual(switches['key-openrouter'],[{model:'anthropic/claude-opus-4.6',enabled:true},{model:'openai/gpt-5.5',enabled:true}],'another provider keeps the Engine\'s list');
   const picks=await ownerPicks(db,fake);
   assert.deepEqual(picks.company.filter(pair=>pair.startsWith('opencode-go/')),['opencode-go/glm-5.3','opencode-go/gemini-4-argon']);
   assert.deepEqual(picks.agent.filter(pair=>pair.startsWith('opencode-go/')),['opencode-go/glm-5.3','opencode-go/gemini-4-argon']);
@@ -227,7 +227,7 @@ test('an OpenCode Go list that cannot be read leaves the Engine\'s list', async 
   seedGo(fake,go.base);
   const {db}=database();
   const switches=await readProviderModels(db,{company,hermes:install(fake)});
-  assert.deepEqual(switches['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+  assert.deepEqual(switches['key-opencode-go'],['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon'].map(model=>({model,enabled:true})),'none marked as OpenCode\'s own');
  } finally { await go.close(); await fake.close(); }
 });
 
@@ -245,4 +245,14 @@ test('giving an OpenCode Go key sets the Company\'s model to one OpenCode serves
    assert.deepEqual([profile.provider,profile.model],['opencode-go',expected]);
   } finally { await go.close(); await fake.close(); }
  }
+});
+
+test('an OpenCode Go key is sent only over HTTPS or to this machine, and an address that is neither keeps the Engine\'s list', async () => {
+ const fake=await fakeHermes();
+ try {
+  seedGo(fake,'http://opencode.example/zen/go/v1');
+  const {db}=database();
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+ } finally { await fake.close(); }
 });
