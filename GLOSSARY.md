@@ -91,7 +91,7 @@ A Company's own machine for its Agents' work: commands, files, code, a Screen wi
 _Avoid_: container, VM, workspace, environment
 
 **Screen / الشاشة**:
-The desktop inside a Company's Work sandbox where its Agents use a browser. A Member can watch it and take it over, for example to sign in to an account. Whatever a person signs in to there, the Company's Agents can use, within that account's own permissions.
+An Agent's own desktop and browser inside its Company's Work sandbox: each Agent has one. A Member can watch it and take it over, for example to sign in to an account. Whatever a person signs in to on an Agent's Screen, that Agent can use, within that account's own permissions; another Agent cannot.
 _Avoid_: bot screen, remote desktop, browser session
 
 **Waiting / في الانتظار**:
