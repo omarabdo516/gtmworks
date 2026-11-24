@@ -27,7 +27,7 @@ const reducedMotion = async (on: boolean) => { await cdp().send('Emulation.setEm
 beforeEach(() => { try { localStorage.clear(); } catch { /* blocked */ } });
 afterEach(async () => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await reducedMotion(false); });
 
-const looks: CompanyLooks = { agents: {}, requests: {} };
+const looks: CompanyLooks = { agents: {}, requests: {}, removed: {} };
 const Company = ({ children }: { children: React.ReactNode }) => <div className="gw"><LanguageProvider language="en"><LooksProvider looks={looks}>{children}</LooksProvider></LanguageProvider></div>;
 const faceOf = (selector: string) => document.querySelector<HTMLElement>(`${selector} .face--live`)!;
 // A moment plays: the face carries it, and its body moves (with reduced motion, still frames instead and nothing moves).
