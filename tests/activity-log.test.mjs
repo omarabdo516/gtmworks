@@ -360,7 +360,7 @@ test('a request moved to the next account names its kind and the two accounts, b
 });
 
 // #644: the Engine moved a request to the Company's Fallback model; the row names the model it was to run on and the
-// one that answered, as the model pickers name them.
+// one that answered, by the Engine's model ids.
 test('a request moved to the Fallback model names the model it was to run on and the one that answered', () => {
  assert.deepEqual(describeEntry({ subject: 'company', action: 'fallback_model_used', details: { from_provider: 'openai-codex', from_model: 'gpt-5.5', to_provider: 'anthropic', to_model: 'claude-sonnet-4-6' } }),
   { act: ['logActFallbackModelUsed'], obj: undefined, from: { text: 'gpt-5.5' }, to: { text: 'claude-sonnet-4-6' }, note: undefined });
