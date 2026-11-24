@@ -22,7 +22,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
  fake=await laneHermes();
  const profile=()=>({soul:'',provider:'anthropic',model:'claude-opus-4-6',key:fake.settings.key,config:{},credentials:{},env:{ANTHROPIC_API_KEY:'sk-ant-playwright-test-only-0123456789'}});
  fake.settings.profiles.set(space,profile());
@@ -79,49 +79,59 @@ async function turn(page:Page,entry:string,row:RegExp,model:string,name:string,o
  await expect.poll(()=>rows(`select enabled from public.company_provider_models where company_id='${company}' and entry='${entry}' and model='${model}'`)[0]?.enabled).toBe(on);
 }
 
-test('a model stays offered once, with its mark, while either Provider has it on, and is gone from both pickers once neither does', async({page},testInfo)=>{
- await signIn(page,'omar@example.com','/c/rs-learning/home');
- const chat=await conversation(page);
- // Both Providers are listed, each with both models on.
- await page.goto('/c/rs-learning/settings?section=models');
- await expect(page.locator('#pv-row-sub-anthropic')).toBeVisible();
- await expect(page.locator('#pv-row-key-anthropic')).toBeVisible();
- let picks=await chatPicks(page,chat);
- expect(offered(picks)).toEqual(models);
- expect(picks.every(pick=>pick.claude)).toBe(true);
- let own=await agentPicks(page);
- expect(offered(own)).toEqual(models);
- expect(own.every(pick=>pick.claude)).toBe(true);
- await page.screenshot({path:testInfo.outputPath('agent-picker-both-on.png')});
+// One test per Provider state (#665): the journey as one test made about ten page loads and ran close to its 60 s limit on
+// loaded CI shards. The tests run in order and share the conversation and the switches each leaves behind.
+let chat='';
+test.describe('a model stays offered once, with its mark, while either Provider has it on, and is gone from both pickers once neither does',()=>{
+ test('both Providers are listed, each with both models on, and both pickers offer each model once with Claude\'s mark', async({page},testInfo)=>{
+  await signIn(page,'omar@example.com','/c/rs-learning/home');
+  chat=await conversation(page);
+  await page.goto('/c/rs-learning/settings?section=models');
+  await expect(page.locator('#pv-row-sub-anthropic')).toBeVisible();
+  await expect(page.locator('#pv-row-key-anthropic')).toBeVisible();
+  const picks=await chatPicks(page,chat);
+  expect(offered(picks)).toEqual(models);
+  expect(picks.every(pick=>pick.claude)).toBe(true);
+  const own=await agentPicks(page);
+  expect(offered(own)).toEqual(models);
+  expect(own.every(pick=>pick.claude)).toBe(true);
+  await page.screenshot({path:testInfo.outputPath('agent-picker-both-on.png')});
+ });
 
- // Off on the subscription: the key still has it on, so both pickers still offer it, once.
- await turn(page,'sub-anthropic',/^Claude/,'claude-sonnet-4-6','Claude',false);
- await page.screenshot({path:testInfo.outputPath('provider-switch-off.png')});
- await page.reload();
- await expect(page.locator('#pv-d-sub-anthropic').getByRole('switch',{name:'claude-sonnet-4-6 on Claude'})).toHaveAttribute('aria-checked','false');
- expect(offered(await chatPicks(page,chat))).toEqual(models);
- expect(offered(await agentPicks(page))).toEqual(models);
+ test('off on the subscription: the key still has it on, so both pickers still offer it, once', async({page},testInfo)=>{
+  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=models');
+  await turn(page,'sub-anthropic',/^Claude/,'claude-sonnet-4-6','Claude',false);
+  await page.screenshot({path:testInfo.outputPath('provider-switch-off.png')});
+  await page.reload();
+  await expect(page.locator('#pv-d-sub-anthropic').getByRole('switch',{name:'claude-sonnet-4-6 on Claude'})).toHaveAttribute('aria-checked','false');
+  expect(offered(await chatPicks(page,chat))).toEqual(models);
+  expect(offered(await agentPicks(page))).toEqual(models);
+ });
 
- // Off on the key too: neither picker offers it, and the Engine is never asked to change a model.
- await turn(page,'key-anthropic',/^Anthropic/,'claude-sonnet-4-6','Anthropic',false);
- picks=await chatPicks(page,chat);
- expect(offered(picks)).toEqual(['claude-opus-4-6']);
- expect(picks[0].claude).toBe(true);
- own=await agentPicks(page);
- expect(offered(own)).toEqual(['claude-opus-4-6']);
- await page.screenshot({path:testInfo.outputPath('agent-picker-one-left.png')});
- // A choice of it sent anyway is refused by both writers, and nothing changes.
- const picked=await page.request.post('/api/conversations',{data:{company,conversation:chat.split('/').pop(),intent:'model',choice:{provider:'anthropic',model:'claude-sonnet-4-6'}}});
- expect([picked.status(),(await picked.json()).error]).toEqual([409,'conversationModelNotEnabled']);
- const written=await page.request.post('/api/agent-settings',{data:{company,agent:lead,setting:'model',value:'anthropic/claude-sonnet-4-6'}});
- expect([written.status(),(await written.json()).error]).toEqual([409,'settingModelNotEnabled']);
- expect(fake.settings.profiles.get(co)?.model).toBe('claude-opus-4-6');
- expect(rows(`select count(*)::int as n from public.conversations where company_id='${company}' and model is not null`)[0].n).toBe(0);
+ test('off on the key too: neither picker offers it, a choice of it is refused, and the Engine is never asked to change a model', async({page},testInfo)=>{
+  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=models');
+  await turn(page,'key-anthropic',/^Anthropic/,'claude-sonnet-4-6','Anthropic',false);
+  const picks=await chatPicks(page,chat);
+  expect(offered(picks)).toEqual(['claude-opus-4-6']);
+  expect(picks[0].claude).toBe(true);
+  const own=await agentPicks(page);
+  expect(offered(own)).toEqual(['claude-opus-4-6']);
+  await page.screenshot({path:testInfo.outputPath('agent-picker-one-left.png')});
+  // A choice of it sent anyway is refused by both writers, and nothing changes.
+  const picked=await page.request.post('/api/conversations',{data:{company,conversation:chat.split('/').pop(),intent:'model',choice:{provider:'anthropic',model:'claude-sonnet-4-6'}}});
+  expect([picked.status(),(await picked.json()).error]).toEqual([409,'conversationModelNotEnabled']);
+  const written=await page.request.post('/api/agent-settings',{data:{company,agent:lead,setting:'model',value:'anthropic/claude-sonnet-4-6'}});
+  expect([written.status(),(await written.json()).error]).toEqual([409,'settingModelNotEnabled']);
+  expect(fake.settings.profiles.get(co)?.model).toBe('claude-opus-4-6');
+  expect(rows(`select count(*)::int as n from public.conversations where company_id='${company}' and model is not null`)[0].n).toBe(0);
+ });
 
- // On again on the key: it is offered again.
- await turn(page,'key-anthropic',/^Anthropic/,'claude-sonnet-4-6','Anthropic',true);
- expect(offered(await chatPicks(page,chat))).toEqual(models);
- expect(offered(await agentPicks(page))).toEqual(models);
+ test('on again on the key: both pickers offer it again', async({page})=>{
+  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=models');
+  await turn(page,'key-anthropic',/^Anthropic/,'claude-sonnet-4-6','Anthropic',true);
+  expect(offered(await chatPicks(page,chat))).toEqual(models);
+  expect(offered(await agentPicks(page))).toEqual(models);
+ });
 });
 
 test('a Manager reads each Provider\'s switches and cannot change one', async({page})=>{

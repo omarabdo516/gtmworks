@@ -49,3 +49,4 @@ test('the Supabase images cache job is no part of the full check: it never fails
   // A cache-key change pulls every image, so 3 minutes would time it out and its cache would never be saved.
   assert.equal(images['timeout-minutes'], 15, 'a key change has time to pull and save every image');
 });
+

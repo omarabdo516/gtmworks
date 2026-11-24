@@ -12,7 +12,7 @@ insert into isolation_matrix(name) values
  ('company_fallback_models'),('company_profile_keepers'),('company_profiles'),('company_provider_models'),('company_shared_spaces'),
  ('good_morning_results'),('good_mornings'),
  ('conversation_archives'),('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
- ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
+ ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversation_run_resets'),('conversations'),
  ('held_agent_changes'),('hermes_agents'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_agent_temperaments'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),

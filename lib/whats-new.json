@@ -6,6 +6,42 @@
   "ar": { "title": "كل وكيل بقى ليه وش بتاعه", "body": "كل وكيل بقى كورة حيّة بلونه وشكله وطبعه، بتتنفس وبترمش وبتبص ناحية الماوس، وبتوريك إمتى بيفكر أو شغال أو خلص أو مستنيك أو وقف أو نايم، والقايمة الجانبية بتتابعه في ثواني؛ وبيسمعك وإنت بتكتبله، وبينتبه لما تنادي اسمه، وبيسلّم عليك، وبيتولد مرة واحدة قدام اللي طلبه؛ ونفس الوش في كل حتة، وبيفضل في المحادثات والقنوات والبطاقات والسجل القديمة حتى لو الوكيل اتشال، ومبتتحركش لو مختار حركة أقل؛ والمالك يقدر يغيّر شكل أي وكيل ولونه وطبعه من شباك صغير بيتفتح من وشه أو بطاقته أو إعداداته." }
  },
  {
+  "issue": 644,
+  "date": "2026-11-24",
+  "en": { "title": "Activity shows when the Fallback model answered", "body": "When every account of an Agent's model has run out and the Company's Fallback model answers the request instead, Activity now shows it once, by gtmworks, with the model the request was meant for and the one that answered." },
+  "ar": { "title": "النشاط بيبيّن إمتى الموديل البديل ردّ", "body": "لما كل حسابات موديل الوكيل يخلص استخدامها والموديل البديل بتاع الشركة يرد على الطلب بداله، النشاط دلوقتي بيبيّن ده مرة واحدة باسم gtmworks، ومعاه الموديل اللي الطلب كان رايحله والموديل اللي ردّ." }
+ },
+ {
+  "issue": 643,
+  "date": "2026-11-24",
+  "en": { "title": "OpenCode Go checks which models it serves you", "body": "An OpenCode Go key now lists, offers and starts on only the models OpenCode itself says it serves that key, so an older model OpenCode refuses is no longer offered; when OpenCode cannot be asked, the Engine's own list is shown as before." },
+  "ar": { "title": "OpenCode Go بيتأكد من الموديلات اللي بيقدّمهالك", "body": "مفتاح OpenCode Go دلوقتي بيعرض ويبدأ بس بالموديلات اللي OpenCode نفسه بيقول إنه بيقدّمها للمفتاح ده، فالموديلات القديمة اللي OpenCode بيرفضها مبقتش بتظهر؛ ولو OpenCode ماردّش، بتظهر قايمة المحرّك نفسه زي الأول." }
+ },
+ {
+  "issue": 638,
+  "date": "2026-11-24",
+  "en": { "title": "Every model of a partly connected subscription has its switch", "body": "A subscription signed in on an Agent's profile now lists every model it reaches under Providers, even when the Company also holds an API key of the same provider, each with its switch." },
+  "ar": { "title": "كل موديل في الاشتراك المتوصل جزئيًا ليه زرار", "body": "الاشتراك اللي متسجل دخوله على بروفايل وكيل بقى بيعرض في المزوّدين كل الموديلات اللي بيوصلها، حتى لو الشركة عندها كمان مفتاح API لنفس المزوّد، وكل واحد ليه زراره." }
+ },
+ {
+  "issue": 642,
+  "date": "2026-11-24",
+  "en": { "title": "A chat that ran out of usage says when it resets", "body": "When every account an Agent can use has run out of usage, the chat now says so even on the messages after the first, and tells you when the usage resets, instead of asking you to send the message again." },
+  "ar": { "title": "المحادثة اللي خلص استخدامها بتقولك إمتى هيتجدّد", "body": "لما كل الحسابات اللي الوكيل يقدر يستخدمها يخلص استخدامها، المحادثة دلوقتي بتقول كده حتى في الرسايل اللي بعد الأولى، وبتقولك الاستخدام هيتجدّد إمتى، بدل ما تطلب منك تبعت الرسالة تاني." }
+ },
+ {
+  "issue": 602,
+  "date": "2026-11-24",
+  "en": { "title": "A handed-over job says why it did not finish", "body": "When an Agent asked to do a job cannot reach its model (no model connected, no credit left, a refused key, a model that is not available, or every account out of usage), the Agent that asked now tells you that reason and what to fix in Providers, instead of only that the job failed." },
+  "ar": { "title": "الشغلانة اللي اتسلّمت بتقول ليه مخلصتش", "body": "لما الوكيل اللي اتطلب منه شغلانة ميقدرش يوصل للموديل بتاعه (مفيش موديل متوصّل، الرصيد خلص، المفتاح اترفض، الموديل مش موجود، أو كل الحسابات خلص استخدامها)، الوكيل اللي طلبها بقى بيقولك السبب وتصلّح إيه في المزوّدين، بدل ما يقول بس إن الشغلانة فشلت." }
+ },
+ {
+  "issue": 586,
+  "date": "2026-11-24",
+  "en": { "title": "A Channel opens cleanly in your own time zone", "body": "Outside UTC, a Channel's message and Handover times now appear straight in your own time zone, without the page redrawing itself as it opens." },
+  "ar": { "title": "القناة بتفتح نضيف بتوقيتك انت", "body": "لو انت برا توقيت UTC، مواعيد الرسايل والتسليمات في القناة دلوقتي بتظهر على طول بتوقيتك انت، من غير ما الصفحة ترسم نفسها من الأول وهي بتفتح." }
+ },
+ {
   "issue": 667,
   "date": "2026-11-24",
   "en": { "title": "Archive cards, conversations and channels", "body": "Archive a card, several at once or everything in Done, a conversation, or a team channel, with Undo: whatever an Agent was doing there stops and nobody waits on it any more, nothing is deleted, and All conversations lists every conversation and channel with their own Archived tab to restore them from." },

@@ -9,6 +9,12 @@ export const creditExhaustedError='Billing or credits exhausted: HTTP 400: Your 
 export const apiKeyRefusedError='Anthropic rejected your API key, so the model can\'t be reached. Add a new key with `hermes auth add anthropic`, or sign in again.';
 export const signInRefusedError='Anthropic rejected your sign-in, so the model can\'t be reached. Sign in again with `hermes login`.';
 export const modelMissingError='Model \'claude-fable\' isn\'t available on Anthropic. Pick another model with `hermes model`.';
+// #642, measured on the pinned release with a ChatGPT account answering HTTP 429 usage_limit_reached (resets_in_seconds
+// 435483): the first Run's exhausted copy (agent/turn_failure_copy.py exhausted_copy, with turn_recovery.py
+// _stamp_limit_reset's last line), and every later Run's, which the Engine answers without a model call once the account
+// is marked exhausted (gateway/run.py _rate_limit_reply, locales/en.yaml gateway.errors.usage_limit_resets).
+export const usageLimitFirstError='ChatGPT or Codex Subscription rate-limited every one of 3 attempts — its usage limit resets in ~121h. Send /retry after that, or switch models with /model. To avoid this in future, add a backup provider with `hermes fallback add`.\n\nProvider said: HTTP 429: The usage limit has been reached\n\nLimit resets at 19:24 (in 120h 58m).';
+export const usageLimitError='⏱️ The AI model service\'s usage limit is reached; it resets in ~121h. Use /retry after that, or /model to switch models.';
 export const failedRunText='Something else went wrong while the model was answering.';
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
@@ -87,7 +93,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   outOfQuota:/** @type {Set<string>} */(new Set()),switches:/** @type {{id:string,provider:string,from:string,to:string,at:number}[]} */([]),
   answeredOn:/** @type {Map<string,string>} */(new Map()),modelCalls:/** @type {{run:string,account:string,provider?:string,model?:string}[]} */([]),
   fallbacks:/** @type {{run:string,provider:string,model:string}[]} */([]),
-  noAccountText:'ChatGPT rate-limited every one of 3 attempts — its usage limit resets in 4h 12m. Send /retry after that, or switch models with /model. To avoid this in future, add a backup provider with `hermes fallback add`.\n\nProvider said: You have hit your usage limit.',
+  // A Run that finds every account already exhausted makes no model call and fails at once with the gateway's
+  // usage-limit line instead (#642, measured), `usageLimitText`.
+  usageLimitText:usageLimitError,
+  noAccountText:usageLimitFirstError,
   configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
   configWriteFail:/** @type {Set<string>} */(new Set()),
   // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal
@@ -137,8 +146,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   archivedSessions:/** @type {Set<string>} */(new Set()),
   sessionMarks:/** @type {{profile:string,session:string,body:any,authorization?:string}[]} */([]),
   sessionMarkStatus:/** @type {number|null} */(null),
-  // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value.
-  reveals:/** @type {{profile:string,key:string}[]} */([]),
+  // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value. A key in revealFail is
+  // answered 500, as an Engine that could not read the .env.
+  reveals:/** @type {{profile:string,key:string}[]} */([]),revealFail:/** @type {Set<string>} */(new Set()),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -341,11 +351,14 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
        settings.modelCalls.push({run:run.id,account:row.id,provider,model});
        if(using&&record) settings.switches.push({id:randomUUID().replaceAll('-',''),provider,from:using.id,to:row.id,at:Date.now()/1000});
        using=row;
-       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); return true; }
+       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); run.served={provider,model}; return true; }
        row.last_status='exhausted';
       }
       return false;
      };
+     // The pair that answered (api_server_runs.py _served_runtime): the Run's own, or the fallback entry it moved to.
+     if(runProvider&&runModel) run.served={provider:runProvider,model:runModel};
+     run.requested=sent.provider&&sent.model?{provider:sent.provider,model:sent.model}:null;
      if(accounts.length&&!tryAccounts(runProvider,runModel,accounts,{record:true})) {
       const saved=profileOf(runProfile)?.config||{};
       const entries=raw=>(Array.isArray(raw)?raw:raw&&typeof raw==='object'?[raw]:[]).filter(entry=>entry?.provider&&entry?.model);
@@ -384,9 +397,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      approval:{command:asking.command,description:asking.description,pattern_key:asking.patternKeys[0],pattern_keys:asking.patternKeys,request_id:asking.request_id,timeout_s:300,
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
-    if(done&&run.outOfAccounts) { endEvents(run.id,'run.failed'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'failed',session_id:run.session,...times,output:settings.noAccountText,pending_controls:[]}); }
+    if(done&&run.outOfAccounts) { endEvents(run.id,'run.failed'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'failed',session_id:run.session,...times,
+     output:settings.modelCalls.some(call=>call.run===run.id)?settings.noAccountText:settings.usageLimitText,pending_controls:[]}); }
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'&&run.served?{runtime:{...run.served,route_source:run.requested?'raw_request':'global',...(run.requested?{requested:run.requested}:{})}}:{}),...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
    // The run's own routes (api_server_runs.py): stop, the answer to the question it waits for, which takes exactly
    // request_id, execution_generation and answer, and the choice for the request it waits on (_handle_run_approval).
@@ -621,6 +635,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const env=named==='default'?settings.defaultEnv:settings.profiles.get(named)?.env||{};
     const value=env?.[body?.key];
     settings.reveals.push({profile:named,key:body?.key});
+    if(settings.revealFail.has(body?.key)) return send(response,500,{detail:'Internal Server Error'});
     return value===undefined?send(response,404,{detail:`${body?.key} not found in .env`}):send(response,200,{key:body.key,value});
    }
    if(url.pathname==='/api/env') {
