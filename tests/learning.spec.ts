@@ -76,6 +76,9 @@ const saving=async(page:import('@playwright/test').Page,click:()=>Promise<void>)
   const request=response.request();
   return request.method()==='POST'&&new URL(response.url()).pathname==='/api/agent-settings';
  },{timeout:30000});
+ // The overlay's links prefetch each section in full once the page loads (lib/link.tsx); those reads end first, so a
+ // read counted here is one the save started.
+ await page.waitForLoadState('networkidle');
  page.on('request',read);
  try {
   await click();
