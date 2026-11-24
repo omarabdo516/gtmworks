@@ -20,6 +20,10 @@ export function useAgentLook(agent:string|null|undefined):AgentLook {
  const looks=useContext(Looks);
  return (agent&&looks.agents[agent])||plainLook;
 }
+// The Company's removed Agents, each by the name kept beside its look (#702), for a record that keeps only the id.
+export function useRemovedAgents():Record<string,string> {
+ return useContext(Looks).removed;
+}
 // The id the Agent a request asks for will have, so the request's card shows the made Agent's face.
 export function useRequestAgent(request:number|string):string|null {
  return useContext(Looks).requests[String(request)]??null;

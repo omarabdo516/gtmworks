@@ -72,7 +72,7 @@ export default function ReadyMade({slug,company,agent,companyName,alone,lead,rol
      {failure&&<p role="alert" className="composer-error">{say(failure)}</p>}
     </div>
     {/* Each role's face is the look its Agent would be made with now (lib/ready-roles: readyRoleLooks). */}
-    <LooksProvider looks={{agents:Object.fromEntries(roles.map(role=>[`ready-${role.id}`,role.look])),requests:{}}}><div className="tpl-grid" aria-live="polite">{shown.length?shown.map(role=><article key={role.id} className="tpl" aria-labelledby={`tpl-t-${role.id}`}>
+    <LooksProvider looks={{agents:Object.fromEntries(roles.map(role=>[`ready-${role.id}`,role.look])),requests:{},removed:{}}}><div className="tpl-grid" aria-live="polite">{shown.length?shown.map(role=><article key={role.id} className="tpl" aria-labelledby={`tpl-t-${role.id}`}>
      <div className="tpl__top"><span className="tpl__face" aria-hidden="true"><AgentFace agent={`ready-${role.id}`} size={44}/></span>
       <div className="tpl__titles"><h3 className="tpl__role" id={`tpl-t-${role.id}`}>{role.role}</h3><span className="tpl__cat">{t(`category.${role.category}`)}{alone?'':` · ${t('team')}`}</span></div></div>
      <p className="tpl__line">{role.line}</p>

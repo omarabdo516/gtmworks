@@ -8,6 +8,8 @@ import { cdp, page } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 import ConversationView, { ConversationLoaded } from '@/app/c/[slug]/conversations/[id]/conversation';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { LooksProvider } from '@/lib/agent-looks-client';
+import type { CompanyLooks } from '@/lib/agent-looks';
 import { MessageBox } from '@/app/conversation-composer';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { latestEnd, shown, withHandedOn, withHandoverAnswers, type AgentRequestView } from '@/lib/conversations';
@@ -514,4 +516,21 @@ test('a message\'s time the server drew in UTC shows in the reader\'s own zone o
   expect(times().map(time => getComputedStyle(time).visibility)).toEqual(['visible', 'visible', 'visible']);
   expect(recoverable).not.toHaveBeenCalled();
  } finally { act(() => root.unmount()); host.remove(); }
+});
+
+// #702: Mona was removed. A Conversation made after this change keeps her id, so its head and her replies show the look
+// she had, read from the Company's looks; one detached before names no Agent and shows her name's first letter.
+for (const [kept, face] of [['keeps her id', 'mona'], ['names no Agent', '']] as const) test(`a Conversation whose Agent was removed and ${kept} shows ${face ? 'the look she had' : 'her name\'s first letter'}, in its head and on her replies`, async () => {
+ stubFetch(vi.fn(() => new Promise<Response>(() => {})));
+ const initial = talk([sent, { id: 2, author: 'agent', author_name: 'Mona', body: 'The plan, in three weeks.', created_at: at }], { conversation: { id: 'cv-9', agent_id: null, agent_name: 'Mona', face } });
+ const looks: CompanyLooks = { agents: { mona: { shape: 'squircle', colour: 'jade', temperament: 'neat' } }, requests: {}, removed: { mona: 'Mona' } };
+ const screen = await render(<LooksProvider looks={looks}>{view(initial)}</LooksProvider>);
+ await expect.element(screen.getByText('The plan, in three weeks.')).toBeVisible();
+ for (const place of [document.querySelector('.head-pill')!, document.querySelector('.turn--agent .sender')!]) {
+  if (face) expect([place.querySelector<HTMLElement>('.face')?.dataset.agent, place.querySelector<HTMLElement>('.face')?.dataset.colour]).toEqual(['mona', 'jade']);
+  else {
+   expect(place.querySelector('.face')).toBeNull();
+   expect(place.querySelector('.avatar')?.textContent).toBe('M');
+  }
+ }
 });
