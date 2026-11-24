@@ -477,8 +477,17 @@ for(const who of [{role:'Owner',email:'omar@example.com',sections:['account','ag
  await signIn(page,who.email,'/c/rs-learning/work/board');
  await page.evaluate(()=>{
   const seen:string[][]=[]; Object.assign(window,{seen});
-  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.classList.contains('sov')) seen.push([event.animationName,location.pathname]); });
-  new MutationObserver(()=>{ const root=document.querySelector('.sov-root'); if(root?.hasAttribute('hidden')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.pathname]); }).observe(document.body,{subtree:true,childList:true,attributes:true});
+  // The entrance, and any other animation of the overlay, from animationstart: the overlay stays, so the event comes
+  // however late the frame. The exit from the closing class, with the animation it gives: the leave is a timer (useLeave
+  // in lib/motion.ts), and a frame later than it (a busy CI runner) hides the overlay before animationstart is ever sent
+  // (#595, as ready-made-roles.spec.ts, #526). So the event skips only the exit of an overlay already closing, which the
+  // observer has recorded; an exit started without the closing class (a section change) is still recorded.
+  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.classList.contains('sov')&&!(event.animationName==='gw-modal-out'&&part.classList.contains('is-closing'))) seen.push([event.animationName,location.pathname]); });
+  new MutationObserver(()=>{
+   const part=document.querySelector('.sov'), root=document.querySelector('.sov-root');
+   if(part?.matches('.is-closing')&&!seen.some(([what])=>what==='closing')) seen.push(['closing',...part.getAnimations().map(run=>{ const {delay,duration}=run.effect!.getTiming(); return `${(run as CSSAnimation).animationName} ${run.playState} delay ${delay}ms for ${duration}ms`; }),location.pathname]);
+   if(root?.hasAttribute('hidden')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.pathname]);
+  }).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden']});
  });
  const seen=()=>page.evaluate(()=>(window as unknown as {seen:string[][]}).seen);
  await openNavigation(page);
@@ -495,7 +504,7 @@ for(const who of [{role:'Owner',email:'omar@example.com',sections:['account','ag
  await overlay.getByRole('button',{name:'Close settings and go back'}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
  await expect(overlay).toHaveCount(0);
- expect(await seen()).toEqual([['gw-fade-in','/c/rs-learning/settings'],['gw-modal-out','/c/rs-learning/settings'],['gone','/c/rs-learning/settings']]);
+ expect(await seen()).toEqual([['gw-fade-in','/c/rs-learning/settings'],['closing','gw-modal-out running delay 0ms for 190ms','/c/rs-learning/settings'],['gone','/c/rs-learning/settings']]);
 });
 
 test('with reduced motion Settings leave at once, with no exit, by Escape',async({page})=>{
