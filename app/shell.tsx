@@ -42,9 +42,10 @@ export const sidebarReads=cache(async(id:string|undefined)=>{
  return Promise.all([
   id?Promise.all([companyAgents(db,id),db.rpc('agent_states',{c:id}).then(({data})=>agentStates(data))]):[[],agentStates(null)] as const,
   // Each listed chat with its own first message (a limit per chat), so a long chat never crowds another out of the titles.
-  id?db.from('conversations').select('id,agent_name,created_at,good_morning_day,conversation_messages(body,conversation_attachments(name))').eq('company_id',id).eq('conversation_messages.author','person')
-   .order('created_at',{ascending:false}).order('id',{referencedTable:'conversation_messages'}).limit(1,{referencedTable:'conversation_messages'}).limit(20)
-   .then(({data})=>(data||[]) as {id:string,agent_name:string,created_at:string,good_morning_day:string|null,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[]}[]):[],
+  // The twenty with the newest messages (#673); All conversations holds the rest.
+  id?db.from('conversations').select('id,agent_name,last_message_at,good_morning_day,conversation_messages(body,conversation_attachments(name))').eq('company_id',id).eq('conversation_messages.author','person')
+   .order('last_message_at',{ascending:false}).order('id',{ascending:false}).order('id',{referencedTable:'conversation_messages'}).limit(1,{referencedTable:'conversation_messages'}).limit(20)
+   .then(({data})=>(data||[]) as {id:string,agent_name:string,last_message_at:string,good_morning_day:string|null,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[]}[]):[],
   id?db.from('companies').select('work_mode').eq('id',id).maybeSingle().then(({data})=>data?.work_mode as string|null|undefined):undefined,
   id?channelSidebar(db,id):[],
   id?db.rpc('can_manage_company',{target:id}).then(({data})=>!!data):false,
@@ -73,7 +74,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  // A chat is named by the first line of its first message, or by its first file when it carries images alone (#155), as
  // its own page names it (lib/conversations titleOf).
  // A Conversation the morning opened is named by its day (#183).
- const chats=conversations.map(c=>{ const first=c.conversation_messages[0]; return {id:c.id,created_at:c.created_at,title:c.good_morning_day?morningTitle(t,language,c.good_morning_day):first?.body.split('\n')[0]||first?.conversation_attachments?.[0]?.name||c.agent_name}; });
+ const chats=conversations.map(c=>{ const first=c.conversation_messages[0]; return {id:c.id,at:c.last_message_at,title:c.good_morning_day?morningTitle(t,language,c.good_morning_day):first?.body.split('\n')[0]||first?.conversation_attachments?.[0]?.name||c.agent_name}; });
  const asksForAgents=writer&&!owner;
  const account=<><AccountMenu slug={slug} company={company?.id} personId={personId} canManage={manage} owner={owner} alone={workMode==='alone'} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;
@@ -107,6 +108,8 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     {(owner||asksForAgents)&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t(owner?'newAgent':'settingsAskAgent')}</span></Link></li>}</AgentGrid>
    </section>
    <section className="sb-sec" id="sb-recent" aria-label={t('recentChats')}>
+    {/* design-reference-card: the sidebar's "All conversations" row, over the channels and the recent chats (#673). */}
+    <Link className="sb-item sb-all" href={`/c/${slug}/conversations`} aria-current={section==='all-conversations'?'page':undefined}><ShellIcon name="archive"/><span className="od-fill">{t('allConversations')}</span><ShellIcon name="chevron"/></Link>
     {company?.id&&<ChannelList slug={slug} company={company.id} person={personId} initial={channels} current={channelId} manage={manage}/>}
     <RecentChats slug={slug} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}

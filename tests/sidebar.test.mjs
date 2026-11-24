@@ -46,11 +46,11 @@ test('recent chats fall into Today, Yesterday and Earlier by the local day, newe
  const now = new Date(2026, 10, 12, 9, 0);
  const at = (day, hour) => new Date(2026, 10, day, hour, 0).toISOString();
  const groups = groupRecents([
-  { id: 'old', created_at: at(3, 10) },
-  { id: 'today-early', created_at: at(12, 0) },
-  { id: 'yesterday', created_at: at(11, 23) },
-  { id: 'today-late', created_at: at(12, 8) },
-  { id: 'two-days', created_at: at(10, 12) },
+  { id: 'old', at: at(3, 10) },
+  { id: 'today-early', at: at(12, 0) },
+  { id: 'yesterday', at: at(11, 23) },
+  { id: 'today-late', at: at(12, 8) },
+  { id: 'two-days', at: at(10, 12) },
  ], now);
  assert.deepEqual(groups.map(group => [group.day, group.items.map(item => item.id)]), [
   ['today', ['today-late', 'today-early']],
@@ -64,9 +64,9 @@ test('just before local midnight, today starts at the last local midnight and a 
  const now = beforeMidnight('2026-11-17');
  const midnight = beforeMidnight('2026-11-16', runnerZone, 0).getTime();
  const groups = groupRecents([
-  { id: uuid(1), created_at: new Date(now.getTime() - 60000).toISOString() },
-  { id: uuid(2), created_at: new Date(midnight + 1000).toISOString() },
-  { id: uuid(3), created_at: new Date(midnight - 1000).toISOString() },
+  { id: uuid(1), at: new Date(now.getTime() - 60000).toISOString() },
+  { id: uuid(2), at: new Date(midnight + 1000).toISOString() },
+  { id: uuid(3), at: new Date(midnight - 1000).toISOString() },
  ], now);
  assert.deepEqual(groups.map(group => [group.day, group.items.map(item => item.id)]), [['today', [uuid(1), uuid(2)]], ['yesterday', [uuid(3)]]]);
 });
@@ -74,7 +74,7 @@ test('just before local midnight, today starts at the last local midnight and a 
 test('a day with no chats has no group', () => {
  const now = new Date(2026, 10, 12, 9, 0);
  assert.deepEqual(groupRecents([], now), []);
- assert.deepEqual(groupRecents([{ id: 'x', created_at: new Date(2026, 10, 1).toISOString() }], now).map(group => group.day), ['earlier']);
+ assert.deepEqual(groupRecents([{ id: 'x', at: new Date(2026, 10, 1).toISOString() }], now).map(group => group.day), ['earlier']);
 });
 
 test('the sidebar search narrows chats by title, ignoring case and surrounding space, and an empty search keeps all', () => {

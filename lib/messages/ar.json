@@ -1640,5 +1640,15 @@
   "boardArchivedEmpty": "مفيش حاجة مؤرشفة",
   "boardRestoreCard": "رجّع {0}",
   "cardUndo": "تراجع",
-  "boardArchivedNoMatch": "مفيش بطاقات مؤرشفة بالفلاتر دي"
+  "boardArchivedNoMatch": "مفيش بطاقات مؤرشفة بالفلاتر دي",
+  "allConversations": "كل المحادثات",
+  "allConversationsLists": "المحادثات",
+  "allConversationsCurrent": "الحالية",
+  "allConversationsArchived": "المؤرشفة",
+  "allConversationsSearch": "دوّر في المحادثات",
+  "allConversationsEmpty": "مفيش محادثات",
+  "allConversationsArchivedEmpty": "مفيش محادثات مؤرشفة",
+  "allConversationsNoMatch": "مفيش محادثة فيها «{0}»",
+  "allConversationsMore": "اعرض أكتر",
+  "allConversationsFailed": "المحادثات ماتقرتش. جرّب تاني."
 }

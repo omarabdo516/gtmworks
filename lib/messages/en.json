@@ -1640,5 +1640,15 @@
   "boardArchivedEmpty": "Nothing archived",
   "boardRestoreCard": "Restore {0}",
   "cardUndo": "Undo",
-  "boardArchivedNoMatch": "No archived cards match these filters"
+  "boardArchivedNoMatch": "No archived cards match these filters",
+  "allConversations": "All conversations",
+  "allConversationsLists": "Conversations",
+  "allConversationsCurrent": "Current",
+  "allConversationsArchived": "Archived",
+  "allConversationsSearch": "Search conversations",
+  "allConversationsEmpty": "No conversations",
+  "allConversationsArchivedEmpty": "No archived conversations",
+  "allConversationsNoMatch": "No conversation matches “{0}”",
+  "allConversationsMore": "Show more",
+  "allConversationsFailed": "The conversations couldn’t be read. Try again."
 }
