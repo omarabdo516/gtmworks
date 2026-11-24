@@ -62,16 +62,17 @@ export function AgentLearningMode({company,agent,labelId,mode,follows}:{company:
  const chosen=follows===true?'follow':!follows&&(mode==='auto'||mode==='ask')?mode:null;
  const idOf=(choice:'auto'|'ask'|'follow')=>choice==='follow'?`ln-${agent}-follow`:`ln-${agent}-${choice}`;
  // The arrow key selects the choice it reaches, as the effort control does; with no choice marked the first has the Tab
- // stop and the arrow selects it.
+ // stop and the arrow selects it. While a choice is being sent its buttons say they are unavailable (aria-disabled) and the
+ // arrow waits; it is not disabled, since a disabled button drops the focus the arrow just gave it (#588).
  const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
-  const direction=arrowChoice(event,rtl); if(direction===null) return;
+  const direction=arrowChoice(event,rtl); if(direction===null||pending) return;
   const next=chosen===null?index:Math.max(0,Math.min(choices.length-1,index+direction));
   choose(choices[next]);
   document.getElementById(idOf(choices[next]))?.focus();
  };
  return <>
   <div className="segmented segmented--field ln-seg" role="radiogroup" aria-labelledby={labelId}>{choices.map((choice,index)=>
-   <button type="button" key={choice} role="radio" id={idOf(choice)} aria-checked={chosen===choice} tabIndex={chosen===choice||(chosen===null&&index===0)?0:-1} disabled={pending}
+   <button type="button" key={choice} role="radio" id={idOf(choice)} aria-checked={chosen===choice} tabIndex={chosen===choice||(chosen===null&&index===0)?0:-1} aria-disabled={pending||undefined}
     onClick={()=>choose(choice)} onKeyDown={event=>move(event,index)}>{t(choice==='follow'?'settingsLearnFollowCompany':modeName[choice])}</button>)}
   </div>
   {failed&&<p className="set-err" role="alert">{t('settingsLearnModeFailed')}</p>}
