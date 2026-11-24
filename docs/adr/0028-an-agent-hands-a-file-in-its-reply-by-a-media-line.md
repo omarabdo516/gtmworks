@@ -30,7 +30,7 @@ Issue #708. An Agent made a PDF report in its work folder and could only quote i
 
 ## Consequences
 
-- Every Run's request body gains one fixed line of instructions. A start that was sent by the previous release and is retried by this one, in the update's few seconds, sends a different body under the same key.
+- Every Run's request body gains one fixed line of instructions. A start the previous release sent without it, whose answer was lost, is retried by this release under the same key: Hermes refuses the new body for that key (409 `idempotency_key_conflict`), and the driver then sends the earlier body once more, which replays the Run it started.
 - A handover's answer and a Card note's reply hand no file on yet: their tags are named as files that could not be attached, or by the file's name in a Card note.
 - The Agent's details "Files" tab lists the files of the reader's own Conversations; a file handed over in a channel is read in the channel only.
 - A reply of files alone keeps an empty text, which a later Run's history carries as an empty turn, as a person's message of images alone already is.

@@ -126,3 +126,28 @@ test('a channel reply is closed with its file, kept in the channel\'s folder for
  assert.deepEqual(closes[0].reply_files.map(file=>file.name),['market.pdf']);
  assert.deepEqual(uploads,[replyFilePath({company,folder:'channels',scope:channel},'run_708_channel',0)]);
 });
+
+test('a file name with several dots is read whole, and a path with backslashes is named by its last part alone',()=>{
+ assert.deepEqual(shownReply(`Here: MEDIA:/work/${profile}/report.v2.pdf.\nAnd MEDIA:C:\\private\\report.pdf`),{body:'Here:.\nAnd',missed:['report.v2.pdf','report.pdf']});
+});
+
+test('a start the previous release sent without the file note is retried with that body, which Hermes replays',async()=>{
+ const { hermesEngine }=await import('../lib/hermes.mjs');
+ const bodies=[]; const real=globalThis.fetch;
+ // Hermes holds the key for the body the previous release sent: no instructions at all (api_server_runs.py, 409).
+ globalThis.fetch=async(_url,request)=>{
+  const body=JSON.parse(request.body); bodies.push(body);
+  return body.instructions?new Response(JSON.stringify({error:{code:'idempotency_key_conflict'}}),{status:409}):new Response(JSON.stringify({run_id:'run_earlier'}),{status:202});
+ };
+ try {
+  const engine=hermesEngine({address:'http://hermes:8642',key:'test-only-key',profile});
+  const start={conversation:'c',input:'Plan',idempotencyKey:'c:k'};
+  assert.equal(await engine.start({...start,retry:true}),'run_earlier');
+  assert.equal(bodies.length,2);
+  assert.match(bodies[0].instructions,/MEDIA:\/work\//);
+  assert.deepEqual(bodies[1],{input:'Plan'});
+  bodies.length=0;
+  assert.equal(await engine.start(start),null,'a first start whose key is taken is refused, as before');
+  assert.equal(bodies.length,1);
+ } finally { globalThis.fetch=real; }
+});
