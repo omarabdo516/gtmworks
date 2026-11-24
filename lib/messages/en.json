@@ -1611,6 +1611,7 @@
   "signInAccountNeeded": "This provider holds more than one sign-in: disconnect each from its own row.",
   "modelNoAccess": "{0} could not reply: every account it can use has run out of usage for now.",
   "modelNoAccessFix": "Add an account or choose a fallback model in Providers",
+  "modelUsageResets": "The usage resets on {0} at {1}.",
   "settingsFallback": "Fallback model",
   "settingsFallbackHint": "When every account for an agent’s model has run out, its request goes on with this model instead. With None, an agent never moves to another kind of provider.",
   "settingsFallbackNone": "None",
