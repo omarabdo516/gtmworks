@@ -1640,5 +1640,7 @@
   "boardArchivedEmpty": "Nothing archived",
   "boardRestoreCard": "Restore {0}",
   "cardUndo": "Undo",
-  "boardArchivedNoMatch": "No archived cards match these filters"
+  "boardArchivedNoMatch": "No archived cards match these filters",
+  "logActChannelArchived": "archived the channel",
+  "logActChannelRestored": "restored the channel"
 }

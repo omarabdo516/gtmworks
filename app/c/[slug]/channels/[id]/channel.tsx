@@ -28,6 +28,7 @@ import { offeredChoices } from '@/lib/conversations';
 import { useArrivals, type Arrival } from '@/lib/arrivals';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { ModelLine } from '@/app/model-line';
+import { ChannelArchive } from '@/app/channel-archive';
 import { isModelCause, modelOutcome } from '@/lib/model-causes';
 
 type Say=(key:string,...values:unknown[])=>string;
@@ -201,6 +202,8 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     :<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>)}
   </div></div>
   <div className="composer-area">
+   {/* An archived channel (#675; design-reference-card: arc-line) is read by its Members, and nobody writes in it. */}
+   {record.archived&&<p className="arc-line" role="note"><ShellIcon name="archive"/><span>{c('channelArchivedLine')}</span></p>}
    {/* Stop (#478; design-reference: syncComposer): while a message the reader may stop has work open, an empty box turns
        the send arrow into the stop square, which ends that message's Runs and every Handover started from it. */}
    {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name,role:member.role}]:[]),agents}} stop={record.stop?{label:c('channelStop',record.stop.agent),run:async()=>{
@@ -212,7 +215,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     const failure=files.length?await postMessageWithFiles(fields,files,'/api/channels'):await postMessage(fields,'/api/channels');
     if(!failure) setSent(value=>value+1);
     return failure;
-   }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
+   }}/>:!record.archived&&<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
   </div>
  </div><ChannelDetails panel={panel} slug={slug} name={name} person={person} record={record} tip={tip} c={c} time={time} refresh={refresh}/></div>;
 }
@@ -355,6 +358,7 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
      </li>)}
     </ul>
    </section>}
+   {record.archive&&<ChannelArchive company={channel.company} channel={channel.id} archived={!!record.archived} agents={agents} c={c} refresh={refresh}/>}
   </div>
  </DetailsShell>;
 }

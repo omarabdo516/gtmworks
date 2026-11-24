@@ -71,3 +71,34 @@
 }
 
 [dir="ltr"] .gw :is(.ch-intro__h, .details .panel-row__t, .details .panel-row__d) { unicode-bidi: plaintext; }
+
+/* Archiving a team channel (#675; design-reference-card/index.html: .ch-arc, .arc-line, #cw-confirm, .cf-list, .cf-row).
+   The section sits last in its details; the confirmation is the reference's native modal dialog, at most 512px wide
+   (DESIGN.md, Dialog), and as tall as what it names. */
+.gw .details .ch-arc { display: grid; gap: 8px; padding: var(--s3); justify-items: start; }
+.gw .details .ch-arc .set-hint { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .details .ch-arc .set-err { padding-inline: 0; }
+.gw .details .ch-arc .btn { gap: 6px; --od-icon-size: 14px; }
+.gw .details .ch-arc .btn .gw-icon { width: 14px; height: 14px; }
+.gw .arc-line {
+  display: flex; align-items: center; justify-content: center; gap: 6px; max-width: var(--gw-chat-col); margin: 0 auto 8px; padding: 12px 16px 0;
+  font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-2); text-align: center;
+}
+.gw .arc-line .gw-icon { flex: none; width: 14px; height: 14px; }
+.gw.modal.ch-confirm { --s3: 12px; --s4: 16px; width: min(512px, calc(100vw - 32px)); height: fit-content; max-height: min(640px, calc(100dvh - 48px)); }
+.gw.modal.ch-confirm::backdrop { background: var(--gw-bg-scrim); }
+.gw.modal.ch-confirm:not([open]) { display: none; }
+.gw.modal.ch-confirm .modal__inner { display: flex; flex-direction: column; max-height: inherit; }
+.gw.modal.ch-confirm .modal__body { overflow-y: auto; min-height: 0; padding: 4px 24px 8px; }
+.gw.modal.ch-confirm .modal__foot--end { justify-content: flex-end; }
+.gw.modal.ch-confirm .btn { height: 36px; padding: 0 16px; font-size: var(--gw-fs-base); }
+.gw.modal.ch-confirm .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw .cf-list { list-style: none; margin: 0 0 var(--s4); padding: 0; display: grid; gap: var(--s3); }
+.gw .cf-row { display: flex; align-items: flex-start; gap: var(--s3); font-size: var(--gw-fs-base); line-height: 1.6; }
+.gw .cf-row > :first-child { flex: none; margin-top: 1px; }
+@media (hover: hover) { .gw.modal.ch-confirm .btn--primary:hover { background: var(--gw-primary-hover); } }
+@media (max-width: 599px) {
+  .gw.modal.ch-confirm { width: calc(100vw - 32px); height: fit-content; border-radius: var(--gw-r-lg); margin-top: 16px; }
+  .gw.modal.ch-confirm .btn { position: relative; }
+  .gw.modal.ch-confirm .btn::before { content: ""; position: absolute; inset: -4px 0; }
+}

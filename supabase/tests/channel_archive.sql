@@ -60,23 +60,23 @@ select is_empty($$select * from public.channel_archive_stops('e6750000-0000-0000
 
 -- Who may archive.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select throws_ok($$select * from public.archive_channel('69000000-0000-0000-0000-000000000001')$$,'42501','channelArchiveNotAllowed','the general channel is never archived, by the Owner either');
-select throws_ok($$select * from public.archive_channel('e6750000-0000-0000-0000-000000000011')$$,'P0002','channelNotFound','the Owner outside a team channel finds no channel');
+select throws_ok($$select * from public.archive_channel('10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001')$$,'42501','channelArchiveNotAllowed','the general channel is never archived, by the Owner either');
+select throws_ok($$select * from public.archive_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'P0002','channelNotFound','the Owner outside a team channel finds no channel');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select throws_ok($$select * from public.archive_channel('e6750000-0000-0000-0000-000000000011')$$,'42501','channelArchiveNotAllowed','a Contributor in it may not archive it');
+select throws_ok($$select * from public.archive_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'42501','channelArchiveNotAllowed','a Contributor in it may not archive it');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
-select throws_ok($$select * from public.archive_channel('e6750000-0000-0000-0000-000000000011')$$,'42501','channelArchiveNotAllowed','nor may the Viewer');
+select throws_ok($$select * from public.archive_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'42501','channelArchiveNotAllowed','nor may the Viewer');
 select set_config('request.jwt.claim.sub','e6759000-0000-0000-0000-000000000001',true);
-select throws_ok($$select * from public.archive_channel('e6750000-0000-0000-0000-000000000011')$$,'P0002','channelNotFound','another Company''s Manager finds no channel');
+select throws_ok($$select * from public.archive_channel('10000000-0000-0000-0000-000000000003','e6750000-0000-0000-0000-000000000011')$$,'P0002','channelNotFound','another Company''s Manager finds no channel');
 
 -- The Manager in it archives it: the started Run is answered to stop on its Agent's Engine, the one not started ends.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is((select array_agg(run||':'||profile) from public.archive_channel('e6750000-0000-0000-0000-000000000011')),array['run-asks:channel-archive-ads'],
+select is((select array_agg(run||':'||profile) from public.archive_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')),array['run-asks:channel-archive-ads'],
  'the Manager archives it, and the Run working is the one to stop on its Engine');
 select is((select outcome from public.channel_runs where message_id=current_setting('test.later')::bigint),'stopped','the Run not started yet ends as stopped');
 select is((select archived_by::text from public.channels where id='e6750000-0000-0000-0000-000000000011'),'20000000-0000-0000-0000-000000000002','the channel keeps who archived it');
 select ok((select archived_at is not null from public.channels where id='e6750000-0000-0000-0000-000000000011'),'and when');
-select is_empty($$select * from public.archive_channel('e6750000-0000-0000-0000-000000000011')$$,'archiving it again changes nothing');
+select is_empty($$select * from public.archive_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'archiving it again changes nothing');
 select is((select state from public.reply_cards where channel_message_id=current_setting('test.asks')::bigint and kind='question'),'closed','its question closes unanswered');
 select is((select state from public.channel_permissions where message_id=current_setting('test.asks')::bigint),'closed','its request closes undecided');
 select is_empty($$select * from public.channel_archive_stops('e6750000-0000-0000-0000-000000000011')$$,'nothing is left to name');
@@ -112,17 +112,17 @@ select is_empty($$select * from public.channels where id='e6750000-0000-0000-000
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is_empty($$select * from public.archived_channels('10000000-0000-0000-0000-000000000001')$$,'nor does the Owner outside it');
 select is_empty($$select * from public.company_log where action in ('channel_archived','channel_restored')$$,'who reads no log row of it either');
-select throws_ok($$select public.restore_channel('e6750000-0000-0000-0000-000000000011')$$,'P0002','channelNotFound','and cannot restore it');
+select throws_ok($$select public.restore_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'P0002','channelNotFound','and cannot restore it');
 select set_config('request.jwt.claim.sub','e6759000-0000-0000-0000-000000000001',true);
 select is_empty($$select * from public.archived_channels('10000000-0000-0000-0000-000000000001')$$,'another Company''s Manager reads nothing');
 
 -- Restoring: only an Owner or a Manager in it; nothing starts.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select throws_ok($$select public.restore_channel('e6750000-0000-0000-0000-000000000011')$$,'42501','channelRestoreNotAllowed','a Contributor in it may not restore it');
-select throws_ok($$select public.restore_channel('69000000-0000-0000-0000-000000000001')$$,'42501','channelRestoreNotAllowed','the general channel has nothing to restore');
+select throws_ok($$select public.restore_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'42501','channelRestoreNotAllowed','a Contributor in it may not restore it');
+select throws_ok($$select public.restore_channel('10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001')$$,'42501','channelRestoreNotAllowed','the general channel has nothing to restore');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select lives_ok($$select public.restore_channel('e6750000-0000-0000-0000-000000000011')$$,'the Manager restores it');
-select lives_ok($$select public.restore_channel('e6750000-0000-0000-0000-000000000011')$$,'restoring it again changes nothing');
+select lives_ok($$select public.restore_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'the Manager restores it');
+select lives_ok($$select public.restore_channel('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011')$$,'restoring it again changes nothing');
 select ok((select archived_at is null and archived_by is null from public.channels where id='e6750000-0000-0000-0000-000000000011'),'it is current again');
 select is((select count(*)::int from public.company_log where action='channel_restored' and actor_id='20000000-0000-0000-0000-000000000002'),1,'with one log row naming who restored it');
 reset role;

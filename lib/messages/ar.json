@@ -1640,5 +1640,7 @@
   "boardArchivedEmpty": "مفيش حاجة مؤرشفة",
   "boardRestoreCard": "رجّع {0}",
   "cardUndo": "تراجع",
-  "boardArchivedNoMatch": "مفيش بطاقات مؤرشفة بالفلاتر دي"
+  "boardArchivedNoMatch": "مفيش بطاقات مؤرشفة بالفلاتر دي",
+  "logActChannelArchived": "أرشف قناة",
+  "logActChannelRestored": "رجّع قناة"
 }

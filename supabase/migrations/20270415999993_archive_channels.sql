@@ -87,13 +87,13 @@ grant execute on function public.channel_archive_stops(uuid) to authenticated;
 -- while it is archived (waiting_list). One Activity log row names who archived it. Refusals: P0002 channelNotFound (not
 -- in it, another Company's, unknown); 42501 channelArchiveNotAllowed (the general channel, or a Member who is no Owner
 -- or Manager). An archived channel answers nothing and changes nothing.
-create function public.archive_channel(ch uuid) returns table(run text, profile text)
+create function public.archive_channel(c uuid, ch uuid) returns table(run text, profile text)
 language plpgsql security definer set search_path='' as $$
 declare k public.channels; m bigint; logged bigint; writer text;
 begin
  if auth.uid() is null then raise exception 'channelArchiveNotAllowed' using errcode='42501'; end if;
  select * into k from public.channels x where x.id=ch for update;
- if k.id is null or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
+ if k.id is null or k.company_id is distinct from c or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
  if k.kind<>'team' or not public.can_manage_company(k.company_id) then raise exception 'channelArchiveNotAllowed' using errcode='42501'; end if;
  if k.archived_at is not null then return; end if;
  update public.channels x set archived_at=now(), archived_by=auth.uid() where x.id=ch;
@@ -117,18 +117,18 @@ begin
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,action,details,source,source_id,created_at)
   values (k.company_id,auth.uid(),'person',writer,'company','channel_archived',jsonb_build_object('channel_id',ch,'channel',k.name),'channel_archives',logged,now());
 end $$;
-revoke all on function public.archive_channel(uuid) from public,anon,service_role;
-grant execute on function public.archive_channel(uuid) to authenticated;
+revoke all on function public.archive_channel(uuid,uuid) from public,anon,service_role;
+grant execute on function public.archive_channel(uuid,uuid) to authenticated;
 
 -- Restores an archived team channel to its Members' channel lists, with one log row. Nothing starts: no Run, question
 -- or handover comes back with it. Refusals as archive_channel, with 42501 channelRestoreNotAllowed.
-create function public.restore_channel(ch uuid) returns void
+create function public.restore_channel(c uuid, ch uuid) returns void
 language plpgsql security definer set search_path='' as $$
 declare k public.channels; logged bigint; writer text;
 begin
  if auth.uid() is null then raise exception 'channelRestoreNotAllowed' using errcode='42501'; end if;
  select * into k from public.channels x where x.id=ch for update;
- if k.id is null or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
+ if k.id is null or k.company_id is distinct from c or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
  if k.kind<>'team' or not public.can_manage_company(k.company_id) then raise exception 'channelRestoreNotAllowed' using errcode='42501'; end if;
  if k.archived_at is null then return; end if;
  update public.channels x set archived_at=null, archived_by=null where x.id=ch;
@@ -137,8 +137,8 @@ begin
  insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,action,details,source,source_id,created_at)
   values (k.company_id,auth.uid(),'person',writer,'company','channel_restored',jsonb_build_object('channel_id',ch,'channel',k.name),'channel_archives',logged,now());
 end $$;
-revoke all on function public.restore_channel(uuid) from public,anon,service_role;
-grant execute on function public.restore_channel(uuid) to authenticated;
+revoke all on function public.restore_channel(uuid,uuid) from public,anon,service_role;
+grant execute on function public.restore_channel(uuid,uuid) to authenticated;
 
 -- The caller's archived channels in one Company, newest archived first, with who archived each and the newest message:
 -- the Archived list. Only channels the caller is in; anyone outside the Company reads nothing.
