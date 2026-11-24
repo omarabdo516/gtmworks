@@ -22,5 +22,6 @@ Omar's decisions of 2026-11-24 (grill on the Agent's face). Today's pastel faces
 
 ## Consequences
 
+- Every record of an Agent keeps the Agent's id, and a finished Handover outlives its Agents (#702). As an Agent is removed its name is kept beside its look, readable as the look is: a removed Agent hides nothing, and nothing of it but its name and look becomes readable. A living Agent is never named there.
 - The four legacy role agents lose their drawing; they are removed whole by their own spec.
 - The role identity colours of `DESIGN.md` give way to the eight look colours as the hues an Agent may carry; orange stays "waiting on you".

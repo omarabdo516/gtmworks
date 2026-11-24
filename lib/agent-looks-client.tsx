@@ -39,6 +39,10 @@ export function useAgentLook(agent:string|null|undefined):AgentLook {
 }
 // The Company whose looks the reader may change, for its Owner; null for every other Role.
 export const useLookChanger=()=>useContext(Changer);
+// The Company's removed Agents, each by the name kept beside its look (#702), for a record that keeps only the id.
+export function useRemovedAgents():Record<string,string> {
+ return useContext(Looks).removed;
+}
 // The id the Agent a request asks for will have, so the request's card shows the made Agent's face.
 export function useRequestAgent(request:number|string):string|null {
  return useContext(Looks).requests[String(request)]??null;

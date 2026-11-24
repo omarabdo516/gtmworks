@@ -24,7 +24,7 @@ afterEach(async () => { change.mockReset(); reset.mockReset(); await page.viewpo
 
 // Each test has an Agent of its own: the saves of this tab are kept by the Agent's id for the whole page.
 const given: KeptLook['automatic'] = { shape: 'circle', colour: 'violet', temperament: 'energetic' };
-const company = (agent: string, picked: KeptLook['picked'] = {}): CompanyLooks => ({ agents: { [agent]: { ...given, ...picked } }, requests: {}, kept: { [agent]: { automatic: given, picked, changedAt: picked.colour ? '2026-11-24T10:00:00Z' : null } } });
+const company = (agent: string, picked: KeptLook['picked'] = {}): CompanyLooks => ({ agents: { [agent]: { ...given, ...picked } }, requests: {}, removed: {}, kept: { [agent]: { automatic: given, picked, changedAt: picked.colour ? '2026-11-24T10:00:00Z' : null } } });
 // The database's answer to a save: the look as it now stands.
 const answer = (picked: KeptLook['picked'], at = '2026-11-24T11:00:00Z'): KeptLook => ({ automatic: given, picked, changedAt: at });
 const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };

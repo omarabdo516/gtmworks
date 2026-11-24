@@ -47,7 +47,7 @@ export function whoOf(row:LogRow,people:LogPeople,t:I18n['t']):Who {
 
 export function WhoFace({who,size=28}:{who:Who,size?:number}) {
  if(who.kind==='system') return <SystemMark size={size}/>;
- if(who.face) return <span className="lg-face" aria-hidden="true"><AgentFace agent={who.face} size={size}/></span>;
+ if(who.face) return <span className="lg-face" aria-hidden="true"><AgentFace agent={who.face} name={who.name} size={size}/></span>;
  return <span className="lg-av" style={{'--av':`${size}px`} as React.CSSProperties} aria-hidden="true">{Array.from(who.name.trim())[0]||'?'}</span>;
 }
 

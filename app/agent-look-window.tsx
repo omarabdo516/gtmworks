@@ -81,7 +81,7 @@ function AgentLookWindow({agent,inSettings=false,onClose}:{agent:Agent,inSetting
   list[to].focus();
   if(!list[to].checked) pick(input.dataset.part as LookPart,list[to].value);
  };
- const variant=(change:Partial<AgentLook>,size:number)=><LooksProvider looks={{agents:{[agent.id]:{...look,...change}},requests:{}}}><AgentFace agent={agent.id} size={size}/></LooksProvider>;
+ const variant=(change:Partial<AgentLook>,size:number)=><LooksProvider looks={{agents:{[agent.id]:{...look,...change}},requests:{},removed:{}}}><AgentFace agent={agent.id} size={size}/></LooksProvider>;
  const radio=(part:LookPart,value:string)=>({type:'radio' as const,name:`${id}-${part}`,value,'data-part':part,checked:look[part]===value,onChange:()=>pick(part,value)});
  const tile=(part:LookPart,value:string,face:ReactNode,label:string)=><label key={value} className="lk-tile"
   onPointerOver={part==='temperament'?event=>{ if(event.pointerType!=='touch'&&!event.currentTarget.contains(event.relatedTarget as Node|null)) sampleFace(event.currentTarget.querySelector<HTMLElement>('.face')); }:undefined}>
