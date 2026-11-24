@@ -1,5 +1,11 @@
 [
  {
+  "issue": 644,
+  "date": "2026-11-24",
+  "en": { "title": "Activity shows when the Fallback model answered", "body": "When every account of an Agent's model has run out and the Company's Fallback model answers the request instead, Activity now shows it once, by gtmworks, with the model the request was meant for and the one that answered." },
+  "ar": { "title": "النشاط بيبيّن إمتى الموديل البديل ردّ", "body": "لما كل حسابات موديل الوكيل يخلص استخدامها والموديل البديل بتاع الشركة يرد على الطلب بداله، النشاط دلوقتي بيبيّن ده مرة واحدة باسم gtmworks، ومعاه الموديل اللي الطلب كان رايحله والموديل اللي ردّ." }
+ },
+ {
   "issue": 643,
   "date": "2026-11-24",
   "en": { "title": "OpenCode Go checks which models it serves you", "body": "An OpenCode Go key now lists, offers and starts on only the models OpenCode itself says it serves that key, so an older model OpenCode refuses is no longer offered; when OpenCode cannot be asked, the Engine's own list is shown as before." },
