@@ -1,5 +1,11 @@
 [
  {
+  "issue": 711,
+  "date": "2026-11-24",
+  "en": { "title": "Every Agent has its own Screen", "body": "An Agent now works on its own desktop and browser inside its company's work sandbox, which wakes when the Agent needs it and sleeps after 30 minutes unused; it publishes or spends only when a member in the conversation asks for that exact thing with its amount, and the update raises each company's sandbox memory to 2 GB so the Screens fit." },
+  "ar": { "title": "كل وكيل بقى ليه شاشته", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح بتوعه جوه صندوق الشغل بتاع الشركة، والشاشة بتصحى لما الوكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام؛ ومش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشات تكفي." }
+ },
+ {
   "issue": 667,
   "date": "2026-11-24",
   "en": { "title": "Archive cards, conversations and channels", "body": "Archive a card, several at once or everything in Done, a conversation, or a team channel, with Undo: whatever an Agent was doing there stops and nobody waits on it any more, nothing is deleted, and All conversations lists every conversation and channel with their own Archived tab to restore them from." },
