@@ -1,5 +1,11 @@
 [
  {
+  "issue": 638,
+  "date": "2026-11-24",
+  "en": { "title": "Every model of a partly connected subscription has its switch", "body": "A subscription signed in on one Agent's profile now lists every model it reaches under Providers, even when the Company also holds an API key of the same provider, so you can switch each one off." },
+  "ar": { "title": "كل موديل في الاشتراك المتوصل جزئيًا ليه زرار", "body": "الاشتراك اللي متسجل دخوله على بروفايل وكيل واحد بقى بيعرض في المزوّدين كل الموديلات اللي بيوصلها، حتى لو الشركة عندها كمان مفتاح API لنفس المزوّد، فتقدر تقفل أي واحد منهم." }
+ },
+ {
   "issue": 586,
   "date": "2026-11-24",
   "en": { "title": "A Channel opens cleanly in your own time zone", "body": "Outside UTC, a Channel's message and Handover times now appear straight in your own time zone, without the page redrawing itself as it opens." },
