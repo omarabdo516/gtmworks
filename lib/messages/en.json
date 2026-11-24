@@ -1117,6 +1117,7 @@
   "logActProviderKeySet": "set the API key for",
   "logActProviderKeyRemoved": "removed the API key for",
   "logActProviderSwitched": "continued a request on the next account of",
+  "logActFallbackModelUsed": "answered a request with the Fallback model",
   "logAppOn": "Connected",
   "logAppOff": "Not connected",
   "sheetTabs": "The card",

@@ -6,7 +6,7 @@ export type HermesConnection={address:string,profile:string,key:string};
 export const startUnknown:{readonly state:'unknown'};
 export function startRun(message:HermesConnection&{input:string,instructions?:string,history?:import('./engine.mjs').HistoryEntry[],sessionKey:string,idempotencyKey:string,retry?:boolean}):Promise<string|null|{readonly state:'unknown'}>;
 export type RunUsage={input:number,output:number};
-export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null,question?:import('./engine.mjs').RunQuestion,noModel?:true,modelRefused?:'credit'|'key'|'model'|'access'}>;
+export function readRun(run:HermesConnection&{run:string}):Promise<{status:'running'|'completed'|'failed'|'cancelled'|'interrupted'|'lost'|'unreachable',output:string|null,session:string|null,usage:RunUsage|null,question?:import('./engine.mjs').RunQuestion,noModel?:true,modelRefused?:'credit'|'key'|'model'|'access',served?:import('./engine.mjs').ModelChoice,chosen?:import('./engine.mjs').ModelChoice}>;
 export function readSession(connection:import('./engine.mjs').EngineConnection,session:string):Promise<import('./engine.mjs').SessionRead>;
 export type UsageModel={model:string,input:number,output:number,sessions:number};
 export type ProfileUsage={state:'found',input:number,output:number,sessions:number,models:UsageModel[]}|{state:'refused'|'unreachable',input:null,output:null,sessions:null,models:null};

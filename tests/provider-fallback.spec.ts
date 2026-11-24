@@ -12,6 +12,8 @@ import { toolConfig } from '../lib/agent-toolsets.mjs';
 // completes on Claude once, and an Agent made afterwards gets the same choice from the worker and completes on it too.
 // Once Claude runs out as well, a request asks it once, never loops, and the chat again says once that Lead is out of
 // access. A Manager reads the choice and the server refuses their change.
+// #644: each request the Fallback model answered is one entry in the Company's Activity, by gtmworks, naming the model
+// it was to run on and the one that answered; a request with None, or one the Fallback model could not answer, logs none.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=<T,>(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as T[]; };
 const company='10000000-0000-0000-0000-000000000001';
@@ -60,6 +62,9 @@ const onFallback=(run:string)=>{ const calls=callsOf(run); expect(calls.at(-1)).
 const fallbacksOf=(run:string)=>fake.settings.fallbacks.filter(entry=>entry.run===run).map(entry=>`${entry.provider}/${entry.model}`);
 const chainAt=(profile:string)=>fake.settings.profiles.get(profile)?.config?.fallback_providers;
 const endOf=(run:string)=>rows<{outcome:string}>(`select outcome from public.conversation_run_ends where run_id='${run}'`);
+const moves=()=>rows<{actor_kind:string,actor_id:string|null,details:Record<string,string>}>(
+ `select actor_kind,actor_id,details from public.company_log where company_id='${company}' and action='fallback_model_used' order by id`);
+const moved={actor_kind:'system',actor_id:null,details:{from_provider:'openai-codex',from_model:'gpt-5.5',to_provider:'anthropic',to_model:'claude-sonnet-4-6'}};
 const replies=(run:string)=>rows<{n:number}>(`select count(*)::int as n from public.conversation_messages where author='agent' and run_id='${run}'`)[0].n;
 async function send(page:Page,agent:string,text:string) {
  const before=fake.settings.runs.length;
@@ -96,6 +101,7 @@ test('with None, a request that ran out of every ChatGPT account asks no other k
  expect(callsOf(run)).toEqual(['openai-codex:c0dex1','openai-codex:c0dex2']);
  expect(fallbacksOf(run)).toEqual([]);
  expect(fake.settings.modelCalls.some(call=>call.provider==='anthropic')).toBe(false);
+ expect(moves()).toEqual([]);
  await testInfo.attach('chat-out-of-access',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });
 
@@ -125,6 +131,15 @@ test('with Claude Sonnet as the Fallback model, the same request completes on it
  expect(replies(run)).toBe(1);
  await expect(page.locator('.convo-status[role="alert"]')).toHaveCount(0);
  await testInfo.attach('chat-fallback-reply',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+ // The move is one entry in Activity, by gtmworks, from Lead's own model to the one that answered; the chat says nothing of it.
+ await expect.poll(()=>moves(),{timeout:30000}).toEqual([moved]);
+ await page.goto('/c/rs-learning/log');
+ const entry=page.locator('.lgp-body .lg-row').filter({hasText:'answered a request with the Fallback model'});
+ await expect(entry).toHaveCount(1);
+ await expect(entry).toContainText('gtmworks');
+ await expect(entry).toContainText('gpt-5.5');
+ await expect(entry).toContainText('claude-sonnet-4-6');
+ await testInfo.attach('activity-fallback-move',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 
  // An Agent made now, on a profile of its own that holds no chain yet, gets the Company's choice from the worker.
  query(`do $$ begin
@@ -137,6 +152,7 @@ test('with Claude Sonnet as the Fallback model, the same request completes on it
  await expect(page.locator('.turn--agent').filter({hasText:'Reply to: Draft the email'})).toHaveCount(1,{timeout:30000});
  onFallback(written);
  expect(fallbacksOf(written)).toEqual(['anthropic/claude-sonnet-4-6']);
+ await expect.poll(()=>moves(),{timeout:30000}).toEqual([moved,moved]);
 });
 
 test('once the Fallback model runs out too, a request asks it once, never loops, and says so once', async({page})=>{
@@ -152,6 +168,8 @@ test('once the Fallback model runs out too, a request asks it once, never loops,
  expect(callsOf(run)).toHaveLength(1);
  await page.reload();
  await expect(page.locator('.convo-status[role="alert"]')).toHaveCount(1,{timeout:30000});
+ // No model answered it: no move is logged.
+ expect(moves()).toHaveLength(2);
 });
 
 test('a Manager reads the Fallback model with no control, and the server refuses their change', async({page})=>{

@@ -359,6 +359,14 @@ test('a request moved to the next account names its kind and the two accounts, b
  assert.equal(describeEntry({ subject: 'company', action: 'provider_switched', details: { provider: 'anthropic' } }).obj, 'Claude');
 });
 
+// #644: the Engine moved a request to the Company's Fallback model; the row names the model it was to run on and the
+// one that answered, as the model pickers name them.
+test('a request moved to the Fallback model names the model it was to run on and the one that answered', () => {
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'fallback_model_used', details: { from_provider: 'openai-codex', from_model: 'gpt-5.5', to_provider: 'anthropic', to_model: 'claude-sonnet-4-6' } }),
+  { act: ['logActFallbackModelUsed'], obj: undefined, from: { text: 'gpt-5.5' }, to: { text: 'claude-sonnet-4-6' }, note: undefined });
+ assert.deepEqual(describeEntry({ subject: 'company', action: 'fallback_model_used', details: {} }).act, ['logActFallbackModelUsed']);
+});
+
 test('a day with no zone given follows the runtime zone, also after it changes', () => {
  const before = process.env.TZ;
  try {
