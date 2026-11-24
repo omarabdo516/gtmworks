@@ -30,7 +30,10 @@ insert into decisions
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)',
-  'public.archived_cards(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[])']) fn
+  'public.archived_cards(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[])','public.card_archive_stops(uuid,bigint[])']) fn
+ union all select 'public.stop_card_work(uuid,bigint,uuid,uuid)','exempt','callable inside the database only, by archive_cards, which asks can_see_card for the Card first (#671); it answers nothing'
+ union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and reads a Card only to ask whether it is archived (#671)' from unnest(array[
+  'public.stopped_runs_open()','public.record_conversation_turn(uuid,uuid,text,uuid)']) fn
  union all select 'public.channel_board_card(uuid)','exempt','a channel member reads the one Card their channel put on the board only while they see its Agent (can_see_agent), as the board shows it (#151); anyone else reads nothing'
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
