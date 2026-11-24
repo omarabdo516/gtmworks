@@ -1,4 +1,4 @@
-import { test, expect } from './fresh-seed';
+import { test, expect, freshSeed } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
@@ -14,6 +14,8 @@ const seconds=10;
 
 test('sixteen moving faces of 56px, two working, keep 50 frames a second on a CPU slowed four times, and add no long task',async({page},testInfo)=>{
  test.setTimeout(120000);
+ // A retry or a repeat starts from the seed again: the sixteen Agents of the attempt before would double the sidebar.
+ if(testInfo.retry>0||testInfo.repeatEachIndex>0) freshSeed(testInfo.file,true);
  const agents=Array.from({length:16},(_,index)=>({id:randomUUID(),connection:randomUUID(),name:`Agent ${String(index+1).padStart(2,'0')}`}));
  const working=agents.slice(1,3).map(agent=>({agent,conversation:randomUUID()}));
  query(`do $$ begin
