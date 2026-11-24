@@ -420,6 +420,11 @@
 .gw .file-chip bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gw .file-chip button { display: inline-flex; color: var(--gw-text-3); border-radius: 50%; }
 @media (hover: hover) { .gw .file-chip button:hover { color: var(--gw-text-1); } }
+/* The files an Agent hands over in its reply (#708) sit under its bubble on its own side; an image is a thumbnail of
+   itself with its chip under it, and opens in full in a new tab. */
+.gw .turn--agent .msg-files--reply { justify-content: flex-start; }
+.gw .file-thumb { display: inline-flex; flex-direction: column; gap: 4px; max-width: 220px; text-decoration: none; }
+.gw .file-thumb img { display: block; max-width: 220px; max-height: 160px; border-radius: var(--gw-r-lg); background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; object-fit: cover; }
 .gw .composer__send.is-stop .gw-icon { width: 16px; height: 16px; }
 .gw .empty-chat { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 40px 0; }
 .gw .empty-chat__faces { display: flex; gap: 8px; margin-bottom: 8px; }

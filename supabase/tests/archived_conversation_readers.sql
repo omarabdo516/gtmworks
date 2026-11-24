@@ -29,7 +29,7 @@ insert into decisions
   'public.pin_run_model(uuid,uuid)','public.refuse_run_model(uuid,uuid)','public.answer_agent_request(uuid,bigint,boolean,text)',
   'public.card_chat_person(uuid,bigint)','public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)']) fn
  union all select fn,'exempt','an Agent''s Run in one Conversation, carried by the worker or by the Run''s own tool call: archiving stopped the Run there and closed what it asked (stop_conversation_work), and a Run closing later writes its end and asks nothing (#671)' from unnest(array[
-  'public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean)','public.track_run_question(uuid,text,jsonb,boolean,timestamptz)',
+  'public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean)','public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean,jsonb,text[])','public.track_run_question(uuid,text,jsonb,boolean,timestamptz)',
   'public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text)','public.settle_permission(bigint,text)',
   'public.agent_show_card(uuid,text,text,text,text,jsonb)','public.agent_save_rule(uuid,text,text,text)','public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text)',
   'public.agent_ask_to_open(uuid,text,text,text)','public.lead_agent_profile(uuid,text,text,text)','public.lead_create_agent(uuid,text,text,text,text,text[],text,text,boolean,boolean)',

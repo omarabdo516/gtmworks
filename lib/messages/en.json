@@ -382,6 +382,7 @@
   "attachCountRefused": "A message carries up to {0} images.",
   "attachSizeRefused": "An image is too large. Each image can be up to 20 MB.",
   "attachRequestRefused": "These images and text are too large to send together. Attach fewer or smaller images.",
+  "replyFileMissed": "{0} couldn’t be attached. Ask the agent to save it in its own work folder, up to 25 MB, and send it again.",
   "usage": "Usage",
   "usageHelp": "Tokens each agent used in the last 30 days, per company, as the agent engine counted them. No prices are shown: they depend on each install's model plan.",
   "usageCompany": "Company",

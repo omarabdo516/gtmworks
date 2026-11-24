@@ -8,6 +8,8 @@ const writer={soul:'',provider:'anthropic',model:'claude-opus-4-6',key:'test-onl
 const connection=fake=>({address:fake.address,managementAddress:fake.managementAddress,profile:'writer',key:'test-only-key'});
 const message={conversation:'conversation-1',input:'Plan the launch post',idempotencyKey:'conversation-1:message-1'};
 
+// Every Run carries how its Agent hands a file in its reply (#708).
+const fileNote=`To give the person a file you made (a PDF, an image, a spreadsheet, a page, any kind of file), save it in your work folder (/work/writer) and put its full path on a line of its own in your reply, as MEDIA:/work/writer/<path to the file>. gtmworks attaches that file to your reply for the person to open and download, whatever its kind, up to 25 MB; this replaces any other note you have on which files come through. Never convert a file into images to send it, and write no other path to it in your reply. Only files inside your own work folder can be attached.`;
 test('a Run with a chosen model is sent with its provider and model, and one with no choice is sent as before',async()=>{
  const fake=await fakeHermes(); fake.settings.profiles.set('writer',writer);
  try {
@@ -15,8 +17,8 @@ test('a Run with a chosen model is sent with its provider and model, and one wit
   assert.equal(typeof await engine.start({...message,model:{provider:'openrouter',model:'openai/gpt-5.5'}}),'string');
   assert.equal(typeof await engine.start({...message,idempotencyKey:'conversation-1:message-2'}),'string');
   assert.deepEqual(fake.settings.runs.map(run=>JSON.parse(run.body)),[
-   {input:'Plan the launch post',provider:'openrouter',model:'openai/gpt-5.5'},
-   {input:'Plan the launch post'}]);
+   {input:'Plan the launch post',instructions:fileNote,provider:'openrouter',model:'openai/gpt-5.5'},
+   {input:'Plan the launch post',instructions:fileNote}]);
  } finally { await fake.close(); }
 });
 

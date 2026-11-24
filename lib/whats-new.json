@@ -1,5 +1,11 @@
 [
  {
+  "issue": 708,
+  "date": "2026-11-24",
+  "en": { "title": "Agents send you files in the chat", "body": "When an Agent makes a PDF, a spreadsheet, an image or any other file in its work folder, it sends it in its reply as a file you open and download, with images shown as thumbnails, and a file it cannot send says so instead of showing a path." },
+  "ar": { "title": "الوكلاء بيبعتولك ملفات في الشات", "body": "لما الوكيل يعمل PDF أو شيت أو صورة أو أي ملف تاني في فولدر شغله، بيبعتهولك في رده كملف تفتحه وتنزّله، والصور بتظهر مصغّرة، ولو في ملف مقدرش يبعته بيقولك كده بدل ما يظهر مسار." }
+ },
+ {
   "issue": 705,
   "date": "2026-11-24",
   "en": { "title": "Find any archived card", "body": "The board's archived list now shows fifty cards at a time, newest archived first, with Show more for the rest, and a search that finds an archived card by its title however long ago it was archived." },
