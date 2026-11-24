@@ -11,6 +11,7 @@ type Step = { name: string, link: string, path: string, content: string, search?
 // A step that opens the board (Marketing board, and the Inbox, which is the board on "Waiting on you") also waits for the
 // board's entrance (#131, #559): its progress bars grow for 700ms from when it is shown (app/board.css gw-bar-grow;
 // design-reference boardEnter), beside the page's fade.
+// The sheet's top bar can hold the Card's More menu beside Close (#692), so the close step names Close (#706).
 const pageFadeIn = 200, rowFade = 150, boardEnter = 700;
 const opensPage = { shown: 0, settled: Math.max(pageFadeIn, rowFade) };
 const opensBoard = { shown: 0, settled: Math.max(pageFadeIn, rowFade, boardEnter) };
@@ -18,7 +19,7 @@ export const clickPath: Step[] = [
   { name: 'numbers', link: '.nav a[href$="/numbers"]', path: '/numbers', content: '.numbers-page', motion: opensPage },
   { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board', motion: opensBoard },
   { name: 'open sheet', link: '#board-cols .kcard[data-card-id="1"] a', path: '/work/board', search: '?card=1', content: '.sheet[open]', motion: { shown: 0, settled: 280 } },
-  { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } },
+  { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn[aria-label="Close"]', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } },
   { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr', motion: opensPage },
   { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal', motion: opensPage },
   { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal', motion: opensBoard },
