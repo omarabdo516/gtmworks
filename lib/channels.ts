@@ -59,8 +59,12 @@ export type ChannelRecord={
  members:ChannelMember[],
  agents:ChannelAgent[],
  writer:boolean,
- // The reader adds and removes people and Agents: an Owner or a Manager, in a team channel.
+ // The reader adds and removes people and Agents: an Owner or a Manager, in a current team channel.
  manage:boolean,
+ // The reader archives and restores it (#675): an Owner or a Manager, in a team channel; never the general one.
+ archive?:boolean,
+ // An archived channel (#675): who archived it and when. Its Members read it, and nobody writes in it until it is restored.
+ archived?:{by:string,at:string},
  // Who does, named to a reader who cannot (a team channel only).
  managers:{name:string,role:'owner'|'manager'}[],
  messages:ChannelMessage[],
@@ -124,7 +128,7 @@ export async function channelSidebar(db:Database,company:string):Promise<Channel
 // a link's prefetch, which nobody saw. `session` reads an Agent's Hermes session for its replies' steps (#148), as a
 // Conversation's record does (#346).
 export async function channelRecord(db:Database,person:string,company:string,channel:string,read=false,session?:ReadSession):Promise<ChannelRecord|null> {
- const {data:found}=await db.from('channels').select('id,company_id,kind,name').eq('id',channel).eq('company_id',company).maybeSingle();
+ const {data:found}=await db.from('channels').select('id,company_id,kind,name,archived_at,archived_by').eq('id',channel).eq('company_id',company).maybeSingle();
  if(!found) return null;
  const name=nameOf(found);
  // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). A
@@ -151,7 +155,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // Each Agent's own state (#206): what waits on the reader, and its open Runs. It runs as the reader, so only their own
  // state comes back, and only the state is kept below.
  const {data:states}=await db.rpc('agent_states',{c:company});
- const {data:writer}=await db.rpc('conversation_can_write',{c:company});
+ const {data:canWrite}=await db.rpc('conversation_can_write',{c:company});
+ // Nobody writes in an archived channel (#675): the database refuses a message there too.
+ const writer=!!canWrite&&!found.archived_at;
  const {data:manager}=await db.rpc('can_manage_company',{target:company});
  const {data:may}=await db.rpc('permission_choices',{c:company});
  // What the reader's Stop ends now (#478), on stop_channel_message's own rule.
@@ -249,8 +255,10 @@ export async function channelRecord(db:Database,person:string,company:string,cha
    return {id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.main,only:agent.here_only,
     state:agentStatus({waitingMine:own?.waiting_mine??false,running:(own?.running??false)||working.has(agent.id)})};
   }),
-  writer:!!writer,
-  manage:!!manager&&name.kind==='team',
+  writer,
+  manage:!!manager&&name.kind==='team'&&!found.archived_at,
+  archive:!!manager&&name.kind==='team',
+  ...(found.archived_at?{archived:{at:found.archived_at as string,by:people.find(member=>member.person===found.archived_by)?.name??''}}:{}),
   managers,
   messages,
   handoffs:((handed||[]) as StoredHandover[]).map(row=>({id:row.id,from:{name:row.from_name,face:row.from_connection},to:{name:row.to_name,face:row.to_connection},goal:row.goal,at:row.created_at,

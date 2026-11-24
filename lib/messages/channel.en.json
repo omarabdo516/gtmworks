@@ -72,5 +72,22 @@
   "stepDone": "Done",
   "stepSkipped": "Skipped",
   "activityThinking": "Thinking",
-  "activityWriting": "Writing the reply"
+  "activityWriting": "Writing the reply",
+  "channelArchiveSection": "Archive the channel",
+  "channelArchiveHint": "It leaves everyone’s channel list; no message in it is deleted.",
+  "channelArchive": "Archive the channel",
+  "channelRestore": "Restore the channel",
+  "channelArchiveConfirm": "Archive the channel?",
+  "channelArchiveCancel": "Cancel",
+  "channelArchiveAndStop": "Archive and stop",
+  "channelStopsRun": "{0} stops working in the channel",
+  "channelStopsQuestion": "The question from {0}, “{1}”, closes unanswered",
+  "channelStopsPermission": "The request from {0}, “{1}”, closes undecided",
+  "channelStopsHand": "The step {0} handed the team, “{1}”, stops waiting",
+  "channelArchivedToast": "Archived",
+  "channelRestoredToast": "Restored",
+  "channelUndo": "Undo",
+  "channelArchivedLine": "This channel is archived. Nobody writes in it until it is restored.",
+  "channelArchiveFailed": "The channel was not archived: it may be archived already, or you can no longer change it.",
+  "channelRestoreFailed": "The channel was not restored: it may be back already, or you can no longer change it."
 }
