@@ -44,7 +44,8 @@ returns table(working boolean, started_at timestamptz, worked_at timestamptz, en
  at_conversation uuid, at_channel uuid, at_card bigint, followed boolean)
 language sql stable security definer set search_path='' as $$
  with chats as (select cv.id, cv.person_id from public.conversations cv where cv.company_id=c and cv.agent_id=agent),
- -- The reader's ended Runs they can see: their own Conversations', the channels they are in, the Cards' notes, and the
+ -- The reader's ended Runs they can see: their own Conversations', the channels they are in, the notes of the Cards
+ -- they see (can_see_card), and the
  -- Handover legs of the Agent in those places. A Conversation's Run another Agent answered by a Handover is that
  -- Agent's leg, not this one's.
  seen as (
@@ -57,7 +58,7 @@ language sql stable security definer set search_path='' as $$
    where r.company_id=c and r.agent_id=agent and r.outcome is not null and public.in_channel(r.channel_id)
   union all
   select n.closed_at, n.outcome, null, null, n.card_id from public.note_runs n
-   where n.company_id=c and n.agent_id=agent and n.outcome is not null
+   where n.company_id=c and n.agent_id=agent and n.outcome is not null and public.can_see_card(c, n.card_id)
   union all
   select coalesce(h.target_closed_at, h.closed_at), h.target_outcome, v.id, m.channel_id, null from public.agent_handovers h
    left join public.conversations v on v.id=h.conversation_id and v.person_id=auth.uid()
