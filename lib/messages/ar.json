@@ -1704,5 +1704,8 @@
   "boardRestoreLeftOne": "مارجعتش: {0}. يمكن اتغيّرت في الوقت ده، أو مش مسموح لك ترجّعها.",
   "boardRestoreLeftMany": "مارجعوش: {0}. يمكن اتغيّروا في الوقت ده، أو مش مسموح لك ترجّعهم.",
   "logActConversationArchived": "أرشف المحادثة",
-  "logActConversationRestored": "رجّع المحادثة"
+  "logActConversationRestored": "رجّع المحادثة",
+  "cardLinkCopyFailed": "اللينك ماتنسخش: المتصفح ماسمحش بكده. انسخه من شريط العنوان.",
+  "archiveCheckFailed": "متأرشفش حاجة: معرفناش نشوف الأرشفة هتوقّف إيه. جرّب تاني.",
+  "cardArchiveFailedRetry": "ده ماتمّش. البورد اتقرا تاني: بص عليه وبعدين جرّب تاني."
 }

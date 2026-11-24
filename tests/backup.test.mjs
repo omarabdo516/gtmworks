@@ -77,7 +77,8 @@ test('a backup and a restore keep archived Cards, Conversations and channels arc
   for (const table of ['work_cards', 'conversations', 'channels']) {
     assert.match(backup, new RegExp(`(insert into|update) public\\.${table}\\b[^\\n]*archived_at`), `the backup area archives a row of ${table} before the backup`);
   }
-  assert.ok(backup.indexOf('archived_rows > archived.before') < backup.indexOf('sh scripts/install.sh backup'), 'and reads them before the backup');
+  const read = backup.indexOf('archived_rows > archived.before'); const backedUp = backup.indexOf('sh scripts/install.sh backup');
+  assert.ok(read >= 0 && backedUp >= 0 && read < backedUp, 'and reads them before the backup');
   assert.match(backup, /diff -u archived\.before archived\.after \|\| fail 'the restore keeps archived Cards, Conversations and channels archived'/, 'and finds them archived after the restore');
   const archived = archivedPaths();
   assert.ok(archived.includes('var/lib/postgresql/data'), 'the database is in the archive');

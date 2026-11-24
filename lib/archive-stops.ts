@@ -10,6 +10,7 @@ export type ArchiveStop={about:string,kind:ArchiveStopKind,title:string,agent:st
 // What each archive action is asked: what archiving would stop, the archive itself, or the restore.
 export type ArchiveIntent='stops'|'archive'|'restore';
 // How each answers: what would stop; the ones it archived or restored (one left as it was, because it changed meanwhile
-// or the person may not change it, is not among them); or refused, when none changed.
-export type ArchiveAnswer<Id>={state:'stops',stops:ArchiveStop[]}|{state:'done',done:Id[]}|{state:'refused'};
+// or the person may not change it, is not among them), with the archive's `version` where its Undo names it (Cards:
+// an Undo restores only what that archive archived); or refused, when none changed.
+export type ArchiveAnswer<Id>={state:'stops',stops:ArchiveStop[]}|{state:'done',done:Id[],version?:string}|{state:'refused'};
 export const archiveIntents:readonly ArchiveIntent[]=['stops','archive','restore'];

@@ -20,7 +20,7 @@ const stopKeys:Record<ArchiveStopKind,string>={run:'channelStopsRun',question:'c
 export function ChannelArchive({company,channel,archived,agents,c,refresh}:{company:string,channel:string,archived:boolean,agents:{id:string,name:string,connection_id:string}[],c:Say,refresh:()=>Promise<void>}) {
  const router=useRouter();
  const [stops,setStops]=useState<ArchiveStop[]|null>(null);
- const [failed,setFailed]=useState<''|'channelArchiveFailed'|'channelRestoreFailed'>('');
+ const [failed,setFailed]=useState<''|'channelArchiveFailed'|'channelRestoreFailed'|'channelArchiveCheckFailed'>('');
  const ask=(intent:'stops'|'archive'|'restore')=>archiveChannels(company,intent,channel).catch(()=>null);
  const button=()=>document.getElementById('ch-arc-btn')?.focus();
  const restore=async(quiet:boolean)=>{
@@ -40,10 +40,12 @@ export function ChannelArchive({company,channel,archived,agents,c,refresh}:{comp
   toast(c('channelArchivedToast'),{icon:'archive',action:{label:c('channelUndo'),run:()=>void restore(true)}});
   button();
  };
+ // Archived at once only when the database answered that nothing stops; an answer that did not come archives nothing.
  const start=async()=>{
   const read=await ask('stops');
-  const found=read?.state==='stops'?read.stops:[];
-  if(found.length) setStops(found); else await archive();
+  if(read?.state!=='stops') { setFailed('channelArchiveCheckFailed'); return; }
+  setFailed('');
+  if(read.stops.length) setStops(read.stops); else await archive();
  };
  const face=(agent:string|null)=>{ const found=agents.find(one=>one.id===agent); return found?<CompanyAgentFace agent={found} size={24}/>:null; };
  return <section className="dp-sec" aria-labelledby="ch-h-arc">

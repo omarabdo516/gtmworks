@@ -37,7 +37,9 @@ export function useConversationArchive(company:string,changed?:(ids:string[],arc
  const archive=async(chats:ArchivedChat[])=>{
   if(!chats.length) return;
   const result=await archiveConversations(company,'stops',chats.map(chat=>chat.id)).catch(()=>null);
-  if(result?.state==='stops'&&result.stops.length) setAsking({chats,stops:result.stops}); else await archiveNow(chats);
+  // Archived at once only when the database answered that nothing stops; an answer that did not come archives nothing.
+  if(result?.state!=='stops') { toast(t('archiveCheckFailed'),{icon:'x'}); return; }
+  if(result.stops.length) setAsking({chats,stops:result.stops}); else await archiveNow(chats);
  };
  let confirm=null;
  if(asking) {

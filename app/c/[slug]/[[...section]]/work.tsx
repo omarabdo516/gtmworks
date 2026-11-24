@@ -54,14 +54,16 @@ export type PlaceResult={ok:true}|{error:string};
 export type PlaceCard=(form:FormData)=>Promise<PlaceResult>;
 export type IdeaResult={card:number}|{failed:true};
 // Archiving or restoring Cards (#670): the Cards the database archived or restored, or none.
-type ArchiveCards=(company:string,intent:ArchiveIntent,cards:number[])=>Promise<ArchiveAnswer<number>>;
+// Which question of what archiving would stop is the newest still wanted: an answer to an older or dropped one is ignored.
+function newestQuestion() { let newest=0; return {ask:()=>++newest,drop:()=>{ newest++; },newest:(asked:number)=>asked===newest}; }
+type ArchiveCards=(company:string,intent:ArchiveIntent|'undo',cards:number[],version?:string)=>Promise<ArchiveAnswer<number>>;
 export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
 export type WorkProps={workAction:WorkAction,placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:Card[],archiveCards?:ArchiveCards};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
 export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
  const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
- const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const [showArchived,setShowArchived]=useState(false); const [confirming,setConfirming]=useState<{cards:number[],stops:ArchiveStop[]}|null>(null); const [selected,setSelected]=useState<Map<number,string>|null>(null); const [left,setLeft]=useState<{restore:boolean,titles:string[]}|null>(null); const selectToggle=useRef<HTMLButtonElement>(null); const selectAllButton=useRef<HTMLButtonElement>(null); const selectedAct=useRef<HTMLButtonElement>(null); const [focusTo,setFocusTo]=useState<{to:'toggle'|'all'|'act'}|null>(null); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
+ const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const [showArchived,setShowArchived]=useState(false); const [confirming,setConfirming]=useState<{cards:number[],stops:ArchiveStop[]}|null>(null); const [asking]=useState(newestQuestion); const [selected,setSelected]=useState<Map<number,string>|null>(null); const [left,setLeft]=useState<{restore:boolean,titles:string[]}|null>(null); const selectToggle=useRef<HTMLButtonElement>(null); const selectAllButton=useRef<HTMLButtonElement>(null); const selectedAct=useRef<HTMLButtonElement>(null); const [focusTo,setFocusTo]=useState<{to:'toggle'|'all'|'act'}|null>(null); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
  const base=`/c/${p.slug}/work`; const card=p.cards.find(c=>c.id===p.cardId); const shown=p.cards.filter(c=>!project||String(c.project_id)===project); const visible=shown.filter(c=>!month||!c.go_live||c.go_live.slice(0,7)===month); const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="company" value={p.company}/></>;
  if(card&&composing) setComposing(false);
  // A card made from a message is marked with its mode, in the colour of the agent it was sent to.
@@ -146,27 +148,39 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const leftOf=(ids:number[],done:number[],restoring:boolean)=>{ const titles=ids.filter(id=>!done.includes(id)).map(titleOf); setLeft(ids.length>1&&titles.length?{restore:restoring,titles}:null); };
  const leftLine=(l:{restore:boolean,titles:string[]})=>{ const [before,after]=t(`board${l.restore?'Restore':'Archive'}Left${l.titles.length>1?'Many':'One'}`,'\u0000').split('\u0000');
   return <>{before}{l.titles.map((title,n)=><Fragment key={n}>{n>0&&t('boardNamesJoin')}{language==='ar'?<>«<bdi>{title}</bdi>»</>:<>“<bdi>{title}</bdi>”</>}</Fragment>)}{after}</>; };
- const endSelecting=()=>{ if(selected) { setSelected(null); setFocusTo({to:'toggle'}); } };
- const restore=(ids:number[])=>{ if(!p.archiveCards) return;
-  void p.archiveCards(p.company,'restore',ids).then(result=>{
+ // A question of what archiving would stop that is still on its way is dropped when the selection it was asked for ends
+ // (Cancel, or the board switching to its archive list): its answer then neither confirms nor archives anything.
+ const dropAsking=()=>asking.drop();
+ const endSelecting=()=>{ dropAsking(); if(selected) { setSelected(null); setFocusTo({to:'toggle'}); } };
+ // A request that never answered (the network, a server that went away) may still have changed Cards: the board is
+ // read again before the person is asked to try again.
+ const failed=()=>{ toast(t('cardArchiveFailedRetry'),{icon:'x'}); router.refresh(); };
+ // `version` is an Undo's: it restores only what the archive that offered it archived (archive_cards' version).
+ const restore=(ids:number[],version?:string)=>{ if(!p.archiveCards) return;
+  void p.archiveCards(p.company,version?'undo':'restore',ids,version).then(result=>{
    const done=result.state==='done'?result.done:[]; leftOf(ids,done,true); endSelecting();
    if(!done.length) { if(ids.length===1) toast(t('cardRestoreRefused'),{icon:'x'}); return; }
    toast(done.length>1?t('cardsRestoredToast',done.length):t('cardRestoredToast'),{icon:'restore'}); router.refresh();
-  });
+  },failed);
  };
  const archiveNow=(ids:number[])=>{ if(!p.archiveCards) return;
   void p.archiveCards(p.company,'archive',ids).then(result=>{
    const done=result.state==='done'?result.done:[]; leftOf(ids,done,false); endSelecting();
-   if(!done.length) { if(ids.length===1) toast(t('cardArchiveRefused'),{icon:'x'}); return; }
-   toast(done.length>1?t('cardsArchivedToast',done.length):t('cardArchivedToast'),{icon:'archive',action:{label:t('cardUndo'),run:()=>restore(done)}}); router.refresh();
-  });
+   if(!done.length||result.state!=='done') { if(ids.length===1) toast(t('cardArchiveRefused'),{icon:'x'}); return; }
+   const version=result.version;
+   toast(done.length>1?t('cardsArchivedToast',done.length):t('cardArchivedToast'),{icon:'archive',action:{label:t('cardUndo'),run:()=>restore(done,version)}}); router.refresh();
+  },failed);
  };
  // #671 (design-reference-card: cwArchive, cwConfirm): the database first says what archiving would stop; only when
- // something does, one confirmation names each thing across every Card being archived, and only "Archive and stop" archives.
+ // something does, one confirmation names each thing across every Card being archived, and only "Archive and stop"
+ // archives. Nothing is archived unless the database answered: a question that failed archives nothing and says so.
  const archive=(ids:number[])=>{ if(!p.archiveCards||!ids.length) return; setLeft(null);
-  void p.archiveCards(p.company,'stops',ids).then(result=>{
-   if(result.state==='stops'&&result.stops.length) setConfirming({cards:ids,stops:result.stops}); else archiveNow(ids);
-  });
+  const token=asking.ask();
+  const answered=(result:ArchiveAnswer<number>|null)=>{ if(!asking.newest(token)) return;
+   if(result?.state!=='stops') { toast(t('archiveCheckFailed'),{icon:'x'}); return; }
+   if(result.stops.length) setConfirming({cards:ids,stops:result.stops}); else archiveNow(ids);
+  };
+  void p.archiveCards(p.company,'stops',ids).then(answered,()=>answered(null));
  };
  // Select mode (#672; design-reference-card: bsel-toggle, sel-card, bsel-all): each Card shown is one press that selects
  // it, with the mouse, a tap, or Space or Enter; "Select all shown" adds every Card the board or the archive list shows.
@@ -349,7 +363,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     {companyAgents.map(a=><button type="button" key={a.id} className="chip" aria-pressed={filter===a.id} onClick={()=>setAgentFilter(a.id)}><span className="chip__face" aria-hidden="true"><CompanyAgentFace agent={a} size={22}/></span><bdi>{a.name}</bdi></button>)}
    </div>
    {boardFilters}
-   {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={t('boardArchivedCount',archivedCards.length)} title={t('boardArchived')} onClick={()=>{ setShowArchived(!showArchived); setSelected(null); }}><ShellIcon name="archive"/>{showArchived&&<span className="num">{archivedCards.length}</span>}</button>}
+   {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={t('boardArchivedCount',archivedCards.length)} title={t('boardArchived')} onClick={()=>{ setShowArchived(!showArchived); dropAsking(); setSelected(null); }}><ShellIcon name="archive"/>{showArchived&&<span className="num">{archivedCards.length}</span>}</button>}
    {canSelect&&!selected&&<button ref={selectToggle} type="button" className="ib" aria-label={t('boardSelectCards')} title={t('boardSelectCards')} onClick={startSelecting}><ShellIcon name="multiSel"/></button>}
    <span className="board-tools__summary">{!p.canCreate?<><BoardIcon name="eye"/>{t('boardReadOnly')}</>:waitingTotal?<><span className="dot dot--waiting" aria-hidden="true"/>{(p.waiting||[]).some(item=>item.kind!=='approval')?t('thingsWaitingOnYou',waitingTotal):t(waitingTotal>1?'boardWaitingMany':'boardWaitingOne',waitingTotal)}</>:<><BoardIcon name="check"/>{t('boardNothingWaiting')}</>}</span>
    <BoardPager/>

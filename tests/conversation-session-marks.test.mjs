@@ -12,14 +12,15 @@ const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 
 function database(rows,{gone=false}={}) {
- const due=[...rows]; const settled=/** @type {{conversation:string,archived:boolean}[]} */([]); const missing=/** @type {{conversation:string,archived:boolean}[]} */([]);
+ const due=[...rows]; const settled=/** @type {{conversation:string,archived:boolean}[]} */([]); const missing=/** @type {{conversation:string,archived:boolean}[]} */([]); const later=/** @type {string[]} */([]);
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
   if(name==='conversation_sessions_to_mark') return {data:[...due],error:null};
   if(name==='conversation_session_marked') { settled.push(args); due.splice(due.findIndex(row=>row.conversation===args.conversation),1); return {data:true,error:null}; }
   if(name==='conversation_session_missing') { missing.push(args); return {data:gone,error:null}; }
+  if(name==='conversation_sessions_later') { later.push(...args.conversations); return {data:null,error:null}; }
   return {data:null,error:{message:'unexpected'}};
  }};
- return {service,settled,due,missing};
+ return {service,settled,due,missing,later};
 }
 
 test('each Conversation\'s session takes its mark on its Agent\'s profile, and the mark is settled once taken',async()=>{
@@ -51,6 +52,18 @@ test('an Engine that does not answer keeps its marks for the next pass, and neve
  await markConversationSessions(two.service,{hermes:null,engines:async id=>id===company?hermes:{...hermes,address:'http://other:8642'},engineFor:connection=>{
   const engine=later.engineFor(connection); later.settings.marking=/** @type {any} */(connection).address.includes('other')?'marked':'unreachable'; return engine; }});
  assert.deepEqual(two.settled,[{conversation:'c4',archived:true}],'another Company\'s Engine is still asked');
+});
+
+test('the marks of an Engine that does not answer wait a minute in the database, so another Company\'s beyond the page reach the next pass',async()=>{
+ const fake=fakeEngine();
+ fake.settings.marking='unreachable';
+ const {service,later,settled}=database([
+  {conversation:'c1',company,profile:'ag-1',session:'s1',archived:true},
+  {conversation:'c2',company,profile:'ag-2',session:'s2',archived:true},
+  {conversation:'c3',company,profile:null,session:'s3',archived:true}]);
+ await markConversationSessions(service,{hermes,engineFor:fake.engineFor});
+ assert.deepEqual(later,['c1','c2'],'each of the held Engine\'s marks is put off, the one never asked among them');
+ assert.deepEqual(settled,[]);
 });
 
 test('a session the Engine does not keep, or a Conversation whose Agent is gone, is told to the database, which decides when to let it go',async()=>{

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(61);
+select plan(64);
 -- #674 (spec #667). A person archives and restores their own Conversations. RS Learning's Ari is shown to the Manager
 -- (…02), a Contributor (…03) and the Viewer (…04). The Manager has "Plans" (tied to the "Plans card" Card, its session
 -- named in the Engine), "Busy" (its Run is open, a turn waits behind it, and the Run asks a question, a permission and
@@ -112,7 +112,7 @@ reset role;
 
 -- Archiving a Card leaves its Conversation as it was.
 set local role authenticated;
-select is(pg_temp.answer($$select public.archive_cards('10000000-0000-0000-0000-000000000001',array[pg_temp.card('Later card')])$$),pg_temp.card('Later card')::text,'the Manager archives the Card of "Later"');
+select is(pg_temp.answer($$select card from public.archive_cards('10000000-0000-0000-0000-000000000001',array[pg_temp.card('Later card')])$$),pg_temp.card('Later card')::text,'the Manager archives the Card of "Later"');
 select is(pg_temp.listed(false),'4,3','"Later" stays a current Conversation');
 
 -- Restoring: only the caller's own.
@@ -209,6 +209,18 @@ update public.conversations set session_missing_since=now()-interval '2 days', s
 set local role service_role;
 select ok(public.conversation_session_missing(pg_temp.chat(5),true),'one missing for a day is settled as it is');
 select ok(not exists(select 1 from public.conversation_sessions_to_mark() where conversation=pg_temp.chat(5)),'and is not asked again');
+reset role;
+
+-- A mark the Engine took after the Conversation changed is kept as what the Engine holds, so the next pass corrects it:
+-- the worker read "Busy" archived, its person restored it, and then the Engine took the archived mark.
+-- ("Busy" is made current with its Engine unmarked, as the worker found it after the restore.)
+update public.conversations set archived_at=null, archived_by=null, session_archived=false where id=pg_temp.chat(2);
+set local role service_role;
+select ok(not public.conversation_session_marked(pg_temp.chat(2),true),'the late mark does not settle the restored Conversation');
+select ok(exists(select 1 from public.conversation_sessions_to_mark() where conversation=pg_temp.chat(2) and not archived),'and the next pass takes the mark off again');
+-- An Engine that does not answer: its marks wait a moment, out of the page, so another Company's are reached.
+select public.conversation_sessions_later(array[pg_temp.chat(2)]);
+select ok(not exists(select 1 from public.conversation_sessions_to_mark() where conversation=pg_temp.chat(2)),'a mark whose Engine did not answer is put off for the next passes');
 reset role;
 
 select * from finish();

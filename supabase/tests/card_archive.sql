@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(34);
 -- #670. RS Learning: the Owner (…01), the Manager (…02), a Contributor (…03), the Viewer (…04) and a second
 -- Contributor (…05). Ads is shown to the Manager, the first Contributor and the Viewer, and hidden from the second
 -- Contributor. A Card in Writing, an Ads Card in Writing, a Card in review that waits on the Manager's approval, a Card
@@ -34,7 +34,7 @@ create function pg_temp.seen(c uuid) returns text language sql as $$ select coal
 create function pg_temp.archived(c uuid) returns text language sql as $$ select coalesce(string_agg(title,',' order by title),'') from public.archived_cards(c) where title like 'Archive %' $$;
 grant execute on function pg_temp.seen(uuid),pg_temp.archived(uuid) to authenticated;
 
-select ok(not has_function_privilege('anon','public.archive_cards(uuid,bigint[])','execute') and not has_function_privilege('anon','public.restore_cards(uuid,bigint[])','execute')
+select ok(not has_function_privilege('anon','public.archive_cards(uuid,bigint[])','execute') and not has_function_privilege('anon','public.restore_cards(uuid,bigint[],timestamptz)','execute')
  and not has_function_privilege('anon','public.archived_cards(uuid)','execute'),'nobody signed out archives, restores or lists archived Cards');
 
 set local role authenticated;
@@ -48,11 +48,11 @@ set local role authenticated;
 
 -- The Viewer sees the Cards and archives nothing.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
-select is(pg_temp.answer(format('select public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'))),'42501','a Viewer cannot archive a Card');
+select is(pg_temp.answer(format('select card from public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'))),'42501','a Viewer cannot archive a Card');
 
 -- The Contributor archives two Cards at once.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is(pg_temp.answer(format('select public.archive_cards(%L,array[%s,%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'),pg_temp.card('Archive project'))),
+select is(pg_temp.answer(format('select card from public.archive_cards(%L,array[%s,%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'),pg_temp.card('Archive project'))),
  format('%s,%s',pg_temp.card('Archive writing'),pg_temp.card('Archive project')),'a Contributor archives two Cards in one call and is told both');
 select is(pg_temp.seen('10000000-0000-0000-0000-000000000001'),'Archive ads','an archived Card is out of every read of current Cards, the board''s, the list''s, the calendar''s and Home''s');
 select is((select count(*)::int from public.board_cards('10000000-0000-0000-0000-000000000001') where title like 'Archive %'),1,'the board leaves archived Cards out');
@@ -60,7 +60,7 @@ select is((select count(*)::int from public.work_cards where company_id='1000000
 select is(pg_temp.archived('10000000-0000-0000-0000-000000000001'),'Archive project,Archive writing','the archived list holds both');
 select is((select string_agg(format('%s %s %s',x.stage_id,x.archived_by,(x.archived_at is not null)::text),',' order by x.title) from public.archived_cards('10000000-0000-0000-0000-000000000001') x where x.title like 'Archive %'),
  '5 20000000-0000-0000-0000-000000000003 true,3 20000000-0000-0000-0000-000000000003 true','each archived Card keeps the column it was in and says who archived it, and when');
-select is(pg_temp.answer(format('select public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'))),'','a Card already archived is not archived again');
+select is(pg_temp.answer(format('select card from public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'))),'','a Card already archived is not archived again');
 select is(pg_temp.answer(format('select public.move_work_card_to_column(%L,%s,%L)','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'),'done')),'P0001','an archived Card is not moved');
 
 -- The Manager no longer waits on the archived Card's approval.
@@ -82,7 +82,7 @@ select is((select count(*)::int from public.company_log where card_id=pg_temp.ca
 
 -- A Card hidden from a Member stays hidden when archived.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is(pg_temp.answer(format('select public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive ads'))),pg_temp.card('Archive ads')::text,'the Contributor who sees Ads archives its Card');
+select is(pg_temp.answer(format('select card from public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive ads'))),pg_temp.card('Archive ads')::text,'the Contributor who sees Ads archives its Card');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select is(pg_temp.archived('10000000-0000-0000-0000-000000000001'),'Archive project,Archive writing','a Member Ads is hidden from does not see its archived Card');
 select is(pg_temp.answer(format('select public.restore_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive ads'))),'','nor restores it');
@@ -90,10 +90,10 @@ select is((select count(*)::int from public.company_log where card_id=pg_temp.ca
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
 
 -- Another Company reaches nothing.
-select is(pg_temp.answer(format('select public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000002',pg_temp.card('Archive elsewhere'))),'42501','a Member of another Company cannot archive its Cards');
-select is(pg_temp.answer(format('select public.archive_cards(%L,%L::bigint[])','10000000-0000-0000-0000-000000000001','{}')),'','an empty choice archives nothing');
+select is(pg_temp.answer(format('select card from public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000002',pg_temp.card('Archive elsewhere'))),'42501','a Member of another Company cannot archive its Cards');
+select is(pg_temp.answer(format('select card from public.archive_cards(%L,%L::bigint[])','10000000-0000-0000-0000-000000000001','{}')),'','an empty choice archives nothing');
 reset role;
-select is(pg_temp.answer(format('select public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',(select id from public.work_cards where title='Archive elsewhere'))),'','a Card of another Company named under this one is never archived');
+select is(pg_temp.answer(format('select card from public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',(select id from public.work_cards where title='Archive elsewhere'))),'','a Card of another Company named under this one is never archived');
 select is((select archived_at from public.work_cards where title='Archive elsewhere'),null,'and the other Company''s Card is as it was');
 set local role authenticated;
 select is(pg_temp.answer(format('select x.id from public.archived_cards(%L) x','10000000-0000-0000-0000-000000000002')),'','nor lists another Company''s archived Cards');
@@ -108,6 +108,20 @@ reset role;
 select is((select string_agg(format('%s %s',actor_id,details->>'column'),',') from public.company_log where action='card_restored' and card_id=pg_temp.card('Archive writing')),
  '20000000-0000-0000-0000-000000000002 progress','the restore row names the person and the column the Card came back to');
 select is((select archived_at is null and archived_by is null from public.work_cards where id=pg_temp.card('Archive writing')),true,'a restored Card is no longer archived');
+
+-- Undo undoes the archive its toast named (its archived_at): a Card restored and archived again meanwhile, by anyone,
+-- stays archived; the archive that is current is restored. A plain restore restores whatever archive is current.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select set_config('test.first',(select archived_at::text from public.archive_cards('10000000-0000-0000-0000-000000000001',array[pg_temp.card('Archive writing')])),true);
+select public.restore_cards('10000000-0000-0000-0000-000000000001',array[pg_temp.card('Archive writing')]);
+select set_config('test.second',(select archived_at::text from public.archive_cards('10000000-0000-0000-0000-000000000001',array[pg_temp.card('Archive writing')])),true);
+select isnt(current_setting('test.first'),current_setting('test.second'),'each archive has its own time');
+select is(pg_temp.answer(format('select public.restore_cards(%L,array[%s],%L)','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'),current_setting('test.first'))),'',
+ 'Undo of the first archive leaves the Card archived by the later one');
+select is(pg_temp.answer(format('select public.restore_cards(%L,array[%s],%L)','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'),current_setting('test.second'))),pg_temp.card('Archive writing')::text,
+ 'Undo of the current archive restores it');
+reset role;
 
 select * from finish();
 rollback;

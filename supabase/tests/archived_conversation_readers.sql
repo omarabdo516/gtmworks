@@ -17,6 +17,7 @@ insert into decisions
   'public.conversation_list(uuid,text,boolean,timestamptz,uuid,integer,text,text)','public.conversation_counts(uuid)','public.conversation_archive_stops(uuid,uuid[])',
   'public.archive_conversations(uuid,uuid[])','public.restore_conversations(uuid,uuid[])','public.restore_written_conversation()',
   'public.conversation_sessions_to_mark()','public.conversation_session_marked(uuid,boolean)','public.conversation_session_missing(uuid,boolean)']) fn
+ union all select 'public.conversation_sessions_later(uuid[])','exempt','the worker''s: it puts off the Engine marks of the Conversations the worker names, whichever way they go, and lists none'
  union all select 'public.log_conversation_archive(uuid,boolean,uuid)','exempt','inside the database only: it writes the log row of the one Conversation an archive, a restore or a message just changed, and lists none'
  union all select fn,'exempt','answers for, or writes in, the one Conversation its caller names, archived or not: an archived Conversation still opens and reads as it was, and a message its person writes there brings it back (restore_written_conversation); it lists no Conversations' from unnest(array[
   'public.conversation_agent(uuid,uuid)','public.conversation_handovers(uuid)','public.conversation_live_run(uuid)','public.conversation_stop_target(uuid,uuid)',

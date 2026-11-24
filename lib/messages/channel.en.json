@@ -87,5 +87,6 @@
   "channelUndo": "Undo",
   "channelArchivedLine": "This channel is archived. Nobody writes in it until it is restored.",
   "channelArchiveFailed": "The channel was not archived: it may be archived already, or you can no longer change it.",
-  "channelRestoreFailed": "The channel was not restored: it may be back already, or you can no longer change it."
+  "channelRestoreFailed": "The channel was not restored: it may be back already, or you can no longer change it.",
+  "channelArchiveCheckFailed": "The channel was not archived: what archiving would stop could not be checked. Try again."
 }

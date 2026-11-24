@@ -1154,6 +1154,8 @@
   .gw.is-chat .topbar h1 { font-weight: 600; font-size: var(--gw-fs-base); text-transform: none; letter-spacing: normal; color: var(--gw-text-1); }
   /* 44px touch targets on a phone (PRODUCT.md), where the reference draws 36px rows and buttons. */
   .gw .circle-btn { width: 44px; height: 44px; }
+  .gw .thread-more { width: 44px; height: 44px; }
+  .gw .thread-menu { top: 0; }
   .gw .sb-item { height: 44px; }
   .gw .menu__item { min-height: 44px; }
   .gw .sb-add { width: 44px; height: 44px; margin: -14px 0 -6px; }

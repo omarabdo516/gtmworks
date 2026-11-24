@@ -135,25 +135,26 @@ grant execute on function public.restore_conversations(uuid,uuid[]) to authentic
 
 -- A message its person writes in an archived Conversation brings it back, with its log row: sent, queued while the
 -- Agent answers, or addressed to a Member. An Agent's reply (a Run closing after the archive) leaves it archived. So does the late record
--- of a message sent or queued before the archive, whose start was on its way when it was archived (its reservation or
--- its queued turn is older than the archive): that is no new writing, and its Run is stopped as it lands, as archiving
--- stops the Runs already named.
+-- of a message sent or queued before an archive, whose start was on its way when its work was stopped (the stop kept on
+-- its reservation, stop_conversation_work, 20270415999992, by archiving the Conversation or its Card): that is no new
+-- writing, and its Run is stopped as it lands, as archiving stops the Runs already named, even when the Conversation or
+-- the Card was restored before the Engine answered. A reservation made again after that (a new start) carries no stop.
 create function public.restore_written_conversation() returns trigger
 language plpgsql security definer set search_path='' as $$
 declare v public.conversations;
 begin
  select * into v from public.conversations x where x.id=new.conversation_id;
- if v.archived_at is null then return null; end if;
  if tg_table_name='conversation_messages' then
   if new.author<>'person' then return null; end if;
-  if exists(select 1 from public.conversation_queued_turns q where q.conversation_id=v.id and q.send_key=new.send_key and q.queued_at<=v.archived_at)
-   or exists(select 1 from public.conversation_run_reservations r where r.conversation_id=v.id and r.send_key=new.send_key and r.created_at<=v.archived_at) then
+  if exists(select 1 from public.conversation_run_reservations r where r.conversation_id=v.id and r.send_key=new.send_key
+   and r.stop_at_start>=r.created_at) then
    if new.run_id is not null then
     insert into public.stopped_runs(company_id,conversation_id,run_id) values(v.company_id,v.id,new.run_id) on conflict do nothing;
    end if;
    return null;
   end if;
  end if;
+ if v.archived_at is null then return null; end if;
  update public.conversations set archived_at=null, archived_by=null where id=v.id and archived_at is not null;
  if found then perform public.log_conversation_archive(v.id,false,new.person_id); end if;
  return null;
@@ -177,16 +178,27 @@ $$;
 revoke all on function public.conversation_sessions_to_mark() from public,anon,authenticated;
 grant execute on function public.conversation_sessions_to_mark() to service_role;
 
--- The worker's: the Engine took the mark `archived` for the Conversation's session. Kept only while the Conversation
--- still is so; a restore or an archive since asks for the other mark on the next pass. True when kept.
+-- The worker's: the Engine took the mark `archived` for the Conversation's session. It is kept as what the Engine
+-- holds, even when the Conversation was restored or archived again since the worker read it: the two then differ, so
+-- the next pass sends the other mark. True when the Conversation still is so (nothing more to send).
 create function public.conversation_session_marked(conversation uuid, archived boolean) returns boolean
 language sql security definer set search_path='' as $$
  with kept as (update public.conversations v set session_archived=archived, session_missing_since=null, session_mark_after=null
-  where v.id=conversation and (v.archived_at is not null)=archived and v.hermes_session_id is not null returning 1)
- select exists(select 1 from kept);
+  where v.id=conversation and v.hermes_session_id is not null returning (v.archived_at is not null)=archived as settled)
+ select coalesce((select settled from kept),false);
 $$;
 revoke all on function public.conversation_session_marked(uuid,boolean) from public,anon,authenticated;
 grant execute on function public.conversation_session_marked(uuid,boolean) to service_role;
+
+-- The worker's: the Engine of these Conversations' sessions did not answer, or refused its key. Each waits 15 seconds
+-- before it is listed again, so a page of them holds no place before another Company's.
+create function public.conversation_sessions_later(conversations uuid[]) returns void
+language sql security definer set search_path='' as $$
+ update public.conversations v set session_mark_after=now()+interval '15 seconds'
+  where v.id=any(conversations) and v.hermes_session_id is not null;
+$$;
+revoke all on function public.conversation_sessions_later(uuid[]) from public,anon,authenticated;
+grant execute on function public.conversation_sessions_later(uuid[]) to service_role;
 
 -- The worker's: the Engine keeps no session by that name for the Conversation, or its Agent is gone. A session not
 -- written yet is asked again a minute later; one missing for a day, or a Conversation with no Agent left, has nothing to

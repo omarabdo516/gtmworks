@@ -11,6 +11,9 @@ const lead='a6730000-0000-0000-0000-000000000001';
 // Sixty of the Owner's Conversations with Lead, the first written first and the rest an hour apart, and one of the
 // Manager's. The oldest is answered last, so it holds the newest message of all.
 function sixtyConversations() {
+ // The general channel, with no message yet, sorts by the time it was made: set from the test's own clock, between
+ // the oldest's answer and Conversation 60, however old the lane's seed is.
+ query(`update public.channels set created_at=now()-interval '20 hours' where company_id='${company}' and kind='general'`);
  query(`insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('${lead}','${company}','f6730000-0000-0000-0000-000000000001','Lead','General',true,'default')`);
  query(`insert into public.conversations(id,company_id,person_id,agent_id,agent_name,created_at)
   select ('c6730000-0000-0000-0000-'||lpad(g::text,12,'0'))::uuid,'${company}','${owner}','${lead}','Lead',now()-interval '100 hours'+make_interval(hours=>g) from generate_series(1,60) g`);
@@ -45,7 +48,7 @@ test('A person reaches every Conversation of theirs from the sidebar, newest mes
  await expect(rows).toHaveCount(50);
  await expect(rows.first()).toContainText('Plan number 01');
  await expect(rows.first()).toContainText('The answer to the oldest');
- // The general channel, with no message yet, by the time it was made, with the seed.
+ // The general channel, with no message yet, by the time it was made (20 hours ago).
  await expect(rows.nth(1)).toContainText('#general');
  await expect(rows.nth(2)).toContainText('Plan number 60');
  await expect(page.getByRole('button',{name:'Current 61'})).toHaveAttribute('aria-pressed','true');

@@ -105,6 +105,10 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // channel gives (?show), which has no current Card to show.
  const {data:archivedRows}=section==='work/board'?await db.rpc('archived_cards',{c:company.id}).select('*'):{data:null};
  const archived=(archivedRows||[]) as {id:number}[];
+ // The archive list is capped at the Data API's row limit too (newest archived first), so an archived Card the address
+ // names and the list missed is read by id, under the same rights and this Company.
+ for(const named of [cardId,shownId,sheetId]) if(section==='work/board'&&named!=null&&!archived.some(c=>c.id===named)&&!workData[2]?.data?.some(c=>c.id===named)) {
+  const {data:asked}=await db.rpc('archived_cards',{c:company.id}).select('*').eq('id',named).maybeSingle(); if(asked) archived.push(asked as {id:number}); }
  const isArchived=(id:number|null|undefined)=>id!=null&&archived.some(c=>c.id===id)&&!workData[2]?.data?.some(c=>c.id===id);
  for(const named of [cardId,shownId]) if(isArchived(named)) redirect(`/c/${slug}/work/board?card=${named}`);
  const sheetArchived=isArchived(sheetId);

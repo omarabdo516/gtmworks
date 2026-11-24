@@ -2,11 +2,11 @@
 -- message first, with a title search, a page at a time.
 
 -- How a search in the interface compares text, as lib/arabic-search.mjs's searchFold reads it: case aside, and in
--- Arabic without its marks or tatweel, with every hamza seat read as its letter, alef wasla as alef, alef maqsura as ya
+-- Arabic without its marks (U+064B-U+065F and U+0670, never the Arabic-Indic digits) or tatweel, with every hamza seat read as its letter, alef wasla as alef, alef maqsura as ya
 -- and teh marbuta as ha. Runs of spaces are one space, and the ends are trimmed. Both sides of a comparison go through it.
 create function public.search_fold(text text) returns text
 language sql immutable strict parallel safe set search_path='' as $$
- select btrim(regexp_replace(translate(regexp_replace(normalize(lower(text),NFKD),'[ً-ٰـ]','','g'),'ٱىة','ايه'),'\s+',' ','g'));
+ select btrim(regexp_replace(translate(regexp_replace(normalize(lower(text),NFKD),'[ً-ٰٟـ]','','g'),'ٱىة','ايه'),'\s+',' ','g'));
 $$;
 revoke all on function public.search_fold(text) from public,anon,authenticated,service_role;
 

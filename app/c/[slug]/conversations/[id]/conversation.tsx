@@ -48,6 +48,10 @@ function newLive():LiveStore {
 export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,first,invites,archived=false,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],first?:'alone'|'team',invites?:number,archived?:boolean,children:ReactNode}) {
  const panel=useDetailsPanel();
  const [isArchived,setArchived]=useState(archived);
+ // This chat's own archive and restore show at once; the server's answer, read again after one from elsewhere (the
+ // sidebar's menu), wins whenever it changes.
+ const [served,setServed]=useState(archived);
+ if(served!==archived) { setServed(archived); setArchived(archived); }
  const composer=useRef<MessageBoxHandle>(null); const [live]=useState(newLive);
  // The same object for the page's life: a new context value reaching a transcript that still streams in would make React
  // draw it again in the browser and leave the streamed copy hidden in the page (#172, #253).

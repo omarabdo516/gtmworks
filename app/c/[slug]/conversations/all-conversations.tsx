@@ -21,11 +21,13 @@ const searchPause=250;
 // time. A page holds fifty rows; "Show more" adds the next fifty after them. The search asks the database, so it reads
 // every title, not only the rows shown. A Conversation of the reader's own is archived from its row, or several at once
 // by selecting them, with Undo, and restored from the Archived list (#674); a channel is archived from its details.
-export default function AllConversations({slug,company,tab,counts,first}:{slug:string,company:string,tab:ConversationTab,counts:ConversationCounts,first:ConversationPage|null}) {
+export default function AllConversations({slug,company,tab,counts,first}:{slug:string,company:string,tab:ConversationTab,counts:ConversationCounts|null,first:ConversationPage|null}) {
  const {t,language}=useI18n();
  const router=useRouter();
  const [page,setPage]=useState<ConversationPage|null>(first);
  const [query,setQuery]=useState('');
+ // The query the rows shown answer ('' for the server's first page): "Show more" extends only a page of the query typed.
+ const [shownFor,setShownFor]=useState('');
  const [searching,setSearching]=useState(false);
  const [loading,setLoading]=useState(false);
  const asked=useRef(0);
@@ -40,9 +42,17 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
   window.setTimeout(async()=>{
    if(ask!==asked.current) return;
    const found=await conversationListPage(company,tab,value,null).catch(()=>null);
-   if(ask===asked.current) setPage(found);
+   if(ask===asked.current) { setPage(found); setShownFor(value); }
   },value.trim()?searchPause:0);
  };
+ // The server's page read again (an archive or a restore from the sidebar or a chat's head refreshes it): the list
+ // follows it, and a search shown is asked again, so a row that changed list elsewhere leaves this one.
+ const [served,setServed]=useState(first);
+ const [reread,setReread]=useState<{value:string}|null>(null);
+ if(served!==first) { setServed(first); if(query.trim()) setReread({value:query}); else { setPage(first); setShownFor(query); } }
+ useEffect(()=>{ if(!reread) return; const ask=++asked.current;
+  void conversationListPage(company,tab,reread.value,null).catch(()=>null).then(found=>{ if(ask===asked.current) { setPage(found); setShownFor(reread.value); } });
+ },[reread,company,tab]);
  const [selected,setSelected]=useState<Set<string>|null>(null);
  // Archived or restored rows leave this list at once; Undo, or a change from elsewhere, reads it again.
  const {archive,restore,confirm}=useConversationArchive(company,(ids,nowArchived)=>{
@@ -50,21 +60,25 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
   if(nowArchived!==archived) setPage(shown=>shown&&{...shown,items:shown.items.filter(item=>item.kind!=='conversation'||!ids.includes(item.id))});
   else search(query);
  });
+ // The next page extends the page it was asked after, as it is now (a row archived meanwhile stays out of it); a page
+ // replaced meanwhile (a new search, the server's page read again) is left as it is.
  const more=async()=>{
-  if(!page?.next||loading) return;
+  const after=page?.next;
+  if(!after||loading||shownFor!==query) return;
   const ask=asked.current; setLoading(true);
-  const next=await conversationListPage(company,tab,query,page.next).catch(()=>null);
+  const next=await conversationListPage(company,tab,query,after).catch(()=>null);
   setLoading(false);
   if(ask!==asked.current) return;
   if(!next) { toast(t('allConversationsFailed'),{icon:'x'}); return; }
-  setPage({items:[...page.items,...next.items],next:next.next});
+  setPage(shown=>shown&&shown.next===after?{items:[...shown.items,...next.items],next:next.next}:shown);
  };
  const open=(to:ConversationTab)=>{ if(to!==tab) router.push(`/c/${slug}/conversations${to==='archived'?'?tab=archived':''}`); };
  const count=(value:number)=>new Intl.NumberFormat(localeFor(language)).format(value);
  const now=new Date();
  const time=(value:string)=>new Date(value).toLocaleString(localeFor(language),recentDay(value,now)==='earlier'?{day:'numeric',month:'short'}:{hour:'numeric',minute:'2-digit'});
- const segment=(key:ConversationTab,icon:'chat'|'archive',label:string,n:number)=>{ const on=key===tab;
-  return <button type="button" aria-pressed={on} aria-label={`${label} ${count(n)}`} title={on?undefined:label} onClick={()=>open(key)}><ShellIcon name={icon}/>{on&&<span>{label}</span>}<span className="num chip__n" aria-hidden="true">{count(n)}</span></button>; };
+ // A count that could not be read is left out, never shown as a zero.
+ const segment=(key:ConversationTab,icon:'chat'|'archive',label:string,n:number|null)=>{ const on=key===tab;
+  return <button type="button" aria-pressed={on} aria-label={n==null?label:`${label} ${count(n)}`} title={on?undefined:label} onClick={()=>open(key)}><ShellIcon name={icon}/>{on&&<span>{label}</span>}{n!=null&&<span className="num chip__n" aria-hidden="true">{count(n)}</span>}</button>; };
  const own=(chat:ListedChat)=>chat.kind==='conversation';
  const chatOf=(chat:ListedChat):ArchivedChat=>({id:chat.id,title:chat.title,face:chat.face});
  const act=(chats:ListedChat[])=>void (archived?restore:archive)(chats.map(chatOf));
@@ -87,7 +101,7 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
  return <div className="cvp">
   <h1 className="sr-only">{t('allConversations')}</h1>
   <div className="board-tools bt2 cv-tools">
-   <div className="segmented cv-seg" role="group" aria-label={t('allConversationsLists')}>{segment('current','chat',t('allConversationsCurrent'),counts.current)}{segment('archived','archive',t('allConversationsArchived'),counts.archived)}</div>
+   <div className="segmented cv-seg" role="group" aria-label={t('allConversationsLists')}>{segment('current','chat',t('allConversationsCurrent'),counts?.current??null)}{segment('archived','archive',t('allConversationsArchived'),counts?.archived??null)}</div>
    {searching||query?<div className="bt-search is-open"><ShellIcon name="search"/><label className="sr-only" htmlFor="cv-q">{t('allConversationsSearch')}</label>
     <input ref={field} type="search" id="cv-q" autoComplete="off" dir="auto" placeholder={t('allConversationsSearch')} value={query} maxLength={200} onChange={event=>search(event.target.value)} onBlur={()=>{ if(!query) setSearching(false); }}/></div>
     :<button type="button" className="ib" aria-label={t('allConversationsSearch')} title={t('allConversationsSearch')} onClick={()=>setSearching(true)}><ShellIcon name="search"/></button>}
@@ -104,7 +118,7 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
    {!page?<p className="col-empty arch-empty" role="alert"><b>{t('allConversationsFailed')}</b></p>
     :items.length?<ul className="panel-card cv-list" aria-label={t(archived?'allConversationsArchived':'allConversationsCurrent')}>{items.map(row)}</ul>
     :<div className="col-empty arch-empty"><b>{wanted?t('allConversationsNoMatch',wanted):t(archived?'allConversationsArchivedEmpty':'allConversationsEmpty')}</b></div>}
-   {page?.next&&<button type="button" className="btn btn--secondary btn--sm cv-more" aria-busy={loading||undefined} disabled={loading} onClick={more}>{t('allConversationsMore')}</button>}
+   {page?.next&&<button type="button" className="btn btn--secondary btn--sm cv-more" aria-busy={loading||undefined} disabled={loading||shownFor!==query} onClick={more}>{t('allConversationsMore')}</button>}
   </div>
   {confirm}
  </div>;

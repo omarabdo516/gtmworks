@@ -37,10 +37,13 @@ create policy channel_archive_rows on public.company_log as restrictive for sele
 
 -- Nobody writes in an archived channel: a Member's message there is refused, whichever function writes it (a post, the
 -- quiet message "Done it" writes). An Agent's reply to a Run that closes after the archive still lands: the Run's end is
--- kept, and it un-archives nothing.
+-- kept, and it un-archives nothing. The channel is locked first, so a message written while an archive commits
+-- (archive_channel holds the channel for update) waits for it and is refused, not stored after it.
 create function public.refuse_archived_channel_message() returns trigger language plpgsql security definer set search_path='' as $$
+declare archived timestamptz;
 begin
- if exists(select 1 from public.channels k where k.id=new.channel_id and k.archived_at is not null) then
+ select k.archived_at into archived from public.channels k where k.id=new.channel_id for key share;
+ if archived is not null then
   raise exception 'channelArchived' using errcode='42501';
  end if;
  return new;
@@ -147,11 +150,12 @@ grant execute on function public.restore_channel(uuid,uuid) to authenticated;
 
 -- A channel Run whose start was on its way when its channel, or the channel's Card, was archived is stopped as it is
 -- named, as a note's Run is (#671, answer_note_start): kept in stopped_runs, so the worker stops it in the Engine and it
--- ends stopped. 20270415600000's answer_channel_start, but for that.
+-- ends stopped. The stop kept on its start (stop_channel_work, 20270415999992) holds even when the channel or the Card
+-- was restored before the Engine named it. 20270415600000's answer_channel_start, but for that.
 create function public.stop_named_channel_run(r public.channel_runs, run text) returns void
 language plpgsql security definer set search_path='' as $$
 begin
- if exists(select 1 from public.channels k where k.id=r.channel_id and k.archived_at is not null)
+ if r.stop_at_start is not null or exists(select 1 from public.channels k where k.id=r.channel_id and k.archived_at is not null)
   or exists(select 1 from public.work_cards w where w.company_id=r.company_id and w.channel_id=r.channel_id and w.archived_at>=r.created_at) then
   insert into public.stopped_runs(company_id,channel_message_id,run_id) values(r.company_id,r.message_id,run) on conflict do nothing;
  end if;

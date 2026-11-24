@@ -1704,5 +1704,8 @@
   "boardRestoreLeftOne": "Not restored: {0}. It changed meanwhile, or you may not restore it.",
   "boardRestoreLeftMany": "Not restored: {0}. They changed meanwhile, or you may not restore them.",
   "logActConversationArchived": "archived the conversation",
-  "logActConversationRestored": "restored the conversation"
+  "logActConversationRestored": "restored the conversation",
+  "cardLinkCopyFailed": "The link was not copied: this browser did not allow it. Copy it from the address bar.",
+  "archiveCheckFailed": "Nothing was archived: what archiving would stop could not be checked. Try again.",
+  "cardArchiveFailedRetry": "That did not go through. The board was read again: check it, then try again."
 }

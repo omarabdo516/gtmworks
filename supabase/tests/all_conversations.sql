@@ -114,6 +114,8 @@ insert into fold_pairs(input,folded) values -- search-fold pairs
  ('مستوى','مستوي'),
  ('مُحَمَّدٌ','محمد'),
  ('ﻻ ＡＢＣ','لا abc'),
+ ('حملة ١٢٣','حمله ١٢٣'),
+ ('Post 123','post 123'),
  ('','');
 select is_empty($$select input from fold_pairs where public.search_fold(input) is distinct from folded$$,'the database folds a search as the interface does');
 select * from finish();

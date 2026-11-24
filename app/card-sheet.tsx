@@ -87,7 +87,9 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite:mayW
  const none=sheet.chat.kind==='none';
  const pick=(next:SheetTab)=>{ if(next==='chat'&&none) return; setTab(next); document.getElementById(`sh-tab-${next}`)?.focus(); };
  const chatLink=sheet.chat.kind==='own'&&`/c/${slug}/conversations/${sheet.chat.record.conversation.id}`;
- const copyLink=()=>{ try { void navigator.clipboard?.writeText(`${location.origin}${board}?card=${sheet.id}`).catch(()=>{}); } catch { /* the browser refused the clipboard */ } toast(t('cardLinkCopied'),{icon:'link'}); };
+ // "Copied" only once the browser took the link; one that refuses the clipboard says so, and the address bar has it.
+ const copyLink=()=>{ const refused=()=>toast(t('cardLinkCopyFailed'),{icon:'x'});
+  try { const writing=navigator.clipboard?.writeText(`${location.origin}${board}?card=${sheet.id}`); if(!writing) { refused(); return; } void writing.then(()=>toast(t('cardLinkCopied'),{icon:'link'}),refused); } catch { refused(); } };
  const menu:MoreMenuItem[]=archive?[{key:'copy',icon:'link',label:t('cardCopyLink'),run:copyLink},
   archived?{key:'restore',icon:'restore',label:t('cardRestore'),run:archive.restore}:{key:'archive',icon:'archive',label:t('cardArchive'),run:archive.archive}]:[];
  return <dialog ref={box} className={`sheet${leaving?' is-closing':''}`} aria-labelledby="sheet-title" onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>

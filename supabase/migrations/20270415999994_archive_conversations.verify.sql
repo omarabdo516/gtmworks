@@ -14,13 +14,16 @@ select json_build_object(
   'public.conversation_archive_stops(uuid,uuid[])']) f),
  'worker_only',(select bool_and(has_function_privilege('service_role',f,'execute') and not has_function_privilege('anon',f,'execute')
   and not has_function_privilege('authenticated',f,'execute')) from unnest(array['public.conversation_sessions_to_mark()','public.conversation_session_marked(uuid,boolean)',
-  'public.conversation_session_missing(uuid,boolean)']) f),
+  'public.conversation_session_missing(uuid,boolean)','public.conversation_sessions_later(uuid[])']) f),
  'as_definer',(select bool_and(prosecdef and proconfig @> array['search_path=""']) from pg_proc where oid in ('public.archive_conversations(uuid,uuid[])'::regprocedure,
   'public.restore_conversations(uuid,uuid[])'::regprocedure,'public.conversation_archive_stops(uuid,uuid[])'::regprocedure,'public.conversation_sessions_to_mark()'::regprocedure,
   'public.conversation_session_marked(uuid,boolean)'::regprocedure,'public.conversation_session_missing(uuid,boolean)'::regprocedure,'public.restore_written_conversation()'::regprocedure)),
  'helpers_closed',(select bool_and(not has_function_privilege(r,f,'execute')) from unnest(array['public.restore_written_conversation()']) f,
   unnest(array['anon','authenticated','service_role']) r),
  'own_only',position('own_conversations(c)' in pg_get_functiondef('public.archive_conversations(uuid,uuid[])'::regprocedure))>0,
- 'restored_by_writing',(select count(*)=3 from pg_trigger where tgfoid='public.restore_written_conversation()'::regprocedure and not tgisinternal),
+ 'restored_by_writing',(select count(*)=3 from pg_trigger g join (values ('conversation_messages','conversation_messages_restore'),
+  ('conversation_queued_turns','conversation_queued_turns_restore'),('conversation_notes','conversation_notes_restore')) x(tab,name)
+  on g.tgrelid=('public.'||x.tab)::regclass and g.tgname=x.name
+  where g.tgfoid='public.restore_written_conversation()'::regprocedure and not g.tgisinternal and g.tgenabled in ('O','A')),
  'session_kept',position('run_outcome in (''completed'',''stopped'') or carded' in pg_get_functiondef('public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean)'::regprocedure))>0
 );

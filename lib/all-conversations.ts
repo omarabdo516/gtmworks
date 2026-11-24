@@ -33,8 +33,10 @@ export async function conversationPage(db:Database,company:string,{tab='current'
  return {items,next:rows.length>conversationPageSize&&last?{at:last.last_at,id:last.id}:null};
 }
 
-export async function conversationCounts(db:Database,company:string):Promise<ConversationCounts> {
- const {data}=await db.rpc('conversation_counts',{c:company});
- const counts=(data||{}) as Partial<ConversationCounts>;
+// The two lists' counts, or null when they could not be read: the toolbar then shows none rather than a zero.
+export async function conversationCounts(db:Database,company:string):Promise<ConversationCounts|null> {
+ const {data,error}=await db.rpc('conversation_counts',{c:company});
+ if(error||!data) return null;
+ const counts=data as Partial<ConversationCounts>;
  return {current:counts.current??0,archived:counts.archived??0};
 }
