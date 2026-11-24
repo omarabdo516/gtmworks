@@ -1,10 +1,10 @@
 import type { i18n } from '@/lib/i18n.mjs';
-import type { CompanyLearning, LearningAgent } from '@/lib/company-learning.mjs';
+import type { CompanyLearning } from '@/lib/company-learning.mjs';
 import Link from '@/lib/link';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { Head, Label } from './settings-overlay-parts';
 import { FocusReturn } from './settings-overlay-frame';
-import { CompanyLearningMode, AgentLearningMode, RuleActions } from './settings-lazy';
+import { LearningModes, RuleActions } from './settings-lazy';
 import { SettingsIcon } from './settings-icons';
 
 // Settings › Learning (#28; design-reference: sovLearnHTML, lnRowHTML): the Company's mode and each Agent's, what each
@@ -14,24 +14,13 @@ import { SettingsIcon } from './settings-icons';
 // A learned Skill's row opens its own page (#181); it shows no restore, because the pinned Engine has no management route
 // over its Skill ledger (the PR names the gap).
 type T=ReturnType<typeof i18n>['t'];
-const modeKey={auto:'settingsLearnOnItsOwn',ask:'settingsLearnAsks',mixed:'settingsLearnMixed'} as const;
 
-// The Company's mode is what its Agents' profiles agree on: one mode when every Agent reads it, mixed when an Agent has
-// its own, and unknown when a profile could not be read.
-function companyModeOf(agents:LearningAgent[]|null):'auto'|'ask'|'mixed'|null {
- if(!agents?.length) return null;
- const modes=agents.map(agent=>agent.mode);
- if(modes.some(mode=>mode===null)) return null;
- return modes.every(mode=>mode===modes[0])?modes[0]:'mixed';
-}
-
-export function LearningSection({t,slug,company,canManage,owner,data}:{t:T,slug:string,company:string,canManage:boolean,owner:boolean,data:CompanyLearning|null}) {
+export function LearningSection({t,slug,company,canManage,owner,data,readAt}:{t:T,slug:string,company:string,canManage:boolean,owner:boolean,data:CompanyLearning|null,readAt:number}) {
  const found=data?.state==='found'?data:null;
  const agents=found?.agents??null;
  const rules=found?.rules??[];
  const lessons=found?.lessons??[];
  const learned=agents?.flatMap(agent=>(agent.learned??[]).map(skill=>({agent,skill})))??[];
- const companyMode=companyModeOf(agents);
  const total=rules.length+learned.length;
  const agentName=(id:string)=>agents?.find(agent=>agent.id===id)?.name||null;
  return <>
@@ -40,19 +29,9 @@ export function LearningSection({t,slug,company,canManage,owner,data}:{t:T,slug:
   {/* The Engine stages a note or Skill write in "Asks first", but its management listener has no route that lists
       them; the section says what the mode does and draws no list this version cannot read. */}
   <section className="dp-sec ln-sugg" aria-labelledby="ln-h-sug"><Label id="ln-h-sug" info={t('settingsLearnSuggestHint')}>{t('settingsLearnSuggestions')}</Label></section>
-  <section className="dp-sec" aria-labelledby="ln-h-co"><Label id="ln-h-co" info={t('settingsLearnTapHint')}>{t('settingsLearnCompany')}</Label>
-   {!agents?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>
-    :<><CompanyLearningMode company={company} mode={companyMode} canChange={owner}/>
-     {/* Each Agent on its own mode is new information, so it stays on the page (#614). */}
-     {companyMode==='mixed'&&<p className="set-hint">{t('settingsLearnMixed')}</p>}</>}</section>
-  <section className="dp-sec" aria-labelledby="ln-h-per"><Label id="ln-h-per">{t('settingsLearnPerAgent')}</Label>
-   {!agents?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>
-    :agents.length===0?<div className="panel-card"><p className="panel-empty">{t('noAgentsYet')}</p></div>
-    :<div className="panel-card">{agents.map(agent=><div className="panel-row ln-ag" key={agent.id}>
-      <span className="panel-row__text"><span className="panel-row__t" id={`ln-ag-t-${agent.id}`}><bdi>{agent.name}</bdi></span>
-       <span className="panel-row__d">{agent.mode?t(modeKey[agent.mode]):t('settingsLearnUnread')}</span></span>
-      {owner&&agent.own&&!agent.shared&&agent.mode?<AgentLearningMode company={company} agent={agent.id} labelId={`ln-ag-t-${agent.id}`} mode={agent.mode} follows={agent.follow}/>:null}
-     </div>)}</div>}</section>
+  {/* The Company's mode and each Agent's are drawn on the page, so a saved mode is held there with no read (#663). Only
+      the fields the modes need cross to the page, not each Agent's learned Skills. */}
+  <LearningModes company={company} owner={owner} readAt={readAt} agents={agents?.map(({id,name,own,shared,mode,follow})=>({id,name,own,shared,mode,follow}))??null}/>
   <section className="dp-sec" aria-labelledby="ln-h-rec"><Label id="ln-h-rec">{t('settingsLearnRecent')}{total>0&&<> <span className="muted num">{total}</span></>}</Label>
    {!found?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>
     :total===0?<div className="panel-card"><p className="panel-empty">{t('settingsLearnNone')}</p></div>

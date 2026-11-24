@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import { SpeechToText, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
+import { SpeechToText, FallbackModel, DefaultModel, EachAgent, AgentModel, DefaultEffort, type AgentModels, type ModelOption } from '@/app/settings-models';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { ToastHost } from '@/app/toast';
 import en from '@/lib/messages/en.json';
@@ -38,7 +38,7 @@ const renderNode = (node: React.ReactNode, language: 'en' | 'ar' = 'en') => rend
 // once and never drawn; the provider in use can be removed; a member reads which one is in use with no control.
 test('the Owner picks a speech-to-text provider with its key, Deepgram first; a member only reads it', async () => {
   const sent = stub({ provider: 'deepgram', missing: [] });
-  const screen = await renderNode(<SpeechToText company={company} owner data={{ provider: null, missing: [] }}/>);
+  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: null, missing: [] }}/>);
   expect([...document.querySelectorAll('#md-stt .md-key')].map(row => row.id)).toEqual(['mdl-stt-row-deepgram', 'mdl-stt-row-elevenlabs', 'mdl-stt-row-openai', 'mdl-stt-row-groq']);
   await expect.element(screen.getByText(en.settingsSpeechNone)).toBeVisible();
   await expect.element(screen.getByText(en.settingsSpeechDeepgram)).toBeVisible();
@@ -47,17 +47,18 @@ test('the Owner picks a speech-to-text provider with its key, Deepgram first; a 
   await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
   await expect.poll(() => sent.length).toBe(1);
   expect(sent[0]).toEqual({ url: '/api/speech-provider', body: { company, provider: 'deepgram', intent: 'set', value: key } });
-  await expect.poll(() => refresh.mock.calls.length).toBe(1);
+  await expect.element(screen.getByText(en.settingsSpeechInUse)).toBeVisible();
   expect(document.body.textContent).not.toContain(key);
+  expect(refresh).not.toHaveBeenCalled();
   await screen.unmount();
-  const used = await renderNode(<SpeechToText company={company} owner data={{ provider: 'deepgram', missing: [{ agent: 'a-1', name: 'Writer' }] }}/>);
+  const used = await renderNode(<SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'deepgram', missing: [{ agent: 'a-1', name: 'Writer' }] }}/>);
   await expect.element(used.getByText(en.settingsSpeechInUse)).toBeVisible();
   await expect.element(used.getByText(new RegExp(en.settingsSpeechMissing))).toBeVisible();
   await used.getByRole('button', { name: 'Remove the Deepgram Nova-3 key' }).click();
   await expect.poll(() => sent.length).toBe(2);
   expect(sent[1]).toEqual({ url: '/api/speech-provider', body: { company, provider: 'deepgram', intent: 'remove' } });
   await used.unmount();
-  await renderNode(<SpeechToText company={company} owner={false} data={{ provider: 'deepgram', missing: [] }}/>, 'ar');
+  await renderNode(<SpeechToText readAt={Date.now()} company={company} owner={false} data={{ provider: 'deepgram', missing: [] }}/>, 'ar');
   expect(document.querySelector('#md-stt input')).toBeNull();
   expect(document.querySelector('#md-stt button:not(.info__btn)')).toBeNull();
   await expect.element(page.getByText(ar.settingsSpeechOwnerOnly)).toBeVisible();
@@ -66,7 +67,7 @@ test('the Owner picks a speech-to-text provider with its key, Deepgram first; a 
 
 test('a speech-to-text change that misses an Agent names it and says to try again, with no success toast', async () => {
   stub({ provider: 'deepgram', missing: [], failed: [{ agent: 'a-1', name: 'Writer' }] });
-  const screen = await renderNode(<><ToastHost/><SpeechToText company={company} owner data={{ provider: 'deepgram', missing: [] }}/></>);
+  const screen = await renderNode(<><ToastHost/><SpeechToText readAt={Date.now()} company={company} owner data={{ provider: 'deepgram', missing: [] }}/></>);
   await screen.getByRole('button', { name: 'Remove the Deepgram Nova-3 key' }).click();
   await expect.element(screen.getByRole('alert')).toHaveTextContent(en.settingsSpeechNotReached.replace('{0}', 'Writer'));
   expect(screen.container.textContent).not.toContain(en.settingsModelsKeyRemoved);
@@ -388,4 +389,77 @@ test('a default that missed an Agent keeps its Retry when a newer choice then fa
   await expect.element(screen.getByText(en.settingsModelsNotReached.replace('{0}', 'Critic'))).toBeVisible();
   await expect.element(screen.getByRole('radio', { name: /claude-opus-4-6/ })).toHaveAttribute('aria-checked', 'true');
   await expect.element(screen.getByRole('button', { name: en.settingsModelsRetry })).toBeVisible();
+});
+
+// #663: speech-to-text and the Fallback model are marked at once with "Saving", held on the page, and go back on a failure.
+test('a speech-to-text key shows its provider in use with "Saving" at once, and a failed save goes back with its form open', async () => {
+  const engine = heldAnswer();
+  const speech = '20000000-0000-0000-0000-000000000663';
+  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={speech} owner data={{ provider: null, missing: [] }}/>);
+  await page.elementLocator(document.querySelector('#mdl-stt-row-groq .link-btn')!).click();
+  await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
+  await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-groq-state')!)).toHaveTextContent(en.settingsSaving);
+  expect(document.querySelector('#mdl-stt-groq-form')).toBeNull();
+  expect(document.body.textContent).not.toContain(key);
+  engine.answer(502, { error: 'speechFailed' });
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(en.settingsModelsKeyError);
+  await expect.element(screen.getByText(en.settingsSpeechNone)).toBeVisible();
+  expect(document.querySelector('#mdl-stt-groq-form')).not.toBeNull();
+  await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
+  await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
+  engine.answer(200, { provider: 'groq', missing: [{ agent: 'a-1', name: 'Writer' }], failed: [], savedAt: Date.now() });
+  await expect.element(screen.getByText(en.settingsSpeechInUse)).toBeVisible();
+  await expect.element(screen.getByText(new RegExp(en.settingsSpeechMissing))).toBeVisible();
+  // Removing it says "Saving" on the row it leaves.
+  await screen.getByRole('button', { name: 'Remove the Groq key' }).click();
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-groq-state')!)).toHaveTextContent(en.settingsSaving);
+  engine.answer(200, { provider: null, missing: [], failed: [], savedAt: Date.now() });
+  await expect.element(screen.getByText(en.settingsSpeechNone)).toBeVisible();
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+test('a failed speech-to-text key leaves another provider\'s form, opened while it saved, as it was', async () => {
+  const engine = heldAnswer();
+  const speech = '20000000-0000-0000-0000-000000000665';
+  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={speech} owner data={{ provider: null, missing: [] }}/>);
+  await page.elementLocator(document.querySelector('#mdl-stt-row-deepgram .link-btn')!).click();
+  await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
+  await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
+  await page.elementLocator(document.querySelector('#mdl-stt-row-groq .link-btn')!).click();
+  await screen.getByLabelText(en.settingsModelsKeyValue).fill('gsk-groq-component-key-0123');
+  engine.answer(502, { error: 'speechFailed' });
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(en.settingsModelsKeyError);
+  expect(document.querySelector('#mdl-stt-deepgram-form')).toBeNull();
+  expect(document.querySelector('#mdl-stt-groq-form')).not.toBeNull();
+  await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
+  await expect.poll(() => engine.sent.length).toBe(2);
+  expect(engine.sent[1].body).toEqual({ company: speech, provider: 'groq', intent: 'set', value: 'gsk-groq-component-key-0123' });
+});
+
+test('a Fallback model is marked with "Saving" at once, kept with no read of the page, and goes back when the save fails', async () => {
+  const engine = heldAnswer();
+  const fallback = '20000000-0000-0000-0000-000000000664';
+  const screen = await renderNode(<><ToastHost/><FallbackModel readAt={Date.now()} company={fallback} owner model={null} options={options}/></>);
+  const none = screen.getByRole('radio', { name: new RegExp(en.settingsFallbackNone) });
+  const picked = screen.getByRole('radio', { name: /claude-opus-4-6/ });
+  await expect.element(none).toHaveAttribute('aria-checked', 'true');
+  await picked.click();
+  await expect.element(picked).toHaveAttribute('aria-checked', 'true');
+  await expect.element(screen.getByText(en.settingsSaving)).toBeVisible();
+  expect(document.querySelectorAll('[role=radio]:disabled')).toHaveLength(0);
+  expect(engine.sent[0]).toEqual({ url: '/api/fallback-model', method: 'POST', body: { company: fallback, value: 'anthropic/claude-opus-4-6' } });
+  engine.answer(200, { model: 'anthropic/claude-opus-4-6', failed: [], savedAt: Date.now() });
+  await expect.element(screen.getByText(en.settingsFallbackSaved)).toBeVisible();
+  await expect.element(screen.getByText(en.settingsSaving)).not.toBeInTheDocument();
+  await expect.element(picked).toHaveAttribute('aria-checked', 'true');
+  await screen.getByRole('radio', { name: /gpt-5.5/ }).click();
+  engine.answer(400, { error: 'settingModelNotEnabled' });
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(en.settingsModelsNotEnabled);
+  await expect.element(picked).toHaveAttribute('aria-checked', 'true');
+  expect(refresh).not.toHaveBeenCalled();
+  // A page the router kept from before the save still shows the kept choice.
+  await screen.unmount();
+  await renderNode(<FallbackModel readAt={Date.now() - 60000} company={fallback} owner model={null} options={options}/>);
+  await expect.element(page.getByRole('radio', { name: /claude-opus-4-6/ })).toHaveAttribute('aria-checked', 'true');
 });

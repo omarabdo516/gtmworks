@@ -2,7 +2,7 @@
 import { lazy, Suspense, type ComponentProps } from 'react';
 import type { CompanyProviders as Providers } from './settings-providers';
 import type Knowledge from './company-knowledge-client';
-import type { CompanyLearningMode as CompanyMode, AgentLearningMode as AgentMode, RuleActions as RuleAction } from './settings-learning-client';
+import type { LearningModes as Modes, RuleActions as RuleAction } from './settings-learning-client';
 import type { SpeechToText as Speech, DefaultModel as Default, FallbackModel as Fallback, EachAgent as Each, AgentModel as Model } from './settings-models';
 
 // Parts of the settings overlay that only one of its sections shows, loaded on demand so they stay out of the page chunk
@@ -29,8 +29,7 @@ const LazyFallback=lazy(()=>import('./settings-models').then(module=>({default:m
 const LazyEach=lazy(()=>import('./settings-models').then(module=>({default:module.EachAgent})));
 const LazyModel=lazy(()=>import('./settings-models').then(module=>({default:module.AgentModel})));
 const LazyDefaultEffort=lazy(()=>import('./settings-models').then(module=>({default:module.DefaultEffort})));
-const LazyCompanyMode=lazy(()=>import('./settings-learning-client').then(module=>({default:module.CompanyLearningMode})));
-const LazyAgentMode=lazy(()=>import('./settings-learning-client').then(module=>({default:module.AgentLearningMode})));
+const LazyModes=lazy(()=>import('./settings-learning-client').then(module=>({default:module.LearningModes})));
 const LazyRuleActions=lazy(()=>import('./settings-learning-client').then(module=>({default:module.RuleActions})));
 export function CompanyProviders(props:ComponentProps<typeof Providers>) { return <Suspense fallback={null}><LazyProviders {...props}/></Suspense>; }
 export function MemberNote(props:{company:string,note:string}) { return <Suspense fallback={null}><LazyNote {...props}/></Suspense>; }
@@ -60,7 +59,6 @@ export function FallbackModel(props:ComponentProps<typeof Fallback>) { return <S
 export function EachAgent(props:ComponentProps<typeof Each>) { return <Suspense fallback={null}><LazyEach {...props}/></Suspense>; }
 export function AgentModel(props:ComponentProps<typeof Model>) { return <Suspense fallback={null}><LazyModel {...props}/></Suspense>; }
 export function DefaultEffort() { return <Suspense fallback={null}><LazyDefaultEffort/></Suspense>; }
-// The Learning section's controls (#28): the mode cards and the per-Agent mode, and a rule's Forget this and Bring it back.
-export function CompanyLearningMode(props:ComponentProps<typeof CompanyMode>) { return <Suspense fallback={null}><LazyCompanyMode {...props}/></Suspense>; }
-export function AgentLearningMode(props:ComponentProps<typeof AgentMode>) { return <Suspense fallback={null}><LazyAgentMode {...props}/></Suspense>; }
+// The Learning section's controls (#28): the Company's mode with each Agent's, and a rule's Forget this and Bring it back.
+export function LearningModes(props:ComponentProps<typeof Modes>) { return <Suspense fallback={null}><LazyModes {...props}/></Suspense>; }
 export function RuleActions(props:ComponentProps<typeof RuleAction>) { return <Suspense fallback={null}><LazyRuleActions {...props}/></Suspense>; }
