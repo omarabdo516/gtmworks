@@ -1003,11 +1003,32 @@ docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's fil
 # Each scan is read whole first and a scan that fails fails the check: under pipefail a `grep -q` that stops reading early
 # could fail the pipe on a match. They run as the work user, who owns every process and file there: the sandbox drops every
 # capability, so its root reads none of the work user's private folders.
-sandbox_env=$(docker exec --user pn "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
-if grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null; then
-  fail 'no process of the sandbox holds a provider credential'
-fi
-sandbox_files=$(docker exec --user pn "$sandbox" sh -c 'grep -rIl -e fake-model-key -e "$1" /home /work /tmp /run 2> /dev/null; true' sh "sk-or-v1-$od_marker") || fail "scan the sandbox's files"
+# A scan that could not run never reads as one that found nothing (#634): the environments read must hold the scanning
+# shell's own, and grep's "no match" (1) is told apart from an error (2 or higher).
+sandbox_env=$(docker exec --user pn --env GTMWORKS_SCAN=read "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
+grep -qx 'GTMWORKS_SCAN=read' <<< "$sandbox_env" || fail "read the sandbox's process environments"
+env_found=0
+grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null || env_found=$?
+case $env_found in
+  0) fail 'no process of the sandbox holds a provider credential' ;;
+  1) ;;
+  *) fail "scan the sandbox's process environments" ;;
+esac
+# Only the files the work user can read are scanned, so a folder it may not open is no error, and a file that went between
+# the listing and the read is read again without it; any other grep error is one. A file the scan writes first with a
+# marker of its own must be found, so a listing that found nothing fails too.
+scan_marker="gtmworks-scan-$od_marker"
+sandbox_files=$(docker exec --user pn "$sandbox" sh -c 'printf "%s\n" "$2" > /tmp/gtmworks-scan
+  find /home /work /tmp /run -type f -readable -print0 2> /dev/null | xargs -0r sh -c '"'"'
+    marker=$1; shift
+    grep -Il -e fake-model-key -e "$0" -e "$marker" -- "$@" 2> /dev/null; [ $? -le 1 ] && exit 0
+    for file; do [ ! -e "$file" ] || set -- "$@" "$file"; shift; done
+    [ $# -gt 0 ] || exit 0
+    grep -Il -e fake-model-key -e "$0" -e "$marker" -- "$@"; [ $? -le 1 ] || exit 255'"'"' "$1" "$2"
+  found=$?; rm -f /tmp/gtmworks-scan; exit "$found"' sh "sk-or-v1-$od_marker" "$scan_marker") \
+  || fail "scan the sandbox's files"
+grep -qx /tmp/gtmworks-scan <<< "$sandbox_files" || fail "scan the sandbox's files"
+sandbox_files=$(grep -vx /tmp/gtmworks-scan <<< "$sandbox_files" | sort -u) || true
 [[ -z $sandbox_files ]] || { printf '%s\n' "$sandbox_files" >&2; fail 'no file of the sandbox holds a provider credential'; }
 sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
 [[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }

@@ -26,7 +26,7 @@ export function agentPaths(cwd,home=homedir()) {
  const agent=found[1];
  const keep=`${home}/.gtmworks/open-design`;
  return {agent,data:`${cwd}/open-design`,route:`${keep}/${agent}.json`,port:`${keep}/${agent}.port`,lock:`${keep}/${agent}.lock`,
-  log:`${keep}/${agent}.log`,socket:`${home}/.gtmworks/engine-${agent}.sock`};
+  stuck:`${keep}/${agent}.stuck`,log:`${keep}/${agent}.log`,socket:`${home}/.gtmworks/engine-${agent}.sock`};
 }
 
 // The socket the Engine's ssh session forwarded for this Agent is moved to a name of this session's own before the MCP
@@ -78,6 +78,33 @@ export async function locked(file,work) {
  try { return await work(); } finally { rmSync(file,{force:true}); }
 }
 
+// A daemon is stopped whole: its process group is asked to end, waited for a bounded time, and killed if any of it is still
+// there, so a start's lock never goes while the old daemon could still take the port (#634).
+/** @param {number} pid */
+export const groupAlive=pid=>{ try { process.kill(-pid,0); return true; } catch(failure) { return /** @type {any} */(failure)?.code==='EPERM'; } };
+// Answers whether the group is gone.
+/** @param {import('node:child_process').ChildProcess} child @param {{grace?:number}} [options] @returns {Promise<boolean>} */
+export async function stopGroup(child,{grace=10_000}={}) {
+ const pid=child.pid;
+ if(!pid) return true;
+ const signal=name=>{ try { process.kill(-pid,name); } catch { try { child.kill(name); } catch {} } };
+ signal('SIGTERM');
+ for(const until=Date.now()+grace;Date.now()<until;) { if(!groupAlive(pid)) return true; await sleep(50); }
+ signal('SIGKILL');
+ for(const until=Date.now()+5000;Date.now()<until;) { if(!groupAlive(pid)) return true; await sleep(50); }
+ return false;
+}
+
+// A daemon group that outlived its kill is kept on record in the work user's home, outside any lock, and no start makes
+// another daemon while it lives; the record goes once the group is gone.
+/** @param {string} record */
+export function earlierDaemonStopping(record) {
+ const pid=Number.parseInt((()=>{ try { return readFileSync(record,'utf8'); } catch { return ''; } })(),10);
+ if(Number.isInteger(pid)&&pid>0&&groupAlive(pid)) return true;
+ rmSync(record,{force:true});
+ return false;
+}
+
 /** @param {{profile:string,key:string,cwd?:string,home?:string}} given */
 export async function ensureDaemon({profile,key,cwd=process.cwd(),home=homedir()}) {
  const paths=agentPaths(cwd,home);
@@ -89,6 +116,7 @@ export async function ensureDaemon({profile,key,cwd=process.cwd(),home=homedir()
  return locked(paths.lock,async()=>{
   const known=readPort(paths.port);
   if(known&&await answers(known)) return `http://127.0.0.1:${known}`;
+  if(earlierDaemonStopping(paths.stuck)) throw new Error(`Open Design's earlier daemon is still stopping; its log is ${paths.log}.`);
   mkdirSync(paths.data,{recursive:true});
   // The design runtime is the Company's Engine (hermes-engine.mjs); a project starts with it chosen.
   const config=`${paths.data}/app-config.json`;
@@ -106,10 +134,12 @@ export async function ensureDaemon({profile,key,cwd=process.cwd(),home=homedir()
    if(child.exitCode!==null) break;
    await sleep(500);
   }
-  // A daemon that never answered is stopped before the lock goes, so the next start makes the only one.
-  if(child.exitCode===null&&child.pid) { try { process.kill(-child.pid,'SIGTERM'); } catch { child.kill('SIGTERM'); } }
+  // A daemon that never answered is stopped whole, a child it left included, before the lock goes, so the next start
+  // makes the only one.
+  const stopped=await stopGroup(child);
+  if(!stopped&&child.pid) writeFileSync(paths.stuck,`${child.pid}\n`,{mode:0o600});
   rmSync(paths.port,{force:true});
-  throw new Error(`Open Design's daemon did not start; its log is ${paths.log}.`);
+  throw new Error(`Open Design's daemon did not start${stopped?'':' and could not be stopped'}; its log is ${paths.log}.`);
  });
 }
 

@@ -24,7 +24,7 @@ insert into decisions
   'public.channel_message_mentions(uuid,uuid,text)','public.reply_card_in_other_channel(bigint)','public.channel_stoppable(uuid)',
   'public.channel_board_card(uuid)','public.read_channel(uuid,bigint)','public.read_channel_mention(uuid,bigint)']) fn
  union all select fn,'exempt','a write into the one channel named: a Member''s message there is refused while it is archived (channel_messages_not_archived), and files kept for a refused message go with it' from unnest(array[
-  'public.post_channel_message(uuid,uuid,text)','public.reserve_channel_files(uuid,uuid,uuid,jsonb)','public.discard_channel_files(uuid,uuid,uuid)']) fn
+  'public.post_channel_message(uuid,uuid,text)','public.reserve_channel_files(uuid,uuid,uuid,jsonb)','public.reserve_channel_files(uuid,uuid,uuid,jsonb,uuid)','public.discard_channel_files(uuid,uuid,uuid)']) fn
  union all select fn,'exempt','an Owner or a Manager in the one channel named changes which Agents or invitees it has; its details offer no change while it is archived, and a change starts no work there' from unnest(array[
   'public.set_channel_agent(uuid,uuid,boolean)','public.set_channel_invitee(uuid,uuid,boolean)']) fn
  union all select 'public.card_archive_stops(uuid,bigint[])','exempt','names what stops in the one team channel of a current Card it is asked about; an archived channel''s work stopped when it was archived, so it names nothing there'
