@@ -55,12 +55,12 @@ revoke all on function public.log_conversation_archive(uuid,boolean,uuid) from p
 
 -- A Run's Engine session is kept with its Conversation when the Run was stopped too, not only when it replied, so an
 -- archived Conversation whose only Run was stopped still has a session to mark in its Engine (a failed Run's is still
--- not kept). 20270411000000's, but for that.
+-- not kept). 20270411000000's as 20270415999950 left it (taking no_access), but for that.
 create or replace function public.close_conversation_run(conversation uuid, run text, run_outcome text, reply text, hermes_session text, used_input bigint, used_output bigint, read_completed boolean)
 returns boolean language plpgsql security definer set search_path='' as $$
 declare existing public.conversations; closed text; carded boolean := false;
 begin
- if run_outcome is null or run_outcome not in ('completed','stopped','lost','failed','no_model','no_credit','key_refused','model_missing') or run_outcome='completed' and coalesce(btrim(reply),'')='' then raise exception 'conversationFailed' using errcode='22023'; end if;
+ if run_outcome is null or run_outcome not in ('completed','stopped','lost','failed','no_model','no_credit','key_refused','model_missing','no_access') or run_outcome='completed' and coalesce(btrim(reply),'')='' then raise exception 'conversationFailed' using errcode='22023'; end if;
  select * into existing from public.conversations where id=conversation;
  if not found or not exists(select 1 from public.conversation_messages where conversation_id=conversation and author='person' and run_id=run) then raise exception 'conversationNotFound' using errcode='P0002'; end if;
  if run_outcome='failed' and read_completed then
