@@ -59,7 +59,7 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
  const row=(chat:ListedChat)=><li key={`${chat.kind}:${chat.id}`} className="cv-row">
   <Link className="cv-open" href={`/c/${slug}/${chat.kind==='channel'?'channels':'conversations'}/${chat.id}`}>
    {chat.face?<span className="cv-face" aria-hidden="true" title={chat.face.name}><CompanyAgentFace agent={chat.face} size={28}/></span>:<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>}
-   <span className="od-field"><span className="cv-t od-truncate" dir="auto">{chat.kind==='channel'?'#':''}{chat.title}</span>{chat.line&&<span className="cv-d od-truncate" dir="auto">{chat.line}</span>}</span>
+   <span className="od-field"><span className="cv-t od-truncate">{chat.kind==='channel'?'#':''}<bdi>{chat.title}</bdi></span>{chat.line&&<span className="cv-d od-truncate"><bdi>{chat.line}</bdi></span>}</span>
    {browser&&<time className="cv-time num" dateTime={chat.at}>{time(chat.at)}</time>}
   </Link>
  </li>;

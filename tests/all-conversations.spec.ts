@@ -45,12 +45,14 @@ test('A person reaches every Conversation of theirs from the sidebar, newest mes
  await expect(rows).toHaveCount(50);
  await expect(rows.first()).toContainText('Plan number 01');
  await expect(rows.first()).toContainText('The answer to the oldest');
- await expect(rows.nth(1)).toContainText('Plan number 60');
+ // The general channel, with no message yet, by the time it was made, with the seed.
+ await expect(rows.nth(1)).toContainText('#general');
+ await expect(rows.nth(2)).toContainText('Plan number 60');
  await expect(page.getByRole('button',{name:'Current 61'})).toHaveAttribute('aria-pressed','true');
  await page.getByRole('button',{name:'Show more'}).click();
  await expect(rows).toHaveCount(61);
  await expect(page.getByRole('button',{name:'Show more'})).toHaveCount(0);
- await expect(rows.filter({hasText:'General'})).toHaveCount(1);
+ await expect(rows.filter({hasText:'#general'})).toHaveCount(1);
  await expect(page.locator('.cv-list')).not.toContainText('The Manager');
  // The search reads every title, not only the rows shown, as the product's search reads Arabic.
  await page.getByRole('button',{name:'Search conversations'}).click();
