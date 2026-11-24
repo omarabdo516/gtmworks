@@ -144,11 +144,23 @@ test('one Agent\'s mode is one Tab stop and the arrow keys move and select it; a
  await expect.element(auto).toHaveAttribute('aria-checked', 'true');
  expect(auto.element().tabIndex).toBe(0);
  expect(ask.element().tabIndex).toBe(-1);
+ // The request is held open: the choice the arrow reached keeps the focus while it is sent (#588), and a second
+ // press waits for the first.
+ let answer!: (response:Response) => void;
+ fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { answer = resolve; }));
  auto.element().focus();
  await userEvent.keyboard('{ArrowRight}');
  await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
  expect(await bodyOf(0)).toEqual({ company, agent: writer, mode: 'ask' });
+ await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
  expect(document.activeElement?.id).toBe(`ln-${writer}-ask`);
+ await expect.element(ask).toHaveAttribute('aria-disabled', 'true');
+ await userEvent.keyboard('{ArrowLeft}');
+ expect(fetchMock.mock.calls).toHaveLength(1);
+ expect(document.activeElement?.id).toBe(`ln-${writer}-ask`);
+ answer(new Response('{}', { status: 200 }));
+ await expect.poll(() => refresh.mock.calls.length).toBe(1);
+ await expect.element(ask).not.toHaveAttribute('aria-disabled');
  await view.unmount();
  // A mode the screen does not know leaves the first choice as the group's one Tab stop.
  const unknown = await render(<LanguageProvider language="en"><AgentLearningMode company={company} agent={writer} labelId="ln-t" mode={null} follows={false}/></LanguageProvider>);
