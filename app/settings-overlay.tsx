@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { createClient } from '@supabase/supabase-js';
 import { AgentFace } from '@/components/agent-face';
-import { agentStates, statusKeys, type AgentStatus } from '@/lib/agent-details.mjs';
+import { agentFaceStates, faceStateWords, type AgentFaceState } from '@/lib/agent-face-states';
 import { pickSection, pageReadAt, overlayHref, agentsMainFirst, usageTotals, usageModels, usageHeaviest, usageEmpty, agentTab, agentTabFocus, type OverlaySection, type AgentTab } from '@/lib/settings-overlay.mjs';
 import { OverlayChrome } from './settings-overlay-chrome';
 import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
@@ -142,8 +142,8 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  // Agent the reader is not shown is not found above, so the page shows the Agents list instead. An Engine that cannot be
  // read leaves the tab unread rather than empty.
  const memory=agent&&tab==='memory'?await readAgentMemory(db,{company:company.id,agent:agent.id}).catch(()=>({state:'failed' as const,main:false,notes:null})):null;
- // Each Agent's state for this reader, read in one call as the sidebar reads it (#184).
- const stateOf=agentStates(section==='agents'?(await db.rpc('agent_states',{c:company.id})).data:null);
+ // Each Agent's state for this reader, read in one call as the sidebar reads it (#699).
+ const stateOf=section==='agents'?(await agentFaceStates(db,company.id)).of:()=>({state:'idle' as const});
  // The Agent's rules in force for the team (#18), newest first as the reference lists them: a suggestion only once it is
  // approved (#25).
  // Learning suggestions waiting for this Owner's or Manager's OK (#25): their open items in "Waiting on you".
@@ -164,7 +164,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
  const ro=!canManage&&<p className="ro-note"><SettingsIcon name="shield"/><span>{t('settingsRO')}</span></p>;
  const page=section==='company'?<CompanySection t={t} company={company} solo={workMode==='alone'} count={memberCount} owner={owner} ro={ro} sandbox={workSandbox?.state==='notRunning'}/>
   :section==='members'?<MembersSection t={t} company={company} solo={workMode==='alone'} members={members} invitations={invitations} agents={agents} allowed={allowed} invitedAllowed={invitedAllowed} userId={userId} slug={slug} owner={owner} canManage={canManage} roleNames={roleNames} ro={ro}/>
-  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id)} main={agents[0]} rules={rules} agentModel={agentModel} readAt={readAt} permissions={permissions?.permissions??[]} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={stateOf} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
+  :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id).state} main={agents[0]} rules={rules} agentModel={agentModel} readAt={readAt} permissions={permissions?.permissions??[]} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={agent=>stateOf(agent).state} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
   :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
@@ -236,7 +236,7 @@ function TalkTip({t,talk}:{t:T,talk?:{href:string,name:string}}) {
  return talk?<p className="talk-tip"><SettingsIcon name="chat"/><Link className="link-btn" href={talk.href}>{t('settingsTalkTo',talk.name)}</Link></p>:null;
 }
 
-function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiting}:{t:T,rtl:boolean,slug:string,agents:Agent[],stateOf:(agent:string)=>AgentStatus,canManage:boolean,canWrite:boolean,owner:boolean,waiting:Set<string>}) {
+function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiting}:{t:T,rtl:boolean,slug:string,agents:Agent[],stateOf:(agent:string)=>AgentFaceState,canManage:boolean,canWrite:boolean,owner:boolean,waiting:Set<string>}) {
  const main=agents.find(agent=>agent.is_default); const other=agents.find(agent=>!agent.is_default);
  const add=canWrite&&main?<Link className="btn btn--secondary btn--sm" href={`/c/${slug}/chat?new=agent`}><SettingsIcon name="chat"/><span>{owner?t('settingsAskLead',main.name):t('settingsAskAgent')}</span></Link>
   :canWrite&&<button type="button" className="btn btn--secondary btn--sm" aria-disabled="true" title={t('soon')}><SettingsIcon name="chat"/><span>{t('settingsAskAgent')}</span></button>;
@@ -248,12 +248,12 @@ function AgentsSection({t,rtl,slug,agents,stateOf,canManage,canWrite,owner,waiti
    <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi>{agent.is_default&&<> <span className="badge sov-badge">{t('mainAgent')}</span></>}</span>
     {agent.speciality&&<span className="panel-row__d"><bdi>{agent.speciality}</bdi></span>}</span>
    {/* An Agent with a change waiting for this Owner ends its row with it in place of its state (#178). */}
-   {waiting.has(agent.id)?<ProposalMark/>:<span className="panel-row__meta">{t(statusKeys[stateOf(agent.id)])}</span>}
+   {waiting.has(agent.id)?<ProposalMark/>:<span className="panel-row__meta">{t(faceStateWords[stateOf(agent.id)])}</span>}
    <span className="panel-row__icon sov-chev"><SettingsIcon name="forward" rtl={rtl}/></span></Link>)
    :<p className="panel-empty">{t('noAgentsYet')}</p>}</div><FocusReturn/></>;
 }
 
-function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,readAt,permissions,morning,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentStatus,main?:Agent,rules:Rule[],readAt:number,agentModel:{models:{agents:{model:string|null,choice:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,permissions:StandingPermission[],morning:MorningRead|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
+function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,skills,how,voice,status,main,rules,agentModel,readAt,permissions,morning,owner,canManage,canWrite,learning,pend}:{t:T,rtl:boolean,slug:string,company:string,userId:string,personName:string,agent:Agent,tab:AgentTab,memory:{state:string,main:boolean,notes:MemoryNote[]|null}|null,about:AgentAbout|null,skills:Awaited<ReturnType<typeof readAgentSkills>>,how:Awaited<ReturnType<typeof readAgentInstructions>>,voice:AgentVoiceRead|null,status:AgentFaceState,main?:Agent,rules:Rule[],readAt:number,agentModel:{models:{agents:{model:string|null,choice:string|null,own:boolean,choosable:boolean,effort:string|null,options:{provider:string,providerName:string,model:string}[]}[]}|null}|null,permissions:StandingPermission[],morning:MorningRead|null,owner:boolean,canManage:boolean,canWrite:boolean,learning:boolean,pend:ReactNode}) {
  const isMain=agent.is_default; const made=madeOf(agent,userId,slug);
  // The handle gtmworks calls the Agent by in messages, which a change of the Engine's name would not touch
  // (lib/conversation-runs.mjs: @ and the name, lowercased).
@@ -286,7 +286,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
   <BackLink className="link-btn sov-back" id="sov-back" slug={slug} agent={agent.id}><SettingsIcon name="back" rtl={rtl}/><span>{t('settingsAllAgents')}</span></BackLink>
   <div className="sov-agent-id"><AgentFace agent={agent.id} size={48} state={status} dot/><div className="od-fill">
    <div className="dp-id__name"><bdi>{agent.name}</bdi>{isMain&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-   <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(statusKeys[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>
+   <div className="dp-id__role"><span>{agent.speciality&&<><bdi>{agent.speciality}</bdi> · </>}</span>{t(faceStateWords[status])}</div>{made&&<MadeLine made={made} where="sov"/>}</div></div>
   <AgentTabs slug={slug} agent={agent.id} tab={tab} label={agent.name}/>
   {/* design-reference: sovAgentHTML's ${pend}, under the tabs on either tab, while a proposed change waits. */}
   {pend}

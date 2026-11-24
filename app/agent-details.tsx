@@ -8,7 +8,9 @@ import { AgentFace } from '@/components/agent-face';
 import { MadeLine } from '@/app/agent-made';
 import type { Made } from '@/lib/agent-made';
 import { onComposerFocus } from '@/lib/composer-focus';
-import { pickTab, statusKeys, type DetailsTab } from '@/lib/agent-details.mjs';
+import { pickTab, type DetailsTab } from '@/lib/agent-details.mjs';
+import { faceStateWords } from '@/lib/agent-face-states';
+import { useAgentState } from '@/app/sidebar-live';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { rememberOpener, takeReturnFocus } from '@/app/settings-opener';
 import type { AgentDetailsView } from '@/app/agent-details-server';
@@ -114,7 +116,7 @@ export function AgentDetails({panel,agent,details,tab:first,slug,suggest}:{panel
    <Later details={details} part="face" agent={agent.id}/>
    <div>
     <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
-    <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}<Later details={details} part="state"/></span></div>
+    <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}<Later details={details} part="state" agent={agent.id}/></span></div>
     {agent.made&&<MadeLine made={agent.made} where="panel"/>}
    </div>
   </div>
@@ -132,8 +134,10 @@ const Later=memo(function Later({details,part,agent}:{details:Details,part:'face
 const Read=({details,part,agent}:{details:Promise<AgentDetailsView>,part:'face'|'state'|Tab,agent?:string})=><Part view={use(details)} part={part} agent={agent}/>;
 function Part({view,part,agent}:{view:Pick<AgentDetailsView,'status'>&Partial<AgentDetailsView>,part:'face'|'state'|Tab,agent?:string}) {
  const {t}=useI18n();
- // The details head's face (72px), in the state the server read, thinking while a Run is open in this Conversation.
- if(part==='face') return <AgentFace agent={agent} size={72} state={view.status} dot live/>;
- if(part==='state') return <>{t(statusKeys[view.status])}</>;
+ // The details head's face (72px) and its state in words: the state the server read, then as the sidebar's poll follows
+ // it (app/sidebar-live); the face thinks while a Run is open in this Conversation.
+ const status=useAgentState(agent??'',view.status);
+ if(part==='face') return <AgentFace agent={agent} size={72} state={status} dot live/>;
+ if(part==='state') return <>{t(faceStateWords[status])}</>;
  return <>{view.tabs?.[part]}</>;
 }

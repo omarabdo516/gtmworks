@@ -10,7 +10,7 @@ select plan(29);
 --  Reach  a Card of it waits on the Owner, and a note Run of it is open on that Card
 --  Hook   a question waits on the Owner in their Conversation with it; a Routine of it ended two days ago
 --  Writer its last Run failed in a team channel the Owner is in and the Contributor is not
---  Coder  the Owner stopped its last Run
+--  Coder  the Owner stopped its last Run; its turn waits behind SEO's
 --  Numbers its last Run failed in the general channel and a person wrote there after it
 --  Critic  its Run failed in the Owner's Conversation, then it worked in the general channel
 --  Old    its Run failed a day and a half ago
@@ -64,6 +64,9 @@ create function pg_temp.called(id bigint, ch uuid, who text, how text, at timest
 $$;
 select pg_temp.ask('Ads','ads-1',now()-interval '2 minutes');
 select pg_temp.called(-6991,'69000000-0000-0000-0000-000000000001','SEO',null,now()-interval '1 minute');
+-- The same message called Coder after SEO: its turn waits for SEO's (#152), so Coder is not working yet.
+insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_id,agent_name,session,input,created_at)
+ select -6991,2,'10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001',agent,'Coder',gen_random_uuid(),'go',now()-interval '1 minute' from named where name='Coder';
 -- A question on Reach's Card waits on the Owner, and a note Run is open on that Card.
 insert into public.waiting_items(company_id,person_id,kind,title,card_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','question','Which audience?',-6991);

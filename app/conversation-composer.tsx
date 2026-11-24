@@ -6,7 +6,8 @@ import { prefersReducedMotion } from '@/lib/motion';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
 import { commandList, insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
 import { useI18n } from '@/lib/i18n-client';
-import { statusKeys } from '@/lib/agent-details.mjs';
+import { faceStateWords, type AgentFaceState } from '@/lib/agent-face-states';
+import { useAgentStates } from './sidebar-live';
 import { ShellIcon } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
 import { firstName } from '@/lib/channels';
@@ -71,7 +72,7 @@ function useSendFlights() {
  return {fly,drawn};
 }
 export type CallablePerson={id:string,name:string,role?:'owner'|'manager'|'contributor'|'viewer'};
-export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:keyof typeof statusKeys,role?:string|null};
+export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:AgentFaceState,role?:string|null};
 export type Callable={people:CallablePerson[],agents:CallableAgent[]};
 const CallableAgents=createContext<CallableAgent[]>([]);
 export function CallableAgentsProvider({agents,children}:{agents:CallableAgent[],children:ReactNode}) {
@@ -105,17 +106,20 @@ const roleLabels={owner:'owner',manager:'manager',contributor:'contributor',view
 // field keeps the keyboard and points at it with aria-activedescendant.
 export function MentionPop({listId,label,items,index,pick}:{listId:string,label:string,items:Suggestion[],index:number,pick:(at:number)=>void}) {
  const {t}=useI18n();
+ // Each Agent's state as the sidebar last read it (app/sidebar-live), else the one it was listed with.
+ const stateOf=useAgentStates();
  const rows:ReactNode[]=[]; let section:Suggestion['kind']|undefined;
  items.forEach((item,at)=>{
   if(item.kind!==section) rows.push(<div key={`label-${at}`} className="menu__label">{t(sectionLabels[item.kind])}</div>);
   section=item.kind;
+  const status=item.agent&&(stateOf(item.agent.id)??item.agent.status);
   rows.push(<button key={`${item.kind}-${at}`} type="button" className="menu__item" role="option" id={`${listId}-${at}`} aria-selected={at===index} tabIndex={-1}
    onMouseDown={event=>event.preventDefault()} onClick={()=>pick(at)}>
    {item.person&&<><span className="me__av lg-av" style={{'--av':'22px'} as CSSProperties} aria-hidden="true">{Array.from(item.person.name.trim())[0]||'?'}</span>
     <span className="menu__t">{item.person.name}{item.person.role&&<span className="menu__d">{t(roleLabels[item.person.role])}{item.person.role==='viewer'&&` · ${t('mentionReadsOnly')}`}</span>}</span>
     <bdi className="menu__hint" dir="auto">@{firstName(item.person.name)}</bdi></>}
-   {item.agent&&<><span aria-hidden="true"><AgentFace agent={item.agent.id} size={24} state={item.agent.status}/></span>
-    <span className="menu__t"><bdi>{item.agent.name}</bdi>{(item.agent.status||item.agent.speciality)&&<span className="menu__d">{item.agent.status&&t(statusKeys[item.agent.status])}{item.agent.status&&item.agent.speciality&&' · '}{item.agent.speciality&&<bdi>{item.agent.speciality}</bdi>}</span>}</span></>}
+   {item.agent&&<><span aria-hidden="true"><AgentFace agent={item.agent.id} size={24} state={status}/></span>
+    <span className="menu__t"><bdi>{item.agent.name}</bdi>{(status||item.agent.speciality)&&<span className="menu__d">{status&&t(faceStateWords[status])}{status&&item.agent.speciality&&' · '}{item.agent.speciality&&<bdi>{item.agent.speciality}</bdi>}</span>}</span></>}
    {item.command&&<><ShellIcon name="slash"/><span className="menu__t">{t(item.command.label,item.command.agent)}</span><span className="menu__hint menu__code">{item.command.command}</span></>}
   </button>);
  });

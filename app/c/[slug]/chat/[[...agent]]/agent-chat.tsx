@@ -10,6 +10,7 @@ import { AgentEmptyChat, type EmptyChat } from '@/app/agent-empty-chat';
 import { PrivateLine } from '@/app/private-line';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import { OpenedMark } from '@/app/agent-made';
+import { OpenedHere } from '@/app/sidebar-live';
 import { FirstRunToast } from '@/app/first-run-toast';
 import Link from '@/lib/link';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
@@ -96,5 +97,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
   </div>
   {current&&shown.details&&<AgentDetails key={current.id} panel={panel} agent={current} details={shown.details} slug={slug} suggest={writer?text=>box.current?.fill(text):undefined}/>}
   {agent&&isNew&&<OpenedMark company={company} agent={agent.id}/>}
+  {/* Opening an Agent's chat wakes it for this reader (#699), the one picked from the chips too. */}
+  <OpenedHere company={company} agent={current?.id}/>
  </div>;
 }
