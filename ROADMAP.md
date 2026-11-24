@@ -22,7 +22,7 @@ The order Omar set on 2026-11-21 (rs 0082, rounds 3 and 4):
 
 Blocked now: no release since 2026-11-21 07:28 UTC (#572), so lines marked "waiting for the release" are merged but not yet on a running install.
 
-In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
+In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one for each Agent (#197 to #199, decision 0060).
 
 ---
 

@@ -90,5 +90,5 @@ Each of these is an addition on top of this shape, not a rebuild: making a Compa
 - Each Company adds an Engine's memory use. The README's figure was measured on one Engine shared by every Company, so a measurement of an Engine per Company sets the two sizes the README states: without video and with video.
 - An Agent drives the browser by pointer and keyboard, or with a script it runs inside the sandbox, not with `browser_exec`.
 - The sandbox shares the server's kernel. A stronger runtime is left for later.
-- An account signed in on the screen can be used by every Member of the Company through any of its Agents.
+- An account signed in on the screen can be used by every Member of the Company through any of its Agents. Update (2026-11-24, vault decision 0060): each Agent has its own Screen and browser, as the Engine places them, so an account signed in on one Agent's Screen is used by that Agent only, by any Member who may talk to it.
 - The tests that pin the old shape change with the build: `tests/bundled-hermes.test.mjs`, `scripts/check-install-profiles.mjs`, and the level table's tests.
