@@ -4,6 +4,7 @@ import { page, userEvent } from 'vitest/browser';
 import { AgentLibrary } from '@/app/agent-library';
 import { LanguageProvider } from '@/lib/i18n-client';
 import '@/app/shell.css';
+import { fakeClock } from './fake-clock';
 
 vi.mock('@/lib/link', () => ({ default: (props: { children?: unknown }) => <a {...props as object}/> }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
@@ -46,7 +47,7 @@ const engine = () => vi.stubGlobal('fetch', vi.fn(async (input: string | URL | R
  }
  return new Response(JSON.stringify({ folder: '', entries: url.searchParams.get('root') === 'images' ? [] : rows }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }));
-afterEach(() => { vi.unstubAllGlobals(); toast.mockClear(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); toast.mockClear(); });
 
 const drawn = (language: 'en' | 'ar' = 'en') => render(<LanguageProvider language={language}>
  <div className="gw" dir={language === 'ar' ? 'rtl' : 'ltr'}><div className="details is-open">
@@ -80,8 +81,15 @@ test('a file\'s row opens the preview with the keyboard on Download, and the clo
  expect(dialog()!.textContent).toContain('19 B');
  await expect.element(screen.getByText('Read only. For edits, ask Lead in the chat.')).toBeVisible();
  await expect.element(screen.getByRole('link', { name: 'Download' })).toHaveFocus();
- await screen.getByRole('button', { name: 'Close' }).click();
+ // The leave on a fake clock (#579), pressed in the page itself, since a driver click's round trip can outlast the 190 ms.
+ fakeClock();
+ (screen.getByRole('button', { name: 'Close' }).element() as HTMLButtonElement).click();
+ await vi.advanceTimersByTimeAsync(0);
  expect(dialog()!.classList.contains('is-closing'), 'the leave is drawn first').toBe(true);
+ await vi.advanceTimersByTimeAsync(189);
+ expect(dialog()!.open, 'the dialog stays for the whole leave').toBe(true);
+ await vi.advanceTimersByTimeAsync(1);
+ vi.useRealTimers();
  await closedBack(screen, 'brief.md');
  // The same row opens it again, and Escape closes it.
  await row.click();
