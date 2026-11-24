@@ -419,6 +419,24 @@ test('a speech-to-text key shows its provider in use with "Saving" at once, and 
   expect(refresh).not.toHaveBeenCalled();
 });
 
+test('a failed speech-to-text key leaves another provider\'s form, opened while it saved, as it was', async () => {
+  const engine = heldAnswer();
+  const speech = '20000000-0000-0000-0000-000000000665';
+  const screen = await renderNode(<SpeechToText readAt={Date.now()} company={speech} owner data={{ provider: null, missing: [] }}/>);
+  await page.elementLocator(document.querySelector('#mdl-stt-row-deepgram .link-btn')!).click();
+  await screen.getByLabelText(en.settingsModelsKeyValue).fill(key);
+  await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
+  await page.elementLocator(document.querySelector('#mdl-stt-row-groq .link-btn')!).click();
+  await screen.getByLabelText(en.settingsModelsKeyValue).fill('gsk-groq-component-key-0123');
+  engine.answer(502, { error: 'speechFailed' });
+  await expect.element(screen.getByRole('alert')).toHaveTextContent(en.settingsModelsKeyError);
+  expect(document.querySelector('#mdl-stt-deepgram-form')).toBeNull();
+  expect(document.querySelector('#mdl-stt-groq-form')).not.toBeNull();
+  await screen.getByRole('button', { name: en.settingsModelsKeySave }).click();
+  await expect.poll(() => engine.sent.length).toBe(2);
+  expect(engine.sent[1].body).toEqual({ company: speech, provider: 'groq', intent: 'set', value: 'gsk-groq-component-key-0123' });
+});
+
 test('a Fallback model is marked with "Saving" at once, kept with no read of the page, and goes back when the save fails', async () => {
   const engine = heldAnswer();
   const fallback = '20000000-0000-0000-0000-000000000664';

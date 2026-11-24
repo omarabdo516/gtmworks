@@ -64,7 +64,8 @@ export function SpeechToText({company,owner,data,readAt}:{company:string,owner:b
   const answer=await saved.save({provider:intent==='set'?provider:null,missing:saved.value.missing??[]},
    ()=>send('/api/speech-provider',{company,provider,intent,...(intent==='set'?{value:key}:{})}),
    found=>({provider:typeof found.data?.provider==='string'?found.data.provider:null,missing:Array.isArray(found.data?.missing)?found.data.missing as Named[]:null}));
-  if(!answer.ok) { if(answer.newest&&intent==='set') setOpen(provider); return; }
+  // A failed key opens its form again, unless the Owner already opened another one, whose key stays with it.
+  if(!answer.ok) { if(answer.newest&&intent==='set') setOpen(current=>current||provider); return; }
   // Agents a write did not reach are named, with no success toast, so the Owner tries again.
   const failed=Array.isArray(answer.data?.failed)?(answer.data.failed as Named[]).map(item=>item.name||t('settingsModelsAnAgent')):[];
   setMissed(failed);
