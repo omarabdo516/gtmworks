@@ -23,12 +23,14 @@ test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
  // A retry, or a repeat of this serial file, starts it again from the seed, so its rows are inserted once.
  freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
+ // Copy, Lead and SEO are made today, so none of them is asleep (#699: an Agent made over 7 days ago with no work for 7
+ // days sleeps): the states below are waiting, working and idle.
  query(`do $$ declare card bigint; begin
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,profile) values
-   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,null,null,'details-copy'),
-   ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null,'details-lead'),
+   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,now(),null,'details-copy'),
+   ('${lead}','${company}','${leadConnection}','Lead','General',true,now(),null,'details-lead'),
    ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}','details-ads'),
-   ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,null,null,'details-seo');
+   ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,now(),null,'details-seo');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(9)}','${company}','${omar}','${lead}','Lead');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
    ('${company}','${id(9)}','person','${omar}',null,'Omar','I want someone to handle our Meta ads','${id(10)}','details-made','2026-06-10T09:00:00Z'),
