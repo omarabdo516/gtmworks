@@ -1649,5 +1649,15 @@
   "archiveStopHand": "الخطوة اللي {0} سلّمها في {1} هتتقفل",
   "archiveStopApproval": "الموافقة على {1} هتنتهي من غير قرار",
   "archiveStopAnAgent": "وكيل",
-  "archiveAndStop": "أرشف ووقّف"
+  "archiveAndStop": "أرشف ووقّف",
+  "allConversations": "كل المحادثات",
+  "allConversationsLists": "المحادثات",
+  "allConversationsCurrent": "الحالية",
+  "allConversationsArchived": "المؤرشفة",
+  "allConversationsSearch": "دوّر في المحادثات",
+  "allConversationsEmpty": "مفيش محادثات",
+  "allConversationsArchivedEmpty": "مفيش محادثات مؤرشفة",
+  "allConversationsNoMatch": "مفيش محادثة فيها «{0}»",
+  "allConversationsMore": "اعرض أكتر",
+  "allConversationsFailed": "المحادثات ماتقرتش. جرّب تاني."
 }

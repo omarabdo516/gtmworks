@@ -1649,5 +1649,15 @@
   "archiveStopHand": "The step {0} handed over on {1} closes",
   "archiveStopApproval": "The approval of {1} ends with no decision",
   "archiveStopAnAgent": "An Agent",
-  "archiveAndStop": "Archive and stop"
+  "archiveAndStop": "Archive and stop",
+  "allConversations": "All conversations",
+  "allConversationsLists": "Conversations",
+  "allConversationsCurrent": "Current",
+  "allConversationsArchived": "Archived",
+  "allConversationsSearch": "Search conversations",
+  "allConversationsEmpty": "No conversations",
+  "allConversationsArchivedEmpty": "No archived conversations",
+  "allConversationsNoMatch": "No conversation matches “{0}”",
+  "allConversationsMore": "Show more",
+  "allConversationsFailed": "The conversations couldn’t be read. Try again."
 }

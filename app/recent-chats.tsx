@@ -6,11 +6,11 @@ import { localeFor } from '@/lib/i18n.mjs';
 import { groupRecents, matchChats } from '@/lib/sidebar.mjs';
 import { useSidebarQuery } from './sidebar-search';
 
-type Chat={id:string,title:string,created_at:string};
+type Chat={id:string,title:string,at:string};
 const subscribe=()=>()=>{};
 const labels={today:'today',yesterday:'yesterday',earlier:'earlier'} as const;
 
-// The person's own Conversations in this company, grouped by their local day (so the groups render after mount,
+// The person's own Conversations in this company, by their newest message (#673), grouped by its local day (so the groups render after mount,
 // in the browser's time zone, never the server's), narrowed by the sidebar's search.
 export default function RecentChats({slug,chats,current,lead}:{slug:string,chats:Chat[],current?:string,lead:string}) {
  const {t,language}=useI18n();
@@ -27,7 +27,7 @@ export default function RecentChats({slug,chats,current,lead}:{slug:string,chats
   <h2 className="sb-label" id={`lbl-day-${group.day}`}>{t(labels[group.day])}</h2>
   <ul aria-labelledby={`lbl-day-${group.day}`}>{group.items.map(chat=><li key={chat.id}>
    <Link className="sb-item thread-item" href={`/c/${slug}/conversations/${chat.id}`} aria-current={chat.id===current?'true':undefined} title={chat.title}>
-    <span className="od-truncate" dir="auto">{chat.title}</span><time className="thread-item__time" dateTime={chat.created_at}>{time(chat.created_at,group.day)}</time>
+    <span className="od-truncate" dir="auto">{chat.title}</span><time className="thread-item__time" dateTime={chat.at}>{time(chat.at,group.day)}</time>
    </Link>
   </li>)}</ul>
  </div>)}</>;

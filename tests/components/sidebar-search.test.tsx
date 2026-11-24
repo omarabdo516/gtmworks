@@ -9,7 +9,7 @@ import { LanguageProvider } from '@/lib/i18n-client';
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 
 const now = new Date().toISOString();
-const chats = [{ id: 'cv-1', title: 'Search check for June', created_at: now }, { id: 'cv-2', title: 'Weekly report', created_at: now }];
+const chats = [{ id: 'cv-1', title: 'Search check for June', at: now }, { id: 'cv-2', title: 'Weekly report', at: now }];
 
 test('the magnifier opens a focused field that narrows the recent chats by title; Escape empties it, then closes it', async () => {
  const screen = await render(<LanguageProvider language="en"><SidebarSearchProvider>
