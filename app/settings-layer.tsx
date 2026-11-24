@@ -4,6 +4,7 @@ import SettingsOverlay from './settings-overlay';
 import { OnSettingsAddress } from './settings-address';
 import { companyLooks } from '@/lib/agent-looks';
 import { LooksProvider } from '@/lib/agent-looks-client';
+import { changeAgentLook, resetAgentLook } from './agent-look-actions';
 
 export type SettingsQuery = Parameters<typeof SettingsOverlay>[0]['query'];
 
@@ -23,5 +24,5 @@ export default async function SettingsLayer({slug,query}:{slug:string,query:Sett
   db.from('members').select('role').eq('company_id',company.id).eq('person_id',user.id).is('removed_at',null).maybeSingle(),
   companyLooks(db,company.id),
  ]);
- return <OnSettingsAddress slug={slug}><LooksProvider looks={looks}><SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} workMode={company.work_mode} query={query}/></LooksProvider></OnSettingsAddress>;
+ return <OnSettingsAddress slug={slug}><LooksProvider looks={looks} change={membership?.role==='owner'?{company:company.id,slug,save:changeAgentLook,reset:resetAgentLook}:null}><SettingsOverlay slug={slug} company={company} userId={user.id} role={membership?.role || ''} personName={person?.name || user.email || ''} workMode={company.work_mode} query={query}/></LooksProvider></OnSettingsAddress>;
 }

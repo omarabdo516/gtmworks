@@ -135,7 +135,7 @@ function tick() {
   if(blinks.has(state)&&now>=face._nb) {
    blink(face); face._nb=now+blinkGap(numbers);
    // Warm: now and then a friendly double blink.
-   if(numbers.gs==='soft'&&Math.random()<.3) face._tm!.push(window.setTimeout(()=>{ if(!reduced()) blink(face); },260));
+   if(numbers.gs==='soft'&&Math.random()<.3) (face._tm??=[]).push(window.setTimeout(()=>{ if(!reduced()) blink(face); },260));
   }
   if(state==='idle'&&!face._busy&&now>=face._ng) { glance(face,numbers); face._ng=now+numbers.glance*1000*rand(.7,1.4); }
  }
@@ -237,6 +237,15 @@ export function watchFace(face:HTMLElement) {
  watching.observe(face);
  if(hop) queueMicrotask(again);
  return ()=>{ watching.unobserve(face); visible.delete(face as Face); clearMoment(face as Face); };
+}
+
+// A temperament felt before it is picked (design-reference-orb/agent-look.html: sample): the face blinks and glances as
+// that temperament does, unless it is busy, still or nothing may move.
+export function sampleFace(face:HTMLElement|null|undefined) {
+ const target=face as Face|null|undefined;
+ if(!target||!isLive(target)||reduced()||target._busy) return;
+ const numbers=numbersOf(target);
+ blink(target); glance(target,numbers); target._ng=performance.now()+numbers.glance*1000;
 }
 
 // A face's state changed: its paces follow, its eyes come back from a glance, and a face that is done hops and sparkles.

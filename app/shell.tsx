@@ -11,6 +11,7 @@ import ApprovalsCount from './approvals-count';
 import { AgentFace } from '@/components/agent-face';
 import { companyLooks } from '@/lib/agent-looks';
 import { LooksProvider } from '@/lib/agent-looks-client';
+import { changeAgentLook, resetAgentLook } from './agent-look-actions';
 import { agentStates, statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { agentIdentities } from '@/lib/agent-identities';
@@ -141,5 +142,5 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const callable=agents.map(({id,connection_id,name,speciality,template})=>({id,connection_id,name,speciality,role:template,status:stateOf(id)}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
- return <LooksProvider looks={looks}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider>;
+ return <LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider>;
 }

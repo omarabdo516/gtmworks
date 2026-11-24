@@ -15,6 +15,7 @@ import { Group, Head, Label, SubLabel } from './settings-overlay-parts';
 import { BackLink, FocusReturn } from './settings-overlay-frame';
 import { AccountChoices, MakeMain, DeleteAgent, CompanyName, Invite, SettingsTeamTable, RuleSaid, RemoveRule } from './settings-overlay-client';
 import { SettingsIcon } from './settings-icons';
+import { LookRow } from './agent-look-window';
 import { InfoTip } from './settings-info';
 import PasswordSettings from './password-settings';
 import { UsageTable, UsageModels } from './c/[slug]/[[...section]]/usage';
@@ -305,6 +306,7 @@ function AgentPage({t,rtl,slug,company,userId,personName,agent,tab,memory,about,
          both are the reference's read-only rows, for every Role. */}
      <ul className="panel-card">
       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsName')}</span><span className="panel-row__d ro-val" id="set-name-val"><bdi>{agent.name}</bdi> · <bdi dir="ltr">{handle}</bdi></span></span></li>
+      <LookRow agent={{id:agent.id,name:agent.name}}/>
       <li className="panel-row"><span className="panel-row__text"><span className="panel-row__t">{t('settingsRole')}</span><span className="panel-row__d ro-val" id="set-role-val">{agent.speciality?<bdi>{agent.speciality}</bdi>:'—'}</span></span></li>
       {mainRow}
      </ul>
