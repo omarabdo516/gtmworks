@@ -6,6 +6,12 @@
   "ar": { "title": "المحادثة اللي خلص استخدامها بتقولك إمتى هيتجدّد", "body": "لما كل الحسابات اللي الوكيل يقدر يستخدمها يخلص استخدامها، المحادثة دلوقتي بتقول كده حتى في الرسايل اللي بعد الأولى، وبتقولك الاستخدام هيتجدّد إمتى، بدل ما تطلب منك تبعت الرسالة تاني." }
  },
  {
+  "issue": 602,
+  "date": "2026-11-24",
+  "en": { "title": "A handed-over job says why it did not finish", "body": "When an Agent asked to do a job cannot reach its model (no model connected, no credit left, a refused key, a model that is not available, or every account out of usage), the Agent that asked now tells you that reason and what to fix in Providers, instead of only that the job failed." },
+  "ar": { "title": "الشغلانة اللي اتسلّمت بتقول ليه مخلصتش", "body": "لما الوكيل اللي اتطلب منه شغلانة ميقدرش يوصل للموديل بتاعه (مفيش موديل متوصّل، الرصيد خلص، المفتاح اترفض، الموديل مش موجود، أو كل الحسابات خلص استخدامها)، الوكيل اللي طلبها بقى بيقولك السبب وتصلّح إيه في المزوّدين، بدل ما يقول بس إن الشغلانة فشلت." }
+ },
+ {
   "issue": 586,
   "date": "2026-11-24",
   "en": { "title": "A Channel opens cleanly in your own time zone", "body": "Outside UTC, a Channel's message and Handover times now appear straight in your own time zone, without the page redrawing itself as it opens." },
