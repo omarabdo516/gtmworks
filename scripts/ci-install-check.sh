@@ -2387,8 +2387,8 @@ compose exec -T web node --input-type=module -e "
 # Engine reaches its own sandbox over SSH, as its Agents' commands do, that sandbox takes its own Engine's key and no other
 # Company's, every sandbox and exit runs the image the install recorded before, and each work folder keeps what it held; the
 # install records again the release that keeps serving (#583), so a backup with that release's files succeeds and one with
-# the failed release's files is refused. An Agent of each Company then runs a command in its own sandbox. Its own area, as the other update areas run near their
-# 12-minute limit.
+# the failed release's files is refused. An Agent of each Company then runs a command in its own sandbox. Its own area,
+# as the other update areas run near their 12-minute limit.
 sandbox_rollback() {
 cd "$root"
 reset_install
@@ -2447,7 +2447,9 @@ for failing in sandbox engine; do
   # refused before anything stops. The release whose sandbox does not start pins this release's own app image, which is
   # what the record names, so only the one whose Engine does not start is another release to refuse.
   [[ $(cat .install-release 2> /dev/null) == "$first" ]] || fail_update "the update whose $failing does not start records this release as the one it runs"
-  if [[ $(sed -n 's/^release_image=//p' install.sh) != "$first" ]]; then
+  if [[ $failing == engine ]]; then
+    [[ $(sed -n 's/^release_image=//p' install.sh) == "$broken_engine" ]] || fail 'the release whose Engine does not start pins an app image of its own'
+    mkdir -p "$dir/refused-backup"
     if sh install.sh backup "$dir/refused-backup" > backup.log 2>&1; then cat backup.log; fail "a backup with the files of the update whose $failing does not start must be refused"; fi
     grep -Fq "This install does not run $broken_engine yet" backup.log || { cat backup.log; fail "the backup with the files of the update whose $failing does not start names the release it does not run"; }
   fi
