@@ -64,7 +64,7 @@ export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
 export type WorkProps={workAction:WorkAction,placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,cardId?:number,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],assignees:{card_id:number,person_id:string}[],message?:string,approvableIds:number[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,notes?:CardNotes,sheet?:CardSheetData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
 // The board's archive list (#670, #705): the server's first page, how many archived Cards the reader sees (null when it
 // could not be read), and an archived Card the address names that the page does not hold, which opens over the board.
-export type ArchivedCards={first:ArchivedPage<Card>|null,total:number|null,named:Card[]};
+type ArchivedCards={first:ArchivedPage<Card>|null,total:number|null,named:Card[]};
 const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boardEmptyWaitingHint'],ideas:['boardEmptyIdeas','boardEmptyIdeasHint'],planned:['boardEmptyPlanned','boardEmptyPlannedHint'],progress:['boardEmptyProgress','boardEmptyProgressHint'],live:['boardEmptyLive','boardEmptyLiveHint'],done:['boardEmptyDone','']};
 export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
@@ -166,7 +166,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   void p.archiveCards(p.company,version?'undo':'restore',ids,version).then(result=>{
    const done=result.state==='done'?result.done:[]; leftOf(ids,done,true); endSelecting();
    if(!done.length) { if(ids.length===1) toast(t('cardRestoreRefused'),{icon:'x'}); return; }
-   toast(done.length>1?t('cardsRestoredToast',done.length):t('cardRestoredToast'),{icon:'restore'}); router.refresh();
+   archiveList.drop(done); toast(done.length>1?t('cardsRestoredToast',done.length):t('cardRestoredToast'),{icon:'restore'}); router.refresh();
   },failed);
  };
  const archiveNow=(ids:number[])=>{ if(!p.archiveCards) return;
@@ -202,7 +202,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const archiveList=useArchivedList(p.company,p.archived?.first??null,{q:archiveQuery,agent:filter==='all'?null:filter,project:project?Number(project):null},p.readArchived,showArchived);
  const archivedShown=archiveList.page?.items||[];
  const archivedCards=[...archivedShown,...(p.archived?.named||[]).filter(c=>!archivedShown.some(shown=>shown.id===c.id))];
- const archivedTotal=p.archived?.total??archivedShown.length;
+ // A count that could not be read is left out, never shown as the rows shown.
+ const archivedTotal=p.archived?.total??null;
  useEffect(()=>{ if(archiveSearching) archiveField.current?.focus(); else if(archiveEscaped.current) { archiveEscaped.current=false; archiveSearchButton.current?.focus(); } },[archiveSearching]);
  const firstName=(person:string|null|undefined)=>p.members.find(m=>m.person_id===person)?.people?.name?.trim().split(/\s+/)[0]||'';
  const archivedOf=(c:Card)=>c.archived_at?{by:firstName(c.archived_by),at:date(c.archived_at,language,{month:'short'})}:undefined;
@@ -377,7 +378,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     <input ref={archiveField} type="search" id="bf-q" autoComplete="off" dir="auto" placeholder={t('boardSearchArchived')} value={archiveQuery} maxLength={200} onChange={e=>setArchiveQuery(e.target.value)}
      onBlur={()=>{ if(!archiveQuery) setArchiveSearching(false); }} onKeyDown={e=>{ if(e.key==='Escape'&&!archiveQuery) { e.preventDefault(); archiveEscaped.current=true; setArchiveSearching(false); } }}/></div>
     :<button ref={archiveSearchButton} type="button" className="ib" aria-label={t('boardSearchArchived')} title={t('boardSearchArchived')} onClick={()=>setArchiveSearching(true)}><ShellIcon name="search"/></button>)}
-   {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={t('boardArchivedCount',archivedTotal)} title={t('boardArchived')} onClick={()=>{ setShowArchived(!showArchived); setArchiveQuery(''); setArchiveSearching(false); dropAsking(); setSelected(null); }}><ShellIcon name="archive"/>{showArchived&&<span className="num">{archivedTotal}</span>}</button>}
+   {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={archivedTotal==null?t('boardArchived'):t('boardArchivedCount',archivedTotal)} title={t('boardArchived')} onClick={()=>{ setShowArchived(!showArchived); setArchiveQuery(''); setArchiveSearching(false); dropAsking(); setSelected(null); }}><ShellIcon name="archive"/>{showArchived&&archivedTotal!=null&&<span className="num">{archivedTotal}</span>}</button>}
    {canSelect&&!selected&&<button ref={selectToggle} type="button" className="ib" aria-label={t('boardSelectCards')} title={t('boardSelectCards')} onClick={startSelecting}><ShellIcon name="multiSel"/></button>}
    <span className="board-tools__summary">{!p.canCreate?<><BoardIcon name="eye"/>{t('boardReadOnly')}</>:waitingTotal?<><span className="dot dot--waiting" aria-hidden="true"/>{(p.waiting||[]).some(item=>item.kind!=='approval')?t('thingsWaitingOnYou',waitingTotal):t(waitingTotal>1?'boardWaitingMany':'boardWaitingOne',waitingTotal)}</>:<><BoardIcon name="check"/>{t('boardNothingWaiting')}</>}</span>
    <BoardPager/>

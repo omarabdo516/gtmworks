@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { page, userEvent } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
-import { card, showWork, workProps } from './work-page';
+import { card, showWork, workProps, workView } from './work-page';
 import type { ReadArchived } from '@/app/c/[slug]/[[...section]]/archived-list';
 import type { Card } from '@/app/c/[slug]/[[...section]]/work';
 
@@ -47,4 +47,19 @@ test('a search asks the database for every archived title, and an empty answer s
  // Cleared, the server's first page shows again.
  await userEvent.clear(page.getByRole('searchbox', { name: 'Search archived cards' }));
  await expect.poll(rows).toEqual(['Weekly report', 'June ads']);
+});
+
+test('the board read again with the same first page keeps the pages "Show more" added, and a new first page shows instead', async () => {
+ const read = vi.fn<ReadArchived<Card>>(async () => ({ items: [archived(3, 'مُهمّة الأسعار')], next: null }));
+ const props = board(read);
+ const screen = await showWork(props);
+ await page.getByRole('button', { name: 'Archived · 3' }).click();
+ await page.getByRole('button', { name: 'Show more' }).click();
+ await expect.poll(rows).toEqual(['Weekly report', 'June ads', 'مُهمّة الأسعار']);
+ // A refresh (a move, an Agent at work) hands the same Cards in new objects.
+ await screen.rerender(workView({ ...props, archived: structuredClone(props.archived) }));
+ await expect.poll(rows).toEqual(['Weekly report', 'June ads', 'مُهمّة الأسعار']);
+ // A Card archived meanwhile changes the first page: it shows, newest first.
+ await screen.rerender(workView({ ...props, archived: { first: { items: [archived(0, 'Just archived'), archived(1, 'Weekly report')], next: { at: '2026-11-29T09:00:00Z', id: 1 } }, total: 4, named: [] } }));
+ await expect.poll(rows).toEqual(['Just archived', 'Weekly report']);
 });

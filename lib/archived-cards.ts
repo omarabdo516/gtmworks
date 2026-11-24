@@ -8,7 +8,7 @@ type Database=Awaited<ReturnType<typeof supabase>>;
 export type ArchivedCursor={at:string,id:number};
 export type ArchivedWant={q?:string,agent?:string|null,project?:number|null};
 export type ArchivedPage<C>={items:C[],next:ArchivedCursor|null};
-export const archivedPageSize=50;
+const archivedPageSize=50;
 
 // One page, read as the signed-in person after `after` (the first page when it is null). A failed read is null.
 export async function archivedCardPage<C extends {id:number,archived_at?:string|null}>(db:Database,company:string,{q='',agent=null,project=null}:ArchivedWant,after:ArchivedCursor|null=null):Promise<ArchivedPage<C>|null> {
