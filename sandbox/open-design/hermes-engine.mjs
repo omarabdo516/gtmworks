@@ -110,8 +110,9 @@ export async function runOnEngine(route,{input,cwd,signal,outage=60000,pace=1000
   if(signal.aborted) return stop();
   const left=outage-(Date.now()-seen);
   if(left<=0) throw new Error("Open Design lost the Company's Engine while it drew the design.");
-  // A cancel interrupts a read still waiting on the Engine, so the stop goes out at once.
-  const read=await call(route,'GET',at,undefined,Math.max(1000,Math.min(left,30000)),signal).catch(failure=>{ if(!signal.aborted&&!route.sockets.length) throw failure; return null; });
+  // A cancel interrupts a read still waiting on the Engine, so the stop goes out at once; a read never outlasts what is
+  // left of the outage (#634).
+  const read=await call(route,'GET',at,undefined,Math.min(left,30000),signal).catch(failure=>{ if(!signal.aborted&&!route.sockets.length) throw failure; return null; });
   if(signal.aborted) return stop();
   if(read&&[401,403].includes(read.status)) throw new Error(refused);
   if(read?.status===404) throw new Error('The Engine no longer knows this design Run.');

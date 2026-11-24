@@ -255,3 +255,37 @@ test('a cancel interrupts an approval the Engine holds, and the stop goes out at
   assert.ok(held.seen.some(line=>line.endsWith('/run-9/stop')),held.seen.join('\n'));
  } finally { held.close(); }
 });
+
+// A daemon that never answered is stopped whole before its start lock goes (#634): the start waits for its process group
+// to exit, for a bounded time, and kills what is left, so the next start never races it for the port.
+test('a stopped daemon\'s whole process group is gone before the stop returns, killed when it ignores the request', async () => {
+ const { spawn } = await import('node:child_process');
+ const { stopGroup } = await import('../sandbox/open-design/daemon.mjs');
+ const groupGone=pid=>{ try { process.kill(-pid,0); return false; } catch { return true; } };
+ // A daemon and a child of its own that both ignore SIGTERM: only the kill after the wait ends them.
+ const stubborn=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{}); require('child_process').spawn(process.execPath,['-e',\"process.on('SIGTERM',()=>{}); setInterval(()=>{},1000)\"],{stdio:'ignore'}); setInterval(()=>{},1000)"],{detached:true,stdio:'ignore'});
+ const willing=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});
+ const leftover=()=>{ for(const child of [stubborn,willing]) { try { process.kill(-child.pid,'SIGKILL'); } catch {} } };
+ try {
+  await new Promise(resolve=>setTimeout(resolve,300));
+  const started=Date.now();
+  await stopGroup(stubborn,{grace:400});
+  assert.ok(groupGone(stubborn.pid),'nothing of the group is left');
+  assert.ok(Date.now()-started>=400,'the kill waits out the grace first');
+  // A daemon that exits when asked ends the wait at once.
+  const asked=Date.now();
+  await stopGroup(willing,{grace:5000});
+  assert.ok(groupGone(willing.pid));
+  assert.ok(Date.now()-asked<3000,'not the whole grace');
+ } finally { leftover(); }
+});
+
+// A read never outlasts what is left of the outage (#634): with less than a second left, the read's own limit is what is left.
+test('a read the Engine holds is given up when the outage runs out, not a second later', async () => {
+ const held=await engineAnswering(request=>request.method==='GET'?null:[200,{ok:true}]);
+ try {
+  const started=Date.now();
+  await assert.rejects(runOnEngine(held.route,{input:'x',cwd,signal:new AbortController().signal,outage:150,pace:20}),/lost the Company's Engine/);
+  assert.ok(Date.now()-started<900,`gave up after ${Date.now()-started} ms`);
+ } finally { held.close(); }
+});
