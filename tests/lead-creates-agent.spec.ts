@@ -53,7 +53,8 @@ test('the Conversation shows the new Agent\'s card, the list marks it new, and o
 
  await openNavigation(page);
  const tile=(name:string)=>page.locator('.sidebar .agent-tile').filter({hasText:name});
- await expect(tile('Meta Ads')).toHaveAccessibleName('Meta Ads · New · Runs the Meta ads. · Idle');
+ // Made in June with no work since, it sleeps (#699) until its chat is opened, which wakes it for this person.
+ await expect(tile('Meta Ads')).toHaveAccessibleName('Meta Ads · New · Runs the Meta ads. · Asleep');
  await expect(tile('Meta Ads').locator('.agent-tile__new')).toHaveText('New');
  await expect(tile('SEO').locator('.agent-tile__new')).toHaveText('New');
  await expect(tile('Lead').locator('.agent-tile__new')).toHaveCount(0);
