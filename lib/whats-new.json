@@ -2,8 +2,8 @@
  {
   "issue": 638,
   "date": "2026-11-24",
-  "en": { "title": "Every model of a partly connected subscription has its switch", "body": "A subscription signed in on one Agent's profile now lists every model it reaches under Providers, even when the Company also holds an API key of the same provider, so you can switch each one off." },
-  "ar": { "title": "كل موديل في الاشتراك المتوصل جزئيًا ليه زرار", "body": "الاشتراك اللي متسجل دخوله على بروفايل وكيل واحد بقى بيعرض في المزوّدين كل الموديلات اللي بيوصلها، حتى لو الشركة عندها كمان مفتاح API لنفس المزوّد، فتقدر تقفل أي واحد منهم." }
+  "en": { "title": "Every model of a partly connected subscription has its switch", "body": "A subscription signed in on an Agent's profile now lists every model it reaches under Providers, even when the Company also holds an API key of the same provider, each with its switch." },
+  "ar": { "title": "كل موديل في الاشتراك المتوصل جزئيًا ليه زرار", "body": "الاشتراك اللي متسجل دخوله على بروفايل وكيل بقى بيعرض في المزوّدين كل الموديلات اللي بيوصلها، حتى لو الشركة عندها كمان مفتاح API لنفس المزوّد، وكل واحد ليه زراره." }
  },
  {
   "issue": 586,
