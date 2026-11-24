@@ -120,7 +120,7 @@ test('every Company\'s work sandbox is the least container its Agents\' work nee
  assert.deepEqual(sandbox.security_opt,['no-new-privileges:true']);
  assert.equal(sandbox.pids_limit,2048);
  assert.equal(sandbox.shm_size,'1gb','shared memory large enough for Chromium');
- assert.equal(sandbox.mem_limit,'${SANDBOX_MEMORY:-1g}');
+ assert.equal(sandbox.mem_limit,'${SANDBOX_MEMORY:-2g}');
  assert.equal(sandbox.cpus,'${SANDBOX_CPUS:-2.0}');
  // The template is the one place those defaults are set (#400): the installer repeats none of them, so nothing can drift
  // from the measured figures; it passes only a Company's own limits, read from that Company's file (#396).

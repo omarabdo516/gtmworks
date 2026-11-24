@@ -52,21 +52,30 @@ the CPU and RAM of one of the two server sizes below. No host Node.js, Git,
 Supabase CLI, cloud project or external account is required.
 
 **Server size.** Two sizes, from the install job's measurement (`install-sizes`,
-run 44848354569, which prints these numbers on every run):
+run 44848354569, which prints these numbers on every run) and one Agent's Screen
+measured on the pinned Engine (#711):
 
 - **Without video: 2 CPU cores and 4 GB RAM.** Idle, the install's own services
   (web app, worker, Postgres, sign-in, REST, Storage, gateway and mail inbox) use
   493 MiB, the first Company's idle Engine 466 MiB and its idle work sandbox 1 MiB: about
-  1 GB for one Company, which leaves room for the system, an Engine at work and a
-  few more Companies.
+  1 GB for one Company, which leaves room for the system, an Engine at work, one
+  Agent's Screen awake and a few more Companies.
 - **With video: 4 CPU cores and 8 GB RAM.** One short render (60 frames of
   1280x720 drawn by Chromium and joined by ffmpeg into a two-second video) took
   13.7 s and peaked at 337 MiB in its sandbox. A sandbox may use up to its limit,
-  **1 GB of RAM and 2 CPUs** by default, so each Company rendering at the same time
-  needs up to 1 GB and 2 cores more than the size without video.
+  **2 GB of RAM and 2 CPUs** by default, so each Company rendering at the same time
+  needs up to 2 GB and 2 cores more than the size without video.
+- **Each Agent's Screen** costs nothing asleep. Awake, its desktop (Xvnc and Xfce
+  at 1440x900) holds about 100 MiB of its Company's sandbox, and 400 to 690 MiB with
+  one page open in its browser (a Wikipedia article 405 MiB, YouTube 588 MiB, the
+  Google Ads page 545 to 687 MiB), peaking at **831 MiB**; the driver `computer_use`
+  runs there adds 26 MiB. It sleeps after 30 minutes unused. The default sandbox
+  limit of 2 GB holds two Screens awake with such a page at once, or one beside a
+  render; a Company whose Agents keep more Screens awake together needs about
+  0.8 GB more for each (`gtmworks company limits`).
 - **Each added Company** costs its Engine, 466 MiB idle with its main Agent (the
   same `install-sizes` run; an Engine holding twenty more Agent profiles is measured
-  apart, see below), its sandbox, 1 MiB idle and up to its 1 GB limit while it
+  apart, see below), its sandbox, 1 MiB idle and up to its 2 GB limit while it
   works, and its internet exit, a small proxy held to 256 MiB.
 
 The limits are the install's defaults, set in one place (the sandbox service of
@@ -81,7 +90,9 @@ and every other Company keep running; if the sandbox does not start with the new
 limits (more CPUs than the server has, say), it starts again with the earlier ones and
 the command says so. A Company's limits are kept with its own files beside its
 Engine's key, so an update, a backup and restore and a repeat install give its sandbox
-the same limits; a Company given none follows the install's default. A render that needs more memory than its Company's limit is stopped at the
+the same limits; a Company given none follows the install's default. The update that
+raised the default to 2 GB (for the Agents' Screens) raises a Company's own lower
+memory limit to it once and never lowers one; a limit you set after that is kept. A render that needs more memory than its Company's limit is stopped at the
 limit, and every other Company's sandbox keeps answering: one Company's video cannot
 starve the others.
 

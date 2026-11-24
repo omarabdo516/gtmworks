@@ -140,16 +140,35 @@ check_limits() {
     || { echo "The CPU limit is a number of CPUs above 0, such as 1 or 1.5, not $2." >&2; return 1; }
 }
 # One Company's limits written into its Engine's file, owner-only, under a temporary name then moved into place; an
-# empty value leaves that limit to the template's default.
+# empty value leaves that limit to the template's default. A memory limit of its own is noted with the default it was
+# written under (SANDBOX_MEMORY_DEFAULT), so an update raises it only once for each new default (#711).
 write_limits() {
   file="$(engine_folder "$1")/.env"
   {
-    grep -Ev '^SANDBOX_(MEMORY|CPUS)=' "$file" || true
-    [ -z "$2" ] || printf 'SANDBOX_MEMORY=%s\n' "$2"
+    grep -Ev '^SANDBOX_(MEMORY|CPUS|MEMORY_DEFAULT)=' "$file" || true
+    [ -z "$2" ] || printf 'SANDBOX_MEMORY=%s\nSANDBOX_MEMORY_DEFAULT=%s\n' "$2" "$(default_sandbox_memory)"
     [ -z "$3" ] || printf 'SANDBOX_CPUS=%s\n' "$3"
   } > "$file.tmp" || return 1
   chmod 600 "$file.tmp" || return 1
   mv "$file.tmp" "$file" || return 1
+}
+# The install's default memory for one sandbox, read from the one place it is set, the sandbox service of the template.
+default_sandbox_memory() { sed -n 's/^    mem_limit: ${SANDBOX_MEMORY:-\([0-9]*[mg]\)}$/\1/p' "$engine_template"; }
+# A size as Docker reads it (512m, 2g) in megabytes.
+megabytes() { case "$1" in *g) echo $(( ${1%g} * 1024 ));; *m) echo "${1%m}";; *) return 1;; esac; }
+# A Company's sandbox holds its Agents' Screens (#711), so an update to a release whose default memory is larger raises a
+# Company's own limit below it to that default, once for that default, and never lowers one; a limit the Owner sets after
+# that (`company limits`) is noted under the same default and kept. A Company with no limit of its own follows the default,
+# and its file is not touched.
+raise_sandbox_memory() {
+  own=$(sandbox_limit "$1" MEMORY)
+  [ -n "$own" ] || return 0
+  default=$(default_sandbox_memory)
+  test -n "$default" || { echo "The sandbox's default memory is not in $engine_template." >&2; return 1; }
+  [ "$(sandbox_limit "$1" MEMORY_DEFAULT)" != "$default" ] || return 0
+  [ "$(megabytes "$own")" -lt "$(megabytes "$default")" ] || return 0
+  write_limits "$1" "$default" "$(sandbox_limit "$1" CPUS)" || return 1
+  echo "The work sandbox of the Engine $1 had $own of memory: raised to $default, the new default, so its Agents' Screens fit."
 }
 # The Engine reaches its sandbox as every Agent's command does (#396): over ssh, as the Engine's own user, with its own
 # key and the host key its known_hosts pins. A few tries, as Docker's name for the sandbox can take a moment to answer.
@@ -380,6 +399,7 @@ engine_start() {
   # The Engine's own key pair and its sandbox's host key are made or read before anything starts, so the sandbox it
   # starts with accepts exactly this Engine and its known_hosts already trusts the host key it will meet.
   sandbox_keys "$1" || return 1
+  raise_sandbox_memory "$1" || return 1
   engine "$1" up -d --wait --wait-timeout "$wait" || return 1
   container=$(engine_project "$1")
   healthy_within "$container" "$wait" || { echo "The Engine $container did not become healthy." >&2; return 1; }

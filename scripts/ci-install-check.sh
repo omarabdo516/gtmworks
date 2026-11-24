@@ -658,6 +658,15 @@ sh scripts/install.sh company limits 'Proxy Company' --cpus 1.5 || fail 'company
 SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh > companies-repeat.log 2>&1 || { cat companies-repeat.log; fail 'a repeat install with limits in the shell'; }
 [[ $(limits_of gtmworks-sandbox-first) == "$(sandbox_memory_bytes) 1500000000" ]] || fail "a repeat install keeps the first Company's limits"
 [[ $(limits_of "$second_sandbox") == '805306368 1000000000' ]] || fail "a repeat install keeps the second Company's limits"
+# #711: the second Company's limit as a release before the Screens wrote it (no default noted beside it) is raised to the
+# default by the next run, once; a Company's limit above the default is never lowered.
+second_file="$(dirname "$(grep -lx "ENGINE_NAME=$second_container" .engines/*/.env)")/.env"
+grep -v '^SANDBOX_MEMORY_DEFAULT=' "$second_file" > "$second_file.old" && mv "$second_file.old" "$second_file" || fail 'the second Company file as the previous release wrote it'
+sh scripts/install.sh company limits 'Proxy Company' --memory 3g || fail 'the first Company above the default'
+sh scripts/install.sh > companies-raise.log 2>&1 || { cat companies-raise.log; fail 'the run that raises a lower limit'; }
+grep -F "had 768m of memory: raised to $(sandbox_default mem_limit)" companies-raise.log || fail 'the run says it raised the lower limit'
+[[ $(limits_of "$second_sandbox") == "$(sandbox_memory_bytes) 1000000000" ]] || fail "the second Company's lower memory limit is raised to the default"
+[[ $(limits_of gtmworks-sandbox-first) == '3221225472 1500000000' ]] || fail "the first Company's limit above the default is kept"
 }
 
 # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
@@ -1641,6 +1650,12 @@ done
 marker="stable-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 tell_engine "$engine_before" "$profile" "$marker" || fail "write a memory in the Company's profile on $stable"
 sign_in_engine "$engine_before" || fail "sign the Company in on its Engine on $stable"
+# A Company whose own sandbox memory is below this release's default, as the release before the Screens wrote it (#711):
+# the update raises it to the default.
+if [[ -f .engines/first/.env ]]; then
+  { grep -Ev '^SANDBOX_MEMORY(_DEFAULT)?=' .engines/first/.env; echo 'SANDBOX_MEMORY=1g'; } > .engines/first/.env.low && mv .engines/first/.env.low .engines/first/.env \
+    || fail "give the Company a memory limit below the default on $stable"
+fi
 # The update to this release, as a stable install takes it: this release's two files in place of the old ones, then update.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail "the update from $stable to this release"
@@ -1664,6 +1679,11 @@ engine=$(first_engine_id)
 sandbox=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')
 [[ -n $sandbox && $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox") == healthy ]] || fail "the updated Company's work sandbox is healthy"
 [[ $(docker inspect -f '{{.Config.Image}}' "$sandbox") == "$(cat .work-sandbox-image)" ]] || fail 'the updated sandbox runs the image the install recorded'
+# #711: the Company's lower memory limit is raised to this release's default, and its sandbox runs with it.
+default_memory=$(sed -n 's/^    mem_limit: ${SANDBOX_MEMORY:-\([0-9]*\)g}$/\1/p' scripts/engine-template.yml)
+[[ -n $default_memory ]] || fail "this release's default sandbox memory, in gigabytes"
+[[ $(sed -n 's/^SANDBOX_MEMORY=//p' .engines/first/.env) == "${default_memory}g" ]] || fail "the update raised the Company's lower memory limit to the default (${default_memory}g)"
+[[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == $(( default_memory * 1073741824 )) ]] || fail "the updated sandbox runs with the default memory (${default_memory}g)"
 # The Owner signs in, the Company's sign-in still serves, and the Agent still remembers what it was told on $stable.
 ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
   || fail "the Agent remembers what it was told on $stable and the Company's sign-in still serves"
@@ -2543,6 +2563,19 @@ default_mib=$(( $(sandbox_memory_bytes) / 1048576 ))
 (( render_peak < default_mib )) || fail "the render's peak memory ($render_peak MiB) is within the default limit ($default_mib MiB)"
 [[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the render at the defaults had no process killed at the memory limit'
 echo "sizes: one short render at the default limits took $render_seconds s and peaked at $render_peak MiB of the $default_mib MiB limit"
+# One Agent's Screen awake with a page open (#711), started as the pinned Engine starts one in its sandbox: its own
+# launcher.sh, read out of the Engine's image, runs in the first Company's sandbox, and the sandbox's Chromium opens a
+# page through the Company's exit. The default memory must hold two such Screens at once, or one beside the render.
+launcher=$(docker exec "$engine_id" base64 -w0 /opt/hermes/tools/bot_desktop/launcher.sh) || fail "the pinned Engine's Screen launcher"
+docker exec -i -e SCREEN_LAUNCHER="$launcher" "$first_sandbox" node --input-type=module - < sandbox/check/screen.mjs | tee screen-defaults.log \
+  || fail 'one Screen wakes with a page open in a sandbox at the default limits'
+screen_peak=$(sed -n 's/^screen=.*"peakMiB":\([0-9]*\).*/\1/p' screen-defaults.log)
+screen_awake=$(sed -n 's/^screen=.*"awakeMiB":\([0-9]*\).*/\1/p' screen-defaults.log)
+[[ -n $screen_peak && -n $screen_awake ]] || fail 'the Screen prints its memory awake and its peak'
+(( screen_peak * 2 < default_mib )) || fail "two Screens at their peak ($screen_peak MiB each) fit in the default limit ($default_mib MiB)"
+(( screen_peak + render_peak < default_mib )) || fail "a Screen ($screen_peak MiB) beside the render ($render_peak MiB) fits in the default limit ($default_mib MiB)"
+[[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the Screen at the defaults had no process killed at the memory limit'
+echo "sizes: one Screen awake with a page open held $screen_awake MiB and peaked at $screen_peak MiB of the $default_mib MiB limit"
 # A render that needs more memory than its Company's limit: the second Company's sandbox gets four fifths of the render's
 # measured peak, so Chromium renders part of the way before the limit stops it, and the first Company's sandbox is asked
 # throughout. It is set on the running sandbox with `docker update`, the cgroup change a Company's own limit (`company

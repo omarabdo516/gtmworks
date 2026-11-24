@@ -79,15 +79,18 @@ services:
       - no-new-privileges:true
     # A process limit and shared memory large enough for Chromium (the base image's own browser, which the screen and a
     # rendered page run), and the RAM and CPU a sandbox gets. These defaults are the install's, set here and nowhere else
-    # (#400), from the install job's measurement (`install-sizes`, run 44848354569): one short render (60 frames of
-    # 1280x720 drawn by Chromium, joined by ffmpeg) peaked at 337 MiB and took 13.7 s on 2 CPUs, so 1g is about three
-    # times that peak, room for a longer or larger render, and 2 CPUs keep it to seconds. A Company's own memory and CPU
+    # (#400), from measurements the install job repeats (`install-sizes`): one short render (60 frames of 1280x720 drawn
+    # by Chromium, joined by ffmpeg) peaked at 337 MiB and took 13.7 s on 2 CPUs (run 44848354569), and one Agent's Screen
+    # awake with an ads page open peaked at 831 MiB (#711, measured with the pinned Engine's own launcher). Every Agent has
+    # a Screen in its Company's sandbox, so 2g holds two Screens awake at once, or one beside a render, and 2 CPUs keep a
+    # render to seconds. An update raises a Company's own lower limit to this default once (scripts/install.sh
+    # raise_sandbox_memory) and never lowers one. A Company's own memory and CPU
     # limit (`company add --memory --cpus`, `company limits`, #396) is kept in its Engine's folder and replaces these two
     # through scripts/install.sh alone; no value in the shell reaches them, and the process limit and shared memory are
     # the same for every sandbox.
     pids_limit: 2048
     shm_size: 1gb
-    mem_limit: ${SANDBOX_MEMORY:-1g}
+    mem_limit: ${SANDBOX_MEMORY:-2g}
     cpus: ${SANDBOX_CPUS:-2.0}
     environment:
       # The public key that arrived when the container started; no private key is here, and a sandbox that gets none
