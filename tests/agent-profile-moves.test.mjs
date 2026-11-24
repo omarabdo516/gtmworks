@@ -150,7 +150,8 @@ test('a Run with no history pinned sends the body it sent before',async()=>{
  try {
   const {db,service}=runDatabases(fake,{history:null});
   assert.deepEqual(await sendMessage(db,service,{company,conversation:'c',sendKey:'k',message:'Next draft',hermes:{address:fake.address,key:fake.settings.key}}),{conversation:'c'});
-  assert.deepEqual(JSON.parse(/** @type {string} */(fake.settings.runs[0].body)),{input:'Next draft'});
+  assert.deepEqual(Object.keys(JSON.parse(/** @type {string} */(fake.settings.runs[0].body))),['input','instructions'],'no history, only the message and how a file is handed over (#708)');
+  assert.equal(JSON.parse(/** @type {string} */(fake.settings.runs[0].body)).input,'Next draft');
  } finally { await fake.close(); }
 });
 
