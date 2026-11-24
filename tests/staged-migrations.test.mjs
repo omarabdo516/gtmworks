@@ -11,6 +11,13 @@ const read=name=>readFileSync(`supabase/migrations/${name}`,'utf8');
 const firstStep='20270408100000_one_set_of_tools.sql';
 const cutover='20270416000000_one_set_of_tools_cutover.sql';
 
+// The Supabase CLI applies migrations in the numeric order of their versions, the installer and the local database in
+// the order their names sort in: one order only while every version has the same 14 digits.
+test('every migration version has 14 digits, so the order its name sorts in is the order it is applied in', () => {
+ for(const name of readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')))
+  assert.match(name,/^\d{14}_[a-z0-9_]+(\.verify)?\.sql$/,`${name} has a version of other than 14 digits`);
+});
+
 test('a migration before the cutover takes no column, table or function away that the previous release reads', () => {
  for(const name of migrations.filter(name=>name>=firstStep&&!name.endsWith('_cutover.sql'))) {
   const sql=read(name);

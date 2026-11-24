@@ -7,6 +7,8 @@ import { CardSheet, type CardSheetData } from '@/app/card-sheet';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import type { ChannelRecord } from '@/lib/channels';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { CallableAgentsProvider } from '@/app/conversation-composer';
+import { useChatKnows } from '@/lib/live-runs';
 import { fakeClock } from './fake-clock';
 import '@/app/tokens.css';
 import '@/app/shell.css';
@@ -271,7 +273,7 @@ const inChannel = (more: Partial<ChannelRecord> = {}): ChannelRecord => ({
 
 test('a channel\'s Card opens on the channel under Chat, with its messages and the channel\'s composer', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel() } }));
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel(), person: 'p-me' } }));
  await expect.element(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
  await expect.element(chatPanel(screen).getByText('Morning all')).toBeVisible();
  await expect.element(chatPanel(screen).getByText('Plan is ready.')).toBeVisible();
@@ -283,7 +285,7 @@ test('a channel\'s Card opens on the channel under Chat, with its messages and t
 test('a message written in the channel\'s Card under Chat goes to that channel', async () => {
  const asks = vi.fn(async (_: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ message: 3 }) : Response.json(inChannel()));
  vi.stubGlobal('fetch', asks);
- const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel() } }));
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel(), person: 'p-me' } }));
  await userEvent.type(screen.getByRole('textbox', { name: 'Write your message in the channel' }), 'Morning, team{Enter}');
  await expect.poll(() => asks.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
  const posted = JSON.parse(String(asks.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body));
@@ -295,7 +297,7 @@ test('a channel message\'s files are the channel\'s file links under its bubble,
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
  const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel({ messages: [
   { id: 1, author: 'person', mine: false, name: 'Sara Adel', role: 'manager', body: '', at, files: [{ id: 9, name: 'brief.png' }], mention: null },
- ] }) } }));
+ ] }), person: 'p-me' } }));
  const file = chatPanel(screen).getByRole('link', { name: 'Open brief.png' });
  await expect.element(file).toHaveAttribute('href', '/c/rs-learning/files/channel/9');
  await expect.element(file).toHaveTextContent('brief.png');
@@ -305,7 +307,7 @@ test('a channel message\'s files are the channel\'s file links under its bubble,
 test('a file chosen in the channel\'s Card goes with the message, as the channel page sends it', async () => {
  const asks = vi.fn(async (_: string, init?: RequestInit) => init?.method === 'POST' ? Response.json({ message: 3 }) : Response.json(inChannel()));
  vi.stubGlobal('fetch', asks);
- const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel() } }));
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel(), person: 'p-me' } }));
  const input = document.querySelector<HTMLInputElement>('input[type=file]')!;
  const carried = new DataTransfer();
  carried.items.add(new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'cover.png', { type: 'image/png' }));
@@ -322,9 +324,36 @@ test('a file chosen in the channel\'s Card goes with the message, as the channel
  expect([...form.getAll('files')].map(file => (file as File).name)).toEqual(['cover.png']);
 });
 
+// #700: the channel in a Card's sheet calls as its own page does. Its @ list holds the channel's Agents and its other
+// Members, never an Agent of the Company outside the channel; the @-named Agent listens while the person writes, and
+// stops once the field is empty.
+const Listening = ({ agent }: { agent: string }) => <output data-testid={`listens-${agent}`}>{String(useChatKnows(agent).listening)}</output>;
+test('the channel in a Card\'s sheet suggests the channel\'s own Agents and Members, and the @-named Agent listens while the person writes', async () => {
+ vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+ const record = inChannel({
+  members: [{ person: 'p-me', name: 'Omar Abdo', role: 'owner', invitation: null, email: null }, { person: 'p-sara', name: 'Sara Adel', role: 'manager', invitation: null, email: null }],
+  agents: [{ id: 'a-ads', connection_id: 'c-1', name: 'Ads', speciality: 'Runs the ads', main: false, only: false, state: 'idle' }],
+ });
+ const screen = await render(<LanguageProvider language="en"><CallableAgentsProvider agents={[{ id: 'a-ads', connection_id: 'c-1', name: 'Ads' }, { id: 'a-writer', connection_id: 'c-2', name: 'Writer' }]}>
+  <CardSheet slug="rs-learning" company="co-1" title="Launch post" face={null} who={<bdi>Ads</bdi>} badge={<span className="badge">Ideas</span>} sheet={sheet({ chat: { kind: 'channel', record, person: 'p-me' } })} canWrite alone={false} send={sent}/>
+  <Listening agent="a-ads"/><Listening agent="a-writer"/>
+ </CallableAgentsProvider></LanguageProvider>);
+ const field = screen.getByRole('textbox', { name: 'Write your message in the channel' });
+ await userEvent.type(field, '@');
+ const options = () => [...document.querySelectorAll('[role="option"] .menu__t')].map(option => option.firstChild?.textContent);
+ await expect.poll(options).toEqual(expect.arrayContaining(['Ads', 'Sara Adel']));
+ expect(options()).not.toContain('Writer');
+ expect(options()).not.toContain('Omar Abdo');
+ await userEvent.type(field, 'Ads plan the week');
+ await expect.element(screen.getByTestId('listens-a-ads')).toHaveTextContent('true');
+ await expect.element(screen.getByTestId('listens-a-writer')).toHaveTextContent('false');
+ await userEvent.clear(field);
+ await expect.element(screen.getByTestId('listens-a-ads')).toHaveTextContent('false');
+});
+
 test('a Viewer in the channel reads its Card under Chat with no composer', async () => {
  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
- const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel({ writer: false }) } }));
+ const screen = await show(sheet({ chat: { kind: 'channel', record: inChannel({ writer: false }), person: 'p-me' } }));
  await expect.element(chatPanel(screen).getByText('Morning all')).toBeVisible();
  await expect.element(screen.getByRole('textbox')).not.toBeInTheDocument();
  await expect.element(screen.getByText('Your account is view-only: you can read everything you’re allowed to, without writing, approving or changing anything.')).toBeVisible();

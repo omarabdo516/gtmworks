@@ -12,7 +12,7 @@ import { useLiveSteps } from '@/app/run-activity';
 import { channelRuns, useReportRuns } from '@/lib/live-runs';
 import { MessageBox, newId, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { ConversationComposer, ConversationTurns, useConversationRecord } from '@/app/conversation-thread';
-import { firstName, type ChannelRecord } from '@/lib/channels';
+import { channelCallable, firstName, type ChannelRecord } from '@/lib/channels';
 import { named } from '@/lib/bidi';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import '@/app/channel.css';
@@ -28,7 +28,7 @@ export type SheetChat=
  | {kind:'none'}
  | {kind:'empty',agent:SheetAgent}
  | {kind:'theirs',agent:SheetAgent,person:string}
- | {kind:'channel',record:ChannelRecord}
+ | {kind:'channel',record:ChannelRecord,person:string}
  | {kind:'channel-locked',name:string}
  | {kind:'own',record:ConversationRecord};
 // design-reference: openSheet. Another Member's chat opens the Card on its Log, as do a Card with nothing to chat about
@@ -46,7 +46,7 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
  const [started,setStarted]=useState<ConversationRecord|null>(null); const [id]=useState(newId);
  const record=chat.kind==='own'?chat.record:started;
  if(record) return <SheetThread key={record.conversation.id} slug={slug} company={company} initial={record} writer={writer} shown={shown}/>;
- if(chat.kind==='channel') return <SheetChannel slug={slug} channel={chat.record} company={company} shown={shown}/>;
+ if(chat.kind==='channel') return <SheetChannel slug={slug} channel={chat.record} person={chat.person} company={company} shown={shown}/>;
  if(chat.kind==='theirs') return <>
   <div {...panel}><div className="transcript__col"><div className="empty-chat priv-sheet">
    <span className="priv-sheet__ic" aria-hidden="true"><ShellIcon name="lock"/></span>
@@ -108,7 +108,7 @@ function SheetThread({slug,company,initial,writer,shown}:{slug:string,company:st
 // own send when they may write. It stays on the newest message while they are there and asks again while it is open, so
 // an Agent's reply lands without a reload. A Viewer in the channel reads it with the view-only line. A message's files are
 // the channel page's file links (#156), under its bubble, so an attachment-only message is no empty bubble.
-function SheetChannel({slug,channel,company,shown}:{slug:string,channel:ChannelRecord,company:string,shown:boolean}) {
+function SheetChannel({slug,channel,person,company,shown}:{slug:string,channel:ChannelRecord,person:string,company:string,shown:boolean}) {
  const {t,language}=useI18n(); const own:Record<string,string>=language==='ar'?channelAr:channelEn;
  const c:Say=(key,...values)=>own[key].replace(/\{(\d+)\}/g,(_,index)=>String(values[Number(index)] ?? ''));
  const [record,setRecord]=useState(channel); const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
@@ -141,7 +141,7 @@ function SheetChannel({slug,channel,company,shown}:{slug:string,channel:ChannelR
       {!!message.files.length&&<div className="msg-files">{message.files.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}</li>)}
    </ol></div>
   </div>
-  <div className="composer-area">{writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} send={async(message,sendKey,files)=>{
+  <div className="composer-area">{writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={channelCallable(record,person)} send={async(message,sendKey,files)=>{
     const fields={company,channel:id,message,sendKey};
     const failure=files.length?await postMessageWithFiles(fields,files,'/api/channels'):await postMessage(fields,'/api/channels');
     if(!failure) await read();

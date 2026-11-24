@@ -1,6 +1,8 @@
 -- Agents' looks (#696, ADR 0027): every Member reads the Company's looks under row-level security, nobody writes the
 -- table by hand, every Agent has one, only an Owner changes one through its function, and only the worker gives Lead's
 -- temperament.
+-- A ready-made role's look (#697) a Member reads through ready_made_looks only, its Company's alone, and the automatic
+-- choice stays inside the database.
 select json_build_object(
  'looks_rls',(select relrowsecurity from pg_class where oid='public.agent_looks'::regclass),
  'looks_members_read',has_table_privilege('authenticated','public.agent_looks','select')
@@ -26,5 +28,12 @@ select json_build_object(
   and not has_function_privilege('anon','public.lead_agent_temperament(uuid,text,text,text)','execute'),
  'give_inside_only',not has_function_privilege('authenticated','public.give_agent_look(uuid,uuid,boolean,text,bigint)','execute')
   and not has_function_privilege('service_role','public.give_agent_look(uuid,uuid,boolean,text,bigint)','execute'),
- 'request_given_its_look',position('give_agent_look' in pg_get_functiondef('public.lead_request_agent(uuid,text,text,text,text,text[],text,text)'::regprocedure))>0
+ 'request_given_its_look',position('give_agent_look' in pg_get_functiondef('public.lead_request_agent(uuid,text,text,text,text,text[],text,text)'::regprocedure))>0,
+ 'preview_signed_in_only',has_function_privilege('authenticated','public.ready_made_looks(uuid,text[])','execute')
+  and not has_function_privilege('anon','public.ready_made_looks(uuid,text[])','execute'),
+ 'preview_members_only',(select prosecdef and proconfig @> array['search_path=""'] and position('is_member(c)' in pg_get_functiondef(oid))>0
+  from pg_proc where oid='public.ready_made_looks(uuid,text[])'::regprocedure),
+ 'auto_inside_only',not has_function_privilege('authenticated','public.agent_look_auto(uuid,text)','execute')
+  and not has_function_privilege('service_role','public.agent_look_auto(uuid,text)','execute'),
+ 'given_by_the_same_choice',position('agent_look_auto' in pg_get_functiondef('public.give_agent_look(uuid,uuid,boolean,text,bigint)'::regprocedure))>0
 );

@@ -3,6 +3,7 @@ import { render } from 'vitest-browser-react';
 import { cdp, userEvent } from 'vitest/browser';
 import type {} from '@vitest/browser-playwright';
 import { AgentFace } from '@/components/agent-face';
+import { sampleFace } from '@/components/face-life';
 import { LooksProvider } from '@/lib/agent-looks-client';
 import type { CompanyLooks } from '@/lib/agent-looks';
 import '@/app/globals.css';
@@ -130,4 +131,17 @@ test('turning reduced motion on stops a moment that plays', async () => {
  await reducedMotion(true);
  await expect.poll(() => faceIn('button').querySelector('.f-act')!.getAnimations()).toHaveLength(0);
  expect(hopping(faceIn('button'))).toBe(false);
+});
+
+test('turning reduced motion on stops a glance that plays: the eyes come back and look nowhere after', async () => {
+ vi.spyOn(Math, 'random').mockReturnValue(0);
+ await render(<Company><span id="neat"><AgentFace agent="b" size={56}/></span></Company>);
+ const gx = () => getComputedStyle(faceIn('#neat').querySelector('.f-eyes')!).getPropertyValue('--gx');
+ // Neat looks one way and then the other (design-reference-orb: precise).
+ sampleFace(faceIn('#neat'));
+ await expect.poll(gx).toBe('-0.6');
+ await reducedMotion(true);
+ await expect.poll(gx).toBe('');
+ await wait(1500);
+ expect(gx(), 'the glance\'s next look never comes').toBe('');
 });

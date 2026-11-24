@@ -87,14 +87,15 @@ export function ActivityLine({view,agent,face,c,cb}:{view:LiveView,agent:string,
  </p>;
 }
 
-// The Agent's turn while it works: its sender line and the steps it finished so far, in the list the reply will carry,
-// open as the person left it for this Run (`open`, `toggled`).
-export function LiveTurn({view,agent,face,c,cb,open,toggled}:{view:LiveView,agent:string,face:string,c:StepsText,cb:StepsBidiText,open:boolean,toggled:(open:boolean)=>void}) {
- // Its face is 24px and alive, in the state the chat's head and the sidebar show (#700); past replies are 20px and still.
+// The Agent's turn while it works, from the moment the person sent (#694): its sender line, and once a step ended the
+// steps it finished so far (`view`, null until the Run's live read answers), in the list the reply will carry, open as
+// the person left it for this Run (`open`, `toggled`).
+export function LiveTurn({view,agent,face,c,cb,open,toggled}:{view:LiveView|null,agent:string,face:string,c:StepsText,cb:StepsBidiText,open:boolean,toggled:(open:boolean)=>void}) {
+ // Its face is 24px and alive, in the state the chat's head and the sidebar show (#700): thinking until the Run's first
+ // step, working after it. Past replies are 20px and still.
  const state=useAgentState(face,'working');
- if(!view.steps.length) return null;
  return <li className="turn turn--agent msg" data-author="agent" data-live>
   <div className="sender"><span aria-hidden="true"><AgentFace agent={face} size={24} state={state} live/></span><bdi>{agent}</bdi></div>
-  <StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} opened={open} toggled={toggled}/>
+  {!!view?.steps.length&&<StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} opened={open} toggled={toggled}/>}
  </li>;
 }

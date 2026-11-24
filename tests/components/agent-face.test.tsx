@@ -106,6 +106,15 @@ test('the face shows its state, and a Run open in the Conversation being read sh
  await expect.poll(shown).toEqual({ state: 'idle', dot: 'dot dot--idle' });
 });
 
+test('leaving the Conversation mid-Run forgets the Run: no done marks a Run nobody saw end', async () => {
+ const screen = await render(<Company><Reading agent="lead" open/><AgentFace agent="lead" size={56} live/></Company>);
+ await expect.poll(() => faceOf('lead', 1).dataset.state).toBe('thinking');
+ await screen.rerender(<Company><AgentFace agent="lead" size={56} live/></Company>);
+ await expect.poll(() => faceOf('lead').dataset.state).toBe('idle');
+ await new Promise(resolve => setTimeout(resolve, 100));
+ expect(faceOf('lead').dataset.state).toBe('idle');
+});
+
 test('with reduced motion nothing moves, and the expression still changes', async () => {
  await reducedMotion(true);
  const screen = await render(<Company><AgentFace agent="ads" size={56} dot/></Company>);

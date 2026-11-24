@@ -102,6 +102,12 @@ test('sent, it thinks until its Run\'s first step, works after it, and is done w
  await userEvent.keyboard('{Enter}');
  await expect.poll(both).toEqual({ head: 'thinking', tile: 'thinking' });
  await expect.poll(() => field().value).toBe('');
+ // The reply being worked on shows from the start (#694: 24px and moving), thinking before its Run's first step.
+ await expect.poll(() => reply()?.dataset.state).toBe('thinking');
+ expect(reply()!.classList.contains('face--live')).toBe(true);
+ expect(reply()!.getBoundingClientRect().width).toBe(24);
+ fake.step({ run: 'run_1', steps: [], now: null });
+ await expect.poll(() => reply()?.dataset.state).toBe('thinking');
  fake.step({ run: 'run_1', steps: [], now: { tool: 'meta_ads', preview: null } });
  await expect.poll(both).toEqual({ head: 'working', tile: 'working' });
  fake.step({ run: 'run_1', steps: [{ tool: 'meta_ads', preview: null, state: 'done' }], now: null });
@@ -195,7 +201,7 @@ test('a channel opened in a Card\'s sheet shows its called Agent thinking, worki
  const answered: ChannelRecord = { ...open, open: false, messages: [{ ...message, mention: { ...message.mention!, state: 'answered' } },
   { id: 3, author: 'agent', name: 'Ads', face: 'ads', body: 'Planned.', at } as ChannelMessage] };
  const fake = server({ shared: { ads: 'working' }, channel: [open] });
- await render(<Sidebar states={{ ads: 'working' }}><CardSheetChat slug="rs" company="co-1" card={4} chat={{ kind: 'channel', record: open }} writer shown openLog={() => {}}/></Sidebar>);
+ await render(<Sidebar states={{ ads: 'working' }}><CardSheetChat slug="rs" company="co-1" card={4} chat={{ kind: 'channel', record: open, person: 'p-me' }} writer shown openLog={() => {}}/></Sidebar>);
  await expect.poll(() => tile()).toBe('thinking');
  fake.step({ run: 'run_9', steps: [], now: { tool: 'meta_ads', preview: null } });
  await expect.poll(() => tile()).toBe('working');

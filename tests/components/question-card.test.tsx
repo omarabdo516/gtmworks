@@ -354,8 +354,9 @@ test('in the chat, a pick posts the answer, the record is read again, and the pi
  expect(calls.mock.calls.filter(([, init]) => init?.method !== 'POST')).toHaveLength(1);
  await expect.poll(() => document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')?.textContent).toContain(angles[0]);
  expect(document.querySelector<HTMLElement>('.turns > li[data-kind="answer"]')?.dataset.author).toBe('person');
- const order = [...document.querySelectorAll('.turns > li')].map(item => (item as HTMLElement).dataset.kind ?? 'message');
- expect(order).toEqual(['message', 'asked', 'answer']);
+ // The Agent's reply being worked on, now the answer sends its Run on, comes after them (#694).
+ const order = [...document.querySelectorAll('.turns > li')].map(item => (item as HTMLElement).dataset.live === undefined ? (item as HTMLElement).dataset.kind ?? 'message' : 'live');
+ expect(order).toEqual(['message', 'asked', 'answer', 'live']);
  await expect.element(screen.getByRole('group', { name: `${open.question}: Answered` })).toBeVisible();
 });
 

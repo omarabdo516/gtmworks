@@ -1,8 +1,8 @@
 -- #699 (spec #694, decision 0067): one read answers, for the reader, the state of every Agent they see: waiting on them,
 -- working on anything, stuck, asleep or idle, in that order, with what the face needs beside it.
---  working  any open Run of the Agent: a Conversation's, a channel's, a Card note's, a Handover leg's, whoever started it.
---           Nothing else of it is told. A Routine has no open record in the database (the Engine runs it and the worker
---           keeps only its end, routine_results), so a running Routine is not working here; its end is work for asleep.
+--  working  any open Run of the Agent: a Conversation's, a channel's, a Card note's, a Handover leg's, whoever started it,
+--           and a Routine the worker saw the Engine running in the last two minutes (routine_runs_open). Nothing else of
+--           it is told. A channel message's Agents go one after another (#152): one whose turn waits is not working yet.
 --  waiting  anything of the Agent's in the reader's own "Waiting on you" (waiting_list, read as the reader), which holds
 --           the questions and permissions open in their own Conversations and in the channels they are in.
 --  stuck    the last ended Run the reader can see failed (any outcome but completed or stopped), within the last 24 hours,
@@ -10,8 +10,8 @@
 --           its place since (see_agent_failure, kept per person).
 --  asleep   no work of any kind for 7 days, the Agent made over 7 days ago, and the reader has not opened its chat in
 --           those 7 days (wake_agent, kept per person in the database, so it holds on every device).
--- Additive, for the previous release: agent_states(uuid) keeps its shape and meaning until its readers move here; one
--- table, indexes and the functions below are new.
+-- Additive, for the previous release: agent_states(uuid) keeps its shape and meaning until its readers move here; two
+-- tables, indexes and the functions below are new; the previous release's worker keeps nothing in routine_runs_open.
 
 -- What each person has done that changes an Agent's state for them alone: since when they have seen where it last
 -- failed, and when they last opened its chat. Removed with the Agent or the person.
@@ -34,6 +34,47 @@ create index note_runs_agent on public.note_runs(company_id, agent_id, created_a
 create index agent_handovers_to_agent on public.agent_handovers(to_agent);
 create index agent_handovers_from_agent on public.agent_handovers(from_agent);
 create index routine_results_agent on public.routine_results(agent_id, ended_at desc);
+
+-- Which Routines of each Agent's profile the Engine runs now. The Engine schedules and runs a Routine and gtmworks keeps
+-- no copy of it (ADR 0016); the worker reads, on each pass of its own loop (lib/routine-runs.mjs, every 15 seconds), the
+-- runs the Engine lists as active and keeps that whole set here for the profile: a Routine that ended is gone on the next
+-- pass, and its end is kept in routine_results as before. A row is the Agent's work only while the worker saw it in the
+-- last two minutes, so a worker that crashed or an Engine that went away leaves the Agent working two minutes at most;
+-- the worker counts no run the Engine still lists as active hours after it started, so a run the Engine lost never holds it.
+create table public.routine_runs_open (
+ company_id uuid not null references public.companies(id) on delete cascade,
+ agent_id uuid not null references public.hermes_agents(id) on delete cascade,
+ profile text not null check (profile ~ '^(co|ag)-[0-9a-f]{32}$'),
+ routine_id text not null check (routine_id ~ '^[0-9a-f]{6,64}$'),
+ started_at timestamptz not null,
+ seen_at timestamptz not null default now(),
+ primary key (company_id, profile, routine_id)
+);
+create index routine_runs_open_agent on public.routine_runs_open(company_id, agent_id, seen_at desc);
+-- The worker alone writes it, through keep_running_routines; agent_run_facts reads it. No Member reads it.
+alter table public.routine_runs_open enable row level security;
+revoke all on public.routine_runs_open from anon, authenticated, service_role;
+
+-- One pass's set for one profile: the Routines the Engine runs now on it, each with its run's start, for the Agent the
+-- worker reads that profile for (an Agent of the Company on that very profile, or nothing is kept). What the set leaves
+-- out has ended and goes. Answers how many it holds now.
+create function public.keep_running_routines(c uuid, at_profile text, agent uuid, running jsonb) returns integer
+language plpgsql security definer set search_path='' as $$
+declare held integer;
+begin
+ if running is null or jsonb_typeof(running)<>'array' or jsonb_array_length(running)>500 then raise exception 'runningRoutinesInvalid' using errcode='22023'; end if;
+ if not exists(select 1 from public.hermes_agents a where a.id=agent and a.company_id=c and a.profile=at_profile) then return 0; end if;
+ delete from public.routine_runs_open r where r.company_id=c and r.profile=at_profile
+  and not exists(select 1 from jsonb_array_elements(running) x where x->>'routine_id'=r.routine_id);
+ insert into public.routine_runs_open(company_id,agent_id,profile,routine_id,started_at,seen_at)
+  select distinct on (x->>'routine_id') c,agent,at_profile,x->>'routine_id',(x->>'started_at')::timestamptz,now()
+  from jsonb_array_elements(running) x
+  on conflict (company_id,profile,routine_id) do update set agent_id=excluded.agent_id,started_at=excluded.started_at,seen_at=excluded.seen_at;
+ select count(*)::int into held from public.routine_runs_open r where r.company_id=c and r.profile=at_profile;
+ return held;
+end $$;
+revoke all on function public.keep_running_routines(uuid,text,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.keep_running_routines(uuid,text,uuid,jsonb) to service_role;
 
 -- The Runs of an Agent, as facts for the state: whether one is open, when its newest work started and when it last
 -- worked at all, and the reader's own last ended Run they can see, with its place and outcome. Security definer, for
@@ -79,6 +120,7 @@ language sql stable security definer set search_path='' as $$
   union all select max(n.created_at) from public.note_runs n where n.company_id=c and n.agent_id=agent
   union all select max(greatest(h.created_at, h.return_started_at, h.answer_started_at)) from public.agent_handovers h
    where h.company_id=c and (h.to_agent=agent or h.from_agent=agent)
+  union all select max(r.started_at) from public.routine_runs_open r where r.company_id=c and r.agent_id=agent
  ),
  ends as (
   select max(e.recorded_at) at from chats cv join public.conversation_run_ends e on e.conversation_id=cv.id
@@ -90,10 +132,14 @@ language sql stable security definer set search_path='' as $$
  )
  select
   exists(select 1 from chats cv cross join lateral public.conversation_open_run(cv.id))
-   or exists(select 1 from public.channel_runs r where r.company_id=c and r.agent_id=agent and r.outcome is null)
+   -- A channel message's Agents go one after another (#152): an Agent whose turn waits behind an earlier open one is
+   -- not working yet.
+   or exists(select 1 from public.channel_runs r where r.company_id=c and r.agent_id=agent and r.outcome is null
+    and not exists(select 1 from public.channel_runs q where q.message_id=r.message_id and q.outcome is null and q.ordinal<r.ordinal))
    or exists(select 1 from public.note_runs n where n.company_id=c and n.agent_id=agent and n.outcome is null)
    or exists(select 1 from public.agent_handovers h where h.company_id=c
-    and (h.to_agent=agent and h.state in ('waiting','target') or h.from_agent=agent and h.state in ('returning','follow_up'))),
+    and (h.to_agent=agent and h.state in ('waiting','target') or h.from_agent=agent and h.state in ('returning','follow_up')))
+   or exists(select 1 from public.routine_runs_open r where r.company_id=c and r.agent_id=agent and r.seen_at > now() - interval '2 minutes'),
   (select max(at) from starts),
   greatest((select max(at) from starts), (select max(at) from ends)),
   l.at, l.outcome, l.conversation, l.channel, l.card,

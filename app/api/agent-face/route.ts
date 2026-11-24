@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
+import { uuid } from '@/lib/conversations';
 import { seeAgentFailure, wakeAgent, type FailurePlace } from '@/lib/agent-face-states';
 
 // The reader opened a place or an Agent's chat (#699; app/sidebar-live OpenedHere): a failure of an Agent in that
 // Conversation, channel or Card is seen by them (see_agent_failure), and the Agent whose chat they opened wakes for them
 // (wake_agent). The page tells it once it has mounted; server rendering and link prefetch never call this. Both
 // functions run as the reader and answer only for what they see. `changed` says whether a face may look different now.
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const placeOf=(value:unknown):FailurePlace|null|undefined=>{
  if(value===undefined) return null;
@@ -26,9 +26,13 @@ export async function POST(request:NextRequest) {
  const body=await request.json().catch(()=>null) as {company?:unknown,agent?:unknown,place?:unknown}|null;
  const place=placeOf(body?.place);
  const agent=body?.agent;
- if(typeof body?.company!=='string'||!uuid.test(body.company)||place===undefined||(agent!==undefined&&(typeof agent!=='string'||!uuid.test(agent)))||(!place&&agent===undefined)) return reply({error:'Invalid request'},400);
- if(!await routeAllowed(db,'app/api/agent-face/route.ts','POST',body.company,user.id)) return reply({error:'Not allowed'},403);
- const [woke,seen]=await Promise.all([typeof agent==='string'?wakeAgent(db,body.company,agent):false,place?seeAgentFailure(db,body.company,place):0]);
+ // A Company, and at least one of a place (a failure seen there) and an Agent (its chat opened), each well formed.
+ const company=typeof body?.company==='string'&&uuid.test(body.company)?body.company:null;
+ const agentWell=agent===undefined||typeof agent==='string'&&uuid.test(agent);
+ const askedSomething=!!place||agent!==undefined;
+ if(!company||place===undefined||!agentWell||!askedSomething) return reply({error:'Invalid request'},400);
+ if(!await routeAllowed(db,'app/api/agent-face/route.ts','POST',company,user.id)) return reply({error:'Not allowed'},403);
+ const [woke,seen]=await Promise.all([typeof agent==='string'?wakeAgent(db,company,agent):false,place?seeAgentFailure(db,company,place):0]);
  if(seen===null) return reply({error:'Could not record it'},500);
  return reply({changed:woke||seen>0});
 }

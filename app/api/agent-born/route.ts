@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
+import { uuid } from '@/lib/conversations';
 
 // A made Agent is born once for the person who asked for it (#701): its card and its sidebar tile ask after they have
 // mounted, and the database answers true only for the first call from that Agent's requester (mark_agent_born). A
 // reload, another device or another Member is answered false, so the birth plays once. The Company is the Agent's own,
 // as this reader may read it.
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 export async function POST(request:NextRequest) {
  const db=await supabase(); const {data:{user}}=await db.auth.getUser();

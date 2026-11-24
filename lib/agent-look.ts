@@ -1,9 +1,11 @@
 // An Agent's look, as the approved orb draws it (design-reference-orb/agent-orb-v2.html: SHAPE_D, EYE_AT, PRESETS,
 // TEMPERS; ADR 0027; GLOSSARY: Look, Temperament). The keys are the ones public.agent_looks keeps (#696); a look is
-// never computed from a name or an id at drawing time.
-export type LookShape='circle'|'squircle'|'blob';
-type LookColour='indigo'|'violet'|'sky'|'teal'|'jade'|'rose'|'dusk'|'slate';
-export type Temperament='calm'|'energetic'|'warm'|'dreamy'|'neat'|'caring';
+// never computed from a name or an id at drawing time. The values of each part are lib/agent-look-words' lists.
+import type { lookChoices } from './agent-look-words.mjs';
+
+export type LookShape=typeof lookChoices.shape[number];
+type LookColour=typeof lookChoices.colour[number];
+export type Temperament=typeof lookChoices.temperament[number];
 export type AgentLook={shape:LookShape,colour:LookColour,temperament:Temperament};
 
 // The three outlines, in a 100 by 100 box: the rim draws them, and the squircle and the blob mask the body with them
@@ -28,20 +30,27 @@ const lookColours:Record<LookColour,readonly [string,string,string,string]>={
  slate:['#6E7C94','#4D586B','#2E3548','#191E2B'],
 };
 
-// A temperament is a handful of numbers. eye: width, height and half the gap as parts of the size, the eyes' centre
-// from the top in %, corner radius, tilt, and a resting lid (dreamy) or an outer droop (caring) in %, a resting look up
-// (dreamy). Breath: its period (s), swell, lift, sway (deg); energetic
-// bounces instead (app/face.css). flk: how strongly the inner colour shows (the build holds it still, #697). Glance:
-// seconds between looks, how it looks, how fast the eyes move (ms). pres: how strongly its glow and inner light show.
+// A temperament is a handful of numbers (agent-orb-v2.html TEMPERS). eye: width, height and half the gap between the
+// eyes as parts of the size, the eyes' centre from the top in %, corner radius, tilt (deg), and a resting lid (dreamy) or
+// an outer droop (caring) in %, and a resting look up (dreamy). breath: its period (s), swell, lift, sway (deg);
+// energetic bounces instead (app/face.css). innerColour: how strongly the inner colour shows (the build holds it still,
+// #697). glance: seconds between looks, how it looks, how fast the eyes move (ms). presence: how strongly its glow and
+// inner light show.
 type Glance='steady'|'dart'|'soft'|'up'|'precise'|'nod';
-export type TemperamentNumbers={eye:{w:number,h:number,g:number,y:number,r:string,t:number,lid?:number,up?:number,droop?:number},br:number,ba:number,bb:number,sw:number,flk:number,glance:number,gs:Glance,gd:number,pres:number};
+export type TemperamentNumbers={
+ eye:{width:number,height:number,gap:number,top:number,radius:string,tilt:number,lid?:number,lookUp?:number,droop?:number},
+ breath:{seconds:number,swell:number,lift:number,sway:number},
+ innerColour:number,
+ glance:{seconds:number,style:Glance,eyeMs:number},
+ presence:number,
+};
 export const temperaments:Record<Temperament,TemperamentNumbers>={
- calm:{eye:{w:.1,h:.225,g:.19,y:42,r:'999px',t:0},br:6,ba:.018,bb:.012,sw:0,flk:.5,glance:9,gs:'steady',gd:620,pres:1.22},
- energetic:{eye:{w:.086,h:.21,g:.165,y:39,r:'999px',t:-4},br:2.4,ba:.022,bb:.045,sw:0,flk:.6,glance:2.8,gs:'dart',gd:110,pres:1},
- warm:{eye:{w:.14,h:.15,g:.2,y:45,r:'999px',t:0},br:4.4,ba:.024,bb:.016,sw:3.5,flk:.55,glance:5,gs:'soft',gd:380,pres:1},
- dreamy:{eye:{w:.112,h:.19,g:.19,y:43,r:'999px',t:0,lid:20,up:-.28},br:5.2,ba:.02,bb:.022,sw:1.5,flk:.95,glance:6,gs:'up',gd:950,pres:1},
- neat:{eye:{w:.118,h:.14,g:.18,y:42,r:'28%',t:0},br:3.6,ba:.01,bb:.006,sw:0,flk:.45,glance:4,gs:'precise',gd:140,pres:1},
- caring:{eye:{w:.122,h:.155,g:.172,y:46,r:'999px',t:6,droop:10},br:5.4,ba:.02,bb:.012,sw:0,flk:.5,glance:7,gs:'nod',gd:620,pres:1},
+ calm:{eye:{width:.1,height:.225,gap:.19,top:42,radius:'999px',tilt:0},breath:{seconds:6,swell:.018,lift:.012,sway:0},innerColour:.5,glance:{seconds:9,style:'steady',eyeMs:620},presence:1.22},
+ energetic:{eye:{width:.086,height:.21,gap:.165,top:39,radius:'999px',tilt:-4},breath:{seconds:2.4,swell:.022,lift:.045,sway:0},innerColour:.6,glance:{seconds:2.8,style:'dart',eyeMs:110},presence:1},
+ warm:{eye:{width:.14,height:.15,gap:.2,top:45,radius:'999px',tilt:0},breath:{seconds:4.4,swell:.024,lift:.016,sway:3.5},innerColour:.55,glance:{seconds:5,style:'soft',eyeMs:380},presence:1},
+ dreamy:{eye:{width:.112,height:.19,gap:.19,top:43,radius:'999px',tilt:0,lid:20,lookUp:-.28},breath:{seconds:5.2,swell:.02,lift:.022,sway:1.5},innerColour:.95,glance:{seconds:6,style:'up',eyeMs:950},presence:1},
+ neat:{eye:{width:.118,height:.14,gap:.18,top:42,radius:'28%',tilt:0},breath:{seconds:3.6,swell:.01,lift:.006,sway:0},innerColour:.45,glance:{seconds:4,style:'precise',eyeMs:140},presence:1},
+ caring:{eye:{width:.122,height:.155,gap:.172,top:46,radius:'999px',tilt:6,droop:10},breath:{seconds:5.4,swell:.02,lift:.012,sway:0},innerColour:.5,glance:{seconds:7,style:'nod',eyeMs:620},presence:1},
 };
 
 // A face whose Agent has no look in hand yet (a record read before its look, a page with no looks) is drawn plain:
@@ -55,8 +64,8 @@ export function lookStyle(look:AgentLook):Record<string,string|number> {
  const top=(outer:boolean)=>lid?lid:droop?(outer?droop:0):-40;
  return {
   '--c1':c1,'--c2':c2,'--c3':c3,'--c4':c4,
-  '--eW':eye.w,'--eH':eye.h,'--eG':eye.g,'--eR':eye.r,'--eT':`${eye.t}deg`,'--eX':`${at.x}%`,'--eYp':`${eye.y+at.dy}%`,
-  '--br':`${t.br}s`,'--ba':t.ba,'--bb':t.bb,'--sw':t.sw,'--flk':t.flk,'--gd':`${t.gd}ms`,'--pres':t.pres,'--sy0':eye.up||0,
+  '--eW':eye.width,'--eH':eye.height,'--eG':eye.gap,'--eR':eye.radius,'--eT':`${eye.tilt}deg`,'--eX':`${at.x}%`,'--eYp':`${eye.top+at.dy}%`,
+  '--br':`${t.breath.seconds}s`,'--ba':t.breath.swell,'--bb':t.breath.lift,'--sw':t.breath.sway,'--flk':t.innerColour,'--gd':`${t.glance.eyeMs}ms`,'--pres':t.presence,'--sy0':eye.lookUp||0,
   '--clL0':`polygon(-40% ${top(true)}%, 140% ${top(false)}%, 140% 140%, -40% 140%)`,
   '--clR0':`polygon(-40% ${top(false)}%, 140% ${top(true)}%, 140% 140%, -40% 140%)`,
  };

@@ -12,7 +12,7 @@ export type FaceState='idle'|'listening'|'thinking'|'working'|'done'|'waiting'|'
 export type Moment='press'|'done'|'greet'|'perk'|'nod'|'birth';
 
 type Keyframes=Keyframe[];
-type Face=HTMLElement&{_nb?:number,_ng?:number,_busy?:boolean,_lx?:string,_ly?:string,_tm?:number[],_an?:Animation[]};
+type Face=HTMLElement&{_nb?:number,_ng?:number,_busy?:boolean,_lx?:string,_ly?:string,_tm?:number[],_gt?:number[],_an?:Animation[]};
 const momentsOf:Record<Exclude<Moment,'birth'>,{dur:number,easing:string,act:Keyframes,shadow?:Keyframes,spark?:boolean,cls:[string,number,number][]}>={
  press:{dur:620,easing:'cubic-bezier(.3,0,.3,1)',
   act:[{transform:'none'},{transform:'translateY(6%) scale(1.14,.84)',offset:.16},{transform:'translateY(-16%) scale(.92,1.1)',offset:.46},{transform:'translateY(0) scale(1.08,.92)',offset:.7},{transform:'translateY(0) scale(.98,1.02)',offset:.86},{transform:'none'}],
@@ -111,18 +111,23 @@ function ungaze(face:Face) { const eyes=eyesOf(face); eyes?.style.removeProperty
 function blink(face:Face) {
  face.querySelectorAll('.f-eye').forEach(eye=>eye.animate([{transform:'scaleY(1)'},{transform:'scaleY(.08)',offset:.45},{transform:'scaleY(1)'}],{duration:150,easing:'ease-in-out'}));
 }
-const blinkGap=(numbers:TemperamentNumbers)=>numbers.gs==='precise'?4000:numbers.gs==='dart'?rand(1600,3400):numbers.gs==='steady'?rand(4200,7000):rand(2600,5600);
+const blinkGap=(numbers:TemperamentNumbers)=>numbers.glance.style==='precise'?4000:numbers.glance.style==='dart'?rand(1600,3400):numbers.glance.style==='steady'?rand(4200,7000):rand(2600,5600);
 function glance(face:Face,numbers:TemperamentNumbers) {
  const side=Math.random()<.5?-1:1;
  const steps:[number,number,number][]={
   steady:[[side*.55,.05,1700]], dart:[[side*.8,-.15,320],[-side*.8,.1,300]], soft:[[side*.5,.3,1300]],
   up:[[side*.35,-.95,2000]], precise:[[side*.6,0,700],[-side*.6,0,700]], nod:[[0,.45,1100]],
- }[numbers.gs] as [number,number,number][];
- if(numbers.gs==='nod') playMoment(face,'nod');
- face._busy=true;
+ }[numbers.glance.style] as [number,number,number][];
+ if(numbers.glance.style==='nod') playMoment(face,'nod');
+ face._busy=true; face._gt=[];
  let at=0;
- for(const [x,y,hold] of steps) { window.setTimeout(()=>{ if(face.dataset.state==='idle') gaze(face,x,y); },at); at+=hold+numbers.gd; }
- window.setTimeout(()=>{ ungaze(face); face._busy=false; },at);
+ for(const [x,y,hold] of steps) { face._gt.push(window.setTimeout(()=>{ if(face.dataset.state==='idle') gaze(face,x,y); },at)); at+=hold+numbers.glance.eyeMs; }
+ face._gt.push(window.setTimeout(()=>stopGlance(face),at));
+}
+// A glance ends, played out or stopped (reduced motion turned on, the face gone): its looks to come never do.
+function stopGlance(face:Face) {
+ (face._gt||[]).forEach(timer=>window.clearTimeout(timer)); face._gt=[];
+ ungaze(face); face._busy=false;
 }
 function tick() {
  if(reduced()||document.hidden) return;
@@ -131,13 +136,13 @@ function tick() {
   if(!face.isConnected) { visible.delete(face); continue; }
   const numbers=numbersOf(face), state=face.dataset.state||'idle';
   face._nb||=now+rand(600,4000);
-  face._ng||=now+rand(1200,numbers.glance*1000);
+  face._ng||=now+rand(1200,numbers.glance.seconds*1000);
   if(blinks.has(state)&&now>=face._nb) {
    blink(face); face._nb=now+blinkGap(numbers);
    // Warm: now and then a friendly double blink.
-   if(numbers.gs==='soft'&&Math.random()<.3) (face._tm??=[]).push(window.setTimeout(()=>{ if(!reduced()) blink(face); },260));
+   if(numbers.glance.style==='soft'&&Math.random()<.3) (face._tm??=[]).push(window.setTimeout(()=>{ if(!reduced()) blink(face); },260));
   }
-  if(state==='idle'&&!face._busy&&now>=face._ng) { glance(face,numbers); face._ng=now+numbers.glance*1000*rand(.7,1.4); }
+  if(state==='idle'&&!face._busy&&now>=face._ng) { glance(face,numbers); face._ng=now+numbers.glance.seconds*1000*rand(.7,1.4); }
  }
 }
 
@@ -227,7 +232,7 @@ function setUp() {
  window.addEventListener('click',press,true);
  // Back in view, the next blink and glance are counted again; turning reduced motion on stops what plays.
  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) visible.forEach(face=>{ face._nb=0; face._ng=0; }); });
- window.matchMedia(reducedQuery).addEventListener('change',query=>{ if(!query.matches) return; document.querySelectorAll<Face>('.face--live').forEach(face=>{ clearMoment(face); ungaze(face); }); queueLook(); });
+ window.matchMedia(reducedQuery).addEventListener('change',query=>{ if(!query.matches) return; document.querySelectorAll<Face>('.face--live').forEach(face=>{ clearMoment(face); stopGlance(face); }); queueLook(); });
  return observer;
 }
 
@@ -236,7 +241,7 @@ export function watchFace(face:HTMLElement) {
  const watching=setUp();
  watching.observe(face);
  if(hop) queueMicrotask(again);
- return ()=>{ watching.unobserve(face); visible.delete(face as Face); clearMoment(face as Face); };
+ return ()=>{ watching.unobserve(face); visible.delete(face as Face); clearMoment(face as Face); stopGlance(face as Face); };
 }
 
 // A temperament felt before it is picked (design-reference-orb/agent-look.html: sample): the face blinks and glances as
@@ -245,7 +250,7 @@ export function sampleFace(face:HTMLElement|null|undefined) {
  const target=face as Face|null|undefined;
  if(!target||!isLive(target)||reduced()||target._busy) return;
  const numbers=numbersOf(target);
- blink(target); glance(target,numbers); target._ng=performance.now()+numbers.glance*1000;
+ blink(target); glance(target,numbers); target._ng=performance.now()+numbers.glance.seconds*1000;
 }
 
 // A face's state changed: its paces follow, its eyes come back from a glance, and a face that is done hops and sparkles.

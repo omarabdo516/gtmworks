@@ -8,7 +8,9 @@
 -- last; its temperament is the one Lead gave for it (lead_agent_temperament), else its ready-made role's, else the one
 -- its Company's Agents use least. Shape starts as the circle. An Agent request is given its look when it is asked for,
 -- by the id the Agent it asks for will have (lead_agent_id), so the request's card and the made Agent have one face; a
--- waiting request's colour counts as used.
+-- waiting request's colour counts as used. A ready-made role's face in the gallery is the face the Agent gets (#697):
+-- the automatic colour and temperament are one function, agent_look_auto, which give_agent_look gives the made Agent and
+-- ready_made_looks shows a Member for each role before it is added.
 --
 -- Only adds (ADR 0023): two tables, a trigger on hermes_agents that gives each Agent made from here on its look (the
 -- previous release's calls included), and new functions; lead_request_agent keeps its
@@ -95,6 +97,19 @@ create function public.agent_look_in_use(look public.agent_looks) returns boolea
 $$;
 revoke all on function public.agent_look_in_use(public.agent_looks) from public,anon,authenticated,service_role;
 
+-- The colour the Company's Agents use least, indigo last, and the role's temperament, else the one they use least.
+create function public.agent_look_auto(c uuid, template text) returns table(colour text, temperament text)
+language sql stable security definer set search_path='' as $$
+ with used as (select l.colour,l.temperament from public.agent_looks l where l.company_id=c and public.agent_look_in_use(l))
+ select
+  (select o.k from unnest(public.agent_look_choices('colour')) with ordinality o(k,n)
+    order by (select count(*) from used u where u.colour=o.k),o.k='indigo',o.n limit 1),
+  coalesce(public.agent_role_temperament(template),
+   (select o.k from unnest(public.agent_look_choices('temperament')) with ordinality o(k,n)
+     order by (select count(*) from used u where u.temperament=o.k),o.n limit 1));
+$$;
+revoke all on function public.agent_look_auto(uuid,text) from public,anon,authenticated,service_role;
+
 -- Gives `agent` its look, once: an Agent or request that has one keeps it. Under the Company's look lock, so two Agents
 -- made at once wait for each other and never take one colour.
 create function public.give_agent_look(c uuid, agent uuid, main boolean, template text, request bigint default null) returns void
@@ -105,14 +120,8 @@ begin
  if exists(select 1 from public.agent_looks l where l.agent_id=agent) then return; end if;
  if main then hue:='indigo'; mood:='calm';
  else
-  with used as (select l.colour from public.agent_looks l where l.company_id=c and public.agent_look_in_use(l))
-  select o.k into hue from unnest(public.agent_look_choices('colour')) with ordinality o(k,n)
-   order by (select count(*) from used u where u.colour=o.k),o.k='indigo',o.n limit 1;
-  mood:=coalesce((select t.temperament from public.lead_agent_temperaments t where t.agent_id=agent and t.company_id=c),
-   public.agent_role_temperament(template),
-   (with used as (select l.temperament from public.agent_looks l where l.company_id=c and public.agent_look_in_use(l))
-    select o.k from unnest(public.agent_look_choices('temperament')) with ordinality o(k,n)
-    order by (select count(*) from used u where u.temperament=o.k),o.n limit 1));
+  select a.colour,coalesce((select t.temperament from public.lead_agent_temperaments t where t.agent_id=agent and t.company_id=c),a.temperament)
+   into hue,mood from public.agent_look_auto(c,template) a;
  end if;
  insert into public.agent_looks(agent_id,company_id,request_id,auto_shape,auto_colour,auto_temperament) values(agent,c,request,'circle',hue,mood);
 end $$;
@@ -172,6 +181,16 @@ begin
 end $$;
 revoke all on function public.reset_agent_look(uuid,uuid) from public,anon,service_role;
 grant execute on function public.reset_agent_look(uuid,uuid) to authenticated;
+
+-- The look each ready-made role would be made with now, for a Member of the Company (app/ready-made: the gallery). It
+-- tells no more than the looks every Member reads already.
+create function public.ready_made_looks(c uuid, templates text[]) returns table(template text, shape text, colour text, temperament text)
+language sql stable security definer set search_path='' as $$
+ select t.k,'circle',a.colour,a.temperament from unnest(templates) t(k) cross join lateral public.agent_look_auto(c,t.k) a
+ where public.is_member(c);
+$$;
+revoke all on function public.ready_made_looks(uuid,text[]) from public,anon,service_role;
+grant execute on function public.ready_made_looks(uuid,text[]) to authenticated;
 
 -- A request is given the look its Agent will be made with, as it is kept: lead_request_agent's current body (20261223000000,
 -- its log line moved by 20270213000000) with one line more, and its signature and answers as they were.

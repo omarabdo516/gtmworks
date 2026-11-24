@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShellIcon } from '@/components/shell-icon';
-import { AgentFace } from '@/components/agent-face';
 import { ArchiveConfirm } from '@/app/archive-confirm';
 import { archiveChannels } from '@/app/channel-archive-actions';
 import type { ArchiveStop, ArchiveStopKind } from '@/lib/archive-stops';
@@ -17,7 +16,7 @@ const stopKeys:Record<ArchiveStopKind,string>={run:'channelStopsRun',question:'c
 // works there, or a question, a request or a handed step waits on people there, the one confirmation Cards and
 // Conversations use (ArchiveConfirm) names each; archiving then stops and clears them. "Archived · Undo" restores it;
 // nothing starts again.
-export function ChannelArchive({company,channel,archived,agents,c,refresh}:{company:string,channel:string,archived:boolean,agents:{id:string,name:string,connection_id:string}[],c:Say,refresh:()=>Promise<void>}) {
+export function ChannelArchive({company,channel,archived,c,refresh}:{company:string,channel:string,archived:boolean,c:Say,refresh:()=>Promise<void>}) {
  const router=useRouter();
  const [stops,setStops]=useState<ArchiveStop[]|null>(null);
  const [failed,setFailed]=useState<''|'channelArchiveFailed'|'channelRestoreFailed'|'channelArchiveCheckFailed'>('');
@@ -47,7 +46,6 @@ export function ChannelArchive({company,channel,archived,agents,c,refresh}:{comp
   setFailed('');
   if(read.stops.length) setStops(read.stops); else await archive();
  };
- const face=(agent:string|null)=>{ const found=agents.find(one=>one.id===agent); return found?<AgentFace agent={found.id} size={24}/>:null; };
  return <section className="dp-sec" aria-labelledby="ch-h-arc">
   <h3 className="dp-label" id="ch-h-arc"><span>{c('channelArchiveSection')}</span></h3>
   <div className="panel-card ch-arc">
@@ -56,7 +54,7 @@ export function ChannelArchive({company,channel,archived,agents,c,refresh}:{comp
     <ShellIcon name={archived?'restore':'archive'}/><span>{c(archived?'channelRestore':'channelArchive')}</span></button>
    {failed&&<p className="set-err" role="alert">{c(failed)}</p>}
   </div>
-  {stops&&<ArchiveConfirm stops={stops} heading={c('channelArchiveConfirm')} face={face} sentence={(stop,agent)=>c(stopKeys[stop.kind],agent,'{1}')}
+  {stops&&<ArchiveConfirm stops={stops} heading={c('channelArchiveConfirm')} sentence={(stop,agent)=>c(stopKeys[stop.kind],agent,'{1}')}
    confirm={()=>{ setStops(null); void archive(); }} cancel={()=>{ setStops(null); button(); }}/>}
  </section>;
 }

@@ -263,6 +263,12 @@ export async function channelRecord(db:Database,person:string,company:string,cha
 }
 
 export const firstName=(name:string)=>name.trim().split(/\s+/)[0]||name;
+// Whom a channel's composer calls (#154, #700), on its page and in a Card's sheet alike: the channel's own Agents and its
+// other Members who have joined, never the reader or an Agent of the Company outside the channel.
+export const channelCallable=(record:Pick<ChannelRecord,'members'|'agents'>,reader:string)=>({
+ people:record.members.flatMap(member=>member.person&&member.person!==reader?[{id:member.person,name:member.name,role:member.role}]:[]),
+ agents:record.agents,
+});
 
 // Marks every Agent name the message called (#152), the longest name first so "@Lead Writer" is one mark and not "@Lead"
 // followed by " Writer": the same rule the database's mention_at reads. A name between spaces, punctuation or the ends is

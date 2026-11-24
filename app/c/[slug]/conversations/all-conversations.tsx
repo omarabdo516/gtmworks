@@ -80,7 +80,7 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
  const segment=(key:ConversationTab,icon:'chat'|'archive',label:string,n:number|null)=>{ const on=key===tab;
   return <button type="button" aria-pressed={on} aria-label={n==null?label:`${label} ${count(n)}`} title={on?undefined:label} onClick={()=>open(key)}><ShellIcon name={icon}/>{on&&<span>{label}</span>}{n!=null&&<span className="num chip__n" aria-hidden="true">{count(n)}</span>}</button>; };
  const own=(chat:ListedChat)=>chat.kind==='conversation';
- const chatOf=(chat:ListedChat):ArchivedChat=>({id:chat.id,title:chat.title,face:chat.face});
+ const chatOf=(chat:ListedChat):ArchivedChat=>({id:chat.id,title:chat.title});
  const act=(chats:ListedChat[])=>void (archived?restore:archive)(chats.map(chatOf));
  const toggle=(id:string)=>setSelected(chosen=>{ const next=new Set(chosen); if(next.has(id)) next.delete(id); else next.add(id); return next; });
  const row=(chat:ListedChat)=><li key={`${chat.kind}:${chat.id}`} className="cv-row">

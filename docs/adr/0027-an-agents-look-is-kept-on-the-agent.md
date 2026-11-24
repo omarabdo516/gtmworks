@@ -5,7 +5,7 @@ date: 2026-11-24
 
 # An Agent's look is kept on the Agent, and one face draws it
 
-Omar's decisions of 2026-11-24 (grill on the Agent's face). Today's pastel faces are replaced by an animated gradient orb: the approved prototype in `design-reference-orb/`. Not built yet; the code and the other records describe today's face until its spec lands.
+Omar's decisions of 2026-11-24 (grill on the Agent's face). Today's pastel faces are replaced by an animated gradient orb: the approved prototype in `design-reference-orb/`. Built by spec #694 (#696 to #702): every Agent wears the orb, and the code and the other records describe it.
 
 ## Decision
 

@@ -84,7 +84,7 @@ function ChatHead({panel,slug,agent,conversation,title,writer,board}:{panel:Deta
 // restore it while it is archived. Its person tidies their own, whatever their Role.
 function ChatMore({company,conversation,title,archived,changed}:{company:string,conversation:ThreadConversation,title:string,archived:boolean,changed:(archived:boolean)=>void}) {
  const {t}=useI18n();
- const chat={id:conversation.id,title,face:{id:conversation.face,name:conversation.agent_name}};
+ const chat={id:conversation.id,title};
  const {archive,restore,confirm}=useConversationArchive(company,(_ids,nowArchived)=>changed(nowArchived));
  return <div className="chat__start"><MoreMenu label={t('conversationMore')} items={[archived
   ?{key:'restore',icon:'restore',label:t('conversationRestore'),run:()=>void restore([chat])}

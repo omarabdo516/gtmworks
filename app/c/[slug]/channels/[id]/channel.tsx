@@ -17,7 +17,7 @@ import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/ap
 import { MessageBox, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { madeDay, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
-import { channelTitle, firstName, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
+import { channelCallable, channelTitle, firstName, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
 import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
 import { ReplyCard } from '@/app/reply-card';
 import type { AnswerQuestion } from '@/app/question-card';
@@ -200,7 +200,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
      {mention.permissions.map(card=><Fragment key={card.id}><Said words={card.said}/><PermissionCard card={card} fresh={!drawnCards.has(card.id)} offered={offeredChoices(card,may)} decide={message.mine&&writer?permit:undefined}/></Fragment>)}
     </li>)}
    </Fragment>)}
-    {workingNow&&live&&<LiveTurn key={`live${live.run}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
+    {workingNow&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
    {workingNow&&(live?<ActivityLine view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>
     :<p className="thinking convo-status" role="status"><span className="shimmer">{t('conversationWorking',workingNow.agent)}</span></p>)}
   </div></div>
@@ -209,7 +209,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    {record.archived&&<p className="arc-line" role="note"><ShellIcon name="archive"/><span>{c('channelArchivedLine')}</span></p>}
    {/* Stop (#478; design-reference: syncComposer): while a message the reader may stop has work open, an empty box turns
        the send arrow into the stop square, which ends that message's Runs and every Handover started from it. */}
-   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={{people:members.flatMap(member=>member.person&&member.person!==person?[{id:member.person,name:member.name,role:member.role}]:[]),agents}} stop={record.stop?{label:c('channelStop',record.stop.agent),run:async()=>{
+   {writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} voice={{company:channel.company,channel:channel.id}} call={channelCallable(record,person)} stop={record.stop?{label:c('channelStop',record.stop.agent),run:async()=>{
     const failure=await postMessage({company:channel.company,channel:channel.id,intent:'stop',message:record.stop?.message},'/api/channels');
     if(!failure) setSent(value=>value+1);
     return failure;
@@ -361,7 +361,7 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
      </li>)}
     </ul>
    </section>}
-   {record.archive&&<ChannelArchive company={channel.company} channel={channel.id} archived={!!record.archived} agents={agents} c={c} refresh={refresh}/>}
+   {record.archive&&<ChannelArchive company={channel.company} channel={channel.id} archived={!!record.archived} c={c} refresh={refresh}/>}
   </div>
  </DetailsShell>;
 }
