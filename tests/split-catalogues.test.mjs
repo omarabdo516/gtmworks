@@ -11,6 +11,7 @@ const owners = [
  ['app/conversation-thread.tsx', 'conversation', /\bcb?\('([A-Za-z]+)'/g],
  ['app/ready-made.tsx', 'ready-made', /\bt\('([A-Za-z]+)'/g],
  ['app/c/[slug]/channels/[id]/channel.tsx', 'channel', /\bc\('([A-Za-z]+)'/g],
+ ['app/channel-archive.tsx', 'channel', /'(channel[A-Z][A-Za-z]*)'/g],
  ['app/agent-card.tsx', 'agent-card', /\bcb?\('([A-Za-z]+)'/g],
  ['app/c/[slug]/[[...section]]/agent-request-card.tsx', 'agent-card', /\bcb?\('([A-Za-z]+)'/g],
  ['app/settings-apps-client.tsx', 'apps', /\bsay\('([A-Za-z]+)'/g],

@@ -1641,6 +1641,8 @@
   "boardRestoreCard": "Restore {0}",
   "cardUndo": "Undo",
   "boardArchivedNoMatch": "No archived cards match these filters",
+  "logActChannelArchived": "archived the channel",
+  "logActChannelRestored": "restored the channel",
   "archiveConfirmOne": "Archive the card?",
   "archiveConfirmMany": "Archive {0} cards?",
   "archiveStopRun": "{0} stops working on {1}",

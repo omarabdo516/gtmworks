@@ -1641,6 +1641,8 @@
   "boardRestoreCard": "رجّع {0}",
   "cardUndo": "تراجع",
   "boardArchivedNoMatch": "مفيش بطاقات مؤرشفة بالفلاتر دي",
+  "logActChannelArchived": "أرشف قناة",
+  "logActChannelRestored": "رجّع قناة",
   "archiveConfirmOne": "أرشف البطاقة؟",
   "archiveConfirmMany": "أرشف {0} بطاقات؟",
   "archiveStopRun": "{0} هيوقف شغل على {1}",
