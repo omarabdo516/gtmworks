@@ -19,6 +19,8 @@ export async function POST(request:NextRequest) {
   if(typeof body?.company!=='string'||!uuid.test(body.company)||!(body.value===null||typeof body.value==='string')) return reply({error:'fallbackInvalid'},400);
   if(!await routeAllowed(db,'app/api/fallback-model/route.ts','POST',body.company,user.id)) return reply({error:'fallbackNotAllowed'},403);
   const result=await changeFallbackModel(db,{company:body.company,value:body.value});
-  return reply(result.body,result.status);
+  // `savedAt` is when the server finished the save: the page holds the choice until it reads itself again after that
+  // time (app/settings-saved.ts, #663).
+  return reply(result.status===200?{...result.body,savedAt:Date.now()}:result.body,result.status);
  } catch { return reply({error:'fallbackInvalid'},400); }
 }

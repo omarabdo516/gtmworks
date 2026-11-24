@@ -1,5 +1,11 @@
 [
  {
+  "issue": 663,
+  "date": "2026-11-24",
+  "en": { "title": "Learning modes, the Fallback model and speech-to-text show at once", "body": "When you change the Company's or an Agent's learning mode, the Fallback model or the speech-to-text provider, your choice is marked straight away with a Saving line while the agent engine takes it, a Company mode shows on every Agent it reached, and a refused change goes back with the reason." },
+  "ar": { "title": "أوضاع التعلّم والموديل الاحتياطي وتحويل الكلام لنص بيبانوا على طول", "body": "لما تغيّر وضع التعلّم للشركة أو لوكيل، أو الموديل الاحتياطي، أو مزوّد تحويل الكلام لنص، اختيارك بيتعلّم على طول وجنبه سطر «بيتحفظ…» لحد ما محرك الوكلاء ياخده، ووضع الشركة بيبان على كل وكيل وصله، ولو التغيير اترفض بيرجع للقديم ويقولك السبب." }
+ },
+ {
   "issue": 644,
   "date": "2026-11-24",
   "en": { "title": "Activity shows when the Fallback model answered", "body": "When every account of an Agent's model has run out and the Company's Fallback model answers the request instead, Activity now shows it once, by gtmworks, with the model the request was meant for and the one that answered." },
