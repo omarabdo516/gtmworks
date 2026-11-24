@@ -1,5 +1,11 @@
 [
  {
+  "issue": 660,
+  "date": "2026-11-24",
+  "en": { "title": "New Agents start right away", "body": "An Agent Lead makes now starts with the company's Providers as they are, so it no longer waits for an API key you already gave, and the ones that waited start on their own; one that truly has no model says so and opens Providers." },
+  "ar": { "title": "الوكلاء الجداد بيشتغلوا على طول", "body": "الوكيل اللي Lead بيعمله بقى بيبدأ بمزوّدين الشركة زي ما هم، فمبقاش يستنى مفتاح API إنت ادّيته قبل كده، واللي كانوا مستنيين بيشتغلوا لوحدهم؛ واللي فعلاً مفيش موديل يشتغل عليه بيقول كده ويفتحلك المزوّدين." }
+ },
+ {
   "issue": 661,
   "date": "2026-11-23",
   "en": { "title": "A model choice shows at once", "body": "When you choose a model for an Agent or the Company, or turn an Agent's sub-agents on or off, your choice is marked straight away with a Saving line on its row while the agent engine takes it, and goes back to the old one with the reason if the engine refuses it." },
