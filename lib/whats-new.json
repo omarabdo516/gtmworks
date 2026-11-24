@@ -6,6 +6,12 @@
   "ar": { "title": "الوكلاء بيبعتولك ملفات في الشات", "body": "لما الوكيل يعمل PDF أو شيت أو صورة أو أي ملف تاني في فولدر شغله، بيبعتهولك في رده كملف تفتحه وتنزّله، والصور بتظهر مصغّرة، ولو في ملف مقدرش يبعته بيقولك كده بدل ما يظهر مسار." }
  },
  {
+  "issue": 705,
+  "date": "2026-11-24",
+  "en": { "title": "Find any archived card", "body": "The board's archived list now shows fifty cards at a time, newest archived first, with Show more for the rest, and a search that finds an archived card by its title however long ago it was archived." },
+  "ar": { "title": "لاقي أي بطاقة مؤرشفة", "body": "قايمة البطاقات المؤرشفة في البورد بقت بتعرض خمسين بطاقة في المرة، الأحدث أرشفة الأول، و«اعرض أكتر» للباقي، وفيها بحث بيلاقي البطاقة المؤرشفة بعنوانها مهما كانت اتأرشفت من زمان." }
+ },
+ {
   "issue": 583,
   "date": "2026-11-24",
   "en": { "title": "Back up right after a failed update", "body": "When an update stops because an agent engine or work sandbox does not start, the version you run is recorded again, so a backup or a restore with that version's own files works without running the failed update first." },
