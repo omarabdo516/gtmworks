@@ -1,5 +1,11 @@
 [
  {
+  "issue": 694,
+  "date": "2026-11-24",
+  "en": { "title": "Every Agent has a face of its own", "body": "Each Agent is now a living orb in its own colour, shape and temperament that breathes, blinks, looks toward your pointer and shows when it is thinking, working, done or waiting on you, the same face everywhere, and it stays still with reduced motion." },
+  "ar": { "title": "كل وكيل بقى ليه وش بتاعه", "body": "كل وكيل بقى كورة حيّة بلونه وشكله وطبعه، بتتنفس وبترمش وبتبص ناحية الماوس، وبتوريك إمتى بيفكر أو شغال أو خلص أو مستنيك، ونفس الوش في كل حتة، ومبتتحركش لو مختار حركة أقل." }
+ },
+ {
   "issue": 667,
   "date": "2026-11-24",
   "en": { "title": "Archive cards, conversations and channels", "body": "Archive a card, several at once or everything in Done, a conversation, or a team channel, with Undo: whatever an Agent was doing there stops and nobody waits on it any more, nothing is deleted, and All conversations lists every conversation and channel with their own Archived tab to restore them from." },

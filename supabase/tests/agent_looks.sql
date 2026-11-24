@@ -162,12 +162,14 @@ select throws_ok($$select public.change_agent_look('10000000-0000-0000-0000-0000
 reset role;
 
 -- 13. A ready-made role's face in the gallery is the face its Agent is made with (#697): a Member of Aleem reads the look
--- each role would take now, and none of another Company.
+-- each role would take now, and a Member of another Company none.
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 select results_eq($$select template,shape,colour,temperament from public.ready_made_looks('10000000-0000-0000-0000-000000000003',array['meta','coder'])$$,
  $$values ('meta','circle','violet','energetic'),('coder','circle','violet','calm')$$,'a Member of Aleem sees each role in the colour Aleem uses least and the role''s temperament');
-select is_empty($$select 1 from public.ready_made_looks('10000000-0000-0000-0000-000000000001',array['meta'])$$,'and nothing of a Company they are not in');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
+select is_empty($$select 1 from public.ready_made_looks('10000000-0000-0000-0000-000000000003',array['meta'])$$,'and a Viewer of RS Learning alone reads nothing of Aleem''s');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 reset role;
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,profile,template) values
  ('d6960000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000003','d6960000-0000-0000-0000-0000000000cd','Reach','Runs the ads','co-10000000000000000000000000000003','meta');
