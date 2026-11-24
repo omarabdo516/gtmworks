@@ -74,17 +74,21 @@ test('A person archives their Conversation from its head while its Agent replies
   await expect(page.locator('.arc-line')).toHaveText('This conversation is archived. Writing in it brings it back to your recent chats.');
   await expect(recent).toHaveCount(0);
   await expect.poll(()=>fake.settings.runs[1].stopped,{message:'the Run is stopped in the Engine'}).toBe(true);
-  // The Engine's session is asked for the mark, which does not land yet.
-  await expect.poll(()=>fake.settings.sessionMarks.length,{timeout:30000}).toBeGreaterThan(0);
-  expect(rows(`select (archived_at is not null) as archived, session_archived from public.conversations where id='${conversation}'`)[0]).toEqual({archived:true,session_archived:null});
 
-  // Undo brings it back to the recent chats; archived again, the Engine answers and takes the mark.
+  // Undo brings it back to the recent chats.
   await toast.getByRole('button',{name:'Undo'}).click();
   await expect(page.locator('.toast').filter({hasText:'Restored'})).toBeVisible();
   await expect(recent).toHaveCount(1);
   await expect(page.locator('.arc-line')).toHaveCount(0);
+  // Archived again once its stopped Run has closed, so nothing is left to stop: no confirmation.
+  await expect.poll(()=>rows(`select count(*)::int as n from public.conversation_run_ends where conversation_id='${conversation}'`)[0].n,{timeout:30000}).toBe(2);
   await archiveFromHead();
   await expect(page.locator('.toast').filter({hasText:'Archived'})).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // The Engine's session is asked for the mark, which does not land while the Engine cannot take it.
+  await expect.poll(()=>fake.settings.sessionMarks.length,{timeout:30000}).toBeGreaterThan(0);
+  expect(rows(`select (archived_at is not null) as archived, session_archived from public.conversations where id='${conversation}'`)[0]).toEqual({archived:true,session_archived:null});
+  // Once it answers, it takes the mark.
   fake.settings.sessionMarkStatus=null;
   await expect.poll(()=>fake.settings.archivedSessions.has(`${nour.profile}:${conversation}`),{timeout:30000}).toBe(true);
   expect(fake.settings.sessionMarks.every(mark=>JSON.stringify(mark.body)==='{"archived":true}'),'the archived flag alone: nothing else of the session, nor the Agent\'s memory').toBe(true);
@@ -104,11 +108,12 @@ test('A person archives their Conversation from its head while its Agent replies
 test('A person archives several Conversations from All conversations and one from the sidebar, with Undo, and restores them from Archived',async({page})=>{
  test.setTimeout(120000);
  const nour=attachNour();
- const [first,second,third]=conversations(nour.id,['Ads for June','Ads for July','Ads for August']);
+ const mark=randomUUID().slice(0,6); const [june,july,august]=[`Ads for June ${mark}`,`Ads for July ${mark}`,`Ads for August ${mark}`];
+ const [first,second,third]=conversations(nour.id,[june,july,august]);
  await ownerSignIn(page,'/c/rs-learning/conversations');
  const list=page.locator('.cv-list .cv-row');
  const titled=(title:string)=>list.filter({hasText:title});
- await expect(titled('Ads for')).toHaveCount(3);
+ await expect(titled(mark)).toHaveCount(3);
  const counted=async(name:'Current'|'Archived')=>Number((await page.getByRole('button',{name:new RegExp(`^${name} \\d+$`)}).getAttribute('aria-label'))!.split(' ')[1]);
  const count=await counted('Current'); const before=await counted('Archived');
 
@@ -116,42 +121,42 @@ test('A person archives several Conversations from All conversations and one fro
  await page.getByRole('button',{name:'Select several conversations'}).click();
  const bar=page.getByRole('region',{name:'Selecting conversations'});
  await expect(bar.getByRole('button',{name:'Archive'})).toBeDisabled();
- await page.getByRole('checkbox',{name:'Select Ads for June'}).click();
- await page.getByRole('checkbox',{name:'Select Ads for July'}).click();
+ await page.getByRole('checkbox',{name:`Select ${june}`}).click();
+ await page.getByRole('checkbox',{name:`Select ${july}`}).click();
  await expect(bar).toContainText('2 selected');
  await bar.getByRole('button',{name:'Archive'}).click();
  const toast=page.locator('.toast').filter({hasText:'2 archived'});
  await expect(toast).toBeVisible();
- await expect(titled('Ads for')).toHaveCount(1);
+ await expect(titled(mark)).toHaveCount(1);
  await expect(page.getByRole('button',{name:`Current ${count-2}`})).toBeVisible();
  await expect(page.getByRole('button',{name:`Archived ${before+2}`})).toBeVisible();
  expect(rows(`select count(*)::int as n from public.conversations where id in ('${first}','${second}') and archived_by='${owner}'`)[0].n).toBe(2);
  await toast.getByRole('button',{name:'Undo'}).click();
  await expect(page.locator('.toast').filter({hasText:'2 restored'})).toBeVisible();
- await expect(titled('Ads for')).toHaveCount(3);
+ await expect(titled(mark)).toHaveCount(3);
 
  // One from its row, and one from the sidebar's menu.
- await titled('Ads for June').hover();
- await page.getByRole('button',{name:'Archive Ads for June'}).click();
+ await titled(june).hover();
+ await page.getByRole('button',{name:`Archive ${june}`}).click();
  await expect(page.locator('.toast').filter({hasText:'Archived'})).toBeVisible();
- await expect(titled('Ads for June')).toHaveCount(0);
- const recent=page.locator('#sb-recent .thread-row').filter({hasText:'Ads for August'});
+ await expect(titled(june)).toHaveCount(0);
+ const recent=page.locator('#sb-recent .thread-row').filter({hasText:august});
  await recent.hover();
- await recent.getByRole('button',{name:'More: Ads for August'}).click();
+ await recent.getByRole('button',{name:`More: ${august}`}).click();
  await page.getByRole('menuitem',{name:'Archive the conversation'}).click();
- await expect(page.locator('#sb-recent .thread-row').filter({hasText:'Ads for August'})).toHaveCount(0);
+ await expect(page.locator('#sb-recent .thread-row').filter({hasText:august})).toHaveCount(0);
  expect(rows(`select count(*)::int as n from public.conversations where id in ('${first}','${third}') and archived_at is not null`)[0].n).toBe(2);
 
  // Archived holds them, newest message first; Restore brings one back, then the other.
  await page.getByRole('button',{name:/^Archived \d+$/}).click();
  await expect(page).toHaveURL(/tab=archived$/);
  await expect(list).toHaveCount(before+2);
- await expect(list.first()).toContainText('Ads for August');
+ await expect(titled(mark).first()).toContainText(august);
  await list.first().hover();
- await page.getByRole('button',{name:'Restore Ads for August'}).click();
+ await page.getByRole('button',{name:`Restore ${august}`}).click();
  await expect(page.locator('.toast').filter({hasText:'Restored'})).toBeVisible();
  await expect(list).toHaveCount(before+1);
- await expect(page.locator('#sb-recent .thread-row').filter({hasText:'Ads for August'})).toHaveCount(1);
+ await expect(page.locator('#sb-recent .thread-row').filter({hasText:august})).toHaveCount(1);
  await page.getByRole('button',{name:'Select several conversations'}).click();
  await page.getByRole('button',{name:'Select all shown'}).click();
  await page.getByRole('region',{name:'Selecting conversations'}).getByRole('button',{name:'Restore'}).click();
