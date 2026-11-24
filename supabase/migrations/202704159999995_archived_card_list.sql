@@ -5,6 +5,9 @@
 -- asked here too (`agent`, `project`), so a filtered list pages on as an unfiltered one does. Only the archived Cards of
 -- a Company the reader is a Member of and sees are read, as archived_cards (20270415999991) reads them; that function
 -- stays the read of an archived Card by its id.
+-- Its version has fifteen digits because every fourteen-digit one between all_conversations (search_fold) and the
+-- staged cutover, which must sort last (tests/staged-migrations.test.mjs), is taken; it sorts after both of its
+-- dependencies and before the cutover by name and by the Supabase CLI alike.
 create function public.archived_card_list(c uuid, q text default null, agent uuid default null, project bigint default null,
  after_at timestamptz default null, after_id bigint default null, lim integer default 50)
 returns setof public.work_cards

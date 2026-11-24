@@ -146,8 +146,9 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   archivedSessions:/** @type {Set<string>} */(new Set()),
   sessionMarks:/** @type {{profile:string,session:string,body:any,authorization?:string}[]} */([]),
   sessionMarkStatus:/** @type {number|null} */(null),
-  // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value.
-  reveals:/** @type {{profile:string,key:string}[]} */([]),
+  // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value. A key in revealFail is
+  // answered 500, as an Engine that could not read the .env.
+  reveals:/** @type {{profile:string,key:string}[]} */([]),revealFail:/** @type {Set<string>} */(new Set()),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
   // password row, and rows that are not one (an alias, a URL, a tool's key). Each profile keeps its own values in `env`;
   // the root's are defaultEnv. A provider listed in providerModels offers those models once its key is set. A profile in
@@ -350,11 +351,14 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
        settings.modelCalls.push({run:run.id,account:row.id,provider,model});
        if(using&&record) settings.switches.push({id:randomUUID().replaceAll('-',''),provider,from:using.id,to:row.id,at:Date.now()/1000});
        using=row;
-       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); return true; }
+       if(!settings.outOfQuota.has(row.id)) { settings.answeredOn.set(run.id,row.id); run.served={provider,model}; return true; }
        row.last_status='exhausted';
       }
       return false;
      };
+     // The pair that answered (api_server_runs.py _served_runtime): the Run's own, or the fallback entry it moved to.
+     if(runProvider&&runModel) run.served={provider:runProvider,model:runModel};
+     run.requested=sent.provider&&sent.model?{provider:sent.provider,model:sent.model}:null;
      if(accounts.length&&!tryAccounts(runProvider,runModel,accounts,{record:true})) {
       const saved=profileOf(runProfile)?.config||{};
       const entries=raw=>(Array.isArray(raw)?raw:raw&&typeof raw==='object'?[raw]:[]).filter(entry=>entry?.provider&&entry?.model);
@@ -396,7 +400,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(done&&run.outOfAccounts) { endEvents(run.id,'run.failed'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'failed',session_id:run.session,...times,
      output:settings.modelCalls.some(call=>call.run===run.id)?settings.noAccountText:settings.usageLimitText,pending_controls:[]}); }
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
-    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
+    return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'&&run.served?{runtime:{...run.served,route_source:run.requested?'raw_request':'global',...(run.requested?{requested:run.requested}:{})}}:{}),...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
    // The run's own routes (api_server_runs.py): stop, the answer to the question it waits for, which takes exactly
    // request_id, execution_generation and answer, and the choice for the request it waits on (_handle_run_approval).
@@ -631,6 +635,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     const env=named==='default'?settings.defaultEnv:settings.profiles.get(named)?.env||{};
     const value=env?.[body?.key];
     settings.reveals.push({profile:named,key:body?.key});
+    if(settings.revealFail.has(body?.key)) return send(response,500,{detail:'Internal Server Error'});
     return value===undefined?send(response,404,{detail:`${body?.key} not found in .env`}):send(response,200,{key:body.key,value});
    }
    if(url.pathname==='/api/env') {

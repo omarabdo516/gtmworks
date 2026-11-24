@@ -143,6 +143,29 @@ test('a run that failed for no credit, a refused key or sign-in, a missing model
  } finally { await fake.close(); }
 });
 
+// #644: a completed Run names the model that answered it (`served`, the pinned Engine's runtime pair, which names the
+// Fallback model after a move to it) and the model the Run named (`chosen`), or none when it ran on its profile's own.
+test('a completed run names the model that answered it and the one it was asked to run on',async()=>{
+ const fake=await fakeHermes();
+ fake.settings.profiles.set('writer',{soul:'',provider:'openai-codex',model:'gpt-5.5',key:'test-only-key',config:{fallback_providers:[{provider:'anthropic',model:'claude-sonnet-4-6'}]},credentials:{}});
+ fake.settings.defaultPool['openai-codex']=[{id:'c0dex1',label:'a',auth_type:'oauth',source:'device_code',priority:0,access_token:'t'}];
+ fake.settings.defaultPool.anthropic=[{id:'c1aude',label:'b',auth_type:'oauth',source:'claude_code',priority:0,access_token:'t'}];
+ try {
+  const own=await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k1'});
+  const read=await engineFor(connection(fake)).read(own);
+  assert.deepEqual([read.served,read.chosen],[{provider:'openai-codex',model:'gpt-5.5'},undefined]);
+  // Every ChatGPT account ran out: the Fallback model answered a Run that named ChatGPT.
+  fake.settings.outOfQuota.add('c0dex1');
+  const moved=await startRun({...connection(fake),input:'Hello',model:{provider:'openai-codex',model:'gpt-5.5'},sessionKey:'s',idempotencyKey:'k2'});
+  const after=await engineFor(connection(fake)).read(moved);
+  assert.deepEqual([after.served,after.chosen],[{provider:'anthropic',model:'claude-sonnet-4-6'},{provider:'openai-codex',model:'gpt-5.5'}]);
+  // A Run still running, or one that failed, names neither.
+  fake.settings.ending='failed';
+  const failed=await engineFor(connection(fake)).read(await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k3'}));
+  assert.deepEqual([failed.served,failed.chosen],[undefined,undefined]);
+ } finally { await fake.close(); }
+});
+
 // #642: a ChatGPT account's HTTP 429 usage_limit_reached, in both of the pinned Engine's texts for it (measured): the
 // Run that met it, and every later Run, which the Engine fails at once. Each is no access, with when the usage resets;
 // a usage limit that names no reset, or a short rate limit, names none.

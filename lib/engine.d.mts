@@ -15,7 +15,7 @@ export type PermissionChoice='once'|'always'|'deny';
 // `allows` is what an "always" answer keeps among the profile's standing permissions (#166), none when it is not offered.
 export type RunPermission={id:string,description:string,command:string,choices:PermissionChoice[],allows?:string[]};
 // `said`: what the Agent wrote in the message that paused the Run on its question or permission (#647), as its words.
-export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,said?:string,noModel?:true,modelRefused?:'credit'|'key'|'model'|'access',resetsAt?:string};
+export type RunState={state:'running'|'completed'|'failed'|'stopped'|'lost'|'unreachable',reply:string|null,session:string|null,usage:RunUsage|null,toolCalls:ToolCall[],question?:RunQuestion|null,permission?:RunPermission|null,said?:string,noModel?:true,modelRefused?:'credit'|'key'|'model'|'access',resetsAt?:string,served?:ModelChoice,chosen?:ModelChoice};
 // Typed words, or the texts of the choices picked on a question where several may be picked (#648).
 export type QuestionAnswer=string|string[];
 export type AnsweredQuestion='answered'|'gone'|'unreachable';
@@ -35,7 +35,7 @@ export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'
 export type FoundAgent={state:'found',agent:Agent}|{state:'missing'|'refused'|'unreachable',agent:null};
 // A model a Run may be started on (#158): the Engine's provider and model names.
 export type ModelChoice={provider:string,model:string};
-export type AgentModels={state:'found'|'refused'|'unreachable',current:ModelChoice|null,models:(ModelChoice&{providerName:string})[]};
+export type AgentModels={state:'found'|'refused'|'unreachable',current:ModelChoice|null,models:(ModelChoice&{providerName:string,served?:true})[]};
 // Where an Agent's own profile takes the Company's Providers from (#660): its shared space, whose API keys it is given, and
 // the profile of the Company's keeper (Lead), whose model it starts on.
 export type CompanyProviders={space:string,keeper:string};
