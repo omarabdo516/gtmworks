@@ -317,6 +317,18 @@ test('a Provider whose models could not be read says so, and one listing none sa
   expect(document.querySelector('#pv-d-sub-anthropic')?.textContent).toContain(en.providersModelsNone);
 });
 
+// #643: an OpenCode Go key's models are the ones OpenCode serves it, and its details say the list is OpenCode's own.
+test('an OpenCode Go key says its models come from OpenCode itself, in both languages; another key does not', async () => {
+  const held = keys({ keys: [{ provider: 'opencode-go', label: 'OpenCode Go', set: true }, { provider: 'anthropic', label: 'Anthropic', set: true }] });
+  const models: ProviderModelsData = { 'key-opencode-go': [{ model: 'glm-5.3', enabled: true }], 'key-anthropic': [{ model: 'claude-opus-4-6', enabled: true }] };
+  for (const [language, words] of [['en', en], ['ar', ar]] as const) {
+    const screen = await providers({ signIns: signIns('notConnected', 'notConnected'), keys: held, models }, language);
+    expect(document.querySelector('#pv-d-key-opencode-go-models-served')?.textContent).toBe(words.providersModelsServed.replace('{0}', 'OpenCode Go'));
+    expect(document.querySelector('#pv-d-key-anthropic-models-served')).toBeNull();
+    await screen.unmount();
+  }
+});
+
 // #618: each subscription account is a Provider of its own, two of one kind apart by the Engine's id, each named by the
 // Owner; a second ChatGPT reads as its kind's name and place until it is named.
 const accounts: SubscriptionAccount[] = [

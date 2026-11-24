@@ -1,5 +1,11 @@
 [
  {
+  "issue": 643,
+  "date": "2026-11-24",
+  "en": { "title": "OpenCode Go offers only the models it serves you", "body": "An OpenCode Go key now lists, offers and starts on only the models OpenCode serves that key, read from OpenCode itself, so no model you pick is refused as not included in OpenCode Go." },
+  "ar": { "title": "OpenCode Go بيعرض بس الموديلات اللي بيقدّمهالك", "body": "مفتاح OpenCode Go دلوقتي بيعرض ويبدأ بس بالموديلات اللي OpenCode بيقدّمها للمفتاح ده، مقرية من OpenCode نفسه، فمفيش موديل هتختاره يترفض إنه مش جوّه OpenCode Go." }
+ },
+ {
   "issue": 586,
   "date": "2026-11-24",
   "en": { "title": "A Channel opens cleanly in your own time zone", "body": "Outside UTC, a Channel's message and Handover times now appear straight in your own time zone, without the page redrawing itself as it opens." },

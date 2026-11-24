@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { AppTile } from '@/components/app-tile';
 import { markOf as letterOf } from '@/lib/app-mark.mjs';
 import { entryId } from '@/lib/provider-entry.mjs';
+import { servesOwnList } from '@/lib/served-models.mjs';
 import { SettingsIcon } from './settings-icons';
 import { InfoTip } from './settings-info';
 import { toast } from './toast';
@@ -136,7 +137,7 @@ export function CompanyProviders({company,companyName,owner,subscriptions:subs,k
      {entry.kind==='subscription'
       ?<SubscriptionDetail company={company} companyName={companyName} owner={owner} entry={entry} placed={placed} gate={gate} keyed={(keys?.keys??[]).some(row=>row.set&&row.provider==='anthropic')}/>
       :<KeyDetail company={company} owner={owner} entry={entry} placed={placed} gate={gate}/>}
-     <ProviderModels company={company} owner={owner} entry={entryId(entry.kind,entry.provider)} panel={entry.id} name={entry.name} models={models?models[entryId(entry.kind,entry.provider)]??[]:null}/>
+     <ProviderModels company={company} owner={owner} entry={entryId(entry.kind,entry.provider)} panel={entry.id} name={entry.name} models={models?models[entryId(entry.kind,entry.provider)]??[]:null} served={entry.kind==='key'&&servesOwnList(entry.provider)}/>
     </div>)}
     {owner&&<div className="pv-detail" id="pv-d-add" role="region" aria-labelledby="pv-d-add-name" hidden={shown!=='add'}>
      {backButton}
@@ -283,7 +284,8 @@ function PlaceFacts({company,owner,entry,placed,gate}:{company:string,owner:bool
 // A switch shows its new state at once and goes back, with a line, when the change was not kept.
 // `entry` is what the switches are kept by, the Provider's kind (lib/provider-entry.mjs): the pinned Engine lists models per
 // provider, not per account, so two ChatGPT accounts share their kind's switches (#618). `panel` is the details' own id.
-function ProviderModels({company,owner,entry,panel,name,models}:{company:string,owner:boolean,entry:string,panel:string,name:string,models:{model:string,enabled:boolean}[]|null}) {
+// `served`: the provider says which models it serves this key (#643), so the list is its own, not the Engine's catalogue.
+function ProviderModels({company,owner,entry,panel,name,models,served}:{company:string,owner:boolean,entry:string,panel:string,name:string,models:{model:string,enabled:boolean}[]|null,served:boolean}) {
  const {t}=useI18n(); const router=useRouter();
  const [shown,setShown]=useState<Record<string,boolean>>({}); const [busy,setBusy]=useState(''); const [error,setError]=useState('');
  const id=`pv-d-${panel}-models`;
@@ -310,6 +312,7 @@ function ProviderModels({company,owner,entry,panel,name,models}:{company:string,
       :<span className="panel-row__meta">{t(on?'providersModelOn':'providersModelOff')}</span>}
     </li>; })}</ul>}
   {error&&<p className="set-err" role="alert">{t(error)}</p>}
+  {served&&<p className="set-hint" id={`${id}-served`}>{t('providersModelsServed',name)}</p>}
   <p className="set-hint">{t('providersModelsHint')}</p>
  </>;
 }

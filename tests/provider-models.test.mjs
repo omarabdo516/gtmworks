@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readModelAccess, readProviderModels, changeProviderModel, offeredModels, modelEnabled } from '../lib/provider-models.mjs';
 import { readCompanyModels, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
+import { setProviderKey } from '../lib/hermes.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #620 (spec #611): each Provider's models are switched on or off by the Owner, and a model choice is offered once while
@@ -181,4 +182,67 @@ test('an order that could not be read offers nothing, and an unlisted subscripti
    'with an account of its kind off, which ones it holds is unknown: not offered');
   assert.deepEqual(await ids([{provider:'anthropic',account:'key',place:null,enabled:false}]),['key-openrouter','sub-anthropic'],'a key switched off says nothing of the subscription');
  } finally { await fake.close(); }
+});
+
+// #643: OpenCode Go serves its key only part of the Engine's catalogue; the Engine merges its own older ids into the list,
+// and OpenCode refuses each of those. A fake OpenCode Go, which the profile's OPENCODE_GO_BASE_URL points at as the
+// Engine's own route does, lists what the key is served.
+async function fakeOpenCode({served,status=200}) {
+ const { createServer }=await import('node:http');
+ const asked=[];
+ const server=createServer((request,response)=>{
+  asked.push({path:request.url,authorization:request.headers.authorization});
+  response.writeHead(status,{'Content-Type':'application/json'});
+  response.end(JSON.stringify(status===200?{object:'list',data:served.map(id=>({id,object:'model',owned_by:'opencode'}))}:{error:'down'}));
+ });
+ await new Promise(done=>server.listen(0,'127.0.0.1',done));
+ return {base:`http://127.0.0.1:${server.address().port}/zen/go/v1`,asked,close:()=>new Promise(done=>server.close(done))};
+}
+const goKey='sk-go-test-0123456789abcdef';
+const seedGo=(fake,base)=>{
+ seed(fake);
+ fake.settings.envRows.push({env:'OPENCODE_GO_API_KEY',provider:'opencode-go',label:'OpenCode Go',primary:true,password:true,category:'provider'});
+ fake.settings.providerModels['opencode-go']=['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon'];
+ for(const name of [space,main]) Object.assign(fake.settings.profiles.get(name).env,{OPENCODE_GO_API_KEY:goKey,OPENCODE_GO_BASE_URL:base});
+};
+
+test('an OpenCode Go key offers only the models OpenCode serves it, in Settings and in the pickers', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:['glm-5.3','gemini-4-argon','qwen-4']});
+ try {
+  seedGo(fake,go.base);
+  const {db}=database();
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['key-opencode-go'],[{model:'glm-5.3',enabled:true},{model:'gemini-4-argon',enabled:true}],'the Engine\'s ids OpenCode does not serve are gone');
+  assert.deepEqual(switches['key-openrouter'].map(row=>row.model),['anthropic/claude-opus-4.6','openai/gpt-5.5'],'another provider keeps the Engine\'s list');
+  const picks=await ownerPicks(db,fake);
+  assert.deepEqual(picks.company.filter(pair=>pair.startsWith('opencode-go/')),['opencode-go/glm-5.3','opencode-go/gemini-4-argon']);
+  assert.deepEqual(picks.agent.filter(pair=>pair.startsWith('opencode-go/')),['opencode-go/glm-5.3','opencode-go/gemini-4-argon']);
+  assert.ok(go.asked.every(request=>request.path==='/zen/go/v1/models'&&request.authorization===`Bearer ${goKey}`),'asked with the key the profile holds');
+ } finally { await go.close(); await fake.close(); }
+});
+
+test('an OpenCode Go list that cannot be read leaves the Engine\'s list', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:[],status:503});
+ try {
+  seedGo(fake,go.base);
+  const {db}=database();
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
+ } finally { await go.close(); await fake.close(); }
+});
+
+test('giving an OpenCode Go key sets the Company\'s model to one OpenCode serves, and to the Engine\'s first when OpenCode cannot say', async () => {
+ for(const [status,expected] of [[200,'glm-5.3'],[503,'mimo-v2-omni']]) {
+  const fake=await fakeHermes(); const go=await fakeOpenCode({served:['gemini-4-argon','glm-5.3'],status});
+  try {
+   seedGo(fake,go.base);
+   for(const name of [space,main]) { delete fake.settings.profiles.get(name).env.OPENCODE_GO_API_KEY; }
+   const set=await setProviderKey(install(fake),{space,profiles:[main],provider:'opencode-go',value:goKey});
+   assert.equal(set.state,'written');
+   assert.equal(set.model,expected,'the first of the Engine\'s list that OpenCode serves');
+   assert.deepEqual(set.profiles,{[main]:'written'});
+   const profile=fake.settings.profiles.get(main);
+   assert.deepEqual([profile.provider,profile.model],['opencode-go',expected]);
+  } finally { await go.close(); await fake.close(); }
+ }
 });
