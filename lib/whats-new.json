@@ -6,6 +6,12 @@
   "ar": { "title": "لاقي أي بطاقة مؤرشفة", "body": "قايمة البطاقات المؤرشفة في البورد بقت بتعرض خمسين بطاقة في المرة، الأحدث أرشفة الأول، و«اعرض أكتر» للباقي، وفيها بحث بيلاقي البطاقة المؤرشفة بعنوانها مهما كانت اتأرشفت من زمان." }
  },
  {
+  "issue": 642,
+  "date": "2026-11-24",
+  "en": { "title": "A chat that ran out of usage says when it resets", "body": "When every account an Agent can use has run out of usage, the chat now says so even on the messages after the first, and tells you when the usage resets, instead of asking you to send the message again." },
+  "ar": { "title": "المحادثة اللي خلص استخدامها بتقولك إمتى هيتجدّد", "body": "لما كل الحسابات اللي الوكيل يقدر يستخدمها يخلص استخدامها، المحادثة دلوقتي بتقول كده حتى في الرسايل اللي بعد الأولى، وبتقولك الاستخدام هيتجدّد إمتى، بدل ما تطلب منك تبعت الرسالة تاني." }
+ },
+ {
   "issue": 602,
   "date": "2026-11-24",
   "en": { "title": "A handed-over job says why it did not finish", "body": "When an Agent asked to do a job cannot reach its model (no model connected, no credit left, a refused key, a model that is not available, or every account out of usage), the Agent that asked now tells you that reason and what to fix in Providers, instead of only that the job failed." },
