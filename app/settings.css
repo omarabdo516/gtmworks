@@ -327,6 +327,7 @@
 .gw .sov .cr-kind__check { position: absolute; top: 14px; inset-inline-end: 12px; display: inline-flex; color: var(--gw-text-1); --od-icon-size: 16px; }
 .gw .sov .ln-ag { flex-wrap: wrap; }
 .gw .sov .ln-seg { flex: none; width: 260px; }
+.gw .sov .ln-seg button[aria-disabled="true"] { opacity: .5; cursor: default; }
 .gw .sov .ln-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
 .gw .sov .ln-rule { padding: var(--s4); gap: var(--s2); }
 .gw .sov .ln-rule b { display: flex; align-items: center; gap: var(--s2); font-size: var(--gw-fs-base); --od-icon-size: 18px; }

@@ -42,6 +42,8 @@ const screen = (language:'en'|'ar' = 'en', { canManage = true, owner = true, val
   <LearningSection t={i18n(language).t} slug="rs-learning" company={company} canManage={canManage} owner={owner} data={value}/>
  </LanguageProvider>);
 };
+// Two rendering updates: long enough for the browser to drop the focus from a button that can no longer take it.
+const twoFrames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const bodyOf = async (call:number) => JSON.parse((fetchMock.mock.calls[call][1] as RequestInit).body as string);
 const button = (view:Awaited<ReturnType<typeof screen>>, name:RegExp) => view.getByRole('button', { name }).elements();
 const companyModes = (view:Awaited<ReturnType<typeof screen>>) => view.getByRole('radiogroup', { name: 'For the whole company' });
@@ -144,11 +146,23 @@ test('one Agent\'s mode is one Tab stop and the arrow keys move and select it; a
  await expect.element(auto).toHaveAttribute('aria-checked', 'true');
  expect(auto.element().tabIndex).toBe(0);
  expect(ask.element().tabIndex).toBe(-1);
+ // The request is held open: the choice the arrow reached keeps the focus while it is sent (#588), and a second
+ // press waits for the first.
+ let answer!: (response:Response) => void;
+ fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => { answer = resolve; }));
  auto.element().focus();
  await userEvent.keyboard('{ArrowRight}');
  await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
  expect(await bodyOf(0)).toEqual({ company, agent: writer, mode: 'ask' });
+ await twoFrames();
  expect(document.activeElement?.id).toBe(`ln-${writer}-ask`);
+ await expect.element(ask).toHaveAttribute('aria-disabled', 'true');
+ await userEvent.keyboard('{ArrowLeft}');
+ expect(fetchMock.mock.calls).toHaveLength(1);
+ expect(document.activeElement?.id).toBe(`ln-${writer}-ask`);
+ answer(new Response('{}', { status: 200 }));
+ await expect.poll(() => refresh.mock.calls.length).toBe(1);
+ await expect.element(ask).not.toHaveAttribute('aria-disabled');
  await view.unmount();
  // A mode the screen does not know leaves the first choice as the group's one Tab stop.
  const unknown = await render(<LanguageProvider language="en"><AgentLearningMode company={company} agent={writer} labelId="ln-t" mode={null} follows={false}/></LanguageProvider>);
