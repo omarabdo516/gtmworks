@@ -74,7 +74,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const agentIds=new Set([...p.agents.map(a=>a.person_id),...identities.map(a=>a.id)]);
  const agentName=(id:string)=>identities.find(a=>a.id===id)?.name||p.members.find(m=>m.person_id===id)?.people?.name||'';
  // A legacy role agent shows its name's first letter, as a person does (#697).
- const letter=(id:string,size:number)=><span dir="auto" className="avatar" role="img" aria-label={agentName(id)} style={{width:size,height:size}}>{Array.from(agentName(id).trim())[0]||'؟'}</span>;
+ const letter=(id:string,size:number)=><span dir="auto" className="avatar avatar--agent" role="img" aria-label={agentName(id)} style={{width:size,height:size}}>{Array.from(agentName(id).trim())[0]||'؟'}</span>;
  const columnOfCard=(c:Card)=>columnOf(c,p.stages);
  // A card's Agent: its assigned Agent, else the Agent that made it (a card an Agent filed through the API). The person
  // who added an idea is the writer of its own log row (#188), so the Card can say "New idea from …".

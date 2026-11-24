@@ -14,7 +14,7 @@ import { faceStateChanged, watchFace, type FaceState } from './face-life';
 // it say who and how. A record that names no Agent, only the name it keeps (#702: one detached before its Agent's id
 // was kept), shows that name's first letter, as a person does.
 export function AgentFace({agent,name,...face}:{agent:string|null|undefined,name?:string,size:number,state?:FaceState,dot?:boolean,live?:boolean}) {
- if(!agent&&name!==undefined) return <span dir="auto" className="avatar" aria-hidden="true" style={{width:face.size,height:face.size,fontSize:Math.max(9,Math.round(face.size/2))}}>{Array.from(name.trim())[0]||'؟'}</span>;
+ if(!agent&&name!==undefined) return <span dir="auto" className="avatar avatar--agent" aria-hidden="true" style={{width:face.size,height:face.size,fontSize:Math.max(9,Math.round(face.size/2))}}>{Array.from(name.trim())[0]||'؟'}</span>;
  return <Orb agent={agent} {...face}/>;
 }
 
