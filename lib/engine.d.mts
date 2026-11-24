@@ -36,6 +36,9 @@ export type FoundAgent={state:'found',agent:Agent}|{state:'missing'|'refused'|'u
 // A model a Run may be started on (#158): the Engine's provider and model names.
 export type ModelChoice={provider:string,model:string};
 export type AgentModels={state:'found'|'refused'|'unreachable',current:ModelChoice|null,models:(ModelChoice&{providerName:string})[]};
+// Where an Agent's own profile takes the Company's Providers from (#660): its shared space, whose API keys it is given, and
+// the profile of the Company's keeper (Lead), whose model it starts on.
+export type CompanyProviders={space:string,keeper:string};
 export type ProvidedAgent={state:'provided'|'noModel'|'forbidden'|'failed'|'refused'|'unreachable'};
 export type RemovedAgent={state:'removed'|'missing'|'refused'|'unreachable'};
 // The apps of the profile an Engine is bound to (#203): each listed app the Engine offers it, with its state there.
@@ -82,7 +85,8 @@ export type Engine={
  steps?(run:string,read?:{signal?:AbortSignal}):AsyncIterable<RunEvent>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
- provideAgent(agent:{name:string,instructions:string,subagents?:boolean}):Promise<ProvidedAgent>,
+ provideAgent(agent:{name:string,instructions:string,subagents?:boolean,providers?:CompanyProviders}):Promise<ProvidedAgent>,
+ giveProviders?(target:{name:string}&CompanyProviders):Promise<ProvidedAgent>,
  removeAgent(name:string):Promise<RemovedAgent>,
  readKeys?(space:string):Promise<ProviderKeys>,
  models?():Promise<AgentModels>,

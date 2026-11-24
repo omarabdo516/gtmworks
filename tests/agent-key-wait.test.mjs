@@ -59,18 +59,18 @@ const engineOn=(fake,profile)=>hermesEngine({address:fake.address,managementAddr
 
 // Lead's create_agent call on Lead's profile, with the database's answers for a Company, and `answers` to other calls by
 // name.
-async function leadMakes(fake,answers={}) {
+async function leadMakes(fake,answers={},lead=main) {
  const calls=[];
  const db={rpc:async(name,args)=>{ calls.push([name,args]);
   if(Object.hasOwn(answers,name)) return {data:answers[name],error:null};
   if(name==='lead_agent_profile') return {data:{profile:later,soul:'You write for RS Learning.'},error:null};
   if(name==='lead_create_agent') return {data:{state:'created',agent:agentId(later)},error:null};
   return {data:null,error:{message:'unexpected'}}; }};
- const outcome=await runToolCall({db,engine:engineOn(fake,main),profile:main,conversation:'conversation-1',run:'run-1'},{id:'call-0',name:'create_agent',arguments:{template:'writer'}});
+ const outcome=await runToolCall({db,engine:engineOn(fake,lead),profile:lead,conversation:'conversation-1',run:'run-1'},{id:'call-0',name:'create_agent',arguments:{template:'writer'}});
  return {outcome,calls};
 }
 
-test('an Agent Lead makes after the key was set is made on a fresh profile of its own, asked to wait for the key, and starts no Run on Lead\'s', async () => {
+test('an Agent Lead makes after the key was set starts on a fresh profile of its own with the Company\'s key and a model, and waits for nothing (#660)', async () => {
  const fake=await fakeHermes();
  try {
   made(fake,space,main,writer);
@@ -81,13 +81,82 @@ test('an Agent Lead makes after the key was set is made on a fresh profile of it
   const createdProfiles=fake.settings.managementRequests.filter(request=>request.method==='POST'&&request.path==='/api/profiles');
   assert.deepEqual(createdProfiles.map(request=>request.body.name),[later],'the Engine is asked to make only the new Agent profile');
   assert.deepEqual(Object.keys(createdProfiles[0].body).sort(),['name','soul'],'never cloned from the space');
-  assert.deepEqual(envOf(fake,later),{},'the new profile holds no key');
-  assert.equal(fake.settings.skills.get(later),undefined,'nor a copy of the space\'s Skills');
-  const writes=fake.settings.managementRequests.filter(request=>request.method!=='GET').map(request=>request.path==='/api/profiles'?request.body.name:profileOf(request.path));
+  assert.equal(envOf(fake,later).OPENROUTER_API_KEY,known,'the profile holds the Company\'s key, read from the space');
+  assert.deepEqual(fake.settings.reveals,[{profile:space,key:'OPENROUTER_API_KEY'}],'read on the Engine\'s own route, from the space only');
+  assert.deepEqual([fake.settings.profiles.get(later).provider,fake.settings.profiles.get(later).model],['openrouter','anthropic/claude-opus-4.6'],'with the first model the key gives, as Lead names none');
+  assert.equal(fake.settings.skills.get(later),undefined,'and no copy of the space\'s Skills');
+  const writes=fake.settings.managementRequests.filter(request=>request.method!=='GET'&&request.path!=='/api/env/reveal').map(request=>request.path==='/api/profiles'?request.body.name:profileOf(request.path));
   assert.ok(writes.every(profile=>profile===later),`only the new profile is written: ${writes}`);
   assert.equal(calls.at(-1)[0],'lead_create_agent');
-  assert.deepEqual([calls.at(-1)[1].own_profile,calls.at(-1)[1].own_answers],[true,false],'the database is asked to make it on its own profile, waiting for the key');
+  assert.deepEqual([calls.at(-1)[1].own_profile,calls.at(-1)[1].own_answers],[true,undefined],'the database is asked to make it on its own profile, able to answer');
+  assert.ok(!JSON.stringify(calls).includes(known),'no key reaches the database');
   assert.deepEqual(runsOn(fake),[],'no Run starts, on Lead\'s profile or any other');
+ } finally { await fake.close(); }
+});
+
+test('in a Company with a provider key and a subscription, an Agent Lead makes answers a turn on its own profile, on the model Lead runs on (#660)', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,space,main,writer);
+  fake.settings.defaultCredentials.anthropic='test-only-claude-oauth';
+  fake.settings.subscriptionModels.anthropic=['claude-sonnet-4-6'];
+  await change(sessions(fake),fake,{intent:'set',value:known});
+  // Lead runs on the Company's Claude subscription, picked after the key was set.
+  Object.assign(fake.settings.profiles.get(main),{provider:'anthropic',model:'claude-sonnet-4-6'});
+  const {outcome,calls}=await leadMakes(fake);
+  assert.equal(outcome.state,'created');
+  assert.deepEqual([calls.at(-1)[1].own_profile,calls.at(-1)[1].own_answers],[true,undefined],'made able to answer, so it waits for nothing');
+  assert.equal(envOf(fake,later).OPENROUTER_API_KEY,known,'it holds the key');
+  assert.deepEqual([fake.settings.profiles.get(later).provider,fake.settings.profiles.get(later).model],['anthropic','claude-sonnet-4-6'],'and starts on Lead\'s model, the subscription the root lends');
+  assert.equal(fake.settings.defaultCredentials.anthropic,'test-only-claude-oauth','the subscription stays the root\'s');
+  assert.equal(fake.settings.profiles.get(later).credentials?.anthropic,undefined,'and is never copied into the profile');
+  const engine=engineOn(fake,later);
+  const run=await engine.start({conversation:'conversation-3',input:'Write the June article',idempotencyKey:'send-2'});
+  assert.equal((await engine.read(run)).state,'completed');
+  assert.deepEqual([...new Set(runsOn(fake))],[later],'the turn runs on its own profile only');
+ } finally { await fake.close(); }
+});
+
+test('a new profile that answers already on the Company\'s subscription is still given the Company\'s key, and keeps its model', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,space,main,writer);
+  await change(sessions(fake),fake,{intent:'set',value:known});
+  fake.settings.defaultCredentials.anthropic='test-only-claude-oauth';
+  fake.settings.subscriptionModels.anthropic=['claude-sonnet-4-6'];
+  // The Engine seeds the new profile with a model the root's subscription answers.
+  const created=fake.settings.profiles.set.bind(fake.settings.profiles);
+  fake.settings.profiles.set=(name,profile)=>created(name,name===later?{...profile,provider:'anthropic',model:'claude-sonnet-4-6'}:profile);
+  const {calls}=await leadMakes(fake);
+  fake.settings.profiles.set=created;
+  assert.deepEqual([calls.at(-1)[1].own_profile,calls.at(-1)[1].own_answers],[true,undefined]);
+  assert.equal(envOf(fake,later).OPENROUTER_API_KEY,known,'the key its Fallback model may need');
+  assert.deepEqual([fake.settings.profiles.get(later).provider,fake.settings.profiles.get(later).model],['anthropic','claude-sonnet-4-6'],'its model kept');
+ } finally { await fake.close(); }
+});
+
+test('a Company with no account that gives a model still makes the Agent waiting on its own profile, with nothing written to it', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,space,main,writer);
+  fake.settings.providerModels.openrouter=[];
+  await change(sessions(fake),fake,{intent:'set',value:known});
+  const {calls}=await leadMakes(fake);
+  assert.deepEqual([calls.at(-1)[1].own_profile,calls.at(-1)[1].own_answers],[true,false],'it waits on its own profile');
+  assert.equal(fake.settings.profiles.get(later).model,'','with no model to answer on');
+  assert.deepEqual(runsOn(fake),[]);
+ } finally { await fake.close(); }
+});
+
+test('a Company whose space the Engine does not serve yet still makes the Agent on its own profile, waiting, and writes it no key', async () => {
+ const fake=await fakeHermes();
+ try {
+  made(fake,main,writer);
+  const {outcome,calls}=await leadMakes(fake);
+  assert.equal(outcome.state,'created');
+  assert.deepEqual([calls.at(-1)[1].own_profile,calls.at(-1)[1].own_answers],[true,false],'made, with no model to answer on yet');
+  assert.deepEqual(envOf(fake,later),{});
+  assert.deepEqual(fake.settings.reveals,[]);
  } finally { await fake.close(); }
 });
 
@@ -109,7 +178,8 @@ test('the waiting Agent is listed for the Owner until the next set gives its own
  try {
   made(fake,space,main,writer);
   await change(sessions(fake),fake,{intent:'set',value:known});
-  await leadMakes(fake);
+  // Made by a Lead whose profile names no Company's Providers, as the previous app version made every Agent.
+  await leadMakes(fake,{},writer);
   const owner=sessions(fake,{waits:[later],extra:[{profile:later,kind:'agent',agent:agentId(later),name:'Writer later'}]});
   assert.deepEqual((await read(owner,fake)).waiting,[{agent:agentId(later),name:'Writer later'}],'the Owner sees it waiting');
   const set=await change(owner,fake,{intent:'set',value:known});
