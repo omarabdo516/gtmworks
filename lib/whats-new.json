@@ -2,8 +2,8 @@
  {
   "issue": 643,
   "date": "2026-11-24",
-  "en": { "title": "OpenCode Go offers only the models it serves you", "body": "An OpenCode Go key now lists, offers and starts on only the models OpenCode itself says it serves that key, so an older model OpenCode refuses is no longer offered; when OpenCode cannot be asked, the Engine's own list is shown as before." },
-  "ar": { "title": "OpenCode Go بيعرض بس الموديلات اللي بيقدّمهالك", "body": "مفتاح OpenCode Go دلوقتي بيعرض ويبدأ بس بالموديلات اللي OpenCode نفسه بيقول إنه بيقدّمها للمفتاح ده، فالموديلات القديمة اللي OpenCode بيرفضها مبقتش بتظهر؛ ولو OpenCode ماردّش، بتظهر قايمة المحرّك نفسه زي الأول." }
+  "en": { "title": "OpenCode Go checks which models it serves you", "body": "An OpenCode Go key now lists, offers and starts on only the models OpenCode itself says it serves that key, so an older model OpenCode refuses is no longer offered; when OpenCode cannot be asked, the Engine's own list is shown as before." },
+  "ar": { "title": "OpenCode Go بيتأكد من الموديلات اللي بيقدّمهالك", "body": "مفتاح OpenCode Go دلوقتي بيعرض ويبدأ بس بالموديلات اللي OpenCode نفسه بيقول إنه بيقدّمها للمفتاح ده، فالموديلات القديمة اللي OpenCode بيرفضها مبقتش بتظهر؛ ولو OpenCode ماردّش، بتظهر قايمة المحرّك نفسه زي الأول." }
  },
  {
   "issue": 602,

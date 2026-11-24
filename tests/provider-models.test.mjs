@@ -187,13 +187,13 @@ test('an order that could not be read offers nothing, and an unlisted subscripti
 // #643: OpenCode Go serves its key only part of the Engine's catalogue; the Engine merges its own older ids into the list,
 // and OpenCode refuses each of those. A fake OpenCode Go, which the profile's OPENCODE_GO_BASE_URL points at as the
 // Engine's own route does, lists what the key is served.
-async function fakeOpenCode({served,status=200}) {
+async function fakeOpenCode({served,status=200,rows}) {
  const { createServer }=await import('node:http');
  const asked=[];
  const server=createServer((request,response)=>{
   asked.push({path:request.url,authorization:request.headers.authorization});
   response.writeHead(status,{'Content-Type':'application/json'});
-  response.end(JSON.stringify(status===200?{object:'list',data:served.map(id=>({id,object:'model',owned_by:'opencode'}))}:{error:'down'}));
+  response.end(JSON.stringify(status===200?{object:'list',data:rows??served.map(id=>({id,object:'model',owned_by:'opencode'}))}:{error:'down'}));
  });
  await new Promise(done=>server.listen(0,'127.0.0.1',done));
  return {base:`http://127.0.0.1:${server.address().port}/zen/go/v1`,asked,close:()=>new Promise(done=>server.close(done))};
@@ -282,5 +282,14 @@ test('an OpenCode Go address the Engine could not read keeps the Engine\'s list 
    assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
   } finally { globalThis.fetch=real; }
   assert.deepEqual(asked.filter(url=>url.includes('/models')&&!url.includes('/api/model/options')),[],'neither OpenCode\'s own address nor the unread one is asked');
+ } finally { await go.close(); await fake.close(); }
+});
+
+test('an OpenCode Go list whose rows name no model is not read as serving none, so the Engine\'s list stays', async () => {
+ const fake=await fakeHermes(); const go=await fakeOpenCode({served:[],rows:[{},{id:''},{object:'model'}]});
+ try {
+  seedGo(fake,go.base);
+  const {db}=database();
+  assert.deepEqual((await readProviderModels(db,{company,hermes:install(fake)}))['key-opencode-go'].map(row=>row.model),['mimo-v2-omni','glm-5.3','kimi-k2.5','gemini-4-argon']);
  } finally { await go.close(); await fake.close(); }
 });
