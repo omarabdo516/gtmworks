@@ -180,8 +180,11 @@ Company's shared space is `cs-<company id>`. Every Agent gets one fixed set of
 tools (ADR 0018): web, vision, image generation, skills, a task list, memory,
 session search, the question tool and scheduled work. The work sandbox's terminal,
 files and code, and the Agent's tools as a whole, are set out in Settings, Company.
-`browser`, `computer_use` and the desktop and project tools stay off for every
-Agent, so a member cannot ask an agent to read another Company's data. An install
+Every Agent also gets `computer_use`, its own Screen: a desktop and a browser the
+Engine places inside its Company's work sandbox, which starts by itself when the
+Agent needs it and sleeps after the Engine's idle time (30 minutes). `browser` and
+the desktop and project tools stay off for every Agent, so a member cannot ask an
+agent to read another Company's data. An install
 was proven with four Agents across two
 Companies, and twenty more Agent profiles for capacity: each of the 20 took 0.66 to
 1.04 seconds to be ready, the Engine held 775 MiB before and 825 MiB after making
