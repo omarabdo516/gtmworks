@@ -11,7 +11,7 @@ const reserveArgs=(place:FilesPlace)=>({conversation:place.scope,c:place.company
 const discardArgs=reserveArgs;
 const reserve='reserve_conversation_files';
 const discard='discard_conversation_files';
-const rows:FilesTable={table:'conversation_attachments',scope:'conversation_id'};
+const table:FilesTable={table:'conversation_attachments',scope:'conversation_id'};
 
 // Whether the send starts a Conversation already there: then its files can be kept before the Agent is asked, which a
 // turn that waits behind another Run needs (the worker may start it at any moment, and it reads the files it finds).
@@ -27,7 +27,7 @@ export async function conversationExists(db:SupabaseClient,company:string,conver
 // whose files a stored message already took, so only a file missing from storage is written, never over a stored one),
 // then the bytes in the Company's folder, at the paths the database built for this keep attempt (#598).
 export async function keepConversationFiles(db:SupabaseClient,service:SupabaseClient,{company,conversation,messageKey,files}:{company:string,conversation:string,messageKey:string,files:File[]}):Promise<{error?:string}> {
- return keepMessageFiles(db,service,{place:placeOf(company,conversation,messageKey),files,rows,reserve,reserveArgs,discard,discardArgs,words});
+ return keepMessageFiles(db,service,{place:placeOf(company,conversation,messageKey),files,table,reserve,reserveArgs,discard,discardArgs,words});
 }
 
 // A send that stored no message takes its images with it: the sender's own rows the database gives back, then their

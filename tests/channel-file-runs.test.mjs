@@ -157,7 +157,7 @@ test('a channel message with images that calls no Agent starts no Run and keeps 
 test('a discard never removes the object a send of the same key kept again before its removal (#598)',async()=>{
  // One key sent twice at once: the first send's second upload fails, so it gives its rows back, and between that discard
  // and its removal from the bucket the second send keeps the rows again and writes its images. The database names each
- // keep attempt's paths (reserve_channel_files with an attempt, supabase/tests/channel_message_files.sql), so the first
+ // keep attempt's paths (reserve_channel_files with an attempt, supabase/tests/message_files_per_attempt.sql), so the first
  // send's removal reaches only its own objects and the second send's message keeps every image its rows name.
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
  let rows=/** @type {{position:number,content_type:string,path:string}[]} */([]);

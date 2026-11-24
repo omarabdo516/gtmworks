@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(14);
 -- #598: two sends of one key that interleave across a discard. The first keeps its rows, gives them back (the server
 -- would then remove the paths the discard returned), and the second keeps them again before that removal: its rows name
 -- other paths, so the removal never reaches what it writes. A send that finds the rows still there is given the rows
@@ -44,6 +44,12 @@ select is(public.reserve_conversation_files('c5980000-0000-0000-0000-00000000000
  'e5980000-0000-0000-0000-00000000000b'),2,'the second send keeps them again');
 select is((select count(*)::int from pg_temp.conversation_paths() path where path in (select path from removed)),0,
  'and none of its paths is one the first send''s removal takes');
+-- A retry from the previous app version, which still calls the four-argument reserve, adds no second row at a place.
+select is(public.reserve_conversation_files('c5980000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000001',
+ '[{"position":0,"name":"a.png","content_type":"image/png","size":10},{"position":1,"name":"b.png","content_type":"image/png","size":10}]'::jsonb),2,
+ 'a previous version''s retry of the key finds the same two rows');
+select is((select count(*)::int from pg_temp.conversation_paths() path where path like '%-e5980000-0000-0000-0000-00000000000b-%'),2,
+ 'and adds none beside them at its old paths');
 select throws_ok($$select public.reserve_conversation_files('c5980000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000003',
  '[{"position":0,"name":"a.png","content_type":"image/png","size":10}]'::jsonb,null)$$,'22023',null,'a keep names its attempt');
 
