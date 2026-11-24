@@ -64,7 +64,7 @@ test('the board\'s archive icon lists archived Cards with the column, who and wh
  await expect(inColumn(page, 'planned', 2)).toBeVisible();
 });
 
-test('an archived Card opens read-only from an old link, its log names the archive, and Restore brings it back', async ({ page }) => {
+test('an archived Card opens read-only from an old link and from its chat\'s link, its log names the archive, and Restore brings it back', async ({ page }) => {
  await signIn(page, 'manager@example.com', board);
  await archiveFromMenu(page, 3);
  await expect(onBoard(page, 3)).toHaveCount(0);
@@ -75,6 +75,11 @@ test('an archived Card opens read-only from an old link, its log names the archi
  await expect(callout).toContainText('مدير');
  await expect(sheet.getByRole('textbox')).toHaveCount(0);
  await expect(sheet.locator('#sheet-log')).toContainText('archived the card');
+ // Its Conversation's or its channel's link to the board (?show) opens it the same way, read-only.
+ await page.goto(`${board}?show=3`);
+ await expect(page).toHaveURL(new RegExp(`${board}\\?card=3$`));
+ await expect(sheet.getByRole('region', { name: 'Archived' })).toBeVisible();
+ await expect(sheet.getByRole('textbox')).toHaveCount(0);
  await callout.getByRole('button', { name: 'Restore' }).click();
  await expect(sheet.getByRole('region', { name: 'Archived' })).toHaveCount(0);
  await expect(toast(page)).toContainText('Restored');

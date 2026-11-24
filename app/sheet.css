@@ -86,10 +86,10 @@
 }
 
 /* The Card's "More" menu and an archived Card's callout (#670; design-reference-card: #cw-more, .cw-call__head--c). */
-.gw .sheet .card-menu { position: relative; flex: none; }
-.gw .sheet .card-menu__pop { inset-inline: auto 0; top: calc(100% + 4px); bottom: auto; min-width: 200px; }
+.gw .sheet .more-menu { position: relative; flex: none; }
+.gw .sheet .more-menu__pop { inset-inline: auto 0; top: calc(100% + 4px); bottom: auto; min-width: 200px; }
 .gw .sheet .sheet-archived { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); padding: var(--s3) var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-tertiary); }
 .gw .sheet .sheet-archived > .gw-icon { width: 18px; height: 18px; flex: none; color: var(--gw-text-3); }
 .gw .sheet .sheet-archived__q { flex: 1 1 0; min-width: 0; margin: 0; font-size: var(--gw-fs-sm); color: var(--gw-text-2); }
 .gw .sheet .sheet-archived .btn .gw-icon { width: 14px; height: 14px; }
-@media (max-width: 767px) { .gw .sheet .card-menu .circle-btn, .gw .sheet .sheet-archived .btn { min-width: 44px; min-height: 44px; } }
+@media (max-width: 767px) { .gw .sheet .more-menu .circle-btn, .gw .sheet .sheet-archived .btn { min-width: 44px; min-height: 44px; } }

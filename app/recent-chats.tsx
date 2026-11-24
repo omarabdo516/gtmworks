@@ -5,7 +5,7 @@ import Link from '@/lib/link';
 import { localeFor } from '@/lib/i18n.mjs';
 import { groupRecents, matchChats } from '@/lib/sidebar.mjs';
 import { useSidebarQuery } from './sidebar-search';
-import { CardMenu } from './card-menu';
+import { MoreMenu } from './more-menu';
 import { useConversationArchive } from './conversation-archive';
 
 type Chat={id:string,title:string,at:string};
@@ -33,7 +33,7 @@ export default function RecentChats({slug,company,chats,current,lead}:{slug:stri
    <Link className="sb-item thread-item" href={`/c/${slug}/conversations/${chat.id}`} aria-current={chat.id===current?'true':undefined} title={chat.title}>
     <span className="od-truncate" dir="auto">{chat.title}</span><time className="thread-item__time" dateTime={chat.at}>{time(chat.at,group.day)}</time>
    </Link>
-   <CardMenu label={t('conversationMoreOf',chat.title)} look="thread-more" className="card-menu thread-menu"
+   <MoreMenu label={t('conversationMoreOf',chat.title)} look="thread-more" className="more-menu thread-menu"
     items={[{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([{id:chat.id,title:chat.title,face:null}])}]}/>
   </li>)}</ul>
  </div>)}{confirm}</>;

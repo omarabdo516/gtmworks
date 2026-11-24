@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(30);
 -- All conversations (#673): a person's own Conversations and the channels they are in, newest message first, with a
 -- title search that reads Arabic as the product's search does, a page at a time. RS Learning's seeded Owner (…01), its
 -- Manager (…02) and a Contributor (…03); Faye is shown to nobody but the Owner.
@@ -102,5 +102,19 @@ select is(public.conversation_counts('10000000-0000-0000-0000-000000000001'),'{"
 reset role;
 select ok(not has_function_privilege('anon','public.conversation_list(uuid,text,boolean,timestamptz,uuid,integer,text,text)','execute'),'nobody signed out may ask');
 
+-- The database's title search folds text as the interface's search does (lib/arabic-search.mjs searchFold): each pair
+-- below is folded the same way by both, and tests/arabic-search.test.mjs folds the same pairs in the interface's code.
+create temporary table fold_pairs(input text, folded text);
+insert into fold_pairs(input,folded) values -- search-fold pairs
+ ('  Recurring   TASKS ','recurring tasks'),
+ ('التعلّم','التعلم'),
+ ('مُـــهمّة','مهمه'),
+ ('أإآٱ','اااا'),
+ ('مسؤول شئون','مسوول شيون'),
+ ('مستوى','مستوي'),
+ ('مُحَمَّدٌ','محمد'),
+ ('ﻻ ＡＢＣ','لا abc'),
+ ('','');
+select is_empty($$select input from fold_pairs where public.search_fold(input) is distinct from folded$$,'the database folds a search as the interface does');
 select * from finish();
 rollback;

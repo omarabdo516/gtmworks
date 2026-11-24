@@ -4,20 +4,22 @@ import { markConversationSessions } from '../lib/conversation-archive.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
 // #674 on the fake engine: the worker carries each archived (or restored) Conversation's mark to its Engine session,
-// and settles it once the Engine took it. The database is a small stand-in for conversation_sessions_to_mark and
-// conversation_session_marked (supabase/tests/conversation_archive.sql proves the real ones).
+// and settles it once the Engine took it. The database is a small stand-in for conversation_sessions_to_mark,
+// conversation_session_marked and conversation_session_missing (supabase/tests/conversation_archive.sql proves the real
+// ones, among them how long a missing session is asked again).
 const hermes={address:'http://hermes:8642',key:'test-only-key'};
 const company='10000000-0000-0000-0000-000000000001';
 const other='10000000-0000-0000-0000-000000000002';
 
-function database(rows) {
- const due=[...rows]; const settled=/** @type {{conversation:string,archived:boolean}[]} */([]);
+function database(rows,{gone=false}={}) {
+ const due=[...rows]; const settled=/** @type {{conversation:string,archived:boolean}[]} */([]); const missing=/** @type {{conversation:string,archived:boolean}[]} */([]);
  const service={rpc:async(/** @type {string} */ name,/** @type {any} */ args)=>{
   if(name==='conversation_sessions_to_mark') return {data:[...due],error:null};
   if(name==='conversation_session_marked') { settled.push(args); due.splice(due.findIndex(row=>row.conversation===args.conversation),1); return {data:true,error:null}; }
+  if(name==='conversation_session_missing') { missing.push(args); return {data:gone,error:null}; }
   return {data:null,error:{message:'unexpected'}};
  }};
- return {service,settled,due};
+ return {service,settled,due,missing};
 }
 
 test('each Conversation\'s session takes its mark on its Agent\'s profile, and the mark is settled once taken',async()=>{
@@ -51,15 +53,17 @@ test('an Engine that does not answer keeps its marks for the next pass, and neve
  assert.deepEqual(two.settled,[{conversation:'c4',archived:true}],'another Company\'s Engine is still asked');
 });
 
-test('a session the Engine no longer keeps, or a Conversation whose Agent is gone, has nothing to mark and is settled',async()=>{
+test('a session the Engine does not keep, or a Conversation whose Agent is gone, is told to the database, which decides when to let it go',async()=>{
  const fake=fakeEngine();
  fake.settings.marking='missing';
- const {service,settled}=database([
-  {conversation:'c1',company,profile:'ag-1',session:'s1',archived:true},
-  {conversation:'c2',company,profile:null,session:'s2',archived:true}]);
- assert.equal(await markConversationSessions(service,{hermes,engineFor:fake.engineFor}),2);
+ const rows=[{conversation:'c1',company,profile:'ag-1',session:'s1',archived:true},{conversation:'c2',company,profile:null,session:'s2',archived:true}];
+ const waiting=database(rows);
+ assert.equal(await markConversationSessions(waiting.service,{hermes,engineFor:fake.engineFor}),0,'a session not written yet is not settled: it is asked again later');
  assert.equal(fake.marks.length,1,'a Conversation with no Agent asks no Engine');
- assert.deepEqual(settled.map(row=>row.conversation),['c1','c2']);
+ assert.deepEqual(waiting.settled,[],'nothing is marked as taken');
+ assert.deepEqual(waiting.missing,[{conversation:'c1',archived:true},{conversation:'c2',archived:true}]);
+ const gone=database(rows,{gone:true});
+ assert.equal(await markConversationSessions(gone.service,{hermes,engineFor:fake.engineFor}),2,'once the database lets them go, they count as settled');
 });
 
 test('a refused key keeps the mark for the next pass',async()=>{

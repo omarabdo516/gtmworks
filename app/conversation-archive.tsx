@@ -3,14 +3,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { CompanyAgentFace } from '@/components/company-agent-face';
-import { ArchiveConfirm, type ArchiveStop } from '@/app/archive-confirm';
+import { ArchiveConfirm } from '@/app/archive-confirm';
 import { archiveConversations } from '@/app/conversation-archive-actions';
-import type { ConversationStop } from '@/lib/all-conversations';
+import type { ArchiveStop } from '@/lib/archive-stops';
 import { toast } from '@/app/toast';
 
 // One Conversation a person archives or restores (#674): its id, the title it is shown by, and its Agent's face.
 export type ArchivedChat={id:string,title:string,face:{connection_id:string,name:string}|null};
-type Asking={chats:ArchivedChat[],stops:ConversationStop[]};
+type Asking={chats:ArchivedChat[],stops:ArchiveStop[]};
 
 // Archiving and restoring the person's own Conversations from any place that lists them (All conversations, the
 // sidebar, the chat's head; design-reference-card: cvArchive, cvRestore). Archiving first asks the database what it
@@ -24,15 +24,15 @@ export function useConversationArchive(company:string,changed?:(ids:string[],arc
  const restore=async(chats:ArchivedChat[])=>{
   const result=await archiveConversations(company,'restore',chats.map(chat=>chat.id)).catch(()=>null);
   if(result?.state!=='done') { toast(t('conversationRestoreRefused'),{icon:'x'}); return; }
-  done(result.chats,false);
-  toast(result.chats.length>1?t('conversationsRestoredToast',result.chats.length):t('conversationRestoredToast'),{icon:'restore'});
+  done(result.done,false);
+  toast(result.done.length>1?t('conversationsRestoredToast',result.done.length):t('conversationRestoredToast'),{icon:'restore'});
  };
  const archiveNow=async(chats:ArchivedChat[])=>{
   const result=await archiveConversations(company,'archive',chats.map(chat=>chat.id)).catch(()=>null);
   if(result?.state!=='done') { toast(t('conversationArchiveRefused'),{icon:'x'}); return; }
-  const archived=chats.filter(chat=>result.chats.includes(chat.id));
-  done(result.chats,true);
-  toast(result.chats.length>1?t('conversationsArchivedToast',result.chats.length):t('conversationArchivedToast'),{icon:'archive',action:{label:t('boardUndo'),run:()=>{ void restore(archived); }}});
+  const archived=chats.filter(chat=>result.done.includes(chat.id));
+  done(result.done,true);
+  toast(result.done.length>1?t('conversationsArchivedToast',result.done.length):t('conversationArchivedToast'),{icon:'archive',action:{label:t('boardUndo'),run:()=>{ void restore(archived); }}});
  };
  const archive=async(chats:ArchivedChat[])=>{
   if(!chats.length) return;
@@ -42,10 +42,10 @@ export function useConversationArchive(company:string,changed?:(ids:string[],arc
  let confirm=null;
  if(asking) {
   const titled=new Map(asking.chats.map(chat=>[chat.id,chat]));
-  const faces=new Map(asking.stops.map(stop=>[stop.agent_id,titled.get(stop.conversation)?.face??null]));
-  const stops=asking.stops.map((stop,index):ArchiveStop=>({card:index,title:titled.get(stop.conversation)?.title??'',kind:stop.kind,agent:stop.agent,agent_id:stop.agent_id}));
+  const faces=new Map(asking.stops.map(stop=>[stop.agent_id,titled.get(stop.about)?.face??null]));
+  const stops=asking.stops.map((stop):ArchiveStop=>({...stop,title:titled.get(stop.about)?.title??''}));
   const face=(agent:string|null)=>{ const found=faces.get(agent); return found?<CompanyAgentFace agent={found} size={24}/>:null; };
-  confirm=<ArchiveConfirm stops={stops} cards={asking.chats.length} face={face}
+  confirm=<ArchiveConfirm stops={stops} face={face}
    heading={asking.chats.length>1?t('conversationArchiveConfirmMany',asking.chats.length):t('conversationArchiveConfirmOne')}
    confirm={()=>{ const chosen=asking.chats; setAsking(null); void archiveNow(chosen); }} cancel={()=>setAsking(null)}/>;
  }

@@ -11,7 +11,7 @@ insert into isolation_matrix(name) values
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_fallback_models'),('company_profile_keepers'),('company_profiles'),('company_provider_models'),('company_shared_spaces'),
  ('good_morning_results'),('good_mornings'),
- ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
+ ('conversation_archives'),('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
  ('held_agent_changes'),('hermes_agents'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
@@ -30,6 +30,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('stopped_runs', $${"conversation_id": "gen_random_uuid()", "run_id": "'isolation'"}$$),
  -- A channel's archive or restore (#675).
  ('channel_archives', $${"action": "'archived'"}$$),
+ -- A Conversation's archive or restore (#674).
+ ('conversation_archives', $${"action": "'archived'"}$$),
  -- A proposal off the list is kept as refused (#19), which its checks allow with any value.
  ('agent_change_proposals', $${"change": "'model'", "state": "'refused'"}$$),
  -- Good morning's lease (#182) names who holds it and until when.

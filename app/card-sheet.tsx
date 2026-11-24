@@ -10,7 +10,7 @@ import { toast } from '@/app/toast';
 import { insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
 import { MentionPop, mentionSuggestions, newId, type CallableAgent, type CallablePerson, type Suggestion } from '@/app/conversation-composer';
 import { CardSheetChat, opensOn, type SheetChat } from '@/app/card-sheet-chat';
-import { CardMenu, type CardMenuItem } from '@/app/card-menu';
+import { MoreMenu, type MoreMenuItem } from '@/app/more-menu';
 import './log.css';
 import './sheet.css';
 
@@ -88,13 +88,13 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite:mayW
  const pick=(next:SheetTab)=>{ if(next==='chat'&&none) return; setTab(next); document.getElementById(`sh-tab-${next}`)?.focus(); };
  const chatLink=sheet.chat.kind==='own'&&`/c/${slug}/conversations/${sheet.chat.record.conversation.id}`;
  const copyLink=()=>{ try { void navigator.clipboard?.writeText(`${location.origin}${board}?card=${sheet.id}`).catch(()=>{}); } catch { /* the browser refused the clipboard */ } toast(t('cardLinkCopied'),{icon:'link'}); };
- const menu:CardMenuItem[]=archive?[{key:'copy',icon:'link',label:t('cardCopyLink'),run:copyLink},
+ const menu:MoreMenuItem[]=archive?[{key:'copy',icon:'link',label:t('cardCopyLink'),run:copyLink},
   archived?{key:'restore',icon:'restore',label:t('cardRestore'),run:archive.restore}:{key:'archive',icon:'archive',label:t('cardArchive'),run:archive.archive}]:[];
  return <dialog ref={box} className={`sheet${leaving?' is-closing':''}`} aria-labelledby="sheet-title" onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="sheet__inner">
    <header className="sheet__head" id="sheet-head">
     <div className="sheet__top">{face}<h2 className="sheet__title" id="sheet-title"><bdi>{title}</bdi></h2>
-     {mayWrite&&menu.length>0&&<CardMenu items={menu}/>}
+     {mayWrite&&menu.length>0&&<MoreMenu label={t('cardMore')} items={menu}/>}
      <button type="button" className="circle-btn" aria-label={t('sheetClose')} onClick={close}><ShellIcon name="x"/></button></div>
     <div className="sheet__meta">{who&&<>{who}<span aria-hidden="true">·</span></>}{badge}
      {chatLink&&<Link className="link-btn" href={chatLink}><ShellIcon name="open"/><span>{t('sheetOpenInChats')}</span></Link>}

@@ -1702,5 +1702,7 @@
   "boardArchiveLeftOne": "Not archived: {0}. It changed meanwhile, or you may not archive it.",
   "boardArchiveLeftMany": "Not archived: {0}. They changed meanwhile, or you may not archive them.",
   "boardRestoreLeftOne": "Not restored: {0}. It changed meanwhile, or you may not restore it.",
-  "boardRestoreLeftMany": "Not restored: {0}. They changed meanwhile, or you may not restore them."
+  "boardRestoreLeftMany": "Not restored: {0}. They changed meanwhile, or you may not restore them.",
+  "logActConversationArchived": "archived the conversation",
+  "logActConversationRestored": "restored the conversation"
 }

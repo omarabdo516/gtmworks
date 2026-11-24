@@ -1,5 +1,11 @@
 [
  {
+  "issue": 667,
+  "date": "2026-11-24",
+  "en": { "title": "Archive cards, conversations and channels", "body": "Archive a card, several at once or everything in Done, a conversation, or a team channel, with Undo: whatever an Agent was doing there stops and nobody waits on it any more, nothing is deleted, and All conversations lists every conversation and channel with their own Archived tab to restore them from." },
+  "ar": { "title": "أرشف البطاقات والمحادثات والقنوات", "body": "أرشف بطاقة، أو كذا واحدة مرة واحدة أو كل اللي في «خلص»، أو محادثة، أو قناة فريق، ومعاها «تراجع»: أي شغل كان الوكيل بيعمله فيها بيقف ومحدش بيفضل مستنيها، ومفيش حاجة بتتمسح، وصفحة «كل المحادثات» فيها كل المحادثات والقنوات وتبويب «المؤرشفة» ترجّعها منه." }
+ },
+ {
   "issue": 660,
   "date": "2026-11-24",
   "en": { "title": "New Agents start right away", "body": "An Agent Lead makes now starts with the company's Providers as they are, so it no longer waits for an API key you already gave, and the ones that waited start on their own; one that truly has no model says so and opens Providers." },

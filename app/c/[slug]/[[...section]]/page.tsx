@@ -100,12 +100,14 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  // reader's own rights, this Company) when the list missed it.
  for(const named of [sheetId,shownId]) if(named!=null&&workData[2]?.data&&!workData[2].data.some(c=>c.id===named)) { const {data:asked}=await boardCards().eq('id',named).maybeSingle(); if(asked) workData[2].data.push(asked); }
  // The board's archive list (#670), read apart from current Cards, which leave archived ones out in the database. An
- // archived Card named in the address opens read-only over the board; its own page's address (an old link, the log's)
- // opens it there too.
+ // archived Card named in the address opens read-only over the board, from every link that leads to it: the board's
+ // own (?card), its own page's address (an old link, the log's, a morning's), and the board link its Conversation or
+ // channel gives (?show), which has no current Card to show.
  const {data:archivedRows}=section==='work/board'?await db.rpc('archived_cards',{c:company.id}).select('*'):{data:null};
  const archived=(archivedRows||[]) as {id:number}[];
- if(cardId!=null&&archived.some(c=>c.id===cardId)&&!workData[2]?.data?.some(c=>c.id===cardId)) redirect(`/c/${slug}/work/board?card=${cardId}`);
- const sheetArchived=sheetId!=null&&archived.some(c=>c.id===sheetId);
+ const isArchived=(id:number|null|undefined)=>id!=null&&archived.some(c=>c.id===id)&&!workData[2]?.data?.some(c=>c.id===id);
+ for(const named of [cardId,shownId]) if(isArchived(named)) redirect(`/c/${slug}/work/board?card=${named}`);
+ const sheetArchived=isArchived(sheetId);
  const sheet=sheetId!=null&&(sheetArchived||workData[2]?.data?.some(c=>c.id===sheetId))?await cardSheet(db,{company:company.id,card:sheetId,slug,me:user.id,canWrite:canCreate&&!sheetArchived,t,language}):undefined;
  const {data:workMembers}=(isWork||section==='home'||section==='approvals')?await db.from('members').select('person_id,role,agent_role,people(name)').is('removed_at',null).eq('company_id',company.id):{data:[]};
  const {data:workAgents}=isWork?await db.rpc('company_agents',{c:company.id}):{data:[]};

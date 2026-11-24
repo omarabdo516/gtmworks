@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(61);
 -- #674 (spec #667). A person archives and restores their own Conversations. RS Learning's Ari is shown to the Manager
 -- (…02), a Contributor (…03) and the Viewer (…04). The Manager has "Plans" (tied to the "Plans card" Card, its session
 -- named in the Engine), "Busy" (its Run is open, a turn waits behind it, and the Run asks a question, a permission and
@@ -84,6 +84,11 @@ select is(public.conversation_counts('10000000-0000-0000-0000-000000000001'),'{"
 select is((select count(*)::int from public.conversations where company_id='10000000-0000-0000-0000-000000000001' and archived_at is null),2,
  'the sidebar''s read of current Conversations leaves them out in the database');
 select is((select archived_by::text from public.conversations where id=pg_temp.chat(1)),'20000000-0000-0000-0000-000000000002','who archived it is kept');
+select is((select string_agg(subject||':'||coalesce(card_id::text,'-')||':'||(details->>'title'),',' order by subject) from public.company_log where action='conversation_archived'),
+ 'agent:-:Busy,card:'||pg_temp.card('Plans card')||':Plans','each archive is logged where the Conversation''s other events go: on its Card, or for its person alone');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is((select string_agg(subject,',') from public.company_log where action='conversation_archived'),'card','another Member reads the Card''s row and not the person''s own');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is(pg_temp.stops(array[pg_temp.chat(2)]),'','an archived Conversation names nothing more to stop');
 select is(pg_temp.waits(),'','and nothing waits on its person any more');
 select is((select count(*)::int from public.work_cards where title='Plans card'),1,'its Card is left on the board');
@@ -154,6 +159,56 @@ select is(pg_temp.answer($$select public.restore_conversations('10000000-0000-00
 select is(pg_temp.stops(array[pg_temp.chat(2)]),'','and is told nothing of what would stop');
 select set_config('request.jwt.claim.sub','',true);
 select is(pg_temp.answer($$select public.archive_conversations('10000000-0000-0000-0000-000000000001',array[pg_temp.chat(5)])$$),'42501','nobody signed in is refused');
+reset role;
+
+-- A message sent or queued before the archive, whose start was on its way when it was archived, lands after it: that
+-- is no new writing, so the Conversation stays archived, and its Run is stopped as it lands. The Contributor's "Theirs"
+-- has a turn queued behind its Run whose start is on its way; the Manager's "Plans" a direct send on its way.
+insert into public.conversation_queued_turns(conversation_id,send_key,company_id,person_id,agent_id,message,queued_at) values
+ (pg_temp.chat(5),'e6742000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a6740000-0000-0000-0000-000000000001','Queued before','2026-11-05 09:05Z');
+insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile,start_attempts,created_at) values
+ (pg_temp.chat(5),'e6742000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000001','c6740000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a6740000-0000-0000-0000-000000000001','Queued before','archive-chat',1,'2026-11-05 09:05Z'),
+ (pg_temp.chat(1),'e6742000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','c6740000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a6740000-0000-0000-0000-000000000001','Sent before','archive-chat',1,'2026-11-01 09:05Z');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select is(pg_temp.answer($$select public.archive_conversations('10000000-0000-0000-0000-000000000001',array[pg_temp.chat(5)])$$),'e6740000-0000-0000-0000-000000000005','the Contributor archives "Theirs"');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is(pg_temp.answer($$select public.archive_conversations('10000000-0000-0000-0000-000000000001',array[pg_temp.chat(1)])$$),'e6740000-0000-0000-0000-000000000001','the Manager archives "Plans" again');
+reset role;
+select ok((select failed_at is null from public.conversation_queued_turns where send_key='e6742000-0000-0000-0000-000000000005'),'the turn whose start is on its way is left to land');
+set local role service_role;
+select ok(public.record_conversation_turn(pg_temp.chat(5),'e6742000-0000-0000-0000-000000000005','theirs-late-run','c6740000-0000-0000-0000-000000000001'),'the queued turn''s start lands after the archive');
+reset role;
+select ok((select archived_at is not null from public.conversations where id=pg_temp.chat(5)),'and leaves its Conversation archived');
+select ok(exists(select 1 from public.stopped_runs where conversation_id=pg_temp.chat(5) and run_id='theirs-late-run'),'its Run is stopped as it lands');
+set local role authenticated;
+select ok(public.send_conversation_message(pg_temp.chat(1),'10000000-0000-0000-0000-000000000001','a6740000-0000-0000-0000-000000000001','Sent before',
+ 'e6742000-0000-0000-0000-000000000006','plans-late-run','c6740000-0000-0000-0000-000000000001'),'the direct send''s record lands after the archive');
+reset role;
+select ok((select archived_at is not null from public.conversations where id=pg_temp.chat(1)),'and leaves its Conversation archived too');
+select ok(exists(select 1 from public.stopped_runs where conversation_id=pg_temp.chat(1) and run_id='plans-late-run'),'its Run is stopped as it lands');
+
+-- A Run stopped before it replied still names its Engine session, so the archived Conversation has a session to mark.
+set local role service_role;
+select ok(public.close_conversation_run(pg_temp.chat(5),'theirs-late-run','stopped',null,'session-theirs-2',null,null,false),'the stopped Run closes');
+reset role;
+update public.conversations set hermes_session_id=null where id=pg_temp.chat(4);
+insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
+ values('10000000-0000-0000-0000-000000000001',pg_temp.chat(4),'person','20000000-0000-0000-0000-000000000002','مدير','One more',gen_random_uuid(),'later-run-2');
+set local role service_role;
+select ok(public.close_conversation_run(pg_temp.chat(4),'later-run-2','stopped',null,'session-later',null,null,false),'a Run of a Conversation with no session yet closes stopped');
+reset role;
+select is((select hermes_session_id from public.conversations where id=pg_temp.chat(4)),'session-later','and its Engine session is kept with the Conversation');
+set local role service_role;
+
+-- A session the Engine does not keep yet is asked again a minute later, and let go after a day.
+select ok(not public.conversation_session_missing(pg_temp.chat(5),true),'a session the Engine does not keep yet is not settled');
+select ok(not exists(select 1 from public.conversation_sessions_to_mark() where conversation=pg_temp.chat(5)),'and waits a minute before it is asked again');
+reset role;
+update public.conversations set session_missing_since=now()-interval '2 days', session_mark_after=null where id=pg_temp.chat(5);
+set local role service_role;
+select ok(public.conversation_session_missing(pg_temp.chat(5),true),'one missing for a day is settled as it is');
+select ok(not exists(select 1 from public.conversation_sessions_to_mark() where conversation=pg_temp.chat(5)),'and is not asked again');
 reset role;
 
 select * from finish();

@@ -67,13 +67,18 @@ test('the README says every Company Engine is in the backup, the restore and the
   assert.match(section('Restore'), /refuses\s+an archive it cannot fully restore/, 'restore refuses an incomplete archive');
 });
 
-// #674: an archived Conversation is still archived after a backup and a restore. Its archive is kept in the database
-// (conversations.archived_at, by its migration) and its Engine session's flag in that Engine's own data, and the archive
-// holds both whole.
-test('a backup and a restore keep an archived Conversation archived, in the database and in its Engine', () => {
-  const migration = readFileSync('supabase/migrations/20270415999991_archive_conversations.sql', 'utf8');
-  assert.match(migration, /alter table public\.conversations add column archived_at timestamptz, add column archived_by uuid/, 'the archive is a column of the Conversation in the database');
-  assert.match(migration, /add column session_archived boolean/, 'and what its Engine session last took is beside it, so a restored install sends no mark again');
+// Spec #667 story 30: an archived Card, Conversation and team channel are still archived after a backup and a restore.
+// Archived is a time and a person on each, kept in the database the archive holds whole; the backup area archives one of
+// each in every Company before the backup and finds each still archived after the restore (`./ci.sh install backup`).
+// An archived Conversation's Engine session flag is in that Engine's own data, which the archive holds too.
+test('a backup and a restore keep archived Cards, Conversations and channels archived', () => {
+  const area = readFileSync('scripts/ci-install-check.sh', 'utf8');
+  const backup = area.slice(area.indexOf('\nbackup() {'), area.indexOf('\n}\n', area.indexOf('\nbackup() {')));
+  for (const table of ['work_cards', 'conversations', 'channels']) {
+    assert.match(backup, new RegExp(`(insert into|update) public\\.${table}\\b[^\\n]*archived_at`), `the backup area archives a row of ${table} before the backup`);
+  }
+  assert.ok(backup.indexOf('archived_rows > archived.before') < backup.indexOf('sh scripts/install.sh backup'), 'and reads them before the backup');
+  assert.match(backup, /diff -u archived\.before archived\.after \|\| fail 'the restore keeps archived Cards, Conversations and channels archived'/, 'and finds them archived after the restore');
   const archived = archivedPaths();
   assert.ok(archived.includes('var/lib/postgresql/data'), 'the database is in the archive');
   assert.ok(archived.includes('engines'), 'every Engine\'s data, which holds its sessions and their flags, is in the archive');

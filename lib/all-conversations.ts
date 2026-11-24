@@ -1,5 +1,5 @@
 import type { supabase } from './supabase';
-import { morningTitle } from './good-morning-title.mjs';
+import { conversationTitle } from './conversation-title.mjs';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 type Translate=(key:string,...values:unknown[])=>string;
@@ -11,10 +11,6 @@ export type ListedChat={kind:'conversation'|'channel',id:string,title:string,lin
 export type ConversationCursor={at:string,id:string};
 export type ConversationPage={items:ListedChat[],next:ConversationCursor|null};
 export type ConversationCounts={current:number,archived:number};
-// One thing archiving a person's Conversations would stop (#674, conversation_archive_stops), and how archiving,
-// restoring or asking what stops answers (app/conversation-archive-actions.ts).
-export type ConversationStop={conversation:string,kind:'run'|'question'|'permission'|'hand',agent:string|null,agent_id:string|null};
-export type ConversationArchiveResult={state:'stops',stops:ConversationStop[]}|{state:'done',chats:string[]}|{state:'refused'};
 const conversationPageSize=50;
 
 type Row={kind:'conversation'|'channel',id:string,agent_name:string|null,connection_id:string|null,title:string|null,good_morning_day:string|null,channel_kind:string|null,last_at:string,last_body:string|null};
@@ -31,7 +27,7 @@ export async function conversationPage(db:Database,company:string,{tab='current'
  const rows=(data||[]) as Row[];
  const shown=rows.slice(0,conversationPageSize);
  const items=shown.map((row):ListedChat=>({kind:row.kind,id:row.id,at:row.last_at,line:(row.last_body||'').replace(/\s+/g,' ').trim(),
-  title:row.kind==='channel'?(row.channel_kind==='team'&&row.title?row.title:general):row.good_morning_day?morningTitle(t,language,row.good_morning_day):row.title||row.agent_name||'',
+  title:row.kind==='channel'?(row.channel_kind==='team'&&row.title?row.title:general):conversationTitle({morningDay:row.good_morning_day,body:row.title,agent:row.agent_name||''},t,language),
   face:row.kind==='conversation'?{connection_id:row.connection_id||row.id,name:row.agent_name||''}:null}));
  const last=shown.at(-1);
  return {items,next:rows.length>conversationPageSize&&last?{at:last.last_at,id:last.id}:null};

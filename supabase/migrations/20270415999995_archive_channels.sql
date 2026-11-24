@@ -4,8 +4,9 @@
 -- Its Members still read it (the channel's read rules do not change), under Archived and not in their channel list, and
 -- nobody writes in it until it is restored. A Member outside it sees nothing of it, the Owner included.
 -- Additive, for the previous app version: two nullable columns, one table, one trigger, one restrictive log policy and
--- four functions; channel_sidebar, conversation_list and conversation_counts keep their signatures. That version reads and lists channels as before,
--- leaving an archived one in its list, and a message it sends there is refused like any other.
+-- the functions below; channel_sidebar, set_channel_person and answer_channel_start keep their signatures. That version
+-- reads and lists channels as before, leaving an archived one in its list, and a message it sends there, or a Member it
+-- adds there, is refused like any other.
 alter table public.channels add column archived_at timestamptz;
 alter table public.channels add column archived_by uuid references public.people(id) on delete set null;
 alter table public.channels add constraint channels_archived_by_archived check (archived_by is null or archived_at is not null);
@@ -28,7 +29,7 @@ alter table public.company_log drop constraint company_log_source_check;
 alter table public.company_log add constraint company_log_source_check check (source in
  ('work_activity','work_comments','member_audit','hermes_agent_audit','company_audit','note_runs','reply_cards',
   'member_invitations','reply_card_answers','channel_permissions','agent_handovers','channel_handover_replies','channel_cards','channel_replies',
-  'channel_archives'));
+  'conversation_archives','channel_archives'));
 -- A channel's archive row is read by that channel's Members alone, as the channel itself is: a Member outside it, the
 -- Owner included, reads none. Every other row keeps the rules it had.
 create policy channel_archive_rows on public.company_log as restrictive for select to authenticated
@@ -48,34 +49,43 @@ revoke all on function public.refuse_archived_channel_message() from public,anon
 create trigger channel_messages_not_archived before insert on public.channel_messages
  for each row when (new.author='person') execute function public.refuse_archived_channel_message();
 
--- What archiving the channel stops, for its one confirmation: each Agent working in it (an open Run or an open
--- Handover), and each question, request and handed step waiting on people there. Only a Member of the channel reads it.
-create function public.channel_archive_stops(ch uuid) returns table(kind text, agent text, title text)
+-- Nobody changes who is in an archived channel: a Member is neither added nor taken out until it is restored
+-- (set_channel_person refuses, 42501 channelArchived), and an invitation claimed meanwhile joins the person to the
+-- Company and its current channels but not to the archived one. A Member leaving the Company still leaves it.
+create function public.keep_archived_channel_people() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ if exists(select 1 from public.channels k where k.id=new.channel_id and k.archived_at is not null) then return null; end if;
+ return new;
+end $$;
+revoke all on function public.keep_archived_channel_people() from public,anon,authenticated,service_role;
+create trigger channel_people_not_archived before insert on public.channel_people
+ for each row execute function public.keep_archived_channel_people();
+
+-- 20261227000000's set_channel_person, which refuses an archived channel.
+create or replace function public.set_channel_person(ch uuid, person uuid, present boolean) returns void
+language plpgsql security definer set search_path='' as $$
+declare k public.channels;
+begin
+ select * into k from public.channels where id=ch;
+ if k.id is null or not public.in_channel(ch) then raise exception 'channelNotFound' using errcode='P0002'; end if;
+ if not public.can_manage_company(k.company_id) or k.kind<>'team' or person=auth.uid() then raise exception 'channelNotAllowed' using errcode='42501'; end if;
+ if k.archived_at is not null then raise exception 'channelArchived' using errcode='42501'; end if;
+ if present is null or person is null then raise exception 'channelFailed' using errcode='22023'; end if;
+ if not present then delete from public.channel_people where channel_id=ch and person_id=person; return; end if;
+ if not public.channel_person(k.company_id, person) then raise exception 'memberNotFound' using errcode='P0002'; end if;
+ insert into public.channel_people(channel_id, company_id, person_id, joined_through, added_by)
+  values (ch, k.company_id, person, coalesce((select max(id) from public.channel_messages where channel_id=ch),0), auth.uid())
+  on conflict (channel_id, person_id) do nothing;
+end $$;
+
+-- What archiving the channel stops, for its one confirmation (channel_work_stops, 20270415999992): each Agent working in
+-- it and each question, request and handed step waiting on people there. Only a Member of the channel reads it.
+create function public.channel_archive_stops(ch uuid) returns table(kind text, agent text, agent_id uuid, title text)
 language sql stable security definer set search_path='' as $$
- select * from (
-  select distinct 'run'::text, r.agent_name, ''::text from public.channel_runs r where r.channel_id=ch and r.outcome is null
-  union
-  select 'run'::text, a.name, ''::text from public.agent_handovers h
-   join public.channel_messages m on m.id=h.channel_message_id
-   join public.hermes_agents a on a.id=h.to_agent and a.company_id=h.company_id
-   where m.channel_id=ch and h.state not in ('done','failed')
-  union all
-  select 'question'::text, cr.agent_name, x.content->>'question' from public.reply_cards x
-   join public.channel_messages m on m.id=x.channel_message_id
-   join public.channel_runs cr on cr.message_id=x.channel_message_id and cr.ordinal=coalesce(x.channel_ordinal,1)
-   where m.channel_id=ch and x.kind='question' and x.state='open' and cr.outcome is null
-  union all
-  select 'permission'::text, cr.agent_name, p.title from public.channel_permissions p
-   join public.channel_runs cr on cr.message_id=p.message_id and cr.ordinal=coalesce(p.ordinal,1)
-   where p.channel_id=ch and p.state='open'
-  union all
-  select 'hand'::text, cr.agent_name, x.title from public.reply_cards x
-   join public.channel_messages m on m.id=x.channel_message_id
-   join public.channel_runs cr on cr.message_id=x.channel_message_id and cr.ordinal=coalesce(x.channel_ordinal,1)
-   where m.channel_id=ch and x.kind='hand' and x.state='open'
- ) s(kind,agent,title)
+ select s.kind, s.agent_name, s.agent_id, s.title from public.channel_work_stops(ch) s
  where auth.uid() is not null and public.in_channel(ch)
-  and exists(select 1 from public.channels k where k.id=ch and k.archived_at is null);
+  and exists(select 1 from public.channels k where k.id=ch and k.archived_at is null)
+ order by array_position(array['run','question','permission','hand'],s.kind), s.agent_name;
 $$;
 revoke all on function public.channel_archive_stops(uuid) from public,anon,service_role;
 grant execute on function public.channel_archive_stops(uuid) to authenticated;
@@ -97,10 +107,12 @@ begin
  if k.kind<>'team' or not public.can_manage_company(k.company_id) then raise exception 'channelArchiveNotAllowed' using errcode='42501'; end if;
  if k.archived_at is not null then return; end if;
  update public.channels x set archived_at=now(), archived_by=auth.uid() where x.id=ch;
- -- Its work stops as archiving the channel's Card stops it (#671, stop_card_work): every Run not started yet ends as
- -- stopped, every open Handover started there ends as stopped down its chain, and its questions, requests and handed
- -- steps close. The started Runs are kept for the worker to stop (stopped_runs) and are answered to stop now.
- perform public.stop_card_work(k.company_id,null,null,ch);
+ -- Its work stops as archiving the channel's Card stops it (stop_channel_work, 20270415999992): every Run not started
+ -- yet ends as stopped, every open Handover started there ends as stopped down its chain, and its questions, requests
+ -- and handed steps close. The started Runs are kept for the worker to stop (stopped_runs) and are answered to stop now.
+ -- A channel raises no wait on a Card (post_channel_message's mentions name their message), so the waits it clears
+ -- below are its messages' own.
+ perform public.stop_channel_work(k.company_id,ch);
  return query select r.run_id, r.profile from public.channel_runs r where r.channel_id=ch and r.outcome is null and r.run_id is not null
   order by r.message_id, r.ordinal;
  update public.waiting_items w set resolved_at=now() from public.channel_messages cm
@@ -133,6 +145,59 @@ end $$;
 revoke all on function public.restore_channel(uuid,uuid) from public,anon,service_role;
 grant execute on function public.restore_channel(uuid,uuid) to authenticated;
 
+-- A channel Run whose start was on its way when its channel, or the channel's Card, was archived is stopped as it is
+-- named, as a note's Run is (#671, answer_note_start): kept in stopped_runs, so the worker stops it in the Engine and it
+-- ends stopped. 20270415600000's answer_channel_start, but for that.
+create function public.stop_named_channel_run(r public.channel_runs, run text) returns void
+language plpgsql security definer set search_path='' as $$
+begin
+ if exists(select 1 from public.channels k where k.id=r.channel_id and k.archived_at is not null)
+  or exists(select 1 from public.work_cards w where w.company_id=r.company_id and w.channel_id=r.channel_id and w.archived_at>=r.created_at) then
+  insert into public.stopped_runs(company_id,channel_message_id,run_id) values(r.company_id,r.message_id,run) on conflict do nothing;
+ end if;
+end $$;
+revoke all on function public.stop_named_channel_run(public.channel_runs,text) from public,anon,authenticated,service_role;
+
+create or replace function public.answer_channel_start(message bigint, attempt integer, run text, ordinal smallint DEFAULT NULL::smallint) returns boolean
+language plpgsql security definer set search_path='' as $$
+declare r public.channel_runs;
+begin
+ if run is not null then
+  select * into r from public.channel_runs where message_id=message and run_id=run for update;
+  if found then return r.outcome is null; end if;
+ end if;
+ if ordinal is not null then
+  select * into r from public.channel_runs where message_id=message and public.channel_runs.ordinal=answer_channel_start.ordinal for update;
+  if r.message_id is null or r.outcome is not null or r.attempts is distinct from attempt then return false; end if;
+  if run is not null then
+   if r.run_id is not null then return r.run_id=run; end if;
+   update public.channel_runs set run_id=run where message_id=message and public.channel_runs.ordinal=r.ordinal;
+   perform public.stop_named_channel_run(r,run);
+   return true;
+  end if;
+  if attempt = 1 and r.attempts = 1 then
+   return public.close_channel_run(message, null, 'failed', null, null, null);
+  end if;
+  return false;
+ end if;
+ select * into r from public.channel_runs where message_id=message and outcome is null and run_id is null order by ordinal limit 1 for update;
+ if r.message_id is null or r.outcome is not null then return false; end if;
+ if exists(select 1 from public.channel_runs o where o.message_id=message and o.ordinal<>r.ordinal and o.attempts>=attempt
+   and (run is null or o.run_id is null)) then
+  return false;
+ end if;
+ if run is not null then
+  update public.channel_runs set run_id=run where message_id=message and public.channel_runs.ordinal=r.ordinal;
+  perform public.stop_named_channel_run(r,run);
+  return true;
+ end if;
+ -- A refused first start ends the Run only while no later attempt was made: only a first start can prove nothing started.
+ if attempt = 1 and r.attempts = 1 then
+  return public.close_channel_run(message, null, 'failed', null, null, null);
+ end if;
+ return false;
+end $$;
+
 -- The caller's archived channels in one Company, newest archived first, with who archived each and the newest message:
 -- the Archived list. Only channels the caller is in; anyone outside the Company reads nothing.
 create function public.archived_channels(c uuid)
@@ -162,10 +227,15 @@ language sql stable security definer set search_path='' as $$
  order by k.kind='general' desc, k.created_at, k.id;
 $$;
 
--- 20270415999988's All conversations (#673): an archived channel is in the Archived list, not the current one, and each
--- list's count follows (design-reference-card: renderConvos, where a channel is archived and restored as a Conversation
--- is). An archived Conversation (#674, 20270415999991) is in the Archived list too. Every other row is as #673 reads it.
-create or replace function public.conversation_list(c uuid, q text default null, archived boolean default false, after_at timestamptz default null,
+-- All conversations (#673, 20270415999993): the reader's own Conversations in Company `c` (an Agent hidden from them
+-- hides its Conversations, as the read policy does) and the channels they are in, newest message first, a page of at
+-- most 100 at a time: the next page starts after the last row of the one before (`after_at`, `after_id`). `q` keeps
+-- those whose title holds it, read through search_fold. A Conversation is titled by conversation_title; a morning's
+-- Conversation (#183) and the general channel are named in the reader's language, so the caller passes those names
+-- (`morning`, `general`) and `title` is null for them. `archived` asks for the Archived list: archived Conversations
+-- (#674) and archived channels (#675, design-reference-card: renderConvos, where a channel is archived and restored as a
+-- Conversation is), and the current list leaves them out. Each row carries its newest message (`last_body`, `last_at`).
+create function public.conversation_list(c uuid, q text default null, archived boolean default false, after_at timestamptz default null,
  after_id uuid default null, lim integer default 50, morning text default null, general text default null)
 returns table(kind text, id uuid, agent_id uuid, agent_name text, connection_id uuid, title text, good_morning_day date, channel_kind text, last_at timestamptz, last_body text)
 language sql stable security definer set search_path='' as $$
@@ -201,8 +271,8 @@ revoke all on function public.conversation_list(uuid,text,boolean,timestamptz,uu
 grant execute on function public.conversation_list(uuid,text,boolean,timestamptz,uuid,integer,text,text) to authenticated;
 
 -- How many rows each of All conversations' two lists holds for the reader: `current` and `archived`, the reader's own
--- Conversations (#674) and the channels they are in alike.
-create or replace function public.conversation_counts(c uuid) returns jsonb
+-- Conversations and the channels they are in alike.
+create function public.conversation_counts(c uuid) returns jsonb
 language sql stable security definer set search_path='' as $$
  select jsonb_build_object('current',
   (select count(*) from public.own_conversations(c) v where v.archived_at is null)

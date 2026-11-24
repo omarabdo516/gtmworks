@@ -8,6 +8,7 @@ import type { ChannelMessage, ChannelQuestion, ChannelRecord } from '@/lib/chann
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices: vi.fn() }));
+vi.mock('@/app/channel-archive-actions', () => ({ archiveChannels: vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); });
 
 // #149: a question or a handed step in a channel is the team's. Any Member who may write answers it or presses "Done it";

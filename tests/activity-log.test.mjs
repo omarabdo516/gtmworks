@@ -32,6 +32,16 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([channelRestored.act, channelRestored.obj, channelRestored.from, channelRestored.to], [['logActChannelRestored'], '#Spring launch', { key: 'logArchive' }, undefined]);
  assert.deepEqual(['en', 'ar'].map(language => ['logActChannelArchived', 'logActChannelRestored'].map(key => i18n(language).t(key))),
   [['archived the channel', 'restored the channel'], ['أرشف قناة', 'رجّع قناة']]);
+ // Archiving and restoring a Conversation (#674) are its person's own rows, where its other events go (log_chat_event):
+ // the Conversation's title, to the archive and back, whichever subject the row has.
+ for (const subject of ['agent', 'card']) {
+  const chatArchived = describeEntry({ subject, action: 'conversation_archived', details: { title: 'Plan the launch' } });
+  assert.deepEqual([chatArchived.act, chatArchived.obj, chatArchived.from, chatArchived.to], [['logActConversationArchived'], 'Plan the launch', undefined, { key: 'logArchive' }]);
+  const chatRestored = describeEntry({ subject, action: 'conversation_restored', details: { title: 'Plan the launch' } });
+  assert.deepEqual([chatRestored.act, chatRestored.obj, chatRestored.from, chatRestored.to], [['logActConversationRestored'], 'Plan the launch', { key: 'logArchive' }, undefined]);
+ }
+ assert.deepEqual(['en', 'ar'].map(language => ['logActConversationArchived', 'logActConversationRestored'].map(key => i18n(language).t(key))),
+  [['archived the conversation', 'restored the conversation'], ['أرشف المحادثة', 'رجّع المحادثة']]);
  const handed = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'next_actor', old: omar, new: writer } }, { name: id => ({ [omar]: 'عمر', [writer]: 'وكيل المحتوى' })[id] });
  assert.deepEqual([handed.act, handed.from, handed.to], [['logActHandedOver'], { text: 'عمر' }, { text: 'وكيل المحتوى' }]);
  const caption = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'caption', old: 'a', new: 'b' } });

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import AccountMenu, { ThemeToggle } from './account-menu';
 import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
-import { morningTitle } from '@/lib/good-morning-title.mjs';
+import { conversationTitle } from '@/lib/conversation-title.mjs';
 import { companyAgents, isNewFor } from '@/lib/sidebar.mjs';
 import ApprovalsCount from './approvals-count';
 import { AgentFaceDot } from './agent-face-dot';
@@ -71,10 +71,9 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const [[agents,stateOf],conversations,workMode,channels,manage,canWrite,ids]=await sidebarReads(id);
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
- // A chat is named by the first line of its first message, or by its first file when it carries images alone (#155), as
- // its own page names it (lib/conversations titleOf).
- // A Conversation the morning opened is named by its day (#183).
- const chats=conversations.map(c=>{ const first=c.conversation_messages[0]; return {id:c.id,at:c.last_message_at,title:c.good_morning_day?morningTitle(t,language,c.good_morning_day):first?.body.split('\n')[0]||first?.conversation_attachments?.[0]?.name||c.agent_name}; });
+ // A chat is named as everywhere else (lib/conversation-title.mjs).
+ const chats=conversations.map(c=>{ const first=c.conversation_messages[0];
+  return {id:c.id,at:c.last_message_at,title:conversationTitle({morningDay:c.good_morning_day,body:first?.body,file:first?.conversation_attachments?.[0]?.name,agent:c.agent_name},t,language)}; });
  const asksForAgents=writer&&!owner;
  const account=<><AccountMenu slug={slug} company={company?.id} personId={personId} canManage={manage} owner={owner} alone={workMode==='alone'} personName={personName} role={role} theme={theme} companyName={company?.name} settingsHref={slug?`/c/${slug}/settings`:undefined}/><ThemeToggle theme={theme}/></>;
  const active=(path:string)=>path==='chat'?chat:path==='work/board'?section.startsWith('work/'):section===path;

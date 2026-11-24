@@ -107,49 +107,74 @@ language sql immutable set search_path='' as $$
 $$;
 
 
--- What archiving the named Cards would stop, one line per thing, for the confirmation that names each one: the Agent
--- working on a Card (its chat's Run, a turn waiting behind it or a Handover it started; its team channel's Runs; a note's
--- Run), and the question, permission request or handed step its Agent waits on, and the approval it waits for. Several
--- Cards are asked at once, as a selection is archived at once (#672). A Card with nothing going on answers nothing, so
--- nothing is asked. A Card that is archived already, hidden from the caller or another Company's answers nothing, and an
--- Agent hidden from the caller is not named.
+-- What stops in one Conversation when it, or the Card it is the chat of, is archived, one line per thing: its Agent
+-- working there (its open Run, a turn waiting behind it or a Handover it started) and each question, permission request
+-- or handed step it waits on its person for. The one reading behind card_archive_stops and conversation_archive_stops
+-- (20270415999994), which decide who may ask; it runs as its caller and nobody calls it directly.
+create function public.conversation_work_stops(conversation uuid) returns table(kind text, agent_id uuid, agent_name text)
+language sql stable set search_path='' as $$
+ select 'run'::text, v.agent_id, v.agent_name from public.conversations v
+ where v.id=conversation and (exists(select 1 from public.conversation_open_run(v.id))
+  or exists(select 1 from public.conversation_queued_turns q where q.conversation_id=v.id and q.started_at is null and q.failed_at is null)
+  or exists(select 1 from public.agent_handovers h where h.conversation_id=v.id and h.state not in ('done','failed')))
+ union all
+ select distinct r.kind, v.agent_id, v.agent_name from public.conversations v
+  join public.reply_cards r on r.conversation_id=v.id and r.company_id=v.company_id and r.kind in ('question','permission','hand') and r.state='open'
+ where v.id=conversation
+  and (r.kind='hand' or not exists(select 1 from public.conversation_run_ends u where u.conversation_id=r.conversation_id and u.run_id=r.run_id));
+$$;
+revoke all on function public.conversation_work_stops(uuid) from public,anon,authenticated,service_role;
+
+-- What stops in one team channel when it, or the Card it is the channel of, is archived, one line per thing: each Agent
+-- working there (an open Run, or the Agent an open Handover started there went to) and each question, permission
+-- request and handed step waiting on people there, with its own words (`title`). The one reading behind
+-- card_archive_stops and channel_archive_stops (20270415999995); it runs as its caller and nobody calls it directly.
+create function public.channel_work_stops(ch uuid) returns table(kind text, agent_id uuid, agent_name text, title text)
+language sql stable set search_path='' as $$
+ select distinct 'run'::text, r.agent_id, r.agent_name, ''::text from public.channel_runs r where r.channel_id=ch and r.outcome is null
+ union
+ select 'run', a.id, a.name, '' from public.agent_handovers h
+  join public.channel_messages m on m.id=h.channel_message_id
+  join public.hermes_agents a on a.id=h.to_agent and a.company_id=h.company_id
+  where m.channel_id=ch and h.state not in ('done','failed')
+ union all
+ select 'question', cr.agent_id, cr.agent_name, x.content->>'question' from public.reply_cards x
+  join public.channel_messages m on m.id=x.channel_message_id
+  join public.channel_runs cr on cr.message_id=x.channel_message_id and cr.ordinal=coalesce(x.channel_ordinal,1)
+  where m.channel_id=ch and x.kind='question' and x.state='open' and cr.outcome is null
+ union all
+ select 'permission', cr.agent_id, cr.agent_name, p.title from public.channel_permissions p
+  join public.channel_runs cr on cr.message_id=p.message_id and cr.ordinal=coalesce(p.ordinal,1)
+  where p.channel_id=ch and p.state='open'
+ union all
+ select 'hand', cr.agent_id, cr.agent_name, x.title from public.reply_cards x
+  join public.channel_messages m on m.id=x.channel_message_id
+  join public.channel_runs cr on cr.message_id=x.channel_message_id and cr.ordinal=coalesce(x.channel_ordinal,1)
+  where m.channel_id=ch and x.kind='hand' and x.state='open';
+$$;
+revoke all on function public.channel_work_stops(uuid) from public,anon,authenticated,service_role;
+
+-- What archiving the named Cards would stop, one line per thing, for the confirmation that names each one: what stops in
+-- a Card's chat and in its team channel (above), a note's Run on it, and the approval it waits for. Several Cards are
+-- asked at once, as a selection is archived at once (#672). A Card with nothing going on answers nothing, so nothing is
+-- asked. A Card that is archived already, hidden from the caller or another Company's answers nothing, and an Agent
+-- hidden from the caller is not named (the confirmation says "An Agent").
 create function public.card_archive_stops(c uuid, cards bigint[]) returns table(card bigint, title text, kind text, agent text, agent_id uuid)
 language sql stable security definer set search_path='' as $$
  with chosen as (
   select w.id, w.title, w.company_id, w.conversation_id, w.channel_id, w.stage_id, w.approval_step_id from public.work_cards w
   where w.company_id=c and w.id=any(cards) and w.archived_at is null and auth.uid() is not null and public.is_member(c) and public.can_see_card(c,w.id)),
  found(id,title,kind,agent_id,agent_name) as (
-  select w.id, w.title, 'run', v.agent_id, v.agent_name
+  select w.id, w.title, s.kind, s.agent_id, s.agent_name
   from chosen w join public.conversations v on v.id=w.conversation_id and v.company_id=w.company_id
-  where exists(select 1 from public.conversation_open_run(v.id))
-   or exists(select 1 from public.conversation_queued_turns q where q.conversation_id=v.id and q.started_at is null and q.failed_at is null)
-   or exists(select 1 from public.agent_handovers h where h.conversation_id=v.id and h.state not in ('done','failed'))
+   cross join lateral public.conversation_work_stops(v.id) s
   union all
-  select w.id, w.title, 'run', r.agent_id, r.agent_name
-  from chosen w join public.channel_runs r on r.channel_id=w.channel_id and r.company_id=w.company_id and r.outcome is null
-  union all
-  select w.id, w.title, 'run', h.from_agent, a.name
-  from chosen w join public.channel_messages m on m.channel_id=w.channel_id and m.company_id=w.company_id
-   join public.agent_handovers h on h.channel_message_id=m.id and h.state not in ('done','failed')
-   join public.hermes_agents a on a.id=h.from_agent and a.company_id=h.company_id
+  select w.id, w.title, s.kind, s.agent_id, s.agent_name
+  from chosen w join public.channels k on k.id=w.channel_id and k.company_id=w.company_id
+   cross join lateral public.channel_work_stops(k.id) s
   union all
   select w.id, w.title, 'run', n.agent_id, n.agent_name
   from chosen w join public.note_runs n on n.company_id=w.company_id and n.card_id=w.id and n.outcome is null
-  union all
-  select w.id, w.title, r.kind, v.agent_id, v.agent_name
-  from chosen w join public.conversations v on v.id=w.conversation_id and v.company_id=w.company_id
-   join public.reply_cards r on r.conversation_id=v.id and r.company_id=v.company_id and r.kind in ('question','permission','hand') and r.state='open'
-  where r.kind='hand' or not exists(select 1 from public.conversation_run_ends u where u.conversation_id=r.conversation_id and u.run_id=r.run_id)
-  union all
-  select w.id, w.title, r.kind, cr.agent_id, cr.agent_name
-  from chosen w join public.channel_messages m on m.channel_id=w.channel_id and m.company_id=w.company_id
-   join public.reply_cards r on r.channel_message_id=m.id and r.kind in ('question','hand') and r.state='open'
-   join public.channel_runs cr on cr.message_id=m.id and cr.ordinal=coalesce(r.channel_ordinal,1)
-  where r.kind='hand' or cr.outcome is null
-  union all
-  select w.id, w.title, 'permission', cr.agent_id, cr.agent_name
-  from chosen w join public.channel_permissions p on p.channel_id=w.channel_id and p.company_id=w.company_id and p.state='open'
-   join public.channel_runs cr on cr.message_id=p.message_id and cr.run_id=p.run_id and cr.outcome is null
   union all
   select w.id, w.title, 'approval', null::uuid, null::text
   from chosen w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id and s.kind='review'
@@ -164,41 +189,62 @@ $$;
 revoke all on function public.card_archive_stops(uuid,bigint[]) from public,anon,service_role;
 grant execute on function public.card_archive_stops(uuid,bigint[]) to authenticated;
 
--- Stops the work on one Card and clears what waits on people because of it, inside archive_cards only (no caller has
--- it). The Card's chat is stopped as its Stop stops it (stop_open_handovers: its open Run and every Handover it started,
--- kept as stopped for the worker to stop in the Engine), and the turns waiting behind it never start; what the chat asks
--- its person closes unanswered. Its team channel's Runs stop as a channel message's Stop stops them. A note's Run not
--- started yet ends stopped and a running one is stopped by the worker. Every waiting item on the Card is resolved.
--- The Conversation and the channel themselves are left alone: a message written there later is answered as before.
-create function public.stop_card_work(c uuid, card bigint, conversation uuid, channel uuid) returns void
+-- Stops what an Agent does in one Conversation and closes what it asks its person there, inside the database only
+-- (archiving its Card, and archiving the Conversation itself, #674). The chat is stopped as its Stop stops it
+-- (stop_open_handovers: its open Run and every Handover it started, kept as stopped for the worker to stop in the
+-- Engine), and the turns waiting behind it never start; a question, a permission request and a handed step close
+-- unanswered. A turn whose start is already on its way is stopped as it lands (record_conversation_turn below, and the
+-- Conversation's own restore trigger in 20270415999994). The Conversation itself is left as it is.
+create function public.stop_conversation_work(conversation uuid) returns void
+language plpgsql security definer set search_path='' as $$
+begin
+ perform public.stop_open_handovers(conversation,null);
+ with dropped as (
+  update public.conversation_queued_turns q set failed_at=now()
+   where q.conversation_id=stop_conversation_work.conversation and q.started_at is null and q.failed_at is null
+    and not exists(select 1 from public.conversation_run_reservations r where r.conversation_id=q.conversation_id and r.send_key=q.send_key
+     and r.abandoned_at is null and (r.start_unknown_at is not null or r.start_attempts>0))
+   returning q.send_key)
+ delete from public.conversation_run_reservations r using dropped d
+  where r.conversation_id=stop_conversation_work.conversation and r.send_key=d.send_key and r.abandoned_at is null;
+ update public.reply_cards r set state='closed'
+  where r.conversation_id=stop_conversation_work.conversation and r.kind in ('question','permission','hand') and r.state='open';
+end $$;
+revoke all on function public.stop_conversation_work(uuid) from public,anon,authenticated,service_role;
+
+-- Stops the work in one team channel and closes what waits on people there, inside the database only (archiving its
+-- Card, and archiving the channel itself, #675): each message's Runs stop as its Stop stops them (Runs not started yet
+-- end stopped; started ones and every open Handover started there are kept for the worker to stop in the Engine); its
+-- questions, handed steps and permission requests close. A Run whose start is on its way is stopped as it is named
+-- (answer_channel_start, 20270415999995). The channel itself is left as it is.
+create function public.stop_channel_work(c uuid, channel uuid) returns void
 language plpgsql security definer set search_path='' as $$
 declare m bigint;
 begin
- if conversation is not null then
-  perform public.stop_open_handovers(conversation,null);
-  with dropped as (
-   update public.conversation_queued_turns q set failed_at=now()
-    where q.conversation_id=stop_card_work.conversation and q.started_at is null and q.failed_at is null
-     and not exists(select 1 from public.conversation_run_reservations r where r.conversation_id=q.conversation_id and r.send_key=q.send_key
-      and r.abandoned_at is null and (r.start_unknown_at is not null or r.start_attempts>0))
-    returning q.send_key)
-  delete from public.conversation_run_reservations r using dropped d
-   where r.conversation_id=stop_card_work.conversation and r.send_key=d.send_key and r.abandoned_at is null;
-  update public.reply_cards r set state='closed'
-   where r.conversation_id=stop_card_work.conversation and r.kind in ('question','permission','hand') and r.state='open';
- end if;
- if channel is not null then
-  for m in select x.id from public.channel_messages x where x.channel_id=stop_card_work.channel and x.company_id=c
-   and (exists(select 1 from public.channel_runs r where r.message_id=x.id and r.outcome is null)
-    or exists(select 1 from public.agent_handovers h where h.channel_message_id=x.id and h.state not in ('done','failed')))
-   order by x.id loop
-   update public.channel_runs r set outcome='stopped', closed_at=now() where r.message_id=m and r.outcome is null and r.run_id is null and r.attempts=0;
-   perform public.stop_open_handovers(null,m);
-  end loop;
-  update public.reply_cards r set state='closed' from public.channel_messages x
-   where x.id=r.channel_message_id and x.channel_id=stop_card_work.channel and r.kind in ('question','hand') and r.state='open';
-  update public.channel_permissions p set state='closed' where p.channel_id=stop_card_work.channel and p.company_id=c and p.state='open';
- end if;
+ for m in select x.id from public.channel_messages x where x.channel_id=stop_channel_work.channel and x.company_id=c
+  and (exists(select 1 from public.channel_runs r where r.message_id=x.id and r.outcome is null)
+   or exists(select 1 from public.agent_handovers h where h.channel_message_id=x.id and h.state not in ('done','failed')))
+  order by x.id loop
+  update public.channel_runs r set outcome='stopped', closed_at=now() where r.message_id=m and r.outcome is null and r.run_id is null and r.attempts=0;
+  perform public.stop_open_handovers(null,m);
+ end loop;
+ update public.reply_cards r set state='closed' from public.channel_messages x
+  where x.id=r.channel_message_id and x.channel_id=stop_channel_work.channel and r.kind in ('question','hand') and r.state='open';
+ update public.channel_permissions p set state='closed' where p.channel_id=stop_channel_work.channel and p.company_id=c and p.state='open';
+end $$;
+revoke all on function public.stop_channel_work(uuid,uuid) from public,anon,authenticated,service_role;
+
+-- Stops the work on one Card and clears what waits on people because of it, inside archive_cards only (no caller has
+-- it): its chat and its team channel stop as above, a note's Run not started yet ends stopped and a running one is
+-- stopped by the worker, and every waiting item on the Card is resolved. The Conversation and the channel themselves are
+-- left alone: a message written there later is answered as before.
+create function public.stop_card_work(c uuid, card bigint) returns void
+language plpgsql security definer set search_path='' as $$
+declare w public.work_cards;
+begin
+ select * into w from public.work_cards x where x.company_id=c and x.id=card;
+ if w.conversation_id is not null then perform public.stop_conversation_work(w.conversation_id); end if;
+ if w.channel_id is not null then perform public.stop_channel_work(c,w.channel_id); end if;
  update public.note_runs n set outcome='stopped', closed_at=now()
   where n.company_id=c and n.card_id=card and n.outcome is null and n.run_id is null and n.attempts=0;
  insert into public.stopped_runs(company_id,note_id,run_id)
@@ -206,12 +252,16 @@ begin
   on conflict do nothing;
  update public.waiting_items i set resolved_at=now() where i.company_id=c and i.card_id=card and i.resolved_at is null;
 end $$;
-revoke all on function public.stop_card_work(uuid,bigint,uuid,uuid) from public,anon,authenticated,service_role;
+revoke all on function public.stop_card_work(uuid,bigint) from public,anon,authenticated,service_role;
 
--- #670's archive, which now stops the Card's work and clears its waits before marking it (stop_card_work), and ends an
--- approval it waits for with no decision: no decision row is written, so it is not counted as a rejection, and the Card
--- keeps its column, which its archive row names.
-create or replace function public.archive_cards(c uuid, cards bigint[]) returns setof bigint
+-- Archives the named Cards and answers the ones it archived. The Role is checked once for the call (a Viewer, or anyone
+-- outside the Company, is refused); a Card that is not this Company's, is hidden from the caller or is already archived
+-- is left out of the answer, so a caller archiving several at once (#672) is told which it could not. Each Card is
+-- archived in one step under its row lock: its work stops and what waits on it clears first (stop_card_work), so nothing
+-- is left running or asking about an archived Card, and an approval it waits for ends with no decision: no decision row
+-- is written, so it is not counted as a rejection. Each Card keeps its column and place, so restoring puts it back where
+-- it was, and gains one Activity log row naming the column.
+create function public.archive_cards(c uuid, cards bigint[]) returns setof bigint
 language plpgsql security definer set search_path='' as $$
 declare w public.work_cards; left_column text;
 begin
@@ -219,7 +269,7 @@ begin
  for w in select * from public.work_cards where company_id=c and id=any(cards) and archived_at is null order by id for update loop
   if not public.can_see_card(c,w.id) then continue; end if;
   select s.board_column into left_column from public.work_stages s where s.company_id=c and s.id=w.stage_id;
-  perform public.stop_card_work(c,w.id,w.conversation_id,w.channel_id);
+  perform public.stop_card_work(c,w.id);
   perform set_config('approval.internal','yes',true);
   update public.work_cards set archived_at=now(),archived_by=auth.uid(),approval_step_id=null where company_id=c and id=w.id;
   perform set_config('approval.internal','',true);
@@ -229,11 +279,14 @@ begin
   return next w.id;
  end loop;
 end $$;
+revoke all on function public.archive_cards(uuid,bigint[]) from public,anon,service_role;
+grant execute on function public.archive_cards(uuid,bigint[]) to authenticated;
 
--- #670's restore, which starts nothing: no Run, turn, question, step, mention or approval comes back with the Card. A
+-- Restores the named archived Cards and answers the ones it restored, with the same checks. Nothing starts: no Run,
+-- turn, question, step, mention or approval comes back with the Card. A Card comes back to the column it was in, but a
 -- Card whose approval ended when it was archived comes back to the column it was sent for approval from (or the last
 -- before review), where it may be sent for approval again: in review with no approval step nobody could decide it.
-create or replace function public.restore_cards(c uuid, cards bigint[]) returns setof bigint
+create function public.restore_cards(c uuid, cards bigint[]) returns setof bigint
 language plpgsql security definer set search_path='' as $$
 declare w public.work_cards; back_column text; back bigint;
 begin
@@ -261,7 +314,8 @@ begin
   return next w.id;
  end loop;
 end $$;
-
+revoke all on function public.restore_cards(uuid,bigint[]) from public,anon,service_role;
+grant execute on function public.restore_cards(uuid,bigint[]) to authenticated;
 
 -- A Run that was stopped asks nothing more (#671): a question, a permission request or a step it would hand over after
 -- Stop is not kept, so a Run closing after its Card was archived writes its end and waits on nobody.
@@ -604,7 +658,8 @@ begin
   values(turn.company_id,conversation,'person',turn.person_id,coalesce(writer,''),turn.message,message_key,run) on conflict do nothing returning id into saved;
  delete from public.conversation_run_reservations r where r.conversation_id=conversation and r.send_key=message_key;
  update public.conversation_queued_turns q set started_at=now() where q.conversation_id=conversation and q.send_key=message_key;
- -- A turn whose start was on its way when the chat's Card was archived is stopped as it is named (#671).
+ -- A turn whose start was on its way when the chat's Card was archived is stopped as it is named (#671); one in an
+ -- archived Conversation is stopped as its message lands, by the Conversation's restore trigger (20270415999994).
  if saved is not null and exists(select 1 from public.work_cards w where w.company_id=turn.company_id and w.conversation_id=conversation and w.archived_at>=turn.queued_at) then
   insert into public.stopped_runs(company_id,conversation_id,run_id) values(turn.company_id,conversation,run) on conflict do nothing; end if;
  return saved is not null;

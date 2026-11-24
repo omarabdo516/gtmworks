@@ -8,8 +8,7 @@ import type { AgentDetailsView } from '@/app/agent-details-server';
 import type { DetailsTab } from '@/lib/agent-details.mjs';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
-import { titleOf } from '@/lib/conversations';
-import { morningTitle } from '@/lib/good-morning-title.mjs';
+import { conversationTitle } from '@/lib/conversation-title.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
@@ -17,7 +16,7 @@ import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';
 import { ShellIcon } from '@/components/shell-icon';
-import { CardMenu } from '@/app/card-menu';
+import { MoreMenu } from '@/app/more-menu';
 import { useConversationArchive } from '@/app/conversation-archive';
 import { toast } from '@/app/toast';
 import { useRouter } from 'next/navigation';
@@ -70,7 +69,7 @@ function ChatHead({panel,slug,agent,conversation,title,writer,board}:{panel:Deta
  const record=live?.record; const corner=record?record.board:board;
  // The pill shakes once when its Card starts waiting while the chat is open (design-reference: syncWaitMarks).
  const fresh=useNewlyWaiting(corner?.column==='waiting'?[corner.card]:[]);
- return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><LiveFace agentId={conversation.agent_id??undefined} agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?record.morningDay?morningTitle(t,language,record.morningDay):titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
+ return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><LiveFace agentId={conversation.agent_id??undefined} agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
 }
 
 // The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): archive the Conversation, or
@@ -79,7 +78,7 @@ function ChatMore({company,conversation,title,archived,changed}:{company:string,
  const {t}=useI18n();
  const chat={id:conversation.id,title,face:{connection_id:conversation.face,name:conversation.agent_name}};
  const {archive,restore,confirm}=useConversationArchive(company,(_ids,nowArchived)=>changed(nowArchived));
- return <div className="chat__start"><CardMenu label={t('conversationMore')} items={[archived
+ return <div className="chat__start"><MoreMenu label={t('conversationMore')} items={[archived
   ?{key:'restore',icon:'restore',label:t('conversationRestore'),run:()=>void restore([chat])}
   :{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([chat])}]}/>{confirm}</div>;
 }

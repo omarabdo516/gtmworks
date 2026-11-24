@@ -217,7 +217,6 @@ export const waiting=(messages:StoredMessage[],ends:RunEnd[]=[],handed:ReadonlyS
 export const latestEnd=(messages:StoredMessage[],ends:RunEnd[])=>{ const latest=messages.filter(message=>message.author==='person').at(-1); return (latest&&ends.find(run=>run.run_id===latest.run_id&&run.outcome!=='completed')?.outcome)||null; };
 // A chat is named by its first message: its first line, or, for a message that carries images alone, its first file
 // (design-reference: send's title). A chat with no message yet keeps the Agent's name.
-export const titleOf=(messages:ConversationMessage[],agentName:string)=>messages[0]?.body.split('\n')[0]||messages[0]?.files?.[0]?.name||agentName;
 // The agent's face is drawn from its Connection, as on the Agents page; a detached agent keeps a stable face from the conversation.
 export const faceOf=(conversation:{id:string,hermes_agents:unknown})=>(conversation.hermes_agents as {connection_id:string}|null)?.connection_id||conversation.id;
 export const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

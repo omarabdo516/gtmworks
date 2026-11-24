@@ -104,7 +104,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 - 🟡 **A Card in review whose Manager cannot see its Agent.** It can wait on a person who cannot open it. [#513]
 - 🟡 **Board polish.** A drop leaves the board where the Card was let go instead of scrolling back to its old place (#556 ✅); a Card hidden by its Agent stays hidden everywhere. [#228, #367]
 - ⚪ **A board like the Hermes Kanban board.** Cards assigned to an Agent or a person ("Assign to me"), Agents claim and move their Cards themselves, and a Card's details cut to the minimum. Grilled, and the look approved in `design-reference-card/`. [decision 0065, ADR 0026]
-- ⚪ **Archive Cards, Conversations and team channels.** One or several, with Undo and an archived filter, and an "All conversations" page. [decision 0065, ADR 0026]
+- ✅ **Archive Cards, Conversations and team channels.** One or several, with Undo and an archived filter, and an "All conversations" page. [decision 0065, ADR 0026, #667]
 - ⚪ **Search.** The sidebar's Search says "not available yet". [`lib/navigation.ts` placeholders]
 - ⚪ **Monthly plan.** A month of Posts with date, pillar, offering, segment and hook, built from the approved Diagnosis and shown as the calendar. [GLOSSARY.md Monthly plan, Post, Pillar; no code in app/ or lib/]
 

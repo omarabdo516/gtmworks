@@ -246,7 +246,7 @@
 .gw .thread-row:hover .thread-item__time, .gw .thread-row:focus-within .thread-item__time, .gw .thread-row:has(.thread-more[aria-expanded="true"]) .thread-item__time { visibility: hidden; }
 @media (hover: hover) { .gw .thread-more:hover { background: var(--gw-bg-active); color: var(--gw-text-1); } }
 @media (hover: none) { .gw .thread-more { opacity: 1; } .gw .thread-row .thread-item__time { visibility: hidden; } }
-.gw .thread-menu .card-menu__pop { inset-inline: auto 0; top: calc(100% + 4px); bottom: auto; min-width: 200px; }
+.gw .thread-menu .more-menu__pop { inset-inline: auto 0; top: calc(100% + 4px); bottom: auto; min-width: 200px; }
 .gw .sb-empty { margin: 0; padding: 8px 12px; font-size: var(--gw-fs-sm); color: var(--gw-text-3); }
 .gw .sb-foot { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; row-gap: 4px; padding: 8px 16px 16px; }
 .gw .sb-apps { flex: 1 0 100%; }
@@ -318,8 +318,8 @@
 .gw .head-pill__title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* The chat's own menu, in the bar's start corner (#674; design-reference-card: .chat__start, #chat-more). */
 .gw .chat__start { position: absolute; inset-inline-start: 12px; top: 14px; z-index: 6; }
-.gw .chat__start .card-menu { position: relative; }
-.gw .chat__start .card-menu__pop { inset-inline: 0 auto; top: calc(100% + 4px); bottom: auto; min-width: 200px; }
+.gw .chat__start .more-menu { position: relative; }
+.gw .chat__start .more-menu__pop { inset-inline: 0 auto; top: calc(100% + 4px); bottom: auto; min-width: 200px; }
 @media (max-width: 767px) { .gw .chat__start .circle-btn { min-width: 44px; min-height: 44px; } }
 /* The chat's Card on the board, in the bar's end corner (#144; design-reference: .chat__corner, .corner-pill) */
 .gw .chat__corner { position: absolute; inset-inline-end: 12px; top: 14px; display: flex; gap: 8px; }

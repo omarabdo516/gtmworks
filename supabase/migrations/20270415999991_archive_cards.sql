@@ -1,6 +1,7 @@
 -- #670 (spec #667, ADR 0026): a Card is archived, never deleted. Archived is a time and a person on the Card; every row
 -- written on it stays. A Member who may edit and sees the Card archives and restores it, one or several at once, through
--- the two functions below, so a direct call obeys the same rules as the board.
+-- archive_cards and restore_cards (20270415999992_archive_busy_cards.sql, with what archiving stops), so a direct call
+-- obeys the same rules as the board.
 alter table public.work_cards add column archived_at timestamptz;
 alter table public.work_cards add column archived_by uuid references public.people(id) on delete set null;
 alter table public.work_cards add constraint work_cards_archived_by_archived check (archived_by is null or archived_at is not null);
@@ -23,48 +24,6 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke all on function public.archived_cards(uuid) from public,anon,service_role;
 grant execute on function public.archived_cards(uuid) to authenticated;
-
--- Archives the named Cards and answers the ones it archived. The Role is checked once for the call (a Viewer, or anyone
--- outside the Company, is refused); a Card that is not this Company's, is hidden from the caller or is already archived
--- is left out of the answer, so a caller archiving several at once (#672) is told which it could not. Each Card keeps
--- its column and place, so restoring puts it back where it was, and gains one Activity log row naming the column.
--- Each Card is archived in one step under its row lock: #671 stops its Runs and clears what waits on it there, before
--- it is marked, so nothing is left running or asking about an archived Card.
-create function public.archive_cards(c uuid, cards bigint[]) returns setof bigint
-language plpgsql security definer set search_path='' as $$
-declare w public.work_cards; left_column text;
-begin
- if auth.uid() is null or not public.work_can_edit(c) then raise exception 'cardArchiveNotAllowed' using errcode='42501'; end if;
- for w in select * from public.work_cards where company_id=c and id=any(cards) and archived_at is null order by id for update loop
-  if not public.can_see_card(c,w.id) then continue; end if;
-  select s.board_column into left_column from public.work_stages s where s.company_id=c and s.id=w.stage_id;
-  update public.work_cards set archived_at=now(),archived_by=auth.uid() where company_id=c and id=w.id;
-  insert into public.work_activity(company_id,card_id,actor_id,action,details)
-   values(c,w.id,auth.uid(),'card_archived',jsonb_build_object('column',left_column));
-  return next w.id;
- end loop;
-end $$;
-revoke all on function public.archive_cards(uuid,bigint[]) from public,anon,service_role;
-grant execute on function public.archive_cards(uuid,bigint[]) to authenticated;
-
--- Restores the named archived Cards to the column they were in and answers the ones it restored, with the same checks.
--- Nothing starts: no Run, handover or wait comes back with the Card.
-create function public.restore_cards(c uuid, cards bigint[]) returns setof bigint
-language plpgsql security definer set search_path='' as $$
-declare w public.work_cards; back_column text;
-begin
- if auth.uid() is null or not public.work_can_edit(c) then raise exception 'cardRestoreNotAllowed' using errcode='42501'; end if;
- for w in select * from public.work_cards where company_id=c and id=any(cards) and archived_at is not null order by id for update loop
-  if not public.can_see_card(c,w.id) then continue; end if;
-  select s.board_column into back_column from public.work_stages s where s.company_id=c and s.id=w.stage_id;
-  update public.work_cards set archived_at=null,archived_by=null where company_id=c and id=w.id;
-  insert into public.work_activity(company_id,card_id,actor_id,action,details)
-   values(c,w.id,auth.uid(),'card_restored',jsonb_build_object('column',back_column));
-  return next w.id;
- end loop;
-end $$;
-revoke all on function public.restore_cards(uuid,bigint[]) from public,anon,service_role;
-grant execute on function public.restore_cards(uuid,bigint[]) to authenticated;
 
 -- A team channel's Card on the channel's head (#151) is a current Card: an archived one shows nothing there.
 create or replace function public.channel_board_card(ch uuid) returns jsonb

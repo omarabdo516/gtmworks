@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { archiveChannel, decideChannelPermission, driveChannelRuns, postChannelMessage, answerChannelQuestion, markChannelHandDone, stopChannelMessage } from '@/lib/channel-runs.mjs';
+import { decideChannelPermission, driveChannelRuns, postChannelMessage, answerChannelQuestion, markChannelHandDone, stopChannelMessage } from '@/lib/channel-runs.mjs';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
@@ -17,7 +17,6 @@ const refuse=(error:string,status:number)=>reply({error},status);
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 const refusals:Record<string,[string,number]>={P0002:['channelNotFound',404],'42501':['channelNotAllowed',403],'22023':['channelFailed',400]};
-const stopKinds:readonly unknown[]=['run','question','permission','hand'];
 
 // A choice on the request an Agent's Run in this channel waits on (#165): one of three fixed words, never text. Only the
 // Member who called the Agent decides (decide_channel_permission); the press is answered once the choice is kept, and
@@ -66,25 +65,6 @@ async function stop(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,u
  return reply(stopped);
 }
 
-// Archiving a team channel (#675): what it stops, for its one confirmation; the archive itself, which stops the Runs it had
-// going on their Engines after the database marks it (archive_channel); and restoring it, which starts nothing. Only an
-// Owner or a Manager in a team channel may, as the database checks again; the general channel never.
-async function archive(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>,company:string,channel:string) {
- if(body.intent==='stops') {
-  const {data,error}=await db.rpc('channel_archive_stops',{ch:channel});
-  if(error) return refuse('channelFailed',400);
-  return reply({stops:((data||[]) as {kind:string,agent:string,title:string}[]).filter(row=>stopKinds.includes(row.kind))});
- }
- if(body.intent==='restore') {
-  const {error}=await db.rpc('restore_channel',{c:company,ch:channel});
-  if(error) return refuse(...(refusals[error.code||'']||['channelFailed',500]));
-  return reply({state:'restored'});
- }
- const archived=await archiveChannel(db,{company,channel,service:service(),later:after});
- if('code' in archived) return refuse(...(refusals[archived.code||'']||['channelFailed',500]));
- return reply({state:'archived'});
-}
-
 async function respond(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -117,7 +97,6 @@ async function respond(request:NextRequest) {
  if(writing&&body.intent==='answer') return await answer(db,body);
  if(writing&&body.intent==='done') return await done(db,body);
   if(writing&&body.intent==='stop') return await stop(db,body);
-  if(writing&&(body.intent==='archive'||body.intent==='restore'||body.intent==='stops')) return await archive(db,body,company,channelId);
   if(writing) {
    if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||body.message.length>20000) return refuse('channelFailed',400);
    // An image the Engine cannot read, more of them than a message carries, or text and images past its request limit:

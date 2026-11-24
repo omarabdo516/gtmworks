@@ -1,20 +1,19 @@
 'use client';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon, type ShellIconName } from '@/components/shell-icon';
 
-export type CardMenuItem={key:string,icon:ShellIconName,label:string,run:()=>void};
+export type MoreMenuItem={key:string,icon:ShellIconName,label:string,run:()=>void};
 
 // Where each arrow key, Home and End move the focus, from item `index` of `count` (as the account menu's do).
 const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=>(i+1)%n,ArrowUp:(i,n)=>(i-1+n)%n,Home:()=>0,End:(_,n)=>n-1};
 
-// The Card's "More" menu (#670; design-reference-card: #cw-more, popHTML 'more'): a round button in the Card's head that
-// opens its menu with the keyboard on the first item. Arrow Down and Up move through the items and wrap, Home and End go
+// A "More" menu of a row or a sheet (design-reference-card: #cw-more, popHTML 'more'): the Card sheet's head (#670), a
+// sidebar Conversation row and the chat head (#674) each have one, named by its `label`, with its button's `look`. The
+// button opens the menu with the keyboard on the first item. Arrow Down and Up move through the items and wrap, Home and End go
 // to the ends, Escape closes it back to the button without closing the Card, Tab closes it and moves on, and a press
-// outside closes it. Choosing an item closes it, gives the button the keyboard back, then runs the item. A Conversation's
-// own menu (#674: the sidebar row's and the chat head's) is the same menu under its own `label` and button `look`.
-export function CardMenu({items,label,look='circle-btn',className='card-menu'}:{items:CardMenuItem[],label?:string,look?:string,className?:string}) {
- const {t}=useI18n(); const [open,setOpen]=useState(false); const id=useId(); const named=label??t('cardMore');
+// outside closes it. Choosing an item closes it, gives the button the keyboard back, then runs the item.
+export function MoreMenu({items,label,look='circle-btn',className='more-menu'}:{items:MoreMenuItem[],label:string,look?:string,className?:string}) {
+ const [open,setOpen]=useState(false); const id=useId(); const named=label;
  const box=useRef<HTMLDivElement>(null); const button=useRef<HTMLButtonElement>(null);
  useEffect(()=>{
   if(!open) return;
@@ -34,7 +33,7 @@ export function CardMenu({items,label,look='circle-btn',className='card-menu'}:{
  };
  return <div ref={box} className={className}>
   <button ref={button} type="button" className={look} aria-label={named} title={named} aria-haspopup="menu" aria-expanded={open} aria-controls={open?id:undefined} onClick={()=>setOpen(!open)}><ShellIcon name="dots"/></button>
-  {open&&<div className="menu card-menu__pop" id={id} role="menu" aria-label={named} onKeyDown={keys}>
+  {open&&<div className="menu more-menu__pop" id={id} role="menu" aria-label={named} onKeyDown={keys}>
    {items.map(item=><button key={item.key} type="button" className="menu__item" role="menuitem" onClick={()=>{ close(); item.run(); }}><ShellIcon name={item.icon}/><span className="menu__t">{item.label}</span></button>)}
   </div>}
  </div>;

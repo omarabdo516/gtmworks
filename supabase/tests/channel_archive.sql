@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(53);
+select plan(59);
 -- #675 (spec #667). RS Learning's seeded Members: the Owner (1), the Manager (2), a Contributor (3), the Viewer (4) and a
 -- second Contributor (5). A team channel "spring" holds the Manager, Contributor 3 and the Viewer, with Ads in it; the
 -- Owner and Contributor 5 are outside it. Karim is a Manager of Aleem only.
@@ -17,15 +17,17 @@ insert into auth.users(id,email) values ('e6759000-0000-0000-0000-000000000001',
 insert into public.people(id,name) values ('e6759000-0000-0000-0000-000000000001','Karim');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000003','e6759000-0000-0000-0000-000000000001','manager');
 
--- Open work in the channel: a Run started (it asks a question and a request), a Run not started yet, a handed step,
--- and a Member's mention waiting on Contributor 3.
+-- Open work in the channel: a Run started (it asks a question and a request), a Run not started yet, one whose start
+-- is on its way (asked of its Engine, not answered yet), a handed step, and a Member's mention waiting on Contributor 3.
 insert into public.channel_messages(company_id,channel_id,author,person_id,author_name,body,send_key) values
  ('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011','person','20000000-0000-0000-0000-000000000002','مدير','@Ads which angle?','e6751000-0000-0000-0000-000000000001'),
  ('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011','person','20000000-0000-0000-0000-000000000002','مدير','@Ads write it','e6751000-0000-0000-0000-000000000002'),
- ('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011','person','20000000-0000-0000-0000-000000000003','مراجع','@Ads hand me the publish','e6751000-0000-0000-0000-000000000003');
+ ('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011','person','20000000-0000-0000-0000-000000000003','مراجع','@Ads hand me the publish','e6751000-0000-0000-0000-000000000003'),
+ ('10000000-0000-0000-0000-000000000001','e6750000-0000-0000-0000-000000000011','person','20000000-0000-0000-0000-000000000002','مدير','@Ads starting','e6751000-0000-0000-0000-000000000004');
 select set_config('test.asks',(select id::text from public.channel_messages where send_key='e6751000-0000-0000-0000-000000000001'),true);
 select set_config('test.later',(select id::text from public.channel_messages where send_key='e6751000-0000-0000-0000-000000000002'),true);
 select set_config('test.hand',(select id::text from public.channel_messages where send_key='e6751000-0000-0000-0000-000000000003'),true);
+select set_config('test.starting',(select id::text from public.channel_messages where send_key='e6751000-0000-0000-0000-000000000004'),true);
 insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_id,agent_name,session,input,run_id,profile,attempts,attempted_at)
  select id,1,company_id,channel_id,'e6750000-0000-0000-0000-000000000001','Ads',gen_random_uuid(),body,
   case send_key when 'e6751000-0000-0000-0000-000000000001' then 'run-asks' else 'run-hand' end,'channel-archive-ads',1,now()
@@ -33,6 +35,9 @@ insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_i
 insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_id,agent_name,session,input)
  select id,1,company_id,channel_id,'e6750000-0000-0000-0000-000000000001','Ads',gen_random_uuid(),body
  from public.channel_messages where send_key='e6751000-0000-0000-0000-000000000002';
+insert into public.channel_runs(message_id,ordinal,company_id,channel_id,agent_id,agent_name,session,input,profile,attempts,attempted_at)
+ select id,1,company_id,channel_id,'e6750000-0000-0000-0000-000000000001','Ads',gen_random_uuid(),body,'channel-archive-ads',1,now()
+ from public.channel_messages where send_key='e6751000-0000-0000-0000-000000000004';
 insert into public.waiting_items(company_id,person_id,kind,title,body,asked_by,channel_message_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','channel_mention','spring','@مراجع look','مدير',current_setting('test.later')::bigint);
 set local role service_role;
@@ -82,6 +87,26 @@ select is((select state from public.channel_permissions where message_id=current
 select is((select state from public.reply_cards where channel_message_id=current_setting('test.hand')::bigint and kind='hand'),'closed','its handed step stops waiting');
 select is_empty($$select * from public.channel_archive_stops('e6750000-0000-0000-0000-000000000011')$$,'nothing is left to name');
 
+-- The Run whose start was on its way is named by its Engine after the archive: it is stopped as it is named.
+set local role service_role;
+select ok(public.answer_channel_start(current_setting('test.starting')::bigint,1,'run-starting'),'the Engine names the Run that was starting');
+reset role;
+select ok(exists(select 1 from public.stopped_runs where channel_message_id=current_setting('test.starting')::bigint and run_id='run-starting'),
+ 'and it is kept as stopped, for the worker to stop in the Engine');
+set local role authenticated;
+
+-- Who is in it does not change until it is restored.
+select throws_ok($$select public.set_channel_person('e6750000-0000-0000-0000-000000000011','20000000-0000-0000-0000-000000000005',true)$$,'42501','channelArchived',
+ 'the Manager adds nobody to the archived channel');
+select throws_ok($$select public.set_channel_person('e6750000-0000-0000-0000-000000000011','20000000-0000-0000-0000-000000000003',false)$$,'42501','channelArchived',
+ 'and takes nobody out of it');
+reset role;
+insert into public.channel_people(channel_id,company_id,person_id,added_by)
+ values('e6750000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','20000000-0000-0000-0000-000000000002');
+select is((select array_agg(right(person_id::text,1) order by person_id) from public.channel_people where channel_id='e6750000-0000-0000-0000-000000000011'),array['2','3','4'],
+ 'nor does any other write join anyone to it (an invitation claimed meanwhile)');
+set local role authenticated;
+
 -- The Run working closes later, as stopped, through its own close: its end is kept and the channel stays archived.
 set local role service_role;
 select ok(public.close_channel_run(current_setting('test.asks')::bigint,'run-asks','stopped',null,null,null),'the Run working closes later as stopped');
@@ -94,7 +119,7 @@ select is_empty($$select * from public.waiting_list('10000000-0000-0000-0000-000
  'nobody waits on the archived channel any more');
 select is((select array_agg(kind order by kind) from public.channel_sidebar('10000000-0000-0000-0000-000000000001')),array['general'],'it leaves its Members'' channel list, with its unread count');
 select is((select array_agg(name||':'||archived_by_name) from public.archived_channels('10000000-0000-0000-0000-000000000001')),array['spring:مدير'],'its Members find it under Archived, with who archived it');
-select is((select count(*)::int from public.channel_messages where channel_id='e6750000-0000-0000-0000-000000000011'),3,'and read every message in it');
+select is((select count(*)::int from public.channel_messages where channel_id='e6750000-0000-0000-0000-000000000011'),4,'and read every message in it');
 select is((select array_agg(title) from public.conversation_list('10000000-0000-0000-0000-000000000001',archived=>true) where kind='channel'),array['spring'],
  'All conversations lists it under Archived');
 select is_empty($$select * from public.conversation_list('10000000-0000-0000-0000-000000000001') where kind='channel' and title='spring'$$,'and not under Current');
@@ -138,6 +163,8 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003'
 select is((select array_agg(kind order by kind) from public.channel_sidebar('10000000-0000-0000-0000-000000000001')),array['general','team'],'it is back in its Members'' channel list');
 select is_empty($$select * from public.archived_channels('10000000-0000-0000-0000-000000000001')$$,'and out of Archived');
 select ok(public.post_channel_message('e6750000-0000-0000-0000-000000000011','e6751000-0000-0000-0000-000000000010','we are back') is not null,'its Members write in it again');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select lives_ok($$select public.set_channel_person('e6750000-0000-0000-0000-000000000011','20000000-0000-0000-0000-000000000005',true)$$,'and the Manager adds people to it again');
 
 reset role;
 select * from finish();
