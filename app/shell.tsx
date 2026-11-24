@@ -7,6 +7,7 @@ import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
 import { companyAgents, isNewFor } from '@/lib/sidebar.mjs';
+import { Birth } from '@/components/face-moments';
 import ApprovalsCount from './approvals-count';
 import { companyLooks } from '@/lib/agent-looks';
 import { LooksProvider } from '@/lib/agent-looks-client';
@@ -105,7 +106,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     <AgentGrid company={id||''} agents={agents.map(agent=>agent.id)}>{agents.map(agent=>{const fresh=isNewFor(agent,personId); return <li key={agent.id}>
      <AgentTile agent={agent.id} href={`/c/${slug}/chat/${agent.id}`} current={chat&&agentId===agent.id} named={[agent.name,agent.is_default&&t('mainAgent'),fresh&&t('agentNew'),agent.speciality].filter((part):part is string=>!!part)} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
       <bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
-      {fresh&&<span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span>}
+      {fresh&&<><span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span><Birth agent={agent.id}/></>}
      </AgentTile>
     </li>;})}
     {(owner||asksForAgents)&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t(owner?'newAgent':'settingsAskAgent')}</span></Link></li>}</AgentGrid>

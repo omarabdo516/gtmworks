@@ -6,6 +6,7 @@ import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { AgentFace } from '@/components/agent-face';
+import { Birth } from '@/components/face-moments';
 import { useRequestAgent } from '@/lib/agent-looks-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
@@ -41,7 +42,8 @@ export function MadeCard({slug,agent,fresh=false}:{slug:string,agent:MadeAgent,f
  const {t,language}=useI18n(); const zone=useZone(); const {c}=useCardText();
  return <div className={`ac-card${fresh?' card-in':''}`} role="group" aria-label={c('madeAgentLabel',agent.name)}>
   <div className="hcard__top"><span className="badge badge--made" data-utc={agent.fresh?undefined:zone}><ShellIcon name="check"/>{c('madeAgentMade')} · {agent.fresh?t('agentNew'):madeDay(agent.created_at,language,zone)}</span></div>
-  <div className="card__head"><span aria-hidden="true"><AgentFace agent={agent.id} size={48}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
+  <div className="card__head"><span aria-hidden="true" data-birth><AgentFace agent={agent.id} size={48}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
+  {agent.fresh&&<Birth agent={agent.id}/>}
   <AgentRows job={agent.job} apps={agent.apps}/>
   <div className="ac-actions"><Link className="btn btn--primary" href={`/c/${slug}/chat/${agent.id}`}>{c('madeAgentOpen',agent.name)}</Link></div>
   <p className="ac-tip"><ShellIcon name="chat"/><span>{c('madeAgentTip')}</span></p>

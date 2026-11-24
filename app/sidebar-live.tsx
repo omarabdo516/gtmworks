@@ -71,7 +71,7 @@ export function useAgentStates():(agent:string)=>AgentFaceState|undefined {
 // before the state: the name, Main, New and the Agent's line.
 export function AgentTile({agent,href,current,named,title,children}:{agent:string,href:string,current?:boolean,named:string[],title:string,children:ReactNode}) {
  const {t}=useI18n(); const state=useAgentState(agent); const shown=useShownState(agent);
- return <Link className="agent-tile" data-agent={agent} href={href} aria-current={current?'true':undefined} aria-label={[...named,t(faceStateWords[shown])].join(' · ')} title={title}>
+ return <Link className="agent-tile" data-agent={agent} data-birth href={href} aria-current={current?'true':undefined} aria-label={[...named,t(faceStateWords[shown])].join(' · ')} title={title}>
   <AgentFace agent={agent} size={56} state={state} dot live/>{children}
  </Link>;
 }
