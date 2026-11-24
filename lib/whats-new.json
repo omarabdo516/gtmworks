@@ -1,5 +1,11 @@
 [
  {
+  "issue": 583,
+  "date": "2026-11-24",
+  "en": { "title": "Back up right after a failed update", "body": "When an update stops because an agent engine or work sandbox does not start, the version you run is recorded again, so a backup or a restore with that version's own files works without running the failed update first." },
+  "ar": { "title": "اعمل نسخة احتياطية على طول بعد تحديث فشل", "body": "لما التحديث يقف عشان محرك وكيل أو صندوق شغل ماشتغلش، النسخة اللي شغّالة عندك بتتسجّل تاني، فالنسخة الاحتياطية أو الاسترجاع بملفات النسخة دي نفسها بيشتغلوا من غير ما تشغّل التحديث اللي فشل الأول." }
+ },
+ {
   "issue": 667,
   "date": "2026-11-24",
   "en": { "title": "Archive cards, conversations and channels", "body": "Archive a card, several at once or everything in Done, a conversation, or a team channel, with Undo: whatever an Agent was doing there stops and nobody waits on it any more, nothing is deleted, and All conversations lists every conversation and channel with their own Archived tab to restore them from." },

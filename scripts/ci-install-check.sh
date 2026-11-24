@@ -2385,8 +2385,9 @@ compose exec -T web node --input-type=module -e "
 # release's own Engines and sandboxes back (restore_previous_engine, ADR 0023), which reads each Engine's own sandbox key
 # before starting it and counts a sandbox restored only once its own Engine reaches it over SSH. After each, every Company's
 # Engine reaches its own sandbox over SSH, as its Agents' commands do, that sandbox takes its own Engine's key and no other
-# Company's, every sandbox and exit runs the image the install recorded before, and each work folder keeps what it held; an
-# Agent of each Company then runs a command in its own sandbox. Its own area, as the other update areas run near their
+# Company's, every sandbox and exit runs the image the install recorded before, and each work folder keeps what it held; the
+# install records again the release that keeps serving (#583), so a backup with that release's files succeeds and one with
+# the failed release's files is refused. An Agent of each Company then runs a command in its own sandbox. Its own area, as the other update areas run near their
 # 12-minute limit.
 sandbox_rollback() {
 cd "$root"
@@ -2442,6 +2443,14 @@ for failing in sandbox engine; do
   cp "$root/release-broken-$failing/docker-compose.install.yml" "$root/release-broken-$failing/install.sh" . || fail "the release files whose $failing does not start in place"
   if GTMWORKS_ENGINE_WAIT=40 sh install.sh update > update.log 2>&1; then fail_update "the update whose $failing does not start must fail"; fi
   grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update "the update whose $failing does not start says the previous release keeps serving"
+  # The install records again the release that keeps serving (#583), so a backup with the failed release's own files is
+  # refused before anything stops. The release whose sandbox does not start pins this release's own app image, which is
+  # what the record names, so only the one whose Engine does not start is another release to refuse.
+  [[ $(cat .install-release 2> /dev/null) == "$first" ]] || fail_update "the update whose $failing does not start records this release as the one it runs"
+  if [[ $(sed -n 's/^release_image=//p' install.sh) != "$first" ]]; then
+    if sh install.sh backup "$dir/refused-backup" > backup.log 2>&1; then cat backup.log; fail "a backup with the files of the update whose $failing does not start must be refused"; fi
+    grep -Fq "This install does not run $broken_engine yet" backup.log || { cat backup.log; fail "the backup with the files of the update whose $failing does not start names the release it does not run"; }
+  fi
   # The release files of a failed update stay in the folder, as a real one leaves them: the previous release's own go
   # back with its command (scripts/get.sh); here they go back by hand.
   cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail "this release files back after the $failing failure"
@@ -2472,6 +2481,10 @@ for failing in sandbox engine; do
     [[ $reached == "$(docker exec "gtmworks-sandbox-$slug" hostname)" ]] || fail_update "the Engine $name reaches its own Company's sandbox after the update whose $failing does not start"
     [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$rollback_marker-$slug.txt") == "$rollback_marker-$slug" ]] || fail_update "the work folder of $name keeps what it held after the update whose $failing does not start"
   done < companies-before
+  # The Owner backs up with the files of the release that keeps serving, without running the failed update again (#583).
+  mkdir -p "$dir/backup-$failing"
+  sh install.sh backup "$dir/backup-$failing" > backup.log 2>&1 || { cat backup.log; fail "a backup with this release's files after the update whose $failing does not start"; }
+  [[ -f $(sed -n 's/^Backup: //p' backup.log | tail -n 1) ]] || { cat backup.log; fail "the backup after the update whose $failing does not start writes its archive"; }
 done
 # Each Company's main Agent runs a command in its own sandbox after both failed updates and still remembers what its own
 # Engine was told; the job reads each sandbox for the file, and no other Company's sandbox has it.

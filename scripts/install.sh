@@ -446,20 +446,24 @@ engines_up() {
 }
 # The previous release's own Engine files, kept when an update starts and before anything replaces them (ADR 0023): an
 # update whose Engines or work sandboxes do not all start puts them back, and so does one that fails before its Engines
-# start (#554). Nothing is kept for an install that has none.
+# start (#554). Nothing is kept for an install that has none. The release the install records it runs is kept beside them
+# (#583): a release update removes that record while its files are on disk, and a rollback puts it back with the Engines,
+# so backup and restore run again with the files of the release that keeps serving.
 keep_previous_engine() {
   mkdir -p .install-lock/previous-engine
   for file in scripts/engine-*; do
     [ -f "$file" ] || continue
     cp "$file" .install-lock/previous-engine/ || return 1
   done
+  if [ -f .install-release ]; then cp .install-release .install-lock/previous-engine/install-release || return 1; fi
   keep_sandbox_parts
 }
 # The previous release's own Engine files back on disk, exactly as keep_previous_engine kept them (#554): each one kept
 # comes back and every other scripts/engine-* the update brought goes, so that release's Engines, its `company add`, its
 # restore and the next update's keep_previous_engine read its own template; an install whose previous release had none
-# is left with none. The work sandbox image this run made is dropped, and when this run rebuilt a source build's tag, the
-# previous image, kept under its own name, gets the tag back. Nothing changes when no update kept the files.
+# is left with none. The release it recorded running is recorded again (#583). The work sandbox image this run made is
+# dropped, and when this run rebuilt a source build's tag, the previous image, kept under its own name, gets the tag back.
+# Nothing changes when no update kept the files.
 previous_engine_files_back() { previous_engine_files_kept_back && new_engine_files_removed; }
 previous_engine_files_kept_back() {
   [ -d .install-lock/previous-engine ] || return 0
@@ -467,6 +471,9 @@ previous_engine_files_kept_back() {
     [ -f "$file" ] || continue
     cp "$file" scripts/ || return 1
   done
+  if [ -f .install-lock/previous-engine/install-release ]; then
+    cp .install-lock/previous-engine/install-release .install-release || return 1
+  fi
   rm -f .install-lock/work-sandbox-image
   if [ -f .install-lock/work-sandbox-rebuilt ] && [ "$(cat .work-sandbox-image 2> /dev/null)" = "$work_sandbox_tag" ]; then
     docker tag "$work_sandbox_tag-previous" "$work_sandbox_tag" || return 1
@@ -1333,7 +1340,8 @@ fi
 if [ "$operation" = install ] && previous_release_engine; then refuse_several_companies || exit 1; fi
 if [ -n "$release_image" ]; then
   docker pull "$release_image"
-  # From here the files on disk belong to this release until the run finishes, so backup and restore wait for that.
+  # From here the files on disk belong to this release until the run finishes, so backup and restore wait for that. An
+  # update that goes back records the previous release again with its Engine files (keep_previous_engine, #583).
   rm -f .install-release
   # The image carries what a checkout holds for the install: migrations, database and gateway files, lib/install-env.mjs.
   # The migrations are replaced, not merged, so a rolled-back release leaves none of its own to apply again. The folder is
