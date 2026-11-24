@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(51);
+select plan(63);
 -- #696 (spec #694, ADR 0027): every Agent's look (shape, colour, temperament), given in the transaction that makes the
 -- Agent and kept by its id. RS Learning (1) has Lead, its main Agent, on the Company's own profile; the Owner (…01) and
 -- the Manager (…02) each talk to it. Aleem (3) has its own Lead.
@@ -137,6 +137,43 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select throws_ok($$select public.change_agent_look('10000000-0000-0000-0000-000000000001','d6960000-0000-0000-0000-000000000003','colour','rose')$$,'P0002','agentLookNotFound','an Owner names another Company''s Agent with their own Company and changes nothing');
 reset role;
 select is(pg_temp.look('aleem'),'circle indigo calm','so Aleem''s Lead keeps its look');
+-- #698: every other Role of the Company is refused, and so is the Owner of another Company, whichever Company they name.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
+select throws_ok($$select public.change_agent_look('10000000-0000-0000-0000-000000000001',(select agent from named where name='reach'),'colour','rose')$$,'42501','agentLookNotAllowed','a Contributor changes no look');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
+select throws_ok($$select public.change_agent_look('10000000-0000-0000-0000-000000000001',(select agent from named where name='reach'),'colour','rose')$$,'42501','agentLookNotAllowed','nor a Viewer');
+reset role;
+insert into auth.users(instance_id,id,aud,role,email,created_at,updated_at) values ('00000000-0000-0000-0000-000000000000','20000000-0000-0000-0000-000000000698','authenticated','authenticated','aleem-owner@example.com',now(),now());
+insert into public.people(id,name) values ('20000000-0000-0000-0000-000000000698','Aleem''s Owner');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000698','owner');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000698',true);
+select throws_ok($$select public.change_agent_look('10000000-0000-0000-0000-000000000001',(select agent from named where name='reach'),'colour','rose')$$,'42501','agentLookNotAllowed','nor another Company''s Owner naming this Company');
+select throws_ok($$select public.change_agent_look('10000000-0000-0000-0000-000000000003',(select agent from named where name='reach'),'colour','rose')$$,'P0002','agentLookNotFound','nor naming their own');
+select throws_ok($$select public.reset_agent_look('10000000-0000-0000-0000-000000000001',(select agent from named where name='reach'))$$,'42501','agentLookNotAllowed','and none of them resets one');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select throws_ok($$select public.reset_agent_look('10000000-0000-0000-0000-000000000001',(select agent from named where name='reach'))$$,'42501','agentLookNotAllowed','nor does a Manager');
+reset role;
+select is(pg_temp.look('reach'),'blob violet dreamy','so Reach keeps the look its Owner picked');
+
+-- Reset to automatic puts every part back at once, one row of the log for each part that was picked; with nothing
+-- picked it changes and logs nothing.
+create temporary table logged_before as select count(*)::int n from public.company_log where action='agent_look_changed';
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is((select shape||' '||colour||' '||temperament from public.reset_agent_look('10000000-0000-0000-0000-000000000001',(select agent from named where name='reach'))),
+ 'circle violet energetic','the Owner resets Reach to the look it was given');
+reset role;
+select is((select picked_shape is null and picked_colour is null and picked_temperament is null from public.agent_looks l join named n on n.agent=l.agent_id where n.name='reach'),true,'and nothing of it is picked');
+select results_eq($$select l.details->>'part',(l.details->>'automatic')::boolean from public.company_log l join named n on n.agent=l.agent_id
+  where n.name='reach' and l.action='agent_look_changed' order by l.id desc limit 2$$,
+ $$values ('temperament',true),('shape',true)$$,'the log has the shape and the temperament put back, the parts that were picked');
+set local role authenticated;
+select lives_ok($$select public.reset_agent_look('10000000-0000-0000-0000-000000000001',(select agent from named where name='reach'))$$,'resetting it again');
+reset role;
+select is((select count(*)::int from public.company_log where action='agent_look_changed'),(select n+2 from logged_before),'changes and logs nothing more');
 
 -- 11. A move to the Agent's own profile keeps its look.
 create temporary table before_move as select l.* from public.agent_looks l join named n on n.agent=l.agent_id where n.name='writer';

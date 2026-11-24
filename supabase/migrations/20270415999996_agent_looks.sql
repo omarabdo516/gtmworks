@@ -161,6 +161,18 @@ end $$;
 revoke all on function public.change_agent_look(uuid,uuid,text,text) from public,anon,service_role;
 grant execute on function public.change_agent_look(uuid,uuid,text,text) to authenticated;
 
+-- "Reset to automatic" (#698): every part of the look back to the one it was given, at once, so a reset never stands
+-- half done; the same rules and log rows as change_agent_look, one row for each part that was picked.
+create function public.reset_agent_look(c uuid, agent uuid) returns public.agent_looks
+language plpgsql security definer set search_path='' as $$
+declare now_is public.agent_looks; part text;
+begin
+ foreach part in array array['shape','colour','temperament'] loop now_is:=public.change_agent_look(c,agent,part,null); end loop;
+ return now_is;
+end $$;
+revoke all on function public.reset_agent_look(uuid,uuid) from public,anon,service_role;
+grant execute on function public.reset_agent_look(uuid,uuid) to authenticated;
+
 -- A request is given the look its Agent will be made with, as it is kept: lead_request_agent's current body (20261223000000,
 -- its log line moved by 20270213000000) with one line more, and its signature and answers as they were.
 do $$

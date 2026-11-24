@@ -18,6 +18,9 @@ select json_build_object(
   and not has_function_privilege('service_role','public.change_agent_look(uuid,uuid,text,text)','execute'),
  'change_as_owner',(select prosecdef and proconfig @> array['search_path=""'] and position('is_company_owner(c)' in pg_get_functiondef(oid))>0
   from pg_proc where oid='public.change_agent_look(uuid,uuid,text,text)'::regprocedure),
+ 'reset_signed_in_only',has_function_privilege('authenticated','public.reset_agent_look(uuid,uuid)','execute')
+  and not has_function_privilege('anon','public.reset_agent_look(uuid,uuid)','execute')
+  and not has_function_privilege('service_role','public.reset_agent_look(uuid,uuid)','execute'),
  'temperament_worker_only',has_function_privilege('service_role','public.lead_agent_temperament(uuid,text,text,text)','execute')
   and not has_function_privilege('authenticated','public.lead_agent_temperament(uuid,text,text,text)','execute')
   and not has_function_privilege('anon','public.lead_agent_temperament(uuid,text,text,text)','execute'),
