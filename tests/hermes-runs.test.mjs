@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeHermes, noProviderError, creditExhaustedError, apiKeyRefusedError, signInRefusedError, modelMissingError, failedRunText } from './fake-hermes.mjs';
+import { fakeHermes, noProviderError, creditExhaustedError, apiKeyRefusedError, signInRefusedError, modelMissingError, failedRunText, usageLimitFirstError, usageLimitError } from './fake-hermes.mjs';
 import { startRun, readRun, startNotReached, startUnknown } from '../lib/hermes.mjs';
 import { engineFor } from '../lib/engine.mjs';
 
@@ -140,6 +140,32 @@ test('a run that failed for no credit, a refused key or sign-in, a missing model
   fake.settings.failure=failedRunText;
   assert.equal((await readRun({...connection(fake),run})).modelRefused,undefined);
   assert.equal((await engineFor(connection(fake)).read(run)).modelRefused,undefined);
+ } finally { await fake.close(); }
+});
+
+// #642: a ChatGPT account's HTTP 429 usage_limit_reached, in both of the pinned Engine's texts for it (measured): the
+// Run that met it, and every later Run, which the Engine fails at once. Each is no access, with when the usage resets;
+// a usage limit that names no reset, or a short rate limit, names none.
+test('a run that failed on a usage limit is no access, with when the limit resets when the Engine names it',async()=>{
+ const fake=await fakeHermes(); fake.settings.ending='failed';
+ try {
+  const run=await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'});
+  for(const [sentence,seconds] of [[usageLimitFirstError,(120*60+58)*60],[usageLimitError,121*3600],
+   ['⏱️ The AI model service\'s usage limit is reached; it resets in ~45 min. Use /retry after that, or /model to switch models.',45*60]]) {
+   fake.settings.failure=sentence;
+   const before=Date.now();
+   for(const read of [await readRun({...connection(fake),run}),await engineFor(connection(fake)).read(run)]) {
+    assert.equal(read.modelRefused,'access',sentence);
+    const at=Date.parse(read.resetsAt??'');
+    assert.ok(at>=before+seconds*1000-1000&&at<=Date.now()+seconds*1000+1000,`${sentence}: ${read.resetsAt}`);
+   }
+  }
+  fake.settings.failure='⚠️ Something went wrong and I couldn\'t finish this reply. Your plan\'s usage limit has been reached. Please wait until it resets.\nUse /retry to try again.';
+  assert.equal((await readRun({...connection(fake),run})).modelRefused,'access');
+  assert.equal((await readRun({...connection(fake),run})).resetsAt,undefined);
+  fake.settings.failure='⏱️ The AI model service is rate-limiting requests. Wait a moment, then use /retry.';
+  assert.equal((await readRun({...connection(fake),run})).modelRefused,undefined);
+  assert.equal((await readRun({...connection(fake),run})).resetsAt,undefined);
  } finally { await fake.close(); }
 });
 

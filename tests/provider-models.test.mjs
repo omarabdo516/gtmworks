@@ -148,6 +148,21 @@ test('a subscription signed in only on an Agent\'s profile lists its models from
  } finally { await fake.close(); }
 });
 
+test('a partly connected subscription lists its own profile\'s models beside a shared-space key of its provider (#638)', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake);
+  // The Claude sign-in an older version left on the Company's profile reaches Opus and Sonnet; the shared space's
+  // Anthropic key reaches Opus only, so the space lists Opus alone for Anthropic.
+  delete fake.settings.defaultCredentials.anthropic;
+  fake.settings.profiles.get(main).credentials.anthropic='test-only-claude-oauth';
+  const {db}=database({rows:[{entry:'sub-anthropic',model:'claude-sonnet-4-6',enabled:false}]});
+  const switches=await readProviderModels(db,{company,hermes:install(fake)});
+  assert.deepEqual(switches['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:false}]);
+  assert.deepEqual(switches['key-anthropic'],[{model:'claude-opus-4-6',enabled:true}]);
+ } finally { await fake.close(); }
+});
+
 test('a Provider the Owner switched off offers nothing, and a subscription goes only once every account of it is off (#619)', async () => {
  const fake=await fakeHermes();
  try {

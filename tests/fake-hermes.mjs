@@ -9,6 +9,12 @@ export const creditExhaustedError='Billing or credits exhausted: HTTP 400: Your 
 export const apiKeyRefusedError='Anthropic rejected your API key, so the model can\'t be reached. Add a new key with `hermes auth add anthropic`, or sign in again.';
 export const signInRefusedError='Anthropic rejected your sign-in, so the model can\'t be reached. Sign in again with `hermes login`.';
 export const modelMissingError='Model \'claude-fable\' isn\'t available on Anthropic. Pick another model with `hermes model`.';
+// #642, measured on the pinned release with a ChatGPT account answering HTTP 429 usage_limit_reached (resets_in_seconds
+// 435483): the first Run's exhausted copy (agent/turn_failure_copy.py exhausted_copy, with turn_recovery.py
+// _stamp_limit_reset's last line), and every later Run's, which the Engine answers without a model call once the account
+// is marked exhausted (gateway/run.py _rate_limit_reply, locales/en.yaml gateway.errors.usage_limit_resets).
+export const usageLimitFirstError='ChatGPT or Codex Subscription rate-limited every one of 3 attempts — its usage limit resets in ~121h. Send /retry after that, or switch models with /model. To avoid this in future, add a backup provider with `hermes fallback add`.\n\nProvider said: HTTP 429: The usage limit has been reached\n\nLimit resets at 19:24 (in 120h 58m).';
+export const usageLimitError='⏱️ The AI model service\'s usage limit is reached; it resets in ~121h. Use /retry after that, or /model to switch models.';
 export const failedRunText='Something else went wrong while the model was answering.';
 // `host` is the loopback address both listeners take: a spec that needs the management listener on its fixed port 9119
 // (the driver's default beside the Hermes address) takes an address of its own, so lanes never share that port. `port`
@@ -87,7 +93,10 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   outOfQuota:/** @type {Set<string>} */(new Set()),switches:/** @type {{id:string,provider:string,from:string,to:string,at:number}[]} */([]),
   answeredOn:/** @type {Map<string,string>} */(new Map()),modelCalls:/** @type {{run:string,account:string,provider?:string,model?:string}[]} */([]),
   fallbacks:/** @type {{run:string,provider:string,model:string}[]} */([]),
-  noAccountText:'ChatGPT rate-limited every one of 3 attempts — its usage limit resets in 4h 12m. Send /retry after that, or switch models with /model. To avoid this in future, add a backup provider with `hermes fallback add`.\n\nProvider said: You have hit your usage limit.',
+  // A Run that finds every account already exhausted makes no model call and fails at once with the gateway's
+  // usage-limit line instead (#642, measured), `usageLimitText`.
+  usageLimitText:usageLimitError,
+  noAccountText:usageLimitFirstError,
   configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
   configWriteFail:/** @type {Set<string>} */(new Set()),
   // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal
@@ -385,7 +394,8 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
      approval:{command:asking.command,description:asking.description,pattern_key:asking.patternKeys[0],pattern_keys:asking.patternKeys,request_id:asking.request_id,timeout_s:300,
       event:'approval.request',run_id:run.id,timestamp:Date.now()/1000,choices:asking.choices}});
     const done=run.reads++>=settings.pendingReads;
-    if(done&&run.outOfAccounts) { endEvents(run.id,'run.failed'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'failed',session_id:run.session,...times,output:settings.noAccountText,pending_controls:[]}); }
+    if(done&&run.outOfAccounts) { endEvents(run.id,'run.failed'); return send(response,200,{object:'hermes.run',run_id:run.id,status:'failed',session_id:run.session,...times,
+     output:settings.modelCalls.some(call=>call.run===run.id)?settings.noAccountText:settings.usageLimitText,pending_controls:[]}); }
     if(done) endEvents(run.id,settings.ending==='completed'?'run.completed':'run.failed');
     return send(response,200,{object:'hermes.run',run_id:run.id,status:done?settings.ending:'running',session_id:run.session,...times,...(done&&settings.ending==='completed'?{output:settings.reply(inputText(run.input),(run.asked||[]).map(asked=>asked.answer??null),(run.approvals||[]).map(asking=>asking.choice??null))}:{}),...(done&&settings.ending==='failed'&&settings.failure?{[settings.failure===noProviderError?'error':'output']:settings.failure}:{}),...(done&&settings.usage?{usage:settings.usage}:{}),pending_controls:[]});
    }
