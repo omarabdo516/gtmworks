@@ -42,6 +42,8 @@ const screen = (language:'en'|'ar' = 'en', { canManage = true, owner = true, val
   <LearningSection t={i18n(language).t} slug="rs-learning" company={company} canManage={canManage} owner={owner} data={value}/>
  </LanguageProvider>);
 };
+// Two rendering updates: long enough for the browser to drop the focus from a button that can no longer take it.
+const twoFrames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const bodyOf = async (call:number) => JSON.parse((fetchMock.mock.calls[call][1] as RequestInit).body as string);
 const button = (view:Awaited<ReturnType<typeof screen>>, name:RegExp) => view.getByRole('button', { name }).elements();
 const companyModes = (view:Awaited<ReturnType<typeof screen>>) => view.getByRole('radiogroup', { name: 'For the whole company' });
@@ -152,7 +154,7 @@ test('one Agent\'s mode is one Tab stop and the arrow keys move and select it; a
  await userEvent.keyboard('{ArrowRight}');
  await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
  expect(await bodyOf(0)).toEqual({ company, agent: writer, mode: 'ask' });
- await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+ await twoFrames();
  expect(document.activeElement?.id).toBe(`ln-${writer}-ask`);
  await expect.element(ask).toHaveAttribute('aria-disabled', 'true');
  await userEvent.keyboard('{ArrowLeft}');

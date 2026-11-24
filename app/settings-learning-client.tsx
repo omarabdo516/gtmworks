@@ -62,8 +62,8 @@ export function AgentLearningMode({company,agent,labelId,mode,follows}:{company:
  const chosen=follows===true?'follow':!follows&&(mode==='auto'||mode==='ask')?mode:null;
  const idOf=(choice:'auto'|'ask'|'follow')=>choice==='follow'?`ln-${agent}-follow`:`ln-${agent}-${choice}`;
  // The arrow key selects the choice it reaches, as the effort control does; with no choice marked the first has the Tab
- // stop and the arrow selects it. While a choice is being sent the group says it is busy (aria-disabled) and the arrow
- // waits; it is not disabled, since a disabled button drops the focus the arrow just gave it (#588).
+ // stop and the arrow selects it. While a choice is being sent its buttons say they are unavailable (aria-disabled) and the
+ // arrow waits; it is not disabled, since a disabled button drops the focus the arrow just gave it (#588).
  const move=(event:KeyboardEvent<HTMLButtonElement>,index:number)=>{
   const direction=arrowChoice(event,rtl); if(direction===null||pending) return;
   const next=chosen===null?index:Math.max(0,Math.min(choices.length-1,index+direction));
