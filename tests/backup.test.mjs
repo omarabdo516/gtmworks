@@ -71,7 +71,7 @@ test('the README says every Company Engine is in the backup, the restore and the
 // (conversations.archived_at, by its migration) and its Engine session's flag in that Engine's own data, and the archive
 // holds both whole.
 test('a backup and a restore keep an archived Conversation archived, in the database and in its Engine', () => {
-  const migration = readFileSync('supabase/migrations/20270415999990_archive_conversations.sql', 'utf8');
+  const migration = readFileSync('supabase/migrations/20270415999991_archive_conversations.sql', 'utf8');
   assert.match(migration, /alter table public\.conversations add column archived_at timestamptz, add column archived_by uuid/, 'the archive is a column of the Conversation in the database');
   assert.match(migration, /add column session_archived boolean/, 'and what its Engine session last took is beside it, so a restored install sends no mark again');
   const archived = archivedPaths();

@@ -11,6 +11,7 @@ import type { ReplyCard as Card } from '@/lib/conversations';
 const Arrived = ({ record }: { record: Promise<ConversationRecord> }) => <ConversationLoaded initial={use(record)} team={false}/>;
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-1', useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });

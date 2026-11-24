@@ -164,7 +164,7 @@ $$;
 
 -- 20270415999988's All conversations (#673): an archived channel is in the Archived list, not the current one, and each
 -- list's count follows (design-reference-card: renderConvos, where a channel is archived and restored as a Conversation
--- is). An archived Conversation (#674, 20270415999990) is in the Archived list too. Every other row is as #673 reads it.
+-- is). An archived Conversation (#674, 20270415999991) is in the Archived list too. Every other row is as #673 reads it.
 create or replace function public.conversation_list(c uuid, q text default null, archived boolean default false, after_at timestamptz default null,
  after_id uuid default null, lim integer default 50, morning text default null, general text default null)
 returns table(kind text, id uuid, agent_id uuid, agent_name text, connection_id uuid, title text, good_morning_day date, channel_kind text, last_at timestamptz, last_body text)

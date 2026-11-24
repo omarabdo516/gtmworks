@@ -11,6 +11,7 @@ import '@/app/shell.css';
 const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 afterEach(() => { vi.unstubAllGlobals(); });
 // The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.

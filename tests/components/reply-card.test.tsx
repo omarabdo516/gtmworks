@@ -13,6 +13,7 @@ import type { ReplyCard as Card } from '@/lib/conversations';
 const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-1', useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 // The live steps' read (#646) is tests/components/live-steps.test.tsx's own: here it waits for ever, so it never takes an
 // answer meant for the record.

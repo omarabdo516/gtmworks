@@ -1,13 +1,13 @@
 'use server';
 import { withActionLog, logActionFailure } from '@/lib/diagnostics.mjs';
-import { revalidatePath } from 'next/cache';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
 import type { ConversationArchiveResult, ConversationStop } from '@/lib/all-conversations';
 
 // What archiving would stop in these Conversations (#674), or archiving or restoring them: each the signed-in person's
 // own, which archive_conversations and restore_conversations decide in the database. `stops` answers what the one
-// confirmation names; the others answer the Conversations they changed, or refused when none changed.
+// confirmation names; the others answer the Conversations they changed, or refused when none changed. The page that
+// asked reads itself again (useConversationArchive), so nothing here imports the server's cache.
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const archiveConversations=withActionLog('archiveConversations',async function archiveConversations(company:string,intent:'stops'|'archive'|'restore',chats:string[]):Promise<ConversationArchiveResult> {
  const db=await supabase();
@@ -21,6 +21,5 @@ export const archiveConversations=withActionLog('archiveConversations',async fun
  const {data,error}=intent==='restore'?await db.rpc('restore_conversations',{c:company,chats:ids}):await db.rpc('archive_conversations',{c:company,chats:ids});
  if(error) { logActionFailure('archiveConversations',error); return {state:'refused'}; }
  const done=((data||[]) as string[]).map(String);
- if(done.length) revalidatePath('/c','layout');
  return done.length?{state:'done',chats:done}:{state:'refused'};
 });
