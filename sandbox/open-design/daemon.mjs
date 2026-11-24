@@ -80,16 +80,19 @@ export async function locked(file,work) {
 
 // A daemon is stopped whole: its process group is asked to end, waited for a bounded time, and killed if any of it is still
 // there, so a start's lock never goes while the old daemon could still take the port (#634).
-const groupAlive=pid=>{ try { process.kill(-pid,0); return true; } catch(failure) { return /** @type {any} */(failure)?.code==='EPERM'; } };
-/** @param {import('node:child_process').ChildProcess} child @param {{grace?:number}} [options] */
+/** @param {number} pid */
+export const groupAlive=pid=>{ try { process.kill(-pid,0); return true; } catch(failure) { return /** @type {any} */(failure)?.code==='EPERM'; } };
+// Answers whether the group is gone.
+/** @param {import('node:child_process').ChildProcess} child @param {{grace?:number}} [options] @returns {Promise<boolean>} */
 export async function stopGroup(child,{grace=10_000}={}) {
  const pid=child.pid;
- if(!pid) return;
+ if(!pid) return true;
  const signal=name=>{ try { process.kill(-pid,name); } catch { try { child.kill(name); } catch {} } };
  signal('SIGTERM');
- for(const until=Date.now()+grace;Date.now()<until;) { if(!groupAlive(pid)) return; await sleep(50); }
+ for(const until=Date.now()+grace;Date.now()<until;) { if(!groupAlive(pid)) return true; await sleep(50); }
  signal('SIGKILL');
- for(const until=Date.now()+5000;Date.now()<until&&groupAlive(pid);) await sleep(50);
+ for(const until=Date.now()+5000;Date.now()<until;) { if(!groupAlive(pid)) return true; await sleep(50); }
+ return false;
 }
 
 /** @param {{profile:string,key:string,cwd?:string,home?:string}} given */
@@ -122,9 +125,9 @@ export async function ensureDaemon({profile,key,cwd=process.cwd(),home=homedir()
   }
   // A daemon that never answered is stopped whole, a child it left included, before the lock goes, so the next start
   // makes the only one.
-  await stopGroup(child);
+  const stopped=await stopGroup(child);
   rmSync(paths.port,{force:true});
-  throw new Error(`Open Design's daemon did not start; its log is ${paths.log}.`);
+  throw new Error(`Open Design's daemon did not start${stopped?'':' and could not be stopped'}; its log is ${paths.log}.`);
  });
 }
 
