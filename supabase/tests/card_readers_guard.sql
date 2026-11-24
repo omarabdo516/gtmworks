@@ -67,6 +67,7 @@ insert into decisions
  union all select 'public.log_routine_change(uuid,uuid,text,text,text,uuid)','exempt','it answers nothing: it reads only whether this Agent''s own Routine change is already in the Company log by its key (#31), a row that names no Card'
  union all select fn,'exempt','an Owner or a Manager saves a field of an Agent''s settings page and writes that Agent''s log row, which names no Card; the caller is checked by check_agent_setting or check_agent_owner_setting' from unnest(array[
   'public.log_agent_setting(uuid,uuid,text,text,text)','public.log_agent_instructions(uuid,uuid)','public.log_agent_morning(uuid,uuid,text,text,uuid)']) fn
+ union all select 'public.change_agent_look(uuid,uuid,text,text)','exempt','an Owner changes a part of an Agent''s look (#696) and writes that Agent''s log row, which names no Card; it answers the look alone'
  union all select 'public.log_permission_revoked(uuid,uuid,text,text)','exempt','an Owner or a Manager who sees the Agent revokes one of its standing permissions and writes that Agent''s log row, which names no Card; the caller is checked by check_permission_revoke (#166)'
  union all select 'public.pin_run_history(uuid,uuid)','exempt','the worker''s, callable by the service role only: it reads when an Agent last moved from that Agent''s log rows, which name no Card, and answers the Conversation''s own messages'
  union all select 'public.agent_move_blocked(uuid)','exempt','callable inside the database only; it answers whether an Agent has running work, and names no Card'

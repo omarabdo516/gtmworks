@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 -- the first test red until it is added here.
 create temp table isolation_matrix(name text primary key, fixed jsonb not null default '{}');
 insert into isolation_matrix(name) values
- ('agent_access_requests'),('agent_change_proposals'),('agent_grants'),('agent_permission_revoked'),('agent_permission_revokes'),('agent_handovers'),('agent_key_waits'),('agent_morning_leases'),('agent_profile_leftovers'),('agent_profiles'),
+ ('agent_access_requests'),('agent_change_proposals'),('agent_looks'),('agent_grants'),('agent_permission_revoked'),('agent_permission_revokes'),('agent_handovers'),('agent_key_waits'),('agent_morning_leases'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
  ('channel_agents'),('channel_archives'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
@@ -14,7 +14,7 @@ insert into isolation_matrix(name) values
  ('conversation_archives'),('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
  ('held_agent_changes'),('hermes_agents'),
- ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
+ ('invitation_agent_access'),('lead_agent_requests'),('lead_agent_temperaments'),('lead_made_agents'),
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('provider_names'),('provider_order'),('reply_cards'),('role_permissions'),('routine_results'),('stopped_runs'),
  ('waiting_items'),
@@ -57,6 +57,9 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('company_key_unfinished', $${"profiles": "array['co-' || md5('isolation')]"}$$),
  ('company_log', $${"actor_kind": "'person'", "actor_id": "'e3370000-0000-0000-0000-000000000001'", "source": "'company_audit'",
    "subject": "'company'"}$$),
+ -- An Agent's look (#696) and Lead's temperament for an Agent name values of their fixed lists.
+ ('agent_looks', $${"auto_shape": "'circle'", "auto_colour": "'rose'", "auto_temperament": "'calm'"}$$),
+ ('lead_agent_temperaments', $${"temperament": "'calm'"}$$),
  ('company_profiles', $${"profile": "'co-' || md5('isolation')", "tools_confirmed": "true"}$$),
  ('conversation_attachments', $${"conversation_id": "'e3370000-0000-0000-0000-00000000000c'",
    "path": "'10000000-0000-0000-0000-000000000001/conversations/e3370000-0000-0000-0000-00000000000c/isolation'"}$$),
