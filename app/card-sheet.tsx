@@ -120,7 +120,7 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite:mayW
       <div className="composer__row">
        <label className="sr-only" htmlFor="ta-note">{t('sheetNoteLabel')}</label>
        <textarea ref={noteField} className="composer__input" id="ta-note" name="body" rows={1} dir="auto" required readOnly={sending} placeholder={t(alone?'notePlaceholderAlone':'notePlaceholderTeam')} aria-describedby="note-hint"
-        value={note} aria-autocomplete="list" aria-expanded={!!list} aria-activedescendant={list?`${listId}-${list.index}`:undefined}
+        value={note} aria-autocomplete="list" aria-expanded={!!list} aria-controls={list?listId:undefined} aria-activedescendant={list?`${listId}-${list.index}`:undefined}
         onChange={event=>{ const value=event.target.value; setNote(value); updateList(value,event.target.selectionStart??value.length); }} onKeyDown={noteKeys}/>
        <button type="submit" className="composer__send" aria-label={t('sheetNoteSend')} disabled={!note.trim()||sending}><ShellIcon name="send"/></button>
       </div>

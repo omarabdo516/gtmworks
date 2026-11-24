@@ -470,6 +470,8 @@
   "agentStatusDone": "Done",
   "agentStatusStuck": "Stuck",
   "agentStatusAsleep": "Asleep",
+  "agentStatusListening": "Listening",
+  "agentStatusThinking": "Thinking",
   "agentLatestActivity": "Latest activity",
   "agentActivityEmpty": "Nothing done this week yet. Send it a message and it’ll start.",
   "agentTools": "Connected tools",

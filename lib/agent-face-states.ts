@@ -1,13 +1,14 @@
 import type { supabase } from './supabase';
+import type { FaceState } from '@/components/face-life';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
 // The state an Agent's face carries for the reader (#699, spec #694), one of them, in this order: something of it waits
 // on the reader, it works on anything, its last Run the reader can see failed, it has done nothing for 7 days, or none.
 export type AgentFaceState='waiting'|'working'|'stuck'|'asleep'|'idle';
 // The words beside a face for each state it may carry (design-reference-orb: ST): what a screen reader hears after the
-// Agent's name, and the line under it. Done is the open chat's own (#700).
+// Agent's name, and the line under it. Listening, thinking and done are the open chat's own (#700, lib/live-runs).
 export const faceStateWords={waiting:'agentStatusWaiting',working:'agentStatusWorking',stuck:'agentStatusStuck',asleep:'agentStatusAsleep',
- idle:'agentStatusIdle',done:'agentStatusDone'} as const satisfies Record<AgentFaceState|'done',string>;
+ idle:'agentStatusIdle',done:'agentStatusDone',listening:'agentStatusListening',thinking:'agentStatusThinking'} as const satisfies Record<FaceState,string>;
 // Where a stuck Agent failed, so opening there clears it (seeAgentFailure): exactly one place.
 export type FailurePlace={conversation:string}|{channel:string}|{card:number};
 // One Agent's face for the reader: its state, whether it also works under a waiting state, its failure (when and where)
