@@ -81,7 +81,7 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one for ea
 - ✅ **Channel replies carry cards and steps; mentions reach the right person.** [#148, #149, #150, #151, #200]
 - ✅ **An Agent sends a file in its reply.** Any file it made in its own work folder (a PDF, a spreadsheet, an image) comes as a file to open and download, images as thumbnails, in a Conversation and a channel; one it cannot send is named, never shown as a path. [#708, ADR 0028]
 - ✅ **Team-work rules.** The author comes from the session, a busy Agent queues the next Member's message, a message to a person does not wake the Agent, and a Member keeps a private note. [#65, ADR 0015, FEATURES.md rules a to g]
-- 🟡 **Errors that say why.** No model connected, a model error that cannot pass (in a Conversation, a channel, a handover or a Card note), a missing image, and a stopped Engine that waits up to ten minutes. Merged; waiting for the release (#572). [#368, #413, #422, #428, #457, #530]
+- 🟡 **Errors that say why.** No model connected, a model error that cannot pass (in a Conversation, a channel, a handover or a Card note), a missing image, and a stopped Engine that waits up to ten minutes. Merged; waiting for the release (#572). [#368, #413, #422, #428, #457, #530, #602]
 - 🟡 **Good morning.** The main Agent opens a new chat with a card of what waits and what ran overnight, switched on and timed in its settings. Merged; waiting for the release (#572). [#182, #183, #506, #524]
 - ✅ **Empty chats help.** Lead's four suggestions, and "Try starting with this sentence" for a new Agent. [#170, #171, #292]
 - ✅ **A chat starts a Card, and a Card has its Chat.** [#144, #145, #146, #147]
