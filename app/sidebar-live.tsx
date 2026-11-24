@@ -5,6 +5,8 @@ import { useI18n } from '@/lib/i18n-client';
 import { AgentFace } from '@/components/agent-face';
 import { faceStateWords, type AgentFaceState, type FailurePlace } from '@/lib/agent-face-states';
 import type { ChannelSummary } from '@/lib/channels';
+import { onWatchedRunEnded, shownState, useChatKnows } from '@/lib/live-runs';
+import type { FaceState } from '@/components/face-life';
 
 const pollEvery=5000;
 // What the sidebar shows that changes while a page stays open: the reader's channels with their unread counts (#24),
@@ -37,7 +39,10 @@ export function SidebarLive({company,channels,states,children}:{company:string,c
   };
   ask.current=()=>{ void poll(); };
   timer=setTimeout(poll,pollEvery);
-  return ()=>{stopped=true;clearTimeout(timer);ask.current=()=>{};};
+  // A Run the open chat watched ended (lib/live-runs): its Agent's state is read again at once, so a failure or a
+  // question shows its own state without waiting for the next poll.
+  const ended=onWatchedRunEnded(()=>ask.current());
+  return ()=>{stopped=true;clearTimeout(timer);ask.current=()=>{};ended();};
  },[company,basis]);
  const refresh=useCallback(()=>ask.current(),[]);
  const live=useMemo(()=>({...now,refresh}),[now,refresh]);
@@ -51,6 +56,11 @@ export const useSidebarChannels=()=>useContext(Now)?.channels??[];
 export function useAgentState(agent:string,drawn:AgentFaceState='idle'):AgentFaceState {
  return useContext(Now)?.agents[agent]??drawn;
 }
+// The one state an Agent's live face shows (lib/live-runs shownState): the sidebar's, with what the chat this person has
+// open knows of it, so the tile, the chat's head and the reply being worked on agree, and the words say the same.
+function useShownState(agent:string|null|undefined,drawn:AgentFaceState='idle'):FaceState {
+ return shownState(useAgentState(agent??'',drawn),useChatKnows(agent));
+}
 export function useAgentStates():(agent:string)=>AgentFaceState|undefined {
  const agents=useContext(Now)?.agents;
  return useCallback((agent:string)=>agents?.[agent],[agents]);
@@ -60,8 +70,8 @@ export function useAgentStates():(agent:string)=>AgentFaceState|undefined {
 // for assistive technology that ends with the state in words, both following the sidebar's poll. `named` is what comes
 // before the state: the name, Main, New and the Agent's line.
 export function AgentTile({agent,href,current,named,title,children}:{agent:string,href:string,current?:boolean,named:string[],title:string,children:ReactNode}) {
- const {t}=useI18n(); const state=useAgentState(agent);
- return <Link className="agent-tile" data-agent={agent} href={href} aria-current={current?'true':undefined} aria-label={[...named,t(faceStateWords[state])].join(' · ')} title={title}>
+ const {t}=useI18n(); const state=useAgentState(agent); const shown=useShownState(agent);
+ return <Link className="agent-tile" data-agent={agent} href={href} aria-current={current?'true':undefined} aria-label={[...named,t(faceStateWords[shown])].join(' · ')} title={title}>
   <AgentFace agent={agent} size={56} state={state} dot live/>{children}
  </Link>;
 }

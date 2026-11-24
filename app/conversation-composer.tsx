@@ -4,7 +4,8 @@ import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { prefersReducedMotion } from '@/lib/motion';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
-import { commandList, insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
+import { calledAgents, commandList, insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
+import { useReportTyping } from '@/lib/live-runs';
 import { useI18n } from '@/lib/i18n-client';
 import { faceStateWords, type AgentFaceState } from '@/lib/agent-face-states';
 import { useAgentStates } from './sidebar-live';
@@ -130,8 +131,11 @@ export type ModelTarget={company:string,conversation:string,agent:string};
 // Why a chosen image, or a set of them, cannot go with this message: the one line under the box (design-reference has
 // no such line, since it takes any file; the Engine reads images only).
 const refusalOf=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
-export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,ref?:Ref<MessageBoxHandle>}) {
+export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,to,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,to?:string|null,ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(''); const [files,setFiles]=useState<File[]>([]); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+ // The Agent being written to listens while the field holds words (#700, lib/live-runs): the chat's own Agent (`to`), or
+ // in a channel each Agent the words name after "@". An empty field, or a sent one, stops it.
+ useReportTyping(!text.trim()?[]:to?[to]:call?calledAgents(text,call.agents):[]);
  const seen=useContext(CallableAgents);
  // A channel's Agents carry no role of their own; the Agents this Member sees do, so each takes its role by id, and its
  // Commands are listed as in a Conversation.

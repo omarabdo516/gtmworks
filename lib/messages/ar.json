@@ -470,6 +470,8 @@
   "agentStatusDone": "خلص",
   "agentStatusStuck": "وقف",
   "agentStatusAsleep": "نايم",
+  "agentStatusListening": "بيسمعك",
+  "agentStatusThinking": "بيفكر",
   "agentLatestActivity": "آخر حاجة عملها",
   "agentActivityEmpty": "لسه معملش حاجة الأسبوع ده. ابعتله رسالة وهو يبدأ.",
   "agentTools": "الأدوات المتوصلة",
