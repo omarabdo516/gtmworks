@@ -171,7 +171,7 @@ export const motionTable = [
   { built: '.gw .fr__col > *', file: 'app/first-run-choice.css', html: '<div class="gw"><form class="fr__col"><div class="fr__head"></div></form></div>' },
   { built: '.gw .cr-kind', file: 'app/first-run-choice.css', html: '<div class="gw"><label class="cr-kind fr-choice"></label></div>' },
   // An Agent's face, the orb (#697, app/face.css): it lifts on a tile's or the chat head's hover, its posture eases between
-  // states, it breathes as its temperament does, its colour flows, its glow, inner light, swirl and veil fade with its
+  // states, it breathes as its temperament does, its glow, inner light, swirl and veil fade with its
   // expression, its highlight and eyes ease toward the pointer and its eyes open, close and smile. The dot of an Agent at
   // work sends a ring, a ::after.
   { built: '.gw .face', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis"></span></div>' },
@@ -179,7 +179,6 @@ export const motionTable = [
   { built: '.gw .f-breath', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><span class="f-breath"></span></span></div>' },
   { built: '.gw .face[data-temperament="energetic"] .f-breath', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="energetic"><span class="f-breath"></span></span></div>' },
   { built: '.gw .f-glow', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="f-glow"></i></span></div>' },
-  { built: '.gw .f-flows', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="l f-flows"></i></span></div>' },
   { built: '.gw .f-core', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="l f-core"></i></span></div>' },
   { built: '.gw .f-swirl', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="l f-swirl"></i></span></div>' },
   { built: '.gw .f-veil', file: 'app/face.css', html: '<div class="gw"><span class="face face--live is-vis" data-temperament="calm" data-state="idle"><i class="l f-veil"></i></span></div>' },

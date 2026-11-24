@@ -22,16 +22,24 @@
 .gw .f-act, .gw .f-pose, .gw .f-breath { position: absolute; inset: 0; }
 .gw .f-pose { transform-origin: 50% 90%; transition: transform 360ms var(--gw-ease-out); }
 .gw .f-breath { transform-origin: 50% 92%; animation: gw-face-breath var(--br, 5s) ease-in-out var(--d, 0s) infinite; }
+/* Each temperament's breath (agent-orb-v2 fBreath and fBounce with its numbers: lift, swell, sway), written out, as
+   keyframes that read custom properties are not run by the compositor and cost every face a frame of the main thread
+   (tests/face-frames.spec.ts, #697). */
 .gw .face[data-temperament="energetic"] .f-breath { animation-name: gw-face-bounce; }
-@keyframes gw-face-breath {
-  0%, 100% { transform: translateY(0) rotate(calc(var(--sw, 0) * -1deg)) scale(1, 1); }
-  50% { transform: translateY(calc(var(--s) * var(--bb, .01) * -1)) rotate(calc(var(--sw, 0) * 1deg)) scale(calc(1 + var(--ba, .02) * .5), calc(1 + var(--ba, .02))); }
-}
+.gw .face[data-temperament="warm"] .f-breath { animation-name: gw-face-sway; }
+.gw .face[data-temperament="dreamy"] .f-breath { animation-name: gw-face-drift; }
+.gw .face[data-temperament="neat"] .f-breath { animation-name: gw-face-tick; }
+.gw .face[data-temperament="caring"] .f-breath { animation-name: gw-face-settle; }
+@keyframes gw-face-breath { 0%, 100% { transform: none; } 50% { transform: translateY(-1.2%) scale(1.009, 1.018); } }
+@keyframes gw-face-sway { 0%, 100% { transform: rotate(-3.5deg); } 50% { transform: translateY(-1.6%) rotate(3.5deg) scale(1.012, 1.024); } }
+@keyframes gw-face-drift { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: translateY(-2.2%) rotate(1.5deg) scale(1.01, 1.02); } }
+@keyframes gw-face-tick { 0%, 100% { transform: none; } 50% { transform: translateY(-.6%) scale(1.005, 1.01); } }
+@keyframes gw-face-settle { 0%, 100% { transform: none; } 50% { transform: translateY(-1.2%) scale(1.01, 1.02); } }
 @keyframes gw-face-bounce {
   0%, 100% { transform: translateY(0) scale(1.025, .975); }
-  14% { transform: translateY(0) scale(1, 1); }
-  46% { transform: translateY(calc(var(--s) * var(--bb, .04) * -1)) scale(.99, 1.02); }
-  78% { transform: translateY(0) scale(1, 1); }
+  14% { transform: none; }
+  46% { transform: translateY(-4.5%) scale(.99, 1.02); }
+  78% { transform: none; }
   88% { transform: translateY(0) scale(1.03, .97); }
 }
 /* the floor: a dark contact shadow on light, a coloured pool of light on dark */
@@ -49,15 +57,15 @@
 .gw .f-body { position: absolute; inset: 0; overflow: hidden; border-radius: 50%; background: var(--c3); isolation: isolate; }
 .gw .face:not([data-shape="circle"]) .f-body { border-radius: 0; -webkit-mask: var(--mask) center / 100% 100% no-repeat; mask: var(--mask) center / 100% 100% no-repeat; }
 .gw .f-base { inset: 0; background: linear-gradient(158deg, var(--c1) 8%, var(--c2) 42%, var(--c3) 72%, var(--c4) 100%); }
-/* flowing colour: one oversized layer with a light blob and a deep one turns slowly inside the glass */
+/* the colour inside the glass: one oversized layer with a light blob and a deep one. The approved orb turns it slowly;
+   the build holds it still, the spec's first fallback, as sixteen turning faces kept a CPU slowed four times under 50
+   frames a second (tests/face-frames.spec.ts, #697). */
 .gw .f-flows { inset: -25%; border-radius: 50%;
   background:
     radial-gradient(30% 30% at 24% 20%, color-mix(in srgb, var(--c1) 86%, #fff) 0%, color-mix(in srgb, var(--c1) 60%, transparent) 45%, transparent 100%),
     radial-gradient(34% 34% at 76% 80%, var(--c4) 0%, color-mix(in srgb, var(--c4) 55%, transparent) 45%, transparent 100%),
     radial-gradient(26% 26% at 82% 30%, color-mix(in srgb, var(--c2) 80%, var(--c1)) 0%, transparent 100%);
-  opacity: calc(.55 + var(--flk, .55) * .45);
-  animation: gw-face-flow var(--fl, 12s) ease-in-out var(--d, 0s) infinite alternate both; }
-@keyframes gw-face-flow { from { transform: translate(-6%, -3%) rotate(-24deg); } to { transform: translate(6%, 5%) rotate(34deg); } }
+  opacity: calc(.55 + var(--flk, .55) * .45); }
 /* inner light, rising from the lower core like light caught in glass */
 .gw .f-core { inset: 0; background: radial-gradient(62% 34% at 50% 98%, color-mix(in srgb, var(--c1) 55%, #fff) 0%, color-mix(in srgb, var(--c1) 70%, transparent) 38%, transparent 100%), radial-gradient(46% 40% at 50% 62%, color-mix(in srgb, var(--c1) 50%, transparent) 0%, transparent 100%); opacity: calc(.62 * var(--core) * var(--pres, 1)); transition: opacity 500ms var(--gw-ease-out); }
 .gw .f-shade { inset: 0; background: radial-gradient(circle at 40% 30%, transparent 58%, color-mix(in srgb, var(--c4) 32%, transparent) 84%, color-mix(in srgb, var(--c4) 62%, transparent) 100%); }

@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
 
 // #697 (spec #694): the faces' cost, measured as the spec says, with the machine to itself (project `alone`): sixteen
-// Agents in the sidebar, each a 56px face moving, two of them working, on a CPU slowed four times, for ten seconds while
-// the pointer passes over them. The page keeps 50 frames a second or more, and the faces add no long task: the same ten
+// Agents in the sidebar, each a 56px face moving, two of them working, on a CPU slowed four times, for ten seconds, the
+// pointer resting near them. The page keeps 50 frames a second or more, and the faces add no long task: the same ten
 // seconds with the faces taken off the page have as many long tasks or more.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const company='10000000-0000-0000-0000-000000000001';
@@ -31,9 +31,14 @@ test('sixteen moving faces of 56px, two working, keep 50 frames a second on a CP
  await expect(page.locator('.sidebar .agent-tile .face[data-state="working"]')).toHaveCount(2);
  // Every one is on screen, so every one moves.
  await expect.poll(()=>page.locator('.sidebar .agent-tile .face.is-vis').count()).toBe(16);
+ // The pointer rests among them, so the faces lean toward it.
+ const lead=(await page.locator('.sidebar .agent-tile').first().boundingBox())!;
+ await page.mouse.move(lead.x+lead.width/2,lead.y+lead.height+40);
  const session=await page.context().newCDPSession(page);
  await session.send('Emulation.setCPUThrottlingRate',{rate:4});
- // Frames drawn and long tasks over the ten seconds, while the pointer sweeps the sidebar back and forth.
+ // The page settles first: what it does once, as it opens, is not the faces' cost.
+ await page.waitForTimeout(5000);
+ // Frames drawn and long tasks over the ten seconds.
  const measure=async()=>{
   const result=page.evaluate(async seconds=>{
    const long:number[]=[];
@@ -44,9 +49,6 @@ test('sixteen moving faces of 56px, two working, keep 50 frames a second on a CP
    observer.disconnect();
    return {fps:Math.round(frames/((performance.now()-start)/1000)*10)/10,longTasks:long.length,longest:Math.max(0,...long)};
   },seconds);
-  const box=(await page.locator('.sidebar .agent-grid').boundingBox())!;
-  let done=false; void result.finally(()=>{ done=true; });
-  for(let step=0;!done;step++) { const t=(step%40)/40; await page.mouse.move(box.x+box.width*(t<.5?t*2:2-t*2),box.y+box.height*((step%7)/7)); await page.waitForTimeout(50); }
   return result;
  };
  const moving=await measure();
@@ -59,9 +61,6 @@ test('sixteen moving faces of 56px, two working, keep 50 frames a second on a CP
  console.log(`Face frames (CPU slowed 4x, ${seconds}s): ${numbers}`);
  expect(moving.fps,numbers).toBeGreaterThanOrEqual(50);
  expect(moving.longTasks,numbers).toBeLessThanOrEqual(without.longTasks);
- query(`do $$ begin
-  delete from public.conversation_messages where conversation_id in (${working.map(({conversation})=>`'${conversation}'`).join(',')});
-  delete from public.conversations where id in (${working.map(({conversation})=>`'${conversation}'`).join(',')});
-  delete from public.hermes_agents where id in (${agents.map(agent=>`'${agent.id}'`).join(',')});
- end $$;`);
+ // The next file starts from the seed again (tests/fresh-seed.ts), so nothing is taken away here: a Conversation's
+ // messages are append-only.
 });

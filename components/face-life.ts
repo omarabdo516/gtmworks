@@ -39,8 +39,9 @@ const stillFramesOf:Partial<Record<Moment,[string,number,number][]>>={
  press:[['is-squint',0,450],['is-look',450,1600]], birth:[['is-shut',0,600],['is-look',600,1800]],
  greet:[['is-look',0,1200],['is-up',0,600]], perk:[['is-wide',0,1000]],
 };
-// Each state's pace for the colour drift and the breath: a change of rate keeps the place, so nothing jumps.
-const rates:Record<FaceState,[number,number]>={idle:[1,1],listening:[1.3,1.2],thinking:[1.9,1],working:[3.2,1.25],done:[1.2,1.1],waiting:[1,1],stuck:[.6,.75],asleep:[.35,.45]};
+// Each state's pace for the breath (the approved orb's second number; its colour drift is held still, #697): a change
+// of rate keeps the place, so nothing jumps.
+const rates:Record<FaceState,number>={idle:1,listening:1.2,thinking:1,working:1.25,done:1.1,waiting:1,stuck:.75,asleep:.45};
 const blinks=new Set<string>(['idle','listening','thinking','working','waiting','stuck']);
 const rand=(from:number,to:number)=>from+Math.random()*(to-from);
 const pressHop=450, pressWaits=10000;
@@ -241,11 +242,10 @@ export function watchFace(face:HTMLElement) {
 // A face's state changed: its paces follow, its eyes come back from a glance, and a face that is done hops and sparkles.
 export function faceStateChanged(face:HTMLElement,state:FaceState,from:FaceState|undefined) {
  const target=face as Face;
- const [drift,breath]=rates[state]??rates.idle;
+ const rate=rates[state]??rates.idle;
  for(const animation of target.getAnimations({subtree:true})) {
   const element=(animation.effect as KeyframeEffect|null)?.target as Element|null;
-  const rate=element?.classList.contains('f-flows')?drift:element?.classList.contains('f-breath')?breath:null;
-  if(rate!=null&&animation.playbackRate!==rate) animation.updatePlaybackRate(rate);
+  if(element?.classList.contains('f-breath')&&animation.playbackRate!==rate) animation.updatePlaybackRate(rate);
  }
  if(state!=='idle') ungaze(target);
  if(state==='done'&&from&&from!=='done') playMoment(target,'done');

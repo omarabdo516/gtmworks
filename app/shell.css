@@ -497,6 +497,11 @@
 .gw .dp-top { display: flex; align-items: center; justify-content: space-between; height: var(--gw-head-h); padding: 12px; }
 .gw .dp-top .circle-btn:last-child { margin-inline-start: auto; }
 .gw .dp-scroll { overflow-y: auto; min-height: 0; padding-bottom: 32px; }
+/* The Agent's face at the top of the details glows past its box (app/face.css): the scrolling part starts under the
+   head's buttons, which stay above it, so the glow is never cut off in a straight line (#697). */
+.gw .details .dp-top { position: relative; z-index: 1; pointer-events: none; }
+.gw .details .dp-top > * { pointer-events: auto; }
+.gw .details .dp-scroll { margin-top: -28px; padding-top: 28px; }
 .gw .dp-id { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 16px 12px; text-align: center; }
 .gw .dp-id > div { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 .gw .dp-id__name { display: inline-flex; align-items: center; gap: 8px; font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.4; }
@@ -707,9 +712,9 @@
 @media (hover: hover) { .gw .details .dp-tools .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); color: var(--gw-on-primary); } }
 .gw .details .num { font-variant-numeric: tabular-nums; }
 .gw .details .muted { color: var(--gw-text-3); }
-.gw .details .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
-.gw .details .dot--working { background: var(--gw-accent); }
-.gw .details .dot--waiting { background: var(--gw-wait); }
+.gw .details :not(.fw) > .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: var(--gw-idle-dot); }
+.gw .details :not(.fw) > .dot--working { background: var(--gw-accent); }
+.gw .details :not(.fw) > .dot--waiting { background: var(--gw-wait); }
 .gw .dp-scrim { display: none; }
 
 /* "New agent": one hint line above Lead's composer (design-reference: .new-hint) */

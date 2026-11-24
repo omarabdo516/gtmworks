@@ -27,12 +27,12 @@ export const clickPath: Step[] = [
   { name: 'inbox', link: '.nav a[href$="/approvals"]', path: '/approvals', content: '.approvals', motion: opensBoard },
   { name: 'activity log', link: '.nav a[href$="/log"]', path: '/log', content: '.log-page', motion: opensPage },
 ];
-// An Agent face's own life is not part of opening a page (#133, #697): its breath, its flowing colour, a state's loop,
+// An Agent face's own life is not part of opening a page (#133, #697): its breath, a state's loop,
 // its dot's ring, the eyes' and the highlight's lean toward the pointer, its expression easing, the tile's hover lift
 // (app/face.css), and its blinks, glances and moments (components/face-life, script animations of its parts). These CSS
 // animations, by name, and every transition or script animation of a face part, by the face it moves in, are left out
 // of "settled" and of idle().
-export const faceAnimations = ['gw-face-breath', 'gw-face-bounce', 'gw-face-flow', 'gw-face-glow', 'gw-face-gaze', 'gw-face-swirl', 'gw-face-nudge', 'gw-dot-ping'];
+export const faceAnimations = ['gw-face-breath', 'gw-face-bounce', 'gw-face-sway', 'gw-face-drift', 'gw-face-tick', 'gw-face-settle', 'gw-face-glow', 'gw-face-gaze', 'gw-face-swirl', 'gw-face-nudge', 'gw-dot-ping'];
 export const faceTransitions = '.face, .face *';
 export type Timing = { shown: number; settled: number; progress: boolean; longest: number };
 export const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
