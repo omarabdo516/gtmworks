@@ -9,6 +9,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { CompanyAgentFace } from '@/components/company-agent-face';
 import { conversationListPage } from '@/app/all-conversations-actions';
 import { toast } from '@/app/toast';
+import { useConversationArchive, type ArchivedChat } from '@/app/conversation-archive';
 import type { ConversationCounts, ConversationPage, ConversationTab, ListedChat } from '@/lib/all-conversations';
 
 const subscribe=()=>()=>{};
@@ -18,7 +19,8 @@ const searchPause=250;
 // design-reference-card: renderConvos. The toolbar's Current and Archived lists with their counts, the search behind its
 // icon, and the rows, newest message first: the Agent's face (a # for a channel), the title, the newest message and its
 // time. A page holds fifty rows; "Show more" adds the next fifty after them. The search asks the database, so it reads
-// every title, not only the rows shown.
+// every title, not only the rows shown. A Conversation of the reader's own is archived from its row, or several at once
+// by selecting them, with Undo, and restored from the Archived list (#674); a channel is archived from its details.
 export default function AllConversations({slug,company,tab,counts,first}:{slug:string,company:string,tab:ConversationTab,counts:ConversationCounts,first:ConversationPage|null}) {
  const {t,language}=useI18n();
  const router=useRouter();
@@ -41,6 +43,13 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
    if(ask===asked.current) setPage(found);
   },value.trim()?searchPause:0);
  };
+ const [selected,setSelected]=useState<Set<string>|null>(null);
+ // Archived or restored rows leave this list at once; Undo, or a change from elsewhere, reads it again.
+ const {archive,restore,confirm}=useConversationArchive(company,(ids,nowArchived)=>{
+  setSelected(null);
+  if(nowArchived!==archived) setPage(shown=>shown&&{...shown,items:shown.items.filter(item=>item.kind!=='conversation'||!ids.includes(item.id))});
+  else search(query);
+ });
  const more=async()=>{
   if(!page?.next||loading) return;
   const ask=asked.current; setLoading(true);
@@ -56,15 +65,25 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
  const time=(value:string)=>new Date(value).toLocaleString(localeFor(language),recentDay(value,now)==='earlier'?{day:'numeric',month:'short'}:{hour:'numeric',minute:'2-digit'});
  const segment=(key:ConversationTab,icon:'chat'|'archive',label:string,n:number)=>{ const on=key===tab;
   return <button type="button" aria-pressed={on} aria-label={`${label} ${count(n)}`} title={on?undefined:label} onClick={()=>open(key)}><ShellIcon name={icon}/>{on&&<span>{label}</span>}<span className="num chip__n" aria-hidden="true">{count(n)}</span></button>; };
+ const own=(chat:ListedChat)=>chat.kind==='conversation';
+ const chatOf=(chat:ListedChat):ArchivedChat=>({id:chat.id,title:chat.title,face:chat.face});
+ const act=(chats:ListedChat[])=>void (archived?restore:archive)(chats.map(chatOf));
+ const toggle=(id:string)=>setSelected(chosen=>{ const next=new Set(chosen); if(next.has(id)) next.delete(id); else next.add(id); return next; });
  const row=(chat:ListedChat)=><li key={`${chat.kind}:${chat.id}`} className="cv-row">
+  {selected&&(own(chat)
+   ?<button type="button" className="sel-box" role="checkbox" aria-checked={selected.has(chat.id)} aria-label={t('allConversationsSelectOne',chat.title)} onClick={()=>toggle(chat.id)}><span>{selected.has(chat.id)&&<ShellIcon name="check"/>}</span></button>
+   :<span className="sel-box" aria-hidden="true"/>)}
   <Link className="cv-open" href={`/c/${slug}/${chat.kind==='channel'?'channels':'conversations'}/${chat.id}`}>
    {chat.face?<span className="cv-face" aria-hidden="true" title={chat.face.name}><CompanyAgentFace agent={chat.face} size={28}/></span>:<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>}
    <span className="od-field"><span className="cv-t od-truncate">{chat.kind==='channel'?'#':''}<bdi>{chat.title}</bdi></span>{chat.line&&<span className="cv-d od-truncate"><bdi>{chat.line}</bdi></span>}</span>
    {browser&&<time className="cv-time num" dateTime={chat.at}>{time(chat.at)}</time>}
   </Link>
+  {!selected&&own(chat)&&<button type="button" className="ib cv-act" aria-label={t(archived?'allConversationsRestoreOne':'allConversationsArchiveOne',chat.title)} title={t(archived?'allConversationsRestoreTip':'allConversationsArchiveTip')} onClick={()=>act([chat])}><ShellIcon name={archived?'restore':'archive'}/></button>}
  </li>;
  const items=page?.items||[];
  const wanted=query.trim();
+ const choosable=items.filter(own);
+ const chosen=choosable.filter(chat=>selected?.has(chat.id));
  return <div className="cvp">
   <h1 className="sr-only">{t('allConversations')}</h1>
   <div className="board-tools bt2 cv-tools">
@@ -73,12 +92,20 @@ export default function AllConversations({slug,company,tab,counts,first}:{slug:s
     <input ref={field} type="search" id="cv-q" autoComplete="off" dir="auto" placeholder={t('allConversationsSearch')} value={query} maxLength={200} onChange={event=>search(event.target.value)} onBlur={()=>{ if(!query) setSearching(false); }}/></div>
     :<button type="button" className="ib" aria-label={t('allConversationsSearch')} title={t('allConversationsSearch')} onClick={()=>setSearching(true)}><ShellIcon name="search"/></button>}
    <span className="od-fill"/>
+   {!selected&&choosable.length>0&&<button type="button" className="ib" aria-label={t('allConversationsSelect')} title={t('allConversationsSelect')} onClick={()=>setSelected(new Set())}><ShellIcon name="multiSel"/></button>}
   </div>
+  {selected&&<div className="bsel cv-sel" role="region" aria-label={t('allConversationsSelecting')}>
+   <span className="bsel__n" aria-live="polite"><b className="num">{count(chosen.length)}</b> {t('allConversationsSelected')}</span>
+   <button type="button" className="link-btn" onClick={()=>setSelected(new Set(choosable.map(chat=>chat.id)))}>{t('allConversationsSelectAll')}</button><span className="od-fill"/>
+   <button type="button" className="btn btn--secondary btn--sm" onClick={()=>setSelected(null)}>{t('cancel')}</button>
+   <button type="button" className="btn btn--primary btn--sm" disabled={!chosen.length} onClick={()=>act(chosen)}><ShellIcon name={archived?'restore':'archive'}/><span>{t(archived?'allConversationsRestoreSelected':'allConversationsArchiveSelected')}</span></button>
+  </div>}
   <div className="cv-body">
    {!page?<p className="col-empty arch-empty" role="alert"><b>{t('allConversationsFailed')}</b></p>
     :items.length?<ul className="panel-card cv-list" aria-label={t(archived?'allConversationsArchived':'allConversationsCurrent')}>{items.map(row)}</ul>
     :<div className="col-empty arch-empty"><b>{wanted?t('allConversationsNoMatch',wanted):t(archived?'allConversationsArchivedEmpty':'allConversationsEmpty')}</b></div>}
    {page?.next&&<button type="button" className="btn btn--secondary btn--sm cv-more" aria-busy={loading||undefined} disabled={loading} onClick={more}>{t('allConversationsMore')}</button>}
   </div>
+  {confirm}
  </div>;
 }

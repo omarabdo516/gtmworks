@@ -7,13 +7,15 @@ import RecentChats from '@/app/recent-chats';
 import { LanguageProvider } from '@/lib/i18n-client';
 
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
 
 const now = new Date().toISOString();
 const chats = [{ id: 'cv-1', title: 'Search check for June', at: now }, { id: 'cv-2', title: 'Weekly report', at: now }];
 
 test('the magnifier opens a focused field that narrows the recent chats by title; Escape empties it, then closes it', async () => {
  const screen = await render(<LanguageProvider language="en"><SidebarSearchProvider>
-  <SearchToggle/><SearchBox/><RecentChats slug="rs-learning" chats={chats} lead="Lead"/>
+  <SearchToggle/><SearchBox/><RecentChats slug="rs-learning" company="10000000-0000-0000-0000-000000000001" chats={chats} lead="Lead"/>
  </SidebarSearchProvider></LanguageProvider>);
  const toggle = screen.getByRole('button', { name: 'Search chats' });
  await expect.element(screen.getByRole('link')).toHaveLength(2);

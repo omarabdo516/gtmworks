@@ -11,9 +11,10 @@ const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=
 // The Card's "More" menu (#670; design-reference-card: #cw-more, popHTML 'more'): a round button in the Card's head that
 // opens its menu with the keyboard on the first item. Arrow Down and Up move through the items and wrap, Home and End go
 // to the ends, Escape closes it back to the button without closing the Card, Tab closes it and moves on, and a press
-// outside closes it. Choosing an item closes it, gives the button the keyboard back, then runs the item.
-export function CardMenu({items}:{items:CardMenuItem[]}) {
- const {t}=useI18n(); const [open,setOpen]=useState(false); const id=useId();
+// outside closes it. Choosing an item closes it, gives the button the keyboard back, then runs the item. A Conversation's
+// own menu (#674: the sidebar row's and the chat head's) is the same menu under its own `label` and button `look`.
+export function CardMenu({items,label,look='circle-btn',className='card-menu'}:{items:CardMenuItem[],label?:string,look?:string,className?:string}) {
+ const {t}=useI18n(); const [open,setOpen]=useState(false); const id=useId(); const named=label??t('cardMore');
  const box=useRef<HTMLDivElement>(null); const button=useRef<HTMLButtonElement>(null);
  useEffect(()=>{
   if(!open) return;
@@ -31,9 +32,9 @@ export function CardMenu({items}:{items:CardMenuItem[]}) {
   const list=[...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
   list[move(list.indexOf(event.target as HTMLElement),list.length)]?.focus();
  };
- return <div ref={box} className="card-menu">
-  <button ref={button} type="button" className="circle-btn" aria-label={t('cardMore')} title={t('cardMore')} aria-haspopup="menu" aria-expanded={open} aria-controls={open?id:undefined} onClick={()=>setOpen(!open)}><ShellIcon name="dots"/></button>
-  {open&&<div className="menu card-menu__pop" id={id} role="menu" aria-label={t('cardMore')} onKeyDown={keys}>
+ return <div ref={box} className={className}>
+  <button ref={button} type="button" className={look} aria-label={named} title={named} aria-haspopup="menu" aria-expanded={open} aria-controls={open?id:undefined} onClick={()=>setOpen(!open)}><ShellIcon name="dots"/></button>
+  {open&&<div className="menu card-menu__pop" id={id} role="menu" aria-label={named} onKeyDown={keys}>
    {items.map(item=><button key={item.key} type="button" className="menu__item" role="menuitem" onClick={()=>{ close(); item.run(); }}><ShellIcon name={item.icon}/><span className="menu__t">{item.label}</span></button>)}
   </div>}
  </div>;

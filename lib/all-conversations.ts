@@ -11,6 +11,10 @@ export type ListedChat={kind:'conversation'|'channel',id:string,title:string,lin
 export type ConversationCursor={at:string,id:string};
 export type ConversationPage={items:ListedChat[],next:ConversationCursor|null};
 export type ConversationCounts={current:number,archived:number};
+// One thing archiving a person's Conversations would stop (#674, conversation_archive_stops), and how archiving,
+// restoring or asking what stops answers (app/conversation-archive-actions.ts).
+export type ConversationStop={conversation:string,kind:'run'|'question'|'permission'|'hand',agent:string|null,agent_id:string|null};
+export type ConversationArchiveResult={state:'stops',stops:ConversationStop[]}|{state:'done',chats:string[]}|{state:'refused'};
 const conversationPageSize=50;
 
 type Row={kind:'conversation'|'channel',id:string,agent_name:string|null,connection_id:string|null,title:string|null,good_morning_day:string|null,channel_kind:string|null,last_at:string,last_body:string|null};

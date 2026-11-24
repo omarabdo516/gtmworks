@@ -1,3 +1,4 @@
+import '@/app/channel.css';
 import { notFound, redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { getI18n } from '@/lib/i18n-server';
@@ -27,7 +28,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // and the Conversation is then held to the Company in the address.
  const [{t,language},{data:{user}},{data:companies},{data:found}]=await Promise.all([getI18n(),db.auth.getUser(),
   db.from('companies').select('id,slug,name,work_mode').order('name'),
-  uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id`).eq('id',id).maybeSingle():{data:null}]);
+  uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id,archived_at`).eq('id',id).maybeSingle():{data:null}]);
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
  const company=companies?.find(c=>c.slug===slug);
  if(!company||!uuid.test(id)) notFound();
@@ -85,7 +86,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const title=conversation.good_morning_day?morningTitle(t,language,conversation.good_morning_day):(first?.body as string|undefined)?.split('\n')[0]||(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name||conversation.agent_name;
  const tied=await tiedRead;
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={conversation.agent_id||undefined} conversationId={id}>
-  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
+  <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
  </Shell>;
 }
 

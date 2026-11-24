@@ -42,8 +42,8 @@ export const sidebarReads=cache(async(id:string|undefined)=>{
  return Promise.all([
   id?Promise.all([companyAgents(db,id),db.rpc('agent_states',{c:id}).then(({data})=>agentStates(data))]):[[],agentStates(null)] as const,
   // Each listed chat with its own first message (a limit per chat), so a long chat never crowds another out of the titles.
-  // The twenty with the newest messages (#673); All conversations holds the rest.
-  id?db.from('conversations').select('id,agent_name,last_message_at,good_morning_day,conversation_messages(body,conversation_attachments(name))').eq('company_id',id).eq('conversation_messages.author','person')
+  // The twenty current ones with the newest messages (#673); All conversations holds the rest, and the archived (#674).
+  id?db.from('conversations').select('id,agent_name,last_message_at,good_morning_day,conversation_messages(body,conversation_attachments(name))').eq('company_id',id).is('archived_at',null).eq('conversation_messages.author','person')
    .order('last_message_at',{ascending:false}).order('id',{ascending:false}).order('id',{referencedTable:'conversation_messages'}).limit(1,{referencedTable:'conversation_messages'}).limit(20)
    .then(({data})=>(data||[]) as {id:string,agent_name:string,last_message_at:string,good_morning_day:string|null,conversation_messages:{body:string,conversation_attachments:{name:string}[]}[]}[]):[],
   id?db.from('companies').select('work_mode').eq('id',id).maybeSingle().then(({data})=>data?.work_mode as string|null|undefined):undefined,
@@ -111,7 +111,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     {/* design-reference-card: the sidebar's "All conversations" row, over the channels and the recent chats (#673). */}
     <Link className="sb-item sb-all" href={`/c/${slug}/conversations`} aria-current={section==='all-conversations'?'page':undefined}><ShellIcon name="archive"/><span className="od-fill">{t('allConversations')}</span><ShellIcon name="chevron"/></Link>
     {company?.id&&<ChannelList slug={slug} company={company.id} person={personId} initial={channels} current={channelId} manage={manage}/>}
-    <RecentChats slug={slug} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
+    <RecentChats slug={slug} company={company?.id||''} chats={chats} current={conversationId} lead={agents[0]?.name||'Lead'}/>
     {company?.id&&<RecentCards key={company.id} slug={slug}/>}
    </section>
   </>}</nav>

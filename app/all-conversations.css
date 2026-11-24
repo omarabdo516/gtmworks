@@ -33,10 +33,32 @@
 .gw .all-convos .cv-t { font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.5; }
 .gw .all-convos .cv-d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); }
 .gw .all-convos .cv-time { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
-@media (max-width: 1023px) { .gw .all-convos .cv-body { padding-inline: var(--s5); } }
+/* Archiving and restoring (#674; design-reference-card/index.html: .cv-act, .bsel, .sel-box): a row's own button shows
+   when the row is hovered or holds the keyboard, and always on a touch screen; selecting puts a box before each row. */
+.gw .all-convos .cv-act { flex: none; color: var(--gw-text-2); }
+.gw .all-convos .cv-act .gw-icon { width: 16px; height: 16px; }
+@media (hover: hover) {
+  .gw .all-convos .cv-act { opacity: 0; }
+  .gw .all-convos .cv-row:hover .cv-act, .gw .all-convos .cv-row:focus-within .cv-act { opacity: 1; }
+  .gw .all-convos .cv-act:hover { background: var(--gw-bg-active); color: var(--gw-text-1); }
+}
+.gw .all-convos .bsel { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; max-width: 880px; margin: 0 var(--s8) var(--s4); padding: var(--s2); padding-inline: var(--s4) var(--s2);
+  border-radius: var(--gw-r-full); background: var(--gw-bg-pane); box-shadow: var(--gw-shadow-card); font-size: var(--gw-fs-sm); }
+.gw .all-convos .bsel__n b { font-weight: 600; }
+.gw .all-convos .bsel .btn .gw-icon { width: 14px; height: 14px; }
+.gw .all-convos .link-btn { display: inline-flex; align-items: center; padding: 2px 6px; border: 0; border-radius: var(--gw-r-xs); background: none; font: inherit; color: var(--gw-text-2); cursor: pointer; }
+@media (hover: hover) { .gw .all-convos .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); } }
+.gw .all-convos .sel-box { width: 44px; height: 44px; flex: none; display: inline-flex; align-items: center; justify-content: center; border: 0; padding: 0; background: none; border-radius: var(--gw-r-sm); color: inherit; }
+.gw .all-convos .sel-box > span { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; box-shadow: var(--gw-border-1) 0 0 0 1.5px inset; }
+.gw .all-convos .sel-box > span .gw-icon { width: 14px; height: 14px; }
+.gw .all-convos .sel-box[aria-checked="true"] > span { background: var(--gw-primary); color: var(--gw-on-primary); box-shadow: none; }
+@media (hover: hover) { .gw .all-convos button.sel-box:hover { background: var(--gw-bg-hover); } }
+.gw .all-convos span.sel-box { visibility: hidden; }
+@media (max-width: 1023px) { .gw .all-convos .cv-body { padding-inline: var(--s5); } .gw .all-convos .bsel { margin-inline: var(--s5); } }
 @media (max-width: 767px) {
   .gw .all-convos .board-tools.bt2 { padding: var(--s3) var(--s4); }
   .gw .all-convos .cv-body { padding-inline: var(--s4); }
+  .gw .all-convos .bsel { margin-inline: var(--s4); border-radius: var(--gw-r-lg); }
   .gw .all-convos .bt-search, .gw .all-convos .bt-search input { width: 100%; }
   .gw .all-convos .bt-search { flex: 1 1 100%; }
   /* 44px touch targets on a phone. */

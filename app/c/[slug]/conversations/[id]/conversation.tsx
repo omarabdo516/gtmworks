@@ -16,6 +16,11 @@ import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
 import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';
+import { ShellIcon } from '@/components/shell-icon';
+import { CardMenu } from '@/app/card-menu';
+import { useConversationArchive } from '@/app/conversation-archive';
+import { toast } from '@/app/toast';
+import { useRouter } from 'next/navigation';
 
 // The record as the loaded transcript keeps it current, and how it asks for the reply after a send.
 type Live={record:ConversationRecord,asked:()=>void};
@@ -39,9 +44,11 @@ function newLive():LiveStore {
 // message from the start, keeping what was typed, its caret and its focus; a message sent before the record arrives
 // has its reply asked for once it is there. `children` is the transcript (ConversationLoaded), drawn by the server once
 // the record is read. `board` is the chat's Card on the board as the page read it, shown in the corner until the record
-// says where the Card is now.
-export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,first,invites,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],first?:'alone'|'team',invites?:number,children:ReactNode}) {
+// says where the Card is now. `archived` (#674): the Conversation is archived; its head's menu restores it, and a line
+// over the composer says so, and that writing in it brings it back.
+export default function ConversationView({slug,agent,details,tab,company,conversation,title,writer,board,first,invites,archived=false,children}:{slug:string,agent:DetailsAgent|null,details:Promise<AgentDetailsView>|null,tab?:DetailsTab,company:string,conversation:ThreadConversation,title:string,writer:boolean,board?:ConversationRecord['board'],first?:'alone'|'team',invites?:number,archived?:boolean,children:ReactNode}) {
  const panel=useDetailsPanel();
+ const [isArchived,setArchived]=useState(archived);
  const composer=useRef<MessageBoxHandle>(null); const [live]=useState(newLive);
  // The same object for the page's life: a new context value reaching a transcript that still streams in would make React
  // draw it again in the browser and leave the streamed copy hidden in the page (#172, #253).
@@ -49,8 +56,9 @@ export default function ConversationView({slug,agent,details,tab,company,convers
  const fill=useCallback((text:string)=>composer.current?.fill(text),[]);
  return <ChatView value={view}>{first&&<FirstRunToast mode={first} agent={conversation.agent_name} invites={invites}/>}<div className="convo"><div className="chat">
   <ChatHead panel={panel} slug={slug} agent={agent} conversation={conversation} title={title} writer={writer} board={board}/>
+  <ChatMore company={company} conversation={conversation} title={title} archived={isArchived} changed={setArchived}/>
   <Transcript>{children}</Transcript>
-  <ChatComposer company={company} conversation={conversation} writer={writer} box={composer}/>
+  <ChatComposer company={company} conversation={conversation} writer={writer} box={composer} archived={isArchived} restored={()=>setArchived(false)}/>
  </div>{agent&&details&&<AgentDetails panel={panel} agent={agent} details={details} tab={tab} slug={slug} suggest={writer?fill:undefined}/>}</div></ChatView>;
 }
 
@@ -65,12 +73,26 @@ function ChatHead({panel,slug,agent,conversation,title,writer,board}:{panel:Deta
  return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><LiveFace agentId={conversation.agent_id??undefined} agent={{connection_id:conversation.face,name:conversation.agent_name}} size={24}/></span>} title={record?record.morningDay?morningTitle(t,language,record.morningDay):titleOf(record.messages,conversation.agent_name):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
 }
 
+// The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): archive the Conversation, or
+// restore it while it is archived. Its person tidies their own, whatever their Role.
+function ChatMore({company,conversation,title,archived,changed}:{company:string,conversation:ThreadConversation,title:string,archived:boolean,changed:(archived:boolean)=>void}) {
+ const {t}=useI18n();
+ const chat={id:conversation.id,title,face:{connection_id:conversation.face,name:conversation.agent_name}};
+ const {archive,restore,confirm}=useConversationArchive(company,(_ids,nowArchived)=>changed(nowArchived));
+ return <div className="chat__start"><CardMenu label={t('conversationMore')} items={[archived
+  ?{key:'restore',icon:'restore',label:t('conversationRestore'),run:()=>void restore([chat])}
+  :{key:'archive',icon:'archive',label:t('conversationArchive'),run:()=>void archive([chat])}]}/>{confirm}</div>;
+}
+
 // The composer, told the record when it is there and given the send made before it as the transcript asks for its reply
-// once loaded (#297).
-function ChatComposer({company,conversation,writer,box}:{company:string,conversation:ThreadConversation,writer:boolean,box:Ref<MessageBoxHandle>}) {
- const {live:store}=useView();
+// once loaded (#297). Over it, while the Conversation is archived, the line that says so (design-reference-card:
+// renderChat's arc-line); a message sent then has brought it back (restore_written_conversation), which a toast says.
+function ChatComposer({company,conversation,writer,box,archived,restored}:{company:string,conversation:ThreadConversation,writer:boolean,box:Ref<MessageBoxHandle>,archived:boolean,restored:()=>void}) {
+ const {live:store}=useView(); const {t}=useI18n(); const router=useRouter();
  const live=useSyncExternalStore(store.subscribe,store.get,()=>undefined);
- return <div className="composer-area"><ConversationComposer company={company} conversation={conversation} record={live?.record??null} writer={writer} asked={live?.asked??store.earlier} box={box} usage/></div>;
+ const sent=()=>{ if(!archived) return; restored(); router.refresh(); toast(t('conversationBack'),{icon:'restore'}); };
+ return <div className="composer-area">{archived&&<p className="arc-line"><ShellIcon name="archive"/><span>{t(writer?'conversationArchivedLine':'conversationArchivedLineRead')}</span></p>}
+  <ConversationComposer company={company} conversation={conversation} record={live?.record??null} writer={writer} asked={live?.asked??store.earlier} box={box} usage sent={sent}/></div>;
 }
 
 // The transcript's boundary renders only when the transcript itself changes. This frame renders again while it

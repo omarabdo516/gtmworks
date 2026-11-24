@@ -14,3 +14,4 @@ export const conversationListPage=withActionLog('conversationListPage',async fun
  const cursor=after&&typeof after.at==='string'&&typeof after.id==='string'?{at:after.at,id:after.id}:null;
  return conversationPage(db,company,{tab:tab==='archived'?'archived':'current',q:String(q||'').slice(0,200),after:cursor},t,language);
 });
+

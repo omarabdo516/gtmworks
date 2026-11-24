@@ -301,7 +301,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
 // square stops the open run for the person who started it, or a Manager or Owner; the view-only line for a Viewer. The
 // Conversation's own page adds its usage line; a Card's sheet draws none. While the record is still on its way (#172) it
 // already takes a message, with no stop square, and keeps the usage line's place.
-export function ConversationComposer({company,conversation,record,writer,asked,box,usage}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,box?:Ref<MessageBoxHandle>,usage:boolean}) {
+export function ConversationComposer({company,conversation,record,writer,asked,box,usage,sent}:{company:string,conversation:ThreadConversation,record:ConversationRecord|null,writer:boolean,asked:()=>void,box?:Ref<MessageBoxHandle>,usage:boolean,sent?:()=>void}) {
  const {t,language}=useI18n(); const {c}=useConversationText();
  // A Run waiting on its person's answer is not working (#138): the box keeps its send arrow, as the reference's does.
  const working=record?.asking?null:record?.working; const canStop=record?.canStop;
@@ -315,7 +315,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
    return failure;
   }}:undefined} send={async(message,sendKey,files)=>{
    const failure=files.length?await postMessageWithFiles({company,conversation:conversation.id,message,sendKey},files):await postMessage({company,conversation:conversation.id,message,sendKey});
-   if(!failure) asked();
+   if(!failure) { asked(); sent?.(); }
    return failure;
   }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{t('viewOnly')}</span></p>}
   {usage&&(record?.usage?<p className="chat-usage" data-usage>{t('conversationUsage',count(record.usage.input+record.usage.output),count(record.usage.input),count(record.usage.output))}</p>

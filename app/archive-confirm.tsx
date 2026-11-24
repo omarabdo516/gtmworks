@@ -12,8 +12,9 @@ const sentences:Record<ArchiveStop['kind'],string>={run:'archiveStopRun',questio
 // something stops, it names each thing, one line each, with the face of the Agent it is about, and asks once for all the
 // Cards being archived (#672 archives a selection through it). Cancel, Escape or a press outside archives nothing;
 // "Archive and stop" archives them all. The dialog is the reference's native one, over the Card's sheet when that is
-// open, and the keyboard goes back where it was when it closes.
-export function ArchiveConfirm({stops,cards,face,confirm,cancel}:{stops:ArchiveStop[],cards:number,face:(agent:string|null)=>ReactNode,confirm:()=>void,cancel:()=>void}) {
+// open, and the keyboard goes back where it was when it closes. Archiving Conversations (#674) asks through it too, under
+// its own `heading`; each line then names the Conversation in place of the Card.
+export function ArchiveConfirm({stops,cards,heading,face,confirm,cancel}:{stops:ArchiveStop[],cards:number,heading?:string,face:(agent:string|null)=>ReactNode,confirm:()=>void,cancel:()=>void}) {
  const {t,language}=useI18n();
  const box=useRef<HTMLDialogElement>(null); const chosen=useRef(false); const pressed=useRef(false);
  useLayoutEffect(()=>{ const dialog=box.current; if(dialog&&!dialog.open) dialog.showModal(); },[]);
@@ -26,7 +27,7 @@ export function ArchiveConfirm({stops,cards,face,confirm,cancel}:{stops:ArchiveS
   onMouseUp={event=>{ const onSurface=pressed.current&&event.target===event.currentTarget; pressed.current=false; if(onSurface) close(false); }}
   onClose={()=>chosen.current?confirm():cancel()}>
   <div className="modal__inner">
-   <header className="modal__head"><div className="modal__titles"><h2 className="modal__title" id="cf-title">{cards>1?t('archiveConfirmMany',cards):t('archiveConfirmOne')}</h2></div></header>
+   <header className="modal__head"><div className="modal__titles"><h2 className="modal__title" id="cf-title">{heading??(cards>1?t('archiveConfirmMany',cards):t('archiveConfirmOne'))}</h2></div></header>
    <div className="modal__body"><ul className="cf-list">{stops.map((stop,index)=><li key={`${stop.card}:${stop.kind}:${stop.agent_id??index}`} className="cf-row">
     <span className="cf-face" aria-hidden="true">{stop.kind==='approval'?<span className="cf-mark"><ShellIcon name="review"/></span>:face(stop.agent_id)??<span className="cf-mark"><ShellIcon name="spark"/></span>}</span>
     <span className="cf-t">{line(stop)}</span></li>)}</ul></div>
