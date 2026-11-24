@@ -168,7 +168,7 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='agents'?(agent?<AgentPage t={t} rtl={rtl} slug={slug} company={company.id} userId={userId} personName={personName} agent={agent} tab={tab} memory={memory} about={about} skills={skills} how={how} voice={voice} status={stateOf(agent.id).state} main={agents[0]} rules={rules} agentModel={agentModel} readAt={readAt} permissions={permissions?.permissions??[]} morning={morning} owner={owner} canManage={canManage} canWrite={canWrite} learning={role!=='viewer'} pend={pend}/>:<AgentsSection t={t} rtl={rtl} slug={slug} agents={agents} stateOf={agent=>stateOf(agent).state} canManage={canManage} canWrite={canWrite} owner={owner} waiting={waitingAgents}/>)
   :section==='apps'?<AppsSection slug={slug} company={company.id} owner={owner} rtl={rtl} app={query.app} failed={query.signin==='failed'}/>
   :section==='usage'?<UsageSection t={t} locale={locale} slug={slug} company={company.id} rows={usageRows} period={query.period==='30'?30:7}/>
-  :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning}/>)
+  :section==='learning'?(skillPage?<SkillPage t={t} slug={slug} rtl={rtl} data={skillPage}/>:<LearningSection t={t} slug={slug} company={company.id} canManage={canManage} owner={owner} data={learning} readAt={readAt}/>)
   :section==='account'?<AccountSection t={t} theme={theme} personName={personName} role={role} roleName={roleNames[role]||''} companyName={company.name} company={company.id} memberNote={memberNote}/>
   :section==='routines'&&routines?<>{ro}<RoutinesSection company={company.id} state={routines.state} agents={routines.agents??[]} canManage={canManage} now={new Date().toISOString()}/></>
   :section==='knowledge'?<><Head title={t('settingsKnowledge')} info={t('settingsKnowledgeSub')}/>{ro}<CompanyKnowledge slug={slug} company={company.id} canManage={canManage} part={query.part}/></>
@@ -178,9 +178,9 @@ export default async function SettingsOverlay({slug,company,userId,role,personNa
   :section==='about'?<AboutSection t={t} language={language} locale={locale} version={process.env.GTMWORKS_VERSION}/>
   :<SoonSection t={t} section={section} ro={ro} providers={<CompanyProviders company={company.id} companyName={company.name} owner={owner} keys={keys} models={providerModels} names={names} order={order}
      subscriptions={{available:subscriptions?.profiles!=null,signIns:subscriptions?.signIns??null,accounts:subscriptions&&'accounts' in subscriptions?subscriptions.accounts:null,noEngine:subscriptions?.noEngine===true}}/>}
-    speech={<SpeechToText company={company.id} owner={owner} data={speech}/>}
+    speech={<SpeechToText company={company.id} owner={owner} data={speech} readAt={readAt}/>}
     defaultModel={models?.models?<DefaultModel company={company.id} owner={owner} models={models.models.default} readAt={readAt}/>:null}
-    fallbackModel={models?.models&&fallback!==undefined?<FallbackModel company={company.id} owner={owner} model={fallback} options={models.models.default.options}/>:null}
+    fallbackModel={models?.models&&fallback!==undefined?<FallbackModel company={company.id} owner={owner} model={fallback} options={models.models.default.options} readAt={readAt}/>:null}
     eachAgent={models?.models?<EachAgent company={company.id} owner={owner} models={models.models} readAt={readAt}/>:null}
     defaultEffort={<DefaultEffort/>}/>;
  // "Change the time" on the morning's card (#183; design-reference: checkin-settings) opens this page on Time, or on the
