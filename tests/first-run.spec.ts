@@ -342,7 +342,9 @@ const recordLeave=(page:Page)=>page.evaluate(()=>{
  const seen:string[][]=[]; Object.assign(window,{seen});
  // The exit is read when the question takes its closing class, from the animation that class gives it, and not from
  // animationstart: the leave is a timer (useLeave in lib/motion.ts), and a frame later than it (a busy CI runner) removes
- // the question before that event is ever sent (#595, as ready-made-roles.spec.ts, #526).
+ // the question before that event is ever sent (#595, as ready-made-roles.spec.ts, #526). An exit started without the
+ // closing class (after a failed save) is still read from animationstart, since the question then stays.
+ document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(event.animationName==='gw-modal-out'&&!part.classList.contains('is-closing')) seen.push(['exit',part.className,location.pathname]); });
  document.addEventListener('focusin',event=>{ if((event.target as Element).matches('textarea.composer__input')) seen.push(['composer',location.pathname]); });
  new MutationObserver(()=>{
   const part=document.querySelector('.fr');

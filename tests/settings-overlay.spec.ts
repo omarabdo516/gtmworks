@@ -477,10 +477,12 @@ for(const who of [{role:'Owner',email:'omar@example.com',sections:['account','ag
  await signIn(page,who.email,'/c/rs-learning/work/board');
  await page.evaluate(()=>{
   const seen:string[][]=[]; Object.assign(window,{seen});
-  // The entrance from animationstart: the overlay stays, so the event comes however late the frame. The exit from the
-  // closing class, with the animation it gives: the leave is a timer (useLeave in lib/motion.ts), and a frame later than
-  // it (a busy CI runner) hides the overlay before animationstart is ever sent (#595, as ready-made-roles.spec.ts, #526).
-  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.classList.contains('sov')&&event.animationName!=='gw-modal-out') seen.push([event.animationName,location.pathname]); });
+  // The entrance, and any other animation of the overlay, from animationstart: the overlay stays, so the event comes
+  // however late the frame. The exit from the closing class, with the animation it gives: the leave is a timer (useLeave
+  // in lib/motion.ts), and a frame later than it (a busy CI runner) hides the overlay before animationstart is ever sent
+  // (#595, as ready-made-roles.spec.ts, #526). So the event skips only the exit of an overlay already closing, which the
+  // observer has recorded; an exit started without the closing class (a section change) is still recorded.
+  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.classList.contains('sov')&&!(event.animationName==='gw-modal-out'&&part.classList.contains('is-closing'))) seen.push([event.animationName,location.pathname]); });
   new MutationObserver(()=>{
    const part=document.querySelector('.sov'), root=document.querySelector('.sov-root');
    if(part?.matches('.is-closing')&&!seen.some(([what])=>what==='closing')) seen.push(['closing',...part.getAnimations().map(run=>{ const {delay,duration}=run.effect!.getTiming(); return `${(run as CSSAnimation).animationName} ${run.playState} delay ${delay}ms for ${duration}ms`; }),location.pathname]);
