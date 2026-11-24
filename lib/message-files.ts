@@ -1,9 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // The images of one message, in a Conversation (#155) or a channel (#156). They are kept in the Company's private folder
-// for that place, named by the message's send key and each image's place, so a retry of the same send writes the same
-// paths and keeps the same rows. The bucket has no write policy for those folders, so the server writes them, where the
-// database's rows say: the database builds every path itself and ignores one a caller sends.
+// for that place, named by the message's send key, the keep attempt that first wrote its rows, and each image's place: a
+// retry that finds the rows still there writes the paths they name, and a send that keeps them again after they were
+// given back writes new ones, which the earlier attempt's removal never reaches (#598). The bucket has no write policy
+// for those folders, so the server writes them, where the database's rows say: the database builds every path itself
+// and ignores one a caller sends.
 const bucket='creatives';
 export type ChosenImage={content_type:string,base64:string};
 
@@ -11,10 +14,17 @@ export type ChosenImage={content_type:string,base64:string};
 export type FilesPlace={company:string,folder:'conversations'|'channels',scope:string,messageKey:string};
 // The catalogue's words for a database refusal: a Viewer, a place that is not the caller's, and any other failure.
 type FileRefusalWords={notAllowed:string,notFound:string,failed:string};
-type KeepFiles={place:FilesPlace,files:File[],reserve:string,reserveArgs:(place:FilesPlace)=>Record<string,unknown>,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>,words:FileRefusalWords};
+// The table that names a place's files, and its column for the Conversation or channel.
+export type FilesTable={table:'conversation_attachments'|'channel_attachments',scope:'conversation_id'|'channel_id'};
+type KeepFiles={place:FilesPlace,files:File[],rows:FilesTable,reserve:string,reserveArgs:(place:FilesPlace)=>Record<string,unknown>,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>,words:FileRefusalWords};
 
-// The path the database builds for one image of a message: <company>/<folder>/<conversation or channel>/<send key>-<place>.
-const messageFilePath=(place:FilesPlace,position:number)=>`${place.company}/${place.folder}/${place.scope}/${place.messageKey}-${position}`;
+// The paths the database named for a send key's files, by each image's place: the rows this attempt kept, or the ones an
+// attempt before it kept and nobody gave back, or a stored message's own. Read as the server, which writes the bytes.
+async function keptPaths(service:SupabaseClient,{place,rows}:{place:FilesPlace,rows:FilesTable}):Promise<Map<number,string>|undefined> {
+ const {data,error}=await service.from(rows.table).select('position,path').eq('company_id',place.company).eq(rows.scope,place.scope).eq('send_key',place.messageKey).order('position');
+ if(error) return undefined;
+ return new Map((data||[]).map((row:{position:number,path:string})=>[row.position,row.path]));
+}
 
 const refusalOf=(code:string|undefined,words:FileRefusalWords)=>code==='42501'?words.notAllowed:code==='P0002'?words.notFound:words.failed;
 
@@ -46,29 +56,35 @@ export async function filesAsImages(service:SupabaseClient,rows:{content_type:st
 }
 
 // Keeps a send's images: the rows first, under the database's own checks (the place is the caller's, they may write, the
-// type is an image the Engine reads), then the bytes in the Company's folder. A failed upload gives the rows back: the
-// guarded discard names the paths of the rows it took, and only those are removed, so a stored message's file stays.
+// type is an image the Engine reads), then the bytes in the Company's folder, at the paths the rows name. Each keep is its
+// own attempt: rows it adds are named by it, so a send of the same key that kept them again after an earlier one gave
+// them back writes where that earlier removal never reaches (#598). A failed upload gives the rows back: the guarded
+// discard names the paths of the rows it took, and only those are removed, so a stored message's file stays.
 /** @param {SupabaseClient} db @param {SupabaseClient} service @param {KeepFiles} kept @returns {Promise<{error?:string}>} */
-export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,{place,files,reserve,reserveArgs,discard,discardArgs,words}:KeepFiles):Promise<{error?:string}> {
+export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,{place,files,rows:table,reserve,reserveArgs,discard,discardArgs,words}:KeepFiles):Promise<{error?:string}> {
  const rows=files.map((file,index)=>({position:index,name:file.name.slice(0,255)||'image',content_type:file.type.slice(0,127),size:file.size}));
- const {data,error}=await db.rpc(reserve,{...reserveArgs(place),files:rows});
+ const {data,error}=await db.rpc(reserve,{...reserveArgs(place),files:rows,attempt:randomUUID()});
  if(error) return {error:refusalOf(error.code,words)};
  // -2: the send key's files are kept and still held by its waiting turn or its Run (#465). The send goes on to that turn,
  // and nothing is written: not over a kept image, so its retry carries what it was sent with, and not beside them at a
  // place no row names, which nothing would read or give back.
  if(data===-2) return {};
+ const paths=await keptPaths(service,{place,rows:table});
  // -1: the files of this send key are already a stored message's own; the send goes on to its message, which the send key
- // answers with the one it stored. A file whose upload failed the first time is written now, and one already stored is
- // never replaced (no upsert: "already exists" is the file being there). Its rows stay: they are the message's. The repair
- // is best effort: a storage error here never stops the send from reaching the message its key already stored.
+ // answers with the one it stored. A file whose upload failed the first time is written now, at the path its row names,
+ // and one already stored is never replaced (no upsert: "already exists" is the file being there). Its rows stay: they
+ // are the message's. The repair is best effort: a storage error here never stops the send from reaching the message
+ // its key already stored.
  if(typeof data==='number'&&data<0) {
-  for(const [index,file] of files.entries())
-   await service.storage.from(bucket).upload(messageFilePath(place,index),Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:false});
+  for(const [index,file] of files.entries()) {
+   const path=paths?.get(index);
+   if(path) await service.storage.from(bucket).upload(path,Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:false});
+  }
   return {};
  }
  for(const [index,file] of files.entries()) {
-  const path=messageFilePath(place,index);
-  const stored=await service.storage.from(bucket).upload(path,Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:true});
+  const path=paths?.get(index);
+  const stored=path?await service.storage.from(bucket).upload(path,Buffer.from(await file.arrayBuffer()),{contentType:rows[index].content_type,upsert:true}):{error:'unnamed'};
   if(stored.error) {
    await discardMessageFiles(db,service,{place,discard,discardArgs});
    return {error:words.failed};

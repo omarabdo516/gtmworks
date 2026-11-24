@@ -53,7 +53,7 @@ function databases({mention=false,attachments=stored,refusePost=false,failUpload
  })};
  return {
   db:{rpc},
-  service:{rpc,from:(/** @type {string} */ table)=>chain(table==='channel_attachments'?attachments.map(file=>({content_type:file.content_type,path:file.path})):[]),storage},
+  service:{rpc,from:(/** @type {string} */ table)=>chain(table==='channel_attachments'?attachments.map((file,position)=>({position,content_type:file.content_type,path:file.path})):[]),storage},
   calls,uploads,removals,downloads,
   get postedAfterUploads(){ return postedAfterUploads; },
  };
@@ -152,4 +152,42 @@ test('a channel message with images that calls no Agent starts no Run and keeps 
  assert.deepEqual(stand.uploads,[`${company}/channels/${channel}/q-0`,`${company}/channels/${channel}/q-1`]);
  assert.deepEqual(stand.downloads,[],'no Run reads them when no Agent is called');
  assert.deepEqual(stand.calls.map(([name])=>name).slice(0,2),['reserve_channel_files','post_channel_message']);
+});
+
+test('a discard never removes the object a send of the same key kept again before its removal (#598)',async()=>{
+ // One key sent twice at once: the first send's second upload fails, so it gives its rows back, and between that discard
+ // and its removal from the bucket the second send keeps the rows again and writes its images. The database names each
+ // keep attempt's paths (reserve_channel_files with an attempt, supabase/tests/channel_message_files.sql), so the first
+ // send's removal reaches only its own objects and the second send's message keeps every image its rows name.
+ const ok=(/** @type {unknown} */ data)=>({data,error:null});
+ let rows=/** @type {{position:number,content_type:string,path:string}[]} */([]);
+ const objects=new Set(); const removed=/** @type {string[]} */([]);
+ let failing=true; let second=/** @type {Promise<unknown>|null} */(null);
+ const rpc=async(/** @type {string} */ name,/** @type {any} */ args)=>{
+  if(name==='reserve_channel_files') {
+   if(!rows.length) rows=args.files.map((/** @type {any} */ file)=>({position:file.position,content_type:file.content_type,path:`${company}/channels/${channel}/q-${args.attempt}-${file.position}`}));
+   return ok(rows.length);
+  }
+  if(name==='discard_channel_files') {
+   const gone=rows.map(row=>row.path); rows=[];
+   failing=false; second??=postChannelMessage(db,service,{company,channel,sendKey:'q',message:'Look at these',files,hermes,engineFor:fakeEngine().engineFor});
+   await second;
+   return ok(gone);
+  }
+  if(name==='post_channel_message') return ok(7);
+  if(name==='channel_runs_due') return ok([]);
+  return {data:null,error:{message:`unexpected ${name}`}};
+ };
+ const read=()=>{ const c={select:()=>c,eq:()=>c,order:async()=>ok(rows)}; return c; };
+ const storage={from:()=>({
+  upload:async(/** @type {string} */ path)=>{ if(failing&&objects.size===1) return {error:{message:'storage refused'}}; objects.add(path); return {error:null}; },
+  remove:async(/** @type {string[]} */ paths)=>{ for(const path of paths) { removed.push(path); objects.delete(path); } return {error:null}; },
+ })};
+ const db={rpc}; const service={rpc,from:read,storage};
+ const first=await postChannelMessage(db,service,{company,channel,sendKey:'q',message:'Look at these',files,hermes,engineFor:fakeEngine().engineFor});
+ assert.deepEqual(first,{refused:'channelFailed',status:400},'the first send could not store its images');
+ assert.deepEqual(await second,{message:7},'the second send of the key stored its message');
+ assert.equal(rows.length,2,'its message keeps both rows');
+ assert.ok(removed.length>0,'the first send removed what it wrote');
+ for(const row of rows) assert.ok(objects.has(row.path),`the second send's ${row.path} is still in the bucket`);
 });
