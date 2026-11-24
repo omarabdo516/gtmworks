@@ -127,7 +127,7 @@ test('a failed install check prints the web and gateway summaries before teardow
  // logs the trap reads always come before the teardown.
  assert.equal(at(/rm -fv install-docker/),-1,'the install step leaves the machine to the teardown step');
  const steps=installJob().steps;
- const teardown=steps.findIndex(s=>/docker rm -fv install-docker/.test(s.run||''));
+ const teardown=steps.findIndex(s=>/ci-install-machine\.sh stop/.test(s.run||''));
  assert.ok(teardown>steps.indexOf(step),'logs are read before the install is torn down');
  // A GitHub-hosted runner discards its machine with the job; the step stays for a runner that is reused (#406).
  assert.equal(steps[teardown].if,"${{ always() && runner.environment != 'github-hosted' }}",'the teardown runs after a failure on a reused runner');

@@ -238,9 +238,9 @@ jobs:
   # the Engine and the checks' helpers, listed once in scripts/ci-install-machine.sh and kept in the Actions cache as a
   # pull-through mirror's storage, under a key made of that list. With the key cached it only looks the key up; after a
   # key change it pulls each image once through the mirror on an isolated Docker machine and saves the storage. It runs
-  # beside the image job, which is longer, so the install areas it holds wait for nothing more; each area then serves
-  # those images from its own runner instead of pulling them, and pulls from the registry only when the storage is
-  # missing. Like supabase-images it only warms a cache: it never fails a run, and it is no part of the full check.
+  # beside the image job: with the key cached it ends long before it, so the install areas it holds wait for nothing
+  # more, and only the run after a key change waits for its pulls, once for every area. Each area then serves those
+  # images from its own runner instead of pulling them, and pulls from the registry only when the storage is missing. Like supabase-images it only warms a cache: it never fails a run, and it is no part of the full check.
   install-images:
     needs: [changes]
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
@@ -271,6 +271,10 @@ jobs:
         with:
           path: ${{ runner.temp }}/install-mirror
           key: ${{ steps.images.outputs.key }}
+      # A failed pull leaves the machine and the mirror behind; a reused runner removes them (a hosted one is discarded).
+      - name: remove the isolated Docker machine
+        if: ${{ always() && runner.environment != 'github-hosted' }}
+        run: bash scripts/ci-install-machine.sh stop
 
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
@@ -459,14 +463,14 @@ jobs:
         run: echo "key=install-sandbox-image-${{ hashFiles('sandbox/**') }}" >> "$GITHUB_OUTPUT"
       - name: look the work sandbox image up
         id: sandbox-cache
-        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.sandbox.outputs.key != '' }}
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/gtmworks-sandbox-image.tar
           key: ${{ steps.sandbox.outputs.key }}
           lookup-only: true
       - name: build the work sandbox image
-        if: ${{ (needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') && steps.sandbox-cache.outputs.cache-hit != 'true' }}
+        if: ${{ steps.sandbox.outputs.key != '' && steps.sandbox-cache.outputs.cache-hit != 'true' }}
         uses: docker/build-push-action@v6
         with:
           context: sandbox
@@ -476,7 +480,7 @@ jobs:
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox
       - name: keep the work sandbox image
-        if: ${{ (needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') && steps.sandbox-cache.outputs.cache-hit != 'true' }}
+        if: ${{ steps.sandbox.outputs.key != '' && steps.sandbox-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/gtmworks-sandbox-image.tar
@@ -799,7 +803,7 @@ jobs:
         run: bash scripts/ci-install-check.sh ${{ matrix.area }}
       - name: remove the isolated Docker machine
         if: ${{ always() && runner.environment != 'github-hosted' }}
-        run: docker rm -fv install-docker install-mirror || true; docker network rm install-net || true
+        run: bash scripts/ci-install-machine.sh stop
 
   # The profile-size measurement (#126, #400) is no check a pull request needs: twenty Agent profiles took 85 seconds,
   # and their numbers are for the README. It runs on a push to main and on a manual run only, easy to find beside the
@@ -830,7 +834,7 @@ jobs:
         run: bash scripts/ci-install-check.sh measure
       - name: remove the isolated Docker machine
         if: ${{ always() && runner.environment != 'github-hosted' }}
-        run: docker rm -fv install-docker install-mirror || true; docker network rm install-net || true
+        run: bash scripts/ci-install-machine.sh stop
 
   check:
     needs: [changes, fast, image, database, integration, chat-open, install]

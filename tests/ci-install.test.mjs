@@ -144,12 +144,12 @@ test('the install and measurement jobs share one composite action for their mach
   assert.equal(action.inputs['sandbox-key'].required, true);
   assert.match(loadBoth.run, /gtmworks-image\.tar" & app=\$!/, 'the two images load at once');
   assert.match(loadBoth.run, /gtmworks-sandbox-image\.tar" & sandbox=\$!/);
-  assert.match(loadBoth.run, /wait "\$app"; wait "\$sandbox"/, 'a failed load fails the step');
+  assert.match(loadBoth.run, /wait "\$app" \|\| status=\$\?; wait "\$sandbox" \|\| status=\$\?\n\s*\(\( status == 0 \)\)/, 'a failed load fails the step once both have ended');
   for (const name of ['install', measureJob]) {
     const used = ci.jobs[name].steps.find(step => step.uses === './.github/actions/install-machine');
     assert.deepEqual(used.with, { 'sandbox-key': '${{ needs.image.outputs.sandbox-key }}' }, `${name} names the run's sandbox image`);
     assert.ok(ci.jobs[name].needs.includes('install-images'), `${name} starts once the mirror's storage is kept`);
-    assert.match(ci.jobs[name].steps.at(-1).run, /docker rm -fv install-docker install-mirror \|\| true; docker network rm install-net \|\| true/);
+    assert.equal(ci.jobs[name].steps.at(-1).run, 'bash scripts/ci-install-machine.sh stop', `${name} removes the machine, the mirror and their network`);
   }
 });
 
@@ -169,6 +169,7 @@ test('the install images job keeps the mirror\'s storage under its key, pulling 
   const save = warm.steps.find(step => step.uses === 'actions/cache/save@v4');
   assert.equal(save.if, pull.if);
   assert.deepEqual(save.with, { path: lookup.with.path, key: lookup.with.key });
+  assert.deepEqual(warm.steps.at(-1), { name: 'remove the isolated Docker machine', if: "${{ always() && runner.environment != 'github-hosted' }}", run: 'bash scripts/ci-install-machine.sh stop' });
 });
 
 // #608: the work sandbox image is built only when its files changed: the image job keeps it in the cache under their
@@ -211,7 +212,7 @@ test('only the proxy area installs the test packages: its browser check is the o
 
 test('a job on a GitHub-hosted runner does not wait for its Docker machine to be removed', () => {
   const remove = job.steps.at(-1);
-  assert.match(remove.run, /docker rm -fv install-docker/);
+  assert.equal(remove.run, 'bash scripts/ci-install-machine.sh stop');
   assert.equal(remove.if, "${{ always() && runner.environment != 'github-hosted' }}", 'the removal stays for a runner that is reused, also after a failure');
 });
 
@@ -266,7 +267,7 @@ test('the profile-size measurement is a job of its own, and the required check d
   assert.match(load.run, /gtmworks-image\.tar/);
   assert.match(load.run, /tag gtmworks:ci "\$web_image"/);
   const remove = job.steps.at(-1);
-  assert.match(remove.run, /docker rm -fv install-docker/);
+  assert.equal(remove.run, 'bash scripts/ci-install-machine.sh stop');
   assert.equal(remove.if, "${{ always() && runner.environment != 'github-hosted' }}", 'removed on a reused runner, also after a failure');
   assert.equal(ci.jobs.check.needs.includes(measureJob), false, 'the required check does not wait for the measurement');
 });

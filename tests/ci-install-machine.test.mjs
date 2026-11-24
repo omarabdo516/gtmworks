@@ -44,11 +44,15 @@ function withDocker(body) {
   try {
     writeFileSync(join(dir, 'docker'), `#!/bin/sh
 printf '%s\\n' "$*" >> "${dir}/calls"
-case "$*" in *' info') grep -q -- '--name install-docker' "${dir}/calls";; esac
+case "$*" in
+  *' info') grep -q -- '--name install-docker' "${dir}/calls";;
+  "$FAIL"*) exit 1;;
+esac
 `);
     chmodSync(join(dir, 'docker'), 0o755);
-    const call = (...args) => spawnSync('bash', ['scripts/ci-install-machine.sh', ...args], {
-      encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+    // FAIL names the start of a call the stand-in fails.
+    const call = (args, fail = 'never') => spawnSync('bash', ['scripts/ci-install-machine.sh', ...args], {
+      encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, FAIL: fail },
     });
     const calls = () => (existsSync(join(dir, 'calls')) ? readFileSync(join(dir, 'calls'), 'utf8').trim().split('\n') : []);
     return body({ dir, call, calls });
@@ -59,10 +63,13 @@ case "$*" in *' info') grep -q -- '--name install-docker' "${dir}/calls";; esac
 
 test('start runs the mirror on the kept storage, then the machine with that mirror as its registry mirror', () => withDocker(({ dir, call, calls }) => {
   const storage = join(dir, 'install-mirror');
-  const out = call('start', storage);
+  const out = call(['start', storage]);
   assert.equal(out.status, 0, out.stderr);
   assert.ok(existsSync(storage), 'an empty storage is made on a cache miss');
-  const [network, mirror, machine, info] = calls();
+  const leftovers = ['stop install-mirror', 'rm -fv install-docker install-mirror', 'network rm install-net'];
+  assert.deepEqual(calls().slice(0, 3), leftovers, 'what a reused runner kept from an earlier run goes first');
+  const [network, mirror, machine, info] = calls().slice(3);
+  const answers = calls().find(line => line.startsWith('exec '));
   assert.equal(network, 'network create install-net');
   assert.match(mirror, /^run -d --name install-mirror --network install-net /);
   assert.ok(mirror.includes(`-v ${storage}:/var/lib/registry`), 'the mirror stores into the kept folder');
@@ -72,12 +79,28 @@ test('start runs the mirror on the kept storage, then the machine with that mirr
   assert.match(machine, /^run -d --privileged --name install-docker --network install-net .*-p 127\.0\.0\.1:2375:2375 /);
   assert.match(machine, / docker:28\.5\.1-dind --registry-mirror=http:\/\/install-mirror:5000$/);
   assert.equal(info, '--host tcp://127.0.0.1:2375 info', 'it waits for the machine');
+  assert.equal(answers, 'exec install-docker wget -q -O /dev/null http://install-mirror:5000/v2/', 'and for the mirror, as the machine sees it');
+}));
+
+test('a mirror that does not start leaves the machine to start alone and pull from the registry', () => withDocker(({ dir, call, calls }) => {
+  const out = call(['start', join(dir, 'install-mirror')], 'run -d --name install-mirror');
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stderr, /the mirror did not start; the machine pulls from the registry/);
+  const machine = calls().find(line => line.startsWith('run -d --privileged --name install-docker'));
+  assert.doesNotMatch(machine, /install-net|registry-mirror/, 'no mirror and no network of its');
+  assert.ok(calls().lastIndexOf('network rm install-net') > calls().findIndex(line => line.startsWith('run -d --name install-mirror')), 'the network it made goes');
+}));
+
+test('warm saves nothing when the mirror does not answer', () => withDocker(({ dir, call, calls }) => {
+  const out = call(['warm', join(dir, 'install-mirror')], 'exec install-docker wget');
+  assert.notEqual(out.status, 0);
+  assert.equal(calls().some(line => / pull /.test(line)), false, 'no pull would reach the storage');
 }));
 
 test('warm pulls every mirrored image through the machine, then removes the machine and the mirror', () => withDocker(({ dir, call, calls }) => {
-  const out = call('warm', join(dir, 'install-mirror'));
+  const out = call(['warm', join(dir, 'install-mirror')]);
   assert.equal(out.status, 0, out.stderr);
   const pulls = calls().filter(line => line.startsWith('--host tcp://127.0.0.1:2375 pull -q '));
   assert.deepEqual(pulls.map(line => line.split(' ').at(-1)), lines(run('mirrored')), 'each mirrored image once');
-  assert.deepEqual(calls().slice(-2), ['rm -fv install-docker install-mirror', 'network rm install-net'], 'the storage is whole before it is saved');
+  assert.deepEqual(calls().slice(-3), ['stop install-mirror', 'rm -fv install-docker install-mirror', 'network rm install-net'], 'the mirror stops, so the storage is whole before it is saved');
 }));

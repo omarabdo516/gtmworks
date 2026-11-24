@@ -447,11 +447,11 @@ test('the install proof runs on one Docker machine per area and a GitHub-hosted 
  const start=at(step=>/bash scripts\/ci-install-machine\.sh start /.test(step.run||''));
  assert.match(machine,/run -d --privileged --name install-docker/);
  const proof=at(step=>step.env?.INSTALL_REF);
- const removes=steps.flatMap((step,index)=>/rm -fv install-docker/.test(step.run||'')?[index]:[]);
+ const removes=steps.flatMap((step,index)=>/rm -fv install-docker|ci-install-machine\.sh stop/.test(step.run||'')?[index]:[]);
  assert.ok(start>=0&&start<proof,'the daemon starts in its own step before the proof');
  assert.equal(steps[start].env?.DOCKER_HOST,undefined,'the start step talks to the runner Docker');
  assert.match(machine,/machine=tcp:\/\/127\.0\.0\.1:2375\n/);
- assert.match(machine,/docker --host "\$machine" info > \/dev\/null 2>&1 && return/,'the start step waits for the daemon');
+ assert.match(machine,/docker --host "\$machine" info > \/dev\/null 2>&1 && break/,'the start step waits for the daemon');
  assert.equal(steps[proof].env?.DOCKER_HOST,'tcp://127.0.0.1:2375','the proof runs on that daemon');
  assert.deepEqual(removes,[steps.length-1],'only the last step removes the daemon');
  assert.equal(steps.at(-1).if,"${{ always() && runner.environment != 'github-hosted' }}");

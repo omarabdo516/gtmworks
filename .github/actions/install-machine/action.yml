@@ -38,7 +38,9 @@ runs:
         path: ${{ runner.temp }}
     # The work sandbox image (#392), kept in the Actions cache under its files' hash by the image job (#608): the cache
     # restores it several times faster than an artifact of its size downloads, and the image job builds it only when
-    # those files change. It is there whenever the image job succeeded, so a miss is a fault, not a reason to build.
+    # those files change. It is there whenever the image job succeeded: the job looked it up or saved it moments before,
+    # so the cache's least-recently-used eviction does not reach it. A miss fails the area rather than building the image
+    # in it; running the image job again saves it once more.
     - name: restore the work sandbox image
       uses: actions/cache/restore@v4
       with:
@@ -55,5 +57,7 @@ runs:
         web_image=$(sed -n '/^  web:$/,/^  [a-z]/s/^    image: //p' docker-compose.install.yml | head -n 1)
         docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-image.tar" & app=$!
         docker --host tcp://127.0.0.1:2375 load --input "$RUNNER_TEMP/gtmworks-sandbox-image.tar" & sandbox=$!
-        wait "$app"; wait "$sandbox"
+        # Both loads end before the step does, so a failed one leaves no other still loading.
+        status=0; wait "$app" || status=$?; wait "$sandbox" || status=$?
+        (( status == 0 ))
         docker --host tcp://127.0.0.1:2375 tag gtmworks:ci "$web_image"
