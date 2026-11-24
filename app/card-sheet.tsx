@@ -1,5 +1,6 @@
 'use client';
 import { useActionState, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { OpenedHere } from './sidebar-live';
 import { useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
@@ -94,6 +95,8 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite:mayW
   archived?{key:'restore',icon:'restore',label:t('cardRestore'),run:archive.restore}:{key:'archive',icon:'archive',label:t('cardArchive'),run:archive.archive}]:[];
  return <dialog ref={box} className={`sheet${leaving?' is-closing':''}`} aria-labelledby="sheet-title" onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="sheet__inner">
+   {/* Opening the Card is where an Agent that failed on it is seen to have failed (#699). */}
+   <OpenedHere company={company} place={{card:sheet.id}}/>
    <header className="sheet__head" id="sheet-head">
     <div className="sheet__top">{face}<h2 className="sheet__title" id="sheet-title"><bdi>{title}</bdi></h2>
      {mayWrite&&menu.length>0&&<MoreMenu label={t('cardMore')} items={menu}/>}
