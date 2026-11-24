@@ -51,9 +51,12 @@ before(() => {
   bin = join(root, 'bin');
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe' });
   execFileSync('git', ['clone', '-q', '--shared', resolve('.'), repo]);
-  // The lane runs this checkout's ci.sh and machine script, committed in the clone as the lane runs HEAD.
-  for (const file of ['ci.sh', 'scripts/install-lane-machine.sh']) copyFileSync(resolve(file), join(repo, file));
+  // The lane runs this checkout's ci.sh, its machine scripts and the image list (#608), committed in the clone as the
+  // lane runs HEAD.
+  const files = ['ci.sh', 'scripts/install-lane-machine.sh', 'scripts/ci-install-machine.sh'];
+  for (const file of files) copyFileSync(resolve(file), join(repo, file));
   writeFileSync(join(repo, 'scripts/ci-install-check.sh'), proof);
+  git('add', ...files);
   git('-c', 'user.name=lane', '-c', 'user.email=lane@example.invalid', 'commit', '-q', '-am', 'lane test');
   // The lane fetches HEAD from origin first; here origin is the clone itself.
   git('remote', 'set-url', 'origin', repo);

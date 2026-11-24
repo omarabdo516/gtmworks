@@ -35,7 +35,7 @@ export type CreatedAgent={state:'created',agent:Agent}|{state:'exists'|'refused'
 export type FoundAgent={state:'found',agent:Agent}|{state:'missing'|'refused'|'unreachable',agent:null};
 // A model a Run may be started on (#158): the Engine's provider and model names.
 export type ModelChoice={provider:string,model:string};
-export type AgentModels={state:'found'|'refused'|'unreachable',current:ModelChoice|null,models:(ModelChoice&{providerName:string})[]};
+export type AgentModels={state:'found'|'refused'|'unreachable',current:ModelChoice|null,models:(ModelChoice&{providerName:string,served?:true})[]};
 // Where an Agent's own profile takes the Company's Providers from (#660): its shared space, whose API keys it is given, and
 // the profile of the Company's keeper (Lead), whose model it starts on.
 export type CompanyProviders={space:string,keeper:string};

@@ -1140,7 +1140,7 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
  assert.ok(run.indexOf("fail 'the previous release install'")<run.indexOf('# one-line: the one line (#51)'),'after the release install');
  assert.equal(step.env.DOCKER_HOST,'tcp://127.0.0.1:2375');
  assert.ok(steps.indexOf(step)<steps.length-1,'before the step that removes the Docker machine');
- assert.match(steps.at(-1).run,/docker rm -fv install-docker/,'the last step removes the machine');
+ assert.equal(steps.at(-1).run,'bash scripts/ci-install-machine.sh stop','the last step removes the machine (#608)');
  for(const pattern of [
   /line\(\) \{ curl -fsSL "\$GTMWORKS_GET" \| sh -s -- "\$@"; \}/,
   /GTMWORKS_RELEASES="file:\/\/\$releases"/,
