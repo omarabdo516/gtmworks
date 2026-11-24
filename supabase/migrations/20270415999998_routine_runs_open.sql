@@ -98,7 +98,10 @@ language sql stable security definer set search_path='' as $$
  )
  select
   exists(select 1 from chats cv cross join lateral public.conversation_open_run(cv.id))
-   or exists(select 1 from public.channel_runs r where r.company_id=c and r.agent_id=agent and r.outcome is null)
+   -- A channel message's Agents go one after another (#152): an Agent whose turn waits behind an earlier open one is
+   -- not working yet.
+   or exists(select 1 from public.channel_runs r where r.company_id=c and r.agent_id=agent and r.outcome is null
+    and not exists(select 1 from public.channel_runs q where q.message_id=r.message_id and q.outcome is null and q.ordinal<r.ordinal))
    or exists(select 1 from public.note_runs n where n.company_id=c and n.agent_id=agent and n.outcome is null)
    or exists(select 1 from public.agent_handovers h where h.company_id=c
     and (h.to_agent=agent and h.state in ('waiting','target') or h.from_agent=agent and h.state in ('returning','follow_up')))
