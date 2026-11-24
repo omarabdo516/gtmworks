@@ -64,13 +64,13 @@ test('The Owner starts a private conversation from the board and from Home, and 
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page).toHaveURL(/\/c\/rs-learning\/conversations\/[0-9a-f-]{36}$/);
   const conversation=page.url().split('/').pop()!;
-  // While the Run is open its Agent's tile thinks; when it ends a check shows for a moment, then the idle dot (#184).
-  const face=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'}).locator('.face-wrap');
-  await expect(face.locator('.think')).toBeVisible();
-  await expect(face).toHaveClass(/\bis-thinking\b/);
-  await expect(face.locator('.done-ck')).toBeVisible();
-  await expect(face.locator('.think')).toHaveCount(0);
-  await expect(face.locator('.done-ck')).toHaveCount(0);
+  // While the Run is open its Agent's tile thinks; when it ends the face is done for a moment, then idle, its dot too
+  // (#184, #697).
+  const face=page.locator('.sidebar .agent-tile').filter({hasText:'Nour'}).locator('.fw');
+  await expect(face.locator('.face')).toHaveAttribute('data-state','thinking');
+  await expect(face.locator('.dot')).toHaveClass('dot dot--thinking');
+  await expect(face.locator('.face')).toHaveAttribute('data-state','done');
+  await expect(face.locator('.face')).toHaveAttribute('data-state','idle');
   await expect(face.locator('.dot')).toHaveClass('dot dot--idle');
   await expect(page.locator('.msg[data-author=person]')).toHaveText(new RegExp(text));
   await expect(page.locator('.msg[data-author=agent]')).toContainText(`Reply to: ${text}`);

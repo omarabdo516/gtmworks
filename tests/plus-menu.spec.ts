@@ -100,7 +100,7 @@ test('in a Conversation the Contributor\'s "Call an agent" lists exactly the Age
   await expect.poll(()=>groups(page)).toEqual({'Call an agent':seen,'Commands':['Ask for a new agent','Attach a file','Connect apps']});
   // Reach was made from the meta role but is hidden from this Member, so its command is not listed (#159).
   expect((await groups(page)).Commands).not.toContain('New campaign with Reach');
-  await expect(page.getByRole('menu').locator('.menu__item .agent-face')).toHaveCount(seen.length);
+  await expect(page.getByRole('menu').locator('.menu__item .face')).toHaveCount(seen.length);
   await expect(page.getByRole('menuitem',{name:/Reach/})).toHaveCount(0);
  }
 });

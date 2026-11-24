@@ -82,7 +82,7 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  const details=await openDetails(page,'omar@example.com',ads,'Meta Ads');
  await expect(details.locator('.dp-id__name')).toHaveText('Meta Ads');
  await expect(details.locator('.dp-id__role')).toHaveText('Runs the Meta ads. · Working');
- await expect(details.locator('.face-wrap .dot')).toHaveClass(/\bdot--working\b/);
+ await expect(details.locator('.fw--lg > .dot')).toHaveClass(/\bdot--working\b/);
  await expect(details.locator('.born')).toContainText('Made on Jun 10 at your request');
  await expect(details.locator('.born').getByRole('link',{name:'See the ask',exact:true})).toHaveAttribute('href',`/c/rs-learning/conversations/${id(9)}`);
  await expect(details.getByRole('link',{name:'Settings for Meta Ads',exact:true})).toBeVisible();
@@ -218,7 +218,7 @@ for(const [who,email,shown] of [
  await expect(tiles(page)).toHaveCount(shown.length);
  for(const [index,[label,status]] of shown.entries()) {
   await expect(tiles(page).nth(index)).toHaveAccessibleName(label);
-  await expect(tiles(page).nth(index).locator('.face-wrap > .dot')).toHaveClass(`dot dot--${status}`);
+  await expect(tiles(page).nth(index).locator('.fw > .dot')).toHaveClass(`dot dot--${status}`);
  }
 });
 
@@ -227,15 +227,15 @@ test('Settings shows the same dot on each Agent, with its state as text in the l
  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=agents');
  const row=(agent:string)=>page.locator(`#sov-ag-${agent}`);
  for(const [agent,status,word] of [[lead,'idle','Idle'],[copy,'waiting','Waiting on you'],[ads,'working','Working'],[seo,'idle','Idle']] as const) {
-  await expect(row(agent).locator('.face-wrap > .dot')).toHaveClass(`dot dot--${status}`);
+  await expect(row(agent).locator('.fw > .dot')).toHaveClass(`dot dot--${status}`);
   await expect(row(agent).locator('.panel-row__meta')).toHaveText(word);
  }
  await row(copy).click();
- await expect(page.locator('.sov-agent-id .face-wrap--lg > .dot')).toHaveClass('dot dot--waiting');
+ await expect(page.locator('.sov-agent-id .fw > .dot')).toHaveClass('dot dot--waiting');
  await expect(page.locator('.sov-agent-id .dp-id__role')).toHaveText('Writes the copy. · Waiting on you');
  await page.context().clearCookies();
  await signIn(page,'reviewer@example.com',`/c/rs-learning/settings?agent=${copy}`);
- await expect(page.locator('.sov-agent-id .face-wrap--lg > .dot')).toHaveClass('dot dot--idle');
+ await expect(page.locator('.sov-agent-id .fw > .dot')).toHaveClass('dot dot--idle');
  await expect(page.locator('.sov-agent-id .dp-id__role')).toHaveText('Writes the copy. · Idle');
 });
 

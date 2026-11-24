@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fresh-seed';
+import { test, expect, type Locator, type Page } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { mkdir } from 'node:fs/promises';
 import { signIn } from './sign-in';
@@ -27,12 +27,11 @@ test('people and agents reply inside one card, in order, each labelled and in it
  await signIn(page,'omar@example.com',`/c/rs-learning/work/board/${card}`);
  const messages=page.locator('.conversation .message');
  await expect(messages).toHaveCount(1);
- // The agent's message carries its name, the agent label and its role colour.
+ // The agent's message carries its name and the agent label; the word tells it apart, as role colours are gone (#697).
  const fromAgent=messages.first();
  await expect(fromAgent).toHaveAttribute('data-author','agent');
  await expect(fromAgent.locator('strong')).toHaveText(writerName);
  await expect(fromAgent.locator('.author-chip')).toHaveText('Agent');
- await expect(fromAgent.locator('.author-chip')).toHaveCSS('border-top-color','rgb(181, 217, 207)');
 
  // A person replies below it.
  const reply=`شكرا، نكمل ${stamp} thanks`;
@@ -41,6 +40,9 @@ test('people and agents reply inside one card, in order, each labelled and in it
  await expect(messages).toHaveCount(2);
  await expect(messages.nth(1)).toHaveAttribute('data-author','person');
  await expect(messages.nth(1).locator('.author-chip')).toHaveText('Person');
+ // Both labels are drawn alike: an agent's carries no colour of its role.
+ const border=(chip:Locator)=>chip.evaluate(element=>[getComputedStyle(element).borderTopColor,!!element.querySelector('i')]);
+ expect(await border(fromAgent.locator('.author-chip'))).toEqual(await border(messages.nth(1).locator('.author-chip')));
  await expect(messages.nth(1).locator('strong')).toContainText('عمر');
  expect(await messages.locator('.comment-body').allInnerTexts()).toEqual([first,reply]);
 

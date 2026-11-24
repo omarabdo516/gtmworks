@@ -2,6 +2,7 @@ import { test, expect, freshSeed } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn, openNavigation } from './sign-in';
+import { faceAnimations, faceTransitions } from './navigation-measure';
 
 // #15, which Agents each Member sees: the Owner turns a switch in Company settings, and the Contributor (مراجع) finds
 // the Agent in their list; an Agent not allowed to them is absent, and its address is a page that does not exist.
@@ -14,7 +15,7 @@ const [lead,ads,seo]=[1,2,3].map(n=>id(10+n));
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
  query(`do $$ begin
   update public.people set language='en' where id in ('${omar}','20000000-0000-0000-0000-000000000003');
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
@@ -64,11 +65,14 @@ test('the Owner shows an Agent to a Member, who then sees it while a hidden one 
 // colour over 200ms, its track fades over 150ms, and turned on the thumb sits 12px toward the end side, in English and
 // in Arabic. With reduced motion it jumps. The switch is turned back, so the board test below starts as it expects.
 test('a switch\'s thumb springs to the end side and fades its colour, in English and Arabic, and jumps with reduced motion',async({page})=>{
- const thumb=()=>page.locator('.ta-table tbody tr').filter({hasText:'مراجع'}).getByRole('switch',{name:'مراجع · SEO'}).evaluate(element=>{
-  document.getAnimations().forEach(animation=>animation.finish());
+ const thumb=()=>page.locator('.ta-table tbody tr').filter({hasText:'مراجع'}).getByRole('switch',{name:'مراجع · SEO'}).evaluate((element,{names,parts})=>{
+  // Every motion on the page ends at once, but the Agents' faces live on and never end (#697, app/face.css).
+  const face=(animation:Animation)=>animation instanceof CSSAnimation?names.includes(animation.animationName)
+   :!!((animation.effect as KeyframeEffect|null)?.target as Element|null)?.matches(parts);
+  document.getAnimations().filter(animation=>!face(animation)).forEach(animation=>animation.finish());
   const after=getComputedStyle(element,'::after'), track=getComputedStyle(element);
   return {thumb:after.transition,track:[track.transitionProperty,track.transitionDuration,track.transitionTimingFunction].join(' '),at:after.transform};
- });
+ },{names:faceAnimations,parts:faceTransitions});
  const thumbMoves='transform 0.32s cubic-bezier(0.34, 1.45, 0.64, 1), background-color 0.2s cubic-bezier(0.2, 0, 0, 1)';
  const trackMoves='background-color 0.15s cubic-bezier(0.2, 0, 0, 1)';
  try { for(const [language,end] of [['en',12],['ar',-12]] as const) {
