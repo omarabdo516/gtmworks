@@ -128,17 +128,71 @@ test('the install and measurement jobs share one composite action for their mach
   }
   const action = load(readFileSync('.github/actions/install-machine/action.yml', 'utf8'));
   assert.equal(action.runs.using, 'composite');
-  assert.deepEqual(action.runs.steps.map(step => step.name), ['start the isolated Docker machine', 'download the image', 'load the image', 'download the work sandbox image', 'load the work sandbox image']);
+  assert.deepEqual(action.runs.steps.map(step => step.name), ['the upstream images key', 'restore the upstream images', 'start the isolated Docker machine', 'download the image', 'restore the work sandbox image', 'load the images']);
   for (const step of action.runs.steps.filter(step => step.run)) assert.equal(step.shell, 'bash', `${step.name} names its shell`);
-  assert.match(action.runs.steps[0].run, /--privileged --name install-docker/);
-  assert.match(action.runs.steps[0].run, /docker --host tcp:\/\/127\.0\.0\.1:2375 info/, 'the start step waits for the daemon');
-  assert.equal(action.runs.steps[1].with.name, 'gtmworks-image');
-  assert.match(action.runs.steps[2].run, /gtmworks-image\.tar/);
+  const [key, mirror, start, image, sandbox, loadBoth] = action.runs.steps;
+  // #608: the upstream images come through the mirror whose storage the cache keeps under the list's key, restored
+  // before the mirror starts on it.
+  assert.match(key.run, /bash scripts\/ci-install-machine\.sh key/);
+  assert.equal(mirror.uses, 'actions/cache/restore@v4');
+  assert.deepEqual(mirror.with, { path: '${{ runner.temp }}/install-mirror', key: '${{ steps.upstream.outputs.key }}' });
+  assert.equal(start.run.trim(), 'bash scripts/ci-install-machine.sh start "$RUNNER_TEMP/install-mirror"');
+  assert.equal(image.with.name, 'gtmworks-image');
+  // #608: the work sandbox image is kept in the cache under its own files' key, which the image job names.
+  assert.equal(sandbox.uses, 'actions/cache/restore@v4');
+  assert.deepEqual(sandbox.with, { path: '${{ runner.temp }}/gtmworks-sandbox-image.tar', key: '${{ inputs.sandbox-key }}', 'fail-on-cache-miss': true });
+  assert.equal(action.inputs['sandbox-key'].required, true);
+  assert.match(loadBoth.run, /gtmworks-image\.tar" & app=\$!/, 'the two images load at once');
+  assert.match(loadBoth.run, /gtmworks-sandbox-image\.tar" & sandbox=\$!/);
+  assert.match(loadBoth.run, /wait "\$app"; wait "\$sandbox"/, 'a failed load fails the step');
+  for (const name of ['install', measureJob]) {
+    const used = ci.jobs[name].steps.find(step => step.uses === './.github/actions/install-machine');
+    assert.deepEqual(used.with, { 'sandbox-key': '${{ needs.image.outputs.sandbox-key }}' }, `${name} names the run's sandbox image`);
+    assert.ok(ci.jobs[name].needs.includes('install-images'), `${name} starts once the mirror's storage is kept`);
+    assert.match(ci.jobs[name].steps.at(-1).run, /docker rm -fv install-docker install-mirror \|\| true; docker network rm install-net \|\| true/);
+  }
+});
+
+// #608: the upstream images' mirror storage is filled once per key by a job of its own beside the image job. Like the
+// Supabase images job it only warms a cache, so it never fails a run, and the required check does not need it.
+test('the install images job keeps the mirror\'s storage under its key, pulling only on a miss', () => {
+  const warm = ci.jobs['install-images'];
+  assert.deepEqual(warm.needs, ['changes']);
+  assert.equal(warm['continue-on-error'], true);
+  assert.equal(ci.jobs.check.needs.includes('install-images'), false);
+  const key = warm.steps.find(step => step.id === 'images');
+  assert.match(key.run, /bash scripts\/ci-install-machine\.sh key/);
+  const lookup = warm.steps.find(step => step.id === 'lookup');
+  assert.deepEqual(lookup.with, { path: '${{ runner.temp }}/install-mirror', key: '${{ steps.images.outputs.key }}', 'lookup-only': true });
+  const pull = warm.steps.find(step => /ci-install-machine\.sh warm/.test(step.run ?? ''));
+  assert.equal(pull.if, "${{ steps.lookup.outputs.cache-hit != 'true' }}");
+  const save = warm.steps.find(step => step.uses === 'actions/cache/save@v4');
+  assert.equal(save.if, pull.if);
+  assert.deepEqual(save.with, { path: lookup.with.path, key: lookup.with.key });
+});
+
+// #608: the work sandbox image is built only when its files changed: the image job keeps it in the cache under their
+// hash and builds and saves it on a miss, and no longer uploads it as an artifact every run.
+test('the image job builds the work sandbox image only when no image of its files is kept', () => {
+  const image = ci.jobs.image;
+  assert.equal(image.outputs['sandbox-key'], '${{ steps.sandbox.outputs.key }}');
+  const key = image.steps.find(step => step.id === 'sandbox');
+  assert.match(key.run, /^echo "key=install-sandbox-image-\$\{\{ hashFiles\('sandbox\/\*\*'\) \}\}" >> "\$GITHUB_OUTPUT"$/);
+  const lookup = image.steps.find(step => step.id === 'sandbox-cache');
+  assert.deepEqual(lookup.with, { path: '${{ runner.temp }}/gtmworks-sandbox-image.tar', key: '${{ steps.sandbox.outputs.key }}', 'lookup-only': true });
+  const build = image.steps.find(step => step.name === 'build the work sandbox image');
+  assert.match(build.if, /steps\.sandbox-cache\.outputs\.cache-hit != 'true'/);
+  assert.equal(build.with.outputs, 'type=docker,dest=${{ runner.temp }}/gtmworks-sandbox-image.tar');
+  const save = image.steps.find(step => step.name === 'keep the work sandbox image');
+  assert.equal(save.uses, 'actions/cache/save@v4');
+  assert.equal(save.if, build.if);
+  assert.deepEqual(save.with, { path: lookup.with.path, key: lookup.with.key });
+  assert.equal(image.steps.some(step => step.with?.name === 'gtmworks-sandbox-image'), false, 'no artifact of it');
 });
 
 test('the install job runs under today\'s install condition and a successful image build', () => {
   assert.equal(job.if, "${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}");
-  assert.deepEqual(job.needs, ['changes', 'image']);
+  assert.deepEqual(job.needs, ['changes', 'image', 'install-images']);
 });
 
 test('only the update, previous-archive and sandbox-update areas fetch the pull request\'s full history: they build an earlier release from its commit', () => {
@@ -197,7 +251,7 @@ test('the measurement is an area of its own and prints the same line of numbers'
 test('the profile-size measurement is a job of its own, and the required check does not need it', () => {
   const job = ci.jobs[measureJob];
   assert.ok(job, `${measureJob} exists`);
-  assert.deepEqual(job.needs, ['changes', 'image']);
+  assert.deepEqual(job.needs, ['changes', 'image', 'install-images']);
   assert.doesNotMatch(String(job.if), /pull_request/);
   assert.match(String(job.if), /github\.event_name == 'push'/);
   assert.match(String(job.if), /github\.event_name == 'workflow_dispatch'/);
@@ -359,7 +413,9 @@ test('release_image builds a fixed commit once, then loads what it saved', async
 // #423: `./ci.sh install` loads every image the proof runs from the host, found by name in the proof's files; the local
 // registry's image is named in the lib (start_registry), so the lib is one of the files it reads.
 test('./ci.sh install loads the images the lib names too', () => {
-  const lane = readFileSync(resolve('ci.sh'), 'utf8').split('\n').find(line => line.includes('registry:[0-9.]+'));
+  // The lane's list is the install machine's (#608), which CI's mirror keeps too.
+  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /images=\$\(bash scripts\/ci-install-machine\.sh images\)/);
+  const lane = readFileSync(resolve('scripts/ci-install-machine.sh'), 'utf8').split('\n').find(line => line.includes('registry:[0-9.]+'));
   assert.ok(lane, 'the lane finds the images by name');
   assert.match(lane, /scripts\/ci-install-check\.sh scripts\/ci-install-lib\.sh/);
   assert.match(lib, /registry:2\.8\.3/, 'the registry image is named in the lib');

@@ -261,9 +261,8 @@ case "${1:-check}" in
   DOCKER_HOST=$machine docker info > /dev/null
   # Pulls inside this machine stall here (the nested network behind rootless Docker), so every image the job runs comes
   # from this host's Docker: pulled here once when missing, then loaded in, by digest where the install pins one.
-  images=$( { grep -h -E '^[[:space:]]*image:' docker-compose.install.yml scripts/engine-template.yml | awk '{print $2}' | grep -v '^gtmworks-local' | grep -v '\$'
-    awk '/^FROM/ && $2 ~ /[:@]/ {print $2}' Dockerfile
-    grep -o -h -E '(alpine:[0-9.]+|node:[0-9][0-9a-z.-]*|curlimages/curl:[0-9.]+|registry:[0-9.]+|mcr\.microsoft\.com/playwright:[^ "]+)' scripts/ci-install-check.sh scripts/ci-install-lib.sh scripts/install.sh scripts/get.sh; } | sort -u)
+  # The list is scripts/ci-install-machine.sh's, the one CI's mirror keeps the Docker Hub part of (#608).
+  images=$(bash scripts/ci-install-machine.sh images)
   # The work sandbox image every Company's sandbox runs (#392, #393): CI builds it in the run's image job and loads that
   # build; here it is built on this host from the committed checkout's sandbox/Dockerfile on every run (Docker reuses the
   # layers that did not change), so the lane runs HEAD's image, never an earlier commit's tag or uncommitted files.

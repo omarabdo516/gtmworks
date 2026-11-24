@@ -234,6 +234,44 @@ jobs:
           path: ${{ runner.temp }}/supabase-images
           key: ${{ steps.images.outputs.key }}
 
+  # The Docker Hub images every install area pulls (#608): Postgres and the API's images, the proxy, the mail catcher,
+  # the Engine and the checks' helpers, listed once in scripts/ci-install-machine.sh and kept in the Actions cache as a
+  # pull-through mirror's storage, under a key made of that list. With the key cached it only looks the key up; after a
+  # key change it pulls each image once through the mirror on an isolated Docker machine and saves the storage. It runs
+  # beside the image job, which is longer, so the install areas it holds wait for nothing more; each area then serves
+  # those images from its own runner instead of pulling them, and pulls from the registry only when the storage is
+  # missing. Like supabase-images it only warms a cache: it never fails a run, and it is no part of the full check.
+  install-images:
+    needs: [changes]
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    # A key change pulls every image once: 15 minutes lets it finish and save, and the job never fails a run.
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: install images cache key
+        id: images
+        run: echo "key=$(bash scripts/ci-install-machine.sh key)" >> "$GITHUB_OUTPUT"
+      - name: look the key up
+        id: lookup
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/install-mirror
+          key: ${{ steps.images.outputs.key }}
+          lookup-only: true
+      - name: pull the images through the mirror
+        if: ${{ steps.lookup.outputs.cache-hit != 'true' }}
+        run: bash scripts/ci-install-machine.sh warm "$RUNNER_TEMP/install-mirror"
+      - name: save the install images
+        if: ${{ steps.lookup.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/install-mirror
+          key: ${{ steps.images.outputs.key }}
+
   # Migrations replayed and verified, row-level security and grants, on one local stack (tests/db.sh).
   database:
     needs: [changes]
@@ -384,6 +422,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    # The work sandbox image's cache key, which every install area restores it under (#608).
+    outputs:
+      sandbox-key: ${{ steps.sandbox.outputs.key }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -409,8 +450,23 @@ jobs:
           compression-level: 0
       # The work sandbox image every Company's sandbox runs (#392, ADR 0020), built in the same job with its own layer cache:
       # every install area and the measurement load it, so no area builds it again. The browser suite does not use it.
-      - name: build the work sandbox image
+      # Its build context is sandbox/ alone, so the image is kept in the Actions cache under those files' hash (#608): the
+      # job builds and keeps it only when they change, and every area restores it from the cache, several times faster
+      # than the artifact of about 1.4 GB it was before.
+      - name: the work sandbox image key
+        id: sandbox
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
+        run: echo "key=install-sandbox-image-${{ hashFiles('sandbox/**') }}" >> "$GITHUB_OUTPUT"
+      - name: look the work sandbox image up
+        id: sandbox-cache
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/gtmworks-sandbox-image.tar
+          key: ${{ steps.sandbox.outputs.key }}
+          lookup-only: true
+      - name: build the work sandbox image
+        if: ${{ (needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') && steps.sandbox-cache.outputs.cache-hit != 'true' }}
         uses: docker/build-push-action@v6
         with:
           context: sandbox
@@ -419,14 +475,12 @@ jobs:
           outputs: type=docker,dest=${{ runner.temp }}/gtmworks-sandbox-image.tar
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox
-      - name: upload the work sandbox image
-        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch' }}
-        uses: actions/upload-artifact@v4
+      - name: keep the work sandbox image
+        if: ${{ (needs.changes.result != 'success' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') && steps.sandbox-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
         with:
-          name: gtmworks-sandbox-image
           path: ${{ runner.temp }}/gtmworks-sandbox-image.tar
-          retention-days: 1
-          compression-level: 0
+          key: ${{ steps.sandbox.outputs.key }}
       # The release builds the work sandbox for linux/amd64 and linux/arm64; this builds only its browser stage for both
       # (#572: arm64's Chromium is in another folder, and only the release found it missing). It downloads no package
       # under emulation, and its own layer cache makes it nearly free while the base and the step do not change.
@@ -689,7 +743,7 @@ jobs:
   # in scripts/ci-install-check.sh.
   install:
     name: install-${{ matrix.area }}
-    needs: [changes, image]
+    needs: [changes, image, install-images]
     if: ${{ !cancelled() && needs.image.result == 'success' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false') }}
     runs-on: ubuntu-latest
     strategy:
@@ -724,6 +778,8 @@ jobs:
           path: ${{ runner.temp }}/release-images
           key: install-release-image-${{ steps.release.outputs.commit }}
       - uses: ./.github/actions/install-machine
+        with:
+          sandbox-key: ${{ needs.image.outputs.sandbox-key }}
       # Only the browser check of the sign-in rate limit, in the proxy area, uses these, inside the Playwright image; the
       # install itself is Docker only. No install scripts: the image already has the browsers.
       - uses: actions/setup-node@v4
@@ -743,14 +799,14 @@ jobs:
         run: bash scripts/ci-install-check.sh ${{ matrix.area }}
       - name: remove the isolated Docker machine
         if: ${{ always() && runner.environment != 'github-hosted' }}
-        run: docker rm -fv install-docker || true
+        run: docker rm -fv install-docker install-mirror || true; docker network rm install-net || true
 
   # The profile-size measurement (#126, #400) is no check a pull request needs: twenty Agent profiles took 85 seconds,
   # and their numbers are for the README. It runs on a push to main and on a manual run only, easy to find beside the
   # install proof (#408, Omar, 2026-11-19), on a fresh isolated Docker machine of its own and with the run's one image.
   # `check` does not wait for it.
   install-measure:
-    needs: [changes, image]
+    needs: [changes, image, install-images]
     if: ${{ !cancelled() && needs.image.result == 'success' && ((github.event_name == 'push' && (needs.changes.result != 'success' || needs.changes.outputs.install != 'false')) || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     # The measurement installs the stack and makes twenty more Agent profiles.
@@ -761,6 +817,8 @@ jobs:
       - uses: actions/checkout@v4
       # The isolated Docker machine and the image the run built once, as one action the install matrix also uses (#411).
       - uses: ./.github/actions/install-machine
+        with:
+          sandbox-key: ${{ needs.image.outputs.sandbox-key }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -772,7 +830,7 @@ jobs:
         run: bash scripts/ci-install-check.sh measure
       - name: remove the isolated Docker machine
         if: ${{ always() && runner.environment != 'github-hosted' }}
-        run: docker rm -fv install-docker || true
+        run: docker rm -fv install-docker install-mirror || true; docker network rm install-net || true
 
   check:
     needs: [changes, fast, image, database, integration, chat-open, install]

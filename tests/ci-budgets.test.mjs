@@ -49,3 +49,13 @@ test('the Supabase images cache job is no part of the full check: it never fails
   // A cache-key change pulls every image, so 3 minutes would time it out and its cache would never be saved.
   assert.equal(images['timeout-minutes'], 15, 'a key change has time to pull and save every image');
 });
+
+// #608: the install images job fills the upstream images' mirror storage the same way: it only warms a cache, never
+// fails a run, and a key change pulls every image once, so its limit is its own too.
+test('the install images cache job is no part of the full check either', () => {
+  const images = jobs['install-images'];
+  assert.equal(images['continue-on-error'], true, 'it cannot fail a run');
+  assert.equal(fullCheck.includes('install-images'), false);
+  assert.equal(jobs.check.needs.includes('install-images'), false, 'the required check needs no cache job');
+  assert.equal(images['timeout-minutes'], 15, 'a key change has time to pull and save every image');
+});
