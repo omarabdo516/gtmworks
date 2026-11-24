@@ -25,7 +25,7 @@ test('creating an Agent makes a profile with its instructions, model and the key
   const run=await agent.start(message);
   assert.equal(typeof run,'string');
   assert.deepEqual(fake.settings.requests.filter(request=>request.method==='POST').map(request=>request.path),['/p/seo-agent/v1/runs']);
-  assert.deepEqual(await agent.read(run),{state:'completed',reply:'Reply to: Plan the launch post',session:'conversation-1',usage:{input:14000,output:12},toolCalls:[]});
+  assert.deepEqual(await agent.read(run),{state:'completed',reply:'Reply to: Plan the launch post',session:'conversation-1',usage:{input:14000,output:12},toolCalls:[],served:{provider:'openrouter',model:'anthropic/claude-opus-4.6'}});
  } finally { await fake.close(); }
 });
 

@@ -1117,6 +1117,7 @@
   "logActProviderKeySet": "حط مفتاح API بتاع",
   "logActProviderKeyRemoved": "شال مفتاح API بتاع",
   "logActProviderSwitched": "كمّل طلب على الحساب اللي بعده في",
+  "logActFallbackModelUsed": "ردّ على طلب بالموديل البديل",
   "logAppOn": "متوصل",
   "logAppOff": "مش متوصل",
   "sheetTabs": "البطاقة",
