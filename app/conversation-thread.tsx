@@ -90,9 +90,6 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {messages,pending}=record;
- // The open Run moves its Agent's tile in the sidebar, from the page and from a Card's sheet alike (#184). A Run waiting
- // on its person's answer (#138) is not working, as the reference's Run has ended when its question card is drawn.
- useReportRun(record.conversation.agent_id??undefined,pending&&!record.asking);
  // The sidebar's Agents and the board come from the server render: an Agent Lead makes while the record is asked for
  // again, or a Card's new column, is only on the page once the server parts are drawn again, so they show without a
  // reload.
@@ -245,7 +242,13 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const working=pending&&!record.asking;
  // An Agent's reply, not a decision drawn as its message.
  const newest=messages.findLast(message=>message.author==='agent'&&message.kind!=='decided')?.id??null;
- const landing=useLanding({working,live:useLiveSteps({company,conversation:conversation.id},working),newest});
+ const steps=useLiveSteps({company,conversation:conversation.id},working);
+ const landing=useLanding({working,live:steps,newest});
+ // The open Run's face, on the page and in a Card's sheet alike (#184, #700): thinking until its first step, working
+ // after it, done once it ended well in front of the reader. A Run waiting on its person's answer (#138) has ended for
+ // the face, as the reference's has when its question card is drawn, and waits on them; one that failed or was stopped
+ // shows the state the sidebar reads for it.
+ useReportRun(conversation.agent_id,working?(steps&&(steps.steps.length||steps.now)?'working':'thinking'):failed||record.asking?'ended':'well');
  const live=landing.view;
  const rise=(index:number)=>rises(drawn[index])&&!(messages[index].author==='agent'&&landing.landed(messages[index].id))?' msg-in':'';
  // A message's time: in UTC on the server and the first browser render, hidden (globals.css), then in the reader's own
@@ -309,7 +312,7 @@ export function ConversationComposer({company,conversation,record,writer,asked,b
  // A waiting message the Engine refused for the Conversation's model (#158) is told as a sent one is, while it is the latest.
  const last=record?.messages.at(-1); const refused=last?.kind==='queued'&&last.failed&&last.model_refused?{key:`${last.created_at}:${last.body}`,text:last.body}:undefined;
  return <>
-  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} voice={conversation.agent_id?{company,agent:conversation.agent_id}:undefined} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
+  {writer?<MessageBox ref={box} placeholder={t('writeTo',conversation.agent_name)} model={{company,conversation:conversation.id,agent:conversation.agent_name}} voice={conversation.agent_id?{company,agent:conversation.agent_id}:undefined} to={conversation.agent_id} refused={refused} stop={working&&canStop?{label:c('conversationStop',conversation.agent_name),run:async()=>{
    const failure=await postMessage({company,conversation:conversation.id,intent:'stop'});
    if(!failure) asked();
    return failure;

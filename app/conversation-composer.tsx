@@ -4,11 +4,14 @@ import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { prefersReducedMotion } from '@/lib/motion';
 import { onComposerFocus, takeComposerFocus } from '@/lib/composer-focus';
-import { commandList, insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
+import { calledAgents, commandList, insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
+import { useReportTyping } from '@/lib/live-runs';
 import { useI18n } from '@/lib/i18n-client';
-import { statusKeys } from '@/lib/agent-details.mjs';
+import { faceStateWords, type AgentFaceState } from '@/lib/agent-face-states';
+import { useAgentStates } from './sidebar-live';
 import { ShellIcon } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
+import { playMoment } from '@/components/face-life';
 import { firstName } from '@/lib/channels';
 import { AppTile } from '@/components/app-tile';
 import { markOf, modelMarkOf } from '@/lib/app-mark.mjs';
@@ -71,7 +74,7 @@ function useSendFlights() {
  return {fly,drawn};
 }
 export type CallablePerson={id:string,name:string,role?:'owner'|'manager'|'contributor'|'viewer'};
-export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:keyof typeof statusKeys,role?:string|null};
+export type CallableAgent={id:string,connection_id:string,name:string,speciality?:string|null,status?:AgentFaceState,role?:string|null};
 export type Callable={people:CallablePerson[],agents:CallableAgent[]};
 const CallableAgents=createContext<CallableAgent[]>([]);
 export function CallableAgentsProvider({agents,children}:{agents:CallableAgent[],children:ReactNode}) {
@@ -86,7 +89,8 @@ export function ComposerPlaceProvider({place,children}:{place:ComposerPlace|null
 // The Commands "/" offers (design-reference: CMDS), the same list the "+" menu names: each job command whose Agent this
 // Member sees, naming it, then "/agent" (#159; lib/composer-mentions.mjs commandList).
 type Command={command:string,label:string,agent?:string};
-export type Suggestion={kind:'people'|'agents'|'commands',insert:string,person?:CallablePerson,agent?:CallableAgent,command?:Command};
+// `named`: the Agent's name is written after the @, whole or its first word (a token holds no space), so it perks up.
+export type Suggestion={kind:'people'|'agents'|'commands',insert:string,person?:CallablePerson,agent?:CallableAgent,command?:Command,named?:boolean};
 // design-reference: mentionMenu. A channel's "@" offers its other Members, then its Agents; a note's the same without
 // Commands; a Conversation's the Agents the Member sees. Each name and command is narrowed by what follows the token.
 export function mentionSuggestions(callable:Callable,token:{type:string,q:string},withCommands:boolean):Suggestion[] {
@@ -95,7 +99,7 @@ export function mentionSuggestions(callable:Callable,token:{type:string,q:string
  const matches=token.type==='/'&&withCommands?commandList(callable.agents).filter(item=>item.command.slice(1).toLowerCase().startsWith(token.q)):[];
  return [
   ...people.map(person=>({kind:'people' as const,insert:`@${firstName(person.name)} `,person})),
-  ...agents.map(agent=>({kind:'agents' as const,insert:`@${agent.name} `,agent})),
+  ...agents.map(agent=>({kind:'agents' as const,insert:`@${agent.name} `,agent,named:!!token.q&&[agent.name,agent.name.split(/\s/)[0]].some(name=>name.toLowerCase()===token.q)})),
   ...matches.map(command=>({kind:'commands' as const,insert:`${command.command} `,command})),
  ];
 }
@@ -105,29 +109,44 @@ const roleLabels={owner:'owner',manager:'manager',contributor:'contributor',view
 // field keeps the keyboard and points at it with aria-activedescendant.
 export function MentionPop({listId,label,items,index,pick}:{listId:string,label:string,items:Suggestion[],index:number,pick:(at:number)=>void}) {
  const {t}=useI18n();
+ // Each Agent's state as the sidebar last read it (app/sidebar-live), else the one it was listed with.
+ const stateOf=useAgentStates();
  const rows:ReactNode[]=[]; let section:Suggestion['kind']|undefined;
  items.forEach((item,at)=>{
   if(item.kind!==section) rows.push(<div key={`label-${at}`} className="menu__label">{t(sectionLabels[item.kind])}</div>);
   section=item.kind;
+  const status=item.agent&&(stateOf(item.agent.id)??item.agent.status);
   rows.push(<button key={`${item.kind}-${at}`} type="button" className="menu__item" role="option" id={`${listId}-${at}`} aria-selected={at===index} tabIndex={-1}
    onMouseDown={event=>event.preventDefault()} onClick={()=>pick(at)}>
    {item.person&&<><span className="me__av lg-av" style={{'--av':'22px'} as CSSProperties} aria-hidden="true">{Array.from(item.person.name.trim())[0]||'?'}</span>
     <span className="menu__t">{item.person.name}{item.person.role&&<span className="menu__d">{t(roleLabels[item.person.role])}{item.person.role==='viewer'&&` · ${t('mentionReadsOnly')}`}</span>}</span>
     <bdi className="menu__hint" dir="auto">@{firstName(item.person.name)}</bdi></>}
-   {item.agent&&<><span aria-hidden="true"><AgentFace agent={item.agent.id} size={24} state={item.agent.status}/></span>
-    <span className="menu__t"><bdi>{item.agent.name}</bdi>{(item.agent.status||item.agent.speciality)&&<span className="menu__d">{item.agent.status&&t(statusKeys[item.agent.status])}{item.agent.status&&item.agent.speciality&&' · '}{item.agent.speciality&&<bdi>{item.agent.speciality}</bdi>}</span>}</span></>}
+   {item.agent&&<><PerkingFace agent={item.agent.id} state={status} named={!!item.named}/>
+    <span className="menu__t"><bdi>{item.agent.name}</bdi>{(status||item.agent.speciality)&&<span className="menu__d">{status&&t(faceStateWords[status])}{status&&item.agent.speciality&&' · '}{item.agent.speciality&&<bdi>{item.agent.speciality}</bdi>}</span>}</span></>}
    {item.command&&<><ShellIcon name="slash"/><span className="menu__t">{t(item.command.label,item.command.agent)}</span><span className="menu__hint menu__code">{item.command.command}</span></>}
   </button>);
  });
- return <div className="menu" role="listbox" aria-label={label}>{rows}</div>;
+ return <div className="menu" role="listbox" id={listId} aria-label={label}>{rows}</div>;
+}
+// design-reference-orb: perk. The Agent in the @ list perks up each time its name comes to be written after the @.
+function PerkingFace({agent,state,named}:{agent:string,state?:AgentFaceState,named:boolean}) {
+ const wrap=useRef<HTMLSpanElement>(null); const was=useRef<{agent:string,named:boolean}|null>(null);
+ useEffect(()=>{
+  const before=was.current; was.current={agent,named};
+  if(named&&(before?.agent!==agent||!before.named)) playMoment(wrap.current?.querySelector<HTMLElement>('.face--live'),'perk');
+ },[agent,named]);
+ return <span aria-hidden="true" ref={wrap}><AgentFace agent={agent} size={24} state={state}/></span>;
 }
 type SuggestionList={token:{type:string,q:string,start:number,end:number},items:Suggestion[],index:number};
 export type ModelTarget={company:string,conversation:string,agent:string};
 // Why a chosen image, or a set of them, cannot go with this message: the one line under the box (design-reference has
 // no such line, since it takes any file; the Engine reads images only).
 const refusalOf=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
-export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,ref?:Ref<MessageBoxHandle>}) {
+export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,to,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,to?:string|null,ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(''); const [files,setFiles]=useState<File[]>([]); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+ // The Agent being written to listens while the field holds words (#700, lib/live-runs): the chat's own Agent (`to`), or
+ // in a channel each Agent the words name after "@". An empty field, or a sent one, stops it.
+ useReportTyping(!text.trim()?[]:to?[to]:call?calledAgents(text,call.agents):[]);
  const seen=useContext(CallableAgents);
  // A channel's Agents carry no role of their own; the Agents this Member sees do, so each takes its role by id, and its
  // Commands are listed as in a Conversation.
@@ -240,7 +259,7 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   {list&&!dictation.recording&&<MentionPop listId={listId} label={t('mentionSuggestions')} items={list.items} index={list.index} pick={pickEntry}/>}
   <div className="composer__row">
    {dictation.recording?dictation.cancel:<PlusMenu open={plusOpen} setOpen={next=>{ if(next) setList(null); setPlusOpen(next); }} callable={callable} channel={!!call} model={model} attach={attach} pickFile={()=>picker.current?.click()} insert={insertAtCaret} field={()=>field.current?.focus()} fail={setError}/>}
-   <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={dictation.writing?t('chatDictationWriting'):placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list&&!dictation.recording} aria-activedescendant={list&&!dictation.recording?`${listId}-${list.index}`:undefined}
+   <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={dictation.writing?t('chatDictationWriting'):placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list&&!dictation.recording} aria-controls={list&&!dictation.recording?listId:undefined} aria-activedescendant={list&&!dictation.recording?`${listId}-${list.index}`:undefined}
     onChange={event=>{ const value=event.target.value; setText(value); setKey(newId()); updateList(value,event.target.selectionStart??value.length); }} onKeyDown={typeKeys}/>
    {dictation.recording&&dictation.wave}
    {dictation.recording&&dictation.clock}

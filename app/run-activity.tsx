@@ -6,6 +6,7 @@
 // with the words of its own catalogue. When the stream cannot be read, the page keeps its "is working on a reply" line.
 import { useEffect, useState } from 'react';
 import { AgentFace } from '@/components/agent-face';
+import { useAgentState } from '@/app/sidebar-live';
 import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
 import type { LiveLine, LiveView } from '@/lib/live-steps.mjs';
 
@@ -89,9 +90,11 @@ export function ActivityLine({view,agent,face,c,cb}:{view:LiveView,agent:string,
 // The Agent's turn while it works: its sender line and the steps it finished so far, in the list the reply will carry,
 // open as the person left it for this Run (`open`, `toggled`).
 export function LiveTurn({view,agent,face,c,cb,open,toggled}:{view:LiveView,agent:string,face:string,c:StepsText,cb:StepsBidiText,open:boolean,toggled:(open:boolean)=>void}) {
+ // Its face is 24px and alive, in the state the chat's head and the sidebar show (#700); past replies are 20px and still.
+ const state=useAgentState(face,'working');
  if(!view.steps.length) return null;
  return <li className="turn turn--agent msg" data-author="agent" data-live>
-  <div className="sender"><span aria-hidden="true"><AgentFace agent={face} size={24} state="working"/></span><bdi>{agent}</bdi></div>
+  <div className="sender"><span aria-hidden="true"><AgentFace agent={face} size={24} state={state} live/></span><bdi>{agent}</bdi></div>
   <StepsList steps={{list:view.steps,seconds:null}} c={c} cb={cb} opened={open} toggled={toggled}/>
  </li>;
 }

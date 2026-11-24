@@ -82,7 +82,7 @@ test('the face is silent for a screen reader, and its glow is never cut off by i
 });
 
 function Reading({ agent, open, state = 'idle' }: { agent: string, open: boolean, state?: 'idle' | 'working' | 'waiting' }) {
- useReportRun(agent, open);
+ useReportRun(agent, open ? 'thinking' : 'well');
  return <AgentFace agent={agent} size={56} state={state} dot live/>;
 }
 const shown = () => ({ state: faceOf('lead').dataset.state, dot: document.querySelector('.fw > .dot')!.className });

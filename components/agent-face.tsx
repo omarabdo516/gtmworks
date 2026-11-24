@@ -3,14 +3,14 @@ import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
 import '@/app/face.css';
 import { lookStyle } from '@/lib/agent-look';
 import { useAgentLook } from '@/lib/agent-looks-client';
-import { useLiveRun } from '@/lib/live-runs';
+import { shownState, useChatKnows } from '@/lib/live-runs';
 import { faceStateChanged, watchFace, type FaceState } from './face-life';
 
 // An Agent's face: the approved orb in the Agent's own look (decision 0067, ADR 0027; design-reference-orb faceHTML),
 // asked for by the Agent's id from the Company's looks (lib/agent-looks-client), at the size its place takes. From 24px
-// it is alive (components/face-life); under 24px it is a still orb with eyes. Its expression is `state`; `live` lets the
-// Run open in the Conversation this person reads show it thinking and then done (lib/live-runs), unless it waits on
-// them. `dot` adds the state dot. The face is silent for assistive technology: the name and the state in words beside
+// it is alive (components/face-life); under 24px it is a still orb with eyes. Its expression is `state`, the state the
+// server last told; `live` adds what the chat this person has open knows (lib/live-runs: listening, thinking, working,
+// done), so every live face of one Agent shows the same. `dot` adds the state dot. The face is silent for assistive technology: the name and the state in words beside
 // it say who and how. A record that names no Agent, only the name it keeps (#702: one detached before its Agent's id
 // was kept), shows that name's first letter, as a person does.
 export function AgentFace({agent,name,...face}:{agent:string|null|undefined,name?:string,size:number,state?:FaceState,dot?:boolean,live?:boolean}) {
@@ -20,8 +20,8 @@ export function AgentFace({agent,name,...face}:{agent:string|null|undefined,name
 
 function Orb({agent,size,state='idle',dot=false,live=false}:{agent:string|null|undefined,size:number,state?:FaceState,dot?:boolean,live?:boolean}) {
  const look=useAgentLook(agent);
- const run=useLiveRun(live?agent??undefined:undefined);
- const shown:FaceState=run&&state!=='waiting'?run:state;
+ const chat=useChatKnows(live?agent:undefined);
+ const shown=shownState(state,chat);
  const still=size<24, big=size>=48;
  const face=useRef<HTMLSpanElement>(null);
  useEffect(()=>still?undefined:watchFace(face.current!),[still]);

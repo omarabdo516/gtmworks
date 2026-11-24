@@ -3,6 +3,8 @@ import { Suspense, createContext, memo, use, useCallback, useEffect, useLayoutEf
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { AgentFace } from '@/components/agent-face';
+import { useAgentState } from '@/app/sidebar-live';
+import { Greeting } from '@/components/face-moments';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent, type DetailsPanel } from '@/app/agent-details';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 import type { DetailsTab } from '@/lib/agent-details.mjs';
@@ -73,7 +75,9 @@ function ChatHead({panel,slug,agent,conversation,title,writer,board}:{panel:Deta
  const record=live?.record; const corner=record?record.board:board;
  // The pill shakes once when its Card starts waiting while the chat is open (design-reference: syncWaitMarks).
  const fresh=useNewlyWaiting(corner?.column==='waiting'?[corner.card]:[]);
- return <HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true"><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} live/></span>} title={record?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/>;
+ // The head's face shows the Agent's state as the sidebar's tile does (app/sidebar-live), with what this chat knows.
+ const state=useAgentState(conversation.agent_id??'');
+ return <><Greeting agent={conversation.agent_id}/><HeadPill panel={panel} agent={agent?.name} face={<span aria-hidden="true" data-greet><AgentFace agent={conversation.face} name={conversation.agent_name} size={32} state={state} live/></span>} title={record?conversationTitle({morningDay:record.morningDay,body:record.messages[0]?.body,file:record.messages[0]?.files?.[0]?.name,agent:conversation.agent_name},t,language):title} titleDir="auto" corner={corner&&<CornerPill slug={slug} board={corner} writer={writer} fresh={fresh.has(corner.card)} c={c}/>}/></>;
 }
 
 // The chat head's own menu (#674; design-reference-card: #chat-more, popHTML 'chat'): archive the Conversation, or

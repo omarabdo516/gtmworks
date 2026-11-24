@@ -25,6 +25,7 @@ test('each Agent the reader sees carries its one state and where it failed; one 
  assert.equal(faces.of('a2').state, 'waiting');
  assert.equal(faces.of('a2').working, true);
  assert.equal(faces.of('a3').state, 'asleep');
+ assert.deepEqual(faces.states, { a1: 'stuck', a2: 'waiting', a3: 'asleep' }, 'what the sidebar\'s poll carries to the browser: the state alone');
  assert.deepEqual(faces.of('hidden'), { state: 'idle', working: false, waiting: false, failedAt: null, failedIn: null, lastWorkAt: null, createdAt: null, wokenAt: null });
 });
 
@@ -32,6 +33,7 @@ test('a read that fails says so, and every face is idle rather than a guess', as
  const faces = await agentFaceStates(/** @type {any} */ (database({ agent_face_states: { data: null, error: { message: 'down' } } })), 'co-1');
  assert.equal(faces.available, false);
  assert.equal(faces.of('a1').state, 'idle');
+ assert.deepEqual(faces.states, {});
 });
 
 test('a failure in a Conversation or on a Card names that place', async () => {

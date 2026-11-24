@@ -1,6 +1,6 @@
 import type { supabase } from './supabase';
 import type { BoardColumn } from './board-columns.mjs';
-import { agentStatus, type AgentStatus } from './agent-details.mjs';
+import { agentFaceStates, type AgentFaceState } from './agent-face-states';
 import type { SessionUsage } from './engine.mjs';
 import { isModelCause, modelCauseOf, type ModelCause } from './model-causes';
 import { handoverEnding, replyCardColumns, replyCardOf, saidParts, stepsOfReplies, type PermissionChoice, type ReplyCard, type ReplyCardRow, type RunSteps, type SessionTurn } from './conversations';
@@ -48,9 +48,9 @@ export type ChannelSummary=ChannelName&{id:string,unread:number};
 // from the email, and the email only for the Owner and the Managers (decision 0043; `channel_members` leaves it out for
 // everyone else).
 type ChannelMember={person:string|null,name:string,role:MemberRole,invitation:string|null,email:string|null};
-// `only`: shown to the reader in this channel and hidden from them everywhere else. `state` is the Agent's own state
-// (#206), with a Run started by a call in this channel counting as working; never whom that work is for or on what.
-export type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,only:boolean,state:AgentStatus};
+// `only`: shown to the reader in this channel and hidden from them everywhere else. `state` is the Agent's own state for
+// the reader (#699, agent_face_states), a call in this channel included; never whom that work is for or on what.
+export type ChannelAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,only:boolean,state:AgentFaceState};
 // The Card a team channel put on the board (#151): its title, the column it stands in now, the line under it, and
 // whether it waits (a review stage or its chat's wait). Read only for a Member who sees its Agent, as the board reads it.
 type ChannelBoard={card:number,title:string,column:BoardColumn,line:string,waiting:boolean};
@@ -152,9 +152,9 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // The channel's handovers (#150), newest first: the transcript draws the row, the target's answer and Lead's reply of
  // the ones whose message is shown, and the details draw the count and the last four.
  const {data:handed}=await db.rpc('channel_handovers',{ch:channel});
- // Each Agent's own state (#206): what waits on the reader, and its open Runs. It runs as the reader, so only their own
- // state comes back, and only the state is kept below.
- const {data:states}=await db.rpc('agent_states',{c:company});
+ // Each Agent's own state (#699): the one state read, as the reader, so only their own state comes back, and only the
+ // state is kept below. An Agent's turn behind another's on a message is not working yet (#152), there too.
+ const faces=await agentFaceStates(db,company);
  const {data:canWrite}=await db.rpc('conversation_can_write',{c:company});
  // Nobody writes in an archived channel (#675): the database refuses a message there too.
  const writer=!!canWrite&&!found.archived_at;
@@ -203,14 +203,6 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  }
  const people=(members||[]) as ChannelMember[];
  const seen=(agents||[]) as StoredAgent[];
- // A Run open in this channel counts as its Agent working, in addition to the Runs the Agent's own state sees. Runs go
- // one after another (#152), so only the Run being worked on now works: the lowest open place of each message. A second
- // or third Agent still waiting its turn is idle, never "Working".
- const open=((openRuns||[]) as {message_id:number,ordinal:number|null,agent_id:string|null}[]);
- const firstPlace=new Map<number,number>();
- for(const run of open) { const place=run.ordinal??1; firstPlace.set(run.message_id,Math.min(firstPlace.get(run.message_id)??place,place)); }
- const working=new Set(open.filter(run=>(run.ordinal??1)===firstPlace.get(run.message_id)).flatMap(run=>run.agent_id??[]));
- const stateOfAgent=new Map(((states||[]) as {agent:string,running:boolean,waiting_mine:boolean}[]).map(row=>[row.agent,row]));
  // Only who is in a team channel can change it (set_channel_person, set_channel_agent), so only they are named: the
  // Owner first, then the Managers. An invited person is no Member yet, and changes nothing.
  const managers=name.kind==='team'?(['owner','manager'] as const).flatMap(role=>people.filter(member=>!member.invitation&&member.role===role&&member.name).map(member=>({name:member.name,role}))):[];
@@ -251,11 +243,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  return {
   channel:{id:found.id,company:found.company_id,...name},
   members:people,
-  agents:seen.map(agent=>{
-   const own=stateOfAgent.get(agent.id);
-   return {id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.main,only:agent.here_only,
-    state:agentStatus({waitingMine:own?.waiting_mine??false,running:(own?.running??false)||working.has(agent.id)})};
-  }),
+  agents:seen.map(agent=>({id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.main,only:agent.here_only,
+   state:faces.of(agent.id).state})),
   writer,
   manage:!!manager&&name.kind==='team'&&!found.archived_at,
   archive:!!manager&&name.kind==='team',
