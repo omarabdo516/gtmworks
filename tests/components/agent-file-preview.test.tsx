@@ -3,8 +3,8 @@ import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { AgentLibrary } from '@/app/agent-library';
 import { LanguageProvider } from '@/lib/i18n-client';
-import '@/app/shell.css';
 import { fakeClock } from './fake-clock';
+import '@/app/shell.css';
 
 vi.mock('@/lib/link', () => ({ default: (props: { children?: unknown }) => <a {...props as object}/> }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
@@ -89,6 +89,7 @@ test('a file\'s row opens the preview with the keyboard on Download, and the clo
  await vi.advanceTimersByTimeAsync(189);
  expect(dialog()!.open, 'the dialog stays for the whole leave').toBe(true);
  await vi.advanceTimersByTimeAsync(1);
+ expect(dialog()?.open ?? false, 'it is gone once the leave has run').toBe(false);
  vi.useRealTimers();
  await closedBack(screen, 'brief.md');
  // The same row opens it again, and Escape closes it.
