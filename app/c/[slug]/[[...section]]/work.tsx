@@ -282,7 +282,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const decidedHere:Record<string,(item:WaitingItem)=>ReactNode>={
   rule_suggestion:ruleView,
   agent_request:item=><OwnerRequestCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} lead={lead} item={item}/>,
-  agent_key:item=><AgentKeyWaitCard key={`${item.kind}:${item.id}`} item={item}/>,
+  agent_key:item=><AgentKeyWaitCard key={`${item.kind}:${item.id}`} item={item} slug={p.slug}/>,
   agent_access:accessView,
   agent_change:item=><ChangeBoardCard key={`${item.kind}:${item.id}`} slug={p.slug} company={p.company} item={item} alone={!!p.alone}/>,
  };
