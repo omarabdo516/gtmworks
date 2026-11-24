@@ -158,46 +158,5 @@ $$;
 revoke all on function public.conversation_session_marked(uuid,boolean) from public,anon,authenticated;
 grant execute on function public.conversation_session_marked(uuid,boolean) to service_role;
 
--- #673's list, its Conversation branch now asking archived_at: the current list leaves archived ones out and the
--- archived list holds only them. Same signature; the channel branch is #675's.
-create or replace function public.conversation_list(c uuid, q text default null, archived boolean default false, after_at timestamptz default null,
- after_id uuid default null, lim integer default 50, morning text default null, general text default null)
-returns table(kind text, id uuid, agent_id uuid, agent_name text, connection_id uuid, title text, good_morning_day date, channel_kind text, last_at timestamptz, last_body text)
-language sql stable security definer set search_path='' as $$
- with wanted as (select nullif(public.search_fold(coalesce(q,'')),'') as fold),
- listed as (
-  select 'conversation'::text as kind, v.id, v.agent_id, v.agent_name, v.good_morning_day, null::text as channel_kind, null::text as name, v.last_message_at as last_at
-  from public.own_conversations(c) v
-  where (v.archived_at is not null)=archived
-  union all
-  select 'channel', k.id, null, null, null, k.kind, k.name,
-   coalesce((select m.created_at from public.channel_messages m where m.channel_id=k.id order by m.id desc limit 1),k.created_at)
-  from public.channels k
-  where k.company_id=c and public.in_channel(k.id) and not archived
- ),
- page as (
-  select t.* from listed t, wanted w
-  where (after_at is null or (t.last_at,t.id)<(after_at,after_id))
-   and case when w.fold is null then true
-    else position(w.fold in public.search_fold(coalesce(case when t.kind='channel' then coalesce(t.name,general) when t.good_morning_day is not null then morning
-     else public.conversation_title(t.id,t.agent_name) end,'')))>0 end
-  order by t.last_at desc, t.id desc
-  limit least(greatest(coalesce(lim,50),1),100)
- )
- select p.kind, p.id, p.agent_id, p.agent_name, h.connection_id,
-  case when p.kind='channel' then p.name when p.good_morning_day is null then public.conversation_title(p.id,p.agent_name) end, p.good_morning_day, p.channel_kind, p.last_at,
-  case when p.kind='conversation'
-   then (select m.body from public.conversation_messages m where m.conversation_id=p.id and m.body<>'' and m.hand_card is null order by m.id desc limit 1)
-   else (select m.body from public.channel_messages m where m.channel_id=p.id and m.body<>'' and m.hand_card is null order by m.id desc limit 1) end
- from page p left join public.hermes_agents h on h.id=p.agent_id and h.company_id=c
- order by p.last_at desc, p.id desc;
-$$;
-
--- #673's counts, each list counting its own Conversations; the channels' part is #675's.
-create or replace function public.conversation_counts(c uuid) returns jsonb
-language sql stable security definer set search_path='' as $$
- select jsonb_build_object('current',
-  (select count(*) from public.own_conversations(c) v where v.archived_at is null)
-  +(select count(*) from public.channels k where k.company_id=c and public.in_channel(k.id)),
-  'archived',(select count(*) from public.own_conversations(c) v where v.archived_at is not null));
-$$;
+-- #673's All conversations list and counts ask archived_at for the Conversation's part too: re-created once, with the
+-- channel's part beside it, in 20270415999993_archive_channels.sql (#675).

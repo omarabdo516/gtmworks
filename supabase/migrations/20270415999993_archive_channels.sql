@@ -164,7 +164,7 @@ $$;
 
 -- 20270415999988's All conversations (#673): an archived channel is in the Archived list, not the current one, and each
 -- list's count follows (design-reference-card: renderConvos, where a channel is archived and restored as a Conversation
--- is). Every other row is as #673 reads it.
+-- is). An archived Conversation (#674, 20270415999990) is in the Archived list too. Every other row is as #673 reads it.
 create or replace function public.conversation_list(c uuid, q text default null, archived boolean default false, after_at timestamptz default null,
  after_id uuid default null, lim integer default 50, morning text default null, general text default null)
 returns table(kind text, id uuid, agent_id uuid, agent_name text, connection_id uuid, title text, good_morning_day date, channel_kind text, last_at timestamptz, last_body text)
@@ -173,7 +173,7 @@ language sql stable security definer set search_path='' as $$
  listed as (
   select 'conversation'::text as kind, v.id, v.agent_id, v.agent_name, v.good_morning_day, null::text as channel_kind, null::text as name, v.last_message_at as last_at
   from public.own_conversations(c) v
-  where not archived
+  where (v.archived_at is not null)=archived
   union all
   select 'channel', k.id, null, null, null, k.kind, k.name,
    coalesce((select m.created_at from public.channel_messages m where m.channel_id=k.id order by m.id desc limit 1),k.created_at)
@@ -200,13 +200,15 @@ $$;
 revoke all on function public.conversation_list(uuid,text,boolean,timestamptz,uuid,integer,text,text) from public,anon,service_role;
 grant execute on function public.conversation_list(uuid,text,boolean,timestamptz,uuid,integer,text,text) to authenticated;
 
--- How many rows each of All conversations' two lists holds for the reader: `current` and `archived` (#674 fills it).
+-- How many rows each of All conversations' two lists holds for the reader: `current` and `archived`, the reader's own
+-- Conversations (#674) and the channels they are in alike.
 create or replace function public.conversation_counts(c uuid) returns jsonb
 language sql stable security definer set search_path='' as $$
  select jsonb_build_object('current',
-  (select count(*) from public.own_conversations(c))
+  (select count(*) from public.own_conversations(c) v where v.archived_at is null)
   +(select count(*) from public.channels k where k.company_id=c and k.archived_at is null and public.in_channel(k.id)),
-  'archived',(select count(*) from public.channels k where k.company_id=c and k.archived_at is not null and public.in_channel(k.id)));
+  'archived',(select count(*) from public.own_conversations(c) v where v.archived_at is not null)
+  +(select count(*) from public.channels k where k.company_id=c and k.archived_at is not null and public.in_channel(k.id)));
 $$;
 revoke all on function public.conversation_counts(uuid) from public,anon,service_role;
 grant execute on function public.conversation_counts(uuid) to authenticated;
