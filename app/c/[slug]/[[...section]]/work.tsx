@@ -188,7 +188,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // back to the select icon when the mode ends.
  const canSelect=!!(p.canCreate&&p.archiveCards&&!p.focus);
  const startSelecting=()=>{ setLeft(null); setSelected(new Map()); setFocusTo({to:'all'}); };
- const flip=(c:{id:number,title:string})=>setSelected(now=>{ if(!now) return now; const next=new Map(now); if(next.has(c.id)) next.delete(c.id); else next.set(c.id,c.title); return next; });
+ const flip=(c:{id:number,title:string})=>{ dropAsking(); setSelected(now=>{ if(!now) return now; const next=new Map(now); if(next.has(c.id)) next.delete(c.id); else next.set(c.id,c.title); return next; }); };
  useEffect(()=>{ if(focusTo) ({toggle:selectToggle,all:selectAllButton,act:selectedAct})[focusTo.to].current?.focus(); },[focusTo]);
  const stopFace=(agent:string|null)=>{ const own=agent?agentById.get(agent):undefined; return own?<CompanyAgentFace agent={own} size={24}/>:null; };
  const archivedCards=p.archived||[];
@@ -370,7 +370,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   </div>
   {selected&&<div className="bsel" role="region" aria-label={t('boardSelecting')}>
    <span className="bsel__n" aria-live="polite">{t('boardSelectedCount','\u0000').split('\u0000')[0]}<b className="num">{selected.size}</b>{t('boardSelectedCount','\u0000').split('\u0000')[1]}</span>
-   <button ref={selectAllButton} type="button" className="link-btn" onClick={()=>{ const shownNow=showArchived?archivedShown:boardColumns.flatMap(inColumn); setSelected(now=>{ const next=new Map(now); for(const c of shownNow) next.set(c.id,c.title); return next; }); setFocusTo({to:'act'}); }}>{t('boardSelectAllShown')}</button>
+   <button ref={selectAllButton} type="button" className="link-btn" onClick={()=>{ dropAsking(); const shownNow=showArchived?archivedShown:boardColumns.flatMap(inColumn); setSelected(now=>{ const next=new Map(now); for(const c of shownNow) next.set(c.id,c.title); return next; }); setFocusTo({to:'act'}); }}>{t('boardSelectAllShown')}</button>
    <span className="od-fill"/>
    <button type="button" className="btn btn--secondary btn--sm" onClick={endSelecting}>{t('cancel')}</button>
    <button ref={selectedAct} type="button" className="btn btn--primary btn--sm" disabled={!selected.size} onClick={()=>{ const ids=[...selected.keys()]; if(showArchived) restore(ids); else archive(ids); }}><ShellIcon name={showArchived?'restore':'archive'}/><span>{t(showArchived?'boardRestoreSelected':'boardArchiveSelected')}</span></button>
