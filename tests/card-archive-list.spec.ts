@@ -10,11 +10,13 @@ const company = '10000000-0000-0000-0000-000000000001';
 const reviewer = '20000000-0000-0000-0000-000000000003';
 const board = '/c/rs-learning/work/board';
 
-// Sixty archived Cards of RS Learning, an hour apart, the first archived first: the oldest titled in Arabic.
+// Sixty archived Cards of RS Learning, an hour apart, the first archived first: the oldest titled in Arabic. A retry on
+// the same lane keeps the file's data, so they are made once.
 function sixtyArchived() {
  query(`insert into public.work_cards(company_id,stage_id,title,archived_at,archived_by)
   select s.company_id,s.id,case when g=1 then 'مُــهمّة إعلانات ديسمبر' else 'Archived plan '||lpad(g::text,2,'0') end,now()-interval '100 hours'+make_interval(hours=>g),'${reviewer}'
-  from generate_series(1,60) g, (select company_id,id from public.work_stages where company_id='${company}' and board_column='progress' order by position limit 1) s`);
+  from generate_series(1,60) g, (select company_id,id from public.work_stages where company_id='${company}' and board_column='progress' order by position limit 1) s
+  where not exists (select 1 from public.work_cards where company_id='${company}' and title='Archived plan 60')`);
 }
 
 test('the archive list shows fifty archived Cards, newest first, "Show more" adds the rest, and its search finds one past the first page', async ({ page }) => {
@@ -41,7 +43,7 @@ test('the archive list shows fifty archived Cards, newest first, "Show more" add
  await expect(rows).toHaveCount(1);
  await expect(rows.first()).toContainText('مُــهمّة إعلانات ديسمبر');
  await page.getByRole('searchbox', { name: 'Search archived cards' }).fill('plan 0');
- await expect(rows).toHaveCount(9);
+ await expect(rows).toHaveCount(8);
  await page.getByRole('searchbox', { name: 'Search archived cards' }).fill('nothing like it');
  await expect(page.getByText('No archived cards match these filters')).toBeVisible();
  await page.getByRole('searchbox', { name: 'Search archived cards' }).fill('مهمه');
