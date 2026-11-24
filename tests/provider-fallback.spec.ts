@@ -96,11 +96,11 @@ test('with None, a request that ran out of every ChatGPT account asks no other k
  expect(callsOf(run)).toEqual(['openai-codex:c0dex1','openai-codex:c0dex2']);
  expect(fallbacksOf(run)).toEqual([]);
  expect(fake.settings.modelCalls.some(call=>call.provider==='anthropic')).toBe(false);
- // #642: the Engine's text named when the usage resets (in 4h 12m), so the line says so, in the reader's own zone.
+ // #642: the Engine's text named when the usage resets (in 120h 58m, as measured), so the line says so, in the reader's own zone.
  const resets=rows<{resets_at:string}>(`select resets_at from public.conversation_run_resets where run_id='${run}'`);
  expect(resets).toHaveLength(1);
- expect(Math.abs(Date.parse(resets[0].resets_at)-Date.now()-(4*60+12)*60_000)).toBeLessThan(5*60_000);
- await expect(page.locator('.convo-status[role="alert"] time')).toContainText('Its usage resets on');
+ expect(Math.abs(Date.parse(resets[0].resets_at)-Date.now()-(120*60+58)*60_000)).toBeLessThan(5*60_000);
+ await expect(page.locator('.convo-status[role="alert"] time')).toContainText('The usage resets on');
  await testInfo.attach('chat-out-of-access',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
  // #642: the next message, with both accounts already marked exhausted, makes no model call: the Engine fails it at once
  // with its usage-limit line, and the chat says the same, with when the usage resets (~121h), not "could not finish".

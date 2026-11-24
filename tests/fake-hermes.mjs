@@ -96,7 +96,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // A Run that finds every account already exhausted makes no model call and fails at once with the gateway's
   // usage-limit line instead (#642, measured), `usageLimitText`.
   usageLimitText:usageLimitError,
-  noAccountText:'ChatGPT rate-limited every one of 3 attempts — its usage limit resets in 4h 12m. Send /retry after that, or switch models with /model. To avoid this in future, add a backup provider with `hermes fallback add`.\n\nProvider said: You have hit your usage limit.',
+  noAccountText:usageLimitFirstError,
   configDefaults:/** @type {any} */({}),configSchema:/** @type {{fields:Record<string,any>,category_order:string[]}} */({fields:{},category_order:[]}),
   configWriteFail:/** @type {Set<string>} */(new Set()),
   // Audio (#162; hermes_cli/web_routers/audio.py 223-352): the sound the speak route answers with, the provider's refusal

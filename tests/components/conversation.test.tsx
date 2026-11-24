@@ -218,8 +218,8 @@ for (const language of ['en', 'ar'] as const) for (const reason of ['credit', 'k
 // #642: a reply that failed because every account ran out says when the usage resets, in the reader's own zone, when the
 // Engine named it, with no retry; with no reset named it says only that the accounts ran out.
 for (const [language, ran, resets, fix] of [
- ['en', 'Mona could not reply: every account it can use has run out of usage for now.', 'Its usage resets on', 'Add an account or choose a fallback model in Providers'],
- ['ar', 'Mona مقدرش يرد: كل الحسابات اللي يقدر يستخدمها خلص استخدامها دلوقتي.', 'استخدامه هيتجدّد يوم', 'ضيف حساب أو اختار موديل بديل من المزوّدين']] as const) test(`in ${language} a reply that ran out of usage says when it resets`, async () => {
+ ['en', 'Mona could not reply: every account it can use has run out of usage for now.', 'The usage resets on', 'Add an account or choose a fallback model in Providers'],
+ ['ar', 'Mona مقدرش يرد: كل الحسابات اللي يقدر يستخدمها خلص استخدامها دلوقتي.', 'الاستخدام هيتجدّد يوم', 'ضيف حساب أو اختار موديل بديل من المزوّدين']] as const) test(`in ${language} a reply that ran out of usage says when it resets`, async () => {
  const resetsAt = '2027-05-01T19:24:00.000Z';
  const screen = await render(view(talk([asking], { failed: true, modelRefused: { reason: 'access', owner: true, resetsAt } }), language));
  const line = screen.getByRole('alert').filter({ hasText: ran });

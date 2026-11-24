@@ -150,7 +150,7 @@ test('a run that failed on a usage limit is no access, with when the limit reset
  const fake=await fakeHermes(); fake.settings.ending='failed';
  try {
   const run=await startRun({...connection(fake),input:'Hello',sessionKey:'s',idempotencyKey:'k'});
-  for(const [sentence,seconds] of [[usageLimitFirstError,(120*60+58)*60],[usageLimitError,121*3600],[fake.settings.noAccountText,(4*60+12)*60],
+  for(const [sentence,seconds] of [[usageLimitFirstError,(120*60+58)*60],[usageLimitError,121*3600],
    ['⏱️ The AI model service\'s usage limit is reached; it resets in ~45 min. Use /retry after that, or /model to switch models.',45*60]]) {
    fake.settings.failure=sentence;
    const before=Date.now();
