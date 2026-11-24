@@ -30,7 +30,7 @@ insert into decisions
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
   'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)',
-  'public.archived_cards(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[],timestamptz)','public.card_archive_stops(uuid,bigint[])']) fn
+  'public.archived_cards(uuid)','public.archived_card_list(uuid,text,uuid,bigint,timestamptz,bigint,integer)','public.archived_card_count(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[],timestamptz)','public.card_archive_stops(uuid,bigint[])']) fn
  union all select 'public.stop_card_work(uuid,bigint)','exempt','callable inside the database only, by archive_cards, which asks can_see_card for the Card first (#671); it answers nothing'
  union all select 'public.log_conversation_archive(uuid,boolean,uuid)','exempt','callable inside the database only: it writes the log row of a Conversation its own person archived or restored (#674) through log_chat_event, on the chat''s Card when it has one (read under card_agent_visible), else private to that person; it answers nothing'
  union all select 'public.stop_named_channel_run(public.channel_runs,text)','exempt','callable inside the database only, by the worker''s answer_channel_start: it reads the channel''s Card only to ask whether it is archived, and answers nothing'
