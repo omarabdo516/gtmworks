@@ -346,9 +346,9 @@ const recordLeave=(page:Page)=>page.evaluate(()=>{
  document.addEventListener('focusin',event=>{ if((event.target as Element).matches('textarea.composer__input')) seen.push(['composer',location.pathname]); });
  new MutationObserver(()=>{
   const part=document.querySelector('.fr');
-  if(part?.matches('.is-closing')&&!seen.some(([what])=>what==='exit')) seen.push(['exit',part.className,...part.getAnimations().map(run=>{ const {delay,duration}=run.effect!.getTiming(); return `${(run as CSSAnimation).animationName} ${run.playState} delay ${delay}ms for ${duration}ms`; }),location.pathname]);
+  if(part?.matches('.is-closing')&&!seen.some(([what])=>what==='closing')) seen.push(['closing',part.className,...part.getAnimations().map(run=>{ const {delay,duration}=run.effect!.getTiming(); return `${(run as CSSAnimation).animationName} ${run.playState} delay ${delay}ms for ${duration}ms`; }),location.pathname]);
   if(!document.querySelector('.fr-root:not([hidden])')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.pathname]);
- }).observe(document.body,{subtree:true,childList:true,attributes:true});
+ }).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden']});
 });
 const recorded=(page:Page)=>page.evaluate(()=>(window as unknown as {seen:string[][]}).seen);
 for(const motion of ['no-preference','reduce'] as const) test(`the saved answer leaves the question ${motion==='reduce'?'at once':'with the exit'} before Lead's Conversation takes the keyboard, and a failed save stays (#130, reduced motion ${motion})`,async({page,baseURL})=>{
@@ -382,6 +382,6 @@ for(const motion of ['no-preference','reduce'] as const) test(`the saved answer 
  const home=`/c/${slug}/home`;
  const seen=await recorded(page);
  expect(seen.slice(0,2)).toEqual(motion==='reduce'?[['gone',home],['composer',expect.stringMatching(new RegExp(`^/c/${slug}/conversations/`))]]
-  :[['exit','fr is-closing','gw-modal-out running delay 0ms for 190ms',home],['gone',home]]);
+  :[['closing','fr is-closing','gw-modal-out running delay 0ms for 190ms',home],['gone',home]]);
  if(motion!=='reduce') expect(seen[2]).toEqual(['composer',expect.stringMatching(new RegExp(`^/c/${slug}/conversations/`))]);
 });
