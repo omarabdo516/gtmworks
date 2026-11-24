@@ -7,11 +7,11 @@ create temp table isolation_matrix(name text primary key, fixed jsonb not null d
 insert into isolation_matrix(name) values
  ('agent_access_requests'),('agent_change_proposals'),('agent_grants'),('agent_permission_revoked'),('agent_permission_revokes'),('agent_handovers'),('agent_key_waits'),('agent_morning_leases'),('agent_profile_leftovers'),('agent_profiles'),
  ('agent_requests'),('agent_rules'),('approval_steps'),
- ('channel_agents'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
+ ('channel_agents'),('channel_archives'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_fallback_models'),('company_profile_keepers'),('company_profiles'),('company_provider_models'),('company_shared_spaces'),
  ('good_morning_results'),('good_mornings'),
- ('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
+ ('conversation_archives'),('conversation_attachments'),('conversation_messages'),('conversation_notes'),('conversation_queued_turns'),
  ('conversation_run_notes'),('conversation_run_reservations'),('conversation_run_ends'),('conversations'),
  ('held_agent_changes'),('hermes_agents'),
  ('invitation_agent_access'),('lead_agent_requests'),('lead_made_agents'),
@@ -28,6 +28,10 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('agent_handovers', $${"conversation_id": "gen_random_uuid()"}$$),
  -- A Run Stop found open (#478) sits in one place too; this row names a Conversation.
  ('stopped_runs', $${"conversation_id": "gen_random_uuid()", "run_id": "'isolation'"}$$),
+ -- A channel's archive or restore (#675).
+ ('channel_archives', $${"action": "'archived'"}$$),
+ -- A Conversation's archive or restore (#674).
+ ('conversation_archives', $${"action": "'archived'"}$$),
  -- A proposal off the list is kept as refused (#19), which its checks allow with any value.
  ('agent_change_proposals', $${"change": "'model'", "state": "'refused'"}$$),
  -- Good morning's lease (#182) names who holds it and until when.

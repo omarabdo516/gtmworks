@@ -72,5 +72,21 @@
   "stepDone": "تم",
   "stepSkipped": "اتخطى",
   "activityThinking": "بيفكر",
-  "activityWriting": "بيكتب الرد"
+  "activityWriting": "بيكتب الرد",
+  "channelArchiveSection": "أرشفة القناة",
+  "channelArchiveHint": "بتختفي من القنوات عند الكل، ومفيش رسالة فيها بتتمسح.",
+  "channelArchive": "أرشف القناة",
+  "channelRestore": "رجّع القناة",
+  "channelArchiveConfirm": "أرشف القناة؟",
+  "channelStopsRun": "{0} هيوقف شغل في القناة",
+  "channelStopsQuestion": "سؤال {0} {1} هيتقفل من غير إجابة",
+  "channelStopsPermission": "طلب {0} {1} هيتقفل من غير قرار",
+  "channelStopsHand": "الخطوة اللي {0} سلّمها للفريق {1} مش هتستنى حد",
+  "channelArchivedToast": "اتأرشفت",
+  "channelRestoredToast": "رجعت",
+  "channelUndo": "تراجع",
+  "channelArchivedLine": "القناة دي مؤرشفة. محدش بيكتب فيها لحد ما ترجع.",
+  "channelArchiveFailed": "القناة ما اتأرشفتش: يمكن اتأرشفت قبل كده، أو مبقاش ينفع تغيّرها.",
+  "channelRestoreFailed": "القناة ما رجعتش: يمكن رجعت قبل كده، أو مبقاش ينفع تغيّرها.",
+  "channelArchiveCheckFailed": "القناة ما اتأرشفتش: معرفناش نشوف الأرشفة هتوقّف إيه. جرّب تاني."
 }

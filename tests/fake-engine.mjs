@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 // What a Run's input says in words: the text part of its last message when it carries images (#155), or the message
 // itself, so a fake's reply and tools read a person's words as they always did.
 const inputText=/** @param {import('../lib/engine.mjs').RunInput} input */ input=>typeof input==='string'?input:(input.at(-1)?.content.flatMap(part=>part.type==='text'?[part.text]:[]).join('')??'');
-/** @returns {{settings:{ending:'completed'|'failed'|'noModel'|'credit'|'key'|'model',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,sessions:Map<string,import('../lib/engine.mjs').SessionTurn[]>,sessionUsage:Map<string,import('../lib/engine.mjs').SessionUsage>,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed'},runs:FakeRun[],connections:object[],appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string}[],removed:string[],answers:{run:string,question:string,text:import('../lib/engine.mjs').QuestionAnswer}[],permits:{run:string,permission:string,choice:string}[],expire:(run:string)=>boolean,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
+/** @returns {{settings:{ending:'completed'|'failed'|'noModel'|'credit'|'key'|'model',pendingReads:number,reply:(input:string,answers:(string|null)[],choices:(string|null)[])=>string,toolCalls:(input:string)=>import('../lib/engine.mjs').ToolCall[],usage:{input:number,output:number}|null,agentProfile:import('../lib/engine.mjs').ProvidedAgent['state'],questions:(input:string)=>{text:string,choices?:string[],multiple?:boolean}[],unreachableAnswers:number,permissions:(input:string)=>{description:string,command:string,choices?:import('../lib/engine.mjs').PermissionChoice[]}[],unreachablePermits:number,sessions:Map<string,import('../lib/engine.mjs').SessionTurn[]>,sessionUsage:Map<string,import('../lib/engine.mjs').SessionUsage>,apps:Record<string,import('../lib/app-catalogue.mjs').AppState>|'refused'|'unreachable'|'failed',marking:import('../lib/engine.mjs').SessionMark},runs:FakeRun[],connections:object[],appReads:{count:number},agentReads:string[],provided:{name:string,instructions:string}[],removed:string[],answers:{run:string,question:string,text:import('../lib/engine.mjs').QuestionAnswer}[],permits:{run:string,permission:string,choice:string}[],marks:{session:string,archived:boolean}[],expire:(run:string)=>boolean,engineFor:(connection:object)=>import('../lib/engine.mjs').Engine}} */
 export function fakeEngine() {
  const settings={ending:/** @type {'completed'|'failed'|'noModel'|'credit'|'key'|'model'} */('completed'),pendingReads:0,reply:(/** @type {string} */ input)=>`Reply to: ${input}`,toolCalls:/** @type {(input:string)=>import('../lib/engine.mjs').ToolCall[]} */(()=>[]),usage:/** @type {{input:number,output:number}|null} */({input:14000,output:12}),
   // How providing an Agent's own profile ends: with no subscription, a made profile has no model to answer with.
@@ -32,7 +32,9 @@ export function fakeEngine() {
   // listens in; `transcription` replaces the answer with an unavailable, refused or failed one.
   transcript:'The words the engine heard',
   dictationLanguage:/** @type {string|null} */('en'),
-  transcription:/** @type {import('../lib/engine.mjs').Transcription['state']|null} */(null)};
+  transcription:/** @type {import('../lib/engine.mjs').Transcription['state']|null} */(null),
+  // How marking a session archived or not ends (#674).
+  marking:/** @type {import('../lib/engine.mjs').SessionMark} */('marked')};
  // Run ids are unique across fakes, as an engine's are: the database refuses a Member's run already used elsewhere (#287).
  const instance=randomUUID().slice(0,8);
  const runs=/** @type {FakeRun[]} */([]);
@@ -42,6 +44,8 @@ export function fakeEngine() {
  const removed=/** @type {string[]} */([]);
  const answers=/** @type {{run:string,question:string,text:import('../lib/engine.mjs').QuestionAnswer}[]} */([]);
  const permits=/** @type {{run:string,permission:string,choice:string}[]} */([]);
+ // Every session mark asked for (#674).
+ const marks=/** @type {{session:string,archived:boolean}[]} */([]);
  // How many reads of the profile's apps were made.
  const appReads={count:0};
  // The engine's own time limit runs out on the question or the request a run waits for: it stops waiting, and the run
@@ -85,6 +89,7 @@ export function fakeEngine() {
    return dataUrl.startsWith('data:audio/')?{state:'transcribed',text:settings.transcript}:{state:'refused'};
   },
   async dictation() { return {state:'found',language:settings.dictationLanguage}; },
+  async markSession(session,archived) { marks.push({session,archived}); return settings.marking; },
   async session(id) { const turns=settings.sessions.get(id); return turns?{state:'found',turns:structuredClone(turns),usage:settings.sessionUsage.get(id)??null}:{state:'missing',turns:null,usage:null}; },
   // A question still waited for takes the first answer; one answered already says so again; any other is gone.
   async answer(id,question,text) {
@@ -135,5 +140,5 @@ export function fakeEngine() {
    return {state:agents.delete(name)?'removed':'missing'};
   },
  };
- return {settings,runs,connections,appReads,agentReads,provided,removed,answers,permits,expire,engineFor:connection=>{ connections.push(connection); return engine; }};
+ return {settings,runs,connections,appReads,agentReads,provided,removed,answers,permits,marks,expire,engineFor:connection=>{ connections.push(connection); return engine; }};
 }

@@ -18,6 +18,30 @@ test('Card, Member and Agent rows say who changed what', () => {
  const back = describeEntry({ subject: 'card', action: 'card_moved_back', details: { old_column: 'planned', new_column: 'progress' } });
  assert.deepEqual([back.act, back.from, back.to], [['logActMovedBack'], { key: 'boardColPlanned' }, { key: 'boardColProgress' }]);
  assert.deepEqual(['en', 'ar'].map(language => i18n(language).t('logActMovedBack')), ['moved the card back', 'رجّع البطاقة مكانها']);
+ // Archiving and restoring a Card (#670) name the column it left for the archive, and the column it came back to.
+ const cardArchived = describeEntry({ subject: 'card', action: 'card_archived', details: { column: 'progress' } });
+ assert.deepEqual([cardArchived.act, cardArchived.from, cardArchived.to], [['logActArchived'], { key: 'boardColProgress' }, { key: 'logArchive' }]);
+ const cardRestored = describeEntry({ subject: 'card', action: 'card_restored', details: { column: 'done' } });
+ assert.deepEqual([cardRestored.act, cardRestored.from, cardRestored.to], [['logActRestored'], { key: 'logArchive' }, { key: 'boardColDone' }]);
+ assert.deepEqual(['en', 'ar'].map(language => ['logActArchived', 'logActRestored', 'logArchive'].map(key => i18n(language).t(key))),
+  [['archived the card', 'restored the card', 'Archived'], ['أرشف البطاقة', 'رجّع البطاقة', 'الأرشيف']]);
+ // Archiving and restoring a team channel (#675) name the channel, to the archive and back.
+ const channelArchived = describeEntry({ subject: 'company', action: 'channel_archived', details: { channel_id: 'x', channel: 'Spring launch' } });
+ assert.deepEqual([channelArchived.act, channelArchived.obj, channelArchived.from, channelArchived.to], [['logActChannelArchived'], '#Spring launch', undefined, { key: 'logArchive' }]);
+ const channelRestored = describeEntry({ subject: 'company', action: 'channel_restored', details: { channel_id: 'x', channel: 'Spring launch' } });
+ assert.deepEqual([channelRestored.act, channelRestored.obj, channelRestored.from, channelRestored.to], [['logActChannelRestored'], '#Spring launch', { key: 'logArchive' }, undefined]);
+ assert.deepEqual(['en', 'ar'].map(language => ['logActChannelArchived', 'logActChannelRestored'].map(key => i18n(language).t(key))),
+  [['archived the channel', 'restored the channel'], ['أرشف قناة', 'رجّع قناة']]);
+ // Archiving and restoring a Conversation (#674) are its person's own rows, where its other events go (log_chat_event):
+ // the Conversation's title, to the archive and back, whichever subject the row has.
+ for (const subject of ['agent', 'card']) {
+  const chatArchived = describeEntry({ subject, action: 'conversation_archived', details: { title: 'Plan the launch' } });
+  assert.deepEqual([chatArchived.act, chatArchived.obj, chatArchived.from, chatArchived.to], [['logActConversationArchived'], 'Plan the launch', undefined, { key: 'logArchive' }]);
+  const chatRestored = describeEntry({ subject, action: 'conversation_restored', details: { title: 'Plan the launch' } });
+  assert.deepEqual([chatRestored.act, chatRestored.obj, chatRestored.from, chatRestored.to], [['logActConversationRestored'], 'Plan the launch', { key: 'logArchive' }, undefined]);
+ }
+ assert.deepEqual(['en', 'ar'].map(language => ['logActConversationArchived', 'logActConversationRestored'].map(key => i18n(language).t(key))),
+  [['archived the conversation', 'restored the conversation'], ['أرشف المحادثة', 'رجّع المحادثة']]);
  const handed = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'next_actor', old: omar, new: writer } }, { name: id => ({ [omar]: 'عمر', [writer]: 'وكيل المحتوى' })[id] });
  assert.deepEqual([handed.act, handed.from, handed.to], [['logActHandedOver'], { text: 'عمر' }, { text: 'وكيل المحتوى' }]);
  const caption = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'caption', old: 'a', new: 'b' } });

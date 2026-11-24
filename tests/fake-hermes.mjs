@@ -132,6 +132,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   cronReply:/** @type {string|((job:any)=>string)} */('Here is what ran overnight.'),
   routineAsks:/** @type {(input:string)=>{name:string,prompt:string,schedule:string}|null} */(()=>null),
   profilesListStatus:/** @type {number|null} */(null),
+  // Each session archived on a profile ("profile:session", #674), every flag sent to one, and the status a flag is
+  // answered with instead (an Engine busy or going away).
+  archivedSessions:/** @type {Set<string>} */(new Set()),
+  sessionMarks:/** @type {{profile:string,session:string,body:any,authorization?:string}[]} */([]),
+  sessionMarkStatus:/** @type {number|null} */(null),
   // Each reveal of a key's real value (/api/env/reveal), by profile and key, never the value.
   reveals:/** @type {{profile:string,key:string}[]} */([]),
   // The provider keys a profile's .env takes (hermes_cli/web_routers/config_env.py 264-330): each provider's primary
@@ -296,6 +301,20 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    const toolsetsPath=request.url.match(/^\/p\/([^/]+)\/v1\/toolsets$/);
    if(toolsetsPath&&!profileOf(decodeURIComponent(toolsetsPath[1]))&&settings.unknownProfiles.includes(decodeURIComponent(toolsetsPath[1]))) return send(response,404,{error:'Unknown or unconfigured profile'});
    if(toolsetsPath) { const enabled=enabledToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config); return send(response,200,{object:'list',platform:'api_server',data:[...configurable.map(name=>({name,enabled:enabled.includes(name)})),...appToolsets(profileOf(decodeURIComponent(toolsetsPath[1]))?.config)]}); }
+   // A session's sidebar flag (#674; api_server.py _handle_patch_session): archived on the profile's own sessions, a
+   // session the profile does not keep is 404 session_not_found, and a field it does not take is refused.
+   const sessionPatch=request.method==='PATCH'&&request.url.match(/^\/p\/([^/]+)\/api\/sessions\/([^/?]+)$/);
+   if(sessionPatch) {
+    const [owner,id]=[decodeURIComponent(sessionPatch[1]),decodeURIComponent(sessionPatch[2])];
+    const body=JSON.parse(raw||'{}');
+    settings.sessionMarks.push({profile:owner,session:id,body,authorization:request.headers.authorization});
+    if(settings.sessionMarkStatus) return send(response,settings.sessionMarkStatus,{error:{message:'Service unavailable'}});
+    if(Object.keys(body).some(field=>!['title','end_reason','pinned','archived','hidden','unread'].includes(field))) return send(response,400,{error:{message:'Unsupported session fields',code:'unsupported_session_field'}});
+    const kept=settings.sessions.get(id)?.profile===owner||settings.runs.some(run=>run.session===id&&run.profile===owner);
+    if(!kept) return send(response,404,{error:{message:`Session not found: ${id}`,code:'session_not_found'}});
+    if(body.archived===true) settings.archivedSessions.add(`${owner}:${id}`); else if(body.archived===false) settings.archivedSessions.delete(`${owner}:${id}`);
+    return send(response,200,{object:'hermes.session',session:{id,archived:settings.archivedSessions.has(`${owner}:${id}`)}});
+   }
    const runPath=request.url.match(/^\/p\/[^/]+\/v1\/runs(?:\/([^/]+))?$/);
    if(runPath&&request.method==='POST'&&!runPath[1]) {
     const key=request.headers['idempotency-key'];

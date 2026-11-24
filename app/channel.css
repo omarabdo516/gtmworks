@@ -71,3 +71,16 @@
 }
 
 [dir="ltr"] .gw :is(.ch-intro__h, .details .panel-row__t, .details .panel-row__d) { unicode-bidi: plaintext; }
+
+/* Archiving a team channel (#675; design-reference-card/index.html: .ch-arc, .arc-line). The section sits last in its
+   details; its confirmation is the one Cards and Conversations use (app/archive-confirm.css). */
+.gw .details .ch-arc { display: grid; gap: 8px; padding: var(--s3); justify-items: start; }
+.gw .details .ch-arc .set-hint { margin: 0; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); }
+.gw .details .ch-arc .set-err { padding-inline: 0; }
+.gw .details .ch-arc .btn { gap: 6px; --od-icon-size: 14px; }
+.gw .details .ch-arc .btn .gw-icon { width: 14px; height: 14px; }
+.gw .arc-line {
+  display: flex; align-items: center; justify-content: center; gap: 6px; max-width: var(--gw-chat-col); margin: 0 auto 8px; padding: 12px 16px 0;
+  font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-2); text-align: center;
+}
+.gw .arc-line .gw-icon { flex: none; width: 14px; height: 14px; }

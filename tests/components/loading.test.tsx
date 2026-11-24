@@ -15,6 +15,7 @@ import type { ConversationRecord } from '@/lib/conversation-record';
 const Arrived = ({ record, team }: { record: Promise<ConversationRecord>, team: boolean }) => <ConversationLoaded initial={use(record)} team={team}/>;
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-2', useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.fn() }));
 // Links stay on the test page: a new page is the test drawing the next one.
 vi.mock('@/lib/link', () => ({ default: ({ onClick, ...props }: ComponentProps<'a'>) => <a {...props} onClick={event => { onClick?.(event); event.preventDefault(); }}/> }));
 

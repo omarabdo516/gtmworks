@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
 import type { IdeaResult, PlaceResult, UndoResult } from './work';
+import { archiveIntents, type ArchiveAnswer, type ArchiveIntent, type ArchiveStopKind } from '@/lib/archive-stops';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
 // start that fails is left to the worker and logged without the note.
 async function startNoteRun(note:number) {
@@ -42,6 +43,38 @@ export const undoMove=withActionLog('undoMove',async function undoMove(form: For
  if(String(error.message||'').includes('the card moved on')) return {state:'gone'};
  logActionFailure('undoMove',error,{form});
  return {state:'refused'};
+});
+// Archiving and restoring Cards (#670): the database checks the Role and who sees each Card, and answers the Cards it
+// archived or restored; one it left (already archived, hidden, or another Company's) is not in the answer, so the board
+// says so and offers no Undo for it. Every Card asked is tried, as many as the board showed: "Select all shown" and
+// "Archive everything in Done" are one action under one confirmation. An archive answers its version, and its Undo
+// (`undo`, with that version) restores only what that archive archived, so a Card someone restored and archived again
+// meanwhile stays archived.
+export const archiveCards=withActionLog('archiveCards',async function archiveCards(company:string,intent:ArchiveIntent|'undo',ids:number[],version?:string):Promise<ArchiveAnswer<number>> {
+ const db=await supabase();
+ const cards=[...new Set((Array.isArray(ids)?ids:[]).map(Number).filter(Number.isSafeInteger))];
+ const undoing=intent==='undo'&&typeof version==='string'&&!Number.isNaN(Date.parse(version));
+ if(!(archiveIntents.includes(intent as ArchiveIntent)||undoing)||!await actionAllowed(db,'archiveCards',company)) return {state:'refused'};
+ // #671: before archiving, what it would stop, so the board asks once, naming each thing, only when something does.
+ if(intent==='stops') {
+  const {data,error}=await db.rpc('card_archive_stops',{c:company,cards});
+  if(error) { logActionFailure('archiveCards',error); return {state:'refused'}; }
+  return {state:'stops',stops:((data||[]) as {card:number,title:string,kind:ArchiveStopKind,agent:string|null,agent_id:string|null}[])
+   .map(({card,...stop})=>({...stop,about:String(card)}))};
+ }
+ if(intent==='archive') {
+  const {data,error}=await db.rpc('archive_cards',{c:company,cards});
+  if(error) { logActionFailure('archiveCards',error); return {state:'refused'}; }
+  const rows=(data||[]) as {card:number|string,archived_at:string}[];
+  if(!rows.length) return {state:'refused'};
+  revalidatePath('/c/[slug]','layout');
+  return {state:'done',done:rows.map(row=>Number(row.card)),version:rows[0].archived_at};
+ }
+ const {data,error}=await db.rpc('restore_cards',undoing?{c:company,cards,archived:version}:{c:company,cards});
+ if(error) { logActionFailure('archiveCards',error); return {state:'refused'}; }
+ const done=((data||[]) as (number|string)[]).map(Number);
+ if(done.length) revalidatePath('/c/[slug]','layout');
+ return done.length?{state:'done',done}:{state:'refused'};
 });
 // A Card placed where its person drops it, or one place up or down its column (#174): the database decides every refusal
 // and the board answers it in place, so a refused place neither leaves the board nor offers an "Undo" (#168).

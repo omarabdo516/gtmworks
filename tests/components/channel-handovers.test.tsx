@@ -10,6 +10,7 @@ import '@/app/shell.css';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/chat', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: React.ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices: vi.fn() }));
+vi.mock('@/app/channel-archive-actions', () => ({ archiveChannels: vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); });
 
 // #150, #476: a channel's handovers, drawn from gtmworks's own record: the quiet row "{asking Agent} asked {asked Agent}"

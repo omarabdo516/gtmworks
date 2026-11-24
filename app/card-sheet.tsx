@@ -6,9 +6,11 @@ import { useI18n } from '@/lib/i18n-client';
 import { ShellIcon } from '@/components/shell-icon';
 import { BoardIcon } from '@/components/board-icon';
 import { leave } from '@/lib/motion';
+import { toast } from '@/app/toast';
 import { insertToken, tokenAtCaret } from '@/lib/composer-mentions.mjs';
 import { MentionPop, mentionSuggestions, newId, type CallableAgent, type CallablePerson, type Suggestion } from '@/app/conversation-composer';
 import { CardSheetChat, opensOn, type SheetChat } from '@/app/card-sheet-chat';
+import { MoreMenu, type MoreMenuItem } from '@/app/more-menu';
 import './log.css';
 import './sheet.css';
 
@@ -25,10 +27,14 @@ const leaveMs=190;
 // dialog at the inline end, so the board behind it is inert, with the Card's head, its Chat and Log tabs and, on Log,
 // the note field. It opens on the tab the Card's chat calls for, with the keyboard in that tab's field. Closing slides it out first; then the board's own address comes back and the keyboard is on the Card.
 // send is the board's note action (work-actions.ts), handed in so this client file never imports the server module.
+// An archived Card (#670; design-reference-card: cwCalloutHTML's archived branch) opens read-only: its head says who
+// archived it and when, with Restore for a Member who may edit, and neither its log nor its chat takes a word. The head's
+// "More" menu, for a Member who may edit, copies the Card's link and archives or restores it.
 // The note field's "@" offers the Company's other Members and the Agents this Member sees (#154, #22), as a note is
 // written for the team; it offers no Commands, as the reference's note field does not.
-export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alone,message,people=[],agents=[],send:sendNote}:{slug:string,company:string,title:string,face:ReactNode,who:ReactNode,badge:ReactNode,sheet:CardSheetData,canWrite:boolean,alone:boolean,message?:string,people?:CallablePerson[],agents?:CallableAgent[],send:(form:FormData)=>Promise<unknown>}) {
+export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite:mayWrite,alone,message,people=[],agents=[],send:sendNote,archived,archive}:{slug:string,company:string,title:string,face:ReactNode,who:ReactNode,badge:ReactNode,sheet:CardSheetData,canWrite:boolean,alone:boolean,message?:string,people?:CallablePerson[],agents?:CallableAgent[],send:(form:FormData)=>Promise<unknown>,archived?:{by:string,at:string},archive?:{archive:()=>void,restore:()=>void}}) {
  const {t}=useI18n(); const router=useRouter();
+ const canWrite=mayWrite&&!archived;
  const box=useRef<HTMLDialogElement>(null); const logBox=useRef<HTMLDivElement>(null); const stopLeaving=useRef(()=>{}); const stick=useRef(true);
  const [tab,setTab]=useState<SheetTab>(opensOn(sheet.chat)); const [leaving,setLeaving]=useState(false);
  // The note and its suggestion list. The caret follows a pick, as the reference's pickPop leaves it.
@@ -81,14 +87,22 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
  const none=sheet.chat.kind==='none';
  const pick=(next:SheetTab)=>{ if(next==='chat'&&none) return; setTab(next); document.getElementById(`sh-tab-${next}`)?.focus(); };
  const chatLink=sheet.chat.kind==='own'&&`/c/${slug}/conversations/${sheet.chat.record.conversation.id}`;
+ // "Copied" only once the browser took the link; one that refuses the clipboard says so, and the address bar has it.
+ const copyLink=()=>{ const refused=()=>toast(t('cardLinkCopyFailed'),{icon:'x'});
+  try { const writing=navigator.clipboard?.writeText(`${location.origin}${board}?card=${sheet.id}`); if(!writing) { refused(); return; } void writing.then(()=>toast(t('cardLinkCopied'),{icon:'link'}),refused); } catch { refused(); } };
+ const menu:MoreMenuItem[]=archive?[{key:'copy',icon:'link',label:t('cardCopyLink'),run:copyLink},
+  archived?{key:'restore',icon:'restore',label:t('cardRestore'),run:archive.restore}:{key:'archive',icon:'archive',label:t('cardArchive'),run:archive.archive}]:[];
  return <dialog ref={box} className={`sheet${leaving?' is-closing':''}`} aria-labelledby="sheet-title" onCancel={event=>{ if(event.cancelable) { event.preventDefault(); close(); } }} onClose={closed} onClick={event=>{ if(event.target===event.currentTarget) close(); }}>
   <div className="sheet__inner">
    <header className="sheet__head" id="sheet-head">
     <div className="sheet__top">{face}<h2 className="sheet__title" id="sheet-title"><bdi>{title}</bdi></h2>
+     {mayWrite&&menu.length>0&&<MoreMenu label={t('cardMore')} items={menu}/>}
      <button type="button" className="circle-btn" aria-label={t('sheetClose')} onClick={close}><ShellIcon name="x"/></button></div>
     <div className="sheet__meta">{who&&<>{who}<span aria-hidden="true">·</span></>}{badge}
      {chatLink&&<Link className="link-btn" href={chatLink}><ShellIcon name="open"/><span>{t('sheetOpenInChats')}</span></Link>}
-     <Link className="link-btn" href={`${board}/${sheet.id}`}>{t('sheetCardDetails')}</Link></div>
+     {!archived&&<Link className="link-btn" href={`${board}/${sheet.id}`}>{t('sheetCardDetails')}</Link>}</div>
+    {archived&&<section className="sheet-archived" aria-label={t('cardArchived')}><ShellIcon name="archive"/><p className="sheet-archived__q"><bdi>{archived.by}</bdi> · <span className="num">{archived.at}</span></p>
+     {mayWrite&&archive&&<button type="button" className="btn btn--primary btn--sm" onClick={archive.restore}><ShellIcon name="restore"/><span>{t('cardRestoreShort')}</span></button>}</section>}
     <div className="segmented sheet-tabs" role="tablist" aria-label={t('sheetTabs')} onKeyDown={event=>{ if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) { event.preventDefault(); pick(event.key==='Home'?'chat':event.key==='End'?'log':tab==='log'?'chat':'log'); } }}>
      <button type="button" role="tab" id="sh-tab-chat" aria-selected={tab==='chat'} aria-controls={tab==='chat'?'sheet-transcript':undefined} aria-disabled={none||undefined} tabIndex={tab==='chat'?0:-1} onClick={()=>pick('chat')}>{t('sheetTabChat')}</button>
      <button type="button" role="tab" id="sh-tab-log" aria-selected={tab==='log'} aria-controls={tab==='log'?'sheet-log':undefined} tabIndex={tab==='log'?0:-1} onClick={()=>pick('log')}>{t('sheetTabLog')} <span className="num sheet-tabs__n">{sheet.count}</span></button>
@@ -109,7 +123,7 @@ export function CardSheet({slug,company,title,face,who,badge,sheet,canWrite,alon
       </div>
      </form>
      <p className="note-hint" id="note-hint"><BoardIcon name="clock"/><span>{t('noteHint')}</span></p>
-    </>:<p className="ro-line"><BoardIcon name="eye"/><span>{t('noteViewOnly')}</span></p>}</div>
+    </>:archived?<p className="ro-line"><ShellIcon name="archive"/><span>{t('cardArchivedReadOnly')}</span></p>:<p className="ro-line"><BoardIcon name="eye"/><span>{t('noteViewOnly')}</span></p>}</div>
    </>}
     {/* Kept while Log shows, so a message on its way, and the reply it waits for, still land in the chat. */}
     <div className="sheet-pane" hidden={tab!=='chat'}><CardSheetChat slug={slug} company={company} card={sheet.id} chat={sheet.chat} writer={canWrite} shown={tab==='chat'} openLog={()=>pick('log')}/></div></div>

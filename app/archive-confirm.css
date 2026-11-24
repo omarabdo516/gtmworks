@@ -1,0 +1,29 @@
+/* The one archive confirmation of Cards, Conversations and team channels (#671, #674, #675; design-reference-card/index.html:
+   #cw-confirm, .modal--sm.modal--fit, .cf-list, .cf-row, .modal__foot--end): the reference's native dialog, as tall as its
+   lines up to its cap, over the board, a Card's sheet, a chat or a channel. */
+.gw.modal.cf-dlg {
+  --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px;
+  width: min(560px, calc(100vw - 32px)); height: fit-content; max-height: min(820px, calc(100dvh - 48px));
+}
+.gw.modal.cf-dlg::backdrop { background: var(--gw-bg-scrim); }
+.gw.modal.cf-dlg:not([open]) { display: none; }
+.gw.modal.cf-dlg :where(h2, p, ul) { margin: 0; letter-spacing: normal; text-transform: none; }
+.gw.modal.cf-dlg .modal__inner { display: flex; flex-direction: column; max-height: inherit; }
+.gw.modal.cf-dlg .modal__inner > * { flex: none; }
+.gw.modal.cf-dlg .modal__body { flex: 1 1 auto; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--s2) var(--s6) var(--s4); }
+.gw.modal.cf-dlg .cf-list { list-style: none; padding: 0; display: grid; gap: var(--s3); }
+.gw.modal.cf-dlg .cf-row { display: flex; align-items: flex-start; gap: var(--s3); font-size: var(--gw-fs-base); line-height: 1.6; }
+.gw.modal.cf-dlg .cf-face { display: inline-flex; flex: none; margin-top: 1px; }
+.gw.modal.cf-dlg .cf-mark { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--gw-bg-tertiary); color: var(--gw-text-2); }
+.gw.modal.cf-dlg .cf-mark .gw-icon { width: 14px; height: 14px; }
+.gw.modal.cf-dlg .cf-t { min-width: 0; overflow-wrap: anywhere; }
+.gw.modal.cf-dlg .modal__foot--end { justify-content: flex-end; }
+.gw.modal.cf-dlg .modal__foot--end .btn { min-width: 96px; }
+.gw.modal.cf-dlg .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+@media (hover: hover) { .gw.modal.cf-dlg .btn--primary:hover { background: var(--gw-primary-hover); } }
+@media (max-width: 599px) {
+  .gw.modal.cf-dlg .modal__body { padding-inline: var(--s4); }
+  /* 44px touch targets on a phone (PRODUCT.md): the footer buttons keep the reference's 36px with an invisible band. */
+  .gw.modal.cf-dlg .modal__foot--end .btn { position: relative; }
+  .gw.modal.cf-dlg .modal__foot--end .btn::before { content: ""; position: absolute; inset: -4px 0; }
+}

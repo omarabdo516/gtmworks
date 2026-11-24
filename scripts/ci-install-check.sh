@@ -1037,6 +1037,26 @@ db -c 'select name from gtmworks_install.schema_migrations order by name' > befo
 # volume the backup now holds (#349). Identities, the encryption and signing keys, and the migration history come back
 # into a fresh empty install from the one archive.
 lifecycle seed > data.before || fail 'create and read people, companies, cards and files through APIs'
+# An archived Card, Conversation and team channel in each Company (spec #667, ADR 0026): archived is a time and a person
+# on each, and the restore keeps every one archived. The channel is archived after its person is in it, as nobody joins
+# an archived channel.
+db -c "do \$\$ declare k record; person uuid; ch uuid; begin
+ select id into person from public.people where name='Restore Person';
+ for k in select id,slug from public.companies where slug like 'restore-%' loop
+  insert into public.work_cards(company_id,stage_id,title,archived_at,archived_by)
+   select k.id,s.id,'Archived '||k.slug,now(),person from public.work_stages s where s.company_id=k.id and s.kind='ideas';
+  insert into public.conversations(id,company_id,person_id,agent_name,archived_at,archived_by) values (gen_random_uuid(),k.id,person,'Lead',now(),person);
+  ch:=gen_random_uuid();
+  insert into public.channels(id,company_id,kind,name,created_by,create_key) values (ch,k.id,'team','Archived '||k.slug,person,gen_random_uuid());
+  insert into public.channel_people(channel_id,company_id,person_id,added_by) values (ch,k.id,person,person);
+  update public.channels set archived_at=now(),archived_by=person where id=ch;
+ end loop; end \$\$" || fail 'archive a Card, a Conversation and a channel before the backup'
+archived_rows() { db -c "select k.slug||' '||(select count(*) from public.work_cards w where w.company_id=k.id and w.archived_at is not null and w.archived_by is not null)
+ ||' '||(select count(*) from public.conversations v where v.company_id=k.id and v.archived_at is not null and v.archived_by is not null)
+ ||' '||(select count(*) from public.channels c where c.company_id=k.id and c.archived_at is not null and c.archived_by is not null)
+ from public.companies k where k.slug like 'restore-%' order by k.slug"; }
+archived_rows > archived.before || fail 'read the archived rows before the backup'
+[[ $(cat archived.before) == $'restore-one 1 1 1\nrestore-two 1 1 1' ]] || fail 'each Company has an archived Card, Conversation and channel before the backup'
 sh scripts/install.sh backup || fail 'backup'
 first_archive=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
 [[ $(stat -c %a "$first_archive") == 600 ]] || fail 'private backup permissions'
@@ -1048,6 +1068,8 @@ sh scripts/install.sh restore "$first_archive" || fail 'restore'
 cmp .env.install.before .env.install || fail 'restore encryption and signing keys'
 lifecycle verify > data.after || fail 'read restored people, companies, cards and files through APIs'
 diff -u data.before data.after || fail 'restored identities match'
+archived_rows > archived.after || fail 'read the archived rows after the restore'
+diff -u archived.before archived.after || fail 'the restore keeps archived Cards, Conversations and channels archived'
 db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
 diff -u before restored || fail 'restored migration history'
 }

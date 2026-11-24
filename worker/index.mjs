@@ -2,6 +2,7 @@ import { checkSettings } from '../lib/settings.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { closeOpenRuns, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { driveChannelRuns, driveNoteRuns } from '../lib/channel-runs.mjs';
+import { markConversationSessions } from '../lib/conversation-archive.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { driveGoodMornings } from '../lib/good-morning-runs.mjs';
 import { selfHosted as isSelfHosted } from '../lib/company-engine.mjs';
@@ -39,6 +40,8 @@ await Promise.all([loop('Conversation runs',()=>closeOpenRuns(db,{})),loop('Queu
  loop('Channel runs',()=>driveChannelRuns(db,{})),
  loop('Note runs',()=>driveNoteRuns(db,{})),
  loop('Handovers',()=>driveHandovers(db,{})),
+ // Each archived or restored Conversation's session takes the same mark in its Engine once the Engine answers (#674).
+ loop('Conversation archive marks',()=>markConversationSessions(db),5000),
  // Each finished run of a Company's Good morning job becomes that morning's message for its Members (#183).
  loop('Good morning',()=>driveGoodMornings(db),30000),
  selfHosted&&loop('Hermes',async()=>{ await keepCompanyProfiles(db,{waiting}); await keepLeadSouls(db,{}); },2000),

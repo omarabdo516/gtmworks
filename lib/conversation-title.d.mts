@@ -1,0 +1,1 @@
+export function conversationTitle(chat: {morningDay?: string | null, body?: string | null, file?: string | null, agent: string}, t: (key: string, ...values: unknown[]) => string, language: string): string;

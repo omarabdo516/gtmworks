@@ -68,6 +68,8 @@ export type RoutineSchedule={kind:string,expr:string|null,minutes:number|null,di
 export type Routine={id:string,name:string,prompt:string,schedule:RoutineSchedule,timezone:string|null,on:boolean,state:'scheduled'|'paused'|'running'|'completed'|'error',nextRunAt:string|null,lastRunAt:string|null,lastStatus:'ok'|'failed'|null,lastError:string|null};
 export type RoutineList={state:'found',routines:Routine[]}|{state:'refused'|'unreachable'|'failed',routines:null};
 export type RoutineChange={state:'done',routine:Routine}|{state:'missing'|'refused'|'busy'|'unreachable'|'failed'};
+// How marking a conversation's session archived, or not, ended (#674).
+export type SessionMark='marked'|'missing'|'refused'|'unreachable';
 export type StartUnknown={readonly state:'unknown'};
 export function startOutcomeUnknown(result:unknown):result is StartUnknown;
 export type Engine={
@@ -79,6 +81,7 @@ export type Engine={
  answer(run:string,question:string,text:QuestionAnswer):Promise<AnsweredQuestion>,
  permit(run:string,permission:string,choice:PermissionChoice):Promise<AnsweredPermission>,
  session(session:string):Promise<SessionRead>,
+ markSession?(session:string,archived:boolean):Promise<SessionMark>,
  steps?(run:string,read?:{signal?:AbortSignal}):AsyncIterable<RunEvent>,
  createAgent(agent:AgentRequest):Promise<CreatedAgent>,
  readAgent(name:string):Promise<FoundAgent>,
