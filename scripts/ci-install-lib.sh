@@ -130,9 +130,11 @@ complete_setup() {
 # What an Agent was told, and the sign-in its Company made, written in an Engine's own data before an update (#385,
 # #483): the code word $3 in the memory of profile $2 on the Engine container $1, and a Claude sign-in on that Engine.
 # The release areas write them on the release they update and read them back after it (scripts/check-install-update.mjs).
+# Each area waits for the Engine to make the profile first, so only the memories folder written here changes hands: the
+# running Engine's SQLite journal comes and goes in the profile, and a chown over all of it fails on a vanished file (#606).
 tell_engine() {
   docker exec -i "$1" sh -ec \
-    'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1"' \
+    'mkdir -p "/opt/data/profiles/$1/memories"; printf "%s\n" "The company code word is $2." >> "/opt/data/profiles/$1/memories/MEMORY.md"; chown -R hermes:hermes "/opt/data/profiles/$1/memories"' \
     sh "$2" "$3"
 }
 sign_in_engine() {

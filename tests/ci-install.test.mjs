@@ -421,3 +421,31 @@ test('every "publishes no host port" check of the proof asks publishes_host_port
   assert.ok(checks.length > 0);
   for (const line of checks) assert.match(line, /publishes_host_port /, line);
 });
+
+// The Engine is running while a release area writes its memory, so its SQLite journal (`state.db-journal`) can appear
+// and vanish anywhere in the profile; a `chown -R` over the whole profile then fails on the vanished file (#606). A
+// stand-in `docker exec` runs the helper's own script against a scratch data folder with a `chown` that records its
+// arguments: the memory lands in MEMORY.md and only the memories folder it wrote is handed to the Engine's user.
+test('tell_engine hands only the memories folder it wrote to the Engine user, never the live profile', () => {
+  const dir = mkdtempSync(`${tmpdir()}/tell-engine-`);
+  try {
+    const data = `${dir}/data`;
+    spawnSync('mkdir', ['-p', `${data}/profiles/co-1`]);
+    writeFileSync(`${dir}/docker`, [
+      '#!/bin/bash', '[ "$1" = exec ] && [ "$2" = -i ] || exit 2', 'shift 3',
+      '[ "$1" = sh ] && [ "$2" = -ec ] || exit 2', 'body=${3//\\/opt\\/data/$DATA}', 'shift 3',
+      'exec sh -ec "$body" "$@"', '',
+    ].join('\n'));
+    writeFileSync(`${dir}/chown`, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CHOWNS"\n');
+    chmodSync(`${dir}/docker`, 0o755);
+    chmodSync(`${dir}/chown`, 0o755);
+    const out = spawnSync('bash', ['-c', '. scripts/ci-install-lib.sh; tell_engine some-engine co-1 marker-1'], {
+      encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, DATA: data, CHOWNS: `${dir}/chowns` },
+    });
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(readFileSync(`${data}/profiles/co-1/memories/MEMORY.md`, 'utf8'), 'The company code word is marker-1.\n');
+    assert.deepEqual(readFileSync(`${dir}/chowns`, 'utf8').split('\n').filter(Boolean), [`-R hermes:hermes ${data}/profiles/co-1/memories`]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
