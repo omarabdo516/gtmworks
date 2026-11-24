@@ -1,5 +1,11 @@
 [
  {
+  "issue": 642,
+  "date": "2026-11-24",
+  "en": { "title": "A chat that ran out of usage says when it resets", "body": "When every account an Agent can use has run out of usage, the chat now says so even on the messages after the first, and tells you when the usage resets, instead of asking you to send the message again." },
+  "ar": { "title": "المحادثة اللي خلص استخدامها بتقولك إمتى هيتجدّد", "body": "لما كل الحسابات اللي الوكيل يقدر يستخدمها يخلص استخدامها، المحادثة دلوقتي بتقول كده حتى في الرسايل اللي بعد الأولى، وبتقولك الاستخدام هيتجدّد إمتى، بدل ما تطلب منك تبعت الرسالة تاني." }
+ },
+ {
   "issue": 586,
   "date": "2026-11-24",
   "en": { "title": "A Channel opens cleanly in your own time zone", "body": "Outside UTC, a Channel's message and Handover times now appear straight in your own time zone, without the page redrawing itself as it opens." },
