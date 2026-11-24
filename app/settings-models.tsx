@@ -48,18 +48,19 @@ function reasonKey(code:string) {
 // back: the field starts empty and is cleared after it is sent. Provider names are their own brands, in either language.
 export type SpeechData={provider:string|null,missing:Named[]|null};
 const speechRows=[['deepgram','Deepgram Nova-3','settingsSpeechDeepgram'],['elevenlabs','ElevenLabs',''],['openai','OpenAI',''],['groq','Groq','settingsSpeechGroq']] as const;
-type HeldSpeech={provider:string|null,missing:Named[]|null};
 export function SpeechToText({company,owner,data,readAt}:{company:string,owner:boolean,data:SpeechData|null,readAt:number}) {
  const {t}=useI18n();
  // The provider in use and the Agents still waiting for it, as the save's answer read them back (#663).
- const saved=useSave<HeldSpeech>(`speech:${company}`,{provider:data?.provider??null,missing:data?.missing??null},readAt);
+ const saved=useSave<SpeechData>(`speech:${company}`,{provider:data?.provider??null,missing:data?.missing??null},readAt);
  const [open,setOpen]=useState(''); const [value,setValue]=useState(''); const [invalid,setInvalid]=useState(false);
+ // The provider whose row says "Saving": the one being set, or the one being removed.
+ const [sending,setSending]=useState('');
  const [missed,setMissed]=useState<string[]>([]);
  const act=async(provider:string,intent:'set'|'remove')=>{
   if(intent==='set'&&value.trim().length<8) { setInvalid(true); return; }
   // The key leaves the page as it is sent: the form closes and the row says "Saving" while the Engine takes it.
   const key=value.trim();
-  setInvalid(false); setOpen(''); setValue('');
+  setInvalid(false); setOpen(''); setValue(''); setSending(provider);
   const answer=await saved.save({provider:intent==='set'?provider:null,missing:saved.value.missing??[]},
    ()=>send('/api/speech-provider',{company,provider,intent,...(intent==='set'?{value:key}:{})}),
    found=>({provider:typeof found.data?.provider==='string'?found.data.provider:null,missing:Array.isArray(found.data?.missing)?found.data.missing as Named[]:null}));
@@ -75,7 +76,7 @@ export function SpeechToText({company,owner,data,readAt}:{company:string,owner:b
  return <section className="dp-sec" aria-labelledby="md-h-stt" id="md-stt"><Label id="md-h-stt" info={t('settingsSpeechHint')}>{t('settingsSpeech')}</Label>
   {data&&current.missing?<div className="panel-card md-keys" aria-busy={saved.saving||undefined}>{speechRows.map(([id,label,note])=>{ const on=current.provider===id; return <div className="md-key" key={id} id={`mdl-stt-row-${id}`}>
    <div className="panel-row"><ProviderLogo provider={id} name={label} label={label}/><span className="panel-row__text"><span className="panel-row__t"><bdi>{label}</bdi></span>
-    {on&&saved.saving?<span className="panel-row__d is-saving" id={`mdl-stt-${id}-state`} role="status">{t('settingsSaving')}</span>
+    {saved.saving&&sending===id?<span className="panel-row__d is-saving" id={`mdl-stt-${id}-state`} role="status">{t('settingsSaving')}</span>
      :<span className="panel-row__d" id={`mdl-stt-${id}-state`}>{on?t('settingsSpeechInUse'):note?t(note):''}</span>}</span>
     {owner&&on&&<button type="button" className="btn btn--secondary btn--sm" aria-label={t('settingsModelsKeyRemoveLabel',label)} onClick={()=>act(id,'remove')}>{t('settingsModelsKeyRemove')}</button>}
     {owner&&<button type="button" className="link-btn" aria-expanded={open===id} aria-controls={`mdl-stt-${id}-form`} onClick={()=>{ setOpen(open===id?'':id); setValue(''); setInvalid(false); }}>{t(on?'settingsModelsKeyReplace':'settingsSpeechUse')}</button>}

@@ -29,7 +29,8 @@ export function LearningSection({t,slug,company,canManage,owner,data,readAt}:{t:
   {/* The Engine stages a note or Skill write in "Asks first", but its management listener has no route that lists
       them; the section says what the mode does and draws no list this version cannot read. */}
   <section className="dp-sec ln-sugg" aria-labelledby="ln-h-sug"><Label id="ln-h-sug" info={t('settingsLearnSuggestHint')}>{t('settingsLearnSuggestions')}</Label></section>
-  {/* The Company's mode and each Agent's are drawn on the page, so a saved mode is held there with no read (#663). */}
+  {/* The Company's mode and each Agent's are drawn on the page, so a saved mode is held there with no read (#663). Only
+      the fields the modes need cross to the page, not each Agent's learned Skills. */}
   <LearningModes company={company} owner={owner} readAt={readAt} agents={agents?.map(({id,name,own,shared,mode,follow})=>({id,name,own,shared,mode,follow}))??null}/>
   <section className="dp-sec" aria-labelledby="ln-h-rec"><Label id="ln-h-rec">{t('settingsLearnRecent')}{total>0&&<> <span className="muted num">{total}</span></>}</Label>
    {!found?<div className="panel-card"><p className="panel-empty">{t('settingsLearnUnread')}</p></div>

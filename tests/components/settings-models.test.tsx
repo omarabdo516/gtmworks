@@ -411,6 +411,11 @@ test('a speech-to-text key shows its provider in use with "Saving" at once, and 
   engine.answer(200, { provider: 'groq', missing: [{ agent: 'a-1', name: 'Writer' }], failed: [], savedAt: Date.now() });
   await expect.element(screen.getByText(en.settingsSpeechInUse)).toBeVisible();
   await expect.element(screen.getByText(new RegExp(en.settingsSpeechMissing))).toBeVisible();
+  // Removing it says "Saving" on the row it leaves.
+  await screen.getByRole('button', { name: 'Remove the Groq key' }).click();
+  await expect.element(page.elementLocator(document.getElementById('mdl-stt-groq-state')!)).toHaveTextContent(en.settingsSaving);
+  engine.answer(200, { provider: null, missing: [], failed: [], savedAt: Date.now() });
+  await expect.element(screen.getByText(en.settingsSpeechNone)).toBeVisible();
   expect(refresh).not.toHaveBeenCalled();
 });
 

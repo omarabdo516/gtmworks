@@ -5,15 +5,15 @@ import { useI18n } from '@/lib/i18n-client';
 import type { LearningAgent } from '@/lib/company-learning.mjs';
 import { SettingsIcon } from './settings-icons';
 import { Label } from './settings-overlay-parts';
-import { holdSaved, savedAt, send as save, useSave, useSavedEach, type Answer } from './settings-saved';
+import { holdSaved, savedAt, send, useSave, useSavedEach, type Answer } from './settings-saved';
 
 // The Learning section's controls (#28): the Owner's two mode choices for the Company or one Agent, and an Owner's or a
 // Manager's "Forget this" and "Bring it back" on a rule. Each sends one request to a route that checks the Role again
 // (/api/agent-settings, /api/agent-rules). A mode is marked at once and says "Saving" while the Engine writes it, and is
 // then held on the page (app/settings-saved.ts, #663); a rule's change reads the page again.
-async function send(path:string,method:'POST'|'PUT',body:object) {
+async function sendRule(method:'POST'|'PUT',body:object) {
  try {
-  const response=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const response=await fetch('/api/agent-rules',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   return response.ok;
  } catch { return false; }
 }
@@ -72,11 +72,11 @@ export function LearningModes({company,owner,readAt,agents}:{company:string,owne
 function CompanyLearningMode({company,mode,canChange,readAt,agents}:{company:string,mode:Read,canChange:boolean,readAt:number,agents:(ModeAgent&Held)[]}) {
  const {t,language}=useI18n(); const rtl=language==='ar';
  // The value held here is the mode the Company's own space took; what the cards show is what its Agents agree on.
- const saved=useSave<Mode|null>(companyKey(company),mode==='auto'||mode==='ask'?mode:null,readAt);
+ const saved=useSave<Read>(companyKey(company),mode,readAt);
  const shown:Read=saved.saving?saved.value:mode;
  const choose=async(next:Mode)=>{
   if(!canChange||shown===next) return;
-  const answer=await saved.save(next,()=>save('/api/agent-settings',{company,mode:next}),found=>found.data?.mode==='ask'?'ask':found.data?.mode==='auto'?'auto':next);
+  const answer=await saved.save(next,()=>send('/api/agent-settings',{company,mode:next}),found=>modeOf(found,next));
   if(!answer.ok) return;
   const at=savedAt(answer);
   for(const entry of Array.isArray(answer.data?.agents)?answer.data.agents as {agent?:unknown,written?:unknown}[]:[]) {
@@ -115,7 +115,7 @@ function AgentLearningRow({company,owner,readAt,agent}:{company:string,owner:boo
  const choose=async(next:Mode|'follow')=>{
   const follows=next==='follow';
   // Following again takes the Company's mode, which the answer names; until then the row keeps its mode and says "Saving".
-  await saved.save({mode:follows?saved.value.mode:next,follow:follows},()=>save('/api/agent-settings',{company,agent:agent.id,mode:next}),
+  await saved.save({mode:follows?saved.value.mode:next,follow:follows},()=>send('/api/agent-settings',{company,agent:agent.id,mode:next}),
    answer=>({mode:modeOf(answer,follows?saved.value.mode:next),follow:follows}));
  };
  const {mode,follow}=saved.value;
@@ -157,7 +157,7 @@ export function RuleActions({company,rule,body,removed}:{company:string,rule:str
  const {t}=useI18n(); const router=useRouter(); const [pending,startTransition]=useTransition(); const [failed,setFailed]=useState(false);
  const act=(button:HTMLButtonElement)=>startTransition(async()=>{
   setFailed(false);
-  if(!await send('/api/agent-rules',removed?'PUT':'POST',{company,rule})) { setFailed(true); return; }
+  if(!await sendRule(removed?'PUT':'POST',{company,rule})) { setFailed(true); return; }
   const buttons=[...document.querySelectorAll<HTMLButtonElement>('.ln-rule-act')]; const at=buttons.indexOf(button);
   (buttons[at+1]||buttons[at-1]||document.getElementById('ln-h-rec'))?.focus();
   router.refresh();
