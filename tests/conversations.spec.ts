@@ -346,7 +346,8 @@ const where=async(page:Page,selector:string)=>{ const box=(await page.locator(se
 
 test('a Conversation whose record is slow shows the placeholder in its transcript, under its title and over its composer, then its messages at the newest',async({page})=>{
  const placeholders=await watchPlaceholders(page);
- // Only the record reads the Run ends (lib/conversation-record.ts); the page's frame and the sidebar never do.
+ // Only the record reads the Run ends (lib/conversation-record.ts); the page's frame and the sidebar never do. Only this
+ // chat's record waits: the other chats the sidebar prefetches read theirs at once (tests/slow-reads.ts).
  const held=await holdPages(page,url=>url.pathname===slowChatPath);
  asAdmin(slowChatRows.unset); asAdmin(slowChatRows.set);
  try {
@@ -372,7 +373,7 @@ test('a Conversation whose record is slow shows the placeholder in its transcrip
    expect(await transcript.evaluate(box=>box.scrollHeight>box.clientHeight),'the messages are taller than the transcript').toBe(true);
    await expect.poll(()=>transcript.evaluate(box=>box.scrollHeight-box.scrollTop-box.clientHeight)).toBeLessThan(2);
    await expect(messages.last()).toBeInViewport();
-  });
+  },`conversation_id='${slowChat(3)}'`);
   expect(placeholders.seen()).toEqual(['Loading the chat']);
  } finally { held.letGo(); await held.stop(); asAdmin(slowChatRows.unset); }
 });
