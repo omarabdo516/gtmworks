@@ -983,10 +983,11 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     if(!owner) return send(response,404,{detail:'Job not found'});
     const jobs=cronStore(owner); const job=jobs.find(found=>found.id===decodeURIComponent(cronPath[1]));
     if(!cronPath[2]&&request.method==='GET') return send(response,200,annotated(job,owner));
-    // The job's run history, newest first (_list_cron_job_runs_sync): one row per cron session.
+    // The job's run history, newest first (_list_cron_job_runs_sync): one row per cron session. A session the test marks
+    // `active` is a run still going: no end, listed as active (#699).
     if(cronPath[2]==='runs'&&request.method==='GET') {
      const limit=Math.max(1,Math.min(Number(url.searchParams.get('limit')??20),100));
-     const runs=[...settings.sessions].filter(([id,found])=>found.profile===owner&&id.startsWith(`cron_${job.id}_`)).map(([id,found])=>({id,source:'cron',started_at:found.started_at??0,ended_at:found.ended_at??found.started_at??0,is_active:false,title:job.name,profile:owner}))
+     const runs=[...settings.sessions].filter(([id,found])=>found.profile===owner&&id.startsWith(`cron_${job.id}_`)).map(([id,found])=>({id,source:'cron',started_at:found.started_at??0,ended_at:found.active?null:found.ended_at??found.started_at??0,is_active:found.active===true,title:job.name,profile:owner}))
       .sort((a,b)=>b.started_at-a.started_at).slice(0,limit);
      return send(response,200,{runs,limit});
     }
