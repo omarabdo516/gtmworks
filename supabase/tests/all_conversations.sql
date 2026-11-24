@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(29);
 -- All conversations (#673): a person's own Conversations and the channels they are in, newest message first, with a
 -- title search that reads Arabic as the product's search does, a page at a time. RS Learning's seeded Owner (…01), its
 -- Manager (…02) and a Contributor (…03); Faye is shown to nobody but the Owner.
@@ -74,8 +74,15 @@ select is((select array_agg(id::text) from public.conversation_list('10000000-00
 select is((select count(*)::int from public.conversation_list('10000000-0000-0000-0000-000000000001',q=>'Here is the plan')),0,'a search reads the titles, not the messages');
 select is((select count(*)::int from public.conversation_list('10000000-0000-0000-0000-000000000001',q=>'Not the Manager')),0,'nor finds another person''s');
 select is((select count(*)::int from public.conversation_list('10000000-0000-0000-0000-000000000001',q=>'Shh')),0,'nor a channel the reader is not in');
-select is((select count(*)::int from public.conversation_list('10000000-0000-0000-0000-000000000001',archived=>true)),0,'nothing is archived yet');
 select is(public.conversation_counts('10000000-0000-0000-0000-000000000001'),'{"current":5,"archived":0}'::jsonb,'the counts of each list');
+-- An archived Conversation (#674) leaves the current list for the archived one, and is counted there.
+select is((select count(*)::int from public.archive_conversations('10000000-0000-0000-0000-000000000001',array['c6730000-0000-0000-0000-000000000002'::uuid])),1,'the Manager archives one');
+select is((select array_agg(id::text) from public.conversation_list('10000000-0000-0000-0000-000000000001',archived=>true)),
+ array['c6730000-0000-0000-0000-000000000002'],'the archived list holds it');
+select is((select count(*)::int from public.conversation_list('10000000-0000-0000-0000-000000000001') where id='c6730000-0000-0000-0000-000000000002'),0,'the current list leaves it out');
+select is(public.conversation_counts('10000000-0000-0000-0000-000000000001'),'{"current":4,"archived":1}'::jsonb,'and each list counts its own');
+select is((select count(*)::int from public.conversation_list('10000000-0000-0000-0000-000000000001',q=>'weekly',archived=>true)),1,'the archived list is searched as the current one is');
+select is((select count(*)::int from public.restore_conversations('10000000-0000-0000-0000-000000000001',array['c6730000-0000-0000-0000-000000000002'::uuid])),1,'and restores it');
 
 -- A morning's Conversation is searched by its name in the reader's language.
 reset role;

@@ -1,0 +1,203 @@
+-- #674 (spec #667, ADR 0026): a person archives their own Conversations and restores them. Archived is a time and a
+-- person on the Conversation; nothing in it is deleted and no append-only rule changes. Archiving stops what its Agent
+-- is doing there (its open Run, the turns waiting behind it, a Handover it started) through the Stop that exists, and
+-- closes what the Agent asks its person there, so nothing waits on them because of it. Its Card is left alone, as
+-- archiving a Card leaves its Conversation. Every list of current Conversations leaves it out in the database, and a
+-- message written in it, sent or queued, brings it back. The Engine keeps the same mark on the Conversation's session
+-- (the pinned Hermes's own session flag): the worker sends it, so an Engine that is down only delays the mark. The
+-- Agent's memory is the Engine's and is not touched.
+
+alter table public.conversations add column archived_at timestamptz, add column archived_by uuid references public.people(id);
+alter table public.conversations add constraint conversations_archived_by check (archived_at is not null or archived_by is null);
+-- What the Engine last took for the Conversation's session: true archived, false not, null never told (not archived).
+alter table public.conversations add column session_archived boolean;
+-- The sessions whose mark the Engine still has to take, for the worker's pass.
+create index conversations_session_mark on public.conversations(id)
+ where hermes_session_id is not null and (archived_at is not null) is distinct from coalesce(session_archived,false);
+
+-- Stops what an Agent does in one Conversation and closes what it asks its person there, inside the database only. The
+-- chat is stopped as its Stop stops it (stop_open_handovers: its open Run and every Handover it started, kept as stopped
+-- for the worker to stop in the Engine), and the turns waiting behind it never start; a question, a permission request
+-- and a handed step close unanswered. The Conversation itself is left as it is.
+create function public.stop_conversation_work(conversation uuid) returns void
+language plpgsql security definer set search_path='' as $$
+begin
+ perform public.stop_open_handovers(conversation,null);
+ with dropped as (
+  update public.conversation_queued_turns q set failed_at=now()
+   where q.conversation_id=stop_conversation_work.conversation and q.started_at is null and q.failed_at is null
+    and not exists(select 1 from public.conversation_run_reservations r where r.conversation_id=q.conversation_id and r.send_key=q.send_key
+     and r.abandoned_at is null and (r.start_unknown_at is not null or r.start_attempts>0))
+   returning q.send_key)
+ delete from public.conversation_run_reservations r using dropped d
+  where r.conversation_id=stop_conversation_work.conversation and r.send_key=d.send_key and r.abandoned_at is null;
+ update public.reply_cards r set state='closed'
+  where r.conversation_id=stop_conversation_work.conversation and r.kind in ('question','permission','hand') and r.state='open';
+end $$;
+revoke all on function public.stop_conversation_work(uuid) from public,anon,authenticated,service_role;
+
+-- #671's stop of a Card's work, whose chat now stops through the Conversation's own stop above.
+create or replace function public.stop_card_work(c uuid, card bigint, conversation uuid, channel uuid) returns void
+language plpgsql security definer set search_path='' as $$
+declare m bigint;
+begin
+ if conversation is not null then perform public.stop_conversation_work(conversation); end if;
+ if channel is not null then
+  for m in select x.id from public.channel_messages x where x.channel_id=stop_card_work.channel and x.company_id=c
+   and (exists(select 1 from public.channel_runs r where r.message_id=x.id and r.outcome is null)
+    or exists(select 1 from public.agent_handovers h where h.channel_message_id=x.id and h.state not in ('done','failed')))
+   order by x.id loop
+   update public.channel_runs r set outcome='stopped', closed_at=now() where r.message_id=m and r.outcome is null and r.run_id is null and r.attempts=0;
+   perform public.stop_open_handovers(null,m);
+  end loop;
+  update public.reply_cards r set state='closed' from public.channel_messages x
+   where x.id=r.channel_message_id and x.channel_id=stop_card_work.channel and r.kind in ('question','hand') and r.state='open';
+  update public.channel_permissions p set state='closed' where p.channel_id=stop_card_work.channel and p.company_id=c and p.state='open';
+ end if;
+ update public.note_runs n set outcome='stopped', closed_at=now()
+  where n.company_id=c and n.card_id=card and n.outcome is null and n.run_id is null and n.attempts=0;
+ insert into public.stopped_runs(company_id,note_id,run_id)
+  select n.company_id,n.note_id,n.run_id from public.note_runs n where n.company_id=c and n.card_id=card and n.outcome is null and n.run_id is not null
+  on conflict do nothing;
+ update public.waiting_items i set resolved_at=now() where i.company_id=c and i.card_id=card and i.resolved_at is null;
+end $$;
+
+-- What archiving the reader's own named Conversations would stop, one line per thing, for the one confirmation that
+-- names each: the Agent working there (its open Run, a turn waiting behind it or a Handover it started), and the
+-- question, permission request or handed step it waits on its person for. A Conversation with nothing going on answers
+-- nothing, so nothing is asked; one archived already, someone else's or another Company's answers nothing.
+create function public.conversation_archive_stops(c uuid, chats uuid[]) returns table(conversation uuid, kind text, agent text, agent_id uuid)
+language sql stable security definer set search_path='' as $$
+ with chosen as (select v.id, v.agent_id, v.agent_name from public.own_conversations(c) v where v.id=any(chats) and v.archived_at is null),
+ found(id,kind,agent_id,agent_name) as (
+  select v.id, 'run', v.agent_id, v.agent_name from chosen v
+  where exists(select 1 from public.conversation_open_run(v.id))
+   or exists(select 1 from public.conversation_queued_turns q where q.conversation_id=v.id and q.started_at is null and q.failed_at is null)
+   or exists(select 1 from public.agent_handovers h where h.conversation_id=v.id and h.state not in ('done','failed'))
+  union
+  select v.id, r.kind, v.agent_id, v.agent_name from chosen v
+   join public.reply_cards r on r.conversation_id=v.id and r.kind in ('question','permission','hand') and r.state='open'
+  where r.kind='hand' or not exists(select 1 from public.conversation_run_ends u where u.conversation_id=r.conversation_id and u.run_id=r.run_id))
+ select f.id, f.kind, f.agent_name, f.agent_id from found f
+ order by f.id, array_position(array['run','question','permission','hand'],f.kind);
+$$;
+revoke all on function public.conversation_archive_stops(uuid,uuid[]) from public,anon,service_role;
+grant execute on function public.conversation_archive_stops(uuid,uuid[]) to authenticated;
+
+-- Archives the reader's own named Conversations in Company `c`, each once, and answers the ones it archived: a
+-- Conversation that is someone else's, another Company's, hidden from them or archived already is skipped. Each is
+-- stopped and its asks closed first (stop_conversation_work); its Card is not touched. Any Member, a Viewer too, tidies
+-- their own. Refused (42501 conversationArchiveNotAllowed) for anyone outside the Company.
+create function public.archive_conversations(c uuid, chats uuid[]) returns setof uuid
+language plpgsql security definer set search_path='' as $$
+declare v uuid;
+begin
+ if auth.uid() is null or not public.is_member(c) then raise exception 'conversationArchiveNotAllowed' using errcode='42501'; end if;
+ for v in select o.id from public.own_conversations(c) o where o.id=any(chats) and o.archived_at is null order by o.id loop
+  perform 1 from public.conversations x where x.id=v and x.archived_at is null for update;
+  if not found then continue; end if;
+  perform public.stop_conversation_work(v);
+  update public.conversations x set archived_at=now(), archived_by=auth.uid() where x.id=v;
+  return next v;
+ end loop;
+end $$;
+revoke all on function public.archive_conversations(uuid,uuid[]) from public,anon,service_role;
+grant execute on function public.archive_conversations(uuid,uuid[]) to authenticated;
+
+-- Restores the reader's own named archived Conversations, each once, and answers the ones it restored. Restoring starts
+-- nothing: no Run, turn, question or step comes back. Refused (42501 conversationRestoreNotAllowed) outside the Company.
+create function public.restore_conversations(c uuid, chats uuid[]) returns setof uuid
+language plpgsql security definer set search_path='' as $$
+declare v uuid;
+begin
+ if auth.uid() is null or not public.is_member(c) then raise exception 'conversationRestoreNotAllowed' using errcode='42501'; end if;
+ for v in select o.id from public.own_conversations(c) o where o.id=any(chats) and o.archived_at is not null order by o.id loop
+  update public.conversations x set archived_at=null, archived_by=null where x.id=v and x.archived_at is not null;
+  if found then return next v; end if;
+ end loop;
+end $$;
+revoke all on function public.restore_conversations(uuid,uuid[]) from public,anon,service_role;
+grant execute on function public.restore_conversations(uuid,uuid[]) to authenticated;
+
+-- A message its person writes in an archived Conversation brings it back: sent, queued while the Agent answers, or
+-- addressed to a Member. An Agent's reply (a Run closing after the archive) leaves it archived.
+create function public.restore_written_conversation() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+ if tg_table_name='conversation_messages' then
+  if new.author<>'person' then return null; end if;
+ end if;
+ update public.conversations set archived_at=null, archived_by=null where id=new.conversation_id and archived_at is not null;
+ return null;
+end $$;
+revoke all on function public.restore_written_conversation() from public,anon,authenticated,service_role;
+create trigger conversation_messages_restore after insert on public.conversation_messages for each row execute function public.restore_written_conversation();
+create trigger conversation_queued_turns_restore after insert on public.conversation_queued_turns for each row execute function public.restore_written_conversation();
+create trigger conversation_notes_restore after insert on public.conversation_notes for each row execute function public.restore_written_conversation();
+
+-- The worker's: each Conversation whose Engine session has yet to take its archived mark (or lose it), with the
+-- profile of its Agent the session lives on (none once the Agent is gone), a page of 100 at a time.
+create function public.conversation_sessions_to_mark() returns table(conversation uuid, company uuid, profile text, session text, archived boolean)
+language sql stable security definer set search_path='' as $$
+ select v.id, v.company_id, a.profile, v.hermes_session_id, v.archived_at is not null
+ from public.conversations v left join public.hermes_agents a on a.id=v.agent_id and a.company_id=v.company_id
+ where v.hermes_session_id is not null and (v.archived_at is not null) is distinct from coalesce(v.session_archived,false)
+ order by v.id limit 100;
+$$;
+revoke all on function public.conversation_sessions_to_mark() from public,anon,authenticated;
+grant execute on function public.conversation_sessions_to_mark() to service_role;
+
+-- The worker's: the Engine took the mark `archived` for the Conversation's session. Kept only while the Conversation
+-- still is so; a restore or an archive since asks for the other mark on the next pass. True when kept.
+create function public.conversation_session_marked(conversation uuid, archived boolean) returns boolean
+language sql security definer set search_path='' as $$
+ with kept as (update public.conversations v set session_archived=archived
+  where v.id=conversation and (v.archived_at is not null)=archived and v.hermes_session_id is not null returning 1)
+ select exists(select 1 from kept);
+$$;
+revoke all on function public.conversation_session_marked(uuid,boolean) from public,anon,authenticated;
+grant execute on function public.conversation_session_marked(uuid,boolean) to service_role;
+
+-- #673's list, its Conversation branch now asking archived_at: the current list leaves archived ones out and the
+-- archived list holds only them. Same signature; the channel branch is #675's.
+create or replace function public.conversation_list(c uuid, q text default null, archived boolean default false, after_at timestamptz default null,
+ after_id uuid default null, lim integer default 50, morning text default null, general text default null)
+returns table(kind text, id uuid, agent_id uuid, agent_name text, connection_id uuid, title text, good_morning_day date, channel_kind text, last_at timestamptz, last_body text)
+language sql stable security definer set search_path='' as $$
+ with wanted as (select nullif(public.search_fold(coalesce(q,'')),'') as fold),
+ listed as (
+  select 'conversation'::text as kind, v.id, v.agent_id, v.agent_name, v.good_morning_day, null::text as channel_kind, null::text as name, v.last_message_at as last_at
+  from public.own_conversations(c) v
+  where (v.archived_at is not null)=archived
+  union all
+  select 'channel', k.id, null, null, null, k.kind, k.name,
+   coalesce((select m.created_at from public.channel_messages m where m.channel_id=k.id order by m.id desc limit 1),k.created_at)
+  from public.channels k
+  where k.company_id=c and public.in_channel(k.id) and not archived
+ ),
+ page as (
+  select t.* from listed t, wanted w
+  where (after_at is null or (t.last_at,t.id)<(after_at,after_id))
+   and case when w.fold is null then true
+    else position(w.fold in public.search_fold(coalesce(case when t.kind='channel' then coalesce(t.name,general) when t.good_morning_day is not null then morning
+     else public.conversation_title(t.id,t.agent_name) end,'')))>0 end
+  order by t.last_at desc, t.id desc
+  limit least(greatest(coalesce(lim,50),1),100)
+ )
+ select p.kind, p.id, p.agent_id, p.agent_name, h.connection_id,
+  case when p.kind='channel' then p.name when p.good_morning_day is null then public.conversation_title(p.id,p.agent_name) end, p.good_morning_day, p.channel_kind, p.last_at,
+  case when p.kind='conversation'
+   then (select m.body from public.conversation_messages m where m.conversation_id=p.id and m.body<>'' and m.hand_card is null order by m.id desc limit 1)
+   else (select m.body from public.channel_messages m where m.channel_id=p.id and m.body<>'' and m.hand_card is null order by m.id desc limit 1) end
+ from page p left join public.hermes_agents h on h.id=p.agent_id and h.company_id=c
+ order by p.last_at desc, p.id desc;
+$$;
+
+-- #673's counts, each list counting its own Conversations; the channels' part is #675's.
+create or replace function public.conversation_counts(c uuid) returns jsonb
+language sql stable security definer set search_path='' as $$
+ select jsonb_build_object('current',
+  (select count(*) from public.own_conversations(c) v where v.archived_at is null)
+  +(select count(*) from public.channels k where k.company_id=c and public.in_channel(k.id)),
+  'archived',(select count(*) from public.own_conversations(c) v where v.archived_at is not null));
+$$;
