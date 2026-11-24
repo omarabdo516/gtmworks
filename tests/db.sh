@@ -38,6 +38,7 @@ replay tests/agent-profile-moves-migration.mjs
 replay tests/agent-key-waits-migration.mjs
 replay tests/card-places-migration.mjs
 replay tests/staged-cutover-migration.mjs
+replay tests/agent-looks-migration.mjs
 status=0
 npx --no-install supabase test db "$replays" 2>&1 | tee "$session" || status=$?
 # pg_prove's result line for each file, as "<file> <result>".

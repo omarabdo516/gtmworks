@@ -209,6 +209,40 @@ test('request_agent reads its arguments as create_agent does, and asks the datab
  assert.match(JSON.parse(specs.request_agent).description,/Nothing is made until the Owner says yes/);
 });
 
+// #696 (ADR 0027): Lead may give the Agent it makes or requests a temperament, from the six it is told what each suits.
+// The database keeps it for the Agent the call makes before the call itself, and refuses one off the list in words.
+test('create_agent and request_agent take an optional temperament, kept by the database before the Agent is made or requested',async()=>{
+ const {engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},null,{lead_agent_temperament:{state:'kept'}});
+ await engine.createAgent({name:profile,instructions:''});
+ const told=['lead_agent_temperament',{conversation:'conversation-1',run:'run-1',call:'call-0',temperament:'warm'}];
+ assert.deepEqual(await call('create_agent',{...asked,temperament:' warm '}),{state:'created',agent:'agent-1'});
+ assert.deepEqual(rpcs.map(([name])=>name),['lead_agent_temperament','lead_agent_profile','lead_create_agent']);
+ assert.deepEqual(rpcs[0],told);
+ assert.deepEqual(rpcs.at(-1),['lead_create_agent',{conversation:'conversation-1',run:'run-1',call:'call-0',agent_name:'Meta Ads',job:'Runs the Meta ads.',apps:['Meta Ads Manager','Canva']}],
+  'the call that makes the Agent is as before');
+ rpcs.length=0;
+ assert.deepEqual(await call('request_agent',{...asked,temperament:'warm'}),{state:'created',agent:'agent-1'});
+ assert.deepEqual(rpcs.map(([name])=>name),['lead_agent_temperament','lead_request_agent']);
+ rpcs.length=0;
+ assert.deepEqual(await call('create_agent',asked),{state:'created',agent:'agent-1'});
+ assert.deepEqual(rpcs.map(([name])=>name),['lead_agent_profile','lead_create_agent'],'without one, nothing more is asked');
+ const {temperament}=JSON.parse(toolSpecTexts().create_agent).parameters.properties;
+ assert.deepEqual(temperament.enum,['calm','energetic','warm','dreamy','neat','caring']);
+ for(const value of temperament.enum) assert.match(temperament.description,new RegExp(`${value} \\(`),value);
+});
+
+test('a temperament off the list is refused in the database\'s words, and nothing is made, requested or asked of the Engine',async()=>{
+ const refusal={state:'invalid',reason:'The temperament must be one of calm, energetic, warm, dreamy, neat or caring, or left out.'};
+ const {fake,engine,rpcs,call}=harness({},{state:'created',agent:'agent-1'},null,{lead_agent_temperament:refusal});
+ await engine.createAgent({name:profile,instructions:''});
+ const reads=fake.agentReads.length;
+ assert.deepEqual(await call('create_agent',{...asked,temperament:'grumpy'}),refusal);
+ assert.deepEqual(await call('request_agent',{...asked,temperament:'grumpy'}),refusal);
+ assert.deepEqual(rpcs.map(([name])=>name),['lead_agent_temperament','lead_agent_temperament']);
+ assert.equal(fake.agentReads.length,reads,'the Engine is not asked');
+ assert.deepEqual(await call('create_agent',{...asked,temperament:7}),{state:'ignored'},'one that is not a word does not read');
+});
+
 // #136: the database alone judges a draft (reply_card_valid), so what reaches it is the model's words, trimmed, and never
 // a NUL or a lone surrogate, which the database cannot store; a whole emoji is kept.
 test('show_draft asks the database to show the draft as the model wrote it, trimmed and without NUL or a lone surrogate, and the Engine is not asked',async()=>{
@@ -305,7 +339,9 @@ test('the tool texts a run may already be pinned with stay byte for byte as they
  const sha=(/** @type {string} */ value)=>createHash('sha256').update(value).digest('hex');
  const specs=toolSpecTexts();
  assert.deepEqual({create_agent:sha(specs.create_agent),save_rule:sha(specs.save_rule),suggest_rule:sha(specs.suggest_rule)},{
-  create_agent:'606a3225225a5d5ea500d40b6a9912c41a9df3452ce86e7ee820fc028e921676',
+  // #696 gave it the optional temperament: a Run pinned before keeps the earlier text in the database (pin_run) and
+  // resends that; only a Run pinned from now on is sent this one.
+  create_agent:'d4f3faef6462296afd65c6060904e720bde242dd1d8da2c410c4e37e2c2744b8',
   save_rule:'57d671d0e25a566996b232a7502f7b5701de124fde7d637072b73d0148797093',
   suggest_rule:'b968872c1d39b12cceba952c080a66432d778dba12b77f1e155c032495a3ac2c',
  });

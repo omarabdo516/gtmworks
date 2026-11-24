@@ -1057,6 +1057,11 @@ archived_rows() { db -c "select k.slug||' '||(select count(*) from public.work_c
  from public.companies k where k.slug like 'restore-%' order by k.slug"; }
 archived_rows > archived.before || fail 'read the archived rows before the backup'
 [[ $(cat archived.before) == $'restore-one 1 1 1\nrestore-two 1 1 1' ]] || fail 'each Company has an archived Card, Conversation and channel before the backup'
+# Every Agent's look (#696, ADR 0027), one of them picked: the restore brings back each look, given and picked.
+db -c "update public.agent_looks set picked_colour='rose',picked_shape='blob' where agent_id=(select min(agent_id::text)::uuid from public.agent_looks)" || fail 'pick a look before the backup'
+looks() { db -c "select agent_id||' '||auto_shape||' '||auto_colour||' '||auto_temperament||' '||coalesce(picked_shape,'-')||' '||coalesce(picked_colour,'-')||' '||coalesce(picked_temperament,'-') from public.agent_looks order by agent_id"; }
+looks > looks.before || fail 'read the looks before the backup'
+grep -q ' blob rose -$' looks.before || fail 'an Agent has a picked look before the backup'
 sh scripts/install.sh backup || fail 'backup'
 first_archive=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
 [[ $(stat -c %a "$first_archive") == 600 ]] || fail 'private backup permissions'
@@ -1070,6 +1075,8 @@ lifecycle verify > data.after || fail 'read restored people, companies, cards an
 diff -u data.before data.after || fail 'restored identities match'
 archived_rows > archived.after || fail 'read the archived rows after the restore'
 diff -u archived.before archived.after || fail 'the restore keeps archived Cards, Conversations and channels archived'
+looks > looks.after || fail 'read the looks after the restore'
+diff -u looks.before looks.after || fail "the restore keeps every Agent's look, given and picked"
 db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
 diff -u before restored || fail 'restored migration history'
 }

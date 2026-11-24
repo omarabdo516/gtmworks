@@ -33,7 +33,7 @@ insert into decisions
   'public.track_run_permission(uuid,text,jsonb,boolean,timestamptz,timestamptz,text)','public.settle_permission(bigint,text)',
   'public.agent_show_card(uuid,text,text,text,text,jsonb)','public.agent_save_rule(uuid,text,text,text)','public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text)',
   'public.agent_ask_to_open(uuid,text,text,text)','public.lead_agent_profile(uuid,text,text,text)','public.lead_create_agent(uuid,text,text,text,text,text[],text,text,boolean,boolean)',
-  'public.lead_request_agent(uuid,text,text,text,text,text[],text,text)','public.lead_hand_to_agent(uuid,text,text,text,text,text)',
+  'public.lead_request_agent(uuid,text,text,text,text,text[],text,text)','public.lead_agent_temperament(uuid,text,text,text)','public.lead_hand_to_agent(uuid,text,text,text,text,text)',
   'public.command_handover(uuid,uuid,uuid,uuid,text,text,text)','public.begin_handover(bigint)','public.handover_hand_to_agent(bigint,text,text,text,text,text)',
   'public.close_handover_follow_up(bigint,text,text,text)','public.handover_writer(bigint)','public.open_conversation_runs(uuid,uuid,bigint)','public.stopped_runs_open()',
   'public.stop_open_handovers(uuid,bigint)','public.pin_run_history(uuid,uuid)','public.queue_unknown_start(public.conversation_run_reservations)']) fn
