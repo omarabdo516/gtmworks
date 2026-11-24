@@ -6,6 +6,12 @@
   "ar": { "title": "لاقي أي بطاقة مؤرشفة", "body": "قايمة البطاقات المؤرشفة في البورد بقت بتعرض خمسين بطاقة في المرة، الأحدث أرشفة الأول، و«اعرض أكتر» للباقي، وفيها بحث بيلاقي البطاقة المؤرشفة بعنوانها مهما كانت اتأرشفت من زمان." }
  },
  {
+  "issue": 583,
+  "date": "2026-11-24",
+  "en": { "title": "Back up right after a failed update", "body": "When an update stops because an agent engine or work sandbox does not start, the version you run is recorded again, so a backup or a restore with that version's own files works without running the failed update first." },
+  "ar": { "title": "اعمل نسخة احتياطية على طول بعد تحديث فشل", "body": "لما التحديث يقف عشان محرك وكيل أو صندوق شغل ماشتغلش، النسخة اللي شغّالة عندك بتتسجّل تاني، فالنسخة الاحتياطية أو الاسترجاع بملفات النسخة دي نفسها بيشتغلوا من غير ما تشغّل التحديث اللي فشل الأول." }
+ },
+ {
   "issue": 663,
   "date": "2026-11-24",
   "en": { "title": "Learning modes, the Fallback model and speech-to-text show at once", "body": "When you change the Company's or an Agent's learning mode, the Fallback model or the speech-to-text provider, your choice is marked straight away with a Saving line while the agent engine takes it, a Company mode shows on every Agent it reached, and a refused change goes back with the reason." },
