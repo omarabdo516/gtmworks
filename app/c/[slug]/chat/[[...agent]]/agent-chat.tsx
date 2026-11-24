@@ -4,12 +4,14 @@ import { useRouter } from 'next/navigation';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { AgentFace } from '@/components/agent-face';
+import { Greeting } from '@/components/face-moments';
 import { ShellIcon } from '@/components/shell-icon';
 import { MessageBox, newId, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import { AgentEmptyChat, type EmptyChat } from '@/app/agent-empty-chat';
 import { PrivateLine } from '@/app/private-line';
 import { AgentDetails, HeadPill, useDetailsPanel, type DetailsAgent } from '@/app/agent-details';
 import { OpenedMark } from '@/app/agent-made';
+import { OpenedHere, useAgentState } from '@/app/sidebar-live';
 import { FirstRunToast } from '@/app/first-run-toast';
 import Link from '@/lib/link';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
@@ -68,9 +70,12 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
   if(chip.current) chip.current.focus(); else transcript.current?.querySelector<HTMLElement>('.empty-chat h2')?.focus();
  },[picked]);
  const opening=newAgent&&!picked;
+ // The head's face shows the Agent's state as the sidebar's tile does, with what this chat knows (lib/live-runs).
+ const headState=useAgentState(current?.id??'');
  return <div className="convo">{first&&agent&&<FirstRunToast mode={first} agent={agent.name} invites={invites}/>}
   <div className="chat">
-   <HeadPill panel={panel} agent={current?.name} face={current&&<span aria-hidden="true"><AgentFace agent={current.id} size={32} live/></span>} title={t('newChat')}/>
+   <HeadPill panel={panel} agent={current?.name} face={current&&<span aria-hidden="true" data-greet><AgentFace agent={current.id} size={32} state={headState} live/></span>} title={t('newChat')}/>
+   <Greeting agent={current?.id}/>
    <div className="transcript" ref={transcript}><div className="transcript__col">
     {current&&team&&<PrivateLine agent={current.name}/>}
     {current?<AgentEmptyChat agent={current} empty={shown.empty} askOf={askOf} suggest={writer?text=>box.current?.insert(text):undefined} picker={agents.length>1?{agents:agents.map(choice=>({id:choice.agent.id,connection_id:choice.agent.connection_id,name:choice.agent.name})),onPick:pick,disabled:sending,chipRef:element=>{chip.current=element}}:undefined}/>:<div className="empty-chat"><p role="note">{t('conversationNoAgent')}</p></div>}
@@ -80,7 +85,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     {current&&writer&&opening&&<div className="new-hint" role="note"><ShellIcon name="userPlus" className="new-hint__ic"/><p className="new-hint__t">{!askOf?t('newAgentHint',current.name):askOf.length?t('newAgentHintMember',current.name,new Intl.ListFormat(localeFor(language),{type:'conjunction'}).format(askOf)):t('newAgentHintMemberAnyOwner',current.name)}</p>
     <Link className="link-btn new-hint__alt" href={`/c/${slug}/chat?new=ready`}>{t('newAgentReadyMade')}</Link></div>}
     {current&&gallery&&<Suspense fallback={null}><ReadyMade slug={slug} company={company} agent={current.id} companyName={gallery.company} alone={gallery.alone} lead={current.name} roles={gallery.roles} owner={gallery.owner} owners={gallery.owners}/></Suspense>}
-    {current&&(writer?<MessageBox key={`${opening}`} ref={box} focus={opening&&!gallery} placeholder={opening?t('newAgentExample'):t('writeTo',current.name)} voice={{company,agent:current.id}} send={async(message,sendKey,files)=>{
+    {current&&(writer?<MessageBox key={`${opening}`} ref={box} focus={opening&&!gallery} placeholder={opening?t('newAgentExample'):t('writeTo',current.name)} voice={{company,agent:current.id}} to={current.id} send={async(message,sendKey,files)=>{
     setSending(true);
     const failure=files.length?await postMessageWithFiles({company,conversation,agent:current.id,message,sendKey},files):await postMessage({company,conversation,agent:current.id,message,sendKey});
     if(failure) { setSending(false); return failure; }
@@ -96,5 +101,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
   </div>
   {current&&shown.details&&<AgentDetails key={current.id} panel={panel} agent={current} details={shown.details} slug={slug} suggest={writer?text=>box.current?.fill(text):undefined}/>}
   {agent&&isNew&&<OpenedMark company={company} agent={agent.id}/>}
+  {/* Opening an Agent's chat wakes it for this reader (#699), the one picked from the chips too. */}
+  <OpenedHere company={company} agent={current?.id}/>
  </div>;
 }

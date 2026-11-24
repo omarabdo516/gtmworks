@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(28);
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values ('e0000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','Lead','General',true,'co-10000000000000000000000000000001');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  select ('e1000000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001',('20000000-0000-0000-0000-00000000000'||n)::uuid,'e0000000-0000-0000-0000-000000000002','Lead' from generate_series(1,4) n;
@@ -45,6 +45,11 @@ select is(public.mark_agent_toast_shown((select id from public.hermes_agents whe
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(public.mark_agent_toast_shown((select id from public.hermes_agents where name='Meta Ads')),true,'its requester is told it was made once (#169)');
 select is(public.mark_agent_toast_shown((select id from public.hermes_agents where name='Meta Ads')),false,'and not again');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
+select is(public.mark_agent_born((select id from public.hermes_agents where name='Meta Ads')),false,'another Member does not see it born');
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+select is(public.mark_agent_born((select id from public.hermes_agents where name='Meta Ads')),true,'its requester sees it born once (#701)');
+select is(public.mark_agent_born((select id from public.hermes_agents where name='Meta Ads')),false,'and not again: a reload, another device');
 
 reset role;
 set local role service_role;

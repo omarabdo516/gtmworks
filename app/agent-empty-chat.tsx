@@ -2,6 +2,7 @@
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
 import { AgentFace } from '@/components/agent-face';
+import { SharedFace } from '@/app/sidebar-live';
 import { ShellIcon } from '@/components/shell-icon';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { MadeLine } from '@/app/agent-made';
@@ -32,7 +33,7 @@ export type AgentPicker={agents:PickerAgent[],onPick:(id:string)=>void,disabled?
 export function AgentEmptyChat({agent,empty,askOf=null,suggest,picker}:{agent:Agent,empty:EmptyChat,askOf?:string[]|null,suggest?:(text:string)=>void,picker?:AgentPicker}) {
  const {t,language}=useI18n();
  if(empty.state==='fresh') return <LeadWelcome agent={agent} askOf={askOf} suggest={suggest}/>;
- const face=<div className="empty-chat__faces" aria-hidden="true"><AgentFace agent={agent.id} size={96} live/></div>;
+ const face=<div className="empty-chat__faces" aria-hidden="true" data-greet><SharedFace agent={agent.id} size={96}/></div>;
  // design-reference: mainEmptyHTML. Its daily check-in, its handing work to another Agent and the suggestion that
  // promises it wait for those parts (gap rows 7 and 4).
  if(empty.state==='main') {
@@ -64,7 +65,7 @@ export function AgentEmptyChat({agent,empty,askOf=null,suggest,picker}:{agent:Ag
  // sentence, or says what to write when it has none.
  const general=[[t('suggestTellMe'),t('suggestTellMeD')],[t('suggestFirstJob'),empty.example??t('suggestFirstJobD')]];
  return <div className="empty-chat">
-  <div className="empty-chat__faces" aria-hidden="true">{picker?picker.agents.map(other=><AgentFace key={other.id} agent={other.id} size={40}/>):<AgentFace agent={agent.id} size={96} live/>}</div>
+  <div className="empty-chat__faces" aria-hidden="true" data-greet>{picker?picker.agents.map(other=><AgentFace key={other.id} agent={other.id} size={40}/>):<SharedFace agent={agent.id} size={96}/>}</div>
   <h2 tabIndex={-1}>{t('emptyChatHeading')}</h2>
   <p>{t('emptyChatPickLead')} <bdi>@</bdi> {t('emptyChatPickTail')}</p>
   {picker&&<div className="agent-picker" role="group" aria-label={t('agentPickerLabel')}>

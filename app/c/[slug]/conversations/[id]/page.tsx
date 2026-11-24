@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Shell, { sidebarReads } from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import ConversationView, { ConversationLoaded } from './conversation';
+import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
 import { conversationRecord, tiedCard } from '@/lib/conversation-record';
@@ -86,6 +87,8 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const title=conversationTitle({morningDay:conversation.good_morning_day,body:first?.body as string|undefined,file:(first?.conversation_attachments as {name:string}[]|undefined)?.[0]?.name,agent:conversation.agent_name},t,language);
  const tied=await tiedRead;
  return <Shell company={company} companies={companies||[]} personId={user.id} section="conversations" title={title} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={conversation.agent_id||undefined} conversationId={id}>
+  {/* Opening the Conversation wakes its Agent and sees a failure there, for this reader (#699). */}
+  <OpenedHere company={company.id} agent={conversation.agent_id} place={{conversation:conversation.id}}/>
   <main className="convo-page h-full"><ConversationView slug={slug} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={agent?details:null} tab={pickTab(tab)} company={company.id} conversation={{id:conversation.id,agent_id:conversation.agent_id,agent_name:conversation.agent_name,face:faceOf(conversation)}} title={title} writer={!!writer} board={tied&&{card:tied.card,column:tied.column}} first={firstRun==='alone'||firstRun==='team'?firstRun:undefined} invites={Number.parseInt(invites||'0',10)||0} archived={!!conversation.archived_at}><Loaded record={record} team={company.work_mode==='team'}/></ConversationView></main>
  </Shell>;
 }

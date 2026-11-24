@@ -9,7 +9,8 @@ import { columnLabel } from '@/lib/board-columns.mjs';
 import { dayOf } from '@/lib/activity-log.mjs';
 import { AgentFace } from '@/components/agent-face';
 import { named } from '@/lib/bidi';
-import { statusKeys } from '@/lib/agent-details.mjs';
+import { faceStateWords } from '@/lib/agent-face-states';
+import { OpenedHere } from '@/app/sidebar-live';
 import { ShellIcon } from '@/components/shell-icon';
 import { HandedRow } from '@/app/handed-row';
 import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/app/agent-details';
@@ -23,6 +24,7 @@ import type { AnswerQuestion } from '@/app/question-card';
 import type { MarkHandDone } from '@/app/hand-card';
 import { StepsList, type StepsBidiText } from '@/app/run-steps';
 import { ActivityLine, LiveTurn, useLanding, useLiveSteps } from '@/app/run-activity';
+import { channelRuns, useReportRuns } from '@/lib/live-runs';
 import { offeredChoices } from '@/lib/conversations';
 import { useArrivals, type Arrival } from '@/lib/arrivals';
 import { overlayHref } from '@/lib/settings-overlay.mjs';
@@ -166,12 +168,14 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
  // Its Run's steps live, as a Conversation shows them (#646): the reply that lands after them takes their place without
  // rising in again, its list open if the live one was.
- const landing=useLanding({working:!!workingNow,live:useLiveSteps({company:channel.company,channel:channel.id},!!workingNow),
-  newest:messages.findLast(message=>message.author==='agent')?.id??null});
+ const steps=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
+ const landing=useLanding({working:!!workingNow,live:steps,newest:messages.findLast(message=>message.author==='agent')?.id??null});
+ // Each called Agent's face while the channel is open (#700, lib/live-runs channelRuns).
+ useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
  const live=landing.view;
  const landedHere=(message:ChannelMessage)=>message.author==='agent'&&landing.landed(message.id);
  const boardColumn=board?t(columnLabel(board.column,writer)):'';
- return <div className="convo"><div className="chat">
+ return <div className="convo"><OpenedHere company={record.channel.company} place={{channel:record.channel.id}}/><div className="chat">
   <HeadPill panel={panel} details={c('channelDetails')} face={<span className="hp-hash" aria-hidden="true"><ShellIcon name="hash"/></span>} title={name}
    corner={board&&<div className="chat__corner"><Link className={`corner-pill${board.waiting?' is-waiting':''}`} href={`/c/${slug}/work/board?show=${board.card}`} aria-label={`${c('channelOnTheBoard')} ${boardColumn}`}>
     <span className={`dot dot--${board.waiting?'waiting':'idle'}`} aria-hidden="true"/><span className="corner-pill__lbl">{c('channelOnTheBoard')}</span><span className="corner-pill__col">{boardColumn}</span>
@@ -326,7 +330,7 @@ function ChannelDetails({panel,slug,name,person,record,tip,c,time,refresh}:{pane
     <h3 className="dp-label" id="ch-h-a"><span>{t('agents')} <span className="muted num">{count(agents.length)}</span></span></h3>
     <ul className="panel-card">
      {agents.length?agents.map(agent=><li key={agent.id} className="panel-row"><AgentFace agent={agent.id} size={28} state={agent.state} dot/>
-      <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>{agent.only?<span className="panel-row__d">{c('channelShownHere')}</span>:<span className="panel-row__d">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{' · '}</>}{t(statusKeys[agent.state])}</span>}</span>
+      <span className="panel-row__text"><span className="panel-row__t"><bdi>{agent.name}</bdi></span>{agent.only?<span className="panel-row__d">{c('channelShownHere')}</span>:<span className="panel-row__d">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{' · '}</>}{t(faceStateWords[agent.state])}</span>}</span>
       {manage&&remove(`tm-rm-${agent.id}`,agent.name,{agent:agent.id,present:false},'tm-add-open')}</li>)
      :empty(team?c('channelNoAgentsYet'):c('channelNoAgents'))}
      {manage&&addRow('tm-add-open',addingAgent,c('channelAddAgent'),()=>void pick(!addingAgent,setAddingAgent))}

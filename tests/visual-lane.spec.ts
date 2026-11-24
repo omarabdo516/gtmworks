@@ -254,6 +254,8 @@ for (const screen of screens) {
           await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
           await expect(page.locator(screen.ready ?? '.content').first()).toBeVisible();
           await idle(page);
+          // A face's moment (a greeting, a birth: #701) shows as still frames for at most 1.8s; the picture waits it out.
+          await page.waitForFunction(() => !document.querySelector('.face[data-moment]'));
           // The fixed text is shorter than a real date, so it goes in before the window is sized for the page.
           await fixClockText(page);
           await showWholePage(page, width);

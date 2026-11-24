@@ -7,6 +7,9 @@ import channelAr from '@/lib/messages/channel.ar.json';
 import { ShellIcon } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
 import { HandedRow } from '@/app/handed-row';
+import { SharedFace } from '@/app/sidebar-live';
+import { useLiveSteps } from '@/app/run-activity';
+import { channelRuns, useReportRuns } from '@/lib/live-runs';
 import { MessageBox, newId, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { ConversationComposer, ConversationTurns, useConversationRecord } from '@/app/conversation-thread';
 import { firstName, type ChannelRecord } from '@/lib/channels';
@@ -66,11 +69,11 @@ export function CardSheetChat({slug,company,card,chat,writer,shown,openLog}:{slu
  const [before,after]=t('sheetChatEmptyLine','\u0000').split('\u0000');
  return <>
   <div {...panel}><div className="transcript__col"><div className="empty-chat empty-chat--sheet">
-   <div className="empty-chat__faces"><span aria-hidden="true"><AgentFace agent={chat.agent.id} size={52} live/></span></div>
+   <div className="empty-chat__faces"><span aria-hidden="true"><SharedFace agent={chat.agent.id} size={52}/></span></div>
    <h2>{t('sheetChatEmpty')}</h2>
    <p>{before}<bdi>{chat.agent.name}</bdi>{after}</p>
   </div></div></div>
-  <div className="composer-area">{writer?<MessageBox placeholder={t('writeTo',chat.agent.name)} voice={{company,agent:chat.agent.id}} send={async(message,sendKey,files)=>{
+  <div className="composer-area">{writer?<MessageBox placeholder={t('writeTo',chat.agent.name)} voice={{company,agent:chat.agent.id}} to={chat.agent.id} send={async(message,sendKey,files)=>{
    const failure=files.length?await postMessageWithFiles({company,conversation:id,card,message,sendKey},files):await postMessage({company,conversation:id,card,message,sendKey});
    if(failure==='sheetChatTaken') router.refresh();
    if(failure) return failure;
@@ -119,6 +122,10 @@ function SheetChannel({slug,channel,company,shown}:{slug:string,channel:ChannelR
  },[id,company,shown]); // eslint-disable-line react-hooks/exhaustive-deps
  useLayoutEffect(()=>{ if(stick.current&&box.current) box.current.scrollTop=box.current.scrollHeight; },[record.messages.length,shown]);
  const {writer,messages}=record;
+ // Its called Agents' faces follow their Runs here as on the channel's page (#700): thinking until the first step the
+ // Run's live read gives, working after it, done once a reply lands.
+ const steps=useLiveSteps({company,channel:id},record.open);
+ useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
  return <>
   <div {...panel} ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>
    <div className="transcript__col"><ol className="turns" aria-label={c('channelMessages',name)}>
