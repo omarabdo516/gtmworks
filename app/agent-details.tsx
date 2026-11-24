@@ -15,6 +15,7 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { rememberOpener, takeReturnFocus } from '@/app/settings-opener';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 import { DetailsChat, onShowRoutines } from '@/app/details-routines';
+import { DetailsFace } from '@/app/agent-look-window';
 
 export type DetailsAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,made?:Made|null};
 // The reference keeps the details beside the chat from 1024px up; below that they slide over it (design-reference:
@@ -113,7 +114,7 @@ export function AgentDetails({panel,agent,details,tab:first,slug,suggest}:{panel
  };
  return <DetailsShell panel={panel} label={t('chatDetailsOf',agent.name)} start={<Link className="circle-btn" id="dp-settings" href={overlayHref(slug,'agents',{agent:agent.id})} aria-haspopup="dialog" aria-label={t('chatAgentSettings',agent.name)} title={t('settings')} onClick={()=>rememberOpener('dp-settings')}><ShellIcon name="gear"/></Link>}>
   <div className="dp-id">
-   <Later details={details} part="face" agent={agent.id}/>
+   <DetailsFace agent={agent}><Later details={details} part="face" agent={agent.id}/></DetailsFace>
    <div>
     <div className="dp-id__name"><bdi>{agent.name}</bdi>{agent.main&&<span className="badge dp-id__badge">{t('mainAgent')}</span>}</div>
     <div className="dp-id__role">{agent.speciality&&<><bdi>{agent.speciality}</bdi>{'\u00a0'}</>}<span className="dp-id__state">{agent.speciality&&'·\u00a0'}<Later details={details} part="state" agent={agent.id}/></span></div>

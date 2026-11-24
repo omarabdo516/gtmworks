@@ -19,7 +19,7 @@ export function HandedRow({as:Row='li',from,to,title,goal,ending,said,className}
  const {language}=useI18n();
  const end=ending.stopped?'stopped':ending.failed?'failed':null;
  return <Row className={className?`handed ${className}`:'handed'} role="note" data-handover {...(end?{[`data-${end}`]:''}:{})}>
-  <span className="handed__faces"><AgentFace agent={from.id} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><AgentFace agent={to.id} size={18}/></span>
+  <span className="handed__faces"><AgentFace agent={from.id} name={from.name} size={18}/><ShellIcon name={language==='ar'?'arrow':'arrowLtr'} className="handed__arrow"/><AgentFace agent={to.id} name={to.name} size={18}/></span>
   <span className="handed__t">{title}</span>
   {goal&&<span className="handed__d"><bdi>{goal}</bdi></span>}
   {end&&<span className={end==='stopped'?'handed__failed is-stopped':'handed__failed'}>{said[end]}</span>}

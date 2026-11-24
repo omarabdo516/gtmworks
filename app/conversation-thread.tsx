@@ -257,7 +257,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
  const when=(at:string,className:string)=><time className={className} dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
  // The sender's face: the Conversation's Agent's, or the one the message itself names — a job command's answer is the
  // target Agent's, drawn with its own face (#358).
- const face=(size:number,agent?:string)=><span aria-hidden="true"><AgentFace agent={agent||conversation.face} size={size}/></span>;
+ const face=(size:number,agent?:string,name=conversation.agent_name)=><span aria-hidden="true"><AgentFace agent={agent||conversation.face} name={name} size={size}/></span>;
  // A job one Agent handed another (#317, #475): inside the asking Agent's turn (`p`), or, for one an asked Agent handed on
  // (#477), its own row between the turns (`li`), as a channel draws every handover.
  const handed=(card:Extract<LeadCard,{kind:'handed'}>,key:string,as:'li'|'p',className?:string)=><HandedRow key={key} as={as} className={className} from={{id:card.from.face,name:card.from.name}} to={{id:card.face,name:card.name}}
@@ -275,7 +275,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    {message.kind==='note'&&<span className="queued" data-addressed>{c('conversationAddressed',message.to||'')}</span>}
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
   </li>:<Fragment key={`${message.kind||'m'}${message.id}`}><li className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
-   <div className="sender">{face(20,message.face)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}{when(message.created_at,'sender__time')}</div>
+   <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}{when(message.created_at,'sender__time')}</div>
    {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={landing.opened(message.id)}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    {/* A tool the Engine could not run because the Company's work sandbox is down (#398): one plain line under the reply,

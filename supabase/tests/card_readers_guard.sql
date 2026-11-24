@@ -44,6 +44,7 @@ insert into decisions
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
   'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_card_place()','public.work_guard()',
   'public.channel_run_card()','public.channel_reply_card()']) fn
+ union all select 'public.keep_record_agent()','exempt','a trigger: it keeps the Agent a Card, a Conversation or a channel call was made with when that Agent is removed (#702), reading only whether the Agent still exists; it answers no caller'
  union all select 'public.work_card_moved()','exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller; the move it writes is read by its own mover alone, on a Card that mover can see (work_card_moves_read)'
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member, and the rows it writes are read under card_agent_visible' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.agent_propose_change(uuid,text,text,text,text,text,jsonb,text)','public.agent_save_rule(uuid,text,text,text)','public.agent_show_card(uuid,text,text,text,text,jsonb)',

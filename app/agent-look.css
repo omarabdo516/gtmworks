@@ -1,0 +1,91 @@
+/* The window that changes an Agent's look and the places that open it (#698; design-reference-orb/agent-look.html:
+   .lk-dlg, .lk, .lk-tile, .lk-sw, .pen, .ac-look, .lk-hit). The dialog clips nothing: a clipping box made a moving face's
+   glow show as a square, so its corners are rounded by its own background alone. */
+.gw .lk-dlg {
+  --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px;
+  margin: auto; padding: 0; border: 0; inset: 0;
+  width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px);
+  border-radius: var(--gw-r-lg); background: var(--gw-bg-chrome); color: var(--gw-text-1); box-shadow: var(--gw-shadow-modal); overflow: visible;
+}
+.gw .lk-dlg:not([open]) { display: none; }
+.gw .lk-dlg::backdrop { background: var(--gw-bg-scrim); }
+.gw .lk-dlg[open] { animation: gw-rise var(--gw-dur-slow) var(--gw-ease-out); }
+.gw .lk-dlg[open]::backdrop { animation: gw-fade-in var(--gw-dur) var(--gw-ease-out); }
+.gw .lk-dlg.is-closing { animation: gw-modal-out 190ms var(--gw-ease-in) forwards; }
+.gw .lk-dlg.is-closing::backdrop { opacity: 0; transition: opacity 190ms var(--gw-ease-in); }
+.gw .lk-dlg :where(h2, p, fieldset, legend) { margin: 0; letter-spacing: normal; text-transform: none; }
+.gw .lk { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-width: 0; max-height: calc(100dvh - 48px); border-radius: inherit; background: var(--gw-bg-chrome); color: var(--gw-text-1); --ring: var(--gw-bg-chrome); }
+.gw .lk-head { display: flex; align-items: center; gap: var(--s2); min-height: 60px; padding: var(--s3) var(--s3) var(--s2) var(--s5); padding-inline: var(--s5) var(--s3); }
+.gw .lk-title { flex: 1 1 0; min-width: 0; font-size: var(--gw-fs-lg); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.gw .lk-stage { display: grid; place-items: center; margin: 0 var(--s5); padding: var(--s8) 0; border-radius: var(--gw-r-md); background: var(--gw-bg-sidebar); --ring: var(--gw-bg-sidebar); }
+.gw .face-btn { display: inline-flex; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; color: inherit; }
+.gw .face-btn:focus-visible { outline: 2px solid var(--gw-focus); outline-offset: 4px; }
+.gw .lk-body { display: grid; gap: var(--s5); align-content: start; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s5) var(--s5) var(--s4); scrollbar-width: thin; scrollbar-color: var(--gw-border-2) transparent; }
+.gw .lk-grp { border: 0; padding: 0; min-width: 0; }
+.gw .lk-lg { display: block; padding: 0; margin: 0 0 var(--s2); font-size: var(--gw-fs-sm); font-weight: 600; line-height: 1.5; color: var(--gw-text-1); }
+.gw .lk-lg__v { font-weight: 400; color: var(--gw-text-2); }
+.gw .lk-lg__v::before { content: " · "; }
+
+/* Shape and temperament: a small face and its name; the chosen one has an ink ring, a check and its name in bold. */
+.gw .lk-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
+.gw .lk-tile {
+  position: relative; display: grid; justify-items: center; align-content: start; gap: 6px; min-width: 0; min-height: 68px;
+  padding: 10px 4px var(--s2); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); box-shadow: var(--gw-border-2) 0 0 0 .5px inset;
+  text-align: center; cursor: pointer; --ring: var(--gw-bg-pane);
+  transition: background-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
+}
+.gw .lk-tiles--t .lk-tile { min-height: 84px; padding-top: var(--s3); }
+.gw :is(.lk-tile, .lk-sw) input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+@media (hover: hover) { .gw .lk-tile:hover { background: var(--gw-bg-elevated-hover); --ring: var(--gw-bg-elevated-hover); } }
+.gw .lk-tile:has(input:checked) { box-shadow: var(--gw-primary) 0 0 0 1.5px inset; }
+.gw :is(.lk-tile, .lk-sw):has(input:focus-visible) { outline: 2px solid var(--gw-focus); outline-offset: 2px; }
+.gw .lk-tile__t { display: block; max-width: 100%; font-size: var(--gw-fs-sm); line-height: 1.4; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw .lk-tile:has(input:checked) .lk-tile__t { font-weight: 600; }
+.gw .lk-ck { position: absolute; top: 6px; inset-inline-end: 6px; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--gw-primary); color: var(--gw-on-primary); opacity: 0; transform: scale(.6); transition: opacity var(--gw-dur-fast) var(--gw-ease-out), transform var(--gw-dur-fast) var(--gw-ease-out); pointer-events: none; }
+.gw .lk-ck .gw-icon { width: 12px; height: 12px; }
+.gw .lk-tile:has(input:checked) .lk-ck { opacity: 1; transform: none; }
+.gw :is(.lk-tile, .lk-sw) .fw { pointer-events: none; }
+
+/* Colour: an orb with its eyes; the chosen one has an ink ring around it, and its name beside the group's. */
+.gw .lk-sws { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px var(--s2); }
+.gw .lk-sw { position: relative; display: grid; place-items: center; height: 44px; border-radius: var(--gw-r-full); cursor: pointer; transition: background-color var(--gw-dur-fast) var(--gw-ease-out); }
+@media (hover: hover) { .gw .lk-sw:hover { background: var(--gw-bg-hover); } }
+.gw .lk-sw__o { display: inline-flex; border-radius: 50%; pointer-events: none; transition: box-shadow var(--gw-dur-fast) var(--gw-ease-out); }
+.gw .lk-sw:has(input:checked) .lk-sw__o { box-shadow: 0 0 0 2.5px var(--gw-bg-chrome), 0 0 0 4.5px var(--gw-text-1); }
+
+.gw .lk-say { margin-top: var(--s3); min-height: 1.7em; font-size: var(--gw-fs-sm); line-height: 1.7; color: var(--gw-text-2); }
+.gw .lk-foot { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3) calc(var(--s2) + env(safe-area-inset-bottom, 0px)); border-top: .5px solid var(--gw-border-3); }
+.gw .lk-foot .od-fill { flex: 1 1 0; }
+.gw :is(.lk-foot, .ac-actions) .link-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 2px var(--s2, 8px); border: 0; border-radius: var(--gw-r-xs); background: none; font: inherit; font-size: var(--gw-fs-sm); color: var(--gw-text-1); text-decoration: none; cursor: pointer; }
+.gw .lk-foot .link-btn:disabled { color: var(--gw-text-4); cursor: default; }
+@media (hover: hover) { .gw :is(.lk-foot, .ac-actions) .link-btn:hover:not(:disabled) { background: var(--gw-bg-hover); } }
+.gw .lk-foot .gw-icon { width: 16px; height: 16px; }
+.gw .lk-fwd:dir(ltr) { transform: scaleX(-1); }
+
+/* The Owner's pencil on the details' big face, at the corner across from the state dot. */
+.gw .dp-face { position: relative; margin-bottom: 4px; }
+.gw .lk-pen { position: absolute; bottom: 2px; inset-inline-start: 2px; z-index: 4; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--gw-bg-pane); color: var(--gw-text-1); box-shadow: 0 0 0 2.5px var(--ring, var(--gw-bg-chrome)), var(--gw-border-1) 0 0 0 .5px inset; pointer-events: none; }
+.gw .lk-pen .gw-icon { width: 13px; height: 13px; }
+.gw .ac-look { padding-inline: 8px; font-weight: 400; }
+.gw .lk-hit { position: relative; }
+.gw .lk-hit::before { content: ""; position: absolute; inset: -7px -4px; }
+.gw #set-look .fw { margin-inline-end: 2px; }
+
+/* Phone: the same window as a sheet from the bottom; the face stays in view while the choices scroll. */
+@keyframes gw-sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes gw-sheet-down { to { transform: translateY(100%); } }
+@media (max-width: 599px) {
+  .gw .lk-dlg { width: 100%; max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 8px); margin: auto 0 0; border-radius: var(--gw-r-lg) var(--gw-r-lg) 0 0; }
+  .gw .lk { max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 8px); }
+  .gw .lk-dlg[open] { animation: gw-sheet-up var(--gw-dur-slow) var(--gw-ease-out); }
+  .gw .lk-dlg.is-closing { animation: gw-sheet-down 190ms var(--gw-ease-in) forwards; }
+  .gw .lk-head { min-height: 56px; padding-inline: var(--s4) var(--s2); }
+  .gw .lk-x { min-width: 44px; height: 44px; }
+  .gw .lk-stage { margin-inline: var(--s4); padding: var(--s6) 0 var(--s8); }
+  .gw .lk-body { padding-inline: var(--s4); }
+  .gw :is(.lk-foot, .ac-actions) .link-btn { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gw .lk-dlg[open], .gw .lk-dlg[open]::backdrop, .gw .lk-dlg.is-closing { animation: none; }
+  .gw :is(.lk-tile, .lk-sw, .lk-sw__o, .lk-ck) { transition: none; }
+}

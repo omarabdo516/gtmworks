@@ -8,6 +8,7 @@ import { localeFor } from '@/lib/i18n.mjs';
 import { AgentFace } from '@/components/agent-face';
 import { Birth } from '@/components/face-moments';
 import { useRequestAgent } from '@/lib/agent-looks-client';
+import { ChangeLookLink } from '@/app/agent-look-window';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
 import { markOf } from '@/lib/app-mark.mjs';
@@ -45,7 +46,7 @@ export function MadeCard({slug,agent,fresh=false}:{slug:string,agent:MadeAgent,f
   <div className="card__head"><span aria-hidden="true" data-birth><AgentFace agent={agent.id} size={48}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
   {agent.fresh&&<Birth agent={agent.id}/>}
   <AgentRows job={agent.job} apps={agent.apps}/>
-  <div className="ac-actions"><Link className="btn btn--primary" href={`/c/${slug}/chat/${agent.id}`}>{c('madeAgentOpen',agent.name)}</Link></div>
+  <div className="ac-actions"><Link className="btn btn--primary" href={`/c/${slug}/chat/${agent.id}`}>{c('madeAgentOpen',agent.name)}</Link><ChangeLookLink agent={agent}/></div>
   <p className="ac-tip"><ShellIcon name="chat"/><span>{c('madeAgentTip')}</span></p>
  </div>;
 }

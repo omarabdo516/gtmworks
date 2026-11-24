@@ -86,7 +86,7 @@ export type ChannelRecord={
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string};
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
-type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,agent_name:string,outcome:string|null};
+type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,outcome:string|null};
 type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string,said_before?:string|null};
 type StoredFile={id:number,message_id:number,name:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
@@ -133,7 +133,7 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  const name=nameOf(found);
  // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). A
  // message may have up to three Runs (#152), one per Agent it called, in the order the Agents were named.
- const runs=((await db.from('channel_runs').select('message_id,ordinal,agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3)).data||[]) as StoredRun[];
+ const runs=((await db.from('channel_runs').select('message_id,ordinal,agent_id,kept_agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3)).data||[]) as StoredRun[];
  const runsOf=new Map<number,StoredRun[]>();
  for(const run of runs) runsOf.set(run.message_id,[...(runsOf.get(run.message_id)??[]),run]);
  for(const group of runsOf.values()) group.sort((a,b)=>(a.ordinal??1)-(b.ordinal??1));
@@ -211,7 +211,8 @@ export async function channelRecord(db:Database,person:string,company:string,cha
  // One Agent's turn under a message (#152): its Run's state, the questions that Run asked (#149) and the requests it
  // asked (its own, never a sibling's).
  const mentionOf=(run:StoredRun):ChannelMention=>({agent:run.agent_name,
-  face:run.agent_id||'',state:stateOf(run.outcome),
+  // A call keeps the Agent it called when that Agent is removed (#702), and so its face.
+  face:run.agent_id||run.kept_agent_id||'',state:stateOf(run.outcome),
   questions:questionsOf.get(`${run.message_id}:${run.ordinal??1}`)??[],
   permissions:asked.filter(row=>row.message_id===run.message_id&&(row.ordinal??1)===(run.ordinal??1))
    .flatMap(row=>{ const card=replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null}); return card?[{...card,...saidParts(row)}]:[]; }) as ChannelPermission[]});
