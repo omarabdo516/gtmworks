@@ -18,7 +18,7 @@ export const clickPath: Step[] = [
   { name: 'numbers', link: '.nav a[href$="/numbers"]', path: '/numbers', content: '.numbers-page', motion: opensPage },
   { name: 'work', link: '.nav a[href$="/work/board"]', path: '/work/board', content: '.board', motion: opensBoard },
   { name: 'open sheet', link: '#board-cols .kcard[data-card-id="1"] a', path: '/work/board', search: '?card=1', content: '.sheet[open]', motion: { shown: 0, settled: 280 } },
-  { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } },
+  { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn:not([aria-haspopup])', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } },
   { name: 'list', link: '.tabs a[href$="/work/list"]', path: '/work/list', content: '.table tbody tr', motion: opensPage },
   { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal', motion: opensPage },
   { name: 'close card', link: '.close-card', path: '/work/board', content: '.board', gone: '.modal', motion: opensBoard },
