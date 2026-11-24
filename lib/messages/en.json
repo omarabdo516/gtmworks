@@ -1568,6 +1568,7 @@
   "providersOwnerOnly": "Only the Owner connects, disconnects, names, orders or switches off a provider, gives a key or switches a model. You see each provider’s state.",
   "providersModels": "Models",
   "providersModelsHint": "Only models switched on here are offered when you choose a model for a chat or an Agent. A model stays offered while any provider of its kind has it on.",
+  "providersModelsServed": "{0} itself says which models it serves this key, so a model it does not serve is not listed here.",
   "providersModelsNone": "This provider lists no models yet.",
   "providersModelsUnread": "Couldn’t read this provider’s models right now.",
   "providersModelSwitch": "{0} on {1}",
