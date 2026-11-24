@@ -154,10 +154,12 @@ language sql stable security definer set search_path='' as $$
   select w.id, w.title, 'approval', null::uuid, null::text
   from chosen w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id and s.kind='review'
   where w.approval_step_id is not null)
- select distinct f.id, f.title, f.kind, x.agent_name, x.agent_id
- from found f cross join lateral (select case when seen then f.agent_name end, case when seen then f.agent_id end
-  from (select f.agent_id is not null and public.can_see_agent(c,f.agent_id) as seen) v) x(agent_name,agent_id)
- order by 1, 3, 4;
+ -- Each Card's lines in its own order: who stops working, then what it asked, then the approval.
+ select d.* from (
+  select distinct f.id, f.title, f.kind, x.agent_name, x.agent_id
+  from found f cross join lateral (select case when seen then f.agent_name end, case when seen then f.agent_id end
+   from (select f.agent_id is not null and public.can_see_agent(c,f.agent_id) as seen) v) x(agent_name,agent_id)) d
+ order by d.id, array_position(array['run','question','permission','hand','approval'],d.kind), d.agent_name;
 $$;
 revoke all on function public.card_archive_stops(uuid,bigint[]) from public,anon,service_role;
 grant execute on function public.card_archive_stops(uuid,bigint[]) to authenticated;

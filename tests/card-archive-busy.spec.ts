@@ -95,7 +95,7 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
   await page.goto(board);
   await expect(page.locator(`#board-cols [data-column="progress"] .kcard[data-card-id="${card}"]`)).toBeVisible();
   await expect.poll(()=>count(page)).toBe(before-1);
- } finally { query(`delete from public.work_cards where conversation_id='${conversation}'`); query(`delete from public.hermes_agents where id='${agent}'`); }
+ } finally { query(`delete from public.hermes_agents where id='${agent}'`); }
 });
 
 test('a Card waiting for an approval asks once; archived, the approval ends with no decision and leaves the approver\'s list, and restored it is back where it was sent from',async({page,browser})=>{
