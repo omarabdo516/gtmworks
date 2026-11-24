@@ -1345,6 +1345,7 @@
   "settingsModelsShared": "This agent runs on the company’s shared profile, so it follows the default.",
   "settingsModelsChoose": "Model for {0}",
   "settingsModelsModelField": "Model for {0}",
+  "settingsSaving": "Saving…",
   "settingsModelsSaved": "Model saved.",
   "settingsModelsError": "Couldn’t save that model. Try again.",
   "settingsThinksHint": "The agent engine lists the models this agent’s own profile may use. It runs on the chosen one from its next message.",

@@ -74,22 +74,22 @@ test('check reads no draft state: no live step, no pull request permission and n
   assert.equal(check.steps.at(-1).env.LIVE_DRAFT, undefined);
 });
 
-// The browser suite runs in 6 shards (#335, #404) with fail-fast off: GitHub's one result for the matrix is a failure or
+// The browser suite runs in 7 shards (#335, #404, #653) with fail-fast off: GitHub's one result for the matrix is a failure or
 // cancelled when any shard is, so it alone judges them.
 test('integration is red when one shard failed or was cancelled, green when all passed', () => {
   assert.equal(verdict({ INTEGRATION_RESULT: 'success' }), 0);
   for (const result of ['failure', 'cancelled']) assert.equal(verdict({ INTEGRATION_RESULT: result }), 1, result);
 });
 
-test('the integration job runs as 6 shards, each uploading its own artifacts, and check reads the matrix result (#335, #404)', async () => {
+test('the integration job runs as 7 shards, each uploading its own artifacts, and check reads the matrix result (#335, #404, #653)', async () => {
   const { load } = await import('js-yaml');
   const { readFileSync } = await import('node:fs');
   const { jobs } = load(readFileSync('.github/workflows/ci.yml', 'utf8'));
   const { integration, check } = jobs;
-  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6] } });
+  assert.deepEqual(integration.strategy, { 'fail-fast': false, matrix: { shard: [1, 2, 3, 4, 5, 6, 7] } });
   const steps = integration.steps;
   const suite = steps.findIndex(step => step.name === 'integration');
-  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/6');
+  assert.equal(steps[suite].run, './ci.sh integration --shard=${{ matrix.shard }}/7');
   // Matrix legs share one outputs namespace, so per-shard outputs could overwrite each other: none are written.
   assert.equal(integration.outputs, undefined);
   const env = check.steps.at(-1).env;
@@ -97,11 +97,14 @@ test('the integration job runs as 6 shards, each uploading its own artifacts, an
   const uploads = steps.filter(step => step.uses?.startsWith('actions/upload-artifact@'));
   assert.ok(uploads.length >= 3);
   for (const upload of uploads) assert.match(upload.with.name, /-\$\{\{ matrix\.shard \}\}$/, upload.with.name);
-  // The proxy suite runs once, in shard 1; every argument after `integration` reaches the browser suite.
+  // The proxy suite runs once, in shard 1; every argument after `integration` but --shard reaches the browser suite,
+  // and --shard becomes the shard's spec files (#653, tests/browser-shards.test.mjs).
   const ci = readFileSync('ci.sh', 'utf8');
-  assert.match(ci, /\[\[ " \$\* " == \*' --shard='\* && " \$\* " != \*' --shard=1\/'\* \]\] && proxy=false/);
+  assert.match(ci, /\[\[ -n \$shard \]\] && \[\[ \$shard != 1\/\* \]\] && proxy=false/);
+  // A shard's files would widen any filter given beside them, so a shard takes no other argument.
+  assert.match(ci, /\[\[ -n \$shard && \$# -gt 0 \]\] && \{ echo "the browser suite runs a shard with no other arguments: \$\*" >&2; exit 2; \}/);
   assert.match(ci, /if \[\[ \$proxy == true \]\]; then npm run test:e2e:proxy; fi/);
-  assert.match(ci, /npm run test:e2e -- "\$@"\n/);
+  assert.match(ci, /npm run test:e2e -- "\$\{files\[@\]\}" "\$@"\n/);
 });
 
 // #421: the chat's open time runs in a job of its own, on the pull request too, so the browser shards no longer share

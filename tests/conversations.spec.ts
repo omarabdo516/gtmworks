@@ -35,6 +35,9 @@ function detach(agents:Record<string,{id:string,connection:string}>) {
 }
 // A stuck click fails with its locator instead of running into the test timeout.
 test.use({actionTimeout:15000});
+// Five minutes of tests in one file held one worker of one shard, longer than any other shard's tests (#653): each test
+// signs in, attaches Agents of its own and detaches them, on its lane's own stack, so they spread over the shard's workers.
+test.describe.configure({mode:'parallel'});
 const send=(page:Page,data:object)=>page.request.post('/api/conversations',{data:{company,...data}});
 
 test('The Owner starts a private conversation from the board and from Home, and the reply arrives without a reload',async({page})=>{

@@ -63,7 +63,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   ending:'completed',failure:/** @type {string|undefined} */(undefined),usage:/** @type {object|undefined} */({input_tokens:14000,output_tokens:12}),
   // The management listener (Hermes's dashboard, a second port): its profiles, and the status it answers with when
   // not 200. A profile made through it has its own Run API key, none until /api/env sets it, as in the pinned release.
-  managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>,display_name?:string|null,description?:string,description_auto?:boolean,bot_title?:string|null,env?:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),
+  managementStatus:200,profiles:/** @type {Map<string,{soul:string,provider:string,model:string,key:string|null,config:any,credentials:Record<string,string>,display_name?:string|null,description?:string,description_auto?:boolean,bot_title?:string|null,env?:Record<string,string>}>} */(new Map()),failStep:/** @type {''|'model'|'env'|'config'} */(''),modelWriteDelay:0,
   managementRequests:/** @type {{method?:string,path?:string,authorization?:string,range?:string,body:any}[]} */([]),
   // The default profile's config and model sign-ins (a profile made through the listener keeps its own), and the
   // sign-in sessions Hermes runs: approve(session) finishes one as the person would in their browser. The Engine's own
@@ -583,12 +583,17 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
     return send(response,200,{ok:true,description:profile.description,description_auto:false});
    }
    if(profilePath?.[2]==='model'&&request.method==='PUT') {
-    if(settings.failStep==='model') return send(response,500,{detail:'Internal Server Error'});
-    // _write_profile_model checks a pick against the profile's own keys (profiles.py 124-150); modelNeedsKey turns it on.
-    const keyed=settings.envRows.find(row=>row.primary&&row.provider===body?.provider);
-    if(settings.modelNeedsKey&&keyed&&!profile.env?.[keyed.env]) return send(response,400,{detail:`No credentials for ${body.provider} in this profile`});
-    Object.assign(profile,{provider:body.provider,model:body.model});
-    return send(response,200,{ok:true,provider:body.provider,model:body.model});
+    const answer=()=>{
+     if(settings.failStep==='model') return send(response,500,{detail:'Internal Server Error'});
+     // _write_profile_model checks a pick against the profile's own keys (profiles.py 124-150); modelNeedsKey turns it on.
+     const keyed=settings.envRows.find(row=>row.primary&&row.provider===body?.provider);
+     if(settings.modelNeedsKey&&keyed&&!profile.env?.[keyed.env]) return send(response,400,{detail:`No credentials for ${body.provider} in this profile`});
+     Object.assign(profile,{provider:body.provider,model:body.model});
+     return send(response,200,{ok:true,provider:body.provider,model:body.model});
+    };
+    // A slow Engine (#661): the model write answers only after modelWriteDelay ms.
+    if(settings.modelWriteDelay>0) { setTimeout(answer,settings.modelWriteDelay); return; }
+    return answer();
    }
    // The real value of one env var (hermes_cli/web_routers/config_env.py reveal_env_var): 404 when the profile's .env
    // holds none.

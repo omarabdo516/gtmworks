@@ -112,6 +112,8 @@ for (const path of [
   'scripts/supabase-images.sh',
   // The public-assets browser test reads every file under public/, Markdown included.
   'public/nested/README.md',
+  // The shards' split by measured time and its times move spec files between shards (#653).
+  'scripts/browser-shards.mjs', 'tests/browser-shard-times.json',
 ]) {
   test(`${path} runs the browser suite`, () => assert.equal(areas('docs/testing.md', path).integration, 'true'));
 }
