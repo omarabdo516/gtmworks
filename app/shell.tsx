@@ -7,6 +7,7 @@ import Link from '@/lib/link';
 import { shellNav } from '@/lib/navigation';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
 import { companyAgents, isNewFor } from '@/lib/sidebar.mjs';
+import { Birth } from '@/components/face-moments';
 import ApprovalsCount from './approvals-count';
 import { AgentFace } from '@/components/agent-face';
 import { companyLooks } from '@/lib/agent-looks';
@@ -103,9 +104,9 @@ export default async function Shell({company,companies,section,title,crumbs,pers
     <h2 className="sb-label" id="lbl-agents">{t('agents')}</h2>
     {/* A tile that arrives during the visit flashes once (#134). */}
     <AgentGrid company={id||''} agents={agents.map(agent=>agent.id)}>{agents.map(agent=>{const fresh=isNewFor(agent,personId); const status=stateOf(agent.id); return <li key={agent.id}>
-     <Link className="agent-tile" data-agent={agent.id} href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={[agent.name,agent.is_default&&t('mainAgent'),fresh&&t('agentNew'),agent.speciality,t(statusKeys[status])].filter(Boolean).join(' · ')} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
+     <Link className="agent-tile" data-agent={agent.id} data-birth href={`/c/${slug}/chat/${agent.id}`} aria-current={chat&&agentId===agent.id?'true':undefined} aria-label={[agent.name,agent.is_default&&t('mainAgent'),fresh&&t('agentNew'),agent.speciality,t(statusKeys[status])].filter(Boolean).join(' · ')} title={agent.speciality?`${agent.name} · ${agent.speciality}`:agent.name}>
       <AgentFace agent={agent.id} size={56} state={status} dot live/><bdi className="agent-tile__name">{agent.name}</bdi>{agent.is_default&&<span className="agent-tile__main" aria-hidden="true">{t('mainAgent')}</span>}
-      {fresh&&<span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span>}
+      {fresh&&<><span className="agent-tile__new" aria-hidden="true">{t('agentNew')}</span><Birth agent={agent.id}/></>}
      </Link>
     </li>;})}
     {(owner||asksForAgents)&&<li><Link className="agent-tile agent-tile--new" href={`/c/${slug}/chat?new=agent`}><span className="agent-tile__plus"><ShellIcon name="plus"/></span><span className="agent-tile__name">{t(owner?'newAgent':'settingsAskAgent')}</span></Link></li>}</AgentGrid>

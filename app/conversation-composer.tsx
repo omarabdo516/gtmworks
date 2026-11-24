@@ -9,6 +9,7 @@ import { useI18n } from '@/lib/i18n-client';
 import { statusKeys } from '@/lib/agent-details.mjs';
 import { ShellIcon } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
+import { playMoment } from '@/components/face-life';
 import { firstName } from '@/lib/channels';
 import { AppTile } from '@/components/app-tile';
 import { markOf, modelMarkOf } from '@/lib/app-mark.mjs';
@@ -86,7 +87,8 @@ export function ComposerPlaceProvider({place,children}:{place:ComposerPlace|null
 // The Commands "/" offers (design-reference: CMDS), the same list the "+" menu names: each job command whose Agent this
 // Member sees, naming it, then "/agent" (#159; lib/composer-mentions.mjs commandList).
 type Command={command:string,label:string,agent?:string};
-export type Suggestion={kind:'people'|'agents'|'commands',insert:string,person?:CallablePerson,agent?:CallableAgent,command?:Command};
+// `named`: the Agent's name is written after the @, whole or its first word (a token holds no space), so it perks up.
+export type Suggestion={kind:'people'|'agents'|'commands',insert:string,person?:CallablePerson,agent?:CallableAgent,command?:Command,named?:boolean};
 // design-reference: mentionMenu. A channel's "@" offers its other Members, then its Agents; a note's the same without
 // Commands; a Conversation's the Agents the Member sees. Each name and command is narrowed by what follows the token.
 export function mentionSuggestions(callable:Callable,token:{type:string,q:string},withCommands:boolean):Suggestion[] {
@@ -95,7 +97,7 @@ export function mentionSuggestions(callable:Callable,token:{type:string,q:string
  const matches=token.type==='/'&&withCommands?commandList(callable.agents).filter(item=>item.command.slice(1).toLowerCase().startsWith(token.q)):[];
  return [
   ...people.map(person=>({kind:'people' as const,insert:`@${firstName(person.name)} `,person})),
-  ...agents.map(agent=>({kind:'agents' as const,insert:`@${agent.name} `,agent})),
+  ...agents.map(agent=>({kind:'agents' as const,insert:`@${agent.name} `,agent,named:!!token.q&&[agent.name,agent.name.split(/\s/)[0]].some(name=>name.toLowerCase()===token.q)})),
   ...matches.map(command=>({kind:'commands' as const,insert:`${command.command} `,command})),
  ];
 }
@@ -114,12 +116,21 @@ export function MentionPop({listId,label,items,index,pick}:{listId:string,label:
    {item.person&&<><span className="me__av lg-av" style={{'--av':'22px'} as CSSProperties} aria-hidden="true">{Array.from(item.person.name.trim())[0]||'?'}</span>
     <span className="menu__t">{item.person.name}{item.person.role&&<span className="menu__d">{t(roleLabels[item.person.role])}{item.person.role==='viewer'&&` · ${t('mentionReadsOnly')}`}</span>}</span>
     <bdi className="menu__hint" dir="auto">@{firstName(item.person.name)}</bdi></>}
-   {item.agent&&<><span aria-hidden="true"><AgentFace agent={item.agent.id} size={24} state={item.agent.status}/></span>
+   {item.agent&&<><PerkingFace agent={item.agent} named={!!item.named}/>
     <span className="menu__t"><bdi>{item.agent.name}</bdi>{(item.agent.status||item.agent.speciality)&&<span className="menu__d">{item.agent.status&&t(statusKeys[item.agent.status])}{item.agent.status&&item.agent.speciality&&' · '}{item.agent.speciality&&<bdi>{item.agent.speciality}</bdi>}</span>}</span></>}
    {item.command&&<><ShellIcon name="slash"/><span className="menu__t">{t(item.command.label,item.command.agent)}</span><span className="menu__hint menu__code">{item.command.command}</span></>}
   </button>);
  });
- return <div className="menu" role="listbox" aria-label={label}>{rows}</div>;
+ return <div className="menu" role="listbox" id={listId} aria-label={label}>{rows}</div>;
+}
+// design-reference-orb: perk. The Agent in the @ list perks up each time its name comes to be written after the @.
+function PerkingFace({agent,named}:{agent:CallableAgent,named:boolean}) {
+ const wrap=useRef<HTMLSpanElement>(null); const was=useRef<{agent:string,named:boolean}|null>(null);
+ useEffect(()=>{
+  const before=was.current; was.current={agent:agent.id,named};
+  if(named&&(before?.agent!==agent.id||!before.named)) playMoment(wrap.current?.querySelector<HTMLElement>('.face--live'),'perk');
+ },[agent.id,named]);
+ return <span aria-hidden="true" ref={wrap}><AgentFace agent={agent.id} size={24} state={agent.status}/></span>;
 }
 type SuggestionList={token:{type:string,q:string,start:number,end:number},items:Suggestion[],index:number};
 export type ModelTarget={company:string,conversation:string,agent:string};
@@ -240,7 +251,7 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   {list&&!dictation.recording&&<MentionPop listId={listId} label={t('mentionSuggestions')} items={list.items} index={list.index} pick={pickEntry}/>}
   <div className="composer__row">
    {dictation.recording?dictation.cancel:<PlusMenu open={plusOpen} setOpen={next=>{ if(next) setList(null); setPlusOpen(next); }} callable={callable} channel={!!call} model={model} attach={attach} pickFile={()=>picker.current?.click()} insert={insertAtCaret} field={()=>field.current?.focus()} fail={setError}/>}
-   <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={dictation.writing?t('chatDictationWriting'):placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list&&!dictation.recording} aria-activedescendant={list&&!dictation.recording?`${listId}-${list.index}`:undefined}
+   <textarea ref={field} className="composer__input" dir="auto" rows={1} autoFocus={focus} readOnly={busy} aria-busy={busy} aria-label={label??t('conversationMessage')} placeholder={dictation.writing?t('chatDictationWriting'):placeholder} value={text} aria-autocomplete="list" aria-expanded={!!list&&!dictation.recording} aria-controls={list&&!dictation.recording?listId:undefined} aria-activedescendant={list&&!dictation.recording?`${listId}-${list.index}`:undefined}
     onChange={event=>{ const value=event.target.value; setText(value); setKey(newId()); updateList(value,event.target.selectionStart??value.length); }} onKeyDown={typeKeys}/>
    {dictation.recording&&dictation.wave}
    {dictation.recording&&dictation.clock}
