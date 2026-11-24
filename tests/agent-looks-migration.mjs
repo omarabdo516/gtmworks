@@ -6,7 +6,7 @@ import { testDb } from './pgtap.mjs';
 // calm though it was made last; an Agent from a ready-made role has that role's temperament; every other Agent takes the
 // colour and the temperament its Company uses least, so no colour comes twice while there are eight or fewer; and an
 // Agent that already has a look keeps it. The database this runs on has the migration.
-const migration=readFileSync('supabase/migrations/20270415999996_agent_looks.sql','utf8');
+const migration=readFileSync('supabase/migrations/20270416000001_agent_looks.sql','utf8');
 const backfill=migration.match(/^do \$\$ declare a record; begin\n[\s\S]*?\nend \$\$;$/m)?.[0];
 if(!backfill) throw new Error('the migration has no block that gives every Agent its look');
 const company='10000000-0000-0000-0000-000000000002';

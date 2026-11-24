@@ -46,7 +46,22 @@ test('the first step of the levels removal keeps the level, and the cutover remo
  for(const removed of [/alter table public\.companies drop column agent_level;/,/drop column tools_level;/,/drop column tools_policy;/,
   /drop function if exists public\.set_agent_level\(uuid,integer\);/,/drop function if exists public\.engine_tool_policy\(\);/])
   assert.match(last,removed);
- assert.equal(migrations.at(-1),cutover,'the cutover sorts after every migration it follows');
+ assert.ok(migrations.indexOf(cutover)>migrations.indexOf(firstStep),'the cutover sorts after the first step it follows');
+});
+
+// The installer applies a cutover by its name, after every other migration, wherever its name sorts; the Supabase CLI
+// and the local database apply it in the order the names sort. So a migration whose name sorts after the cutover (once
+// no version is left before it) is applied after the cutover there and before it on an install: the same only when it
+// makes nothing the cutover makes and reads nothing the cutover takes away.
+test('a migration sorting after the cutover makes nothing the cutover makes and reads nothing it takes away', () => {
+ const last=read(cutover);
+ const made=new Set([...last.matchAll(/create (?:or replace )?(?:function|view|trigger|policy) (?:public\.)?"?(\w+)/gi)].map(([,name])=>name));
+ const removed=new Set([...last.matchAll(/drop (?:function|table|column|policy|view|trigger)(?: if exists)? (?:public\.)?"?(\w+)/gi)].map(([,name])=>name));
+ assert.ok(made.size&&removed.size,'the cutover makes and removes what it names');
+ for(const name of migrations.slice(migrations.indexOf(cutover)+1)) {
+  const sql=read(name);
+  for(const word of [...made,...removed]) assert.doesNotMatch(sql,new RegExp(`\\b${word}\\b`),`${name} names ${word}, which the cutover makes or takes away`);
+ }
 });
 
 test('the installer applies the cutover only once this release answers, and puts the previous Engines back when an update cannot start its own', () => {

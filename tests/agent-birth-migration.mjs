@@ -4,7 +4,7 @@ import { testDb } from './pgtap.mjs';
 // An install updated to #701 already has Agents its people asked for, made by the release before it with no birth
 // record. The migration's last statement marks every one of them born, replayed here on an Agent made as that release
 // made it: its requester is never shown it born after the update, and an Agent made after the update still is, once.
-const migration=readFileSync('supabase/migrations/20270415999998_agent_birth.sql','utf8');
+const migration=readFileSync('supabase/migrations/20270416000003_agent_birth.sql','utf8');
 const backfill=migration.match(/^update public\.hermes_agents set requester_born_at=[^;]*;$/m)?.[0];
 if(!backfill) throw new Error('the migration marks no Agent made before it born');
 const company='10000000-0000-0000-0000-000000000001';
