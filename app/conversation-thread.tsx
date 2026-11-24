@@ -292,7 +292,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   {failed&&(modelCause
    // The Company has no model at all (#422), or a model error a retry cannot fix (#457): sending again cannot work, so
    // the line says its cause and where the Owner fixes it.
-   ?<p className="note convo-status" role="alert" data-outcome={modelOutcome(modelCause)}><ModelLine cause={modelCause} agent={record.modelRefused?.agent??conversation.agent_name} slug={slug} owner={(record.noModel??record.modelRefused)?.owner===true}/></p>
+   ?<p className="note convo-status" role="alert" data-outcome={modelOutcome(modelCause)}><ModelLine cause={modelCause} agent={record.modelRefused?.agent??conversation.agent_name} slug={slug} owner={(record.noModel??record.modelRefused)?.owner===true} resets={record.modelRefused?.resetsAt}/></p>
    :<p className="note convo-status" role="alert">{t('conversationReplyFailed')}</p>)}
  </>;
 }
