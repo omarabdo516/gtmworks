@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readProviderKeys, setProviderKey, removeProviderKey, hermesEngine } from '../lib/hermes.mjs';
-import { changeCompanyKey, readCompanyKeys } from '../lib/provider-keys.mjs';
+import { changeCompanyKey, readCompanyKeys, withCompanyKeys } from '../lib/provider-keys.mjs';
 import { describeEntry } from '../lib/activity-log.mjs';
 import { i18n } from '../lib/i18n.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -348,4 +348,14 @@ test('the install job sets a key on the pinned Engine for a Company\'s space and
  assert.match(script,/assert\.deepEqual\(keyedStates,\[true,true,true,false,false,false,false\]/);
  assert.match(script,/removeProviderKey\(\{\.\.\.firstEngine,profile:first\.profile\},\{\.\.\.keyed,provider\}\)/);
  assert.match(script,/assert\.deepEqual\(await providerKeys\(\),\[false,false,false,false,false,false,false\]/);
+});
+
+// One queue per Company whatever the letter case of its id (#634): a UUID spelled in capitals is the same Company.
+test('work on a Company\'s keys waits for work on the same Company spelled in another letter case', async () => {
+ const order=[];
+ const company='3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b';
+ const first=withCompanyKeys(company,async()=>{ order.push('first in'); await new Promise(resolve=>setTimeout(resolve,50)); order.push('first out'); });
+ const second=withCompanyKeys(company.toUpperCase(),async()=>{ order.push('second'); });
+ await Promise.all([first,second]);
+ assert.deepEqual(order,['first in','first out','second']);
 });
