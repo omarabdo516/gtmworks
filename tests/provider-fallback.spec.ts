@@ -102,7 +102,23 @@ test('with None, a request that ran out of every ChatGPT account asks no other k
  expect(fallbacksOf(run)).toEqual([]);
  expect(fake.settings.modelCalls.some(call=>call.provider==='anthropic')).toBe(false);
  expect(moves()).toEqual([]);
+ // #642: the Engine's text named when the usage resets (in 120h 58m, as measured), so the line says so, in the reader's own zone.
+ const resets=rows<{resets_at:string}>(`select resets_at from public.conversation_run_resets where run_id='${run}'`);
+ expect(resets).toHaveLength(1);
+ expect(Math.abs(Date.parse(resets[0].resets_at)-Date.now()-(120*60+58)*60_000)).toBeLessThan(5*60_000);
+ await expect(page.locator('.convo-status[role="alert"] time')).toContainText('The usage resets on');
  await testInfo.attach('chat-out-of-access',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+ // #642: the next message, with both accounts already marked exhausted, makes no model call: the Engine fails it at once
+ // with its usage-limit line, and the chat says the same, with when the usage resets (~121h), not "could not finish".
+ const again=await send(page,lead,'Plan it again');
+ await outOfAccess(page,again);
+ expect(callsOf(again)).toEqual([]);
+ const later=rows<{resets_at:string}>(`select resets_at from public.conversation_run_resets where run_id='${again}'`);
+ expect(Math.abs(Date.parse(later[0].resets_at)-Date.now()-121*3600_000)).toBeLessThan(5*60_000);
+ const time=page.locator('.convo-status[role="alert"] time');
+ await expect(time).toHaveAttribute('datetime',new Date(later[0].resets_at).toISOString());
+ await expect(page.getByText('Send the message again to retry.')).toHaveCount(0);
+ await testInfo.attach('chat-out-of-usage-again',{body:await page.locator('.convo-status[role="alert"]').screenshot(),contentType:'image/png'});
 });
 
 test('with Claude Sonnet as the Fallback model, the same request completes on it once, for Lead and for an Agent made later', async({page},testInfo)=>{
