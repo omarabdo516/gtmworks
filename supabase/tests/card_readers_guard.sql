@@ -54,6 +54,8 @@ insert into decisions
  union all select 'public.mark_hand_done(uuid,uuid,bigint)','exempt','the Conversation''s own person marks a hand card of that Conversation done and writes its log row, on the chat''s Card when it has one (read under card_agent_visible), else private to that person; it answers no Card'
  union all select fn,'exempt','a Member''s own channel action: a message names the Members it mentions, and each of them reads one waiting item that names that message and no Card, while opening the mention (#200) resolves the reader''s own item alone; neither answers a Card' from unnest(array[
   'public.post_channel_message(uuid,uuid,text)','public.read_channel_mention(uuid,bigint)']) fn
+ union all select fn,'exempt','an Owner or a Manager in a team channel archives or restores it (#675): it writes the channel''s own log row, read by the channel''s members alone, and on archiving resolves the waiting items of the channel''s messages; it names no Card and answers none' from unnest(array[
+  'public.archive_channel(uuid)','public.restore_channel(uuid)']) fn
  union all select 'public.good_morning_waits(uuid)','checks','runs as the authenticated role, so the Member''s own policies apply, and asks can_see_card for each Card besides; record_good_morning''s only caller (#183)'
  union all select 'public.log_agent_event(uuid,uuid,text,uuid,text,jsonb)','exempt','callable inside the database only; it writes an Agent''s log row, which names no Card'
  union all select 'public.log_held_change(public.held_agent_changes,boolean)','exempt','callable inside the database only; it writes the Agent''s log row of a held memory or skill change (#370), which names no Card'
