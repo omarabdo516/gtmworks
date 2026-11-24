@@ -83,14 +83,15 @@ $$;
 revoke all on function public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean,jsonb,text[]) from public,anon,authenticated;
 grant execute on function public.close_conversation_run(uuid,text,text,text,text,bigint,bigint,boolean,jsonb,text[]) to service_role;
 
--- 20270415650000's close_channel_run, with the reply's files, as a Conversation's close takes them. Every Member of the
+-- close_channel_run as 20270415650000 wrote it and 20270415997200 and 20270415999950 left it (every model cause a
+-- retry cannot fix), with the reply's files, as a Conversation's close takes them. Every Member of the
 -- channel reads them, as they read its messages' own files. A file row's send key is the Run's own (md5 of the Run as a
 -- uuid), so a reply's files keep one place each.
 create function public.close_channel_run(message bigint, run text, run_outcome text, reply text, used_input bigint, used_output bigint, reply_files jsonb, missed_files text[])
 returns boolean language plpgsql security definer set search_path='' as $$
 declare r public.channel_runs; said bigint; handed boolean := public.reply_hands_files(reply_files,missed_files);
 begin
- if run_outcome is null or run_outcome not in ('completed','failed','no_model','stopped','lost')
+ if run_outcome is null or run_outcome not in ('completed','failed','no_model','no_credit','key_refused','model_missing','no_access','stopped','lost')
   or (run_outcome='completed') <> (coalesce(btrim(reply),'') <> '' or handed) or not public.reply_files_valid(reply_files,missed_files)
   or handed and run is null then
   raise exception 'channelFailed' using errcode='22023'; end if;

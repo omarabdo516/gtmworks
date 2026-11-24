@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(22);
 -- #708, ADR 0028: an Agent's reply hands its person files. The close stores the reply with them: rows of the place's
 -- files table on the Agent's message, at paths the database builds itself, and the names of the files it could not hand
 -- over. A reply of files alone is a whole reply; a close that stores no message stores no file.
@@ -73,5 +73,13 @@ reset role;
 select is((select array_agg(a.name||':'||a.path||':'||array_to_string(m.missed_files,',')) from public.channel_attachments a join public.channel_messages m on m.id=a.message_id where m.reply_to=(select id from sent where label='ask')),
  array['deck.pdf:10000000-0000-0000-0000-000000000001/channels/69000000-0000-0000-0000-000000000001/reply-'||md5('run_708_channel')||'-0:gone.png'],
  'its message takes the file at the path the database builds, and the name it could not hand over');
+-- A channel Run that failed for a cause a retry cannot fix closes with it, as the previous version's close takes it.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
+insert into sent values ('broke',public.post_channel_message('69000000-0000-0000-0000-000000000001',gen_random_uuid(),'@Deckmaker one more'));
+set local role service_role;
+select ok((select attempt from public.begin_channel_start((select id from sent where label='broke')))=1 and public.answer_channel_start((select id from sent where label='broke'),1,'run_708_broke'),'a second channel Run is started');
+select is(public.close_channel_run((select id from sent where label='broke'),'run_708_broke','no_credit',null,null,null,'[]'::jsonb,null),true,'and closes as no credit through the close that takes files');
+reset role;
 select * from finish();
 rollback;
