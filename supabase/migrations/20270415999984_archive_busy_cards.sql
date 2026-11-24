@@ -113,7 +113,7 @@ $$;
 -- Cards are asked at once, as a selection is archived at once (#672). A Card with nothing going on answers nothing, so
 -- nothing is asked. A Card that is archived already, hidden from the caller or another Company's answers nothing, and an
 -- Agent hidden from the caller is not named.
-create function public.card_archive_stops(c uuid, cards bigint[]) returns table(card bigint, title text, kind text, agent text)
+create function public.card_archive_stops(c uuid, cards bigint[]) returns table(card bigint, title text, kind text, agent text, agent_id uuid)
 language sql stable security definer set search_path='' as $$
  with chosen as (
   select w.id, w.title, w.company_id, w.conversation_id, w.channel_id, w.stage_id, w.approval_step_id from public.work_cards w
@@ -154,8 +154,9 @@ language sql stable security definer set search_path='' as $$
   select w.id, w.title, 'approval', null::uuid, null::text
   from chosen w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id and s.kind='review'
   where w.approval_step_id is not null)
- select distinct f.id, f.title, f.kind, case when f.agent_id is not null and public.can_see_agent(c,f.agent_id) then f.agent_name end
- from found f
+ select distinct f.id, f.title, f.kind, x.agent_name, x.agent_id
+ from found f cross join lateral (select case when seen then f.agent_name end, case when seen then f.agent_id end
+  from (select f.agent_id is not null and public.can_see_agent(c,f.agent_id) as seen) v) x(agent_name,agent_id)
  order by 1, 3, 4;
 $$;
 revoke all on function public.card_archive_stops(uuid,bigint[]) from public,anon,service_role;

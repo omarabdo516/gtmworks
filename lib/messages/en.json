@@ -1640,5 +1640,14 @@
   "boardArchivedEmpty": "Nothing archived",
   "boardRestoreCard": "Restore {0}",
   "cardUndo": "Undo",
-  "boardArchivedNoMatch": "No archived cards match these filters"
+  "boardArchivedNoMatch": "No archived cards match these filters",
+  "archiveConfirmOne": "Archive the card?",
+  "archiveConfirmMany": "Archive {0} cards?",
+  "archiveStopRun": "{0} stops working on {1}",
+  "archiveStopQuestion": "The question from {0} on {1} closes unanswered",
+  "archiveStopPermission": "What {0} asked to be allowed on {1} closes unanswered",
+  "archiveStopHand": "The step {0} handed over on {1} closes",
+  "archiveStopApproval": "The approval of {1} ends with no decision",
+  "archiveStopAnAgent": "An Agent",
+  "archiveAndStop": "Archive and stop"
 }

@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
 import type { ArchiveResult, IdeaResult, PlaceResult, UndoResult } from './work';
+import type { ArchiveStop } from '@/app/archive-confirm';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
 // start that fails is left to the worker and logged without the note.
 async function startNoteRun(note:number) {
@@ -50,6 +51,12 @@ export const archiveCards=withActionLog('archiveCards',async function archiveCar
  const db=await supabase(); const company=String(form.get('company'));
  const cards=form.getAll('card').map(Number).filter(Number.isSafeInteger);
  if(!await actionAllowed(db,'archiveCards',company)) return {state:'refused'};
+ // #671: before archiving, what it would stop, so the board asks once, naming each thing, only when something does.
+ if(form.get('intent')==='stops') {
+  const {data,error}=await db.rpc('card_archive_stops',{c:company,cards});
+  if(error) { logActionFailure('archiveCards',error,{form}); return {state:'refused'}; }
+  return {state:'stops',stops:(data||[]) as ArchiveStop[]};
+ }
  const {data,error}=form.get('intent')==='restore'?await db.rpc('restore_cards',{c:company,cards}):await db.rpc('archive_cards',{c:company,cards});
  if(error) { logActionFailure('archiveCards',error,{form}); return {state:'refused'}; }
  const done=((data||[]) as (number|string)[]).map(Number);

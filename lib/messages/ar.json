@@ -1640,5 +1640,14 @@
   "boardArchivedEmpty": "مفيش حاجة مؤرشفة",
   "boardRestoreCard": "رجّع {0}",
   "cardUndo": "تراجع",
-  "boardArchivedNoMatch": "مفيش بطاقات مؤرشفة بالفلاتر دي"
+  "boardArchivedNoMatch": "مفيش بطاقات مؤرشفة بالفلاتر دي",
+  "archiveConfirmOne": "أرشف البطاقة؟",
+  "archiveConfirmMany": "أرشف {0} بطاقات؟",
+  "archiveStopRun": "{0} هيوقف شغل على {1}",
+  "archiveStopQuestion": "سؤال {0} في {1} هيتقفل من غير إجابة",
+  "archiveStopPermission": "اللي {0} طلب الإذن بيه في {1} هيتقفل من غير رد",
+  "archiveStopHand": "الخطوة اللي {0} سلّمها في {1} هتتقفل",
+  "archiveStopApproval": "الموافقة على {1} هتنتهي من غير قرار",
+  "archiveStopAnAgent": "وكيل",
+  "archiveAndStop": "أرشف ووقّف"
 }
