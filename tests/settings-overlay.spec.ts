@@ -2,6 +2,7 @@ import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn, openNavigation, emailLink } from './sign-in';
+import { dialogExit, recordDialogExit, dialogRecords, type DialogExitRecord } from './dialog-exit';
 
 // The settings overlay (#26): opened from the account menu over the page, closed back to it, one address per state,
 // the company's real Agents (the main one first), and the Owner's agent controls checked again on the server.
@@ -475,21 +476,15 @@ test('a Viewer raises none of the toasts, on the screens or through the routes',
 // is the same.
 for(const who of [{role:'Owner',email:'omar@example.com',sections:['account','agents','company']},{role:'Viewer',email:'viewer@example.com',sections:['account','agents','account']}]) test(`${who.role}: Settings opened from the board leaves with its exit, then is gone, then the board returns; three sections play one entrance`,async({page})=>{
  await signIn(page,who.email,'/c/rs-learning/work/board');
+ await recordDialogExit(page,{part:'.sov',shown:'.sov-root:not([hidden])'});
  await page.evaluate(()=>{
-  const seen:string[][]=[]; Object.assign(window,{seen});
+  const {seen}=window as unknown as {seen:DialogExitRecord[]};
   // The entrance, and any other animation of the overlay, from animationstart: the overlay stays, so the event comes
-  // however late the frame. The exit from the closing class, with the animation it gives: the leave is a timer (useLeave
-  // in lib/motion.ts), and a frame later than it (a busy CI runner) hides the overlay before animationstart is ever sent
-  // (#595, as ready-made-roles.spec.ts, #526). So the event skips only the exit of an overlay already closing, which the
-  // observer has recorded; an exit started without the closing class (a section change) is still recorded.
-  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.classList.contains('sov')&&!(event.animationName==='gw-modal-out'&&part.classList.contains('is-closing'))) seen.push([event.animationName,location.pathname]); });
-  new MutationObserver(()=>{
-   const part=document.querySelector('.sov'), root=document.querySelector('.sov-root');
-   if(part?.matches('.is-closing')&&!seen.some(([what])=>what==='closing')) seen.push(['closing',...part.getAnimations().map(run=>{ const {delay,duration}=run.effect!.getTiming(); return `${(run as CSSAnimation).animationName} ${run.playState} delay ${delay}ms for ${duration}ms`; }),location.pathname]);
-   if(root?.hasAttribute('hidden')&&!seen.some(([what])=>what==='gone')) seen.push(['gone',location.pathname]);
-  }).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden']});
+  // however late the frame. The exit of an overlay already closing is skipped: tests/dialog-exit.ts reads it from the
+  // closing class (#595, #725). An exit started without the closing class (a section change) is still recorded.
+  document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.classList.contains('sov')&&!(event.animationName==='gw-modal-out'&&part.classList.contains('is-closing'))) seen.push([event.animationName,location.pathname+location.search]); });
  });
- const seen=()=>page.evaluate(()=>(window as unknown as {seen:string[][]}).seen);
+ const seen=()=>dialogRecords(page);
  await openNavigation(page);
  const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
  await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
@@ -504,7 +499,9 @@ for(const who of [{role:'Owner',email:'omar@example.com',sections:['account','ag
  await overlay.getByRole('button',{name:'Close settings and go back'}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
  await expect(overlay).toHaveCount(0);
- expect(await seen()).toEqual([['gw-fade-in','/c/rs-learning/settings'],['closing','gw-modal-out running delay 0ms for 190ms','/c/rs-learning/settings'],['gone','/c/rs-learning/settings']]);
+ // The exit leaves from the last section's address; Company, the default section, has the bare one.
+ const last=`/c/rs-learning/settings${who.sections.at(-1)==='company'?'':`?section=${who.sections.at(-1)}`}`;
+ expect(await seen()).toEqual([['gw-fade-in','/c/rs-learning/settings'],['closing',dialogExit,last],['gone',last]]);
 });
 
 test('with reduced motion Settings leave at once, with no exit, by Escape',async({page})=>{

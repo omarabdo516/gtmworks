@@ -20,6 +20,9 @@
 .gw .sov :where(h2, h3, h4, p) { margin: 0; letter-spacing: normal; text-transform: none; }
 .gw .sov :where(a) { color: inherit; text-decoration: none; }
 .gw .sov [aria-disabled="true"] { cursor: default; }
+/* A segmented or row choice that waits for a save keeps its focus (aria-disabled, #588, #720) and a disabled button's dimmed look;
+   the Company's mode cards (cr-kind) are read-only, not waiting, and keep their own look. */
+.gw .sov :is(.segmented, .panel-card) > [role="radio"][aria-disabled="true"] { opacity: .5; }
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .sov-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
 .gw .sov .num { font-variant-numeric: tabular-nums; }
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .muted { color: var(--gw-text-3); }
@@ -100,7 +103,7 @@
   .gw :is(.sov, .apps-sheet, .modal.team-dlg) .btn--primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--gw-primary-hover); }
   .gw :is(.sov, .apps-sheet, .modal.team-dlg) .btn--secondary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sov-btn2-hover); }
   .gw :is(.sov, .apps-sheet, .modal.team-dlg) .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
-  .gw :is(.sov, .modal.team-dlg) a.panel-row:hover, .gw :is(.sov, .modal.team-dlg) button.panel-row:hover:not(:disabled) { background: var(--gw-bg-hover); }
+  .gw :is(.sov, .modal.team-dlg) a.panel-row:hover, .gw :is(.sov, .modal.team-dlg) button.panel-row:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--gw-bg-hover); }
   .gw .sov-nav .sb-item:hover { background: var(--gw-bg-hover); }
   .gw .sov-nav .sb-item[aria-current="page"]:hover { background: var(--gw-bg-active); }
 }
@@ -322,7 +325,6 @@
 .gw .sov .cr-kind__check { position: absolute; top: 14px; inset-inline-end: 12px; display: inline-flex; color: var(--gw-text-1); --od-icon-size: 16px; }
 .gw .sov .ln-ag { flex-wrap: wrap; }
 .gw .sov .ln-seg { flex: none; width: 260px; }
-.gw .sov .ln-seg button[aria-disabled="true"] { opacity: .5; cursor: default; }
 .gw .sov .ln-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
 .gw .sov .ln-rule { padding: var(--s4); gap: var(--s2); }
 .gw .sov .ln-rule b { display: flex; align-items: center; gap: var(--s2); font-size: var(--gw-fs-base); --od-icon-size: 18px; }
