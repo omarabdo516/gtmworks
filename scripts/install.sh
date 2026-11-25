@@ -75,29 +75,29 @@ node_image=node:22.14.0-alpine3.21
 # A network that is gone (a Company removed) is left out, so the file never names one Compose cannot find.
 engines_file=docker-compose.engines.yml
 write_engines_file() {
-  networks=
-  for name in $(engine_names); do
-    network=$(engine_network_of "$name")
-    [ "$name" = first ] && network=${network:-gtmworks-engine-first}
-    [ -n "$network" ] || continue
-    docker network inspect "$network" > /dev/null 2>&1 || continue
-    case " $networks " in *" $network "*) ;; *) networks="$networks $network" ;; esac
+  ef_networks=
+  for ef_name in $(engine_names); do
+    ef_network=$(engine_network_of "$ef_name")
+    [ "$ef_name" = first ] && ef_network=${ef_network:-gtmworks-engine-first}
+    [ -n "$ef_network" ] || continue
+    docker network inspect "$ef_network" > /dev/null 2>&1 || continue
+    case " $ef_networks " in *" $ef_network "*) ;; *) ef_networks="$ef_networks $ef_network" ;; esac
   done
   {
     echo '# Written by scripts/install.sh before every Compose command (#773): the app and the worker on each Company'"'"'s'
     echo '# Engine network. Do not edit: the next install command writes it again from the Engines this install has.'
-    if [ -z "$networks" ]; then echo 'services: {}'; else
+    if [ -z "$ef_networks" ]; then echo 'services: {}'; else
       echo 'services:'
-      for service in web worker; do
-        echo "  $service:"
+      for ef_service in web worker; do
+        echo "  $ef_service:"
         echo '    networks:'
         echo '      default: {}'
-        for network in $networks; do
-          if [ "$service" = web ]; then echo "      $network:"; echo '        aliases: [web]'; else echo "      $network: {}"; fi
+        for ef_net in $ef_networks; do
+          if [ "$ef_service" = web ]; then echo "      $ef_net:"; echo '        aliases: [web]'; else echo "      $ef_net: {}"; fi
         done
       done
       echo 'networks:'
-      for network in $networks; do echo "  $network:"; echo '    external: true'; done
+      for ef_net in $ef_networks; do echo "  $ef_net:"; echo '    external: true'; done
     fi
   } > "$engines_file.tmp" && mv "$engines_file.tmp" "$engines_file"
 }
@@ -412,6 +412,9 @@ remove_old_engine() {
 join_engine_network() {
   network=$1
   test -n "$network" || return 0
+  # The installer's Compose file names every Engine network there is now (#773), this one included, so a recreate by any
+  # Compose command that reads it keeps the app and the worker on it.
+  write_engines_file || return 1
   for service in web worker; do
     id=$(compose ps -q "$service") || return 1
     [ -n "$id" ] || continue
