@@ -11,13 +11,12 @@ import { BoardIcon } from '@/components/board-icon';
 import { ShellIcon } from '@/components/shell-icon';
 import { AgentFace } from '@/components/agent-face';
 import { useRemovedAgents } from '@/lib/agent-looks-client';
-import { CardWindow, Sym, type CardWindowData } from '@/app/card-window';
+import { CardWindow, CwMenu, Sym, symbolKey, type CardWindowData, type MenuItem } from '@/app/card-window';
 import { toast } from '@/app/toast';
 import { useFlagToast } from '@/app/use-flag-toast';
 import { useAgentIdentities } from '@/lib/agent-identities-client';
 const NewCard=lazy(()=>import('./new-card'));
-import AddIdea from './add-idea';
-import { ChatCardFoot, useShowCard, type CardAgent } from './board-show';
+import { useShowCard, type CardAgent } from './board-show';
 import { answerAgentAccess, decideAgentRule } from './skill-actions';
 import { OwnerRequestCard } from './agent-request-card';
 import { ChangeBoardCard } from './agent-change-card';
@@ -26,7 +25,7 @@ import { ReviewDecision } from '@/app/review-decision';
 import { Avatar, type WorkActivity, type WorkAttachment, type WorkMember } from '@/lib/work-activity';
 import { workDate as date } from '@/lib/work-date.mjs';
 import { sortWorkCards } from '@/lib/work-sort.mjs';
-import { bellRows, boardColumns, blockReason, cardSymbol, chatPlace, chatWait, columnLabel, columnOf, keyboardTarget, onCard, orderColumn, placeByOne, progressOf, type CardWait } from '@/lib/board-columns.mjs';
+import { bellRows, boardColumns, blockReason, cardSymbol, chatPlace, chatWait, columnLabel, columnOf, keyboardTarget, onCard, orderColumn, placeByOne, type CardWait } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import { withMention } from '@/lib/channels';
 import type { AssignedCard, WaitingItem } from '@/lib/approval-queue';
@@ -58,14 +57,14 @@ type SaveCard=(form:FormData)=>Promise<SaveResult>;
 type TickTodoAction=(form:FormData)=>Promise<TickResult>;
 type SaveDescriptionAction=(form:FormData)=>Promise<DescriptionSaved>;
 type UploadPictureAction=(form:FormData)=>Promise<PictureUploaded>;
-export type IdeaResult={card:number}|{failed:true};
+export type NewCardResult={id:number}|{error:string};
 // Archiving or restoring Cards (#670): the Cards the database archived or restored, or none.
 // Which question of what archiving would stop is the newest still wanted: an answer to an older or dropped one is ignored.
 function newestQuestion() { let newest=0; return {ask:()=>++newest,drop:()=>{ newest++; },newest:(asked:number)=>asked===newest}; }
 type ArchiveCards=(company:string,intent:ArchiveIntent|'undo',cards:number[],version?:string)=>Promise<ArchiveAnswer<number>>;
-export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
+export type NewCardAction=(form:FormData)=>Promise<NewCardResult>;
 export type OpenReview={card_id:number,version_id:number|null,asked_by:string|null,asked_at:string};
-export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,saveDescription?:SaveDescriptionAction,uploadPicture?:UploadPictureAction,reviews?:OpenReview[],openWaits?:{card_id:number,waiting:number}[],placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
+export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,saveDescription?:SaveDescriptionAction,uploadPicture?:UploadPictureAction,reviews?:OpenReview[],openWaits?:{card_id:number,waiting:number}[],placeMove:PlaceCard,newCard:NewCardAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:'idea'|'card',ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
 // The board's archive list (#670, #705): the server's first page, how many archived Cards the reader sees (null when it
 // could not be read), and an archived Card the address names that the page does not hold, which opens over the board.
 type ArchivedCards={first:ArchivedPage<Card>|null,total:number|null,named:Card[]};
@@ -73,7 +72,7 @@ const emptyKey:Record<string,[string,string]>={waiting:['boardEmptyWaiting','boa
 export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove}=p; const {t,locale,language}=useI18n(); const router=useRouter(); const identities=useAgentIdentities();
  // A change-only form cannot submit before React attaches its handler.
  const hydrated=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
- const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState(p.initialCreating && p.canCreate); const [addingIdea,setAddingIdea]=useState(false); const [showArchived,setShowArchived]=useState(false); const [confirming,setConfirming]=useState<{cards:number[],stops:ArchiveStop[]}|null>(null); const [asking]=useState(newestQuestion); const [selected,setSelected]=useState<Map<number,string>|null>(null); const [left,setLeft]=useState<{restore:boolean,titles:string[]}|null>(null); const selectToggle=useRef<HTMLButtonElement>(null); const selectAllButton=useRef<HTMLButtonElement>(null); const selectedAct=useRef<HTMLButtonElement>(null); const [focusTo,setFocusTo]=useState<{to:'toggle'|'all'|'act'}|null>(null); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [archiveQuery,setArchiveQuery]=useState(''); const [archiveSearching,setArchiveSearching]=useState(false); const archiveField=useRef<HTMLInputElement>(null); const archiveSearchButton=useRef<HTMLButtonElement>(null); const archiveEscaped=useRef(false); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
+ const [moving,setMoving]=useState(false); const [placeError,setPlaceError]=useState<string|null>(null); const focusCard=useRef<{id:number,column:string,landing?:boolean|{left:number,top:number},smooth?:boolean,before?:number|null,since?:number}>({id:0,column:''}); const [agentFilter,setAgentFilter]=useState('all'); const [kind,setKind]=useState<'all'|'mkt'>('all'); const [month,setMonth]=useState(p.section==='work/calendar'?new Date().toISOString().slice(0,7):''); const [composing,setComposing]=useState<false|'planned'|'ideas'>(p.initialCreating&&p.canCreate?'planned':false); const [showArchived,setShowArchived]=useState(false); const [confirming,setConfirming]=useState<{cards:number[],stops:ArchiveStop[]}|null>(null); const [asking]=useState(newestQuestion); const [selected,setSelected]=useState<Map<number,string>|null>(null); const [left,setLeft]=useState<{restore:boolean,titles:string[]}|null>(null); const selectToggle=useRef<HTMLButtonElement>(null); const selectAllButton=useRef<HTMLButtonElement>(null); const selectedAct=useRef<HTMLButtonElement>(null); const [focusTo,setFocusTo]=useState<{to:'toggle'|'all'|'act'}|null>(null); const addButton=useRef<HTMLButtonElement>(null); const [project,setProject]=useState(''); const [boardQuery,setBoardQuery]=useState(''); const [searching,setSearching]=useState(false); const searchField=useRef<HTMLInputElement>(null); const [archiveQuery,setArchiveQuery]=useState(''); const [archiveSearching,setArchiveSearching]=useState(false); const archiveField=useRef<HTMLInputElement>(null); const archiveSearchButton=useRef<HTMLButtonElement>(null); const archiveEscaped=useRef(false); const [sort,setSort]=useState('title'); const [direction,setDirection]=useState<'ascending'|'descending'>('ascending');
  const base=`/c/${p.slug}/work`; const shown=p.cards.filter(c=>!project||String(c.project_id)===project); const visible=shown.filter(c=>!month||!c.go_live||c.go_live.slice(0,7)===month); const hidden=(op:string)=><><input type="hidden" name="op" value={op}/><input type="hidden" name="slug" value={p.slug}/><input type="hidden" name="company" value={p.company}/></>;
  // A card made from a message is marked with its mode, in the colour of the agent it was sent to.
  const modeChip=(c:Card)=>{ if(!c.mode) return null; return <span className="mode-chip" data-mode={c.mode}><i/>{c.mode==='plan'?t('modePlan'):c.mode==='do'?t('modeDo'):t('modeAnswer')}</span>; };
@@ -98,11 +97,15 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const agentById=useMemo(()=>new Map([...Object.entries(removed).map(([id,name]):[string,CardAgent]=>[id,{id,connection_id:'',name,speciality:''}]),...(p.cardAgents||[]).map((a):[string,CardAgent]=>[a.id,a])]),[p.cardAgents,removed]);
  const cardAgentOf=(c:Card)=>{ const agent=c.assignee_agent??(c.assignee_person?null:c.kept_agent_id); return agent?agentById.get(agent):undefined; };
  // A filter on an Agent the reader no longer sees reads as All (design-reference: 5741).
- const filter=companyAgents.some(a=>a.id===agentFilter)?agentFilter:'all';
+ // Who a Card is on (#683; design-reference-card: bf.who): everyone, the reader, no one, an Agent or a Member.
+ const filter=agentFilter==='me'||agentFilter==='none'||companyAgents.some(a=>a.id===agentFilter)||(agentFilter.startsWith('p:')&&p.members.some(m=>`p:${m.person_id}`===agentFilter))?agentFilter:'all';
+ const onWho=(c:Card)=>filter==='all'||(filter==='me'?c.assignee_person===p.me:filter==='none'?!c.assignee_agent&&!c.assignee_person:filter.startsWith('p:')?c.assignee_person===filter.slice(2):c.assignee_agent===filter);
+ // The board's search (#683): Cards whose title holds what is typed.
+ const found=(c:Card)=>!boardQuery.trim()||c.title.toLocaleLowerCase(locale).includes(boardQuery.trim().toLocaleLowerCase(locale));
  const asked=p.show?p.cards.find(c=>c.id===p.show):undefined;
- useShowCard(p.show,{hides:!!asked&&filter!=='all'&&asked.assignee_agent!==filter,showAll:()=>setAgentFilter('all'),board:`${base}/board`});
+ useShowCard(p.show,{hides:!!asked&&(!onWho(asked)||!found(asked)),showAll:()=>{ setAgentFilter('all'); setBoardQuery(''); },board:`${base}/board`});
  // The board keeps the month filter of the dated views: a card dated in another month is hidden, an undated one stays.
- const boardCards=visible.filter(c=>filter==='all'||c.assignee_agent===filter);
+ const boardCards=(p.section==='work/board'?shown:visible).filter(c=>onWho(c)&&found(c));
  // A question or a hand of a chat with a Card is drawn as that Card (#146), as an approval is, while the board draws the
  // Card under Waiting on you; a filter or a hidden Agent that leaves the Card out leaves the row drawn on its own.
  const waitingHere=new Set(boardCards.filter(c=>columnOfCard(c)==='waiting').map(c=>c.id));
@@ -114,7 +117,6 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const ownList=p.focus==='waiting';
  const ownEntries=(p.waiting||[]).flatMap((item,n,all):{item:WaitingItem,card?:Card}[]=>{ if(!asCard(item)) return [{item}]; if(all.findIndex(other=>asCard(other)&&other.card_id===item.card_id)<n) return []; const c=boardCards.find(x=>x.id===item.card_id); return c?[{item,card:c}]:[]; });
  const drawnCards=ownList?boardCards.filter(c=>columnOfCard(c)!=='waiting'||ownEntries.some(entry=>entry.card?.id===c.id)):boardCards;
- const waitingTotal=new Set((p.waiting||[]).filter(item=>asCard(item)&&waitingHere.has(item.card_id!)).map(item=>item.card_id)).size+items.length;
  const stagesIn=(column:string)=>p.stages.filter(s=>(s.board_column||'ideas')===column);
  const stageName=(c:Card)=>p.stages.find(s=>s.id===c.stage_id)?.name||'';
  // After a move the card is drawn again in its new column; the keyboard stays on it, and after a keyboard move the board
@@ -132,7 +134,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // An idea just added comes back on the board with the card it made (#188): the reference confirms it with a toast,
  // while useShowCard flashes that Card and puts the focus on it.
  // Each idea added says so, the second one on the same board included.
- useEffect(()=>{ if(p.ideaAdded) toast(t('ideaAdded')); },[p.ideaAdded,p.show,t]);
+ useEffect(()=>{ if(p.ideaAdded) toast(t(p.ideaAdded==='idea'?'ideaAdded':'ncAdded')); },[p.ideaAdded,p.show,t]);
  // A decided learning suggestion comes back to the board with its outcome in the address (#169): the item has left the
  // list, and the toast names the Agent it was for, read by the page from the item the address names. Shown once; a reload
  // does not say it again.
@@ -203,7 +205,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  useEffect(()=>{ if(focusTo) ({toggle:selectToggle,all:selectAllButton,act:selectedAct})[focusTo.to].current?.focus(); },[focusTo]);
  // The archive list (#705) is read a page at a time and searched in the database, with the board's Agent and Project
  // filters, as the reference's list follows them; the search opens from its icon while the list is shown.
- const archiveList=useArchivedList(p.company,p.archived?.first??null,{q:archiveQuery,agent:filter==='all'?null:filter,project:project?Number(project):null},p.readArchived,showArchived);
+ const archiveList=useArchivedList(p.company,p.archived?.first??null,{q:archiveQuery,agent:companyAgents.some(a=>a.id===filter)?filter:null,project:project?Number(project):null},p.readArchived,showArchived);
  const archivedShown=archiveList.page?.items||[];
  const archivedCards=[...archivedShown,...(p.archived?.named||[]).filter(c=>!archivedShown.some(shown=>shown.id===c.id))];
  // A count that could not be read is left out, never shown as the rows shown.
@@ -257,34 +259,33 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const yours=(c:Card)=>chatOf(c)?.mine??p.approvableIds.includes(c.id);
  // Read from every Card, not the drawn ones, so a filter that brings a waiting Card back does not shake it again.
  const fresh=useNewlyWaiting(p.cards.filter(c=>columnOfCard(c)==='waiting'&&yours(c)).map(c=>c.id));
- const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const own=cardAgentOf(c); const crew=(c.crew||[]).flatMap(id=>agentById.get(id)??[]); const names=crew.map(a=>a.name); const job=c.channel_id?t('boardCardChannel'):c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const chat=chatOf(c); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
-  // How many Cards it still waits for (#682), on the tile.
-  const waits=waitCount.get(c.id)??0; const waitChip=waits>0&&<span className="kcard__todo kcard__waits od-nowrap" title={t('symWaitsN',String(waits))}><span aria-hidden="true"><ShellIcon name="hourglass"/><span className="num">{waits}</span></span><span className="sr-only">{t('symWaitsN',String(waits))}</span></span>;
-  // The description's to-do count on the tile (#679), "2/5", only when it has to-do items.
-  const todos=todoProgress(c.description); const todoChip=todos.total>0&&<span className={`kcard__todo od-nowrap${todos.done===todos.total?' is-all':''}`} title={t('deTileTodos',String(todos.done),String(todos.total))}><span aria-hidden="true"><ShellIcon name="todo"/><bdi dir="ltr" className="num">{todos.done}/{todos.total}</bdi></span><span className="sr-only">{t('deTileTodos',String(todos.done),String(todos.total))}</span></span>;
-  const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
- // The line an idea added in the column carries (#188; design-reference: saveIdea's prog): who thought of it. A Card
- // made from a message has its mode and a Card read from the board's data keeps its brief, so neither takes this line.
- const maker=makerOf(c); const from=column==='ideas'&&!brief&&c.assignee_agent&&!c.mode?p.members.find(m=>m.person_id===maker)?.people?.name?.split(' ')[0]:undefined;
- const idea=from?t('boardNewIdeaFrom',from):null;
+ // A tile (#683; design-reference-card: kcardHTML): its title and one state symbol, then the assignee's face and only
+ // the counts above zero (publishing date, files, comments, to-dos, Cards it waits for). Everything it shows, and its
+ // state, is said once more in its name for a screen reader; each symbol is named in a tooltip and on a long press.
+ const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const mine=p.approvableIds.includes(c.id);
+  const waits=waitCount.get(c.id)??0; const todos=todoProgress(c.description);
+  const files=fileCount.get(c.id)??0; const comments=commentCount.get(c.id)??0;
+  const state=cardSymbol({...c,latest_version:latestVersion.get(c.id)??null,open_waits:waits},{me:p.me});
+  const who=c.assignee_agent?agentById.get(c.assignee_agent)?.name||agentName(c.assignee_agent):c.assignee_person?agentName(c.assignee_person):'';
+  const face=c.assignee_agent?<AgentFace agent={c.assignee_agent} size={20}/>:c.assignee_person?letter(c.assignee_person,20):<span className="cw-noone" aria-hidden="true"/>;
+  const fileText=files===1?t('tileOneFile'):t('tileFiles',String(files)); const commentText=comments===1?t('tileOneComment'):t('tileComments',String(comments));
+  const stateName=state?(state==='waits'&&waits>1?t('symWaitsN',String(waits)):t(symbolKey[state])):'';
+  const name=[c.title,columnName(column),stateName,t('tileAssignee',who||t('boardNoOne')),c.go_live?t('tileDate',due(c)):'',files?fileText:'',comments?commentText:'',todos.total?t('deTileTodos',String(todos.done),String(todos.total)):''].filter(Boolean).join(' · ');
   const picking=!!selected&&!isOverlay; const chosen=!!selected?.has(c.id);
-  return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate||!!selected} className={`${mine?'approval-card':''}${picking?' is-sel':''}`} data-mine={mine||undefined} data-stage-id={c.stage_id} data-stage-name={stageName(c)}>
-   {c.mode&&<span className="kcard__kind">{modeChip(c)}</span>}
-   {picking?<><button type="button" className="authored-title kcard__title kcard__pick" dir="auto" aria-pressed={chosen} onClick={()=>flip(c)}><strong>{c.title}</strong></button><span className="kt-check" aria-hidden="true">{chosen&&<ShellIcon name="check"/>}</span></>
-   :<Link className="authored-title kcard__title" dir="auto" href={p.focus?`${base}/board/${c.id}`:`${base}/board?card=${c.id}`} scroll={!!p.focus} draggable={false} tabIndex={isOverlay?-1:undefined} aria-label={crew.length>1?t('boardWorkedOnCard',c.title,names.join(t('boardNamesJoin'))):undefined} aria-describedby="board-drag-hint" aria-keyshortcuts={p.canCreate?'Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown':undefined} onKeyDown={isOverlay?undefined:keys(c)}><strong>{c.title}</strong></Link>}
-   {column==='waiting'&&chat?<>
-    {chat.kind==='hand'&&<span className="wtag wtag--hand"><ShellIcon name="hand"/>{t('handBadge')}</span>}
-    <span className={`badge${chat.mine?' badge--wait':''}${chat.mine&&fresh.has(c.id)?' is-new':''}`}>{chat.mine?<span className="dot dot--waiting" aria-hidden="true"/>:<BoardIcon name="clock"/>}{chatBadge(chat)}</span>
-    <span className="kcard__t" dir="auto">{chat.title}</span>
-   </>:column==='waiting'?<>
-    <span className={`badge${mine?' badge--wait':''}${mine&&fresh.has(c.id)?' is-new':''}`}>{mine?<span className="dot dot--waiting" aria-hidden="true"/>:<BoardIcon name="clock"/>}{mine?t('boardWaitingYou'):waitingOn(c.next_actor)}</span>
-    {mine&&step?<span className="kcard__t">{t('boardWaitingYourOk','\u0000').split('\u0000')[0]}<bdi>{step}</bdi>{t('boardWaitingYourOk','\u0000').split('\u0000')[1]}</span>:<span className="kcard__t" dir="auto">{stageName(c)}</span>}
-   </>:column==='live'?<>
-    <span className="badge badge--live"><span className="dot" aria-hidden="true"/>{t('boardLive')}</span><span className="kcard__t" dir="auto">{stageName(c)}</span>
-   </>:progress?<span className="kcard__prog"><span className="kcard__t" dir="auto">{progress.next||stageName(c)} · <span className="num">{progress.pct}%</span></span><span className="bar" role="progressbar" aria-label={t('boardProgress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.pct}><span className="bar__fill" style={{transform:`scaleX(${progress.pct/100})`}}/></span></span>
-   :brief?<span className="kcard__t" dir="auto">{brief}</span>:idea?<span className="kcard__t" dir="auto">{idea}</span>:null}
-   {crew.length>1&&<span className="kcard__crew"><span className="fstack" aria-hidden="true">{crew.map(a=><AgentFace key={a.id} agent={a.id} size={18}/>)}</span><span className="kcard__crew-t">{t('boardWorkedOn')} {crew.map((a,i)=><Fragment key={a.id}>{i>0&&t('boardNamesJoin')}<bdi>{a.name}</bdi></Fragment>)}</span></span>}
-   {own?<ChatCardFoot agent={own} job={job} due={(todoChip||waitChip||due(c))&&<>{waitChip}{todoChip}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</>}/>:<span className="kcard__foot">{agent&&<span className="kcard__agent card-avatars">{letter(agent,18)}<bdi className="od-truncate">{agentName(agent)}</bdi></span>}{job&&<span>{agent?'· ':''}<bdi>{job}</bdi></span>}{waitChip}{todoChip}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>}
+  return <KanbanCard id={c.id} column={column} isOverlay={isOverlay} key={c.id} disabled={!p.canCreate||!!selected} className={`${mine?'approval-card':''}${picking?' is-sel':''}`} data-mine={mine||undefined} data-status={c.status}>
+   <span className="kt-head">
+    {picking?<button type="button" className="authored-title kcard__title kcard__pick" dir="auto" aria-pressed={chosen} aria-label={name} onClick={()=>flip(c)}><strong>{c.title}</strong></button>
+    :<Link className="authored-title kcard__title" dir="auto" href={p.focus?`${base}/board/${c.id}`:`${base}/board?card=${c.id}`} scroll={!!p.focus} draggable={false} tabIndex={isOverlay?-1:undefined} aria-label={name} aria-haspopup="dialog" aria-describedby="board-drag-hint" aria-keyshortcuts={p.canCreate?'Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown':undefined} onKeyDown={isOverlay?undefined:keys(c)}><strong>{c.title}</strong></Link>}
+    {state&&<span className={`kt-syms${state==='question'||state==='review'?(fresh.has(c.id)&&(chatOf(c)?.mine||mine)?' is-new':''):''}`}><Sym kind={state} inert/>{state==='waits'&&waits>1&&<span className="sym__n num" aria-hidden="true">{waits}</span>}</span>}
+   </span>
+   {picking&&<span className="kt-check" aria-hidden="true">{chosen&&<ShellIcon name="check"/>}</span>}
+   <span className="kcard__foot"><span className="kt-face" data-tip={who||t('boardNoOne')} aria-hidden="true">{face}</span>
+    {(c.go_live||files||comments||todos.total)?<span className="kt-metas" aria-hidden="true">
+     {c.go_live&&<span className="kt-date num">{due(c)}</span>}
+     {files>0&&<span className="kt-m od-nowrap" data-tip={fileText}><ShellIcon name="clip"/><span className="num">{files}</span></span>}
+     {comments>0&&<span className="kt-m od-nowrap" data-tip={commentText}><ShellIcon name="chat"/><span className="num">{comments}</span></span>}
+     {todos.total>0&&<span className={`kt-m kcard__todo od-nowrap${todos.done===todos.total?' is-all':''}`} data-tip={t('deTileTodos',String(todos.done),String(todos.total))}><ShellIcon name="todo"/><bdi dir="ltr" className="num">{todos.done}/{todos.total}</bdi></span>}
+    </span>:null}</span>
   </KanbanCard>; };
  // A learning suggestion (#25; design-reference: lnRowHTML) is decided where it waits: the rule, its Agent, who told it,
  // and Decline or Make it team-wide.
@@ -349,6 +350,9 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const latestVersion=new Map<number,number>(); for(const v of p.versions) { const card=p.creatives.find(x=>x.id===v.creative_id)?.card_id; if(card!=null&&v.id>(latestVersion.get(card)??0)) latestVersion.set(card,v.id); }
  const reviewOf=(c:Card)=>p.reviews?.find(r=>r.card_id===c.id);
  const waitCount=new Map((p.openWaits||[]).map(row=>[row.card_id,row.waiting]));
+ // A tile's counts (#683): the files on the Card and its comments, each only when above zero.
+ const fileCount=new Map<number,number>(); for(const file of p.attachments) fileCount.set(file.card_id,(fileCount.get(file.card_id)??0)+1);
+ const commentCount=new Map<number,number>(); for(const row of p.activity) if(row.action==='comment_added') commentCount.set(row.card_id,(commentCount.get(row.card_id)??0)+1);
  const intoReview=(c:Card)=>p.canCreate&&!c.archived_at&&c.status!=='waiting'?()=>void workAction(formOf('review',c)).then(()=>router.refresh()):undefined;
  const windowCallout=(c:Card)=>{ const chat=chatOf(c); const mine=p.approvableIds.includes(c.id);
   if(c.wait) return <section className="cw-call cw-call--wait" data-card-section="question"><div className="cw-call__head"><Sym kind="question"/><p className="cw-call__t od-fill" dir="auto">{c.wait.title}</p>
@@ -393,10 +397,10 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    projects={p.projects} send={workAction} save={p.saveCard??(async()=>({error:t('couldNotSaveTheChangeCheckPermissionsAnd')}))} move={moveTo(c)}
    archive={p.archiveCards&&{archive:()=>archive([c.id]),restore:()=>restore([c.id])}}
    callout={windowCallout(c)} description={windowDescription(c)} intoReview={intoReview(c)} waitChoices={p.cards.filter(x=>!x.archived_at).map(x=>({id:x.id,title:x.title,status:x.status}))}/>; };
- const ideasStage=stagesIn('ideas')[0]?.id;
- // "+" on Ideas opens that column's form and a second press closes it (#188); Cancel and Escape come back to it too.
- const closeIdea=()=>{ setAddingIdea(false); addButton.current?.focus({preventScroll:true}); };
- const toggleIdea=()=>{ if(addingIdea) closeIdea(); else setAddingIdea(true); };
+ // The one New card form (#683): the toolbar's button lands a Card in Planned, the Ideas "+" at the top of Ideas; closing
+ // it gives the button that opened it the keyboard back, and a Card made flashes on the board with a toast.
+ const closeNew=()=>{ const from=composing; setComposing(false); if(p.initialCreating) router.push(`${base}/board`); if(from==='ideas') addButton.current?.focus({preventScroll:true}); };
+ const madeNew=(id:number)=>{ const from=composing; setComposing(false); router.replace(`${base}/board?show=${id}${from==='ideas'?'&idea=1':'&added=1'}`,{scroll:false}); };
  // The reader's own list under the bell (#677): the Cards they can act on, the Cards assigned to them until Live or Done
  // (each stays in its column), the requests waiting for their answer and their mentions; its rows are the count the
  // sidebar shows (approvalQueue's waitingCount).
@@ -411,14 +415,33 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   {key:'mentions',label:t('bellMentions'),rows:bell.mentions.map(item=>({key:`mn-${item.kind}-${item.id}`,href:item.kind==='mention'&&item.card_id?cardHref(item.card_id):elsewhere(item),title:(item.kind==='mention'&&cardTitle(item.card_id))||item.title||item.body,sub:item.asked_by||undefined}))},
  ];
  const bellCount=bellGroups.reduce((total,group)=>total+group.rows.length,0);
- const views=<div className="work-toolbar" data-canonical-toolbar="work"><nav className="tabs segmented" aria-label={t('boardViews')}>{[['board',t('board')],['calendar',t('calendar')],['list',t('list')]].map(([path,label])=><Link key={path} data-slot="button" data-active={p.section===`work/${path}`&&!p.focus} aria-current={p.section===`work/${path}`&&!p.focus?'page':undefined} className={`button ${p.section===`work/${path}`&&!p.focus?'active':''}`} href={`${base}/${path}`}>{label}</Link>)}</nav>{p.canCreate&&<button className="btn btn--primary btn--sm" data-slot="button" data-toolbar-primary onClick={()=>setComposing(true)}>{t('newCardAction')}</button>}</div>;
+ const views=<div className="work-toolbar" data-canonical-toolbar="work"><nav className="tabs segmented" aria-label={t('boardViews')}>{[['board',t('board')],['calendar',t('calendar')],['list',t('list')]].map(([path,label])=><Link key={path} data-slot="button" data-active={p.section===`work/${path}`&&!p.focus} aria-current={p.section===`work/${path}`&&!p.focus?'page':undefined} className={`button ${p.section===`work/${path}`&&!p.focus?'active':''}`} href={`${base}/${path}`}>{label}</Link>)}</nav>
+  {/* On the board the toolbar holds New card (#683); the list and the calendar keep theirs here. */}
+  {p.canCreate&&p.section!=='work/board'&&<button className="btn btn--primary btn--sm" data-slot="button" data-toolbar-primary onClick={()=>setComposing('planned')}>{t('newCardAction')}</button>}</div>;
  const head=<header className="page-head"><div className="od-field"><h1 className="page-title">{t('marketingBoard')}</h1><p className="page-sub">{t('boardSubtitle')}</p><p className="sr-only" id="board-drag-hint">{t('boardDragHint')}</p></div>{views}</header>;
  // The Month filter's choices (#453): every month a Card is dated in, newest first, and the month already chosen even
  // when no Card is in it, so an empty filter reads "All months" in the board's own style, never the browser's raw
  // month placeholder. The Calendar keeps its month picker, which always has a month.
  const monthOptions=useMemo(()=>{const found=new Set(p.cards.flatMap(c=>c.go_live?[c.go_live.slice(0,7)]:[])); if(month) found.add(month); return [...found].sort().reverse();},[p.cards,month]);
  const monthSelect=<select data-toolbar-control aria-label={t('month')} disabled={!hydrated} value={month} onChange={e=>setMonth(e.target.value)}><option value="">{t('allMonths')}</option>{monthOptions.map(value=><option key={value} value={value}>{new Date(Number(value.slice(0,4)),Number(value.slice(5,7))-1,1).toLocaleDateString(locale,{month:'long',year:'numeric'})}</option>)}</select>;
- const boardFilters=<div className="work-filters" data-canonical-toolbar="work-filters"><label>{t('month')}{' '}{monthSelect}</label>{p.projects.length>0&&<label>{t('project')}{' '}<select data-toolbar-control aria-label={t('project')} disabled={!hydrated} value={project} onChange={e=>setProject(e.target.value)}><option value="">{t('allProjects')}</option>{p.projects.map(pr=><option dir="auto" key={pr.id} value={pr.id}>{pr.name}</option>)}</select></label>}</div>;
+ // The toolbar's menus (#683): who a Card is on and its Project, the same choices folded into one menu on a phone.
+ const personName=(id:string)=>p.members.find(m=>m.person_id===id)?.people?.name||'';
+ const whoName=filter==='all'?t('boardEveryone'):filter==='me'?t('boardMe'):filter==='none'?t('boardNoOne'):filter.startsWith('p:')?personName(filter.slice(2)):agentById.get(filter)?.name||'';
+ const whoFace=filter==='none'?<span className="cw-noone" aria-hidden="true"/>:filter==='me'?letter(p.me,20):filter.startsWith('p:')?letter(filter.slice(2),20):filter!=='all'?<AgentFace agent={filter} size={20}/>:null;
+ const setWho=(value:string)=>setAgentFilter(value);
+ const whoChoices=[{key:'all',label:t('boardEveryone')},{key:'me',label:t('boardMe')},{key:'none',label:t('boardNoOne')},
+  ...companyAgents.map(a=>({key:a.id,label:a.name,lead:<AgentFace agent={a.id} size={20}/>})),
+  ...p.members.filter(m=>m.role&&m.role!=='viewer'&&m.person_id!==p.me&&m.people?.name).map(m=>({key:`p:${m.person_id}`,label:m.people!.name,lead:letter(m.person_id,20)}))];
+ const whoItems:MenuItem[]=whoChoices.map(c=>({key:`who-${c.key}`,label:<bdi>{c.label}</bdi>,lead:'lead' in c?c.lead:undefined,checked:filter===c.key,run:()=>setWho(c.key)}));
+ const projectLabel=project?p.projects.find(pr=>String(pr.id)===project)?.name||'':t('allProjects');
+ const projectItems:MenuItem[]=[{key:'pr-all',label:t('allProjects'),checked:!project,run:()=>setProject('')},...p.projects.map(pr=>({key:`pr-${pr.id}`,label:<bdi>{pr.name}</bdi>,checked:project===String(pr.id),run:()=>setProject(String(pr.id))}))];
+ const toggleArchived=()=>{ setShowArchived(!showArchived); setArchiveQuery(''); setArchiveSearching(false); dropAsking(); setSelected(null); };
+ const clearFilters=()=>{ setAgentFilter('all'); setProject(''); setBoardQuery(''); setSearching(false); };
+ const filterCount=(filter!=='all'?1:0)+(project?1:0)+(showArchived?1:0);
+ const phoneItems:MenuItem[]=[{key:'g-who',group:t('assignee')},...whoItems,...(p.projects.length?[{key:'g-pr',group:t('project')},...projectItems]:[]),
+  ...(p.archived&&!p.focus?[{key:'g-more',group:t('boardMore')},{key:'arch',label:t('boardArchived'),checked:showArchived,run:toggleArchived}]:[]),
+  ...(canSelect&&!selected?[{key:'sel',label:t('boardSelectCards'),run:startSelecting}]:[]),
+  ...((filter!=='all'||project)?[{key:'clear',label:t('boardClearFilters'),run:clearFilters}]:[])];
  const board=<div className={`board-view${p.focus?' approvals':''}`} data-focus={p.focus}>
   {head}
   <div className="board-tools">
@@ -427,20 +450,31 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
     <button type="button" aria-pressed={kind==='mkt'} onClick={()=>setKind('mkt')}><span>{t('boardMarketing')}</span><span className="num kind-seg__n">{visible.length}</span></button>
     <button type="button" aria-disabled="true" title={t('soon')}><BoardIcon name="code"/><span>{t('boardCode')}</span><span className="num kind-seg__n">{0}</span></button>
    </div>
-   <div className="od-rail" role="group" aria-label={t('boardFilterByAgent')}>
-    <button type="button" className="chip chip--plain" aria-pressed={filter==='all'} onClick={()=>setAgentFilter('all')}>{t('boardAll')}</button>
-    {companyAgents.map(a=><button type="button" key={a.id} className="chip" aria-pressed={filter===a.id} onClick={()=>setAgentFilter(a.id)}><span className="chip__face" aria-hidden="true"><AgentFace agent={a.id} size={22}/></span><bdi>{a.name}</bdi></button>)}
+   {/* One row (#683; design-reference-card: renderBoard's bt2): who a Card is on, its Project, search, the archive and
+       selecting several; on a phone these fold into one Filter menu and the search comes first. */}
+   <div className="bt-desk">
+    <CwMenu label={t('boardFilterWho',whoName)} className={`ib${filter!=='all'?' is-on':''}`} radio items={whoItems} button={filter==='all'?<ShellIcon name="user"/>:<>{whoFace}<bdi className="od-truncate bt-who">{whoName}</bdi></>}/>
+    {p.projects.length>0&&<CwMenu label={t('boardFilterProject',projectLabel)} className={`ib${project?' is-on':''}`} radio items={projectItems} button={project?<><ShellIcon name="folder"/><bdi className="od-truncate bt-who">{projectLabel}</bdi></>:<ShellIcon name="folder"/>}/>}
    </div>
-   {boardFilters}
+   {!showArchived&&(searching||boardQuery?<div className="bt-search is-open"><ShellIcon name="search"/><label className="sr-only" htmlFor="bf-board-q">{t('boardSearch')}</label>
+    <input ref={searchField} type="search" id="bf-board-q" autoComplete="off" dir="auto" placeholder={t('boardSearch')} value={boardQuery} maxLength={200} onChange={e=>setBoardQuery(e.target.value)} autoFocus
+     onBlur={()=>{ if(!boardQuery) setSearching(false); }} onKeyDown={e=>{ if(e.key==='Escape') { e.preventDefault(); setBoardQuery(''); setSearching(false); } }}/></div>
+    :<button type="button" className="ib bt-search-btn" aria-label={t('boardSearch')} title={t('boardSearch')} onClick={()=>setSearching(true)}><ShellIcon name="search"/></button>)}
    {p.archived&&!p.focus&&showArchived&&(archiveSearching||archiveQuery?<div className="bt-search is-open"><ShellIcon name="search"/><label className="sr-only" htmlFor="bf-q">{t('boardSearchArchived')}</label>
     <input ref={archiveField} type="search" id="bf-q" autoComplete="off" dir="auto" placeholder={t('boardSearchArchived')} value={archiveQuery} maxLength={200} onChange={e=>setArchiveQuery(e.target.value)}
      onBlur={()=>{ if(!archiveQuery) setArchiveSearching(false); }} onKeyDown={e=>{ if(e.key==='Escape'&&!archiveQuery) { e.preventDefault(); archiveEscaped.current=true; setArchiveSearching(false); } }}/></div>
     :<button ref={archiveSearchButton} type="button" className="ib" aria-label={t('boardSearchArchived')} title={t('boardSearchArchived')} onClick={()=>setArchiveSearching(true)}><ShellIcon name="search"/></button>)}
-   {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={archivedTotal==null?t('boardArchived'):t('boardArchivedCount',archivedTotal)} title={t('boardArchived')} onClick={()=>{ setShowArchived(!showArchived); setArchiveQuery(''); setArchiveSearching(false); dropAsking(); setSelected(null); }}><ShellIcon name="archive"/>{showArchived&&archivedTotal!=null&&<span className="num">{archivedTotal}</span>}</button>}
-   {canSelect&&!selected&&<button ref={selectToggle} type="button" className="ib" aria-label={t('boardSelectCards')} title={t('boardSelectCards')} onClick={startSelecting}><ShellIcon name="multiSel"/></button>}
-   <span className="board-tools__summary">{!p.canCreate?<><BoardIcon name="eye"/>{t('boardReadOnly')}</>:bell.assigned.length?<><span className="dot dot--waiting" aria-hidden="true"/>{t('thingsWaitingOnYou',bellCount)}</>:waitingTotal?<><span className="dot dot--waiting" aria-hidden="true"/>{(p.waiting||[]).some(item=>item.kind!=='approval')?t('thingsWaitingOnYou',waitingTotal):t(waitingTotal>1?'boardWaitingMany':'boardWaitingOne',waitingTotal)}</>:<><BoardIcon name="check"/>{t('boardNothingWaiting')}</>}</span>
-   {p.canCreate&&<WaitingBell label={t('bellLabel',bellCount)} count={bellCount} groups={bellGroups} empty={t('bellEmpty')}/>}
+   <div className="bt-desk">
+    {p.archived&&!p.focus&&<button type="button" className="ib" aria-pressed={showArchived} aria-label={archivedTotal==null?t('boardArchived'):t('boardArchivedCount',archivedTotal)} title={t('boardArchived')} onClick={toggleArchived}><ShellIcon name="archive"/>{showArchived&&archivedTotal!=null&&<span className="num">{archivedTotal}</span>}</button>}
+    {canSelect&&!selected&&<button ref={selectToggle} type="button" className="ib" aria-label={t('boardSelectCards')} title={t('boardSelectCards')} onClick={startSelecting}><ShellIcon name="multiSel"/></button>}
+    {(filter!=='all'||project||boardQuery)&&<button type="button" className="ib" aria-label={t('boardClearFilters')} title={t('boardClearFilters')} onClick={clearFilters}><ShellIcon name="x"/></button>}
+   </div>
+   <div className="bt-filter"><CwMenu label={t('boardFilter')} className={`ib${filterCount?' is-on':''}`} items={phoneItems} button={<><ShellIcon name="filter"/>{filterCount>0&&<span className="num">{filterCount}</span>}</>}/></div>
+   <span className="od-fill"/>
    <BoardPager/>
+   {!p.canCreate&&<Sym kind="readonly"/>}
+   {p.canCreate&&<WaitingBell label={t('bellLabel',bellCount)} count={bellCount} groups={bellGroups} empty={t('bellEmpty')}/>}
+   {p.canCreate&&<button className="btn btn--primary btn--sm bt-new" data-slot="button" data-toolbar-primary aria-label={t('newCard')} title={t('newCard')} onClick={()=>setComposing('planned')}><ShellIcon name="plus"/><span className="bt-new__t">{t('newCard')}</span></button>}
   </div>
   {selected&&<div className="bsel" role="region" aria-label={t('boardSelecting')}>
    <span className="bsel__n" aria-live="polite">{t('boardSelectedCount','\u0000').split('\u0000')[0]}<b className="num">{selected.size}</b>{t('boardSelectedCount','\u0000').split('\u0000')[1]}</span>
@@ -477,19 +511,18 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
      </KanbanColumn>;
     }
     const archiveAll=column==='done'&&canSelect&&!selected&&list.length?<button type="button" className="ib ib--sm col__act" aria-label={t('boardArchiveDone',columnName(column))} title={t('boardArchiveAll')} onClick={()=>archive(list.map(c=>c.id))}><ShellIcon name="archive"/></button>:null;
-    const add=column==='ideas'&&p.canCreate&&ideasStage&&!selected?<button ref={addButton} type="button" className="circle-btn add-btn add-card" aria-label={t('boardAddIdea')} title={t('boardAddIdea')} aria-expanded={addingIdea} onClick={toggleIdea}><BoardIcon name="plus"/></button>:null;
+    const add=column==='ideas'&&p.canCreate&&!selected?<button ref={addButton} type="button" className="circle-btn add-btn add-card" aria-label={t('boardAddIdea')} title={t('boardAddIdea')} aria-haspopup="dialog" onClick={()=>setComposing('ideas')}><BoardIcon name="plus"/></button>:null;
     return <KanbanColumn key={column} column={column} id={`col-${column}-section`} name={columnName(column)} count={list.length+extra.length} waiting={column==='waiting'} head={add??archiveAll} data-stage-name={stages.length===1?stages[0].name:undefined}>
      {extra.filter(answeredHere).map(itemView)}
      {groups.map((group,n)=><div key={group.id} className="mn-group" role="group" aria-labelledby={group.id}><h3 className="mn-h" id={group.id}><BoardIcon name="at"/><span>{t(group.label)}</span> <span className="num">{group.items.length}</span></h3>{group.items.map(itemView)}{(list.length>0||n<groups.length-1)&&<div className="mn-sep" role="separator"/>}</div>)}
-     {column==='ideas'&&addingIdea&&ideasStage&&<AddIdea company={p.company} slug={p.slug} stage={ideasStage} agents={companyAgents} preferred={filter==='all'?'':filter} addIdea={p.addIdea} onClose={closeIdea}/>}
      {list.map(c=><div key={c.id} className="column" data-stage-id={c.stage_id} data-stage-name={stageName(c)}>{cardView(c)}</div>)}
-     {!list.length&&!extra.length&&!(column==='ideas'&&addingIdea)&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
+     {!list.length&&!extra.length&&<div className="col-empty"><b>{t(emptyKey[column][0])}</b>{emptyKey[column][1]&&<span>{t(emptyKey[column][1])}</span>}</div>}
     </KanbanColumn>; })}
   </KanbanBoard>}
  </div>;
  return <div className="work-root">{(placeError||p.message)&&!sheetCard&&<p role="alert" className="work-error">{placeError||p.message}</p>}<>{p.section==='settings/work'?<div className="tabs"><Link className="button" href={`/c/${p.slug}/settings`}>{t('general')}</Link><Link className="button" href={`/c/${p.slug}/settings/members`}>{t('members')}</Link><Link className="button active" href={`/c/${p.slug}/settings/work`}>{t('work')}</Link></div>:null}{p.section==='settings/work'&&<section className="panel"><h2>{t('workStages')}</h2>{p.stages.map(s=><form action={workAction} className="settings-row" key={s.id}>{hidden('stage-settings')}<input type="hidden" name="stage" value={s.id}/><input dir="auto" aria-label={t('stageName', s.name)} name="name" defaultValue={s.name}/><input aria-label={t('stageOrder', s.name)} name="position" type="number" defaultValue={s.position}/><button>{t('save')}</button></form>)}<h2>{t('labels')}</h2>{p.labels.map(l=><form action={workAction} className="settings-row" key={l.id}>{hidden('label-settings')}<input type="hidden" name="label" value={l.id}/><input dir="auto" aria-label={t('labelName', l.name)} name="name" defaultValue={l.name}/><input dir="auto" aria-label={t('labelColor', l.name)} name="color" type="color" defaultValue={l.color}/><button>{t('save')}</button></form>)}</section>}
   {p.section==='work/board'&&board}
   {(p.section==='work/list'||p.section==='work/calendar')&&<div className="board-view board-view--page">{head}<div className="board-body"><div className="work-filters" data-canonical-toolbar="work-filters"><label>{t('month')}{' '}{p.section==='work/calendar'?<input data-toolbar-control type="month" disabled={!hydrated} value={month} onChange={e=>setMonth(e.target.value||new Date().toISOString().slice(0,7))}/>:monthSelect}</label>{p.projects.length>0&&p.section!=='work/calendar'&&<label>{t('project')}{' '}<select data-toolbar-control aria-label={t('project')} disabled={!hydrated} value={project} onChange={e=>setProject(e.target.value)}><option value="">{t('allProjects')}</option>{p.projects.map(pr=><option dir="auto" key={pr.id} value={pr.id}>{pr.name}</option>)}</select></label>}</div>{p.section==='work/list'&&<TaskList emptyMessage={!visible.length?t('noCardsToDisplay'):undefined}><thead><tr>{[['title',t('title')],['stage_id',t('stageField')],['channel',t('channel')],['go_live',t('publishingDate')],['assignee',t('assignee')]].map(([key,label])=><th key={key} aria-sort={sort===key?direction:undefined}><button onClick={()=>{if(sort===key) setDirection(direction==='ascending'?'descending':'ascending'); else {setSort(key);setDirection('ascending');}}}>{label} ↕</button></th>)}</tr></thead><tbody dir="auto">{sortWorkCards(visible,sort,direction,p.stages,p.members,companyAgents).map(c=><TaskListRow key={c.id}><td><AuthoredTitle href={`${base}/board?card=${c.id}`}>{c.title}</AuthoredTitle></td><td dir="auto">{p.stages.find(s=>s.id===c.stage_id)?.name}</td><td dir="auto">{c.channel}</td><td>{date(c.go_live,language)}</td><td dir="auto">{c.assignee_person?<><Avatar id={c.assignee_person} members={p.members} nameVisible/> <span>{p.members.find(m=>m.person_id===c.assignee_person)?.people?.name}</span></>:cardAgentOf(c)?<bdi>{cardAgentOf(c)?.name}</bdi>:null}</td></TaskListRow>)}</tbody></TaskList>}{p.section==='work/calendar'&&<div className="panel calendar-wrap"><h2 className="calendar-title">{month&&new Date(Number(month.slice(0,4)),Number(month.slice(5,7))-1,1).toLocaleDateString(locale,{month:'long',year:'numeric'})}</h2>{!p.cards.some(c=>c.go_live?.startsWith(month))&&<p className="empty-column">{t('noCardsThisMonth')}</p>}<div className="calendar">{[t('sunday'),t('monday'),t('tuesday'),t('wednesday'),t('thursday'),t('friday'),t('saturday')].map(d=><div className="day calendar-heading" key={d}>{d}</div>)}{Array.from({length:new Date(Number(month.slice(0,4)),Number(month.slice(5,7))-1,1).getDay()},(_,i)=><div className="day" key={`empty-${i}`}/>)}{Array.from({length:new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate()},(_,i)=><div className="day" key={i}>{i+1}{p.cards.filter(c=>c.go_live&&new Date(c.go_live).getUTCDate()===i+1&&c.go_live.startsWith(month)).map(c=><AuthoredTitle key={c.id} href={`${base}/board?card=${c.id}`}>{c.title}</AuthoredTitle>)}</div>)}</div></div>}</div></div>}
- </>{composing&&<Suspense fallback={<div className="navigation-progress" role="progressbar" aria-label={t('openingPage')}/>}><NewCard slug={p.slug} company={p.company} agents={p.agents} members={p.members} stage={0} fromRoute={p.initialCreating} workAction={workAction} onClose={()=>setComposing(false)}/></Suspense>}
+ </>{composing&&<Suspense fallback={<div className="navigation-progress" role="progressbar" aria-label={t('openingPage')}/>}><NewCard slug={p.slug} company={p.company} me={p.me} status={composing} project={project} agents={companyAgents.map(a=>({id:a.id,name:a.name}))} people={p.members.filter(m=>m.role&&m.role!=='viewer'&&m.people?.name).map(m=>({id:m.person_id,name:m.people!.name}))} newCard={p.newCard} onClose={closeNew} onMade={madeNew}/></Suspense>}
   {opened&&sheetCard&&windowView(sheetCard,opened)}{confirming&&<ArchiveConfirm stops={confirming.stops} heading={confirming.cards.length>1?t('archiveConfirmMany',confirming.cards.length):t('archiveConfirmOne')} confirm={()=>{ const chosen=confirming.cards; setConfirming(null); archiveNow(chosen); }} cancel={()=>setConfirming(null)}/>}</div>;
 }

@@ -72,8 +72,10 @@ function moveLine(view:EditorView,step:-1|1) {
  view.dispatch(tr.scrollIntoView()); return true;
 }
 
-export default function DescriptionEditor({body,version,slug,company,card,people,save,upload:send,onDone}:{body:string,version:number,slug:string,company:string,card:number,people:Callable[],
- save:(body:string,base:number)=>Promise<DescriptionSaved>,upload:(form:FormData)=>Promise<PictureUploaded>,onDone:()=>void}) {
+// `draft`: the New card form's description (#683), kept in the form until the Card is made: no save line, no Done and
+// no picture (a picture is stored in a Card's own folder).
+export default function DescriptionEditor({body,version,slug,company,card,people,save,upload:send,onDone,draft=false,label}:{body:string,version:number,slug:string,company:string,card:number,people:Callable[],
+ save:(body:string,base:number)=>Promise<DescriptionSaved>,upload:(form:FormData)=>Promise<PictureUploaded>,onDone:()=>void,draft?:boolean,label?:string}) {
  const {t}=useI18n(); const id=useId();
  const root=useRef<HTMLDivElement>(null); const grip=useRef<HTMLDivElement>(null); const editor=useRef<Editor|null>(null); const picture=useRef<HTMLInputElement>(null);
  const [pop,setPop]=useState<Pop>(null); const popRef=useRef<Pop>(null);
@@ -116,7 +118,7 @@ export default function DescriptionEditor({body,version,slug,company,card,people
  const blocks:Choice[]=[
   {key:'h1',label:t('deBlockHeading'),icon:'heading'},{key:'h2',label:t('deBlockSubheading'),icon:'heading'},{key:'ul',label:t('deBlockList'),icon:'list'},
   {key:'ol',label:t('deBlockNumbered'),icon:'listNumbered'},{key:'todo',label:t('deBlockTodo'),icon:'todo'},{key:'quote',label:t('deBlockQuote'),icon:'quote'},
-  {key:'code',label:t('deBlockCode'),icon:'code'},{key:'table',label:t('deBlockTable'),icon:'table'},{key:'image',label:t('deBlockImage'),icon:'image'},{key:'hr',label:t('deBlockDivider'),icon:'divider'},
+  {key:'code',label:t('deBlockCode'),icon:'code'},{key:'table',label:t('deBlockTable'),icon:'table'},...(draft?[]:[{key:'image',label:t('deBlockImage'),icon:'image' as const}]),{key:'hr',label:t('deBlockDivider'),icon:'divider'},
  ];
  const choices=(current:Pop):Choice[]=>{ if(!current) return [];
   const q=current.query.toLowerCase();
@@ -166,7 +168,7 @@ export default function DescriptionEditor({body,version,slug,company,card,people
   let gone=false; let provider:BlockProvider|null=null;
   void made.create().then(instance=>{ if(gone) { void instance.destroy(); return; } editor.current=instance;
    if(grip.current) instance.action(ctx=>{ provider=new BlockProvider({ctx,content:grip.current!,getOffset:()=>8,getPlacement:()=>document.documentElement.dir==='rtl'?'right':'left'}); provider.update(); });
-   instance.action(ctx=>ctx.get(editorViewCtx).focus()); });
+   if(!draft) instance.action(ctx=>ctx.get(editorViewCtx).focus()); });
   return ()=>{ gone=true; media.removeEventListener('change',fit); provider?.destroy(); if(timer.current) clearTimeout(timer.current); void flush(); void editor.current?.destroy(); editor.current=null; };
   // The editor is made once for the description it opened on; later texts reach it through the save answers.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,9 +176,9 @@ export default function DescriptionEditor({body,version,slug,company,card,people
 
  const list=choices(pop);
  const status:Record<typeof state,ReactNode>={saved:t('deSaved'),saving:t('deSaving'),merged:t('deMerged'),both:t('deBothKept'),error:said};
- const bar:Choice[]=[blocks[0],blocks[2],blocks[4],blocks[5],blocks[6],blocks[8],{key:'in',label:t('deIndent'),icon:'indent'},{key:'out',label:t('deOutdent'),icon:'outdent'}];
+ const bar:Choice[]=[...blocks.filter(item=>['h1','ul','todo','quote','code','image'].includes(item.key)),{key:'in',label:t('deIndent'),icon:'indent'},{key:'out',label:t('deOutdent'),icon:'outdent'}];
  return <div className="de-wrap">
-  <div ref={root} className="de de--edit" data-placeholder={t('dePlaceholder')} aria-label={t('cwDescription')}/>
+  <div ref={root} className="de de--edit" data-placeholder={t('dePlaceholder')} aria-label={label??t('cwDescription')}/>
   <div ref={grip} className="de-grip" aria-hidden="true" title={t('deDragLine')}><ShellIcon name="grip"/></div>
   {pop&&list.length>0&&<div className="menu de-pop" role="listbox" id={`${id}-pop`} aria-label={pop.kind==='slash'?t('deBlocks'):t('deCall')} style={{top:pop.top,insetInlineStart:pop.left}}>
    {list.map((item,index)=><button key={item.key} type="button" role="option" aria-selected={index===pop.index} className={`menu__item${index===pop.index?' is-active':''}`}
@@ -188,7 +190,7 @@ export default function DescriptionEditor({body,version,slug,company,card,people
    const file=event.target.files?.[0]; event.target.value=''; if(!file) return;
    const form=new FormData(); for(const [key,value] of Object.entries({slug,company,card:String(card)})) form.set(key,value); form.set('files',file);
    void latest.current.send(form).then(answer=>{ if('error' in answer) { setSaid(answer.error); return; } run(insertImageCommand.key,{src:answer.url,alt:answer.name}); }); }}/>
-  <div className="de-foot"><span className="de-status" role="status" aria-live="polite">{state!=='saved'||said?<>{state==='both'&&<ShellIcon name="alert"/>}{status[state]}</>:t('deSaved')}</span>
-   <button type="button" className="btn btn--secondary btn--sm" onClick={()=>{ void flush(); onDone(); }}>{t('deDone')}</button></div>
+  {!draft&&<div className="de-foot"><span className="de-status" role="status" aria-live="polite">{state!=='saved'||said?<>{state==='both'&&<ShellIcon name="alert"/>}{status[state]}</>:t('deSaved')}</span>
+   <button type="button" className="btn btn--secondary btn--sm" onClick={()=>{ void flush(); onDone(); }}>{t('deDone')}</button></div>}
  </div>;
 }

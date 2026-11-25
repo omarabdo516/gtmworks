@@ -40,6 +40,8 @@ const symbols:Record<CardSymbol,{icon:ShellIconName|null,tone:string,key:string}
  question:{icon:'ask',tone:'wait',key:'symQuestion'},review:{icon:'needsReview',tone:'wait',key:'symReview'},approved:{icon:'approved',tone:'ok',key:'symApproved'},waits:{icon:'hourglass',tone:'mute',key:'symWaits'},working:{icon:null,tone:'ok',key:'symWorking'},
  onyou:{icon:'hand',tone:'wait',key:'symOnyou'},archived:{icon:'archive',tone:'mute',key:'symArchived'},readonly:{icon:'eye',tone:'mute',key:'cwReadOnly'},
 };
+// The message naming each symbol, for a control that names its state itself (a tile, #683).
+export const symbolKey=Object.fromEntries(Object.entries(symbols).map(([kind,look])=>[kind,look.key])) as Record<CardSymbol,string>;
 // One state as one symbol (design-reference-card: symHTML): an image named by its tooltip, or, inside a control that
 // already names it, hidden from a screen reader.
 export function Sym({kind,inert=false}:{kind:CardSymbol,inert?:boolean}) {
@@ -48,11 +50,11 @@ export function Sym({kind,inert=false}:{kind:CardSymbol,inert?:boolean}) {
 }
 
 const moves:Record<string,(index:number,count:number)=>number>={ArrowDown:(i,n)=>(i+1)%n,ArrowUp:(i,n)=>(i-1+n)%n,Home:()=>0,End:(_,n)=>n-1};
-type MenuItem={key:string,label:ReactNode,lead?:ReactNode,checked?:boolean,disabled?:boolean,run:()=>void}|{key:string,group:string};
+export type MenuItem={key:string,label:ReactNode,lead?:ReactNode,checked?:boolean,disabled?:boolean,run:()=>void}|{key:string,group:string};
 // A property's menu (design-reference-card: openCwPop): the button opens it with the keyboard on the first item; Arrow
 // Down and Up move and wrap, Home and End go to the ends, Escape closes it back to the button without closing the Card,
 // Tab closes it, a press outside closes it, and a choice closes it and gives the button the keyboard back.
-function CwMenu({label,button,className,items,radio=false}:{label:string,button:ReactNode,className:string,items:MenuItem[],radio?:boolean}) {
+export function CwMenu({label,button,className,items,radio=false}:{label:string,button:ReactNode,className:string,items:MenuItem[],radio?:boolean}) {
  const [open,setOpen]=useState(false); const id=useId(); const box=useRef<HTMLDivElement>(null); const trigger=useRef<HTMLButtonElement>(null);
  const role=radio?'menuitemradio':'menuitem';
  useEffect(()=>{

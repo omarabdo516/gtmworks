@@ -1,7 +1,7 @@
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import { onTestFinished, vi } from 'vitest';
-import Work, { type AddIdeaAction, type PlaceCard, type UndoMove, type WorkAction, type WorkProps } from '@/app/c/[slug]/[[...section]]/work';
+import Work, { type NewCardAction, type PlaceCard, type UndoMove, type WorkAction, type WorkProps } from '@/app/c/[slug]/[[...section]]/work';
 import { Frame } from '@/app/frame';
 import { LanguageProvider } from '@/lib/i18n-client';
 import { LooksProvider } from '@/lib/agent-looks-client';
@@ -27,14 +27,14 @@ export const card = (more: Partial<Card> = {}): Card => ({ id: 1, title: 'أفك
  offering: '', segment: '', hook: '', goal: '', caption: '', next_actor: null, mode: null, approval_step_id: null, rejection_reason: null, project_id: null,
  assignee_agent: more.agent_id ?? null, assignee_person: more.agent_id ? null : more.next_actor ?? null, ...more });
 export const workProps = (more: Partial<WorkProps> = {}): WorkProps => ({
- workAction: vi.fn<WorkAction>(async () => {}), placeMove: vi.fn<PlaceCard>(async () => ({ ok: true })), addIdea: vi.fn<AddIdeaAction>(async () => ({ card: 9 })), undoMove: vi.fn<UndoMove>(async () => ({ state: 'refused' })), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],
+ workAction: vi.fn<WorkAction>(async () => {}), placeMove: vi.fn<PlaceCard>(async () => ({ ok: true })), newCard: vi.fn<NewCardAction>(async () => ({ id: 9 })), undoMove: vi.fn<UndoMove>(async () => ({ state: 'refused' })), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],
  cards: [card()], items: [{ id: 1, card_id: 1, title: 'Script Ready', done: false }], members: [{ person_id: 'p-1', people: { name: 'عمر' } }],
  activity: [], creatives: [], versions: [], cardLabels: [], projects: [], approvableIds: [], agents: [],
  canCreate: true, initialCreating: false, attachments: [], ...more,
 });
 export const sent = (props: WorkProps) => vi.mocked(props.workAction).mock.calls.map(([form]) => Object.fromEntries(form));
-// The ideas the Ideas column sent (#188, #452), each with its request key.
-export const ideasSent = (props: WorkProps) => vi.mocked(props.addIdea).mock.calls.map(([form]) => Object.fromEntries(form));
+// The Cards the New card form sent (#683), each with its request key.
+export const cardsSent = (props: WorkProps) => vi.mocked(props.newCard).mock.calls.map(([form]) => Object.fromEntries(form));
 // What the board asked the server to place, read as the form it sent (#174).
 export const placed = (props: WorkProps) => vi.mocked(props.placeMove).mock.calls.map(([form]) => Object.fromEntries(form));
 

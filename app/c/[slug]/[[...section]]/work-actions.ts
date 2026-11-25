@@ -5,12 +5,11 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { actionAllowed } from '@/lib/route-permissions.mjs';
-import { fingerprint } from '@/lib/agent-crypto.mjs';
 import { filesProblem } from '@/lib/attachments.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
-import type { Card, IdeaResult, PlaceResult, SaveResult, UndoResult } from './work';
+import type { Card, NewCardResult, PlaceResult, SaveResult, UndoResult } from './work';
 import type { TickResult } from '@/app/card-description';
 import type { DescriptionSaved, PictureUploaded } from '@/app/description-editor';
 import { mergeDescriptions } from '@/lib/description-merge.mjs';
@@ -172,20 +171,34 @@ export const uploadDescriptionPicture=withActionLog('uploadDescriptionPicture',a
  if(error||!row) { logActionFailure('uploadDescriptionPicture',error??{message:'attachment not found'},{form}); return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')}; }
  return {url:`/c/${slug}/files/${row.id}`,name:stored.files[0].name};
 });
-// An idea from the Ideas column (#188): made once per request key, so Add pressed twice or a retry is one Card (#452). It
-// answers the form with its Card instead of redirecting, since a redirect rejects the promise the form waits on.
-export const addIdea=withActionLog('addIdea',async function addIdea(form: FormData): Promise<IdeaResult> {
+// A new Card from the one New card form (#683): from the toolbar into Planned, from the Ideas column at its top, with
+// its description, its assignee or no one, the board's Project, and files. Made once per request key, so pressing Add
+// twice or a retry is one Card. It answers instead of redirecting: the form shows a refusal and stays open.
+export const newCard=withActionLog('newCard',async function newCard(form: FormData): Promise<NewCardResult> {
+ const {t}=await getI18n();
  const db=await supabase(); const company=String(form.get('company'));
- if(!await actionAllowed(db,'addIdea',company)) return {failed:true};
- const payload={stage:Number(form.get('stage')),title:String(form.get('title')||''),agent:String(form.get('agent')||'')};
- const {data,error}=await db.rpc('agent_write',{c:company,request_key:String(form.get('key')||''),fingerprint:fingerprint('POST','ideas',JSON.stringify(payload)),op:'idea',card:null,payload});
- if(error||!data?.id) { logActionFailure('addIdea',error||{message:'no card'},{form}); return {failed:true}; }
+ if(!await actionAllowed(db,'newCard',company)) return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+ const [kind,who]=String(form.get('assignee')||'').split(':'); const key=String(form.get('key')||'');
+ const {data,error}=await db.rpc('new_card',{c:company,card_title:String(form.get('title')||''),status:String(form.get('status')||'planned'),
+  description:String(form.get('description')??'').replace(/\r\n?/g,'\n'),agent:kind==='a'?who:null,person:kind==='p'?who:null,
+  project:form.get('project')?Number(form.get('project')):null,request_key:/^[0-9a-f-]{36}$/.test(key)?key:null});
+ if(error||!data) {
+  logActionFailure('newCard',error??{message:'no card'},{form});
+  const reason=String(error?.message||'');
+  return {error:reason.includes('title required')?t('ncTitleMissing'):/agent not found|assignee not a member/.test(reason)?t('assigneeNotPermitted'):t('couldNotSaveTheChangeCheckPermissionsAnd')};
+ }
+ const card=Number(data);
+ const stored=await storeFiles(db,company,form,`${card}/files/${key||crypto.randomUUID()}`);
+ if(!stored.error&&stored.files.length) {
+  const attached=await db.rpc('attach_card_files',{c:company,card,files:stored.files});
+  if(attached.error) logActionFailure('newCard',attached.error,{form});
+ } else if(stored.error) logActionFailure('newCard',stored.error,{form});
  revalidatePath(`/c/${String(form.get('slug'))}`,'layout');
- return {card:Number(data.id)};
+ return {id:card};
 });
 export const workAction=withActionLog('workAction',async function workAction(form: FormData) { const {t}=await getI18n();
  const db=await supabase(); const company=String(form.get('company')); const slug=String(form.get('slug')); const op=String(form.get('op')); const card=Number(form.get('card')); const base=`/c/${slug}/work/board`; const evidence=String(form.get('evidence')||'').trim() || null;
- let error: {message:string}|null=null; let created: number|undefined;
+ let error: {message:string}|null=null;
  // The action's permission (lib/route-permissions.mjs) for this operation, with the role read now; the database checks
  // the finer rules (the current approver, the stage rules) again.
  if(!await actionAllowed(db,'workAction',company,op)) error={message:'not permitted'};
@@ -196,17 +209,7 @@ export const workAction=withActionLog('workAction',async function workAction(for
  // A Card waits for another, or stops waiting (#682); the database refuses a loop.
  else if(op==='wait-add'||op==='wait-remove') ({error}=await db.rpc(op==='wait-add'?'add_card_wait':'remove_card_wait',{c:company,card,waits_for:Number(form.get('waits_for'))}));
  else if(op==='approve'||op==='send-back') ({error}=await db.rpc('decide_review',{c:company,card,version:form.get('version')?Number(form.get('version')):null,decision:op==='approve'?'approve':'send_back',reason:String(form.get('reason')||'')}));
- else if(op==='create') { const result=await db.rpc('create_work_card',{c:company,s:Number(form.get('stage')),card_title:String(form.get('title')),template:String(form.get('template')||''),evidence}); error=result.error; created=result.data; }
- else if(op==='request') {
-  // One card, its first message and its assignment, once per key: a double click or a retry returns the same card.
-  const key=String(form.get('key')||''); const stored=await storeFiles(db,company,form,/^[0-9a-f-]{36}$/.test(key)?key:crypto.randomUUID()); error=stored.error;
-  if(!error) {
-   const payload={message:String(form.get('message')||''),agent:String(form.get('agent')||''),mode:String(form.get('mode')||'')};
-   const result=await db.rpc('agent_write',{c:company,request_key:key,fingerprint:fingerprint('POST','cards',JSON.stringify(payload)),op:'create',card:null,payload});
-   error=result.error; created=result.data?.id;
-   if(!error && created && stored.files.length) error=(await db.rpc('attach_files',{c:company,card:created,message:null,files:stored.files})).error;
-  }
- }
+
  else if(op==='project') ({error}=await db.rpc('edit_work_card',{c:company,card,fields:{project_id:String(form.get('project')||'')},evidence}));
  // The Card page's stage list, the one way into review until the review is a decision of its own (#681): the stage
  // moves, and the status follows it.
@@ -249,6 +252,5 @@ export const workAction=withActionLog('workAction',async function workAction(for
  else if(op==='label-settings') { const result=await db.from('work_labels').update({name:String(form.get('name')),color:String(form.get('color'))}).eq('company_id',company).eq('id',Number(form.get('label'))).select('id'); error=result.error || (!result.data?.length?{message:'not permitted'}:null); }
  else error={message:'unknown operation'};
  revalidatePath(`/c/${slug}`,'layout');
- if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op==='request'?`/c/${slug}/work/new`:op.endsWith('settings')?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')||['move','move-column'].includes(op)&&error.message.includes('not permitted')?t('youCannotMoveTheCardToThisStage'):error.message.includes('waiting is not placed by hand')?t('boardWaitingFillsItself'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):error.message.includes('wait loop')?t('cwWaitLoop'):error.message.includes('review closed')?t('reviewClosed'):error.message.includes('version changed')?t('reviewVersionChanged'):error.message.includes('already in review')?t('reviewAlready'):error.message.includes('reason required')?t('reviewReasonRequired'):op==='assign'&&(error.message.includes('agent not found')||error.message.includes('assignee not a member')||error.message.includes('one assignee'))?t('assigneeNotPermitted'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
- if(created) redirect(`${base}/${created}`);
+ if(error) { logActionFailure(`workAction:${op}`,error,{form}); const path=op.endsWith('settings')?`/c/${slug}/settings/work`:card&&form.get('view')==='sheet'?`${base}?card=${card}`:card&&(!['move','move-column'].includes(op)||form.get('view')==='card')?`${base}/${card}`:base; redirect(`${path}${path.includes('?')?'&':'?'}message=${encodeURIComponent(error.message.includes('contributors cannot move')||['move','move-column'].includes(op)&&error.message.includes('not permitted')?t('youCannotMoveTheCardToThisStage'):error.message.includes('waiting is not placed by hand')?t('boardWaitingFillsItself'):error.message.includes('approval required')?t('boardNeedsApproval'):error.message.includes('decision required')?t('boardDecideFirst'):error.message.includes('wait loop')?t('cwWaitLoop'):error.message.includes('review closed')?t('reviewClosed'):error.message.includes('version changed')?t('reviewVersionChanged'):error.message.includes('already in review')?t('reviewAlready'):error.message.includes('reason required')?t('reviewReasonRequired'):op==='assign'&&(error.message.includes('agent not found')||error.message.includes('assignee not a member')||error.message.includes('one assignee'))?t('assigneeNotPermitted'):t('couldNotSaveTheChangeCheckPermissionsAnd'))}`); }
 });

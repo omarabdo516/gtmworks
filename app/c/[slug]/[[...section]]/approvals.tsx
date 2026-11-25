@@ -1,9 +1,9 @@
 'use client';
-import { addIdea, placeMove, workAction, undoMove } from './work-actions';
+import { newCard, placeMove, workAction, undoMove } from './work-actions';
 import Work, { type WorkProps } from './work';
 export type ApprovalCard={id:number,title:string,caption:string,offering:string,segment:string,hook:string,goal:string,go_live:string|null,approval_step_id:number|null,review_entered_at:string|null,rejection_reason:string|null};
 // "Waiting on you" (#16, ADR 0013) is the board's first column: the Inbox opens the board on it. One list for this
 // person, newest first: the reviews they decide (#681) and anything else addressed to them, each opening its Card or Conversation.
-export function Approvals(props:Omit<WorkProps,'workAction'|'placeMove'|'addIdea'|'undoMove'|'section'|'focus'|'initialCreating'|'cardId'>) {
- return <Work {...props} workAction={workAction} placeMove={placeMove} addIdea={addIdea} undoMove={undoMove} section="work/board" focus="waiting" initialCreating={false}/>;
+export function Approvals(props:Omit<WorkProps,'workAction'|'placeMove'|'newCard'|'undoMove'|'section'|'focus'|'initialCreating'|'cardId'>) {
+ return <Work {...props} workAction={workAction} placeMove={placeMove} newCard={newCard} undoMove={undoMove} section="work/board" focus="waiting" initialCreating={false}/>;
 }

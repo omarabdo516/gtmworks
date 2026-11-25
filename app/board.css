@@ -173,7 +173,6 @@
 .gw .kcard__t { font-size: var(--gw-fs-sm); color: var(--gw-text-2); line-height: 1.6; text-wrap: pretty; }
 .gw .kcard .badge { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; height: 22px; padding: 0 var(--s2, 8px); border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); background: var(--gw-bg-tertiary); color: var(--gw-text-1); --b-icon: 14px; }
 .gw .kcard .badge--wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); font-weight: 600; }
-.gw .kcard .badge--wait.is-new { animation: gw-nudge 520ms var(--gw-ease-out); }
 .gw .kcard .badge .dot { width: 6px; height: 6px; }
 .gw .kcard .badge--live .dot { background: var(--gw-text-1); }
 .gw .kcard__prog { display: grid; gap: 6px; }
@@ -401,4 +400,42 @@
   .gw .board-view .bsel { border-radius: var(--gw-r-lg); }
   .gw .board-view .col__head .col__act { min-width: 44px; height: 44px; }
   .gw .board-view .link-btn { min-height: 44px; }
+}
+
+/* The tile (#683; design-reference-card: kcardHTML, round 8): its title and one state symbol, then the assignee's face and
+   only the counts above zero. */
+.gw .kcard > .kt-head { display: flex; align-items: flex-start; gap: var(--s2); }
+.gw .kt-head > .kcard__title { flex: 1 1 0; min-width: 0; }
+.gw .kt-syms { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: calc(var(--gw-fs-base) * 1.55); }
+.gw .kt-syms .gw-icon { width: 16px; height: 16px; }
+.gw .kt-syms.is-new .sym { animation: gw-nudge 520ms var(--gw-ease-out); }
+.gw .sym__n { font-size: var(--gw-fs-xs); font-weight: 600; line-height: 1; }
+.gw .kcard > .kcard__foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 4px; padding-top: 2px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw .kt-face { display: inline-flex; flex: none; --av: 20px; }
+.gw .kt-metas { margin-inline-start: auto; display: inline-flex; align-items: center; gap: var(--s3); flex: none; }
+.gw .kt-m { display: inline-flex; align-items: center; gap: 3px; }
+.gw .kt-m .gw-icon { width: 13px; height: 13px; }
+.gw .kt-m.is-all { color: var(--gw-text-2); }
+.gw .kt-date { color: var(--gw-text-2); }
+.gw .kcard.is-sel .kt-head { padding-inline-end: 28px; }
+@media (prefers-reduced-motion: reduce) { .gw .kt-syms.is-new .sym { animation: none; } }
+
+/* One toolbar row (#683; design-reference-card: .bt2, .bt-desk, .bt-filter). On a phone the filters fold into one
+   Filter menu and the search comes first, so the first Card shows near the top. */
+.gw .board-view .board-tools .bt-desk { display: contents; }
+.gw .board-view .board-tools .bt-filter { display: none; }
+.gw .board-view .board-tools .od-fill { flex: 1 1 0; min-width: 0; }
+.gw .board-view .board-tools .ib.is-on { background: var(--gw-bg-active); color: var(--gw-text-1); }
+.gw .board-view .board-tools .cw-menu > .ib { width: auto; min-width: 36px; gap: 6px; padding-inline: 8px; }
+.gw .board-view .board-tools .bt-who { max-width: 140px; font-size: var(--gw-fs-sm); }
+.gw .board-view .board-tools .cw-pop { width: 260px; }
+.gw .board-view .bt-new { display: inline-flex; align-items: center; gap: 6px; }
+.gw .board-view .bt-new .gw-icon { width: 16px; height: 16px; }
+@media (max-width: 767px) {
+  .gw .board-view .board-tools { gap: var(--s2); padding-block-end: var(--s3); }
+  .gw .board-view .board-tools .bt-desk { display: none; }
+  .gw .board-view .board-tools .bt-filter { display: inline-flex; }
+  .gw .board-view .board-tools :is(.bt-search, .bt-search-btn) { order: -2; }
+  .gw .board-view .board-tools .bt-search.is-open { flex: 1 1 100%; }
+  .gw .board-view .bt-new__t { display: none; }
 }

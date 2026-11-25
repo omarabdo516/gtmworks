@@ -84,6 +84,8 @@ const paths = {
  indent: <><path d="M4 6h16M4 18h16M11 12h9"/><path d="M4 9l3 3-3 3"/></>,
  outdent: <><path d="M4 6h16M4 18h16M11 12h9"/><path d="M7 9l-3 3 3 3"/></>,
  grip: <><circle cx="9" cy="6.5" r="1.1"/><circle cx="15" cy="6.5" r="1.1"/><circle cx="9" cy="12" r="1.1"/><circle cx="15" cy="12" r="1.1"/><circle cx="9" cy="17.5" r="1.1"/><circle cx="15" cy="17.5" r="1.1"/></>,
+ // The phone board's one Filter menu (#683; design-reference-card: filter).
+ filter: <path d="M4 6.5h16M7 12h10M10 17.5h4"/>,
  open: <><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></>,
 };
 export type ShellIconName = keyof typeof paths;
