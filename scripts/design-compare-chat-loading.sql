@@ -19,9 +19,8 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
  ('10000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000003','agent',null,'6f000000-0000-0000-0000-000000000002','Ads','تمام، هبدأ بالجمهور وبعدها أكتب 3 إعلانات وأبعتهملك تشوفهم.',null,'visual-loading','2026-06-10T10:01:00Z') on conflict do nothing;
 insert into public.conversation_run_ends(company_id,conversation_id,run_id,outcome,recorded_at) values ('10000000-0000-0000-0000-000000000001','6f000000-0000-0000-0000-000000000003','visual-loading','completed','2026-06-10T10:01:00Z') on conflict do nothing;
 -- The chat's Card on the board, as the reference's th-meta has one, so the corner pill shows while the record loads.
-insert into public.work_cards(id,company_id,stage_id,title,agent_id,conversation_id) overriding system value
-select 640172,'10000000-0000-0000-0000-000000000001',s.id,'خطة إعلانات Meta لكورس المحاسب الشامل','6f000000-0000-0000-0000-000000000002','6f000000-0000-0000-0000-000000000003'
-from (select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and board_column in ('waiting','progress') order by board_column='waiting' desc,position,id limit 1) s
+insert into public.work_cards(id,company_id,status,title,agent_id,conversation_id) overriding system value
+values (640172,'10000000-0000-0000-0000-000000000001','waiting','خطة إعلانات Meta لكورس المحاسب الشامل','6f000000-0000-0000-0000-000000000002','6f000000-0000-0000-0000-000000000003')
 on conflict do nothing;
 create policy test_slow_read on public.conversation_run_ends as restrictive for select to authenticated using ((select pg_sleep(7)) is not null);
 commit;

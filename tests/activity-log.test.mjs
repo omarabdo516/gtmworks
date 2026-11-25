@@ -9,6 +9,9 @@ const omar = '20000000-0000-0000-0000-000000000001', writer = '30000000-0000-000
 test('Card, Member and Agent rows say who changed what', () => {
  const moved = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'stage_id', old_name: 'أفكار', new_name: 'كتابة' } });
  assert.deepEqual([moved.act, moved.from, moved.to], [['logActMoved'], { text: 'أفكار' }, { text: 'كتابة' }]);
+ // A move since the cutover (#684) is logged by its columns, read in the reader's language.
+ const byStatus = describeEntry({ subject: 'card', action: 'card_changed', details: { field: 'status', old_status: 'ideas', new_status: 'progress' } });
+ assert.deepEqual([byStatus.act, byStatus.from, byStatus.to], [['logActMoved'], { key: 'boardColIdeas' }, { key: 'boardColProgress' }]);
  // Files added to the Card itself in its window (#678) name the files.
  const files = describeEntry({ subject: 'card', action: 'files_added', details: { names: ['brief.pdf', 'logo.png'] } });
  assert.deepEqual([files.act, files.to], [['logActFilesAdded'], { text: 'brief.pdf, logo.png' }]);

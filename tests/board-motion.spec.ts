@@ -12,9 +12,9 @@ const sendForReview=async(on:Page)=>{ const card=on.getByRole('dialog'); await c
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 const rows=(sql:string)=>{ const out=JSON.parse(query(sql)); return (Array.isArray(out)?out:out.rows) as Record<string,unknown>[]; };
 const rs='10000000-0000-0000-0000-000000000001';
-// A Card of this test's own in a stage, at its column's end.
-const cardIn=(title:string,stage:string)=>{
- const id=Number(rows(`insert into public.work_cards(company_id,stage_id,title) select '${rs}',id,'${title} ${Date.now()}' from public.work_stages where company_id='${rs}' and name='${stage}' returning id`)[0].id);
+// A Card of this test's own in a column, at its end (a Card's status since #684).
+const cardIn=(title:string,status:string)=>{
+ const id=Number(rows(`insert into public.work_cards(company_id,status,title) values ('${rs}','${status}','${title} ${Date.now()}') returning id`)[0].id);
  return id;
 };
 const card=(page:Page,id:number)=>page.locator(`#board-cols .kcard[data-card-id="${id}"]`);
@@ -36,7 +36,7 @@ async function pickUp(page:Page,id:number) {
 const logRows=(id:number)=>Number(rows(`select count(*) n from public.work_activity where card_id=${id}`)[0].n);
 
 test('a carried Card leans with the pointer and settles back, scrolls the columns at an edge, and has no lean with reduced motion',async({page})=>{
- const id=cardIn('Lean','أفكار');
+ const id=cardIn('Lean','ideas');
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  await page.setViewportSize({width:1280,height:800});
  const at=await pickUp(page,id);
@@ -96,7 +96,7 @@ const watchFlight=(page:Page,id:number)=>page.evaluate(id=>{
 const flight=(page:Page)=>page.evaluate(()=>(window as unknown as {flight:Promise<{transition:{property:string,duration:string,easing:string}|null,dimmed:boolean,ms:number,dimmedAfter:boolean}>}).flight);
 
 test('a Card cancelled with Escape or let go on its own place flies back over 220ms, dimmed in its place until it arrives, and moves nothing',async({page})=>{
- const id=cardIn('Fly back','أفكار');
+ const id=cardIn('Fly back','ideas');
  const logged=logRows(id);
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const flying={transition:{property:'transform',duration:'0.22s',easing:'cubic-bezier(0.2, 0, 0, 1)'},dimmed:true};
@@ -133,7 +133,7 @@ test('a Card cancelled with Escape or let go on its own place flies back over 22
 });
 
 test('a Card dropped in another column or moved with Shift and an arrow lands on a spring with a ring, and a Viewer picks nothing up',async({page,browser})=>{
- const id=cardIn('Landing','أفكار');
+ const id=cardIn('Landing','ideas');
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  // Watches the Card in its new column for the landing's inline transition and ring.
  const landing=()=>page.evaluate(({id})=>new Promise<{transition:string,ring:boolean,transform:string}>(done=>{
@@ -179,7 +179,7 @@ test('a Card dropped in another column or moved with Shift and an arrow lands on
 });
 
 test('a Card carried until its own place is out of the window and dropped in another column leaves the board where it is (#556)',async({page})=>{
- const id=cardIn('Far drop','أفكار');
+ const id=cardIn('Far drop','ideas');
  await page.setViewportSize({width:900,height:800});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const at=await pickUp(page,id);
@@ -230,7 +230,7 @@ test('the board\'s entrance class is gone after a second, leaving the edge fade'
 test('a Card newly waiting on the approver nudges its badge and pops the sidebar count once, not on a reload and not when the count falls',async({page,context})=>{
  // The board stays open in one tab while the approver moves a Card to review on its own page in another; the board is
  // drawn again when the reader next moves a Card there.
- const mover=cardIn('Redraw','أفكار');
+ const mover=cardIn('Redraw','ideas');
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const redraw=async(to:'ArrowRight'|'ArrowLeft')=>{ const column=await columnOf(page,mover); await page.locator(`#board-cols .kcard[data-card-id="${mover}"] a`).focus(); await page.keyboard.press(`Shift+${to}`); await expect.poll(()=>columnOf(page,mover)).not.toBe(column); };
  const tab=await context.newPage();

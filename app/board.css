@@ -189,10 +189,6 @@
 .gw .kcard__todo > span[aria-hidden] { display: inline-flex; align-items: center; gap: 3px; }
 .gw .kcard__todo .gw-icon { width: 14px; height: 14px; }
 .gw .kcard__todo.is-all { color: var(--gw-text-2); }
-.gw .kcard__kind { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.gw .kcard .mode-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 var(--s2, 8px); border: 1px solid; border-radius: var(--gw-r-full); font-size: var(--gw-fs-xs); font-weight: 600; }
-.gw .kcard .mode-chip { border-color: var(--gw-border-2); }
-.gw .kcard .mode-chip i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 /* ---------- a carried Card lands: the line before it, or at the column's end (#174) ---------- */
 /* design-reference: .kcard.is-drop-before::before, .col__body.is-drop-end::after, .kcard.is-landing */

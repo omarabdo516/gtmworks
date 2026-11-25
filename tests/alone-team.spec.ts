@@ -24,7 +24,7 @@ test.beforeAll(({},testInfo)=>{
    insert into public.conversations(id,company_id,person_id,agent_name) values (gen_random_uuid(),'${company}','${omar}','Lead');
   end if;
   if not exists(select 1 from public.work_cards where company_id='${company}') then
-   insert into public.work_cards(company_id,stage_id,title) select '${company}',id,'Alone card' from public.work_stages where company_id='${company}' order by position limit 1;
+   insert into public.work_cards(company_id,status,title) values ('${company}','ideas','Alone card');
   end if;
  end $$;`);
  before=counts(); earlierLog=logRows();

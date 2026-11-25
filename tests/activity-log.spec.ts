@@ -107,7 +107,7 @@ test('older rows are reached page by page in a stable order, each row once',asyn
  const company=rows(`with engine as (insert into public.company_engines(address,key_encrypted) values ('http://127.0.0.1:8642','paged') returning id) insert into public.companies(id,slug,name,engine_id) select gen_random_uuid(),'${slug}','Paged ${stamp}',id from engine returning id`)[0].id as string;
  query(`insert into public.members(company_id,person_id,role) values ('${company}','${viewer}','viewer')`);
  try {
-  query(`with card as (insert into public.work_cards(company_id,stage_id,title) select '${company}',id,'${title}' from public.work_stages where company_id='${company}' and kind='ideas' order by position limit 1 returning id)
+  query(`with card as (insert into public.work_cards(company_id,status,title) values ('${company}','ideas','${title}') returning id)
    insert into public.work_comments(company_id,card_id,body,author_id,created_at) select '${company}',card.id,'Paged row '||g,'${viewer}',timestamptz '2026-01-01T00:00:00Z'+(g/${moment})*interval '1 minute' from card,generate_series(1,${comments}) g`);
   const card=Number(rows(`select id from public.work_cards where title='${title}'`)[0].id);
   const expected=rows(`select id,created_at from public.company_log where card_id=${card} order by created_at desc,id desc`);

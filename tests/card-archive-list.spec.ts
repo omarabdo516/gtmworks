@@ -13,9 +13,9 @@ const board = '/c/rs-learning/work/board';
 // Sixty archived Cards of RS Learning, an hour apart, the first archived first: the oldest titled in Arabic. A retry on
 // the same lane keeps the file's data, so they are made once.
 function sixtyArchived() {
- query(`insert into public.work_cards(company_id,stage_id,title,archived_at,archived_by)
-  select s.company_id,s.id,case when g=1 then 'مُــهمّة إعلانات ديسمبر' else 'Archived plan '||lpad(g::text,2,'0') end,now()-interval '100 hours'+make_interval(hours=>g),'${reviewer}'
-  from generate_series(1,60) g, (select company_id,id from public.work_stages where company_id='${company}' and board_column='progress' order by position limit 1) s
+ query(`insert into public.work_cards(company_id,status,title,archived_at,archived_by)
+  select '${company}','progress',case when g=1 then 'مُــهمّة إعلانات ديسمبر' else 'Archived plan '||lpad(g::text,2,'0') end,now()-interval '100 hours'+make_interval(hours=>g),'${reviewer}'
+  from generate_series(1,60) g
   where not exists (select 1 from public.work_cards where company_id='${company}' and title='Archived plan 60')`);
 }
 

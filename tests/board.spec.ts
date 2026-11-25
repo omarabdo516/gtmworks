@@ -21,8 +21,8 @@ const columnOf=(page:Page,id:number)=>page.locator(`.kcard[data-card-id="${id}"]
 const landedColumn=async(page:Page,id:number)=>{ let column:string|null=null; await expect.poll(async()=>column=await columnOf(page,id)).not.toBeNull(); return column; };
 
 // #174: a Card keeps its place inside its column. Cards made for one test sit at their column's end, in the order made.
-const placeCards=(stamp:number,n:number,stage='أفكار')=>rows(`with made as (insert into public.work_cards(company_id,stage_id,title)
- select '${rs}',s.id,'Place ${stamp} '||x from public.work_stages s, generate_series(1,${n}) x where s.company_id='${rs}' and s.name='${stage}' returning id)
+const placeCards=(stamp:number,n:number,status='ideas')=>rows(`with made as (insert into public.work_cards(company_id,status,title)
+ select '${rs}','${status}','Place ${stamp} '||x from generate_series(1,${n}) x returning id)
  select id from made order by id`).map(row=>Number(row.id));
 // The order a column is drawn in.
 const orderIn=(page:Page,column:string)=>page.locator(`#board-cols .col[data-column="${column}"] .kcard[data-card-id]`).evaluateAll(nodes=>nodes.map(node=>Number(node.getAttribute('data-card-id'))));
@@ -371,7 +371,7 @@ test('a Card is carried to the top, the middle and the end of its own column, an
  await page.reload();
  expect(await orderIn(page,'ideas')).toEqual(end);
  // Into the middle of another column: above the Card made there last.
- const [d]=placeCards(stamp,1,'بريف جاهز');
+ const [d]=placeCards(stamp,1,'planned');
  await page.reload();
  const planned=await orderIn(page,'planned');
  expect(planned[planned.length-1]).toBe(d);
@@ -496,15 +496,14 @@ test('a Contributor dropping a Card archived meanwhile is told it cannot move it
  expect(rows(`select status from public.work_cards where id=${card}`)).toEqual([{status:'ideas'}]);
 });
 
-// #168: "Undo" on a move is offered for six seconds and puts the Card back in the stage it left, not only in its column;
+// #168: "Undo" on a move is offered for six seconds and puts the Card back in the column and the place it left;
 // the keyboard returns to it and the log keeps both rows. A move the board refuses offers no "Undo".
-test('a move to another column is offered as Undo, which puts the Card back in the stage and place it left, focused, with both log rows',async({page})=>{
+test('a move to another column is offered as Undo, which puts the Card back in the column and place it left, focused, with both log rows',async({page})=>{
  await page.setViewportSize({width:2200,height:900});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const stamp=Date.now();
- // Two Cards in «كتابة», a stage of In progress: a Card put back returns to that stage, not to the column's first one.
- const [a,b]=placeCards(stamp,2,'كتابة');
- const writing=Number(rows(`select id from public.work_stages where company_id='${rs}' and name='كتابة'`)[0].id);
+ // Two Cards In progress: a Card put back returns to its own place there.
+ const [a,b]=placeCards(stamp,2,'progress');
  await page.reload();
  const progress=await orderIn(page,'progress');
  expect(progress.slice(-2)).toEqual([a,b]);
@@ -513,18 +512,17 @@ test('a move to another column is offered as Undo, which puts the Card back in t
  await carry(page,a,{column:'planned',before:planned[0]});
  await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect(page.getByRole('button',{name:'Undo'})).toBeVisible();
- // Undo: the Card is back in In progress and in the stage it left, its own place again, and it takes the keyboard.
+ // Undo: the Card is back in In progress, its own place again, and it takes the keyboard.
  await page.getByRole('button',{name:'Undo'}).click();
  await expect(page.locator('.toast')).toHaveText('Back in “In progress”');
  const back=page.locator(`.col[data-column="progress"] .kcard[data-card-id="${a}"]`);
  await expect(back).toBeVisible();
- expect(await back.evaluate(el=>el.closest('[data-stage-id]')?.getAttribute('data-stage-id'))).toBe(String(writing));
  await expect(back.locator('a')).toBeFocused();
  expect(await orderIn(page,'progress')).toEqual(progress);
- // The log keeps one row for the move and one for the way back, each naming who and both stages.
+ // The log keeps one row for the move and one for the way back, each naming who and both columns.
  await page.goto(`/c/rs-learning/work/board/${a}`);
  const log=await activityOf(page);
- await expect(log.filter({hasText:/moved the card\s*from\s*كتابة\s*to\s*بريف جاهز/})).toHaveCount(1);
+ await expect(log.filter({hasText:/moved the card\s*from\s*In progress\s*to\s*Planned/})).toHaveCount(1);
  await expect(log.filter({hasText:/moved the card back\s*from\s*Planned\s*to\s*In progress/})).toHaveCount(1);
  // The keyboard's move is told with "Undo" too, and its Undo brings the Card back again.
  await page.goto('/c/rs-learning/work/board');

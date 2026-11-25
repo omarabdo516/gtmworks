@@ -427,7 +427,7 @@ test('integration: an Agent shows a review once under its reply, shows none for 
  };
  fake.settings.toolCalls=input=>Object.hasOwn(calls,input)?[{id:'call-0',name:'show_review',arguments:calls[input]}]:[];
  const work=()=>JSON.parse(query(`select (select count(*) from public.work_activity where action like 'approval%')::int as approvals,(select count(*) from public.work_activity)::int as activity,
-  (select count(*) from public.work_versions)::int as versions,(select string_agg(id||':'||stage_id||':'||coalesce(approval_step_id::text,'-'),',' order by id) from public.work_cards) as cards`))[0];
+  (select count(*) from public.work_versions)::int as versions,(select string_agg(id||':'||status,',' order by id) from public.work_cards) as cards`))[0];
  try {
   const {service,person}=await clients();
   const conversation=randomUUID();
@@ -470,7 +470,7 @@ test('integration: an Agent hands a step over once under its reply, shows none w
  };
  fake.settings.toolCalls=input=>Object.hasOwn(calls,input)?[{id:'call-0',name:'hand_over',arguments:calls[input]}]:[];
  const work=()=>JSON.parse(query(`select (select count(*) from public.work_activity where action like 'approval%')::int as approvals,(select count(*) from public.work_activity)::int as activity,
-  (select count(*) from public.work_versions)::int as versions,(select string_agg(id||':'||stage_id||':'||coalesce(approval_step_id::text,'-'),',' order by id) from public.work_cards) as cards`))[0];
+  (select count(*) from public.work_versions)::int as versions,(select string_agg(id||':'||status,',' order by id) from public.work_cards) as cards`))[0];
  try {
   const {service,person}=await clients();
   const conversation=randomUUID();
@@ -665,8 +665,8 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
  const fake=await laneHermes(); const {conversation,show,detach}=await handedStep(fake);
  const others=['20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004'];
  const language=(value:'en'|'ar')=>query(`update public.people set language='${value}' where id in ('${omar}','${others.join("','")}')`);
- const [{id:card,stage_id:stage}]=JSON.parse(query(`select id,stage_id from public.work_cards where conversation_id='${conversation}'`));
- const stageNow=()=>JSON.parse(query(`select stage_id from public.work_cards where id=${card}`))[0].stage_id;
+ const [{id:card,status:stage}]=JSON.parse(query(`select id,status from public.work_cards where conversation_id='${conversation}'`));
+ const stageNow=()=>JSON.parse(query(`select status from public.work_cards where id=${card}`))[0].status;
  const [{run_id:run}]=JSON.parse(query(`select run_id from public.conversation_messages where conversation_id='${conversation}' and author='person' order by id limit 1`));
  const opened:{close:()=>Promise<void>}[]=[];
  const member=async(email:string)=>{ const context=await browser.newContext(); opened.push(context); const other=await context.newPage(); await signIn(other,email,'/c/rs-learning/work/board'); return other; };
@@ -1072,7 +1072,7 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
    expect(await sendMessage(person,service,{person:omar,company,conversation,sendKey:randomUUID(),agent,message,hermes,engineFor:fake.engineFor})).toEqual({conversation});
    expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(1);
   };
-  const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.conversation_id='${conversation}'`));
+  const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,c.status as board_column from public.work_cards c where c.conversation_id='${conversation}'`));
   await send('Plan the launch week\nThree posts and one reel');
   const [card]=cards();
   expect(cards()).toEqual([{id:card.id,title:'Plan the launch week',agent_id:agent,board_column:'progress'}]);
@@ -1101,7 +1101,7 @@ test('a new chat with an Agent puts its Card on the board, and the chat\'s line 
   await expect(page.locator('.msg[data-author=agent]')).toHaveCount(2);
   expect(await kinds()).toEqual(['person','agent','boarded','person','agent']);
 
-  query(`select public.move_work_card_to_column('${company}',${card.id},'planned')`);
+  query(`update public.work_cards set status='planned' where id=${card.id}`);
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   await expect(pill).toHaveAccessibleName('On the board: Planned');
   await page.setViewportSize({width:390,height:900});
@@ -1156,7 +1156,7 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
  type Handover={id:number,state:string,to_agent:string,goal:string,target_outcome:string|null};
  const handovers=():Handover[]=>JSON.parse(query(`select id,state,to_agent,goal,target_outcome from public.agent_handovers where conversation_id='${conversation}' order by id`));
  const settle=async()=>expect.poll(async()=>{ await drive(); const rows=handovers(); return rows.length>0&&rows.every(row=>row.state==='done'||row.state==='failed'); },{timeout:60000}).toBe(true);
- const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.conversation_id='${conversation}'`));
+ const cards=()=>JSON.parse(query(`select c.id,c.title,c.agent_id,c.status as board_column from public.work_cards c where c.conversation_id='${conversation}'`));
  const rows=(card:number):{actor_id:string,actor_kind:string,agent_id:string,action:string,details:{agent_name:string,to_name:string,goal:string}}[]=>JSON.parse(query(`select actor_id,actor_kind,agent_id,action,details from public.company_log where card_id=${card} and action='agent_handed_to' order by id`));
  try {
   language('en');

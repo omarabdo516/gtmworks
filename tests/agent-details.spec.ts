@@ -16,7 +16,6 @@ const [copyConnection,copy]=[12,13].map(id);
 // The files (#21): one on a Meta Ads Card, one in Omar's own Conversation with it and one in the Contributor's.
 const paths={card:`${company}/agent-details/${randomUUID()}.pdf`,mine:`${company}/conversations/${conversation}/${randomUUID()}.csv`,theirs:`${company}/conversations/${id(11)}/${randomUUID()}.txt`};
 const bytes=Buffer.from('June audiences\n');
-const stage=(column:string)=>`(select id from public.work_stages where company_id='${company}' and board_column='${column}' order by position limit 1)`;
 
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
@@ -40,10 +39,9 @@ test.beforeAll(({},testInfo)=>{
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${ads}','Meta Ads');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values
    ('${company}','${conversation}','person','${omar}','Omar',E'Plan the June campaign\\nwith three ads','${id(8)}','details-run',now()-interval '5 minutes');
-  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('progress')},'June campaign','${ads}') returning id into card;
-  insert into public.work_checklist(company_id,card_id,title,done) values ('${company}',card,'Pick the audience',true),('${company}',card,'Write the ad copy',false);
-  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('planned')},'Retargeting ads','${ads}');
-  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('ideas')},'Spring copy','${copy}') returning id into card;
+  insert into public.work_cards(company_id,status,title,agent_id,description) values ('${company}','progress','June campaign','${ads}','- [x] Pick the audience'||chr(10)||'- [ ] Write the ad copy') returning id into card;
+  insert into public.work_cards(company_id,status,title,agent_id) values ('${company}','planned','Retargeting ads','${ads}');
+  insert into public.work_cards(company_id,status,title,agent_id) values ('${company}','ideas','Spring copy','${copy}') returning id into card;
   insert into public.waiting_items(company_id,person_id,kind,title,card_id) values ('${company}','${omar}','question','Which tone for spring?',card);
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','${viewer}','${copy}'),('${company}','${reviewer}','${copy}');
   -- Two earlier changes of Meta Ads in the company log, as log_agent_event writes them, dated in the past.
@@ -199,7 +197,7 @@ test('a Viewer\'s panel has only the gear and Close as actions, and no other per
 
 test('every file of the Agent is listed, past fifty, and the heading counts what the list holds',async({page})=>{
  query(`do $$ declare card bigint; message bigint; begin
-  insert into public.work_cards(company_id,stage_id,title,agent_id) values ('${company}',${stage('planned')},'Many files','${seo}') returning id into card;
+  insert into public.work_cards(company_id,status,title,agent_id) values ('${company}','planned','Many files','${seo}') returning id into card;
   insert into public.work_comments(company_id,card_id,body,author_id) values ('${company}',card,'The files','${omar}') returning id into message;
   insert into public.work_attachments(company_id,card_id,comment_id,name,content_type,size,path,created_by,created_at)
    select '${company}',card,message,'file-'||n||'.txt','text/plain',10,'${company}/agent-details-many/'||n||'.txt','${omar}',timestamptz '2026-06-01T09:00:00Z'+n*interval '1 minute' from generate_series(1,51) n;

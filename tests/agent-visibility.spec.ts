@@ -108,21 +108,17 @@ test('the board shows a Member chips and Cards of the Agents they see only, and 
  query(`do $$ declare stage bigint; card bigint; step bigint; review bigint; begin
   update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000004');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000003','${ads}') on conflict do nothing;
-  select id into stage from public.work_stages where company_id='${company}' and board_column='ideas' order by position limit 1;
-  insert into public.work_cards(company_id,stage_id,title,channel,agent_id) values
-   ('${company}',stage,'Lead plans the month','Instagram','${lead}'),('${company}',stage,'SEO drafts the blog','Blog','${seo}');
-  insert into public.work_cards(company_id,stage_id,title,channel,agent_id) values ('${company}',stage,'Ads runs the launch','Meta','${ads}') returning id into card;
+  insert into public.work_cards(company_id,status,title,agent_id) values
+   ('${company}','ideas','Lead plans the month','${lead}'),('${company}','ideas','SEO drafts the blog','${seo}');
+  insert into public.work_cards(company_id,status,title,agent_id) values ('${company}','ideas','Ads runs the launch','${ads}') returning id into card;
   insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,body,source,source_id,created_at) values
    ('${company}','${seo}','agent','SEO','card',card,'${seo}','note_reply','Keywords','note_runs',9190101,now()-interval '2 hours'),
    ('${company}','${ads}','agent','Meta Ads','card',card,'${ads}','note_reply','Audience','note_runs',9190102,now()-interval '1 hour');
   -- The seed's own review waits on every Owner and Manager who sees it (#681); answered here, the Manager's list holds
   -- only what this test puts there.
   update public.work_reviews set decision='ended',decided_at=now() where company_id='${company}' and decision is null;
-  perform set_config('approval.internal','yes',true);
-  insert into public.approval_steps(company_id,name,position,person_id) values ('${company}','Manager',9,'20000000-0000-0000-0000-000000000002') returning id into step;
-  select id into review from public.work_stages where company_id='${company}' and kind='review' order by position limit 1;
-  insert into public.work_cards(company_id,stage_id,title,channel,agent_id,approval_step_id,review_entered_at) values ('${company}',review,'SEO waits for the Manager','Blog','${seo}',step,now());
-  perform set_config('approval.internal','',true);
+  insert into public.work_cards(company_id,status,title,agent_id,review_entered_at) values ('${company}','waiting','SEO waits for the Manager','${seo}',now()) returning id into card;
+  insert into public.work_reviews(company_id,card_id,asked_by) values ('${company}',card,'20000000-0000-0000-0000-000000000001');
  end $$;`);
  // The board's assignee menu (#683) names the Agents the reader sees, after Everyone, Me and No one.
  // The Agents in the Assignee menu, by their faces: a Member may carry an Agent's name (the seed's Contributor "Lead").

@@ -103,7 +103,7 @@ test('"Archive everything in Done" archives every Card shown in Done at once, an
  // carries its status as well as its stage (#676).
  query(`do $$ begin
   set local session_replication_role=replica;
-  insert into public.work_cards(company_id,stage_id,status,title,board_order) select company_id,id,'done',x,n from public.work_stages, unnest(array['Spring post','Summer post']) with ordinality as made(x,n) where company_id='${company}' and board_column='done';
+  insert into public.work_cards(company_id,status,title,board_order) select '${company}','done',x,n from unnest(array['Spring post','Summer post']) with ordinality as made(x,n);
   set local session_replication_role=origin;
  end $$;`);
  const made=rows(`select id from public.work_cards where company_id='${company}' and title in ('Spring post','Summer post') order by id`).map(row=>Number(row.id));

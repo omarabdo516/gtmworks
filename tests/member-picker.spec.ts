@@ -15,12 +15,12 @@ test('a Card whose assignee leaves the Company has no assignee and stays in its 
   query(`insert into auth.users(id) values ('${person}')`);
   query(`insert into public.people(id,name) values ('${person}','Removed assignee')`);
   query(`insert into public.members(company_id,person_id,role) values ('${company}','${person}','contributor')`);
-  // The previous release names a Card's person by its next actor; the assignee follows.
-  [card]=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title,next_actor)
-   select '${company}',id,'Removed assignee regression','${person}' from public.work_stages where company_id='${company}' and board_column='planned' order by position limit 1 returning id`)).map((row:{id:number})=>row.id);
+  // A Card assigned to the Member.
+  [card]=JSON.parse(query(`insert into public.work_cards(company_id,status,title,assignee_person)
+   values ('${company}','planned','Removed assignee regression','${person}') returning id`)).map((row:{id:number})=>row.id);
   expect(JSON.parse(query(`select assignee_person from public.work_cards where id=${card}`))[0].assignee_person).toBe(person);
   query(`update public.members set removed_at=now() where company_id='${company}' and person_id='${person}'`);
-  expect(JSON.parse(query(`select assignee_person,next_actor,status from public.work_cards where id=${card}`))[0]).toEqual({assignee_person:null,next_actor:null,status:'planned'});
+  expect(JSON.parse(query(`select assignee_person,status from public.work_cards where id=${card}`))[0]).toEqual({assignee_person:null,status:'planned'});
 
   await signIn(page,'manager@example.com',`/c/rs-learning/work/board/${card}`);
   // The Card window's assignee menu (#678; design-reference-card: popHTML 'asg').

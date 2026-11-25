@@ -73,7 +73,7 @@ test('a card file of another company is not found, under its address or one\'s o
  const ownFile=Number((await reply(page,`File on an RS Learning card ${stamp}`)).split('/').pop());
  // A Card of Aleem's, filed straight into the seed's Ideas stage (Aleem has no agent to add one from the board).
  await page.goto('/c/aleem/work/board');
- const inserted=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,'Aleem files ${stamp}' from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and kind='ideas' returning id`));
+ const inserted=JSON.parse(query(`insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000003','ideas','Aleem files ${stamp}') returning id`));
  const [aleemCard]=((Array.isArray(inserted)?inserted:inserted.rows) as {id:number}[]);
  await page.goto(`/c/aleem/work/board/${aleemCard.id}`);
  await expect(page).toHaveURL(new RegExp(`/c/aleem/work/board/${aleemCard.id}$`));

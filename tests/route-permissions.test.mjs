@@ -83,7 +83,7 @@ test('a route or action added without a table entry is reported, and needs Owner
   // A first-Owner link is reached without a Member, and its route must read the link by the secret's hash (#383).
   assert.equal(requiredFor(routePermissions, 'app/first-owner/submit/route.ts', 'POST'), 'ownerLink');
   assert.deepEqual(unguarded(['app/first-owner/submit/route.ts'], () => 'export async function POST() {}'), ['app/first-owner/submit/route.ts']);
-  assert.equal(requiredFor(actionPermissions, 'workAction', 'stage-settings'), 'manager');
+  assert.equal(requiredFor(actionPermissions, 'workAction', 'approve'), 'manager');
   assert.equal(requiredFor(actionPermissions, 'workAction', 'comment'), 'contributor');
 });
 

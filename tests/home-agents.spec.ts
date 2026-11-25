@@ -41,9 +41,8 @@ test('a Member sees the main Agent first, then the made Agent shown to them, and
 });
 
 test('the Card an Agent is working on now is a link under its own tile, and the others are not working',async({page})=>{
- const [stage]=JSON.parse(query(`select id from public.work_stages where company_id=${quote(company)} and board_column='progress' order by position limit 1`));
  const title=`حملة الميتا ${Date.now()}`;
- const [card]=JSON.parse(query(`insert into public.work_cards(company_id,stage_id,title,agent_id) values (${quote(company)},${stage.id},${quote(title)},${quote(ads)}) returning id`));
+ const [card]=JSON.parse(query(`insert into public.work_cards(company_id,status,title,agent_id) values (${quote(company)},'progress',${quote(title)},${quote(ads)}) returning id`));
  await signIn(page,'reviewer@example.com','/c/rs-learning/home');
  const tile=(name:string)=>page.locator('.home-agents article').filter({has:page.getByRole('heading',{name,exact:true})});
  await expect(tile('Meta Ads').getByRole('link')).toHaveAttribute('href',`/c/rs-learning/work/board/${card.id}`);

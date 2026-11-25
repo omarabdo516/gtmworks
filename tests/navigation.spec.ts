@@ -232,7 +232,7 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await sendForReview(page);
   await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Waiting/})).toBeVisible();
   await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
-  await expect(page.locator('.column[data-stage-name="مراجعة"] .card').filter({ hasText: title })).toBeVisible();
+  await expect(page.locator('.col[data-column="waiting"] .card').filter({ hasText: title })).toBeVisible();
   await openNavigation(page);
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   // The board draws the same Card in its own column, opening its sheet (#116): the queued Card is read on Waiting on you.
@@ -247,7 +247,7 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await expect(queued).toHaveCount(0);
   await openNavigation(page);
   await page.locator('.nav a[href$="/work/board"]').click();
-  await expect(page.locator('.column[data-stage-name="معتمد"] .card').filter({ hasText: title })).toBeVisible();
+  await expect(page.locator('.col[data-column="planned"] .card').filter({ hasText: title })).toBeVisible();
 });
 
 test('drawer targets are at least 44px and do not overlap', async ({ page }) => {

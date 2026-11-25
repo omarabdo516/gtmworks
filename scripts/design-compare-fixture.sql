@@ -133,9 +133,8 @@ from public.channel_messages where send_key='63000000-0000-0000-0000-00000000001
 on conflict do nothing;
 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-insert into public.work_cards(id,company_id,stage_id,title,agent_id) overriding system value
-select 640001,'10000000-0000-0000-0000-000000000001',id,'حملة Meta للمحاسب الشامل','61000000-0000-0000-0000-000000000002'
-from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1
+insert into public.work_cards(id,company_id,status,title,agent_id) overriding system value
+values (640001,'10000000-0000-0000-0000-000000000001','ideas','حملة Meta للمحاسب الشامل','61000000-0000-0000-0000-000000000002')
 on conflict do nothing;
 insert into public.work_comments(id,company_id,card_id,body,author_id) overriding system value
 values (640002,'10000000-0000-0000-0000-000000000001',640001,'البريف والإعلانات','20000000-0000-0000-0000-000000000001')
@@ -185,11 +184,10 @@ on conflict do nothing;
 
 -- The Card sheet's Chat tab (#145): the Card of Omar's chat with Ads above (his own: its chat in the sheet), and the
 -- Card of the first Contributor's chat with Ads (another Member's: the lock Omar sees); 640001 above is the idea with Ads
--- and no chat. Tied here as the database ties them (only it may), in the first "In progress" stage.
-insert into public.work_cards(id,company_id,stage_id,title,agent_id,conversation_id) overriding system value
-select x.id,'10000000-0000-0000-0000-000000000001',s.id,x.title,'61000000-0000-0000-0000-000000000002',x.conversation
+-- and no chat. Tied here as the database ties them (only it may), In progress.
+insert into public.work_cards(id,company_id,status,title,agent_id,conversation_id) overriding system value
+select x.id,'10000000-0000-0000-0000-000000000001','progress',x.title,'61000000-0000-0000-0000-000000000002',x.conversation
 from (values (640006,'إعلانات Meta: مراجعة قبل العميل','62000000-0000-0000-0000-000000000003'::uuid),(640007,'إعلانات السعودية بلهجة سعودية','62000000-0000-0000-0000-000000000004'::uuid)) x(id,title,conversation)
-cross join lateral (select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and board_column='progress' and kind='before_review' order by position,id limit 1) s
 on conflict do nothing;
 
 -- Omar's Conversation with Ads whose reply shows the tool calls its Run made (#141; the reference's th-meta, message m3,

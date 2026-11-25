@@ -163,8 +163,8 @@ test('a review: an Owner approves it into Planned with its date ahead and into D
  };
  const title=`بطاقة موافقة ${Date.now()}`;
  const cardId=await make(title);
- // The Card's old fields are read in the place of its description until #684 moves them into it (#678).
- query(`update public.work_cards set caption='نص مخصص للمراجعة',offering='عرض مخصص للمراجعة',go_live=now()+interval '10 days' where id=${cardId}`);
+ // The Card's description, read in its window (#679).
+ query(`update public.work_cards set description='نص مخصص للمراجعة',go_live=now()+interval '10 days' where id=${cardId}`);
  await page.reload();
  await sendForReview();
  // "Waiting on you" (ADR 0013) holds the Card for every Owner and Manager who sees it; the sidebar counts it.

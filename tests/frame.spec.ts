@@ -183,7 +183,7 @@ test('owner assigns a new Contributor agent through settings, the work list foll
    insert into auth.users(id) values (${quote(person)});
    insert into public.people(id,name) values (${quote(person)},${quote(initialName)});
    insert into public.members(company_id,person_id,role) values (${quote(writer.company_id)},${quote(person)},'contributor');
-   update public.work_cards set next_actor=${quote(person)} where company_id=${quote(writer.company_id)} and id=${quote(card)};
+   update public.work_cards set assignee_person=${quote(person)} where company_id=${quote(writer.company_id)} and id=${quote(card)};
    end $$;`);
   await page.goto('/c/rs-learning/settings/members');
   const member=page.locator('.member-row').filter({has:page.locator('strong',{hasText:initialName})});
@@ -219,7 +219,7 @@ test('owner assigns a new Contributor agent through settings, the work list foll
   expect(JSON.parse(query(`select role,agent_role from public.members where company_id=${quote(writer.company_id)} and person_id=${quote(person)}`))[0]).toEqual({role:'viewer',agent_role:null});
  } finally {
   query(`do $$ begin
-   update public.work_cards set next_actor=${quote(writer.person_id)} where company_id=${quote(writer.company_id)} and id=${quote(card)};
+   update public.work_cards set assignee_person=${quote(writer.person_id)} where company_id=${quote(writer.company_id)} and id=${quote(card)};
    update public.members set agent_role=null,removed_at=now() where company_id=${quote(writer.company_id)} and person_id=${quote(person)};
    update public.members set agent_role='writer' where company_id=${quote(writer.company_id)} and person_id=${quote(writer.person_id)};
    end $$;`);
@@ -247,8 +247,8 @@ test('recent cards record actual opens only, newest three per person and company
  await chooseCompany(page,'aleem');
  await expect(page).toHaveURL(/\/c\/aleem\/work\/board$/);
  await expect(page.locator('.recent-cards')).toHaveCount(0);
- // A Card of Aleem's, filed straight into the seed's Ideas stage (Aleem has no agent to add one from the board).
- const [aleemCard]=rows(`insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,${quote(`بطاقة عليم ${Date.now()}`)} from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and kind='ideas' returning id`);
+ // A Card of Aleem's, filed straight into Ideas.
+ const [aleemCard]=rows(`insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000003','ideas',${quote(`بطاقة عليم ${Date.now()}`)}) returning id`);
  await page.goto(`/c/aleem/work/board/${aleemCard.id}`);
  await expect(page).toHaveURL(new RegExp(`/c/aleem/work/board/${aleemCard.id}$`));
  const otherCard=new URL(page.url()).pathname;

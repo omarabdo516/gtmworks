@@ -50,7 +50,7 @@ test('integration: a Card its Agent works on asks once, naming the Run and the q
   expect(await sendMessage(person,service,{person:reviewer,company,conversation,sendKey:randomUUID(),agent,message:'Write the June post',hermes,engineFor:fake.engineFor})).toEqual({conversation});
   expect(await closeOpenRuns(service,{hermes,conversation,engineFor:fake.engineFor})).toBe(0);
   // The chat's Card, as its first reply would put it In progress.
-  const [{id}]=rows(`insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id) select company_id,id,'Write the June post','${agent}','${conversation}' from public.work_stages where company_id='${company}' and board_column='progress' and kind='before_review' order by position,id limit 1 returning id`);
+  const [{id}]=rows(`insert into public.work_cards(company_id,status,title,agent_id,conversation_id) values ('${company}','progress','Write the June post','${agent}','${conversation}') returning id`);
   const card=Number(id);
   await signIn(page,'reviewer@example.com',board);
   const before=await count(page);
