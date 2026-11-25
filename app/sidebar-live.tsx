@@ -23,12 +23,16 @@ const Now=createContext<Live|null>(null);
 // answer asked for since then is kept only while it answers that page's. `refresh` asks at once, after the reader opened
 // something that changes a face (OpenedHere).
 const noHands:ScreenHand[]=[];
-// A page whose read of the channels failed passes null (#776): the ones shown last for this Company in this tab stay. The
-// Shell is drawn by each page, so they are kept here, outside any one page's components.
+// A page whose read of the channels failed passes null (#776): the ones this tab showed last for this Company stay, a
+// poll's among them. Kept in the browser only: the server draws a failed read as no channels, never a list from shared
+// state, which could be another reader's.
 const channelsShown=new Map<string,ChannelSummary[]>();
+// The page read last recorded for each Company: a page's own list is kept once, so drawing it again never undoes a newer poll.
+const pageRead=new Map<string,ChannelSummary[]>();
+const inBrowser=typeof window!=='undefined';
 export function SidebarLive({company,slug,channels:read,states,handed=noHands,children}:{company:string,slug?:string,channels:ChannelSummary[]|null,states:Record<string,AgentFaceState>,handed?:ScreenHand[],children:ReactNode}) {
- if(read) channelsShown.set(company,read);
- const channels=useMemo(()=>read??channelsShown.get(company)??[],[read,company]);
+ if(read&&inBrowser&&pageRead.get(company)!==read) { pageRead.set(company,read); channelsShown.set(company,read); }
+ const channels=useMemo(()=>read??(inBrowser?channelsShown.get(company):undefined)??[],[read,company]);
  const [polled,setPolled]=useState<{basis:SidebarNow,now:SidebarNow}|null>(null);
  const basis=useMemo(()=>({channels,agents:states,handed}),[channels,states,handed]);
  const now=polled?.basis===basis?polled.now:basis;
@@ -40,7 +44,7 @@ export function SidebarLive({company,slug,channels:read,states,handed=noHands,ch
    if(document.visibilityState==='visible') {
     try {
      const response=await fetch(`/api/sidebar?company=${company}`,{cache:'no-store'});
-     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) setPolled(was=>kept(was,basis,answer)); }
+     if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) { channelsShown.set(company,answer.channels); setPolled(was=>kept(was,basis,answer)); } }
     } catch {}
    }
    if(!stopped) { clearTimeout(timer); timer=setTimeout(poll,pollEvery); }

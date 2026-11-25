@@ -167,6 +167,7 @@ async function readChannel(db:Database,person:string,company:string,channel:stri
  // Each Agent's own state (#699): the one state read, as the reader, so only their own state comes back, and only the
  // state is kept below. An Agent's turn behind another's on a message is not working yet (#152), there too.
  const faces=await agentFaceStates(db,company);
+ if(!faces.available) throw new ReadFailed('agent states');
  const canWrite=mustRead(await db.rpc('conversation_can_write',{c:company}),'whether the reader writes');
  // Nobody writes in an archived channel (#675): the database refuses a message there too.
  const writer=!!canWrite&&!found.archived_at;

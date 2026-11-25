@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
-import { routeAllowed } from '@/lib/route-permissions.mjs';
+import { routePermission } from '@/lib/route-permissions.mjs';
 import { channelSidebar } from '@/lib/channels';
 import { agentFaceStates } from '@/lib/agent-face-states';
 import { uuid } from '@/lib/conversations';
 import type { SidebarNow } from '@/app/sidebar-live';
-import { screenHands } from '@/lib/agent-screen.mjs';
+import { readScreenHands } from '@/lib/agent-screen.mjs';
 import { ReadFailed } from '@/lib/read-failed';
 
 const reply=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -20,9 +20,14 @@ export async function GET(request:NextRequest) {
   if(!user) return reply({error:'channelNotFound'},401);
   const company=request.nextUrl.searchParams.get('company');
   if(!company||!uuid.test(company)) return reply({error:'channelFailed'},400);
-  if(!await routeAllowed(db,'app/api/sidebar/route.ts','GET',company,user.id)) return reply({error:'channelNotFound'},404);
-  const [channels,{states},handed]=await Promise.all([channelSidebar(db,company),agentFaceStates(db,company),screenHands(db,company)]);
-  return reply({channels,agents:states,handed} satisfies SidebarNow);
+  // A membership read that failed is an error, not "not found" (#776, #777).
+  const allowed=await routePermission(db,'app/api/sidebar/route.ts','GET',company,user.id);
+  if(allowed==='failed') return reply({error:'channelNotRead'},503);
+  if(allowed==='refused') return reply({error:'channelNotFound'},404);
+  const [channels,faces,handed]=await Promise.all([channelSidebar(db,company),agentFaceStates(db,company),readScreenHands(db,company)]);
+  // Any of the three that could not be read is an error: the sidebar keeps what it shows, never idle faces or no steps.
+  if(!faces.available||!handed) return reply({error:'channelNotRead'},503);
+  return reply({channels,agents:faces.states,handed} satisfies SidebarNow);
  } catch(error) {
   // A read that failed answers an error (#776): the sidebar keeps the Conversations and channels it shows.
   if(error instanceof ReadFailed) return reply({error:'channelNotRead'},503);

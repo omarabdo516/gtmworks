@@ -7,7 +7,7 @@ import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestByt
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
-import { routeAllowed } from '@/lib/route-permissions.mjs';
+import { routePermission } from '@/lib/route-permissions.mjs';
 import { channelRecord } from '@/lib/channels';
 import { channelSessionTurns } from '@/lib/company-app-items';
 import { uuid } from '@/lib/conversations';
@@ -92,7 +92,10 @@ async function respond(request:NextRequest) {
   }
   const company=typeof body.company==='string'?body.company:''; const channelId=typeof body.channel==='string'?body.channel:'';
   if(![company,channelId].every(value=>uuid.test(value))) return refuse('channelFailed',400);
-  if(!await routeAllowed(db,'app/api/channels/route.ts',request.method,company,user.id)) return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
+  // A membership read that failed is an error the browser asks again after (#776), never "not found".
+  const allowed=await routePermission(db,'app/api/channels/route.ts',request.method,company,user.id);
+  if(allowed==='failed') return refuse('channelNotRead',503);
+  if(allowed==='refused') return refuse(writing?'channelNotAllowed':'channelNotFound',writing?403:404);
   if(writing&&body.intent==='permit') return await permit(db,body);
  if(writing&&body.intent==='answer') return await answer(db,body);
  if(writing&&body.intent==='done') return await done(db,body);

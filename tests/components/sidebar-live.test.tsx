@@ -78,17 +78,22 @@ test('one poll carries the channels\' counts and the Agents\' states', async () 
  await expect.element(screen.getByRole('link', { name: 'Reach · Runs the ads. · Waiting on you' })).toBeVisible();
 });
 
-// #776: a page whose read of the channels failed, and a poll that failed, keep the channels the sidebar shows.
-test('a failed read of the channels keeps the ones the sidebar shows, from a page drawn after it and from a poll', async () => {
+// #776: a page whose read of the channels failed, and a poll that failed, keep the channels the sidebar shows, what an
+// earlier poll brought among them.
+test('a failed read of the channels keeps the ones the sidebar shows, a poll\'s among them, from the next page and from a poll', async () => {
  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
- vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ error: 'channelNotRead' }), { status: 503 }));
- const general: ChannelSummary[] = [{ kind: 'general', id: 'ch-1', unread: 0 }];
+ const general: ChannelSummary = { kind: 'general', id: 'ch-1', unread: 0 };
+ vi.stubGlobal('fetch', async () => answer({}, [{ ...general, unread: 4 }]));
  const drawn = (channels: ChannelSummary[] | null) => <LanguageProvider language="en"><SidebarLive company="co-kept" channels={channels} states={{}}><ChannelList slug="rs" company="co-kept" person="p-1" manage={false}/></SidebarLive></LanguageProvider>;
- const first = await render(drawn(general));
+ const first = await render(drawn([general]));
  await expect.element(first.getByRole('link', { name: 'general' })).toBeVisible();
- first.unmount();
- const next = await render(drawn(null));
- await expect.element(next.getByRole('link', { name: 'general' })).toBeVisible();
  await vi.advanceTimersByTimeAsync(5000);
- await expect.element(next.getByRole('link', { name: 'general' })).toBeVisible();
+ await expect.element(first.getByLabelText('4 new messages')).toBeVisible();
+ first.unmount();
+ vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ error: 'channelNotRead' }), { status: 503 }));
+ const next = await render(drawn(null));
+ await expect.element(next.getByLabelText('4 new messages')).toBeVisible();
+ await vi.advanceTimersByTimeAsync(5000);
+ await expect.element(next.getByLabelText('4 new messages')).toBeVisible();
+ next.unmount();
 });
