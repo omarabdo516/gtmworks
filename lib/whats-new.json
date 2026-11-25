@@ -3,7 +3,7 @@
   "issue": 746,
   "date": "2026-11-25",
   "en": { "title": "A Card's note waits for its Card", "body": "When the board can't move a Card and opens it instead, its note now stays its full time on the Card's page, however long the page takes to open." },
-  "ar": { "title": "ملاحظة الكارت بتستنى الكارت", "body": "لما البورد ما يقدرش ينقل كارت ويفتحه بدل كده، الملاحظة بتاعته بقت بتفضل وقتها كله على صفحة الكارت، مهما الصفحة اتأخرت في الفتح." }
+  "ar": { "title": "ملاحظة البطاقة بتستنى البطاقة", "body": "لما اللوحة ما تقدرش تنقل بطاقة وتفتحها بدل كده، الملاحظة بتاعتها بقت بتفضل وقتها كله على صفحة البطاقة، مهما الصفحة اتأخرت في الفتح." }
  },
  {
   "issue": 715,
