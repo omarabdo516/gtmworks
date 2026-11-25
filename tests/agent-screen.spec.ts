@@ -383,6 +383,9 @@ function handedOnScreen() {
    insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${conversation}','${company}','${omar}','${ads}','Ads');
    insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
     values ('${company}','${conversation}','person','${omar}','عمر','Set up the December campaign',gen_random_uuid(),'${run}');
+   -- The Run ended with its reply, as the worker keeps it, so no reader asks the Engine for it again.
+   insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id)
+    values ('${company}','${conversation}','agent','${ads}','Ads','The campaign is ready. I stopped at Publish for you.','${run}');
   end $$;`);
  let calls=0;
  const hand=()=>{

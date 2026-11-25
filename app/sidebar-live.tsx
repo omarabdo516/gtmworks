@@ -7,7 +7,6 @@ import { faceStateWords, type AgentFaceState, type FailurePlace } from '@/lib/ag
 import type { ChannelSummary } from '@/lib/channels';
 import { onWatchedRunEnded, shownState, useChatKnows } from '@/lib/live-runs';
 import type { FaceState } from '@/components/face-life';
-import { useRouter } from 'next/navigation';
 import { toast } from '@/app/toast';
 import { onHandDone, type ScreenHand } from '@/app/screen-hands';
 
@@ -61,18 +60,19 @@ export function SidebarLive({company,slug,channels,states,handed=noHands,childre
 // toast): "{Agent} stopped at “{step}” and handed it to you", with "Open", which opens its Conversation at the card. The
 // steps the page was drawn with are no arrival.
 function HandedToasts({slug,handed}:{slug:string,handed:ScreenHand[]}) {
- const {t}=useI18n(); const router=useRouter();
+ const {t}=useI18n();
  const seen=useRef<Set<number>|null>(null);
  useEffect(()=>{
   if(!seen.current) { seen.current=new Set(handed.map(hand=>hand.card)); return; }
   const arrived=handed.filter(hand=>!seen.current!.has(hand.card));
   handed.forEach(hand=>seen.current!.add(hand.card));
   const hand=arrived[0]; if(!hand) return;
-  // The Conversation lands on the card it opens at (`#hand-<card>`) when it is drawn; one already open is drawn again.
+  // The Conversation lands on the card it opens at (`#hand-<card>`) when it is drawn. It is loaded afresh: a copy the
+  // router fetched before the card arrived (the sidebar's link prefetches it) would not hold it.
   const path=`/c/${slug}/conversations/${hand.conversation}`;
-  const open=()=>{ if(location.pathname===path) { history.replaceState(history.state,'',`${path}#hand-${hand.card}`); location.reload(); } else router.push(`${path}#hand-${hand.card}`); };
+  const open=()=>{ if(location.pathname===path) { history.replaceState(history.state,'',`${path}#hand-${hand.card}`); location.reload(); } else location.assign(`${path}#hand-${hand.card}`); };
   toast(t('screenHandToast',hand.agent_name,hand.title),{icon:'hand',action:{label:t('screenHandToastOpen'),run:open}});
- },[handed,slug,t,router]);
+ },[handed,slug,t]);
  return null;
 }
 
