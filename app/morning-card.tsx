@@ -50,7 +50,7 @@ export function MorningCard({slug,card}:{slug:string,card:Card}) {
   {night>0&&<section className="ck-sec" aria-labelledby="ck-h-night"><h3 className="ck-label" id="ck-h-night">{t('goodMorningRan')} <span className="num">{night}</span></h3>
    <div className="ck-list">{card.overnight.map(row=><Link key={row.id} className="panel-row" href={`/c/${slug}/chat/${row.agent.id}`} data-kind="overnight">
     <span aria-hidden="true"><AgentFace agent={row.agent.id} size={24}/></span>
-    <span className="panel-row__text"><span className="panel-row__t" dir="auto">{row.line}</span><span className="panel-row__d"><bdi>{row.agent.name}</bdi> · <ReaderTime at={row.at} className="num"/> · <bdi dir="auto">{row.routine}</bdi></span></span>
+    <span className="panel-row__text"><span className="panel-row__t" dir="auto">{row.line}</span><span className="panel-row__d"><bdi>{row.agent.name}</bdi> · <ReaderTime at={row.at} className="num" hour="numeric"/> · <bdi dir="auto">{row.routine}</bdi></span></span>
     <span className="panel-row__meta"><ShellIcon name={on}/></span></Link>)}</div></section>}
   {handed>0&&<section className="ck-sec" aria-labelledby="ck-h-hand"><h3 className="ck-label" id="ck-h-hand"><span className="badge ck-badge"><ShellIcon name="hand"/>{t('goodMorningHanded')}</span></h3>
    <div className="ck-list">{card.handed.map(item=><ItemRow key={`${item.kind}:${item.id}`} slug={slug} item={item} on={on}/>)}</div></section>}

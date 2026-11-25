@@ -44,8 +44,6 @@ export function PermissionCard({card,fresh,offered,decide}:{card:PermissionReque
   if('state' in result) { setPressed(result); setJust(result.first&&result.state==='decided'); }
   else { setError(result.error==='conversationFailed'?'permissionFailed':result.error); busy.current=false; }
  };
- // Today its time, another day its day, as a handed step's card says when it was done.
- const when=(at:string)=><ReaderTime at={at} orDay/>;
  const title=card.description.trim()||card.command.trim();
  const command=card.description.trim()?card.command.trim():'';
  const line=(icon:'check'|'x'|'clock',words:ReactNode)=><div className="card__outcome"><ShellIcon name={icon}/><span>{words}</span></div>;
@@ -53,7 +51,7 @@ export function PermissionCard({card,fresh,offered,decide}:{card:PermissionReque
   <div className="card__head"><AppTile app={plainTile} size="lg"/>
    <div className="card__titles"><span className="card__title" dir="auto">{title}</span></div></div>
   {command&&<dl className="kv"><div className="kv__row"><dt>{t('permissionCommand')}</dt><dd><bdi dir="auto">{command}</bdi></dd></div></dl>}
-  {shown?.state==='decided'?line(shown.choice==='deny'?'x':'check',<>{t(outcomes[shown.choice])} · {when(shown.at)}</>)
+  {shown?.state==='decided'?line(shown.choice==='deny'?'x':'check',<>{t(outcomes[shown.choice])} · <ReaderTime at={shown.at} orDay/></>)
    :shown?.state==='closed'?line('clock',t('permissionClosed'))
    :decide&&offered.length?<div className="card__actions" aria-busy={pending?true:undefined}>{offered.map(choice=>
     <button key={choice} type="button" className={`btn ${choice==='once'?'btn--primary':'btn--secondary'}`} disabled={!!pending} aria-busy={pending===choice||undefined} onClick={()=>void press(choice)}>{t(labels[choice])}</button>)}</div>

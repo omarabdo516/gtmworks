@@ -49,8 +49,6 @@ export function HandCard({card,fresh,done,team=false,openScreen}:{card:Hand,fres
   else setError(result.error==='conversationFailed'?'handFailed':result.error);
   busy.current=false; setSending(false);
  };
- // Today its time, another day its day, as the made card says when an Agent was made.
- const time=(value:string)=><ReaderTime at={value} orDay/>;
  // The time is its own element inside the sentence, so the sentence is split where the time goes.
  const [before,after]=t('handDoneAt','{0}').split('{0}');
  return <div id={`hand-${card.id}`} tabIndex={-1} className={`reply-card reply-card--hand${at?' is-resolved':''}${just?' is-just':''}${fresh?' card-in':''}`} role="group" aria-label={t('handLabel',card.title)} dir={directionOf(card.title,language==='ar'?'rtl':'ltr')}>
@@ -58,7 +56,7 @@ export function HandCard({card,fresh,done,team=false,openScreen}:{card:Hand,fres
   <div className="card__head"><AppTile app={handApp(card.app)} size="lg"/>
    <div className="card__titles"><span className="card__title">{card.title}</span><span className="card__sub">{card.line}</span></div></div>
   {card.rows.length>0&&<dl className="kv">{card.rows.map((row,index)=><div key={index} className="kv__row"><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>}
-  {at?<div className="card__outcome"><ShellIcon name="check"/><span><bdi className="hand__at" dir={language==='ar'?'rtl':'ltr'}>{before}{time(at)}{after}</bdi>{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
+  {at?<div className="card__outcome"><ShellIcon name="check"/><span><bdi className="hand__at" dir={language==='ar'?'rtl':'ltr'}>{before}<ReaderTime at={at} orDay/>{after}</bdi>{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
    :!done&&team?<div className="card__outcome"><ShellIcon name="clock"/><span>{t('handWaitTeam')}</span></div>
    :<div className="card__actions">
     {card.screen?openScreen&&<button type="button" className="btn btn--secondary" onClick={()=>openScreen(card.id)}><ShellIcon name="monitor"/><span>{t('handOpenScreen')}</span></button>

@@ -26,8 +26,6 @@ export function AccessCard({card,fresh,press,c,cb}:{card:AgentAccessView,fresh:b
  // What a press here ended in, else the record's.
  const shown=pressed??('at' in card?{state:card.state==='dismissed'?'dismissed' as const:'asked' as const,at:card.at,just:false}:card.state==='available'?{state:'available' as const,just:false}:null);
  const first=card.named.first||card.named.name; const role=card.named.role==='owner'?t('owner'):t('manager');
- // Today its time, another day its day, as the chat's other cards say when they were answered.
- const when=(at:string)=><ReaderTime at={at} orDay/>;
  const answer=async(ask:boolean)=>{
   if(held.current||!press) return;
   held.current=true; setBusy(true); setError('');
@@ -39,7 +37,7 @@ export function AccessCard({card,fresh,press,c,cb}:{card:AgentAccessView,fresh:b
   (root.current?.closest('.chat, dialog')??document).querySelector<HTMLTextAreaElement>('.composer__input')?.focus();
  };
  const outcome=shown?.state==='asked'
-  ?<div className="card__outcome"><ShellIcon name="check"/><span>{cb('accessSent',first,when(shown.at))}</span></div>
+  ?<div className="card__outcome"><ShellIcon name="check"/><span>{cb('accessSent',first,<ReaderTime at={shown.at} orDay/>)}</span></div>
   :shown?.state==='available'?<div className="card__outcome"><ShellIcon name="check"/><span>{c('accessAvailable')}</span></div>
   :shown?.state==='dismissed'?<div className="card__outcome"><ShellIcon name="x"/><span>{c('accessNotSent')}</span></div>
   :!press?<div className="card__outcome"><ShellIcon name="clock"/><span>{cb('accessWaitingFor',first)}</span></div>

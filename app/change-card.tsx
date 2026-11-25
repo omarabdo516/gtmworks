@@ -53,7 +53,6 @@ export function ChangeCard({change,company,owner=false,unread=false,answer}:{cha
  const {language}=useI18n(); const {c,cb}=useCardText();
  const read=useChangeRead(company,change,unread);
  const [editing,setEditing]=useState(false);
- // Today its time, another day its day, as the other cards of a chat say when they were answered.
  const when=(at:string)=><ReaderTime at={at} orDay/>;
  const words=useChangeWords();
  const choices=read&&read!=='loading'&&read.edit?.kind==='model'?read.edit.options:[];

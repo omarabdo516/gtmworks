@@ -46,23 +46,24 @@ test('an answer that says the toast is due raises it even when it arrives after 
 
 // #719: one component draws a time in the reader's own zone for every screen. The server, in UTC, draws it in UTC and
 // hidden; once the page hydrates in Cairo it reads Cairo's time, visible, with no hydration error. Asked for its day, it
-// gives the time today and the day another day (Cairo is three hours ahead in June, so 22:30 UTC is the next day there).
-test('a time the server drew in UTC shows in the reader\'s own zone once it hydrates, and another day its day when asked', async () => {
+// gives the time today and the day another day (Cairo is three hours ahead in June, so 22:30 UTC is the next day there);
+// asked for a numeric hour, as the morning card draws it, it has no leading zero.
+test('a time the server drew in UTC shows in the reader\'s own zone once it hydrates, another day its day and a numeric hour when asked', async () => {
  const zone = (timezoneId: string) => cdp().send('Emulation.setTimezoneOverride', { timezoneId });
  onTestFinished(async () => { await zone(''); });
- const view = <LanguageProvider language="en"><p><ReaderTime at="2026-11-12T22:30:00Z" className="sender__time"/><ReaderTime at="2025-06-10T22:30:00Z" orDay/></p></LanguageProvider>;
+ const view = <LanguageProvider language="en"><p><ReaderTime at="2026-11-12T22:30:00Z" className="sender__time"/><ReaderTime at="2025-06-10T22:30:00Z" orDay/><ReaderTime at="2026-11-12T06:05:00Z" hour="numeric"/></p></LanguageProvider>;
  await zone('UTC');
  const host = document.body.appendChild(document.createElement('div'));
  host.innerHTML = renderToString(view);
  const times = () => [...host.querySelectorAll('time')];
- expect(times().map(time => [time.textContent, time.getAttribute('datetime'), getComputedStyle(time).visibility])).toEqual([['10:30 PM', '2026-11-12T22:30:00Z', 'hidden'], ['Jun 10, 2025', '2025-06-10T22:30:00Z', 'hidden']]);
+ expect(times().map(time => [time.textContent, time.getAttribute('datetime'), getComputedStyle(time).visibility])).toEqual([['10:30 PM', '2026-11-12T22:30:00Z', 'hidden'], ['Jun 10, 2025', '2025-06-10T22:30:00Z', 'hidden'], ['6:05 AM', '2026-11-12T06:05:00Z', 'hidden']]);
  expect(times()[0].className).toBe('sender__time');
  await zone('Africa/Cairo');
  const recoverable = vi.fn();
  const root = await act(async () => hydrateRoot(host, view, { onRecoverableError: recoverable }));
  try {
-  await expect.poll(() => times().map(time => time.textContent)).toEqual(['12:30 AM', 'Jun 11, 2025']);
-  expect(times().map(time => getComputedStyle(time).visibility)).toEqual(['visible', 'visible']);
+  await expect.poll(() => times().map(time => time.textContent)).toEqual(['12:30 AM', 'Jun 11, 2025', '8:05 AM']);
+  expect(times().map(time => getComputedStyle(time).visibility)).toEqual(['visible', 'visible', 'visible']);
   expect(recoverable).not.toHaveBeenCalled();
  } finally { act(() => root.unmount()); host.remove(); }
 });
