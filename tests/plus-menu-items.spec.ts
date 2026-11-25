@@ -29,7 +29,7 @@ test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
  // A retry starts from the seed again: Lead and its Connection below are inserted once per run of this file.
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  const klaviyo={url:'https://mcp.klaviyo.example/mcp',auth:'oauth',...appConfig(appByKey('klaviyo')!,`${appOrigin}/api/apps/callback/klaviyo`).mcp_servers.klaviyo};
  fake.settings.profiles.set(profile,{soul:'',provider:'anthropic',model:'claude-opus-4-6',key:fake.settings.key,config:{mcp_servers:{klaviyo}},credentials:{anthropic:'signed-in'},env:{OPENROUTER_API_KEY:'set'}} as never);

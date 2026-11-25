@@ -14,7 +14,7 @@ const [aleemLead,lead,ads,seo]=[1,2,3,4].map(n=>id(n));
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo);
  query(`do $$ begin
   update public.people set language='en' where id in ('20000000-0000-0000-0000-000000000005','${reviewer}');
   insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values

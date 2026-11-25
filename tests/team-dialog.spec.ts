@@ -17,7 +17,7 @@ const names=(page:Page)=>page.locator('.sidebar .agent-tile:not(.agent-tile--new
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo);
  query(`do $$ begin
   update public.people set language='en' where id in ('${omar}','20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004');
   delete from public.member_agent_access where company_id='${company}';

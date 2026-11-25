@@ -28,7 +28,7 @@ const allowlist=(agent:string)=>fake.settings.profiles.get(own(agent))?.config?.
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  for(const name of [profile,own(ads),own(seo)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.approvals=input=>input.includes(asking)?[{app:{server:'meta-ads',tool:'create_campaign'}}]:[];

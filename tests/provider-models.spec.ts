@@ -22,7 +22,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  const profile=()=>({soul:'',provider:'anthropic',model:'claude-opus-4-6',key:fake.settings.key,config:{},credentials:{},env:{ANTHROPIC_API_KEY:'sk-ant-playwright-test-only-0123456789'}});
  fake.settings.profiles.set(space,profile());

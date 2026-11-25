@@ -13,7 +13,7 @@ const sidebarFace=(page:import('@playwright/test').Page)=>page.locator(`.agent-t
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
+ freshSeed(testInfo);
  query(`do $$ begin insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
   ('${reach}','${company}','69800000-0000-0000-0000-0000000000c1','Reach','Runs the ads.',false,'look-reach');
   insert into public.member_agent_access(company_id,person_id,agent_id) values ('${company}','20000000-0000-0000-0000-000000000002','${reach}'); end $$`);

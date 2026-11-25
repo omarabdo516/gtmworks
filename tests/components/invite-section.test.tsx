@@ -9,7 +9,7 @@ import '@/app/tokens.css';
 import '@/app/settings.css';
 
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh, replace: vi.fn(), prefetch: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh, replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/settings' }));
 const send = vi.fn<(email: string, role: string) => Promise<{ error?: string }>>();
 afterEach(() => { send.mockReset(); refresh.mockReset(); });
 

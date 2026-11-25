@@ -16,7 +16,7 @@ let lead='', channel='', cardId='';
 test.describe.configure({mode:'serial'});
 // A retry, or a repeat, of this serial file starts from the seed again: every case builds on the ones before it, and a
 // run that failed half way must leave nothing behind, such as #151's channel in the sidebar of the first case (#450).
-test.beforeAll(async({},testInfo)=>{ freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0); fake=await laneHermes(); });
+test.beforeAll(async({},testInfo)=>{ freshSeed(testInfo); fake=await laneHermes(); });
 test.afterAll(async()=>{ await fake?.close(); if(lead) query(`delete from public.hermes_agents where id='${lead}'`); });
 
 test('a Member opens the general channel, reads that an Agent replies only when called, and posts a message that starts no Run',async({page})=>{

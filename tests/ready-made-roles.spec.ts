@@ -26,7 +26,7 @@ test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
  // A retry or a repeat starts again from the seed: the Lead the first try inserted would refuse this one's (#526).
- freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.reply=(input:string)=>{

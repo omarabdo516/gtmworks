@@ -27,7 +27,7 @@ let fake:Awaited<ReturnType<typeof fakeHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({timezoneId:'UTC'});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.files.set(work,[

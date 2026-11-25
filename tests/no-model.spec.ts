@@ -19,7 +19,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 
 test.describe.configure({mode:'serial'});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  // The Company's space and Lead's profile, with no key and no sign-in.
  for(const name of [space,co]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{},env:{}});

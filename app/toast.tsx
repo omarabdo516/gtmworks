@@ -3,13 +3,16 @@ import './tokens.css';
 import './toast.css';
 import { useEffect, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
+import { usePathname } from 'next/navigation';
 import { ShellIcon, type ShellIconName } from '@/components/shell-icon';
 import { useI18n } from '@/lib/i18n-client';
 import { isolate } from '@/lib/bidi';
 import { leave } from '@/lib/motion';
 
 type ToastAction={label:string,run:()=>void};
-type Toast={id:number,text:string,icon:ShellIconName,action?:ToastAction};
+// `from`: the page a toast raised as its page opens another was raised on (opensPage); its clock waits until the page
+// shown is another one.
+type Toast={id:number,text:string,icon:ShellIconName,action?:ToastAction,from?:string};
 type ToastState={toast:Toast,leaving:boolean}|null;
 
 // One toast at a time for the whole page (design-reference/app.js: toast). toastOut in toast.css runs 140ms.
@@ -35,11 +38,13 @@ function place() {
 }
 
 // A new toast replaces the one showing and stops its clock, whichever step it is in. Its own clock starts once it is on
-// the page (startClock): 2.8 seconds, or 6 with an action, before it leaves.
+// the page (startClock): 2.8 seconds, or 6 with an action, before it leaves. A toast raised as its page opens another
+// (`opensPage`: a drop the board refuses opens the Card it is about) starts its clock once that page is shown, so a page
+// that takes longer to arrive than the toast's time still shows it there (#746).
 export const toastTime={plain:2800,action:6000};
-export function toast(text:string,{icon='check',action}:{icon?:ShellIconName,action?:ToastAction}={}) {
+export function toast(text:string,{icon='check',action,opensPage=false}:{icon?:ShellIconName,action?:ToastAction,opensPage?:boolean}={}) {
  place(); stop(); stop=()=>{};
- show({toast:{id:++count,text,icon,action},leaving:false});
+ show({toast:{id:++count,text,icon,action,from:opensPage?location.pathname:undefined},leaving:false});
 }
 
 // A toast's time runs from the first frame the page draws after it is put on the page, not from the call (#561): a page
@@ -67,8 +72,10 @@ export function dismissToast() {
 export function ToastHost() {
  const {language}=useI18n();
  const state=useSyncExternalStore(subscribe,()=>shown,()=>null);
- // Each toast's clock starts when the host has put it on the page.
- const arrived=state&&!state.leaving?state.toast:null;
+ const pathname=usePathname();
+ // Each toast's clock starts when the host has put it on the page, and one raised as its page opens another once the
+ // page shown is no longer the one it was raised on.
+ const arrived=state&&!state.leaving&&(state.toast.from===undefined||state.toast.from!==pathname)?state.toast:null;
  useEffect(()=>{ if(arrived) startClock(arrived); },[arrived]);
  useEffect(()=>{
   place();

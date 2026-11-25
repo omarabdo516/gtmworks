@@ -24,7 +24,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  const profile=(soul='')=>({soul,provider:'openrouter',model:'openai/gpt-5.5',key:fake.settings.key,config:{},credentials:{}});
  for(const name of [space,co]) fake.settings.profiles.set(name,profile());

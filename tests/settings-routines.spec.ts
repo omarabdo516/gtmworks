@@ -28,7 +28,7 @@ const logRows=(act:string)=>rows(`select actor_id,agent_id,details from public.c
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  for(const name of [profile,own(ads)]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:toolConfig({profile:name}),credentials:{}});
  fake.settings.cron.set(profile,[job('aa00000000a1','Morning brief','0 8 * * *',{last_run_at:new Date(Date.now()-3600e3).toISOString(),last_status:'ok'})]);

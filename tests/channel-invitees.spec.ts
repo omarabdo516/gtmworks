@@ -16,7 +16,7 @@ let channel='';
 let link='';
 
 test.describe.configure({mode:'serial'});
-test.beforeAll(({},testInfo)=>{ freshSeed(testInfo.file); query(`update public.people set language='en' where id::text like '20000000-%'`); });
+test.beforeAll(({},testInfo)=>{ freshSeed(testInfo); query(`update public.people set language='en' where id::text like '20000000-%'`); });
 
 test('the Owner invites a person, who joins the general channel with "Invite sent" and the channel\'s counts; a Contributor reads the row without the email',async({page,browser})=>{
  await signIn(page,'omar@example.com',general);

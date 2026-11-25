@@ -18,7 +18,7 @@ const channelFiles=()=>rows<{n:number}>(`select count(*)::int as n from public.c
 const storedChannelFiles=()=>rows<{n:number}>(`select count(*)::int as n from storage.objects where bucket_id='creatives' and name like '${company}/channels/%'`)[0].n;
 
 test.describe.configure({mode:'serial'});
-test.beforeAll(({},testInfo)=>{ freshSeed(testInfo.file); });
+test.beforeAll(({},testInfo)=>{ freshSeed(testInfo); });
 
 test('an image with a channel message shows under it for the writer and for the Viewer, and its file opens for both',async({page})=>{
  await signIn(page,'reviewer@example.com',general);

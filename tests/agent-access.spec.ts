@@ -22,7 +22,7 @@ let fake:Awaited<ReturnType<typeof laneHermes>>;
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({},testInfo)=>{
- freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
+ freshSeed(testInfo);
  fake=await laneHermes();
  fake.settings.profiles.set(profile,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  const turn=(talk:string,run:string,asked:string,minutes:number,answer=said)=>`('${company}','${talk}','person','${reviewer}',null,'مراجع','${asked}',gen_random_uuid(),'${run}',now()-interval '${minutes} minutes'),

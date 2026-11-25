@@ -26,7 +26,7 @@ const servers=(name:string)=>fake.settings.profiles.get(name)!.config.mcp_server
 test.describe.configure({mode:'serial'});
 test.use({actionTimeout:15000});
 test.beforeAll(async({browser},testInfo)=>{
- freshSeed(testInfo.file);
+ freshSeed(testInfo);
  fake=await laneHermes();
  for(const name of [profile,own]) fake.settings.profiles.set(name,{soul:'',provider:'auto',model:'',key:fake.settings.key,config:{},credentials:{}});
  fake.settings.profiles.get(profile)!.config.mcp_servers={canva:installed('canva')};

@@ -25,7 +25,7 @@ const [faye,reach,sage]=[id(11),id(12),id(13)];
 test.describe.configure({mode:'serial'});
 test.beforeAll(({},testInfo)=>{
  // A retry starts from the seed again: this file's rows below are inserted once per run of it.
- freshSeed(testInfo.file,testInfo.retry>0);
+ freshSeed(testInfo);
  // Connections that are never called: every run goes to the fake engine.
  query(`do $$ begin
   update public.people set language='en' where id in ('${omar}','${contributor}');
