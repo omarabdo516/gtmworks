@@ -204,10 +204,9 @@ const markedWithin=(page:Page,model:string)=>page.evaluate(model=>new Promise<nu
 }),model);
 // Every page read the router makes (an RSC request), from the moment it is started.
 const pageReads=(page:Page)=>{ const reads:string[]=[]; page.on('request',request=>{ if(request.headers()['rsc']==='1'||request.url().includes('_rsc=')) reads.push(request.url()); }); return reads; };
-// The overlay's links prefetch every section once the page is drawn (lib/link.tsx), later on a loaded machine: wait
-// until the Models section's has gone and no read has started for 2 s, so only reads after the save are counted.
+// A link reads its page only when pointed at, focused or touched (lib/link.tsx), so nothing should be read once the page
+// is drawn: wait until no read has started for 2 s, so only reads after the save are counted.
 async function prefetchesSettled(reads:string[]) {
- await expect.poll(()=>reads.some(url=>url.includes('section=models')),{timeout:30000}).toBe(true);
  let seen=-1;
  await expect.poll(()=>{ const now=reads.length; const still=now===seen; seen=now; return still; },{timeout:30000,intervals:[2000]}).toBe(true);
  return reads.length;
