@@ -23,7 +23,7 @@ insert into decisions
  union all select fn,'exempt','answers for, or writes in, the one Conversation its caller names, archived or not: an archived Conversation still opens and reads as it was, and a message its person writes there brings it back (restore_written_conversation); it lists no Conversations' from unnest(array[
   'public.conversation_agent(uuid,uuid)','public.conversation_handovers(uuid)','public.conversation_live_run(uuid)','public.conversation_stop_target(uuid,uuid)',
   'public.conversation_working_for(uuid)','public.send_conversation_message(uuid,uuid,uuid,text,uuid,text,uuid)','public.reserve_conversation_turn(uuid,uuid,uuid,uuid,text)',
-  'public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)','public.reserve_conversation_files(uuid,uuid,uuid,jsonb)','public.reserve_conversation_files(uuid,uuid,uuid,jsonb,uuid)','public.discard_conversation_files(uuid,uuid,uuid)',
+  'public.reserve_conversation_run(uuid,uuid,uuid,uuid,text)','public.reserve_conversation_files(uuid,uuid,uuid,jsonb)','public.reserve_conversation_files(uuid,uuid,uuid,jsonb,uuid)','public.discard_conversation_files(uuid,uuid,uuid)','public.discard_conversation_files(uuid,uuid,uuid,uuid)',
   'public.claim_conversation_turn(uuid)','public.set_conversation_model(uuid,uuid,jsonb)','public.answer_question(uuid,uuid,bigint,integer,text,uuid,integer[])',
   'public.decide_permission(uuid,uuid,bigint,text)','public.mark_hand_done(uuid,uuid,bigint)','public.postpone_app_card(uuid,uuid,bigint)',
   'public.stop_conversation_handovers(uuid,uuid)','public.can_see_conversation_agent(uuid,uuid)','public.lead_key_settle(uuid)','public.conversation_agent_access(uuid)',

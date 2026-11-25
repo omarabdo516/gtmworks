@@ -191,3 +191,15 @@ test('a discard never removes the object a send of the same key kept again befor
  assert.ok(removed.length>0,'the first send removed what it wrote');
  for(const row of rows) assert.ok(objects.has(row.path),`the second send's ${row.path} is still in the bucket`);
 });
+
+test('a send gives back only the rows its own keep attempt holds (#727)',async()=>{
+ // A send of the same key that found these rows still holds them: the discard names this send's attempt, the one its
+ // reserve named, so the database takes this attempt off the rows and gives back only those no other send still holds
+ // (supabase/tests/message_files_held.sql).
+ const stand=databases({refusePost:true});
+ await postChannelMessage(stand.db,stand.service,{company,channel,sendKey:'q',message:'Look at these',files,hermes,engineFor:fakeEngine().engineFor});
+ const reserved=stand.calls.find(([name])=>name==='reserve_channel_files')?.[1];
+ const discarded=stand.calls.find(([name])=>name==='discard_channel_files')?.[1];
+ assert.match(reserved.attempt,/^[0-9a-f-]{36}$/,'the keep names its attempt');
+ assert.equal(discarded.attempt,reserved.attempt,'the discard names the same attempt');
+});

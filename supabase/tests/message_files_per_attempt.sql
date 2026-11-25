@@ -36,7 +36,11 @@ select is(public.reserve_conversation_files('c5980000-0000-0000-0000-00000000000
  'e5980000-0000-0000-0000-00000000000c'),2,'a send that finds its rows still there adds no second row at a place');
 select is((select count(*)::int from pg_temp.conversation_paths() path where path like '%-e5980000-0000-0000-0000-00000000000a-%'),2,
  'and is given the paths the rows already name');
-insert into removed select public.discard_conversation_files('c5980000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000001');
+-- Both attempts give them back (#727: each takes only itself off the rows, and the last takes the rows).
+insert into removed select public.discard_conversation_files('c5980000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000001',
+ 'e5980000-0000-0000-0000-00000000000c');
+insert into removed select public.discard_conversation_files('c5980000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000001',
+ 'e5980000-0000-0000-0000-00000000000a');
 select is((select count(*)::int from removed),2,'the discard gives back both paths, which the server then removes');
 -- Before that removal, the second send of the key keeps its images again.
 select is(public.reserve_conversation_files('c5980000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000001',
@@ -57,7 +61,8 @@ select throws_ok($$select public.reserve_conversation_files('c5980000-0000-0000-
 delete from removed;
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000002',
  '[{"position":0,"name":"a.png","content_type":"image/png","size":10}]'::jsonb,'e5980000-0000-0000-0000-00000000000a'),1,'a channel send keeps its image under its attempt');
-insert into removed select public.discard_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000002');
+insert into removed select public.discard_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000002',
+ 'e5980000-0000-0000-0000-00000000000a');
 select is((select count(*)::int from removed),1,'and gives it back');
 select is(public.reserve_channel_files('69000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','d5980000-0000-0000-0000-000000000002',
  '[{"position":0,"name":"a.png","content_type":"image/png","size":10}]'::jsonb,'e5980000-0000-0000-0000-00000000000b'),1,'the second send keeps it again');
