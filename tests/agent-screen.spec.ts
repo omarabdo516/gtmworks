@@ -338,13 +338,15 @@ test('a page that loses its connection while in control has it again on reconnec
  expect(controlRows('agent_screen_taken').length).toBe(taken+1);
  expect(controlRows('agent_screen_given_back').length).toBe(given);
 
- // The server ends the socket too: control went back, which the page says once its next socket reads it.
+ // The server finds the socket dead and gives control back before the page reconnects: the page says so once its
+ // next socket reads it. (A page that reconnects first is handed control again, as above.)
  const last=sockets.at(-1);
- await last?.page.close({code:1011,reason:'lost'}); await last?.server.close();
- await expect(page.locator('.toast')).toContainText('Control went back to Ads when you closed the screen');
- await expect(view.getByRole('button',{name:'Take control'})).toBeVisible();
+ await last?.server.close();
  await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
  await expect.poll(()=>controlRows('agent_screen_given_back').length).toBe(given+1);
+ await last?.page.close({code:1011,reason:'lost'});
+ await expect(page.locator('.toast')).toContainText('Control went back to Ads when you closed the screen');
+ await expect(view.getByRole('button',{name:'Take control'})).toBeVisible();
 });
 
 test('while one person holds the Screen, another sees Watching only with who has control and no picture of what is typed',async({page,browser})=>{
