@@ -124,22 +124,49 @@ const leanersOf=(face:Face)=>[eyesOf(face),face.querySelector<HTMLElement>('.f-s
 // add one and take it away again, and each time the browser lays out the layers of the whole page anew: sixteen faces
 // blinking and glancing did that on most frames, which kept a CPU slowed four times under 50 frames a second
 // (tests/face-frames.spec.ts). A waiting animation lasts a minute, so a late timer never plays it twice.
-type Rig={blink:Animation[],look:Animation,nod?:Animation,looking:string,ease:string,eyeMs:number};
+// A glance's eyes are still for most of it, so its animation plays only while they move and waits, paused, while they
+// hold: a running animation is styled again on every frame the page draws, held or not (#697). Its looks are made
+// once, one for each side the glance can start to, so a glance builds nothing as it starts.
+type Glance={side:number,start:number,moves:number};
+type Rig={blink:Animation[],look:Animation,glances:Glance[],glancing?:Glance,nod?:Animation,eyeMs:number};
 const rigMs=60000, blinkMs=150;
 const at=(ms:number)=>ms/rigMs;
 const blinkFrames:Keyframes=[{transform:'scaleY(1)',easing:'ease-in'},{transform:'scaleY(.08)',offset:at(blinkMs*.45),easing:'ease-out'},{transform:'scaleY(1)',offset:at(blinkMs)},{transform:'scaleY(1)'}];
 const waiting=(element:Element,keyframes:Keyframes)=>{ const animation=element.animate(keyframes,{duration:rigMs,iterations:Infinity}); animation.pause(); animation.currentTime=0; return animation; };
 const rest=(animation:Animation)=>{ animation.pause(); animation.currentTime=0; };
 const targetOf=(animation:Animation)=>(animation.effect as KeyframeEffect|null)?.target;
-function dropRig(face:Face) { face._rig?.blink.forEach(animation=>animation.cancel()); face._rig?.look.cancel(); face._rig?.nod?.cancel(); face._rig=undefined; }
+// The theme's ease out (app/tokens.css), read once for the page: reading a style while faces move styles the page anew.
+let easeOut:string|undefined;
+const easeOf=(face:Element)=>easeOut??=getComputedStyle(face).getPropertyValue('--gw-ease-out').trim()||'ease-out';
+// Where each look of a temperament's glance takes the eyes and how long they hold there (agent-orb-v2's gaze).
+const glanceSteps=(style:TemperamentNumbers['glance']['style'],side:number):[number,number,number][]=>({
+ steady:[[side*.55,.05,1700]], dart:[[side*.8,-.15,320],[-side*.8,.1,300]], soft:[[side*.5,.3,1300]],
+ up:[[side*.35,-.95,2000]], precise:[[side*.6,0,700],[-side*.6,0,700]], nod:[[0,.45,1100]],
+} as Record<string,[number,number,number][]>)[style];
+// A face's glances, one for each side it can start to, laid one after the other on its look's minute: each is its
+// moves, one after another over the eye time (to each look, then back), from the eyes at rest to the eyes at rest. The
+// eyes move by a share of the face's size (agent-orb-v2: .065 across, .06 down).
+function lookOf(face:Face,element:Element,numbers:TemperamentNumbers):{look:Animation,glances:Glance[]} {
+ const size=parseFloat(face.style.getPropertyValue('--s'))||face.offsetWidth, eyeMs=numbers.glance.eyeMs, ease=easeOf(face);
+ const sides=numbers.glance.style==='nod'?[1]:[-1,1];
+ const keyframes:Keyframes=[{transform:'none',offset:0}], glances:Glance[]=[];
+ sides.forEach((side,index)=>{
+  const start=index*rigMs/2, places=[...glanceSteps(numbers.glance.style,side).map(([x,y])=>`translate(${(x*size*.065).toFixed(2)}px, ${(y*size*.06).toFixed(2)}px)`),'none'];
+  keyframes.push({transform:'none',offset:at(start),easing:ease},...places.map((transform,move)=>({transform,offset:at(start+(move+1)*eyeMs),...(move<places.length-1?{easing:ease}:{})})));
+  glances.push({side,start,moves:places.length});
+ });
+ keyframes.push({transform:'none',offset:1});
+ return {look:waiting(element,keyframes),glances};
+}
+function dropRig(face:Face) { const rig=face._rig; rig?.blink.forEach(animation=>animation.cancel()); rig?.look.cancel(); rig?.nod?.cancel(); face._rig=undefined; }
 function rigOf(face:Face):Rig|null {
- const eyes=[...face.querySelectorAll('.f-eye')], look=face.querySelector('.f-look'), kept=face._rig;
- if(kept&&targetOf(kept.look)===look&&kept.blink.length===eyes.length&&kept.blink.every((animation,index)=>targetOf(animation)===eyes[index])) return kept;
+ const eyes=[...face.querySelectorAll('.f-eye')], element=face.querySelector('.f-look'), kept=face._rig;
+ if(kept&&targetOf(kept.look)===element&&kept.blink.length===eyes.length&&kept.blink.every((animation,index)=>targetOf(animation)===eyes[index])) return kept;
  dropRig(face);
- if(!look) return null;
- const style=getComputedStyle(face);
- const rig:Rig={blink:eyes.map(eye=>waiting(eye,blinkFrames)),look:waiting(look,[{transform:'none'},{transform:'none'}]),looking:'',ease:style.getPropertyValue('--gw-ease-out').trim()||'ease-out',eyeMs:0};
- if(numbersOf(face).glance.style==='nod') nodOf(face,rig);
+ if(!element) return null;
+ const numbers=numbersOf(face);
+ const rig:Rig={blink:eyes.map(eye=>waiting(eye,blinkFrames)),...lookOf(face,element,numbers),eyeMs:numbers.glance.eyeMs};
+ if(numbers.glance.style==='nod') nodOf(face,rig);
  face._rig=rig;
  return rig;
 }
@@ -158,35 +185,36 @@ const blinkGap=(numbers:TemperamentNumbers)=>numbers.glance.style==='precise'?40
 // A glance: each look moves the eyes over the temperament's eye time, holds, and the last comes back the same way, as
 // the approved orb's gaze does. The eyes move by a share of the face's size (agent-orb-v2: .065 across, .06 down).
 function glance(face:Face,numbers:TemperamentNumbers) {
- const side=Math.random()<.5?-1:1;
- const steps:[number,number,number][]={
-  steady:[[side*.55,.05,1700]], dart:[[side*.8,-.15,320],[-side*.8,.1,300]], soft:[[side*.5,.3,1300]],
-  up:[[side*.35,-.95,2000]], precise:[[side*.6,0,700],[-side*.6,0,700]], nod:[[0,.45,1100]],
- }[numbers.glance.style] as [number,number,number][];
  if(numbers.glance.style==='nod') playMoment(face,'nod');
  const rig=(face.dataset.state||'idle')==='idle'?rigOf(face):null; if(!rig) return;
- const size=parseFloat(face.style.getPropertyValue('--s'))||face.offsetWidth, eyeMs=numbers.glance.eyeMs;
- const place=([x,y]:[number,number,number]|[number,number])=>`translate(${(x*size*.065).toFixed(2)}px, ${(y*size*.06).toFixed(2)}px)`;
- const keyframes:Keyframes=[]; let from='none', ms=0;
- for(const step of steps) {
-  keyframes.push({transform:from,offset:at(ms),easing:rig.ease},{transform:from=place(step),offset:at(ms+eyeMs)});
-  ms+=step[2]+eyeMs;
- }
- keyframes.push({transform:from,offset:at(ms),easing:rig.ease},{transform:'none',offset:at(ms+eyeMs)},{transform:'none',offset:1});
- const looking=JSON.stringify(keyframes);
- if(rig.looking!==looking) { (rig.look.effect as KeyframeEffect).setKeyframes(keyframes); rig.looking=looking; }
- rig.eyeMs=eyeMs; rig.look.currentTime=0; rig.look.play();
- face._busy=true;
- window.clearTimeout(face._gt); face._gt=window.setTimeout(()=>stopGlance(face),ms+eyeMs+50);
+ stopGlance(face);
+ const glancing=rig.glances[rig.glances.length>1&&Math.random()>=.5?1:0], {look,eyeMs}=rig;
+ const holds=glanceSteps(numbers.glance.style,glancing.side).map(([,,hold])=>hold);
+ rig.glancing=glancing; face._busy=true;
+ // Move `index` plays over the eye time and stops where it ends, so a late timer never starts the next one early.
+ const move=(index:number)=>{
+  if(rig.glancing!==glancing) return;
+  look.currentTime=glancing.start+index*eyeMs; look.play();
+  face._gt=window.setTimeout(()=>{
+   if(rig.glancing!==glancing) return;
+   look.pause(); look.currentTime=glancing.start+(index+1)*eyeMs;
+   if(index+1<glancing.moves) face._gt=window.setTimeout(()=>move(index+1),holds[index]);
+   else stopGlance(face);
+  },eyeMs);
+ };
+ move(0);
 }
 // A glance ends, played out or stopped (the face's state changed, a moment that looks at you, reduced motion turned
 // on, the face gone): its looks to come never do. `back` brings the eyes back over the eye time from where they are.
 function stopGlance(face:Face,back=false) {
  window.clearTimeout(face._gt); face._busy=false;
- const look=face._rig?.look; if(!look||look.playState!=='running') return;
- const element=targetOf(look) as HTMLElement|null|undefined, from=back&&!reduced()&&element?getComputedStyle(element).transform:'none';
- rest(look);
- if(element&&from!=='none') element.animate([{transform:from},{transform:'none'}],{duration:face._rig!.eyeMs,easing:face._rig!.ease});
+ const rig=face._rig, glancing=rig?.glancing; if(!rig||!glancing) return;
+ rig.glancing=undefined;
+ const element=targetOf(rig.look) as HTMLElement|null|undefined, time=Number(rig.look.currentTime);
+ const away=back&&!reduced()&&!!element&&time>glancing.start&&time<glancing.start+glancing.moves*rig.eyeMs;
+ const from=away?getComputedStyle(element!).transform:'none';
+ rest(rig.look);
+ if(element&&from!=='none') element.animate([{transform:from},{transform:'none'}],{duration:rig.eyeMs,easing:easeOf(element)});
 }
 function tick() {
  if(reduced()||document.hidden) return;
