@@ -492,7 +492,8 @@ jobs:
     # 12 (#410). Spec #710's Screen tests took three of seven past it (run 45654432600), so the suite runs as eight. Eight
     # still reached 11.6 min (run 45664486098) and 12.3 min refreshed (run 45673930434): a shard spends about 4 min
     # before its first test, and one file's minutes vary by half between runs (engine-conversation.spec.ts 859 to 1340
-    # s), so the suite runs as ten (#755), split from the mean of runs 45664486098, 45668614439 and 45673930434.
+    # s), so the suite runs as ten (#755), split from the mean of runs 45664486098, 45668614439, 45673930434 and
+    # 45678780051, the first run of ten, whose slowest shard took 10.1 min.
     timeout-minutes: 12
     permissions:
       contents: read
