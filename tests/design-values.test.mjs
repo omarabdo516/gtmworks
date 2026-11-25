@@ -234,7 +234,7 @@ export const paperclipDifferences = (design, sources) => {
 
 // ---- raw values in the stylesheets under app/ ----
 
-const colourLiteral = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|(?<![\w-])(?:white|black|red|green|blue|gray|grey|orange|yellow|purple|pink|silver|navy|teal|maroon)(?![\w-])/i;
+const colourLiteral = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|(?<![\w-])(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgr[ae]y|darkgreen|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategr[ae]y|darkturquoise|darkviolet|deeppink|deepskyblue|dimgr[ae]y|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gr[ae]y|green|greenyellow|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgr[ae]y|lightgreen|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategr[ae]y|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategr[ae]y|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen)(?![\w-])/i;
 const kinds = /** @type {const} */ ([
   ['shadow', /^(?:-webkit-)?box-shadow$|^text-shadow$/],
   ['radius', /^border(?:-[a-z]+)*-radius$/],
@@ -242,7 +242,7 @@ const kinds = /** @type {const} */ ([
   ['font family', /^font-family$/],
   ['font weight', /^font-weight$/],
   ['font', /^font$/],
-  ['colour', /^(?:color|background(?:-color)?|border(?:-[a-z]+)*?(?:-color)?|outline(?:-color)?|fill|stroke|caret-color|accent-color|text-decoration(?:-color)?|column-rule(?:-color)?|scrollbar-color|-webkit-text-fill-color|-webkit-tap-highlight-color|--[\w-]+)$/],
+  ['colour', /^(?:color|background(?:-color|-image)?|border(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?(?:-color)?|outline(?:-color)?|fill|stroke|filter|backdrop-filter|caret-color|accent-color|text-decoration(?:-color)?|column-rule(?:-color)?|scrollbar-color|-webkit-text-fill-color|-webkit-tap-highlight-color|--[\w-]+)$/],
 ]);
 /**
  * Whether one declaration writes a raw value of its kind. A token reference with no fallback (`var(--x)`) is never
@@ -252,10 +252,10 @@ const kinds = /** @type {const} */ ([
 const isRaw = (kind, value) => {
   const plain = space(value.replace(/!\s*important\s*$/, '').replace(/var\(--[\w-]+\)/g, 'V'));
   if (/^(?:inherit|initial|unset|revert|revert-layer|none|0|V)$/i.test(plain)) return false;
-  if (kind === 'colour') return colourLiteral.test(plain);
+  if (kind === 'colour') return colourLiteral.test(plain.replace(/url\([^)]*\)/g, 'U'));
   if (kind === 'shadow') return !/^V(?: ?, ?V)*$/.test(plain);
   if (kind === 'radius') return /\d/.test(plain.replace(/(?<![\d.])(?:0|50%)(?![\d.%\w])/g, ''));
-  if (kind === 'font size') return /\d/.test(plain);
+  if (kind === 'font size') return /\d|(?<![\w-])(?:xx?-small|small|medium|large|xx?x?-large|smaller|larger)(?![\w-])/.test(plain);
   if (kind === 'font family') return true;
   if (kind === 'font weight') return /\d|bold|normal|lighter/i.test(plain);
   return /\d|"|'/.test(plain);
@@ -336,6 +336,8 @@ test('the guard finds a raw colour, shadow, radius or font and names the file an
     'app/x.css:2 .gw .b color', 'app/x.css:3 .gw .c box-shadow', 'app/x.css:4 @media (max-width: 767px) .gw .d border-radius',
     'app/x.css:4 @media (max-width: 767px) .gw .d font-size', 'app/x.css:5 .gw .e font-weight', 'app/x.css:5 .gw .e font-family', 'app/x.css:5 .gw .e --local',
   ]);
+  assert.deepEqual(rawValues('app/x.css', '.a { color: whitesmoke; font-size: larger; border-width: 2px; border-style: solid; fill: url(#fade); background-image: linear-gradient(#fff, transparent); }')
+    .map(raw => raw.property), ['color', 'font-size', 'background-image']);
   const found = rawValues('app/x.css', '.a { color: #fff; }\n.b { color: #000; }');
   assert.deepEqual(unlisted(found, [['app/x.css', '.a', 'color', '#fff'], ['app/x.css', '.z', 'color', '#fff']]),
     { fresh: [found[1]], stale: ['app/x.css | .z | color | #fff'] });
@@ -382,7 +384,6 @@ function rawValueExceptions() {
     ['app/apps.css', '.gw :is(.sov-apps, .apps-sheet) .tm-check', 'box-shadow', 'var(--gw-border-1) 0 0 0 1px inset'],
     ['app/apps.css', '.gw .apps-sheet .switch::after', 'background', '#FFFFFF'],
     ['app/apps.css', '.gw .apps-sheet .switch::after', 'box-shadow', '#1C1C1C1F 0 1px 3px'],
-    ['app/apps.css', ':root[data-theme="dark"] .gw .apps-sheet .switch[aria-checked="true"]::after', 'background', '#121212'],
     ['app/board.css', '.gw .board-view', '--b-bg-elevated', '#FFFFFF'],
     ['app/board.css', ':root[data-theme="dark"] .gw .board-view', '--b-bg-elevated', '#1F1F1F'],
     ['app/board.css', '@media (prefers-color-scheme: dark) :root[data-theme="device"] .gw .board-view', '--b-bg-elevated', '#1F1F1F'],
@@ -414,7 +415,6 @@ function rawValueExceptions() {
     ['app/board.css', '.gw .board-view .bsel', 'box-shadow', 'var(--b-shadow-card, #1C1C1C1F 0 0 0 0.5px, #1C1C1C09 0 2px 8px)'],
     ['app/board.css', '.gw .board-view .sel-box > span', 'box-shadow', 'var(--gw-border-1) 0 0 0 1.5px inset'],
     ['app/channel.css', '.gw .ch-intro', 'box-shadow', 'var(--gw-border-2) 0 0 0 0.5px inset'],
-    ['app/channel.css', '.gw .bubble--peer', 'border-end-start-radius', '6px'],
     ['app/channel.css', '@keyframes channel-spot 0%, 45%', 'box-shadow', '0 0 0 2px var(--gw-text-1)'],
     ['app/channel.css', '@keyframes channel-spot 100%', 'box-shadow', '0 0 0 2px transparent'],
     ['app/channel.css', '@media (prefers-reduced-motion: reduce) .gw .transcript .is-spot', 'box-shadow', '0 0 0 2px var(--gw-text-1)'],
@@ -504,8 +504,6 @@ function rawValueExceptions() {
     ['app/shell.css', '.gw .me__av', 'box-shadow', 'var(--gw-border-3) 0 0 0 0.5px inset'],
     ['app/shell.css', '.gw .head-pill', 'box-shadow', 'var(--gw-border-3) 0 0 0 0.5px inset, var(--gw-shadow-pill)'],
     ['app/shell.css', '.gw .corner-pill', 'box-shadow', 'var(--gw-border-3) 0 0 0 1px inset'],
-    ['app/shell.css', '.gw .bubble--agent', 'border-end-start-radius', '6px'],
-    ['app/shell.css', '.gw .bubble--user', 'border-end-end-radius', '6px'],
     ['app/shell.css', '.gw .file-chip', 'box-shadow', 'var(--gw-border-2) 0 0 0 0.5px inset'],
     ['app/shell.css', '.gw .file-thumb img', 'box-shadow', 'var(--gw-border-2) 0 0 0 0.5px inset'],
     ['app/shell.css', '.gw .try-one__btn', 'box-shadow', 'var(--gw-border-3) 0 0 0 1px inset'],
@@ -518,7 +516,6 @@ function rawValueExceptions() {
     ['app/shell.css', '.gw .details .mem-search input:focus', 'box-shadow', '0 0 0 3px var(--gw-bg-active)'],
     ['app/shell.css', '.gw :is(.sov, .modal.team-dlg, .details) .switch::after', 'background', '#FFFFFF'],
     ['app/shell.css', '.gw :is(.sov, .modal.team-dlg, .details) .switch::after', 'box-shadow', '#1C1C1C1F 0 1px 3px'],
-    ['app/shell.css', ':root[data-theme="dark"] .gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"]::after', 'background', '#121212'],
     ['app/shell.css', '.gw :is(.sov, .modal.team-dlg, .details) .set-input:focus', 'box-shadow', '0 0 0 3px var(--gw-bg-active)'],
     ['app/shell.css', '.gw .details .rt-add input:focus', 'box-shadow', '0 0 0 3px var(--gw-bg-active)'],
     ['app/shell.css', '.gw .details .btn--secondary', 'box-shadow', 'var(--gw-btn2-ring) 0 0 0 1px inset'],

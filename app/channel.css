@@ -17,7 +17,7 @@
 
 .gw .divider { align-self: center; margin-bottom: -8px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); list-style: none; }
 .gw .turn--peer { align-items: flex-start; }
-.gw .bubble--peer { background: var(--gw-bubble-agent); color: var(--gw-text-1); border-end-start-radius: 6px; }
+.gw .bubble--peer { background: var(--gw-bubble-agent); color: var(--gw-text-1); border-end-start-radius: var(--gw-r-xs); }
 .gw .sender__role { color: var(--gw-text-3); }
 .gw .mention { font-weight: var(--gw-fw-semibold); }
 .gw .bubble--agent .mention, .gw .bubble--peer .mention { color: var(--gw-text-1); }

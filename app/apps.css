@@ -92,7 +92,7 @@
 .gw .apps-sheet .switch[aria-checked="true"] { background: var(--gw-primary); }
 .gw .apps-sheet .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
 [dir="ltr"] .gw .apps-sheet .switch[aria-checked="true"]::after { transform: translateX(12px); }
-:root[data-theme="dark"] .gw .apps-sheet .switch[aria-checked="true"]::after { background: #121212; }
+:root[data-theme="dark"] .gw .apps-sheet .switch[aria-checked="true"]::after { background: var(--gw-on-primary); }
 .gw .apps-sheet .switch[aria-disabled="true"] { opacity: .55; }
 @media (hover: hover) { .gw .apps-sheet button.panel-row:hover:not([aria-disabled="true"]) { background: var(--gw-bg-hover); } }
 

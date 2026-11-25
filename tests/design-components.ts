@@ -35,7 +35,7 @@ export function expected(name: string, theme: Theme, language: Language): Expect
       const type = key ? design.typography?.[key] as Typography | undefined : undefined;
       if (!type) throw new Error(`components.${name}.typography names no typography: ${value}`);
       const family = String(type.fontFamily);
-      values.fontFamily = language === 'ar' && family === (design.typography.body as Typography).fontFamily ? 'var(--font-arabic), sans-serif' : family;
+      values.fontFamily = language === 'ar' && family === (design.typography.body as Typography | undefined)?.fontFamily ? 'var(--font-arabic), sans-serif' : family;
       if (type.fontSize !== undefined) values.fontSize = String(type.fontSize);
       if (type.fontWeight !== undefined) values.fontWeight = String(type.fontWeight);
       if (type.lineHeight !== undefined) values.lineHeight = String(type.lineHeight);
@@ -72,11 +72,13 @@ export async function differences(page: Page, component: string, selector: strin
     const problems: string[] = [];
     const say = (property: string, want: string, got: string) => problems.push(`${component} (${selector}) ${property}: DESIGN.md says ${want}, the page draws ${got}`);
     try {
-      if (values.fontSize) probe.style.fontSize = values.fontSize;
+      // An em or unitless line height and letter spacing resolve against the element's own size when the type names none.
+      probe.style.fontSize = values.fontSize ?? drawn.fontSize;
       for (const [property, value] of Object.entries(values) as [string, string][]) {
         if (property === 'height' || property === 'width') {
-          const size = element.getBoundingClientRect()[property];
-          if (Math.abs(size - parseFloat(value)) > 0.5) say(property, value, `${size}px`);
+          probe.style[property] = value;
+          const size = element.getBoundingClientRect()[property], want = parseFloat(getComputedStyle(probe)[property]);
+          if (Math.abs(size - want) > 0.5) say(property, `${value} (${want}px)`, `${size}px`);
           continue;
         }
         (probe.style as unknown as Record<string, string>)[property] = value;

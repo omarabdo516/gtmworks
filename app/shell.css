@@ -327,8 +327,8 @@
   max-width: 560px; min-width: 0; padding: 8px 14px; border-radius: var(--gw-r-bubble); font-size: var(--gw-fs-msg); line-height: 1.7;
   box-shadow: var(--gw-bubble-ring); white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: pretty;
 }
-.gw .bubble--agent { background: var(--gw-bubble-agent); color: var(--gw-text-1); border-end-start-radius: 6px; }
-.gw .bubble--user { background: var(--gw-bubble-user); color: var(--gw-on-bubble-user); border-end-end-radius: 6px; box-shadow: none; }
+.gw .bubble--agent { background: var(--gw-bubble-agent); color: var(--gw-text-1); border-end-start-radius: var(--gw-r-xs); }
+.gw .bubble--user { background: var(--gw-bubble-user); color: var(--gw-on-bubble-user); border-end-end-radius: var(--gw-r-xs); box-shadow: none; }
 .gw .bubble-row { display: flex; align-items: flex-end; gap: 8px; max-width: 100%; }
 .gw .bubble__time { flex: none; padding-bottom: 9px; font-size: var(--gw-fs-xs); white-space: nowrap; }
 .gw .note { align-self: center; max-width: 560px; margin: 0; text-align: center; font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-2); padding: 0 12px; }
@@ -632,7 +632,7 @@
 .gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"] { background: var(--gw-primary); }
 .gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"]::after { transform: translateX(-12px); background: var(--gw-bg-pane); }
 [dir="ltr"] .gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"]::after { transform: translateX(12px); }
-:root[data-theme="dark"] .gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"]::after { background: #121212; }
+:root[data-theme="dark"] .gw :is(.sov, .modal.team-dlg, .details) .switch[aria-checked="true"]::after { background: var(--gw-on-primary); }
 .gw :is(.sov, .modal.team-dlg, .details) .set-input {
   display: block; width: 100%; height: 34px; min-height: 0; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
   background: var(--gw-bg-pane); color: var(--gw-text-1); font: inherit; font-size: var(--gw-fs-sm); outline: none; box-shadow: none;
