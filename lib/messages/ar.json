@@ -580,6 +580,8 @@
   "cwSendForReview": "ابعتها للمراجعة",
   "cwAnswerInChat": "جاوب في المحادثة",
   "cwFileBy": "{0} · {1}",
+  "cwTodoDone": "خلص",
+  "cwTodoOpen": "لسه",
   "sheetLogForever": "مفيش حاجة في السجل بتتمسح، ولا حتى من المالك. الملاحظة بيعدّلها اللي كتبها بس، في أول 5 دقايق.",
   "logYou": "(انت)",
   "logToday": "النهارده",

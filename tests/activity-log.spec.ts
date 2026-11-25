@@ -66,9 +66,9 @@ test('the Activity log filters by a person, and an opened Card shows only its ow
  const tr=await t(page);
  for(const [card,body] of [[own,mine],[other,theirs]] as const) {
   await page.goto(`/c/rs-learning/work/board/${card}`);
-  await page.getByLabel(tr('comment'),{exact:true}).fill(body);
-  await page.getByRole('button',{name:tr('send'),exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:body})).toBeVisible();
+  await page.getByRole('dialog').getByRole('textbox',{name:tr('cwCommentLabel')}).fill(body);
+  await page.getByRole('button',{name:tr('cwPost')}).click();
+  await expect(page.getByRole('dialog').locator('#cw-list .lg-note').filter({hasText:body})).toBeVisible();
  }
 
  // One person: only their rows remain, both comments among them, and the address carries the filter.
@@ -94,8 +94,8 @@ test('the Activity log filters by a person, and an opened Card shows only its ow
  // The opened Card shows its own rows and none of the other Card's.
  await rows.filter({hasText:mine}).locator('.lg-card').click();
  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/work/board/${own}$`));
- await expect(page.locator('.modal .comment-body').filter({hasText:mine})).toBeVisible();
- await expect(page.locator('.modal').getByText(theirs)).toHaveCount(0);
+ await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:mine})).toBeVisible();
+ await expect(page.locator('.cw[open]').getByText(theirs)).toHaveCount(0);
 });
 
 test('older rows are reached page by page in a stable order, each row once',async({page})=>{

@@ -33,9 +33,10 @@ test('revoking a grant keeps the agent face and name in a company-only member’
   await member.goto('/c/rs-learning/work/board');
   expect(await faceMarkup(member.locator('.card-avatars').getByRole('img',{name:names[1],exact:true}).first(),names[1])).toBe(before);
   await member.goto('/c/rs-learning/work/board/1');
-  const message=member.locator('.message[data-author=agent]').filter({hasText:body});
-  await expect(message.locator('strong')).toHaveText(names[1]);
-  expect(await faceMarkup(message.locator('.avatar'),null)).toBe(before);
+  // The Card opens in its window (#678), where the note is one of its Comments, drawn as the log draws it.
+  const message=member.locator('.cw[open] #cw-list .lg-row').filter({hasText:body});
+  await expect(message.locator('.lg-name')).toHaveText(names[1]);
+  expect(await faceMarkup(message.locator('.lg-av'),null)).toBe(before);
  } finally {
   await page.goto('/c/rs-learning/agents');
   if(await writer.getByRole('button',{name:'Grant access to Writer'}).isVisible()) await writer.getByRole('button',{name:'Grant access to Writer'}).click();

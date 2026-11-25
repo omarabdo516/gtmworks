@@ -339,7 +339,9 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   if(c.wait) return <section className="cw-call cw-call--wait" data-card-section="question"><div className="cw-call__head"><Sym kind="question"/><p className="cw-call__t od-fill" dir="auto">{c.wait.title}</p>
    {chat?.mine&&opened?.made.from==='chat'&&<Link className="btn btn--secondary btn--sm" href={opened.made.href}><ShellIcon name="chat"/><span>{t('cwAnswerInChat')}</span></Link>}</div>
    {!chat?.mine&&<p className="cw-call__s">{chat?chatBadge(chat):waitingOn(c.wait.person)}</p>}</section>;
-  if(c.status!=='waiting') return null;
+  // A Card sent back keeps the reason on it until the review is a decision of its own (#681).
+  if(c.status!=='waiting') return c.rejection_reason?<section className="cw-call" data-card-section="sent-back"><div className="cw-call__head"><span className="cw-call__ic" aria-hidden="true"><ShellIcon name="sendBack"/></span><p className="cw-call__t od-fill">{t('rejectionReason')}</p></div>
+   <p className="cw-call__s" dir="auto">{c.rejection_reason}</p></section>:null;
   return <section className="cw-call cw-call--wait" data-card-section="review"><div className="cw-call__head"><Sym kind="review"/><p className="cw-call__t od-fill">{mine?t('boardWaitingYou'):p.canCreate?waitingOn(c.next_actor):t('boardWaitingTeam')}</p></div>
    {c.rejection_reason&&<p className="cw-call__s" dir="auto">{c.rejection_reason}</p>}
    {mine&&<Decision slug={p.slug} company={p.company} card={c.id} workAction={workAction}/>}</section>; };
@@ -352,7 +354,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   return <>{fields.length>0&&<dl className="cw-kv">{fields.map(([key,label])=><div key={key} className="cw-kv__r"><dt>{label}</dt><dd dir="auto">{String(c[key])}</dd></div>)}</dl>}
    {labels.length>0&&<div className="member-chips">{labels.map(l=><span dir="auto" className="label-chip" style={{borderColor:l.color}} key={l.id}>{l.name}</span>)}</div>}
    {todos.length>0&&<ul className="cw-todos" aria-label={t('checklist')}>{todos.map(i=><li key={i.id}>{tick?<form action={workAction}>{hidden('check')}<input type="hidden" name="card" value={c.id}/><input type="hidden" name="item" value={i.id}/><input type="hidden" name="done" value={String(!i.done)}/><input type="hidden" name="view" value="sheet"/>
-    <label dir="auto"><input type="checkbox" checked={i.done} onChange={e=>e.currentTarget.form?.requestSubmit()}/> {i.title}</label></form>:<label dir="auto"><input type="checkbox" checked={i.done} disabled/> {i.title}</label>}</li>)}</ul>}</>; };
+    <label dir="auto"><input type="checkbox" checked={i.done} onChange={e=>e.currentTarget.form?.requestSubmit()}/> {i.title}</label></form>:<span className="cw-todo" dir="auto"><span className={`cw-todo__box${i.done?' is-done':''}`} role="img" aria-label={t(i.done?'cwTodoDone':'cwTodoOpen')}>{i.done&&<ShellIcon name="check"/>}</span>{i.title}</span>}</li>)}</ul>}</>; };
  const assignable=p.members.filter(m=>m.role&&m.role!=='viewer');
  const assigneeOf=(c:Card)=>c.assignee_person?`p:${c.assignee_person}`:c.assignee_agent?`a:${c.assignee_agent}`:'';
  const windowView=(c:Card,data:CardWindowData)=>{ const own=cardAgentOf(c);

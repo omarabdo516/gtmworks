@@ -16,7 +16,7 @@ async function chooseLanguage(page:Page,language:'en'|'ar') {
 }
 // The thumbnail of the message holding `text`: it must really load, and its address names the file by id, never by storage path.
 async function thumbnail(page:Page,text:string) {
- const image=page.locator('.conversation .message').filter({hasText:text}).locator('.attachments img');
+ const image=page.locator('.cw[open] #cw-list .lg-row').filter({hasText:text}).locator('.attachments img');
  await expect(image).toHaveCount(1);
  await expect.poll(()=>image.evaluate(element=>(element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
  const source=await image.getAttribute('src');
@@ -24,9 +24,9 @@ async function thumbnail(page:Page,text:string) {
  return source as string;
 }
 async function reply(page:Page,text:string) {
- await page.getByLabel('Comment',{exact:true}).fill(text);
- await attach(page).setInputFiles(picture('reply.png'));
- await page.getByRole('button',{name:'Send',exact:true}).click();
+ await page.getByRole('textbox',{name:'Write a comment'}).fill(text);
+ await page.getByLabel('Attach a file to the comment').setInputFiles(picture('reply.png'));
+ await page.getByRole('button',{name:'Post the comment'}).click();
  return thumbnail(page,text);
 }
 
@@ -55,7 +55,7 @@ test('a file attached in the composer and in a reply shows as a thumbnail, in bo
   // The reply comes below it, with its own file.
   const second=await reply(page,`Here is another one ${stamp}`);
   expect(second).not.toBe(first);
-  await expect(page.locator('.conversation .message')).toHaveCount(2);
+  await expect(page.locator('.cw[open] #cw-list .lg-row')).toHaveCount(2);
   // A member opens the file by its address and gets the picture itself, shown in place and sandboxed.
   const opened=await page.request.get(first);
   expect(opened.status()).toBe(200);
@@ -65,8 +65,8 @@ test('a file attached in the composer and in a reply shows as a thumbnail, in bo
   for(const language of ['en','ar'] as const) {
    await chooseLanguage(page,language);
    await page.goto(cardPath);
-   await expect(page.locator('.conversation .message .attachments img')).toHaveCount(2);
-   for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); await page.locator('.modal').first().screenshot({path:`test-results/screenshots/attachments-card-${language}-${width}.png`}); }
+   await expect(page.locator('.cw[open] #cw-list .attachments img')).toHaveCount(2);
+   for(const width of [1440,390]) { await page.setViewportSize({width,height:900}); await page.locator('.cw[open]').screenshot({path:`test-results/screenshots/attachments-card-${language}-${width}.png`}); }
   }
  } finally { await chooseLanguage(page,'en'); }
 });

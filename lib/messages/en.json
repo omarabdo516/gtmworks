@@ -580,6 +580,8 @@
   "cwSendForReview": "Send for review",
   "cwAnswerInChat": "Answer in the chat",
   "cwFileBy": "{0} · {1}",
+  "cwTodoDone": "Done",
+  "cwTodoOpen": "To do",
   "sheetLogForever": "Nothing in the log is ever deleted, not even by the Owner. Only the writer can edit a note, in its first 5 minutes.",
   "logYou": "(you)",
   "logToday": "Today",

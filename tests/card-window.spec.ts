@@ -102,6 +102,7 @@ test('the title, assignee, publishing date and Project save as they change; a sa
   await windowOf(other).getByRole('textbox', { name: 'Card title' }).fill('Renamed by the manager');
   await other.keyboard.press('Enter');
   await expect(windowOf(other).getByRole('heading', { level: 2 })).toHaveText('Renamed by the manager');
+  await expect.poll(() => JSON.parse(query('select title from public.work_cards where id=3'))).toEqual([{ title: 'Renamed by the manager' }]);
  } finally { await context.close(); }
  await card.getByRole('button', { name: title }).click();
  await card.getByRole('textbox', { name: 'Card title' }).fill('Renamed by the contributor');

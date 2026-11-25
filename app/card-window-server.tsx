@@ -7,6 +7,7 @@ import { PageIcon } from '@/app/c/[slug]/log/icons';
 import { ShellIcon } from '@/components/shell-icon';
 import { ModelLine } from './model-line';
 import { modelCauseOf, modelCauseOutcomes, modelOutcome } from '@/lib/model-causes';
+import { isThumbnail } from '@/lib/attachments.mjs';
 import type { CardMade, CardWindowData } from './card-window';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
@@ -24,7 +25,7 @@ export async function cardWindow(db:Db,{company,card,slug,me,canWrite,t,language
   db.from('company_log').select(logColumns).eq('company_id',company).eq('card_id',card).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(windowRows),
   db.from('note_runs').select('note_id,agent_id,agent_name,outcome,created_at,closed_at').eq('company_id',company).eq('card_id',card).order('created_at'),
   logPeople(db,company,[card]),
-  db.from('work_attachments').select('id,comment_id,name,created_by,created_at').eq('company_id',company).eq('card_id',card).order('id'),
+  db.from('work_attachments').select('id,comment_id,name,content_type,created_by,created_at').eq('company_id',company).eq('card_id',card).order('id'),
   db.from('work_creatives').select('id,name').eq('company_id',company).eq('card_id',card).order('id'),
   db.from('work_versions').select('id,creative_id,path,created_at').eq('company_id',company).eq('card_id',card).order('id'),
   madeOf(db,company,card,slug),
@@ -33,13 +34,16 @@ export async function cardWindow(db:Db,{company,card,slug,me,canWrite,t,language
  const runs=((runRows||[]) as {note_id:number,agent_id:string,agent_name:string,outcome:string|null,created_at:string,closed_at:string|null}[]);
  const causes=new Map(runs.filter(run=>modelCauseOutcomes.includes(run.outcome as never)).flatMap(run=>{ const cause=modelCauseOf(run.outcome); return cause?[[`note-${run.note_id}` as string,{cause,agent:run.agent_name}] as const]:[]; }));
  const {data:owner}=causes.size?await db.rpc('is_company_owner',{c:company}):{data:false};
- const files=((fileRows||[]) as {id:number,comment_id:number|null,name:string,created_by:string,created_at:string}[]);
+ const files=((fileRows||[]) as {id:number,comment_id:number|null,name:string,content_type:string,created_by:string,created_at:string}[]);
  const nameOf=(id:string)=>people.members.find(member=>member.person_id===id)?.people?.name?.trim().split(/\s+/)[0]||'';
  const why=(anchor:string|undefined)=>{ const run=anchor?causes.get(anchor):undefined;
   return run&&<p className="note" role="alert" data-outcome={modelOutcome(run.cause)}><ModelLine cause={run.cause} agent={run.agent} slug={slug} owner={owner===true}/></p>; };
- // A comment's files under it, each opened from the Company's own storage.
+ // A comment's files under it, each opened from the Company's own storage: a picture as its thumbnail, any other file
+ // as its chip.
  const filesOf=(row:LogRow)=>{ const own=row.source==='work_comments'?files.filter(file=>file.comment_id===row.source_id):[];
-  return own.length>0&&<div className="msg-files">{own.map(file=><a key={file.id} className="file-chip" href={`/c/${slug}/files/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>; };
+  return own.length>0&&<ul className="attachments">{own.map(file=>{ const href=`/c/${slug}/files/${file.id}`;
+   return <li key={file.id}>{isThumbnail(file.content_type)?<a href={href} target="_blank" rel="noreferrer"><img src={href} alt={file.name}/></a>
+    :<a className="file-chip" href={href} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>}</li>; })}</ul>; };
  const drawList=(list:LogRow[],empty:string,forever:boolean)=><div className="lg-wrap">
   {list.length?<LogDays oldestFirst items={list.map(row=>({id:row.id,at:row.created_at,anchor:logAnchor(row),node:<><LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={canWrite} drawnAt={drawn} t={t} language={language} cardLink={false}/>{filesOf(row)}{why(logAnchor(row))}</>}))}/>
    :<div className="panel-card"><p className="panel-empty">{empty}</p></div>}
