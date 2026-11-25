@@ -325,3 +325,5 @@
 .gw .de-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
 .gw .de-status { display: inline-flex; align-items: center; gap: 4px; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .de-status .gw-icon { width: 13px; height: 13px; }
+/* The comment box's hint is read text, so it keeps 4.5:1 on the window (contrast.spec.ts, the `card` screen). */
+.gw .cw .composer__input::placeholder { color: var(--gw-text-3); opacity: 1; }

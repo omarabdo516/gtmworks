@@ -156,7 +156,7 @@ type Screen = { name: string, path: string, ready: string, state?: string, quiet
 const screens: Screen[] = [
   { name: 'home', path: '/c/rs-learning/home', ready: '.home-dashboard', state: 'agent-details', quiet: [['chart subtitle', '.home-charts article h2 + span'], ['sidebar heading', '.sidebar .sb-label'], ['account role', '.sidebar .me__role']] },
   { name: 'board', path: '/c/rs-learning/work/board', ready: '.board', quiet: [['toolbar label', '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)']] },
-  { name: 'card', path: '/c/rs-learning/work/board/1', ready: '.modal', quiet: [['comment placeholder', '.modal textarea[name=body]', '::placeholder']] },
+  { name: 'card', path: '/c/rs-learning/work/board/1', ready: '.cw[open]', quiet: [['comment placeholder', '.cw[open] textarea[name=body]', '::placeholder']] },
   { name: 'chat', path: '/c/rs-learning/chat', ready: '.chat' },
   { name: 'channel', path: `/c/rs-learning/channels/${general}`, ready: '.ch-intro', state: 'channel' },
   { name: 'agents', path: '/c/rs-learning/agents', ready: '.company-hermes-agents' },
