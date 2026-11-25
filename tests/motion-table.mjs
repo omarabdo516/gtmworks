@@ -69,7 +69,7 @@ export const motionTable = [
   // Fields: the reason an Owner gives for a no, the settings fields and the Activity log's filters.
   { built: '.gw .ac-card .set-input', file: 'app/shell.css', html: '<div class="gw"><div class="ac-card"><textarea class="set-input set-textarea"></textarea></div></div>' },
   { built: '.gw .sov .set-input', file: 'app/settings.css', html: '<div class="gw"><div class="sov" role="dialog"><input class="set-input" type="text"></div></div>' },
-  { built: '.gw :is(.log-page, .numbers-page, .sheet) .set-input', file: 'app/log.css', html: '<div class="gw"><main class="log-page"><select class="set-input"></select></main></div>' },
+  { built: '.gw :is(.log-page, .numbers-page, .sheet, .cw) .set-input', file: 'app/log.css', html: '<div class="gw"><main class="log-page"><select class="set-input"></select></main></div>' },
   // The board: a column lights up under a carried card; an item waiting on the reader.
   { built: '.gw .board-view .col', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><section class="col"></section></div></div>' },
   { built: '.gw .board-view .mcard', file: 'app/board.css', html: '<div class="gw"><div class="board-view"><a class="mcard" href="#"></a></div></div>' },

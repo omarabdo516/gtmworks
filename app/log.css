@@ -1,6 +1,6 @@
 /* The Activity log page (#11) and the parts the Numbers page (#35) shares with it, ported from the approved reference
    (design-reference/index.html: page heads, panel-card, link-btn, btn, set-input and "the log, channels and mentions
-   round"). A Card's sheet (#116, app/sheet.css) draws its log with the same rules. Colours come from the shell's gw
+   round"). A Card's window (#678, app/card-window.css) draws its log with the same rules. Colours come from the shell's gw
    tokens (app/shell.css); the few it does not carry are set here for both themes. */
 .gw :is(.log-page, .numbers-page) {
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
@@ -28,80 +28,80 @@
 .gw :is(.log-page, .numbers-page) .muted { color: var(--gw-text-3); }
 .gw :is(.log-page, .numbers-page) .od-field { display: grid; gap: 2px; min-width: 0; }
 .gw :is(.log-page, .numbers-page) .od-field > * { display: block; min-width: 0; }
-.gw :is(.log-page, .numbers-page, .details, .sheet) .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.gw :is(.log-page, .numbers-page, .details, .sheet) .pg-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
+.gw :is(.log-page, .numbers-page, .details, .sheet, .cw) .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.gw :is(.log-page, .numbers-page, .details, .sheet, .cw) .pg-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
 .gw :is(.log-page, .numbers-page) .page-head { display: flex; align-items: flex-end; gap: var(--s4); padding: var(--s8) var(--s8) var(--s4); flex-wrap: wrap; }
 .gw :is(.log-page, .numbers-page) .page-title { margin: 0; font-size: var(--gw-fs-xl); line-height: 1.4; font-weight: 600; }
 .gw :is(.log-page, .numbers-page) .page-sub { margin: 0; font-size: var(--gw-fs-base); color: var(--gw-text-2); text-wrap: pretty; }
 .gw :is(.log-page, .numbers-page) .panel-card { display: flex; flex-direction: column; padding: 4px; border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); list-style: none; margin: 0; }
 .gw :is(.log-page, .numbers-page) .panel-empty { margin: 0; padding: var(--s2); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-3); }
-.gw :is(.log-page, .numbers-page, .sheet) .link-btn {
+.gw :is(.log-page, .numbers-page, .sheet, .cw) .link-btn {
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--gw-r-xs); border: 0; min-height: 0;
   background: transparent; font-size: var(--gw-fs-sm); color: var(--gw-text-2); --od-icon-size: 14px; text-decoration: none;
 }
-.gw :is(.log-page, .numbers-page, .sheet) .btn {
+.gw :is(.log-page, .numbers-page, .sheet, .cw) .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; min-height: 0; padding: 0 var(--s4);
   border: 0; border-radius: var(--gw-r-full); font-size: var(--gw-fs-base); font-weight: 600; white-space: nowrap; text-decoration: none;
   --od-icon-size: 16px;
 }
-.gw :is(.log-page, .numbers-page, .sheet) .btn--secondary { background: var(--p-btn-secondary-bg); color: var(--gw-text-1); box-shadow: var(--p-btn-secondary-ring) 0 0 0 1px inset; }
-.gw :is(.log-page, .numbers-page, .sheet) .btn--sm { height: 30px; padding: 0 var(--s3); font-size: var(--gw-fs-sm); }
+.gw :is(.log-page, .numbers-page, .sheet, .cw) .btn--secondary { background: var(--p-btn-secondary-bg); color: var(--gw-text-1); box-shadow: var(--p-btn-secondary-ring) 0 0 0 1px inset; }
+.gw :is(.log-page, .numbers-page, .sheet, .cw) .btn--sm { height: 30px; padding: 0 var(--s3); font-size: var(--gw-fs-sm); }
 @media (hover: hover) {
-  .gw :is(.log-page, .numbers-page, .sheet) .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
-  .gw :is(.log-page, .numbers-page, .sheet) .btn--secondary:hover { background: var(--gw-bg-secondary-hover); }
+  .gw :is(.log-page, .numbers-page, .sheet, .cw) .link-btn:hover { background: var(--gw-bg-hover); color: var(--gw-text-1); }
+  .gw :is(.log-page, .numbers-page, .sheet, .cw) .btn--secondary:hover { background: var(--gw-bg-secondary-hover); }
 }
-.gw :is(.log-page, .numbers-page, .sheet) .set-input {
+.gw :is(.log-page, .numbers-page, .sheet, .cw) .set-input {
   display: block; width: 100%; height: 34px; min-height: 0; padding: 0 10px; border-radius: var(--gw-r-sm); border: 0.5px solid var(--gw-border-2);
   background: var(--gw-bg-pane); color: var(--gw-text-1); font-size: var(--gw-fs-sm); font-family: inherit; outline: none;
   transition: border-color var(--gw-dur-fast) var(--gw-ease-out), box-shadow var(--gw-dur-fast) var(--gw-ease-out);
 }
-.gw :is(.log-page, .numbers-page, .sheet) select.set-input { appearance: auto; padding-inline-end: 6px; }
-.gw :is(.log-page, .numbers-page, .sheet) .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
+.gw :is(.log-page, .numbers-page, .sheet, .cw) select.set-input { appearance: auto; padding-inline-end: 6px; }
+.gw :is(.log-page, .numbers-page, .sheet, .cw) .set-input:focus { border-color: var(--gw-border-1); box-shadow: 0 0 0 3px var(--gw-bg-active); }
 
 /* who did it: a person's initial, an Agent's face, or the gtmworks mark for automatic lines */
-.gw :is(.log-page, .numbers-page, .details, .sheet) .lg-av {
+.gw :is(.log-page, .numbers-page, .details, .sheet, .cw) .lg-av {
   width: var(--av, 28px); height: var(--av, 28px); border-radius: 50%; flex: none; background: var(--gw-bg-active); box-shadow: var(--gw-border-3) 0 0 0 0.5px inset;
   color: var(--gw-text-2); display: inline-flex; align-items: center; justify-content: center; font-size: var(--gw-fs-xs); font-weight: 600; line-height: 1;
 }
-.gw :is(.log-page, .numbers-page, .details, .sheet) .lg-face { display: inline-flex; flex: none; }
-.gw :is(.log-page, .numbers-page, .details, .sheet) .lg-sys { display: block; flex: none; }
+.gw :is(.log-page, .numbers-page, .details, .sheet, .cw) .lg-face { display: inline-flex; flex: none; }
+.gw :is(.log-page, .numbers-page, .details, .sheet, .cw) .lg-sys { display: block; flex: none; }
 
-.gw :is(.log-page, .details, .sheet) .lg-day { display: grid; gap: var(--s2); }
-.gw :is(.log-page, .details, .sheet) .lg-day__h { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; color: var(--gw-text-3); }
-.gw :is(.log-page, .details, .sheet) .lg-day__h[data-utc], .gw :is(.log-page, .numbers-page, .details, .sheet) time[data-utc] { visibility: hidden; }
-.gw :is(.log-page, .details, .sheet) .lg-list { list-style: none; margin: 0; padding: 2px var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
-.gw :is(.log-page, .details, .sheet) .lg-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s3); align-items: start; padding: var(--s3) 0; }
-.gw :is(.log-page, .details, .sheet) .lg-row + .lg-row { border-top: 0.5px solid var(--gw-border-2); }
-.gw :is(.log-page, .details, .sheet) .lg-row > :first-child { margin-top: 1px; }
-.gw :is(.log-page, .details, .sheet) .lg-body { display: grid; gap: 6px; min-width: 0; }
-.gw :is(.log-page, .details, .sheet) .lg-line { margin: 0; font-size: var(--gw-fs-base); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
-.gw :is(.log-page, .details, .sheet) .lg-name { font-weight: 600; }
-.gw :is(.log-page, .details, .sheet) :is(.lg-you, .lg-act) { color: var(--gw-text-2); }
-.gw :is(.log-page, .details, .sheet) .lg-change { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--gw-text-3); --od-icon-size: 14px; }
-.gw :is(.log-page, .details, .sheet) .lg-val { display: inline-block; max-width: 100%; padding: 1px var(--s2); border-radius: var(--gw-r-xs); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
-.gw :is(.log-page, .details, .sheet) .lg-val--old { background: transparent; box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; color: var(--gw-text-2); }
-[dir="ltr"] .gw :is(.log-page, .details, .sheet) .lg-arrow { transform: scaleX(-1); }
-.gw :is(.log-page, .details, .sheet) .lg-note { margin: 0; padding: var(--s2) var(--s3); border-radius: var(--gw-r-md); background: var(--gw-bubble-agent); box-shadow: var(--gw-bubble-ring); font-size: var(--gw-fs-base); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-.gw :is(.log-page, .details, .sheet) .lg-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 13px; }
-.gw :is(.log-page, .details, .sheet) .lg-meta .link-btn { font-size: var(--gw-fs-xs); padding: 0 4px; margin-inline: -4px; min-height: 24px; color: var(--gw-text-2); }
-.gw :is(.log-page, .details, .sheet) .lg-card { min-width: 0; max-width: 100%; }
-.gw :is(.log-page, .details, .sheet) .lg-card .od-truncate { max-width: 260px; }
-.gw :is(.log-page, .details, .sheet) .lg-forever { margin: 0; display: flex; align-items: flex-start; gap: 6px; padding-inline: var(--s1); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 14px; }
-.gw :is(.log-page, .details, .sheet) .lg-forever .pg-icon { margin-top: 2px; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-day { display: grid; gap: var(--s2); }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-day__h { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); font-weight: 400; line-height: 1.5; color: var(--gw-text-3); }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-day__h[data-utc], .gw :is(.log-page, .numbers-page, .details, .sheet, .cw) time[data-utc] { visibility: hidden; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-list { list-style: none; margin: 0; padding: 2px var(--s4); border-radius: var(--gw-r-md); background: var(--gw-bg-pane); border: 0.5px solid var(--gw-border-3); }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s3); align-items: start; padding: var(--s3) 0; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-row + .lg-row { border-top: 0.5px solid var(--gw-border-2); }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-row > :first-child { margin-top: 1px; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-body { display: grid; gap: 6px; min-width: 0; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-line { margin: 0; font-size: var(--gw-fs-base); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-name { font-weight: 600; }
+.gw :is(.log-page, .details, .sheet, .cw) :is(.lg-you, .lg-act) { color: var(--gw-text-2); }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-change { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--gw-text-3); --od-icon-size: 14px; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-val { display: inline-block; max-width: 100%; padding: 1px var(--s2); border-radius: var(--gw-r-xs); background: var(--gw-bg-tertiary); font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-1); overflow-wrap: anywhere; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-val--old { background: transparent; box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; color: var(--gw-text-2); }
+[dir="ltr"] .gw :is(.log-page, .details, .sheet, .cw) .lg-arrow { transform: scaleX(-1); }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-note { margin: 0; padding: var(--s2) var(--s3); border-radius: var(--gw-r-md); background: var(--gw-bubble-agent); box-shadow: var(--gw-bubble-ring); font-size: var(--gw-fs-base); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 13px; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-meta .link-btn { font-size: var(--gw-fs-xs); padding: 0 4px; margin-inline: -4px; min-height: 24px; color: var(--gw-text-2); }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-card { min-width: 0; max-width: 100%; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-card .od-truncate { max-width: 260px; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-forever { margin: 0; display: flex; align-items: flex-start; gap: 6px; padding-inline: var(--s1); font-size: var(--gw-fs-xs); line-height: 1.6; color: var(--gw-text-3); --od-icon-size: 14px; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-forever .pg-icon { margin-top: 2px; }
 /* a note (#22): "Edited", the time its writer has left to edit it, "Locked", and the field that replaces it while its
    writer edits (design-reference: lg-edit, lg-left, lg-edited, lg-lock) */
-.gw :is(.log-page, .details, .sheet) :is(.lg-left, .lg-lock, .lg-edited) { display: inline-flex; align-items: center; gap: 4px; }
-.gw :is(.log-page, .details, .sheet) .lg-left .num { color: var(--gw-text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
-.gw :is(.log-page, .sheet) .lg-status { color: var(--gw-text-2); }
-.gw :is(.log-page, .sheet) .lg-edit { display: grid; gap: var(--s2, 8px); }
-.gw :is(.log-page, .sheet) .lg-edit__t { height: auto; min-height: 72px; padding: var(--s2, 8px) 10px; font-size: var(--gw-fs-base); line-height: 1.7; resize: vertical; }
-.gw :is(.log-page, .sheet) .lg-edit__row { display: flex; align-items: center; gap: var(--s2, 8px); flex-wrap: wrap; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
-.gw :is(.log-page, .sheet) .lg-edit__row .od-fill { flex: 1 1 0; min-width: 0; }
-.gw :is(.log-page, .sheet) .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
-.gw :is(.log-page, .sheet) .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
-.gw :is(.log-page, .sheet) :is(.btn--primary, .btn--secondary):disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; }
-@media (hover: hover) { .gw :is(.log-page, .sheet) .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
-.gw :is(.log-page, .sheet) .lg-more { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw :is(.log-page, .details, .sheet, .cw) :is(.lg-left, .lg-lock, .lg-edited) { display: inline-flex; align-items: center; gap: 4px; }
+.gw :is(.log-page, .details, .sheet, .cw) .lg-left .num { color: var(--gw-text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+.gw :is(.log-page, .sheet, .cw) .lg-status { color: var(--gw-text-2); }
+.gw :is(.log-page, .sheet, .cw) .lg-edit { display: grid; gap: var(--s2, 8px); }
+.gw :is(.log-page, .sheet, .cw) .lg-edit__t { height: auto; min-height: 72px; padding: var(--s2, 8px) 10px; font-size: var(--gw-fs-base); line-height: 1.7; resize: vertical; }
+.gw :is(.log-page, .sheet, .cw) .lg-edit__row { display: flex; align-items: center; gap: var(--s2, 8px); flex-wrap: wrap; font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
+.gw :is(.log-page, .sheet, .cw) .lg-edit__row .od-fill { flex: 1 1 0; min-width: 0; }
+.gw :is(.log-page, .sheet, .cw) .set-err { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-danger-text); }
+.gw :is(.log-page, .sheet, .cw) .btn--primary { background: var(--gw-primary); color: var(--gw-on-primary); }
+.gw :is(.log-page, .sheet, .cw) :is(.btn--primary, .btn--secondary):disabled { background: var(--gw-primary-disabled); color: var(--gw-text-4); box-shadow: none; }
+@media (hover: hover) { .gw :is(.log-page, .sheet, .cw) .btn--primary:hover:not(:disabled) { background: var(--gw-primary-hover); } }
+.gw :is(.log-page, .sheet, .cw) .lg-more { margin: 0; padding-inline: var(--s1); font-size: var(--gw-fs-xs); color: var(--gw-text-3); }
 .gw .log-page .lg-pages { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 .gw .log-page .lg-pages .lg-more { margin-inline-end: auto; }
 
@@ -139,15 +139,15 @@
   .gw .log-page .lgp-clear { position: relative; }
   .gw .log-page .lgp-clear::before { content: ""; position: absolute; inset: -10px 0; }
   /* A Card link keeps the reference's 24px line; an invisible ring makes its tap area 44px tall inside the row's padding. */
-  .gw :is(.log-page, .sheet) .lg-meta .link-btn { position: relative; }
-  .gw :is(.log-page, .sheet) .lg-meta .link-btn::before { content: ""; position: absolute; inset: -10px 0; }
+  .gw :is(.log-page, .sheet, .cw) .lg-meta .link-btn { position: relative; }
+  .gw :is(.log-page, .sheet, .cw) .lg-meta .link-btn::before { content: ""; position: absolute; inset: -10px 0; }
   /* The page buttons keep their 30px look; a ring makes each tap area 44px tall. */
-  .gw :is(.log-page, .sheet) :is(.lg-pages, .lg-edit) .btn { position: relative; }
-  .gw :is(.log-page, .sheet) :is(.lg-pages, .lg-edit) .btn::before { content: ""; position: absolute; inset: -7px 0; }
+  .gw :is(.log-page, .sheet, .cw) :is(.lg-pages, .lg-edit) .btn { position: relative; }
+  .gw :is(.log-page, .sheet, .cw) :is(.lg-pages, .lg-edit) .btn::before { content: ""; position: absolute; inset: -7px 0; }
 }
 @media (max-width: 599px) {
   .gw .log-page .lgp-field { flex: 1 1 100%; }
   .gw .log-page .lgp-field .set-input { width: 100%; }
   .gw .log-page .lgp-count { margin-inline-start: 0; }
-  .gw :is(.log-page, .sheet) .lg-list { padding-inline: var(--s3); }
+  .gw :is(.log-page, .sheet, .cw) .lg-list { padding-inline: var(--s3); }
 }
