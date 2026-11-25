@@ -267,7 +267,8 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  // Approving it: the count falls when the board is drawn again, and neither plays.
  await tab.reload();
  await tab.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
- await expect(tab.getByRole('dialog').getByRole('button',{name:/^Status: Planned/})).toBeVisible();
+ // With no publishing date, an approved Card is Done (#681).
+ await expect(tab.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
  await redraw('ArrowLeft');
  await expect(count).toHaveText(String(before));
  await expect(count).not.toHaveClass(/is-pop/);

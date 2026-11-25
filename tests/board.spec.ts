@@ -185,7 +185,8 @@ test('a card waiting for my approval is in Waiting on you and leaves it when I a
  await queued.getByRole('link',{name:card.title}).click();
  await expect(page).toHaveURL(new RegExp(`${card.path}$`));
  await page.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
- await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Planned/})).toBeVisible();
+ // With no publishing date, an approved Card is Done (#681).
+ await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
  await page.goto('/c/rs-learning/approvals');
  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toHaveCount(0);
  await expect(waiting.locator('.col__count')).toHaveText(String(count-1));

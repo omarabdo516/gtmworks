@@ -29,13 +29,13 @@ export type CardWindowData={id:number,working:boolean,comments:ReactNode,comment
  files:{id:number,name:string,by:string,at:string}[],creative:number|null,versions:{id:number,n:number,name:string,url:string|null,at:string}[],made:CardMade};
 // The Card as the board holds it, with its assignee as the window saves it ('a:<Agent>', 'p:<Member>' or '').
 export type CardWindowCard={id:number,title:string,status:string,go_live:string|null,project_id:number|null,assignee:string,archived?:{by:string,at:string}};
-export type CardSymbol='question'|'review'|'working'|'onyou'|'archived'|'readonly';
+export type CardSymbol='question'|'review'|'approved'|'working'|'onyou'|'archived'|'readonly';
 type Field='title'|'go_live'|'project'|'assignee';
 type Tab='comments'|'activity'|'runs';
 type SuggestionList={token:{type:string,q:string,start:number,end:number},items:Suggestion[],index:number};
 
 const symbols:Record<CardSymbol,{icon:ShellIconName|null,tone:string,key:string}>={
- question:{icon:'ask',tone:'wait',key:'symQuestion'},review:{icon:'needsReview',tone:'wait',key:'symReview'},working:{icon:null,tone:'ok',key:'symWorking'},
+ question:{icon:'ask',tone:'wait',key:'symQuestion'},review:{icon:'needsReview',tone:'wait',key:'symReview'},approved:{icon:'approved',tone:'ok',key:'symApproved'},working:{icon:null,tone:'ok',key:'symWorking'},
  onyou:{icon:'hand',tone:'wait',key:'symOnyou'},archived:{icon:'archive',tone:'mute',key:'symArchived'},readonly:{icon:'eye',tone:'mute',key:'cwReadOnly'},
 };
 // One state as one symbol (design-reference-card: symHTML): an image named by its tooltip, or, inside a control that

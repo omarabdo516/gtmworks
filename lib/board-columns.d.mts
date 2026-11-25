@@ -5,7 +5,7 @@ export declare const boardCardColumns: '*,wait:card_wait';
 export type CardWait = {person:string, kind:'question'|'hand'|'permission', title:string};
 export declare function columnOf(card: {status?:string|null, wait?:CardWait|null}): string;
 export declare function chatWait(card: {wait?:CardWait|null}, reader: {me:string, writer:boolean, approval:boolean}): (CardWait & {mine:boolean, team:boolean}) | null;
-export declare function cardSymbol(card: {status:string, wait?:CardWait|null, assignee_person?:string|null}, reader: {me:string, working?:boolean}): 'question'|'review'|'working'|'onyou'|'';
+export declare function cardSymbol(card: {status:string, wait?:CardWait|null, assignee_person?:string|null, approved_version?:number|null, approved_at?:string|null, latest_version?:number|null}, reader: {me:string, working?:boolean}): 'question'|'review'|'approved'|'working'|'onyou'|'';
 type WaitingRow = {kind:string, card_id:number|null, conversation_id:string|null};
 export declare function onCard(item: WaitingRow): boolean;
 export declare function waitingCount(items: WaitingRow[], assigned?: {id:number}[]): number;

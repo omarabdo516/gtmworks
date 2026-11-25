@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import type { supabase } from './supabase';
-import type { Step, ApprovalCard } from '@/app/c/[slug]/[[...section]]/approvals';
+import type { ApprovalCard } from '@/app/c/[slug]/[[...section]]/approvals';
 import { boardCardColumns, visibleApprovals, waitingCount } from './board-columns.mjs';
 // One item of "Waiting on you" (ADR 0013): an approval this person holds, or anything else addressed to them by kind.
 // A mention (#22) carries the note it opens.
@@ -36,8 +36,7 @@ export const approvalQueue=(db:Awaited<ReturnType<typeof supabase>>,company:stri
 const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,person:string)=>{
  // The database reads the person from the session for waiting_list; the Cards assigned to them (#677) are theirs until
  // Live or Done, while each stays in its column.
- const [stepResult,listResult,assignedResult]=await Promise.all([
-  db.from('approval_steps').select('*').eq('company_id',company).is('removed_at',null).order('position').order('id'),
+ const [listResult,assignedResult]=await Promise.all([
   db.rpc('waiting_list',{c:company}),
   db.from('work_cards').select('id,title,status').eq('company_id',company).eq('assignee_person',person).in('status',['waiting','ideas','planned','progress']).order('created_at',{ascending:false}).order('id',{ascending:false}),
  ]);
@@ -123,5 +122,5 @@ const queue=cache(async(db:Awaited<ReturnType<typeof supabase>>,company:string,p
   const mention=item.kind==='mention'?mentions.get(item.id):undefined;
   return mention?{...item,note_id:mention.note_id,body:mention.work_comments?.body??item.body}:item;
  });
- return {steps:(stepResult.data || []) as Step[],cards,visible:visible.cards,items,assigned,count:waitingCount(visible.items,assigned),available:!stepResult.error&&!listResult.error&&!assignedResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!channelMentionResult.error&&!changeResult.error&&!accessResult.error&&!cardRunError&&!permissionRunError&&!faceError&&!mentionedMessageResult.error&&!channelNameResult.error};
+ return {cards,visible:visible.cards,items,assigned,count:waitingCount(visible.items,assigned),available:!listResult.error&&!assignedResult.error&&!cardResult.error&&!agentResult.error&&!ruleResult.error&&!requestResult.error&&!mentionResult.error&&!chatResult.error&&!channelResult.error&&!channelCardResult.error&&!channelMentionResult.error&&!changeResult.error&&!accessResult.error&&!cardRunError&&!permissionRunError&&!faceError&&!mentionedMessageResult.error&&!channelNameResult.error};
 });

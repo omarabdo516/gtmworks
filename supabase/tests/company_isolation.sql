@@ -19,7 +19,7 @@ insert into isolation_matrix(name) values
  ('note_runs'),('provider_names'),('provider_order'),('reply_cards'),('role_permissions'),('routine_results'),('routine_runs_open'),('stopped_runs'),
  ('waiting_items'),
  ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_moves'),('work_card_visits'),('work_cards'),
- ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_stages'),('work_versions');
+ ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_reviews'),('work_stages'),('work_versions');
 -- Values a table's own checks need, as SQL (RS Learning is 10000000-...-0001). The member row names a person of no
 -- Company, as naming the caller would make them a member of RS Learning, and a Contributor, so the Owner-only guard
 -- does not answer before the policy does.

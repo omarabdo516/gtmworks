@@ -22,7 +22,7 @@ import { answerAgentAccess, decideAgentRule } from './skill-actions';
 import { OwnerRequestCard } from './agent-request-card';
 import { ChangeBoardCard } from './agent-change-card';
 import { AgentKeyWaitCard } from './agent-key-wait-card';
-import { Decision } from './decision';
+import { ReviewDecision } from '@/app/review-decision';
 import { Avatar, type WorkActivity, type WorkAttachment, type WorkMember } from '@/lib/work-activity';
 import { workDate as date } from '@/lib/work-date.mjs';
 import { sortWorkCards } from '@/lib/work-sort.mjs';
@@ -39,7 +39,7 @@ import { CardDescription, type TickResult, type TickTodo } from '@/app/card-desc
 import { todoProgress } from '@/lib/card-description.mjs';
 import '@/app/board.css';
 type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string};
-export type Card={id:number,title:string,stage_id:number,status:string,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,assignee_agent?:string|null,assignee_person?:string|null,kept_agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null,description?:string|null,description_version?:number|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+export type Card={id:number,title:string,stage_id:number,status:string,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,assignee_agent?:string|null,assignee_person?:string|null,kept_agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null,description?:string|null,description_version?:number|null,approved_version?:number|null,approved_at?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // workAction is the board's server action (work-actions.ts), handed in so this client file never imports the server module.
 export type WorkAction=(form:FormData)=>Promise<void>;
 // "Undo" on a move (#168): the server's answer, and nothing else, decides whether the Card went back. The shape lives here
@@ -60,7 +60,8 @@ export type IdeaResult={card:number}|{failed:true};
 function newestQuestion() { let newest=0; return {ask:()=>++newest,drop:()=>{ newest++; },newest:(asked:number)=>asked===newest}; }
 type ArchiveCards=(company:string,intent:ArchiveIntent|'undo',cards:number[],version?:string)=>Promise<ArchiveAnswer<number>>;
 export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
-export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
+export type OpenReview={card_id:number,version_id:number|null,asked_by:string|null,asked_at:string};
+export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,reviews?:OpenReview[],placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
 // The board's archive list (#670, #705): the server's first page, how many archived Cards the reader sees (null when it
 // could not be read), and an archived Card the address names that the page does not hold, which opens over the board.
 type ArchivedCards={first:ArchivedPage<Card>|null,total:number|null,named:Card[]};
@@ -338,8 +339,10 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   toast(t('boardMoved',columnName(column)),{action:{label:t('boardUndo'),run:()=>undo(c.id)}}); router.refresh(); return true; };
  // The one way into review until the review is a decision of its own (#681): the Card goes to the review stage, as
  // the Card page's stage list sent it there, and its status follows.
- const reviewStage=p.stages.find(s=>s.board_column==='waiting')?.id;
- const intoReview=(c:Card)=>reviewStage&&p.canCreate?()=>void workAction(formOf('move',c,{stage:String(reviewStage)})).then(()=>router.refresh()):undefined;
+ // A Card's latest Version, the one a review is asked on (#681), and its open review.
+ const latestVersion=new Map<number,number>(); for(const v of p.versions) { const card=p.creatives.find(x=>x.id===v.creative_id)?.card_id; if(card!=null&&v.id>(latestVersion.get(card)??0)) latestVersion.set(card,v.id); }
+ const reviewOf=(c:Card)=>p.reviews?.find(r=>r.card_id===c.id);
+ const intoReview=(c:Card)=>p.canCreate&&!c.archived_at&&c.status!=='waiting'?()=>void workAction(formOf('review',c)).then(()=>router.refresh()):undefined;
  const windowCallout=(c:Card)=>{ const chat=chatOf(c); const mine=p.approvableIds.includes(c.id);
   if(c.wait) return <section className="cw-call cw-call--wait" data-card-section="question"><div className="cw-call__head"><Sym kind="question"/><p className="cw-call__t od-fill" dir="auto">{c.wait.title}</p>
    {chat?.mine&&opened?.made.from==='chat'&&<Link className="btn btn--secondary btn--sm" href={opened.made.href}><ShellIcon name="chat"/><span>{t('cwAnswerInChat')}</span></Link>}</div>
@@ -347,9 +350,10 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   // A Card sent back keeps the reason on it until the review is a decision of its own (#681).
   if(c.status!=='waiting') return c.rejection_reason?<section className="cw-call" data-card-section="sent-back"><div className="cw-call__head"><span className="cw-call__ic" aria-hidden="true"><ShellIcon name="sendBack"/></span><p className="cw-call__t od-fill">{t('rejectionReason')}</p></div>
    <p className="cw-call__s" dir="auto">{c.rejection_reason}</p></section>:null;
-  return <section className="cw-call cw-call--wait" data-card-section="review"><div className="cw-call__head"><Sym kind="review"/><p className="cw-call__t od-fill">{mine?t('boardWaitingYou'):p.canCreate?waitingOn(c.next_actor):t('boardWaitingTeam')}</p></div>
-   {c.rejection_reason&&<p className="cw-call__s" dir="auto">{c.rejection_reason}</p>}
-   {mine&&<Decision slug={p.slug} company={p.company} card={c.id} workAction={workAction}/>}</section>; };
+  // In review (#681): the Version it is decided on, and Approve or Send back for each Owner and Manager who sees it.
+  const review=reviewOf(c); const version=opened?.versions.find(v=>v.id===review?.version_id);
+  return <section className="cw-call cw-call--wait" data-card-section="review"><div className="cw-call__head"><Sym kind="review"/><p className="cw-call__t od-fill">{mine?t('boardWaitingYou'):p.canCreate?t('cwWaitingDecider'):t('boardWaitingTeam')}{version&&<> <span className="cw-call__v num">{t('cwVersionN',String(version.n))}</span></>}</p></div>
+   {mine&&!c.archived_at&&<ReviewDecision slug={p.slug} company={p.company} card={c.id} version={review?.version_id??null} send={workAction}/>}</section>; };
  // The description's place, until the description is the Card's own Markdown (#679, #680): what the previous Card page
  // held (its marketing fields, its checklist, its labels), read as it is. #684 moves them into the description.
  const windowDescription=(c:Card)=>{ const fields=([['hook',t('hook')],['offering',t('offering')],['segment',t('segment')],['goal',t('goal')],['channel',t('channel')],['format',t('format')],['caption',t('caption')]] as const).filter(([key])=>String(c[key]||'').trim());
@@ -371,7 +375,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   const assigneeAgents=[...companyAgents.map(a=>({id:a.id,name:a.name})),...(own&&!companyAgents.some(a=>a.id===own.id)?[{id:own.id,name:own.name}]:[])];
   return <CardWindow key={c.id} slug={p.slug} company={p.company} me={p.me} data={data} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
    card={{id:c.id,title:c.title,status:columnOf({...c,wait:null}),go_live:c.go_live,project_id:c.project_id,assignee:assigneeOf(c),archived:archivedOf(c)}}
-   symbol={cardSymbol(c,{me:p.me,working:data.working})} columnName={columnName}
+   symbol={cardSymbol({...c,latest_version:latestVersion.get(c.id)??null},{me:p.me,working:data.working})} columnName={columnName}
    assignees={{agents:assigneeAgents,people:assignable.map(m=>({id:m.person_id,name:m.people?.name||''}))}}
    people={p.members.filter(member=>member.person_id!==p.me&&member.people?.name).map(member=>({id:member.person_id,name:member.people!.name,role:member.role}))} agents={companyAgents}
    projects={p.projects} send={workAction} save={p.saveCard??(async()=>({error:t('couldNotSaveTheChangeCheckPermissionsAnd')}))} move={moveTo(c)}

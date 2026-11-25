@@ -147,82 +147,74 @@ test('a design file over 1MB with an Arabic name is added to a Card and uploaded
  await expect(versions.getByRole('link',{name:'Open version 2: تصميم.png'})).toBeVisible();
 });
 
-test('approval queue, rejection and ordered steps',async({page})=>{
- await signIn(page,'omar@example.com','/c/rs-learning/settings/work');
- const settings=page.locator('.approval-settings');
- await settings.getByLabel("New step name").fill('مراجعة إضافية للاختبار');
- await settings.getByLabel("New approver").selectOption('role:owner');
- await settings.getByRole('button',{name:"Add step"}).click();
- await expect(settings.locator('input[value="مراجعة إضافية للاختبار"]')).toBeVisible();
- await page.goto('/c/rs-learning/work/board');
- await page.getByRole('button',{name:"+ New card"}).click();
- const title=`بطاقة موافقة ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(title);
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- const cardUrl=page.url();
- const cardId=Number(cardUrl.split('/').pop());
- // The Card's old fields are read in the place of its description until #684 moves them into it (#678).
- query(`update public.work_cards set caption='نص مخصص للمراجعة',offering='عرض مخصص للمراجعة' where id=${cardId}`);
- await page.reload();
+test('a review: an Owner approves it into Planned with its date ahead and into Done with none, and sends one back with a reason the team reads',async({page,browser})=>{
+ // #681: one review, decided by any Owner or Manager who sees the Card, the first answer closing it; approval steps are gone.
+ await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const card=page.getByRole('dialog');
- // The way into review until the review is a decision of its own (#681): the status menu's "Send for review".
- await card.getByRole('button',{name:/^Status:/}).click();
- await card.getByRole('menuitemradio',{name:'Send for review'}).click();
- await expect(card.getByRole('button',{name:/^Status: Waiting on you/})).toBeVisible();
- // "Waiting on you" (ADR 0013) holds the card; the sidebar counts the cards waiting for this approver.
- await page.goto('/c/rs-learning/approvals');
  const waiting=page.locator('.col[data-column="waiting"]');
+ const make=async(name:string)=>{
+  await page.goto('/c/rs-learning/work/board');
+  await page.getByRole('button',{name:"+ New card"}).click();
+  await page.getByLabel('Message',{exact:true}).fill(name);
+  await page.getByRole('button',{name:"Create card"}).click();
+  await expect(page).toHaveURL(/\/work\/board\/\d+$/);
+  return Number(page.url().split('/').pop());
+ };
+ const sendForReview=async()=>{
+  await card.getByRole('button',{name:/^Status:/}).click();
+  await card.getByRole('menuitemradio',{name:'Send for review'}).click();
+  await expect(card.getByRole('button',{name:/^Status: Waiting on you/})).toBeVisible();
+ };
+ const title=`بطاقة موافقة ${Date.now()}`;
+ const cardId=await make(title);
+ // The Card's old fields are read in the place of its description until #684 moves them into it (#678).
+ query(`update public.work_cards set caption='نص مخصص للمراجعة',offering='عرض مخصص للمراجعة',go_live=now()+interval '10 days' where id=${cardId}`);
+ await page.reload();
+ await sendForReview();
+ // "Waiting on you" (ADR 0013) holds the Card for every Owner and Manager who sees it; the sidebar counts it.
+ await page.goto('/c/rs-learning/approvals');
  const queued=waiting.locator('.approval-card').filter({hasText:title});
  await expect(queued).toBeVisible();
  const count=await waiting.locator('.approval-card').count();
  await expect(page.locator('.sidebar .sb-count[href$="/approvals"]')).toHaveText(String(count));
- await expect(queued.getByRole('link',{name:title})).toHaveAttribute('href',new URL(cardUrl).pathname);
- // The decision is made inside the card, beside the caption and the brief it is about.
+ // The decision is made inside the Card, beside the brief it is about.
  await queued.getByRole('link',{name:title}).click();
  await expect(card.locator('[data-slot="description"]')).toContainText('نص مخصص للمراجعة');
- await expect(card.locator('[data-slot="description"]')).toContainText('عرض مخصص للمراجعة');
  const review=card.locator('[data-card-section="review"]');
- await Promise.all([page.waitForResponse(response=>response.request().method()==='POST' && response.url().includes('/work/board/')), review.getByRole('button',{name:"Approve"}).click()]);
- // The second step is also Omar's: the card is still waiting on him.
- await page.goto('/c/rs-learning/approvals');
- await expect(waiting.locator('.approval-card').filter({hasText:title})).toBeVisible();
- await waiting.locator('.approval-card').filter({hasText:title}).getByRole('link',{name:title}).click();
- await card.locator('[data-card-section="review"]').getByRole('button',{name:"Approve"}).click();
+ await review.getByRole('button',{name:"Approve"}).click();
+ // Its publishing date is ahead: Planned, with the approved symbol; the review is closed for everyone.
  await expect(card.getByRole('button',{name:/^Status: Planned/})).toBeVisible();
+ await expect(card.getByRole('img',{name:'Approved'})).toBeVisible();
+ expect(JSON.parse(query(`select decision from public.work_reviews where card_id=${cardId}`))).toEqual([{decision:'approved'}]);
  await page.goto('/c/rs-learning/approvals');
  await expect(waiting.locator('.kcard').filter({hasText:title})).toHaveCount(0);
- await page.goto(cardUrl);
- await expect(card.getByRole('button',{name:/^Status: Planned/})).toBeVisible();
- expect(JSON.parse(query(`select s.name from public.work_cards w join public.work_stages s on s.id=w.stage_id where w.id=${cardId}`))).toEqual([{name:'معتمد'}]);
- await page.goto('/c/rs-learning/work/board');
- await page.getByRole('button',{name:"+ New card"}).click();
+
+ // A Card with no publishing date, approved by the Manager, is Done.
+ const undated=`بطاقة بلا تاريخ ${Date.now()}`;
+ const undatedId=await make(undated);
+ await sendForReview();
+ const manager=await (await browser.newContext()).newPage();
+ await signIn(manager,'manager@example.com',`/c/rs-learning/work/board?card=${undatedId}`);
+ await manager.getByRole('dialog').locator('[data-card-section="review"]').getByRole('button',{name:"Approve"}).click();
+ await expect(manager.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
+
+ // Sent back with a reason: In progress, and the reason is a comment the team reads.
  const rejected=`بطاقة رفض ${Date.now()}`;
- await page.getByLabel('Message',{exact:true}).fill(rejected);
- await page.getByRole('button',{name:"Create card"}).click();
- await expect(page).toHaveURL(/\/work\/board\/\d+$/);
- const rejectedUrl=page.url();
- await card.getByRole('button',{name:/^Status:/}).click();
- await card.getByRole('menuitemradio',{name:'Send for review'}).click();
- await expect(card.getByRole('button',{name:/^Status: Waiting on you/})).toBeVisible();
- await page.goto('/c/rs-learning/approvals');
- const row=waiting.locator('.approval-card').filter({hasText:rejected});
- await row.getByRole('link',{name:rejected}).click();
+ const rejectedId=await make(rejected);
+ await sendForReview();
+ await page.goto(`/c/rs-learning/work/board?card=${rejectedId}`);
  const decision=card.locator('[data-card-section="review"]');
- await decision.getByText("Reject with a reason").click();
- await decision.getByLabel("Rejection reason").fill('يرجى تعديل التصميم');
- await decision.getByLabel("Design needs work",{exact:true}).check();
- await decision.getByRole('button',{name:"Confirm rejection"}).click();
- await expect(card.locator('[data-card-section="sent-back"]')).toContainText('يرجى تعديل التصميم');
- await page.goto('/c/rs-learning/approvals');
- await expect(row).toHaveCount(0);
- await page.goto(rejectedUrl);
+ await decision.getByRole('button',{name:"Send back"}).click();
+ // The reason is required.
+ await decision.getByRole('button',{name:"Send back"}).click();
+ await expect(decision.getByText('Write the reason so whoever works on the card knows what to change.')).toBeVisible();
+ await decision.getByLabel('The reason').fill('يرجى تعديل التصميم');
+ await decision.getByRole('button',{name:"Send back"}).click();
  await expect(card.getByRole('button',{name:/^Status: In progress/})).toBeVisible();
  await expect(card.locator('[data-card-section="sent-back"]')).toContainText('يرجى تعديل التصميم');
- await page.goto('/c/rs-learning/settings/work');
- const step=page.locator('.approval-settings form').filter({has:page.locator('input[value="مراجعة إضافية للاختبار"]')});
- await step.getByRole('button',{name:"Delete"}).click();
- await expect(step).toHaveCount(0);
+ await expect(card.locator('.cw-feed')).toContainText('يرجى تعديل التصميم');
+ await page.goto('/c/rs-learning/approvals');
+ await expect(waiting.locator('.approval-card').filter({hasText:rejected})).toHaveCount(0);
 });
 
 // The external-agent API is gone (#341): its routes answer not found, with or without a key.

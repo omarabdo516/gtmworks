@@ -70,6 +70,11 @@
 .gw .cw-call__t { margin: 0; font-size: var(--gw-fs-base); font-weight: 600; line-height: 1.55; overflow-wrap: anywhere; }
 .gw .cw-call__s { margin: 0; font-size: var(--gw-fs-sm); line-height: 1.6; color: var(--gw-text-2); }
 .gw .cw-call .btn .gw-icon { width: 14px; height: 14px; }
+.gw .cw-call__acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.gw .cw-back { display: grid; gap: var(--s3); }
+.gw .cw-ans { display: grid; gap: 6px; }
+.gw .cw-ans .set-textarea { min-height: 64px; }
+.gw .cw-call__v { color: var(--gw-text-3); font-weight: 400; }
 
 /* sections: the description's place and the Result */
 .gw .cw-sec { display: grid; gap: var(--s2); }

@@ -11,7 +11,9 @@ const rs = "'10000000-0000-0000-0000-000000000001'";
 const sql = `begin;
 create extension if not exists pgtap with schema extensions;
 select plan(16);
--- The table as the previous release had it: nothing of this migration exists yet.
+-- The table as the previous release had it: nothing of this migration exists yet, nor the review's bridge built on the
+-- status since (#681).
+drop trigger work_cards_review_from_steps on public.work_cards;
 drop trigger align_card_status on public.work_cards;
 drop function public.align_card_status();
 drop function public.card_status_stage(uuid,text,bigint);

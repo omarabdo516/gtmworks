@@ -18,7 +18,7 @@ select json_build_object(
   and position('''question''' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and position('agent_request' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
   and position('waiting_items' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
-  and position('approval_holds' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0
+  and position('work_reviews' in pg_get_functiondef('public.waiting_list(uuid)'::regprocedure))>0 -- the reviews (#681) in place of approval steps
   and not (select prosecdef from pg_proc where oid='public.waiting_list(uuid)'::regprocedure),
  'writers_place_rows',(select bool_and(position('log_chat_event' in pg_get_functiondef(f))>0 and position('company_log' in pg_get_functiondef(f))=0)
   from unnest(array['public.agent_show_card(uuid,text,text,text,text,jsonb)','public.settle_question(bigint,text)','public.mark_hand_done(uuid,uuid,bigint)']::regprocedure[]) f),

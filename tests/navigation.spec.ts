@@ -54,7 +54,7 @@ test.afterAll(async ({ browser }) => {
       // The waiting column lists the card; its decision is taken inside the card (#16).
       await card.getByRole('link', { name: created.title }).click();
       await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
-      await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Planned/})).toBeVisible();
+      await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
       await page.goto('/c/rs-learning/approvals');
       await expect(card).toHaveCount(0);
     }
@@ -248,7 +248,7 @@ test('own comments, moves and approvals invalidate prepared pages immediately', 
   await expect(queued).toBeVisible();
   await queued.getByRole('link', { name: title }).click();
   await page.locator('[data-card-section="review"]').getByRole('button', { name: "Approve", exact: true }).click();
-  await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Planned/})).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Done/})).toBeVisible();
   await openNavigation(page);
   await page.locator('.sidebar .sb-count[href$="/approvals"]').click();
   await expect(queued).toHaveCount(0);

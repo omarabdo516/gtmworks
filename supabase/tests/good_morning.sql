@@ -17,6 +17,10 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name) va
  ('c1000000-0000-0000-0000-000000000181','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','e1000000-0000-0000-0000-000000000181','Lead');
 insert into public.waiting_items(company_id,person_id,kind,title,conversation_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000005','question','Which offer goes first?','c1000000-0000-0000-0000-000000000181');
+-- The seed's Card in review waits on every Owner and Manager who sees it (#681); assigned to Ads here, it waits on the
+-- Owner alone, so the Manager still has nothing of their own.
+update public.work_cards set assignee_agent='e1000000-0000-0000-0000-000000000182',agent_id='e1000000-0000-0000-0000-000000000182',assignee_person=null
+ where company_id='10000000-0000-0000-0000-000000000001' and status='waiting';
 set local session_replication_role=origin;
 
 -- The worker records a run (as the service role): the Owner sees Ads's result, the Contributor 3 works with Ads, and

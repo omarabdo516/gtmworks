@@ -69,8 +69,8 @@ insert into waiting select 'viewer',coalesce(string_agg(kind,',' order by kind) 
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000005',true);
 insert into waiting select 'contributor Ads is hidden from',coalesce(string_agg(kind,',' order by kind) filter (where card_id=current_setting('test.card')::bigint),''),count(*) filter (where card_id=current_setting('test.untied')::bigint) from public.waiting_list('10000000-0000-0000-0000-000000000001');
 select results_eq($$select person,on_card,untied from waiting order by person$$,
- $$values ('contributor Ads is hidden from'::text,''::text,1),('contributor who sees Ads','question',0),('manager','approval,question',0),('owner','question',0),('viewer','question',0)$$,
- 'moved to review, the Card waits on the Manager who holds its step and on each Member asked about it who sees Ads; the Contributor Ads is hidden from gets none of it, and still has their item on an untied Card');
+ $$values ('contributor Ads is hidden from'::text,''::text,1),('contributor who sees Ads','question',0),('manager','approval,question',0),('owner','approval,question',0),('viewer','question',0)$$,
+ 'moved to review, the Card waits on every Owner and Manager who sees Ads (#681) and on each Member asked about it who sees Ads; the Contributor Ads is hidden from gets none of it, and still has their item on an untied Card');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select public.set_agent_visible('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a2280000-0000-0000-0000-000000000001',false);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);

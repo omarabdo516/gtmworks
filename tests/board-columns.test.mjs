@@ -195,4 +195,12 @@ test('a Card shows one state: its chat\'s question, a review, an Agent at work, 
  assert.equal(cardSymbol({ status: 'live', assignee_person: me }, { me }), '');
  assert.equal(cardSymbol({ status: 'done', assignee_person: me }, { me }), '');
  assert.equal(cardSymbol({ status: 'planned', assignee_person: 'p-2' }, { me }), '');
+ // #681: Planned on its approved Version shows it approved, until a later Version needs its own Approval.
+ const at = '2026-11-25T10:00:00Z';
+ assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: 7, latest_version: 7, assignee_person: me }, { me }), 'approved');
+ assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: 7, latest_version: 9 }, { me }), '');
+ assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: null, latest_version: null }, { me }), 'approved');
+ assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: null, latest_version: 3 }, { me }), '');
+ assert.equal(cardSymbol({ status: 'planned', approved_version: null, latest_version: null }, { me }), '');
+ assert.equal(cardSymbol({ status: 'done', approved_at: at, approved_version: 7, latest_version: 7 }, { me }), '');
 });
