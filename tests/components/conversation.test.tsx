@@ -108,6 +108,47 @@ for (const [language, line] of [['en', 'The agent engine did not take that model
  expect(later.container.querySelector('.composer-error')).toBeNull();
 });
 
+// #767: a waiting Conversation's poll sends the stamp it last read and keeps its record when nothing changed; a hidden tab
+// asks nothing until it is shown, then asks at once; a signed-out reader stops asking, and a failing read asks more slowly.
+const setHidden = (hidden: boolean) => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' }); document.dispatchEvent(new Event('visibilitychange')); };
+test('the poll asks only whether anything changed, stops in a hidden tab and reads at once when shown again', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ onTestFinished(() => { setHidden(false); vi.useRealTimers(); });
+ const waiting = { ...talk([sent], { pending: true }), stamp: 'a'.repeat(32) };
+ const asks = vi.fn(async (_url: string) => Response.json({ unchanged: true, stamp: 'a'.repeat(32) }));
+ stubFetch(asks);
+ const screen = await render(view(waiting));
+ await vi.advanceTimersByTimeAsync(500);
+ expect(asks).toHaveBeenCalledTimes(1);
+ expect(asks.mock.calls[0][0]).toBe(`/api/conversations?company=co-1&conversation=cv-2&since=${'a'.repeat(32)}`);
+ expect(screen.container.querySelector('.turn--user')?.textContent, 'nothing changed, so the record shown stays').toContain('Draft the long launch plan');
+ setHidden(true);
+ await vi.advanceTimersByTimeAsync(10000);
+ expect(asks, 'a hidden tab asks nothing').toHaveBeenCalledTimes(1);
+ setHidden(false);
+ await vi.advanceTimersByTimeAsync(0);
+ expect(asks, 'shown again, it asks at once').toHaveBeenCalledTimes(2);
+});
+
+test('a signed-out reader stops asking, and a failing read asks again more slowly', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ onTestFinished(() => { vi.useRealTimers(); });
+ const signedOut = vi.fn(async () => Response.json({ error: 'conversationNotFound' }, { status: 401 }));
+ stubFetch(signedOut);
+ await render(view(talk([sent], { pending: true })));
+ await vi.advanceTimersByTimeAsync(20000);
+ expect(signedOut).toHaveBeenCalledTimes(1);
+ const failing = vi.fn(async () => Response.json({ error: 'conversationFailed' }, { status: 503 }));
+ stubFetch(failing);
+ await render(view(talk([sent], { pending: true })));
+ await vi.advanceTimersByTimeAsync(500);
+ expect(failing).toHaveBeenCalledTimes(1);
+ await vi.advanceTimersByTimeAsync(2999);
+ expect(failing, 'the second read waits 3 s, not 1.5 s').toHaveBeenCalledTimes(1);
+ await vi.advanceTimersByTimeAsync(1);
+ expect(failing).toHaveBeenCalledTimes(2);
+});
+
 // #766 (ADR 0030): a Conversation is drawn from its record at once, and each reply's steps are their own read after it:
 // they fill in under their reply when that read lands, with no second rise-in, and a read that fails changes nothing.
 test('each reply\'s steps arrive after the messages, under their own reply, and a failed read leaves the replies as they are', async () => {

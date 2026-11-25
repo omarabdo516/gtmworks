@@ -7,7 +7,7 @@ import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
 import Shell, { sidebarReads } from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
-import ConversationView, { ConversationLoaded } from './conversation';
+import ConversationView, { ConversationLoaded, ConversationNotRead } from './conversation';
 import { OpenedHere } from '@/app/sidebar-live';
 import { conversationColumns, faceOf, uuid } from '@/lib/conversations';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
@@ -101,5 +101,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
 async function Loaded({record,team}:{record:ReturnType<typeof conversationRecord>,team:boolean}) {
  // Everything outside this boundary is drawn by now, so the page's first bytes leave next.
  markOpen('firstByte');
- return <ConversationLoaded initial={await record} team={team}/>;
+ // A record that could not be read draws its line with "Try again", never an empty Conversation (#768).
+ const read=await record.catch(()=>null);
+ return read?<ConversationLoaded initial={read} team={team}/>:<ConversationNotRead/>;
 }

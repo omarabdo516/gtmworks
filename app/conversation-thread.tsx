@@ -99,34 +99,58 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {list:sendingList,start:sending,reading}=useSending({company,conversation:id});
  const {messages,pending}=record;
- // The sidebar's Agents and the board come from the server render: an Agent Lead makes while the record is asked for
- // again, or a Card's new column, is only on the page once the server parts are drawn again, so they show without a
- // reload.
+ // What lives outside the Conversation comes from the server render: an Agent made in it (the sidebar's Agents) and its
+ // Card's column on the board behind a Card's sheet are drawn again when they change, and nothing else is (#767):
+ // sending, storing and a reply landing never redraw the page.
  const router=useRouter();
  const made=useRef(madeCount(initial.messages));
- // A queued turn keeps `pending` true from one run to the next; each run's start and reply add a message.
- const runKey=`${pending}:${messages.length}`; const drawnRun=useRef(runKey);
- useEffect(()=>{ if(drawnRun.current===runKey) return; drawnRun.current=runKey; router.refresh(); },[runKey,router]);
+ const column=record.board?.column; const drawnColumn=useRef(column);
+ useEffect(()=>{ if(drawnColumn.current===column) return; drawnColumn.current=column; router.refresh(); },[column,router]);
  const asking=pending||requestWaits(messages)||record.handover===true;
+ // The poll asks only whether the Conversation changed since its last read (a stamp from the database, #767), and its
+ // answer is the record only when it did. A hidden tab asks nothing until it is shown again, then asks at once; a read
+ // that fails asks again more slowly, up to thirty seconds apart, and a signed-out reader stops asking. After a Run's
+ // events end (`hurry`) it asks every 300 ms for a few seconds, so the reply is drawn within a second of its Run's end.
+ const stamp=useRef(initial.stamp??null); const latest=useRef(record); latest.current=record;
+ // Three reads in a row that failed say so under the transcript (#768); what is drawn stays, and the next read that
+ // lands takes the line away.
+ const [unread,setUnread]=useState(false);
+ const hurry=useRef(0);
+ const read=async(since:string|null)=>{
+  const landed=reading();
+  const response=await fetch(`/api/conversations?company=${company}&conversation=${id}${since?`&since=${since}`:''}`,{cache:'no-store'});
+  if(!response.ok) { await response.arrayBuffer().catch(()=>{}); return {status:response.status}; }
+  const result=await response.json() as ConversationRecord|{unchanged:true,stamp:string};
+  // Nothing changed since the record shown was read, so it already holds every message answered before this read began.
+  if('unchanged' in result) { landed(); return {status:200,record:latest.current}; }
+  stamp.current=result.stamp??null; setRecord(result); landed();
+  const now=madeCount(result.messages); if(now>made.current) router.refresh(); made.current=now;
+  return {status:200,record:result};
+ };
  useEffect(()=>{
   if(!asking) return;
-  let stopped=false; let every=1500;
+  let stopped=false; let failures=0; let timer:ReturnType<typeof setTimeout>|undefined;
   const poll=async()=>{
+   if(stopped||document.visibilityState==='hidden') return;
+   let every=1500;
    try {
-    const landed=reading();
-    const response=await fetch(`/api/conversations?company=${company}&conversation=${id}`,{cache:'no-store'});
-    if(response.ok&&!stopped) {
-     const result=await response.json() as ConversationRecord; setRecord(result); landed();
-     const now=madeCount(result.messages); if(now>made.current) router.refresh(); made.current=now;
-     if(!result.pending&&!requestWaits(result.messages)&&!result.handover) return;
-     every=result.pending||result.handover?1500:5000;
-    }
-   } catch { /* Hermes or the network is down: ask again. */ }
+    const answer=await read(stamp.current);
+    if(stopped) return;
+    if(answer.status===401) { stopped=true; return; }
+    if(!answer.record) throw new Error(String(answer.status));
+    failures=0; setUnread(false);
+    const now=answer.record;
+    if(!now.pending&&!requestWaits(now.messages)&&!now.handover) return;
+    every=now.pending||now.handover?1500:5000;
+   } catch { failures++; every=Math.min(1500*2**failures,30000); if(failures>=3) setUnread(true); }
+   if(hurry.current>0&&failures===0) { hurry.current--; every=300; }
    if(!stopped) timer=setTimeout(poll,every);
   };
-  let timer=setTimeout(poll,500);
-  return ()=>{stopped=true;clearTimeout(timer);};
- },[asking,sent,company,id,router,reading]);
+  const shown=()=>{ if(document.visibilityState==='visible'&&!stopped) { clearTimeout(timer); void poll(); } };
+  document.addEventListener('visibilitychange',shown);
+  timer=setTimeout(poll,500);
+  return ()=>{stopped=true;clearTimeout(timer);document.removeEventListener('visibilitychange',shown);};
+ },[asking,sent,company,id]); // eslint-disable-line react-hooks/exhaustive-deps
  // The Card may move on the board in another window: coming back to this one reads its column again.
  const tied=!!record.board;
  useEffect(()=>{
@@ -142,10 +166,11 @@ export function useConversationRecord({company,initial}:{company:string,initial:
   return ()=>window.removeEventListener('focus',again);
  },[tied,company,id]);
  const asked=()=>{ setRecord(current=>({...current,pending:true})); setSent(value=>value+1); };
- // A press that changed nothing the Agent does (#167) reads the record once, which keeps it read while its answer waits.
+ // A press that changed nothing the Agent does (#167), or a Run's events that ended (#763), read the record once now; the
+ // poll then asks quickly for a moment, until the reply is in.
  const reread=async()=>{
-  try { const landed=reading(); const response=await fetch(`/api/conversations?company=${company}&conversation=${id}`,{cache:'no-store'}); if(response.ok) { setRecord(await response.json() as ConversationRecord); landed(); } }
-  catch { /* The next send or read brings it. */ }
+  hurry.current=10;
+  try { const answer=await read(null); if(answer.record) setUnread(false); } catch { /* The next send or read brings it. */ }
  };
  // Each reply's steps and the token use are their own read (ADR 0030, #766), after the messages are drawn, and again
  // when a new reply lands: a read that fails leaves the replies as they are, with no line about it.
@@ -158,7 +183,7 @@ export function useConversationRecord({company,initial}:{company:string,initial:
    .then(async response=>{ if(response.ok) setSteps(await response.json() as ConversationSteps); else await response.arrayBuffer(); }).catch(()=>{});
   return ()=>stopped.abort();
  },[replies,company,id]);
- const drawn=useMemo(()=>withSteps(withSending(record,sendingList),steps),[record,sendingList,steps]);
+ const drawn=useMemo(()=>{ const shown=withSteps(withSending(record,sendingList),steps); return unread?{...shown,unread:true as const}:shown; },[record,sendingList,steps,unread]);
  return {record:drawn,asked,reread,sending};
 }
 // The record with each reply's steps under it and the Conversation's token use, once read; a reply the read does not
@@ -357,6 +382,8 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}
    {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
   {working&&<WorkingLine view={live} working={record.workingFor?cb('conversationWorkingForPerson',record.workingFor):undefined} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>}
+  {/* The record could not be read three times in a row (#768): what was drawn stays above, and Try again reads it now. */}
+  {record.unread&&<p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')}{reread&&<> <button type="button" className="link-btn" onClick={()=>void reread()}>{c('conversationTryAgain')}</button></>}</p>}
   {failed&&(modelCause
    // The Company has no model at all (#422), or a model error a retry cannot fix (#457): sending again cannot work, so
    // the line says its cause and where the Owner fixes it.

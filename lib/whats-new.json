@@ -1,5 +1,11 @@
 [
  {
+  "issue": 767,
+  "date": "2026-11-25",
+  "en": { "title": "A Conversation stays still while you work", "body": "Sending a message or getting a reply no longer redraws the whole page, and a Conversation open in a background tab stops asking the server until you come back to it." },
+  "ar": { "title": "المحادثة بتفضل ثابتة وانت شغال", "body": "بعت رسالة أو وصول رد ما بقاش بيرسم الصفحة كلها من الأول، والمحادثة المفتوحة في تاب مش قدامك بتبطّل تسأل السيرفر لحد ما ترجعلها." }
+ },
+ {
   "issue": 766,
   "date": "2026-11-25",
   "en": { "title": "Conversations open at once", "body": "A Conversation opens with its messages straight away, even when the agent engine is busy; the tools each reply used appear under it a moment later." },

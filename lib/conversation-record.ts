@@ -42,6 +42,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
  type Face={id:string,connection_id:string,name:string};
  type ChangeRow={id:number,run_id:string,change:ChangeProposalView['change'],setting:string|null,value:unknown,approved_value?:unknown,reason:string,state:ChangeProposalView['state']|'applying',answered_at:string|null,answer:string|null,maybe_applied?:boolean,created_at:string,answerer:{name:string}|null,agent:Face|null,by:Face|null};
  type AccessRow={id:number,run_id:string,state:'offered'|'asked'|'dismissed'|'opened'|'declined',named_first:string,named_name:string,named_role:string,pressed_at:string|null,answered_at:string|null,answerer:string,opened:Face|null,available:boolean,created_at:string};
+ // The stamp first (#767): read before the rows, so a change made while they are read gives the next poll a new stamp.
+ const stamped=db.rpc('conversation_stamp',{conversation}).then(({data})=>typeof data==='string'?data:null,()=>null);
  const [{ends,resets,messages,queued,requestRows,madeRows,changeRows,moving},handedRows,notes,replyRows,rows,files,{data:working},{data:me},card,accessRows]=await Promise.all([
   db.from('conversations').select(`conversation_run_ends(run_id,outcome),conversation_run_resets(run_id,resets_at),conversation_messages(${messageColumns}),conversation_queued_turns(${queuedColumns}),`
    +'lead_agent_requests(id,run_id,call_id,agent_name,job,apps,asked_with,state,answered_at,reason,created_at,answerer:people!answered_by(name),asker:people!asked_by(name)),'
@@ -54,7 +56,7 @@ export async function conversationRecord(db:Database,person:string,company:strin
    .eq('id',conversation).order('id',{referencedTable:'conversation_messages'}).order('queued_at',{referencedTable:'conversation_queued_turns'})
    .order('id',{referencedTable:'lead_agent_requests'}).order('created_at',{referencedTable:'lead_made_agents'})
    .order('id',{referencedTable:'agent_change_proposals'}).maybeSingle()
-   .then(({data})=>{ const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_run_resets:{run_id:string,resets_at:string}[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:{id:number,state:string}[],agent_change_proposals:ChangeRow[]}|null;
+   .then(({data,error})=>{ if(error) throw new ConversationUnread(); const read=data as unknown as {conversation_run_ends:RunEnd[],conversation_run_resets:{run_id:string,resets_at:string}[],conversation_messages:Message[],conversation_queued_turns:QueuedTurn[],lead_agent_requests:RequestRow[],lead_made_agents:MadeRow[],agent_handovers:{id:number,state:string}[],agent_change_proposals:ChangeRow[]}|null;
     return {ends:read?.conversation_run_ends||[],resets:read?.conversation_run_resets||[],messages:read?.conversation_messages||[],queued:read?.conversation_queued_turns||[],requestRows:read?.lead_agent_requests||[],madeRows:read?.lead_made_agents||[],changeRows:read?.agent_change_proposals||[],moving:(read?.agent_handovers||[]).some(row=>row.state!=='done'&&row.state!=='failed')}; }),
   // The handovers of this chat (#317, #475), both Agents named, oldest first, to draw them; whether one is still moving
   // is read with the messages above.
@@ -161,6 +163,8 @@ export async function conversationRecord(db:Database,person:string,company:strin
   :undefined;
  return {
   conversation:{id:found.id,agent_id:found.agent_id,agent_name:found.agent_name,face:faceOf(found)},
+  // What the poll sends back to ask whether anything changed since this read (#767); left out when it could not be read.
+  ...await stamped.then(stamp=>stamp?{stamp}:{}),
   ...(found.good_morning_day?{morningDay:found.good_morning_day}:{}),
   messages:withBoardNote(withTeamWork(withHandedOn(withHandoverAnswers(withDecisions(shown(messages,ends,cards,found.agent_name,saved,[],files),decisions,found.agent_name),answers),handedOn),notes,queued,me?.name||'',files,waiting(messages,ends,commandRuns).length>0),firstReply)
    .map(message=>message.agent_id&&faces.has(message.agent_id)?{...message,face:faces.get(message.agent_id)}:message),
@@ -182,7 +186,9 @@ export async function conversationRecord(db:Database,person:string,company:strin
   ...(board?{board}:{}),
  };
 }
-export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>;
+export type ConversationRecord=Awaited<ReturnType<typeof conversationRecord>>&{unread?:true};
+// The Conversation's own rows could not be read (#768): a state of its own, never an empty Conversation.
+export class ConversationUnread extends Error { constructor() { super('conversationUnread'); this.name='ConversationUnread'; } }
 
 // Each reply's steps and the Conversation's token use, read from its Agent's Hermes session (#346, #347) on their own
 // request, after the messages are drawn (ADR 0030, #766): by the id of the reply they go under. Null when the session

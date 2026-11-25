@@ -118,6 +118,13 @@ const ChatView=createContext<View|null>(null);
 const useView=()=>use(ChatView)!;
 
 // The transcript once its record is read, in place of the placeholder.
+// A first open whose record could not be read (#768): one line with "Try again", which draws the page again, in place of
+// an empty Conversation.
+export function ConversationNotRead() {
+ const {c}=useConversationText(); const router=useRouter();
+ return <div className="transcript"><div className="transcript__col"><p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')} <button type="button" className="link-btn" onClick={()=>router.refresh()}>{c('conversationTryAgain')}</button></p></div></div>;
+}
+
 export function ConversationLoaded({initial,team}:{initial:ConversationRecord,team:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
  const {record,asked,reread,sending}=useConversationRecord({company,initial});

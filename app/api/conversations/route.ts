@@ -66,9 +66,12 @@ async function stop(db:Database,body:Record<string,unknown>) {
  const stopped=await stopConversationRun(db,{company:body.company as string,conversation:body.conversation});
  if('code' in stopped) return stopped.message==='conversationNothingToStop'?reply({stopped:false}):refuseFor(stopped.code);
  if('error' in stopped) return refuse(stopped.error,stopped.status);
- // The stopped run is closed now, and a turn waiting behind it may start.
- await closeOpenRuns(service(),{conversation:body.conversation});
- await startQueuedTurns(service(),{conversation:body.conversation});
+ // The stopped run is closed after the answer, and a turn waiting behind it may start then (the worker does both too).
+ const conversation=body.conversation;
+ after(async()=>{
+  try { await closeOpenRuns(service(),{conversation}); await startQueuedTurns(service(),{conversation}); }
+  catch { logActionFailure('conversation',new Error('Stopped run not closed yet')); }
+ });
  return reply(stopped);
 }
 
@@ -176,21 +179,21 @@ async function models(db:Database,person:string,company:string,conversation:stri
  return reply({state:read.state,models:offeredModels(read.models,access),current:found.model??read.current});
 }
 
-// Reading the record also closes any of its runs Hermes has ended (lib/conversation-runs.mjs, as the worker does), so
-// the page shows the reply, and the usage of every ended run, without a reload; then a turn that waited for that run
-// starts. The person's session must see the conversation first; only their own runs of it are closed.
-async function read(db:Database,person:string,company:string,conversation:string) {
- const {data:found}=await db.from('conversations').select(conversationColumns).eq('id',conversation).eq('company_id',company).maybeSingle();
- if(!found) return refuse('conversationNotFound',404);
- await closeOpenRuns(service(),{conversation,owner:person});
- await startQueuedTurns(service(),{conversation});
- // A new chat's first Run, closed just now, is what names its Engine session: read again, so the reply that lands carries
- // its steps at once, where its live steps were (#646), whoever closed the Run first.
- if(!found.hermes_session_id) {
-  const {data:named}=await db.from('conversations').select('hermes_session_id').eq('id',conversation).maybeSingle();
-  if(named?.hermes_session_id) found.hermes_session_id=named.hermes_session_id;
+// The record of the Conversation, as the database holds it (ADR 0030). A read never closes a Run or starts a turn (#767):
+// the worker and the one starter of turns do both. With `since`, the stamp the page last read, the answer is only that
+// nothing changed when the database's stamp is the same, so a waiting page's poll costs one round trip. The person's
+// session must see the Conversation; anyone else reads not found.
+async function read(db:Database,person:string,company:string,conversation:string,since:unknown) {
+ if(typeof since==='string'&&/^[0-9a-f]{32}$/.test(since)) {
+  const {data:stamp}=await db.rpc('conversation_stamp',{conversation});
+  if(stamp===since) return reply({unchanged:true,stamp});
  }
- return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent)));
+ const {data:found,error:unfound}=await db.from('conversations').select(conversationColumns).eq('id',conversation).eq('company_id',company).maybeSingle();
+ if(unfound) return refuse('conversationUnread',503);
+ if(!found) return refuse('conversationNotFound',404);
+ // A read that fails answers an error, never an empty Conversation (#768): the page keeps what it shows and asks again.
+ try { return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent))); }
+ catch { return refuse('conversationUnread',503); }
 }
 
 // "Try again" on a message that was not sent (#764): the same turn, by its send key, waits again and its Run starts
@@ -257,7 +260,7 @@ async function respond(request:NextRequest) {
   }
   if(body.intent==='steps') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await steps(db,body.company,body.conversation):refuse('conversationNotFound',404);
   if(body.intent==='models') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await models(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
-  return typeof body.conversation==='string'&&uuid.test(body.conversation)?await read(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
+  return typeof body.conversation==='string'&&uuid.test(body.conversation)?await read(db,user.id,body.company,body.conversation,body.since):refuse('conversationNotFound',404);
  } catch { logActionFailure('conversation',new Error('Conversation request failed')); return refuse('conversationFailed',400); }
 }
 export const GET=respond;
