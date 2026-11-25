@@ -1,7 +1,7 @@
 -- #684 (spec #668, ADR 0026, ADR 0023): the second step of the Card's move to the Hermes Kanban way, the cutover.
 -- scripts/install.sh applies a migration whose name ends in _cutover only once this release's app answers its health
 -- check and its worker runs, so the release it replaced has stopped serving, and a failed update has left it running on
--- the first step's schema (20270417000000_card_status.sql and the steps after it), which writes both shapes.
+-- the first step's schema (20270417050000_card_status.sql and the steps after it), which writes both shapes.
 --
 -- First every Card's old fields, checklist, labels, mode and other assignees are written into its description, as they
 -- stand now, so what the previous release wrote between the two steps is kept. Then stages, labels, the checklist, the
@@ -15,7 +15,7 @@
 -- 0. A cutover never lands in the transaction that applied its first step (the levels cutover's guard, #389).
 do $$ begin
  if to_regclass('gtmworks_install.schema_migrations') is not null then
-  if exists(select 1 from gtmworks_install.schema_migrations m where m.name='20270417000000_card_status.sql' and m.xmin=pg_current_xact_id()::xid) then
+  if exists(select 1 from gtmworks_install.schema_migrations m where m.name='20270417050000_card_status.sql' and m.xmin=pg_current_xact_id()::xid) then
    raise exception 'This update is finished by the installer it downloaded: run sh scripts/install.sh update again. The database and the running release were not changed.';
   end if;
  end if;

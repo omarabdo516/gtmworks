@@ -11,7 +11,7 @@ import { testDb } from './pgtap.mjs';
 const cutover = readFileSync('supabase/migrations/20270418000000_card_kanban_cutover.sql', 'utf8');
 const guard = cutover.match(/^do \$\$ begin\n[\s\S]*?\nend \$\$;$/m)[0];
 const verify = readFileSync('supabase/migrations/20270418000000_card_kanban_cutover.verify.sql', 'utf8').replace(/^--.*\n/gm, '').trim().replace(/;$/, '');
-const first = '20270417000000_card_status.sql';
+const first = '20270417050000_card_status.sql';
 const rs = "'10000000-0000-0000-0000-000000000001'";
 const omar = "'20000000-0000-0000-0000-000000000001'", manager = "'20000000-0000-0000-0000-000000000002'", contributor = "'20000000-0000-0000-0000-000000000003'";
 const ads = "'a6840000-0000-0000-0000-000000000001'";

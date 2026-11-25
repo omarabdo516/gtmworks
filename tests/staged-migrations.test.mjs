@@ -11,7 +11,7 @@ const migrations=readdirSync('supabase/migrations').filter(name=>name.endsWith('
 const read=name=>readFileSync(`supabase/migrations/${name}`,'utf8');
 const firstStep='20270408100000_one_set_of_tools.sql';
 const cutover='20270416000000_one_set_of_tools_cutover.sql';
-const cardFirstStep='20270417000000_card_status.sql';
+const cardFirstStep='20270417050000_card_status.sql';
 const cardCutover='20270418000000_card_kanban_cutover.sql';
 const cutovers=migrations.filter(name=>name.endsWith('_cutover.sql'));
 
