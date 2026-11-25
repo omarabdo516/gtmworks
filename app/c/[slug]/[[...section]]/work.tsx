@@ -39,7 +39,7 @@ import type { WaitingItem } from '@/lib/approval-queue';
 import { ArchiveConfirm } from '@/app/archive-confirm';
 import type { ArchiveAnswer, ArchiveIntent, ArchiveStop } from '@/lib/archive-stops';
 import '@/app/board.css';
-type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
+type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string}; type Card={id:number,title:string,stage_id:number,status:string,channel:string,format:string,go_live:string|null,offering:string,segment:string,hook:string,goal:string,caption:string,next_actor:string|null,mode:string|null,approval_step_id:number|null,rejection_reason:string|null,project_id:number|null,agent_id?:string|null,channel_id?:string|null,crew?:string[],wait?:CardWait|null,board_order?:number|null,created_at?:string|null,archived_at?:string|null,archived_by?:string|null}; type Project={id:number,name:string}; type Item={id:number,card_id:number,title:string,done:boolean}; type Person=WorkMember & {agent_role?:string|null}; type Activity=WorkActivity; type Creative={id:number,card_id:number,name:string}; type Version={id:number,creative_id:number,path:string,url:string|null}; type CL={card_id:number,label_id:number};
 // An open Card's notes (#22): each note's current text, the Runs its Agent mentions started and their replies in the
 // log, the Agents those are drawn with, the reader and the moment the page was drawn (for the edit countdown).
 type CardNotes={me:string,owner:boolean,drawnAt:number,comments:EditableNote[],runs:{note_id:number,agent_id:string,agent_name:string,outcome:string|null}[],replies:{reply_to:number,actor_id:string,actor_name:string|null,body:string,created_at:string}[],agents:{id:string,name:string,connection_id:string}[]};
@@ -68,13 +68,13 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  if(card&&composing) setComposing(false);
  // A card made from a message is marked with its mode, in the colour of the agent it was sent to.
  const modeChip=(c:Card)=>{ if(!c.mode) return null; const role=p.assignees.filter(x=>x.card_id===c.id).map(x=>p.agents.find(a=>a.person_id===x.person_id)?.role).find(Boolean); const color=roleAgents.find(r=>r.key===role)?.color; return <span className="mode-chip" data-mode={c.mode} style={{borderColor:color}}><i style={{background:color}}/>{c.mode==='plan'?t('modePlan'):c.mode==='do'?t('modeDo'):t('modeAnswer')}</span>; };
- // ---- the board (ADR 0013): six columns over the stages, "Waiting on you" first ----
+ // ---- the board (ADR 0026): six columns, each a status (#676), "Waiting on you" first ----
  const rtl=language==='ar';
  const columnName=(column:string)=>t(columnLabel(column,p.canCreate));
  const agentIds=new Set([...p.agents.map(a=>a.person_id),...identities.map(a=>a.id)]);
  const agentName=(id:string)=>identities.find(a=>a.id===id)?.name||p.members.find(m=>m.person_id===id)?.people?.name||'';
  const agentRole=(id:string)=>identities.find(a=>a.id===id)?.role||p.agents.find(a=>a.person_id===id)?.role||p.members.find(m=>m.person_id===id)?.agent_role||'account_manager';
- const columnOfCard=(c:Card)=>columnOf(c,p.stages);
+ const columnOfCard=(c:Card)=>columnOf(c);
  // A card's Agent: its assigned Agent, else the Agent that made it (a card an Agent filed through the API). The person
  // who added an idea is the writer of its own log row (#188), so the Card can say "New idea from …".
  const makerOf=(c:Card)=>p.activity.find(a=>a.card_id===c.id&&(a.action==='card_created'||a.action==='idea_added'))?.actor_id;
@@ -203,7 +203,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   const from=columnOfCard(c);
   // "Waiting on you" keeps its own order, newest first, and takes no place by hand (ADR 0013).
   if(from==='waiting'&&to==='waiting') return Promise.resolve(false);
-  const why=blockReason(from,to,!!c.wait&&columnOf({...c,wait:null},p.stages)!=='waiting');
+  const why=blockReason(from,to,!!c.wait&&columnOf({...c,wait:null})!=='waiting');
   if(why==='waiting') { toast(t('boardWaitingFillsItself'),{icon:'clock'}); return Promise.resolve(false); }
   if(why==='chat') { toast(t('boardWaitingOnChat'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return Promise.resolve(false); }
   if(why==='decide') { toast(t(to==='live'||to==='done'?'boardDecideFirst':'boardWaitingForDecision'),{icon:'hand'}); router.push(`${base}/board/${c.id}`); return Promise.resolve(false); }

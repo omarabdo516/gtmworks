@@ -3,7 +3,7 @@ export type BoardColumn = typeof boardColumns[number];
 export declare const boardCardColumns: '*,wait:card_wait';
 /** A Card's chat waiting on its person (#146), read with the Card as `wait:card_wait`. */
 export type CardWait = {person:string, kind:'question'|'hand'|'permission', title:string};
-export declare function columnOf(card: {stage_id:number, wait?:CardWait|null}, stages: {id:number, board_column?:string|null}[]): string;
+export declare function columnOf(card: {status?:string|null, wait?:CardWait|null}): string;
 export declare function chatWait(card: {wait?:CardWait|null}, reader: {me:string, writer:boolean, approval:boolean}): (CardWait & {mine:boolean, team:boolean}) | null;
 type WaitingRow = {kind:string, card_id:number|null, conversation_id:string|null};
 export declare function onCard(item: WaitingRow): boolean;

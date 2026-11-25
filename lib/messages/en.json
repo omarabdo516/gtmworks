@@ -133,7 +133,7 @@
   "last14Days": "Last 14 days",
   "deliveredWork": "Delivered work",
   "last14DaysApprovedCards": "Last 14 days · Approved cards",
-  "cardsByStage": "Cards by stage",
+  "cardsByStatus": "Cards by status",
   "cardsCreatedInTheLast14Days": "Cards created in the last 14 days",
   "firstTimeAcceptance": "First-time acceptance",
   "last14DaysCardsApprovedWithoutEarlierRejection": "Last 14 days · Cards approved without earlier rejection",

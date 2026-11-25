@@ -69,8 +69,9 @@ select is(public.pin_run_history('c1000000-0000-0000-0000-000000000181','b183000
 set local session_replication_role=replica;
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values
  ('c1000000-0000-0000-0000-000000000182','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','e1000000-0000-0000-0000-000000000182','Ads');
-insert into public.work_cards(id,company_id,stage_id,title,board_order,conversation_id,agent_id) overriding system value
- values (918301,'10000000-0000-0000-0000-000000000001',(select min(id) from public.work_stages where company_id='10000000-0000-0000-0000-000000000001'),'Ads card',1,'c1000000-0000-0000-0000-000000000182','e1000000-0000-0000-0000-000000000182');
+-- Written past the triggers, so the row carries its status as well as its stage (#676).
+insert into public.work_cards(id,company_id,stage_id,status,title,board_order,conversation_id,agent_id) overriding system value
+ values (918301,'10000000-0000-0000-0000-000000000001',(select min(id) from public.work_stages where company_id='10000000-0000-0000-0000-000000000001'),'ideas','Ads card',1,'c1000000-0000-0000-0000-000000000182','e1000000-0000-0000-0000-000000000182');
 insert into public.waiting_items(company_id,person_id,kind,title,card_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','question','On the Ads card',918301);
 set local session_replication_role=origin;

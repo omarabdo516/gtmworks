@@ -39,7 +39,12 @@ test('the first step of the levels removal keeps the level, and the cutover remo
  for(const removed of [/alter table public\.companies drop column agent_level;/,/drop column tools_level;/,/drop column tools_policy;/,
   /drop function if exists public\.set_agent_level\(uuid,integer\);/,/drop function if exists public\.engine_tool_policy\(\);/])
   assert.match(last,removed);
- assert.equal(migrations.at(-1),cutover,'the cutover sorts after every migration it follows');
+ // The cutover sorts after its first step and every migration of the levels removal. A later spec's migrations sort
+ // after it (#668's Card status, 20270417000000, on): each of those is held to the first test's rule, and its own
+ // cutover drops what it replaced.
+ assert.ok(migrations.indexOf(firstStep)<migrations.indexOf(cutover),'the cutover sorts after its first step');
+ assert.ok(migrations.filter(name=>name<cutover).every(name=>name<'20270416000000'),'and after every migration it follows');
+ assert.ok(migrations.filter(name=>name>cutover).every(name=>name>='20270417000000'),'a later spec\'s migration is named after it');
 });
 
 test('the installer applies the cutover only once this release answers, and puts the previous Engines back when an update cannot start its own', () => {

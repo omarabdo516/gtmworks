@@ -37,6 +37,7 @@ replay tests/member-agent-visibility-migration.mjs
 replay tests/agent-profile-moves-migration.mjs
 replay tests/agent-key-waits-migration.mjs
 replay tests/card-places-migration.mjs
+replay tests/card-status-migration.mjs
 replay tests/staged-cutover-migration.mjs
 status=0
 npx --no-install supabase test db "$replays" 2>&1 | tee "$session" || status=$?

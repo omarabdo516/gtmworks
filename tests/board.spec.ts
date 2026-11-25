@@ -449,14 +449,36 @@ test('a second Member sees the same order; a place inside a column is not announ
  await expect(page.locator('.detail-row').filter({hasText:'Moved the card from أفكار to بريف جاهز'})).toHaveCount(1);
 });
 
-// #168, #174: a place the server refuses keeps the board as it was: the Contributor is told in the page, stays on the
-// board and is offered no "Undo", and a reload shows the Card where it stood.
-test('a Contributor dropping a Card on Live is told it cannot move it, stays on the board with no Undo, and the Card stays put',async({page})=>{
+// #676: people who may edit move a Card freely, Live and Done included: a Contributor's drop on Live moves it there.
+test('a Contributor drops a Card on Live and it moves there, with Undo',async({page})=>{
  await page.setViewportSize({width:2200,height:900});
+ // A Card of its own in Ideas, so the seeded ones stay where the file's other tests read them.
+ const [card]=placeCards(Date.now(),1);
  await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
- // Card 1 is seeded in Ideas; a Contributor moves Cards, but not into Live, which only the people who manage the Company do.
- await expect(page.locator('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toBeVisible();
- const from=(await page.locator('.kcard[data-card-id="1"]').boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
+ await expect(page.locator(`.col[data-column="ideas"] .kcard[data-card-id="${card}"]`)).toBeVisible();
+ const from=(await page.locator(`.kcard[data-card-id="${card}"]`).boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
+ await page.mouse.move(from.x+from.width/2,from.y+20);
+ await page.mouse.down();
+ await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
+ await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
+ await page.mouse.up();
+ await expect(page.locator('.toast')).toContainText('Moved to “Live”');
+ await expect(page.getByRole('button',{name:'Undo'})).toBeVisible();
+ await page.reload();
+ expect(await columnOf(page,card)).toBe('live');
+ expect(rows(`select status from public.work_cards where id=${card}`)).toEqual([{status:'live'}]);
+});
+
+// #168, #174: a place the server refuses keeps the board as it was: the Contributor is told in the page, stays on the
+// board and is offered no "Undo", and a reload shows the board as it stands. The Card was archived meanwhile, in another
+// tab, so the board still draws it and the server finds no Card to move.
+test('a Contributor dropping a Card archived meanwhile is told it cannot move it, stays on the board with no Undo, and nothing moves',async({page})=>{
+ await page.setViewportSize({width:2200,height:900});
+ const [card]=placeCards(Date.now(),1);
+ await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
+ await expect(page.locator(`.col[data-column="ideas"] .kcard[data-card-id="${card}"]`)).toBeVisible();
+ query(`update public.work_cards set archived_at=now(),archived_by='20000000-0000-0000-0000-000000000001' where id=${card}`);
+ const from=(await page.locator(`.kcard[data-card-id="${card}"]`).boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
  await page.mouse.move(from.x+from.width/2,from.y+20);
  await page.mouse.down();
  await page.mouse.move(from.x+from.width/2+8,from.y+20,{steps:2});
@@ -465,9 +487,9 @@ test('a Contributor dropping a Card on Live is told it cannot move it, stays on 
  await expect(page.locator('.work-error')).toHaveText('You cannot move the card to this stage.');
  await expect(page).toHaveURL(/\/work\/board$/);
  await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
- await expect(page.locator('.col[data-column="ideas"] .kcard[data-card-id="1"]')).toBeVisible();
  await page.reload();
- expect(await columnOf(page,1)).toBe('ideas');
+ await expect(page.locator(`.kcard[data-card-id="${card}"]`)).toHaveCount(0);
+ expect(rows(`select status from public.work_cards where id=${card}`)).toEqual([{status:'ideas'}]);
 });
 
 // #168: "Undo" on a move is offered for six seconds and puts the Card back in the stage it left, not only in its column;

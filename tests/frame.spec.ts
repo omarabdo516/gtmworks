@@ -125,7 +125,7 @@ test('Home has four parts in order and missing sources show unavailable, never z
  // Home lists the Company's real Agents: Aleem has none, so its Agents section stays and is simply empty.
  await expect(page.locator('.home-agents article')).toHaveCount(0);
  await expect(page.locator('.stats .label')).toHaveText(["Awaiting your approval","Published this week","Bookings this week","Stopped cards"]);
- await expect(page.locator('.home-charts h2')).toHaveText(["Delivered work","Cards by stage","First-time acceptance"]);
+ await expect(page.locator('.home-charts h2')).toHaveText(["Delivered work","Cards by status","First-time acceptance"]);
  await expect(page.locator('.home-recent h2')).toHaveText(["Recent activity","Recent cards"]);
  const missing=page.locator('.stats .stat:nth-child(n+2) strong, .acceptance-chart p');
  await expect(missing).toHaveCount(4);

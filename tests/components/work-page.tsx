@@ -19,7 +19,8 @@ const stages = [
  { id: 3, name: 'كتابة', position: 3, board_column: 'progress' },
  { id: 4, name: 'مراجعة', position: 4, board_column: 'waiting' },
 ];
-export const card = (more: Partial<Card> = {}): Card => ({ id: 1, title: 'أفكار لمحتوى الشهر', stage_id: 1, channel: 'Instagram', format: '', go_live: '2026-06-04T12:00:00+00:00',
+// A Card's status is its stage's column until the stages go (#676), as the database keeps them.
+export const card = (more: Partial<Card> = {}): Card => ({ id: 1, title: 'أفكار لمحتوى الشهر', stage_id: 1, status: stages.find(stage => stage.id === (more.stage_id ?? 1))?.board_column ?? 'ideas', channel: 'Instagram', format: '', go_live: '2026-06-04T12:00:00+00:00',
  offering: '', segment: '', hook: '', goal: '', caption: '', next_actor: null, mode: null, approval_step_id: null, rejection_reason: null, project_id: null, ...more });
 export const workProps = (more: Partial<WorkProps> = {}): WorkProps => ({
  workAction: vi.fn<WorkAction>(async () => {}), placeMove: vi.fn<PlaceCard>(async () => ({ ok: true })), addIdea: vi.fn<AddIdeaAction>(async () => ({ card: 9 })), undoMove: vi.fn<UndoMove>(async () => ({ state: 'refused' })), me: 'p-1', slug: 'rs-learning', company: 'co-1', section: 'work/board', stages, labels: [{ id: 1, name: 'static', color: '#87bba2' }],

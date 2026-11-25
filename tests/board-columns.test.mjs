@@ -6,18 +6,18 @@ test('the six columns keep the approved order, Waiting on you first', () => {
  assert.deepEqual(boardColumns, ['waiting', 'ideas', 'planned', 'progress', 'live', 'done']);
 });
 
-test('a card shows in its stage column', () => {
- const stages = [{ id: 1, board_column: 'ideas' }, { id: 5, board_column: 'waiting' }, { id: 6, board_column: 'planned' }];
- assert.equal(columnOf({ stage_id: 5 }, stages), 'waiting');
- assert.equal(columnOf({ stage_id: 6 }, stages), 'planned');
+// #676: a Card's status is its column.
+test('a card shows in the column its status names', () => {
+ assert.equal(columnOf({ status: 'waiting' }), 'waiting');
+ assert.equal(columnOf({ status: 'planned' }), 'planned');
+ assert.equal(columnOf({ status: 'done' }), 'done');
 });
 
-// #146: a card whose chat waits on its person shows under Waiting on you, whatever its stage, which stays as it is.
-test('a card whose chat waits shows in Waiting on you from any stage, and in its stage column once it waits no more', () => {
- const stages = [{ id: 1, board_column: 'ideas' }, { id: 3, board_column: 'progress' }, { id: 5, board_column: 'waiting' }, { id: 7, board_column: 'live' }];
+// #146: a card whose chat waits on its person shows under Waiting on you, whatever its status, which stays as it is.
+test('a card whose chat waits shows in Waiting on you from any status, and in its own column once it waits no more', () => {
  const wait = { person: 'p-1', kind: 'hand', title: 'انشر المقال' };
- for (const stage_id of [1, 3, 5, 7]) assert.equal(columnOf({ stage_id, wait }, stages), 'waiting');
- assert.equal(columnOf({ stage_id: 3, wait: null }, stages), 'progress');
+ for (const status of ['ideas', 'progress', 'waiting', 'live']) assert.equal(columnOf({ status, wait }), 'waiting');
+ assert.equal(columnOf({ status: 'progress', wait: null }), 'progress');
 });
 
 // design-reference: kcardHTML's waiting branch and cardMine, with a Viewer reading the team's wait (#146).

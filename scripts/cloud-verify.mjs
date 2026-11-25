@@ -177,9 +177,9 @@ async function journey(page) {
  await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect(page.locator(`.col[data-column="planned"] .kcard[data-card-id="${card}"]`)).toBeVisible();
  await screenshot(page,'board-after-move');
- await expect.poll(()=>query(`select c.title,s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.id=${card}`))
-  .toEqual([{title,board_column:'planned'}]);
- step(`made the Card "${title}" and dragged it from Ideas to Planned; work_cards has it in the planned column`);
+ await expect.poll(()=>query(`select c.title,c.status from public.work_cards c where c.id=${card}`))
+  .toEqual([{title,status:'planned'}]);
+ step(`made the Card "${title}" and dragged it from Ideas to Planned; work_cards has its status planned`);
 }
 
 const browser=await chromium.launch();

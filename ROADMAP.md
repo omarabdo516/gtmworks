@@ -90,7 +90,7 @@ In flight now: Open Design (#544, PR #570), the Agent's screen (#196 to #199).
 
 ## 4. Work: board, cards, projects, routines
 
-- 🟡 **The board.** Six columns over the stages, drag with undo, Shift plus arrows to reorder, motion as designed. Merged; waiting for the release (#572). [#34, #131, #168, #174, ADR 0013]
+- 🟡 **The board.** Six columns, each a Card's status, that anyone who may edit moves a Card between, Live and Done included; drag with undo, Shift plus arrows to reorder, motion as designed. Merged; waiting for the release (#572). [#34, #131, #168, #174, #676, ADR 0026]
 - ✅ **The Card sheet.** A Card opens over the board with its Chat and Log. [#116]
 - ✅ **Board, calendar and list views of Cards.** [#34, `work.tsx` has `work/calendar` and `work/list`]
 - ✅ **Versions and Approvals.** Editing makes a new Version, an approval applies to one exact Version, and an Agent never approves. [#16, #137, GLOSSARY.md Version, Approval]

@@ -133,7 +133,7 @@
   "last14Days": "آخر 14 يومًا",
   "deliveredWork": "العمل المنجز",
   "last14DaysApprovedCards": "آخر 14 يومًا · البطاقات المعتمدة",
-  "cardsByStage": "البطاقات حسب المرحلة",
+  "cardsByStatus": "البطاقات حسب الحالة",
   "cardsCreatedInTheLast14Days": "البطاقات المنشأة في آخر 14 يومًا",
   "firstTimeAcceptance": "حصة العمل المقبول من المرة الأولى",
   "last14DaysCardsApprovedWithoutEarlierRejection": "آخر 14 يومًا · البطاقات المعتمدة دون رفض سابق",

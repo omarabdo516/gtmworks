@@ -22,38 +22,37 @@ test('one agent_states call gives each Agent the reader sees its state, and any 
  assert.deepEqual(['working', 'waiting', 'idle'].map(status => statusKeys[status]), ['agentStatusWorking', 'agentStatusWaiting', 'agentStatusIdle']);
 });
 
-const stages = [{ id: 1, name: 'Ideas', board_column: 'ideas' }, { id: 2, name: 'Writing', board_column: 'progress' }, { id: 3, name: 'Review', board_column: 'waiting' }, { id: 4, name: 'Published', board_column: 'done' }];
-
 test('an Agent\'s Cards follow the board\'s columns, each with the reference\'s line under it', () => {
  const cards = [
-  { id: 10, title: 'Done post', stage_id: 4 },
-  { id: 11, title: 'Article', stage_id: 2 },
-  { id: 12, title: 'Campaign', stage_id: 3 },
-  { id: 13, title: 'Idea', stage_id: 1 },
-  { id: 14, title: 'Draft', stage_id: 2 },
+  { id: 10, title: 'Done post', status: 'done' },
+  { id: 11, title: 'Article', status: 'progress' },
+  { id: 12, title: 'Campaign', status: 'waiting' },
+  { id: 13, title: 'Idea', status: 'ideas' },
+  { id: 14, title: 'Draft', status: 'progress' },
  ];
  const checklist = [{ card_id: 11, title: 'Outline', done: true }, { card_id: 11, title: 'Write the intro', done: false }, { card_id: 11, title: 'Edit', done: false }];
  const waiting = [{ kind: 'approval', title: 'Campaign', body: 'Final OK', card_id: 12 }];
- assert.deepEqual(agentTasks(cards, stages, checklist, waiting), [
+ assert.deepEqual(agentTasks(cards, checklist, waiting), [
   { id: 12, title: 'Campaign', column: 'waiting', line: { key: 'boardWaitingYourOk', args: ['Final OK'] }, waiting: true },
-  { id: 13, title: 'Idea', column: 'ideas', line: { text: 'Ideas' }, waiting: false },
+  { id: 13, title: 'Idea', column: 'ideas', line: { key: 'boardColIdeas', args: [] }, waiting: false },
   { id: 11, title: 'Article', column: 'progress', line: { text: 'Write the intro · 33%' }, waiting: false },
-  { id: 14, title: 'Draft', column: 'progress', line: { text: 'Writing' }, waiting: false },
-  { id: 10, title: 'Done post', column: 'done', line: { text: 'Published' }, waiting: false },
+  { id: 14, title: 'Draft', column: 'progress', line: { key: 'boardColProgress', args: [] }, waiting: false },
+  { id: 10, title: 'Done post', column: 'done', line: { key: 'boardColDone', args: [] }, waiting: false },
  ]);
 });
 
-test('a question about a Card is its line; a Card waiting on someone else shows its stage', () => {
- const cards = [{ id: 20, title: 'Ad', stage_id: 3 }, { id: 21, title: 'Reel', stage_id: 3 }];
- const lines = agentTasks(cards, stages, [], [{ kind: 'question', title: 'Which angle?', body: '', card_id: 20 }]).map(task => task.line);
- assert.deepEqual(lines, [{ text: 'Which angle?' }, { text: 'Review' }]);
+// #676: a Card's status is its column, so a Card with nothing else to say shows its column's name.
+test('a question about a Card is its line; a Card waiting on someone else shows its column', () => {
+ const cards = [{ id: 20, title: 'Ad', status: 'waiting' }, { id: 21, title: 'Reel', status: 'waiting' }];
+ const lines = agentTasks(cards, [], [{ kind: 'question', title: 'Which angle?', body: '', card_id: 20 }]).map(task => task.line);
+ assert.deepEqual(lines, [{ text: 'Which angle?' }, { key: 'boardColWaiting', args: [] }]);
 });
 
-test('a Card whose chat waits is under Waiting on you with the wait\'s line, its stage kept, as on the board (#146)', () => {
- const cards = [{ id: 30, title: 'Article', stage_id: 2, wait: { person: 'p-2', kind: 'hand', title: 'Post it' } }, { id: 31, title: 'Reel', stage_id: 2, wait: null }];
- assert.deepEqual(agentTasks(cards, stages, [], []), [
+test('a Card whose chat waits is under Waiting on you with the wait\'s line, its status kept, as on the board (#146)', () => {
+ const cards = [{ id: 30, title: 'Article', status: 'progress', wait: { person: 'p-2', kind: 'hand', title: 'Post it' } }, { id: 31, title: 'Reel', status: 'progress', wait: null }];
+ assert.deepEqual(agentTasks(cards, [], []), [
   { id: 30, title: 'Article', column: 'waiting', line: { text: 'Post it' }, waiting: true },
-  { id: 31, title: 'Reel', column: 'progress', line: { text: 'Writing' }, waiting: false },
+  { id: 31, title: 'Reel', column: 'progress', line: { key: 'boardColProgress', args: [] }, waiting: false },
  ]);
 });
 

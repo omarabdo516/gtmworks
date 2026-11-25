@@ -39,7 +39,7 @@ type StoredHandover = { id: number, run: string, from_name: string, from_connect
 function database(card: TiedCard | null, messages: typeof stored = stored, agent_handovers: StoredHandover[] = [], snapshot: { id: number, state: string }[] = agent_handovers) {
  // The messages and how their runs ended are read through the Conversation, in one statement (lib/conversation-record.ts).
  const { conversation_run_ends, conversation_messages, ...rest } = messages;
- const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [], agent_handovers: snapshot }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, stage_id: 3, wait: card.wait ?? null, work_stages: { id: 3, board_column: card.column } }] : [] };
+ const rows: Record<string, unknown[]> = { ...rest, conversations: [{ conversation_run_ends, conversation_messages, conversation_queued_turns: [], lead_agent_requests: [], lead_made_agents: [], agent_handovers: snapshot }], work_cards: card ? [{ id: card.id, created_at: card.made ?? replied, status: card.column, wait: card.wait ?? null }] : [] };
  const table = (name: string) => {
   const found = rows[name] ?? [];
   const query: Record<string, unknown> = { then: (resolve: (value: unknown) => unknown) => resolve({ data: found, error: null }), maybeSingle: async () => ({ data: found[0] ?? null, error: null }) };

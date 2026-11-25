@@ -78,6 +78,8 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('company_fallback_models', $${"provider": "'anthropic'", "model": "'claude-sonnet-4-6'"}$$),
  ('waiting_items', $${"card_id": "1"}$$),
  ('work_attachments', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$),
+ -- A Card's status is one of the board's six columns (#676).
+ ('work_cards', $${"status": "'ideas'"}$$),
  ('work_stages', $${"board_column": "'ideas'"}$$),
  ('work_versions', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$)
 ) v(name, fixed) where m.name = v.name;

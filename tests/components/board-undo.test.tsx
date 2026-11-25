@@ -36,7 +36,7 @@ const frames = () => new Promise(resolve => requestAnimationFrame(() => requestA
 const options = () => vi.mocked(toast).mock.calls.at(-1)![1] as { icon?: string, action?: { label: string, run: () => void } } | undefined;
 const undone = (props: ReturnType<typeof workProps>) => Object.fromEntries(vi.mocked(props.undoMove).mock.calls.at(-1)![0]);
 // The board as the server's answer to the move draws it (#131): the Card in Planned, where it lands.
-const inPlanned = (props: ReturnType<typeof workProps>) => ({ ...props, cards: props.cards.map(each => each.id === 1 ? { ...each, stage_id: 2 } : each) });
+const inPlanned = (props: ReturnType<typeof workProps>) => ({ ...props, cards: props.cards.map(each => each.id === 1 ? { ...each, stage_id: 2, status: 'planned' } : each) });
 // A Card in Ideas, drawn where the database put it.
 const ideas = () => workProps({ cards: [card({ id: 1, title: 'Launch post', stage_id: 1, board_order: 1 })], undoMove: vi.fn(async () => ({ state: 'undone' as const, column: 'ideas' })) });
 

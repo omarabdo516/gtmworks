@@ -129,8 +129,8 @@ test('production worker exits with all missing setting names', async () => {
 
 test('every unavailable Home metric and chart remains unavailable rather than zero', async()=>{
  const {homeCharts,metricValue}=await import('../lib/home-data.mjs');
- const missing=homeCharts(null,null,null);
- assert.deepEqual(missing,{delivered:null,stages:null,acceptance:null});
+ const missing=homeCharts(null,null);
+ assert.deepEqual(missing,{delivered:null,statuses:null,acceptance:null});
  for(const source of [null,undefined,...Object.values(missing)]) {
   assert.equal(metricValue(source),'Unavailable');
   assert.notEqual(metricValue(source),'0');
@@ -138,38 +138,46 @@ test('every unavailable Home metric and chart remains unavailable rather than ze
  assert.equal(metricValue(0),'0','a real measured zero remains zero');
 });
 
-test('Home charts use fourteen UTC days, actual stages and first acceptance without earlier rejection',async()=>{
+// #676: Home reads Approvals and status moves, never stages. A delivery is an Approval that closed a review: its
+// decision moved the Card out of review in the same moment (an earlier approval step's Approval moves nothing).
+test('Home charts use fourteen UTC days, each Card\'s status and first acceptance without earlier rejection',async()=>{
  const {homeCharts}=await import('../lib/home-data.mjs');
  const now=Date.parse('2030-01-15T12:00:00Z');
- const stages=[{id:1,name:'كتابة'},{id:2,name:'تم الاعتماد',stage_key:'approved'}];
- const cards=[{id:1,stage_id:1,created_at:'2030-01-02T00:00:00Z'},{id:2,stage_id:2,created_at:'2030-01-01T23:59:59Z'}];
- const delivered=(id,card_id,created_at)=>({id,card_id,created_at,action:'card_changed',details:{field:'stage_id',new:2,new_name:'اسم قديم'}});
- const events=[{id:1,card_id:1,created_at:'2029-12-01T00:00:00Z',action:'approval_rejected',details:{}},delivered(2,1,'2030-01-03T12:00:00Z'),delivered(3,2,'2030-01-15T10:00:00Z'),delivered(4,3,'2030-01-01T23:59:59Z'),delivered(5,4,'2030-01-16T00:00:00Z')];
- const charts=homeCharts(cards,stages,events,now);
+ const cards=[{id:1,status:'progress',created_at:'2030-01-02T00:00:00Z'},{id:2,status:'planned',created_at:'2030-01-01T23:59:59Z'},{id:3,status:'planned',created_at:'2030-01-10T00:00:00Z'}];
+ const approved=(id,card_id,created_at)=>({id,card_id,created_at,action:'approval_approved',details:{step:'مراجعة'}});
+ // A row the previous release wrote names the stage only; one this release writes names the statuses too.
+ const moved=(id,card_id,created_at,details={field:'stage_id',new:2,new_name:'اسم قديم'})=>({id,card_id,created_at,action:'card_changed',details});
+ const events=[{id:1,card_id:1,created_at:'2029-12-01T00:00:00Z',action:'approval_rejected',details:{}},
+  approved(2,1,'2030-01-03T12:00:00Z'),moved(3,1,'2030-01-03T12:00:00Z'),
+  approved(4,2,'2030-01-15T10:00:00Z'),moved(5,2,'2030-01-15T10:00:00Z',{field:'stage_id',new:9,old_status:'waiting',new_status:'planned'}),
+  approved(6,3,'2030-01-01T23:59:59Z'),moved(7,3,'2030-01-01T23:59:59Z'),
+  approved(8,4,'2030-01-16T00:00:00Z'),moved(9,4,'2030-01-16T00:00:00Z'),
+  // An Approval of an earlier step moved nothing: it is no delivery; a move with no Approval is none either.
+  approved(10,5,'2030-01-12T00:00:00Z'),moved(11,6,'2030-01-12T08:00:00Z')];
+ const charts=homeCharts(cards,events,now);
  assert.equal(charts.delivered.length,14);
  assert.equal(charts.delivered[0].label,'2030-01-02');
  assert.equal(charts.delivered.at(-1).label,'2030-01-15');
  assert.equal(charts.delivered.reduce((sum,row)=>sum+row.value,0),2);
- assert.deepEqual(charts.stages,[{label:'كتابة',value:1},{label:'تم الاعتماد',value:0}]);
+ assert.deepEqual(charts.delivered.filter(row=>row.value).map(row=>row.label),['2030-01-03','2030-01-15']);
+ assert.deepEqual(charts.statuses,[{label:'waiting',value:0},{label:'ideas',value:0},{label:'planned',value:1},{label:'progress',value:1},{label:'live',value:0},{label:'done',value:0}]);
  assert.equal(charts.acceptance,50);
- assert.equal(homeCharts([],stages,[],now).acceptance,null,'no denominator is unavailable');
+ assert.equal(homeCharts([],[],now).acceptance,null,'no denominator is unavailable');
 });
 
 test('an Agent works on its newest Card in progress, never one whose chat waits on a person', async()=>{
  const {currentAgentCard}=await import('../lib/home-data.mjs');
- const stages=[{id:1,name:'كتابة',board_column:'progress'},{id:2,name:'معتمد',board_column:'planned'},{id:3,name:'مراجعة',board_column:'waiting'}];
  const cards=[
-  {id:1,stage_id:1,agent_id:'a',created_at:'2030-01-02T00:00:00Z'},
-  {id:2,stage_id:1,agent_id:'a',created_at:'2030-01-03T00:00:00Z'},
-  {id:3,stage_id:1,agent_id:'a',created_at:'2030-01-04T00:00:00Z',wait:{person:'p',kind:'question',title:'Which tone?'}},
-  {id:4,stage_id:2,agent_id:'a',created_at:'2030-01-05T00:00:00Z'},
-  {id:5,stage_id:1,agent_id:'b',created_at:'2030-01-06T00:00:00Z'},
+  {id:1,status:'progress',agent_id:'a',created_at:'2030-01-02T00:00:00Z'},
+  {id:2,status:'progress',agent_id:'a',created_at:'2030-01-03T00:00:00Z'},
+  {id:3,status:'progress',agent_id:'a',created_at:'2030-01-04T00:00:00Z',wait:{person:'p',kind:'question',title:'Which tone?'}},
+  {id:4,status:'planned',agent_id:'a',created_at:'2030-01-05T00:00:00Z'},
+  {id:5,status:'progress',agent_id:'b',created_at:'2030-01-06T00:00:00Z'},
  ];
- assert.equal(currentAgentCard(cards,stages,'a')?.id,2,'the newest Card in progress, not one waiting or in another column');
- assert.equal(currentAgentCard(cards,stages,'b')?.id,5);
- assert.equal(currentAgentCard(cards,stages,'c'),null,'no Card is not a Card');
- assert.equal(currentAgentCard(null,stages,'a'),null,'an unread Card list is unavailable');
- assert.equal(currentAgentCard(cards,null,'a'),null,'an unread stage list is unavailable');
+ assert.equal(currentAgentCard(cards,'a')?.id,2,'the newest Card in progress, not one waiting or in another column');
+ assert.equal(currentAgentCard(cards,'b')?.id,5);
+ assert.equal(currentAgentCard(cards,'c'),null,'no Card is not a Card');
+ assert.equal(currentAgentCard(null,'a'),null,'an unread Card list is unavailable');
 });
 
 test('catalogues reject missing keys, empty messages and mismatched interpolation', async()=>{
