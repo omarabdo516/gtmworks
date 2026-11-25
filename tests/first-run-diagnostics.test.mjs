@@ -110,6 +110,7 @@ test('failed first-run tests print only the last 40 matching server lines; passi
   'node:path':require('node:path'),
   '../scripts/first-run-db.mjs':{},
   './sign-in':{},
+  './dialog-exit':{},
  },{console:{log:line=>output.push(line)}});
  await afterEach({},{status:'passed',expectedStatus:'passed'});
  assert.equal(reads,0);
