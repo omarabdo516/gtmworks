@@ -19,17 +19,21 @@
 .gw .cw .num { font-variant-numeric: tabular-nums; }
 .gw .cw__inner { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; }
 
+/* The window's own controls drop the app's default button box (app/globals.css) and draw themselves below. */
+.gw .cw :is(.cw-title-btn, .cwp__b, .cw-tab, .cw-status) { min-height: 0; border: 0; background-color: transparent; font-weight: inherit; justify-content: flex-start; }
+.gw .cw .cw-tab { justify-content: center; }
+
 /* the head: status, More, Close */
 .gw .cw-head { padding: var(--s3) var(--s5); border-bottom: 0.5px solid var(--gw-border-3); }
 .gw .cw-head__row { display: flex; align-items: center; gap: var(--s2); min-height: 36px; }
-.gw .cw-status {
+.gw .cw .cw-status {
   position: relative; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: var(--gw-r-full);
   background: var(--gw-bg-tertiary); color: var(--gw-text-1); font-size: var(--gw-fs-sm); font-weight: 600; white-space: nowrap;
   transition: background-color var(--gw-dur-fast) var(--gw-ease-out);
 }
 .gw .cw-status::before { content: ""; position: absolute; inset: -8px 0; }
 .gw .cw-status > .gw-icon { width: 14px; height: 14px; color: var(--gw-text-3); }
-.gw .cw-status.is-wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); }
+.gw .cw .cw-status.is-wait { background: var(--gw-wait-bg); color: var(--gw-wait-text); }
 @media (hover: hover) { .gw button.cw-status:hover { background: var(--gw-bg-secondary-hover); } .gw button.cw-status.is-wait:hover { background: var(--gw-wait-bg); box-shadow: var(--gw-border-2) 0 0 0 0.5px inset; } }
 .gw .cw .more-menu { position: relative; flex: none; }
 .gw .cw .more-menu__pop { inset-inline: auto 0; top: calc(100% + 4px); bottom: auto; min-width: 200px; }
@@ -116,7 +120,7 @@
 .gw .cwp__src .gw-icon { width: 16px; height: 16px; }
 .gw .cw-input { width: 100%; height: 36px; font-size: var(--gw-fs-sm); }
 .gw .cw-noone { width: var(--av, 22px); height: var(--av, 22px); flex: none; border-radius: 50%; display: inline-block; box-shadow: var(--gw-border-1) 0 0 0 1px inset; }
-.gw .cw-av { width: var(--av, 20px); height: var(--av, 20px); font-size: 11px; }
+.gw .cw .cw-av { width: var(--av, 20px); height: var(--av, 20px); min-width: 0; flex: none; font-size: 11px; line-height: 1; }
 .gw .cw-fls { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; width: 100%; }
 .gw .cw-fl { display: grid; min-width: 0; justify-items: start; }
 .gw .cw-file { max-width: 100%; min-width: 0; }
@@ -134,7 +138,7 @@
 .gw .cw-pop .menu__item .dot { margin-inline: 7px; }
 
 /* Comments, Activity and Runs */
-.gw .cw-tabs { justify-content: flex-start; padding: 0; margin-inline-start: -4px; flex-wrap: wrap; }
+.gw .cw .cw-tabs { justify-content: flex-start; padding: 0; margin-inline-start: -4px; flex-wrap: wrap; }
 .gw .cw-tab { display: inline-flex; align-items: center; gap: 6px; }
 .gw .cw-tab .gw-icon { width: 15px; height: 15px; }
 .gw .cw-tab[aria-selected="true"] { background: var(--gw-bg-tertiary); color: var(--gw-text-1); }
@@ -192,7 +196,7 @@
   .gw .cw-title { font-size: var(--gw-fs-lg); }
   .gw .cw-body { display: flex; flex-direction: column; }
   .gw .cw-top { padding: var(--s4) var(--s4) 0; }
-  .gw .cw-side { position: static; min-height: auto; margin-top: var(--s5); padding: var(--s4); gap: var(--s4); border-inline-start: 0; border-block: 0.5px solid var(--gw-border-3); }
+  .gw .cw-side { position: static; align-self: stretch; min-height: auto; margin-top: var(--s5); padding: var(--s4); gap: var(--s4); border-inline-start: 0; border-block: 0.5px solid var(--gw-border-3); }
   .gw .cw-feed { padding: var(--s5) var(--s4) var(--s8); }
   .gw .cw-pop { width: min(340px, calc(100vw - 16px)); }
   /* 44px touch targets on a phone (DESIGN.md). */
