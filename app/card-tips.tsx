@@ -3,13 +3,13 @@ import { useEffect, useRef, type RefObject } from 'react';
 
 // One tooltip for every symbol and icon-only control inside a box (design-reference-card: GTIP, tipShow, tipHide): it
 // names what [data-tip] holds. A mouse or a pen resting on it shows it after 420 ms (at once while one shows), keyboard
-// focus shows it, and on a phone a long press of 480 ms shows it and the tap that follows does nothing; Escape, a scroll,
+// focus reached by the keyboard shows it, and on a phone a long press of 480 ms shows it and the tap that follows does nothing; Escape, a scroll,
 // a resize, leaving it or a press elsewhere hide it. It sits in the box itself, so a modal dialog's top layer holds it.
 export function CardTips({box}:{box:RefObject<HTMLElement|null>}) {
  const tip=useRef<HTMLDivElement>(null);
  useEffect(()=>{
   const root=box.current; const el=tip.current; if(!root||!el) return;
-  let on:HTMLElement|null=null; let timer=0; let press=0; let swallow=false; let at={x:0,y:0};
+  let on:HTMLElement|null=null; let keyed=false; let timer=0; let press=0; let swallow=false; let at={x:0,y:0};
   const show=(target:HTMLElement)=>{
    const text=target.dataset.tip; if(!text||!target.isConnected||target.getAttribute('aria-expanded')==='true') return;
    el.textContent=text; el.hidden=false;
@@ -23,10 +23,10 @@ export function CardTips({box}:{box:RefObject<HTMLElement|null>}) {
   const tipOf=(node:EventTarget|null)=>node instanceof Element?node.closest<HTMLElement>('[data-tip]'):null;
   const over=(event:PointerEvent)=>{ if(event.pointerType==='touch') return; const target=tipOf(event.target); if(target===on) return; clearTimeout(timer);
    if(!target) { hide(); return; } const quick=!el.hidden; timer=window.setTimeout(()=>show(target),quick?0:420); };
-  const focus=(event:FocusEvent)=>{ const target=tipOf(event.target); if(target&&event.target===target&&target.matches(':focus-visible')) show(target); else hide(); };
+  const focus=(event:FocusEvent)=>{ const target=tipOf(event.target); if(target&&event.target===target&&keyed) show(target); else hide(); };
   const blur=()=>{ if(on&&!press) hide(); };
-  const keys=(event:KeyboardEvent)=>{ if(event.key==='Escape'&&on) hide(); };
-  const down=(event:PointerEvent)=>{ clearTimeout(press); press=0;
+  const keys=(event:KeyboardEvent)=>{ keyed=true; if(event.key==='Escape'&&on) hide(); };
+  const down=(event:PointerEvent)=>{ keyed=false; clearTimeout(press); press=0;
    if(event.pointerType!=='touch') { if(on) hide(); return; }
    const target=tipOf(event.target); if(!target) return; at={x:event.clientX,y:event.clientY};
    press=window.setTimeout(()=>{ show(target); swallow=!!on; press=0; },480); };

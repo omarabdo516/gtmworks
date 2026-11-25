@@ -39,7 +39,6 @@ Adaptations bind gtmworks data, routing and both message catalogues, preserve au
 | `components/paperclip/Auth.tsx` | Copied and adapted | `src/pages/Auth.tsx` |
 | `components/paperclip/ChartCard.tsx` | Copied and adapted | `src/components/ActivityCharts.tsx (ChartCard only)` |
 | `components/paperclip/EmptyState.tsx` | Copied and adapted | `src/components/EmptyState.tsx` |
-| `components/paperclip/IssueDetail.tsx` | Copied and adapted | `src/pages/IssueDetail.tsx` |
 | `components/paperclip/KanbanBoard.tsx` | Copied and adapted | `src/components/KanbanBoard.tsx` |
 | `components/paperclip/Layout.tsx` | Copied and adapted | `src/components/Layout.tsx; src/components/BreadcrumbBar.tsx` |
 | `components/paperclip/MetricCard.tsx` | Copied and adapted | `src/components/MetricCard.tsx` |

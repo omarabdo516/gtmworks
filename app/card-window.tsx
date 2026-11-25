@@ -212,8 +212,8 @@ export function CardWindow({slug,company,me,card,data,symbol,canWrite:mayWrite,a
   {note('project')}
   {W?<form ref={cardFiles} action={send} className={`cwp${data.files.length?' cwp--chips':''}`}>{hidden('files')}
     {data.files.length?<><span className="cwp__ic" data-tip={t('cwFiles')} aria-hidden="true"><ShellIcon name="clip"/></span><span className="sr-only">{t('cwFiles')}:</span>{fileList}
-     <label className="ib ib--sm cw-pick-files" data-tip={t('cwAddFiles')}><ShellIcon name="plus"/><span className="sr-only">{t('cwAddFiles')}</span><input type="file" name="files" multiple className="sr-only" onChange={()=>cardFiles.current?.requestSubmit()}/></label></>
-    :<label className="cwp__b is-empty cw-pick-files" data-tip={t('cwFiles')}>{icon('clip')}<span className="sr-only">{t('cwAddFiles')}</span>{addLabel}<input type="file" name="files" multiple className="sr-only" onChange={()=>cardFiles.current?.requestSubmit()}/></label>}</form>
+     <label className="ib ib--sm cw-pick-files" data-tip={t('cwAddFiles')}><ShellIcon name="plus"/><input type="file" name="files" multiple className="sr-only" aria-label={t('cwAddFiles')} onChange={()=>cardFiles.current?.requestSubmit()}/></label></>
+    :<label className="cwp__b is-empty cw-pick-files" data-tip={t('cwFiles')}>{icon('clip')}{addLabel}<input type="file" name="files" multiple className="sr-only" aria-label={t('cwAddFiles')} onChange={()=>cardFiles.current?.requestSubmit()}/></label>}</form>
    :data.files.length>0&&<div className="cwp cwp--chips"><span className="cwp__ic" data-tip={t('cwFiles')} aria-hidden="true"><ShellIcon name="clip"/></span><span className="sr-only">{t('cwFiles')}:</span>{fileList}</div>}
   <div className="cwp cwp--made"><span className="cwp__s"><span className="cwp__ic" data-tip={t('cwMadeBy')} aria-hidden="true">{made.by?<Letter name={made.by} size={20}/>:null}</span><span className="od-truncate"><span className="sr-only">{t('cwMadeBy')}: </span><bdi>{made.by||'—'}</bdi>{madeAt&&<> · <span className="num">{madeAt}</span></>}</span></span>{source}</div>
  </div></aside>;
@@ -244,7 +244,7 @@ export function CardWindow({slug,company,me,card,data,symbol,canWrite:mayWrite,a
    {list&&<MentionPop listId={listId} label={t('mentionCallSomeone')} items={list.items} index={list.index} pick={pickEntry}/>}
    {chosen.length>0&&<div className="composer__files">{chosen.map((name,n)=><span key={n} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{name}</bdi></span>)}</div>}
    <div className="composer__row">
-    <label className="composer__btn" data-tip={t('cwAttach')}><ShellIcon name="clip"/><span className="sr-only">{t('cwAttach')}</span><input ref={commentFiles} type="file" name="files" multiple className="sr-only" onChange={event=>setChosen([...(event.target.files||[])].map(file=>file.name))}/></label>
+    <label className="composer__btn" data-tip={t('cwAttach')}><ShellIcon name="clip"/><input aria-label={t('cwAttach')} ref={commentFiles} type="file" name="files" multiple className="sr-only" onChange={event=>setChosen([...(event.target.files||[])].map(file=>file.name))}/></label>
     <label className="sr-only" htmlFor="ta-note">{t('cwCommentLabel')}</label>
     <textarea ref={noteField} className="composer__input" id="ta-note" name="body" rows={1} dir="auto" required readOnly={posting} placeholder={t(alone?'cwCommentAlone':'cwCommentTeam')} aria-describedby="note-hint"
      value={comment} aria-autocomplete="list" aria-expanded={!!list} aria-controls={list?listId:undefined} aria-activedescendant={list?`${listId}-${list.index}`:undefined}

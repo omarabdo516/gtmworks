@@ -1,5 +1,4 @@
 'use client';
-import { messages } from '@/lib/i18n.mjs';
 import { useI18n } from '@/lib/i18n-client';
 import Link from '@/lib/link';
 import { AuthoredTitle } from '@/lib/authored-title';
@@ -51,7 +50,7 @@ export type PlaceCard=(form:FormData)=>Promise<PlaceResult>;
 // A property saved in the Card window (#678): saved, refused because someone changed it meanwhile (with the newer
 // value, as the database holds it), or refused for a reason told in words.
 export type SaveResult={saved:string}|{stale:string}|{error:string};
-export type SaveCard=(form:FormData)=>Promise<SaveResult>;
+type SaveCard=(form:FormData)=>Promise<SaveResult>;
 export type IdeaResult={card:number}|{failed:true};
 // Archiving or restoring Cards (#670): the Cards the database archived or restored, or none.
 // Which question of what archiving would stop is the newest still wanted: an answer to an older or dropped one is ignored.

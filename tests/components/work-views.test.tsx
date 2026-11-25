@@ -52,8 +52,8 @@ test('the board\'s Month filter lists each month of the Cards, newest first, aft
 
 test('the List filters by month too, and a row\'s title opens its Card', async () => {
  const screen = await showWork(workProps({ section: 'work/list', cards }));
- const row = (id: number) => document.querySelectorAll(`.table tbody tr a[href="/c/rs-learning/work/board/${id}"]`).length;
- await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' })).toHaveAttribute('href', '/c/rs-learning/work/board/1');
+ const row = (id: number) => document.querySelectorAll(`.table tbody tr a[href="/c/rs-learning/work/board?card=${id}"]`).length;
+ await expect.element(screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' })).toHaveAttribute('href', '/c/rs-learning/work/board?card=1');
  await userEvent.selectOptions(screen.getByLabelText('Month'), '2026-12');
  await expect.poll(() => row(1)).toBe(0);
  expect(row(3)).toBe(1);
@@ -65,7 +65,7 @@ test('the Calendar shows a Card on its publishing day in its month, linking to t
  const screen = await showWork(workProps({ section: 'work/calendar', cards }));
  await userEvent.fill(screen.getByLabelText('Month'), '2026-11');
  const link = screen.getByRole('link', { name: 'أفكار لمحتوى الشهر' });
- await expect.element(link).toHaveAttribute('href', '/c/rs-learning/work/board/1');
+ await expect.element(link).toHaveAttribute('href', '/c/rs-learning/work/board?card=1');
  expect(link.element().closest('.day')!.firstChild!.textContent).toBe('12');
 });
 
@@ -352,11 +352,11 @@ test('a Card whose chat waits leaves Waiting on you by its answer: a mouse drop 
  for (let step = 1; step <= 10; step++) await mouse('mouseMoved', from.left + from.width / 2 + (to.left + to.width / 2 - from.left - from.width / 2) * step / 10, from.top + 20 + (to.top + 40 - from.top - 20) * step / 10);
  await mouse('mouseReleased', to.left + to.width / 2, to.top + 40);
  await expect.poll(() => toast.mock.calls).toEqual([['This card is waiting on its chat. Once it’s answered or done there, the card moves back on its own', { icon: 'hand' }]]);
- expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9']]);
+ expect(push.mock.calls).toEqual([['/c/rs-learning/work/board?card=9', { scroll: false }]]);
  document.querySelector<HTMLElement>('.kcard[data-card-id="9"] a')!.focus();
  await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
  expect(toast).toHaveBeenCalledTimes(2);
- expect(push.mock.calls).toEqual([['/c/rs-learning/work/board/9'], ['/c/rs-learning/work/board/9']]);
+ expect(push.mock.calls).toEqual([['/c/rs-learning/work/board?card=9', { scroll: false }], ['/c/rs-learning/work/board?card=9', { scroll: false }]]);
  expect(sent(props)).toEqual([]);
  expect(placed(props)).toEqual([]);
  expect(document.querySelector('.kcard[data-card-id="9"]')!.closest('.col')!.getAttribute('data-column')).toBe('waiting');
