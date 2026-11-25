@@ -184,6 +184,8 @@ function handedDatabases({ more = null } = {}) {
    kept.handover = { id: 7, state: 'waiting', conversation: args.conversation, run_id: kept.message.run_id, from: args.agent, to: reach, goal: args.goal, target_run: null };
    return { data: true, error: null };
   }
+  // A command's Agent that asks nothing keeps no card (#470): each read of its Run is tracked, and hands nothing back.
+  if (name === 'track_handover_question' || name === 'track_handover_permission') return { data: [], error: null };
   // No Run Stop ended a handover on is left to stop (#478).
   if (name === 'stopped_runs_open') return { data: [], error: null };
   if (name === 'handover_runs_stopping') return { data: [], error: null };

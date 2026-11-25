@@ -46,6 +46,8 @@ function handover(overrides = {}) {
     if(row.state==='returning') { row.follow_up_run=args.run; row.state='follow_up'; return ok(true); }
     return ok(false);
    }
+   // A channel's handover is no command's (#470): the database keeps no card for its target.
+   if(name==='track_handover_question'||name==='track_handover_permission') return ok(null);
    if(name==='close_handover_target') { if(row.state!=='target') return ok(false); Object.assign(row,{state:'returning',target_outcome:args.run_outcome,summary:args.words}); return ok(true); }
    if(name==='close_handover_follow_up') { if(row.state!=='follow_up') return ok(false); if(args.reply) wrote.push({author:'agent',body:args.reply}); row.state='done'; row.follow_up_outcome=args.run_outcome; return ok(true); }
    return {data:null,error:{message:'unexpected'}};
