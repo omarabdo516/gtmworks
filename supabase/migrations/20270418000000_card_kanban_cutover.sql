@@ -21,9 +21,12 @@ do $$ begin
  end if;
 end $$;
 
--- 1. The old fields, checklist, labels, mode and other assignees, written into each Card's description once: a block
--- after what the description holds, only for a Card that has any of them. Safe to run again: once the columns are gone
--- there is nothing left to write.
+-- 1. The old fields, checklist, labels, mode, next actor and other assignees, written into each Card's description once:
+-- a block after what the description holds, only for a Card that has any of them. A value's lines are written as text,
+-- never as Markdown of their own (a caption's "- [ ]" is no to-do item, its "#" no heading). Safe to run again: once the
+-- columns are gone there is nothing left to write.
+create or replace function pg_temp.as_text(value text) returns text language sql immutable as $f$
+ select string_agg(regexp_replace(regexp_replace(l,'^(\s*)([-*+#>|])','\1\\\2'),'^(\s*)([0-9]+)([.)])','\1\2\\\3'),E'  \n' order by n) from unnest(string_to_array(btrim(value),E'\n')) with ordinality u(l,n) $f$;
 do $$
 declare w record; lines text[]; field record; names text; items text; block text;
 begin
@@ -32,15 +35,20 @@ begin
  for w in select * from public.work_cards order by id loop
   lines:=array[]::text[];
   for field in select * from (values ('Hook',w.hook),('Offering',w.offering),('Segment',w.segment),('Goal',w.goal),('Channel',w.channel),('Format',w.format),('Caption',w.caption)) f(label,value) loop
-   if btrim(coalesce(field.value,''))<>'' then lines:=lines||('**'||field.label||':** '||replace(btrim(field.value),E'\n',E'  \n'))::text; end if;
+   if btrim(coalesce(field.value,''))<>'' then lines:=lines||('**'||field.label||':** '||pg_temp.as_text(field.value))::text; end if;
   end loop;
-  if w.mode is not null then lines:=lines||('**Mode:** '||case w.mode when 'plan' then 'Plan it' when 'do' then 'Do it now' else 'Answer only' end)::text; end if;
-  select string_agg(l.name,', ' order by l.name) into names from public.work_card_labels x join public.work_labels l on l.id=x.label_id and l.company_id=x.company_id where x.card_id=w.id;
+  if w.mode is not null then lines:=lines||('**Mode:** '||case w.mode when 'plan' then 'Plan it' when 'do' then 'Do it now' when 'answer' then 'Answer only' else pg_temp.as_text(w.mode) end)::text; end if;
+  select string_agg(pg_temp.as_text(l.name),', ' order by l.name) into names from public.work_card_labels x join public.work_labels l on l.id=x.label_id and l.company_id=x.company_id where x.card_id=w.id;
   if names is not null then lines:=lines||('**Labels:** '||names)::text; end if;
-  select string_agg(coalesce(p.name,a.person_id::text),', ' order by a.id) into names from public.work_assignees a left join public.people p on p.id=a.person_id
-   where a.card_id=w.id and a.person_id is distinct from w.assignee_person;
+  -- The next actor, when the Card's one assignee is someone else (an Agent, or the person a review was asked by).
+  if w.next_actor is not null and w.next_actor is distinct from w.assignee_person then
+   select p.name into names from public.people p where p.id=w.next_actor;
+   if btrim(coalesce(names,''))<>'' then lines:=lines||('**Next:** '||pg_temp.as_text(names))::text; end if;
+  end if;
+  select string_agg(pg_temp.as_text(p.name),', ' order by a.id) into names from public.work_assignees a join public.people p on p.id=a.person_id
+   where a.card_id=w.id and a.person_id is distinct from w.assignee_person and a.person_id is distinct from w.next_actor and btrim(coalesce(p.name,''))<>'';
   if names is not null then lines:=lines||('**Also assigned:** '||names)::text; end if;
-  select string_agg('- ['||case when i.done then 'x' else ' ' end||'] '||replace(btrim(i.title),E'\n',' '),E'\n' order by i.id) into items from public.work_checklist i where i.card_id=w.id;
+  select string_agg('- ['||case when i.done then 'x' else ' ' end||'] '||replace(pg_temp.as_text(i.title),E'  \n',' '),E'\n' order by i.id) into items from public.work_checklist i where i.card_id=w.id;
   if array_length(lines,1) is null and items is null then continue; end if;
   block:=array_to_string(lines,E'\n\n')||case when items is not null then case when array_length(lines,1) is null then '' else E'\n\n' end||items else '' end;
   update public.work_cards x set description=case when btrim(x.description)='' then block else x.description||E'\n\n'||block end,
@@ -114,6 +122,8 @@ create trigger align_card_assignee before insert or update of agent_id,assignee_
 create or replace function public.card_write_guard()
  returns trigger language plpgsql security definer set search_path='' as $function$
 begin
+ -- A Card never changes Company, whoever writes it (work_guard's first rule, kept).
+ if tg_op='UPDATE' and new.company_id<>old.company_id then raise exception 'company cannot change' using errcode='42501'; end if;
  if auth.uid() is null or coalesce(current_setting('approval.internal',true),'')='yes' then return new; end if;
  if tg_op='INSERT' then
   if new.status='waiting' then raise exception 'waiting is not placed by hand' using errcode='42501'; end if;
@@ -385,6 +395,8 @@ do $$ begin
   update public.work_card_moves m set to_status=coalesce(m.to_status,s.board_column) from public.work_stages s where s.id=m.to_stage_id and m.to_status is null;
  end if;
 end $$;
+-- A move whose stage was deleted since has no column to go back to: Undo could never put it back, so it is no longer
+-- remembered. The Card's log rows of it stay.
 delete from public.work_card_moves where from_status is null or to_status is null;
 alter table public.work_card_moves drop column if exists from_stage_id, drop column if exists to_stage_id;
 alter table public.work_card_moves alter column from_status set not null, alter column to_status set not null;
@@ -435,7 +447,6 @@ begin
   select w.id,w.agent_id into card,card_agent from public.work_cards w where w.company_id=talk.company_id and w.conversation_id=conversation;
   if card is null and main then
    -- As #144's Card: In progress, titled from the person's first message in this chat.
-   if true then
     select m.body into first_words from public.conversation_messages m where m.conversation_id=conversation and m.author='person' order by m.id limit 1;
     insert into public.work_cards(company_id,status,title,agent_id,conversation_id)
      values(talk.company_id,'progress',public.chat_card_title(first_words,target.name),target.id,conversation)
@@ -448,7 +459,6 @@ begin
       update public.work_cards set agent_id=target.id
        where company_id=talk.company_id and id=card and agent_id is distinct from target.id and archived_at is null; end if;
     end if;
-   end if;
   elsif card is not null and main and card_agent is distinct from target.id then
    update public.work_cards set agent_id=target.id where company_id=talk.company_id and id=card and archived_at is null;
   end if;

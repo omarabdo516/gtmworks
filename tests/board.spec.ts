@@ -72,8 +72,8 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  expect(await columnOf(page,card.id)).toBe('progress');
  // The log under the card has both moves.
  await page.goto(card.path);
- await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*أفكار\s*to\s*بريف جاهز/})).toHaveCount(1);
- await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*بريف جاهز\s*to\s*كتابة/})).toHaveCount(1);
+ await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*Ideas\s*to\s*Planned/})).toHaveCount(1);
+ await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*Planned\s*to\s*In progress/})).toHaveCount(1);
  // Waiting on you fills by itself: a drop there is refused on the board.
  await page.goto('/c/rs-learning/work/board');
  await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus();
@@ -446,7 +446,7 @@ test('a second Member sees the same order; a place inside a column is not announ
  await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect.poll(()=>orderIn(page,'planned')).toEqual(placed(planned,b,planned[0]));
  await page.goto(`/c/rs-learning/work/board/${b}`);
- await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*أفكار\s*to\s*بريف جاهز/})).toHaveCount(1);
+ await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*Ideas\s*to\s*Planned/})).toHaveCount(1);
 });
 
 // #676: people who may edit move a Card freely, Live and Done included: a Contributor's drop on Live moves it there.

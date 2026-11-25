@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(37);
+select plan(38);
 -- #676, #684 (ADR 0026): a Card's status is its column. move_card is the one way a person moves it, with every rule of a
 -- move in check_card_move, and undo_card_move puts the person's own latest move back (#168). Since the cutover the Card
 -- has no stage, and a status is never written by hand: the row refuses it (card_write_guard).
@@ -78,6 +78,7 @@ select is(pg_temp.answer(format('update public.work_cards set status=%L where id
 select is(pg_temp.answer(format('update public.work_cards set approved_at=now() where id=%s',pg_temp.id('H'))),'42501 approval fields are protected','an approval written by hand is refused');
 select is(pg_temp.answer($$insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000676','waiting','Status Forged')$$),'42501 waiting is not placed by hand','a Card made by hand is not made waiting on a review');
 select is((select status from card where title='Status H'),'planned','and the Card stays');
+select is(pg_temp.answer(format('update public.work_cards set company_id=%L where id=%s','10000000-0000-0000-0000-000000000001',pg_temp.id('H'))),'42501 company cannot change','nor does a Card change Company');
 
 -- Who may not move: a Viewer, someone outside the Company, and anyone on an archived Card or one whose Agent hides from them.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);

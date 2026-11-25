@@ -75,10 +75,12 @@ test('a project is created, a card is filed into it, and the board and list show
 
  // The board and the list filter by project.
  await page.goto('/c/rs-learning/work/board');
- await page.getByLabel('Project',{exact:true}).selectOption({label:name});
+ await page.getByRole('button',{name:'Project: All projects'}).click();
+ await page.getByRole('menuitemradio',{name}).click();
  await expect(page.locator('.card')).toHaveCount(1);
  await expect(page.locator('.card').first()).toContainText(title);
- await page.getByLabel('Project',{exact:true}).selectOption({label:'All projects'});
+ await page.getByRole('button',{name:`Project: ${name}`}).click();
+ await page.getByRole('menuitemradio',{name:'All projects'}).click();
  await expect(page.locator('.card')).toHaveCount(total);
  await page.goto('/c/rs-learning/work/list');
  await page.getByLabel('Project',{exact:true}).selectOption({label:name});
@@ -97,7 +99,9 @@ test('a project is created, a card is filed into it, and the board and list show
    await expect(page.getByRole('form',{name,exact:true})).toBeVisible();
    await shoot(page,`projects-page-${language}`);
    await page.goto('/c/rs-learning/work/board');
-   await page.locator('.work-filters').getByLabel({en:'Project',ar:'المشروع'}[language],{exact:true}).selectOption({label:name});
+   // The board's Project menu (#683).
+   await page.getByRole('button',{name:/^(Project|المشروع):/}).click();
+   await page.getByRole('menuitemradio',{name}).click();
    await expect(page.locator('.card')).toHaveCount(1);
    await shoot(page,`projects-board-${language}`);
    await page.locator('.card a').first().click();

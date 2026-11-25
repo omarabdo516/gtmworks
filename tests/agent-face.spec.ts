@@ -26,15 +26,14 @@ test('revoking a grant keeps the agent face and name in a company-only member’
   // the signed-in id, auth.uid().
   query(`do $$ begin perform set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
    insert into public.work_comments(company_id,card_id,body,author_id) values ('10000000-0000-0000-0000-000000000001',1,'${body}','30000000-0000-0000-0000-000000000001'); end $$`);
-  await signIn(member,'manager@example.com','/c/rs-learning/work/board');
-  const before=await faceMarkup(member.locator('.card-avatars').getByRole('img',{name:names[1],exact:true}).first(),names[1]);
+  // The Card opens in its window (#678), where the note is one of its Comments, drawn as the log draws it.
+  await signIn(member,'manager@example.com','/c/rs-learning/work/board/1');
+  const message=member.locator('.cw[open] #cw-list .lg-row').filter({hasText:body});
+  await expect(message.locator('.lg-name')).toHaveText(names[1]);
+  const before=await faceMarkup(message.locator('.lg-av'),null);
   await writer.getByRole('button',{name:'Revoke access from Writer'}).click();
   await expect(writer.getByText('No access',{exact:true})).toBeVisible();
-  await member.goto('/c/rs-learning/work/board');
-  expect(await faceMarkup(member.locator('.card-avatars').getByRole('img',{name:names[1],exact:true}).first(),names[1])).toBe(before);
   await member.goto('/c/rs-learning/work/board/1');
-  // The Card opens in its window (#678), where the note is one of its Comments, drawn as the log draws it.
-  const message=member.locator('.cw[open] #cw-list .lg-row').filter({hasText:body});
   await expect(message.locator('.lg-name')).toHaveText(names[1]);
   expect(await faceMarkup(message.locator('.lg-av'),null)).toBe(before);
  } finally {

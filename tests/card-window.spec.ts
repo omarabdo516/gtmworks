@@ -256,6 +256,8 @@ test('the description is written on the page: its editor loads only on Edit, sav
 });
 
 test('on a phone the description is written with a bar of blocks', async ({ page }) => {
+ // Card 4 starts with no description (the seed gives it its old fields and to-do, #684), so the block is the first.
+ query(`update public.work_cards set description='',description_version=description_version+1 where id=4`);
  await page.setViewportSize({ width: 390, height: 844 });
  await signIn(page, 'omar@example.com', `${board}?card=4`);
  const card = windowOf(page);

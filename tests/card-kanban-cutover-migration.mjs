@@ -37,8 +37,8 @@ insert into public.work_labels(company_id,name) values (${rs},'reel'),(${rs},'la
 insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values (${ads},${rs},'c6840000-0000-0000-0000-000000000001','Ads','Runs the Meta ads.',false,'cutover-ads');
 insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('e6840000-0000-0000-0000-000000000001',${rs},${contributor},${ads},'Ads');
 -- Every field, a checklist, both labels, three assignees and a mode; the first assignee is the Card's assignee.
-insert into public.work_cards(company_id,status,title,stage_id,mode,hook,offering,segment,goal,channel,format,caption,assignee_person)
- select ${rs},'progress','Cutover full',id,'plan','Stop scrolling','Course','Parents','Sign-ups','Instagram','Reel','Line one'||E'\\n'||'line two',${omar} from public.work_stages where name='كتابة' and company_id=${rs};
+insert into public.work_cards(company_id,status,title,stage_id,mode,hook,offering,segment,goal,channel,format,caption,assignee_person,next_actor)
+ select ${rs},'progress','Cutover full',id,'plan','Stop scrolling','Course','Parents','Sign-ups','Instagram','Reel','Line one'||E'\\n'||'- not a to-do',${omar},${manager} from public.work_stages where name='كتابة' and company_id=${rs};
 insert into public.work_checklist(company_id,card_id,title,done) select ${rs},w.id,x.title,x.done from public.work_cards w, (values ('Write the hook',true),('Pick the music',false)) x(title,done) where w.title='Cutover full';
 insert into public.work_card_labels(company_id,card_id,label_id) select ${rs},w.id,l.id from public.work_cards w, public.work_labels l where w.title='Cutover full' and l.company_id=${rs};
 insert into public.work_assignees(company_id,card_id,person_id) select ${rs},id,p from public.work_cards, unnest(array[${omar},${manager},${contributor}]::uuid[]) p where title='Cutover full';
@@ -81,8 +81,8 @@ select is((select count(*)::int from public.work_cards w join kept k using(id) w
  or w.agent_id is distinct from k.agent_id or w.conversation_id is distinct from k.conversation_id or w.channel_id is distinct from k.channel_id),0,'its assignee, its Agent and its chat or channel stay');
 select is((select description from public.work_cards where title='Cutover full'),
  '**Hook:** Stop scrolling'||E'\\n\\n'||'**Offering:** Course'||E'\\n\\n'||'**Segment:** Parents'||E'\\n\\n'||'**Goal:** Sign-ups'||E'\\n\\n'||'**Channel:** Instagram'||E'\\n\\n'||'**Format:** Reel'
- ||E'\\n\\n'||'**Caption:** Line one  '||E'\\n'||'line two'||E'\\n\\n'||'**Mode:** Plan it'||E'\\n\\n'||'**Labels:** launch, reel'||E'\\n\\n'||'**Also assigned:** مدير, مراجع'
- ||E'\\n\\n'||'- [x] Write the hook'||E'\\n'||'- [ ] Pick the music','the old fields, mode, labels and the other assignees come into the description, the checklist as its to-do items');
+ ||E'\\n\\n'||'**Caption:** Line one  '||E'\\n'||'\\- not a to-do'||E'\\n\\n'||'**Mode:** Plan it'||E'\\n\\n'||'**Labels:** launch, reel'||E'\\n\\n'||'**Next:** مدير'||E'\\n\\n'||'**Also assigned:** مراجع'
+ ||E'\\n\\n'||'- [x] Write the hook'||E'\\n'||'- [ ] Pick the music','the old fields as text, mode, labels, next actor and the other assignees come into the description, the checklist as its to-do items');
 select is((select count(*)::int from public.card_todos((select description from public.work_cards where title='Cutover full'))),2,'and the to-do items read as the checklist did');
 select is((select description from public.work_cards where title='Cutover written'),'# Brief'||E'\\n\\n'||'**Format:** Story','a description already written keeps its text, the old fields after it');
 select is((select description from public.work_cards where title='Cutover chat'),'**Hook:** From the chat','a chat''s Card keeps its field too');
