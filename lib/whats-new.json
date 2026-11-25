@@ -1,5 +1,11 @@
 [
  {
+  "issue": 765,
+  "date": "2026-11-25",
+  "en": { "title": "A channel message is kept first too", "body": "A message you send in a channel or a card's chat is stored and shown at once, and the Agents it calls start after; if one can't start, the message says Not sent to that Agent, with Try again." },
+  "ar": { "title": "رسالة القناة بتتحفظ الأول هي كمان", "body": "الرسالة اللي بتبعتها في قناة أو في شات البطاقة بتتحفظ وتظهر على طول، والوكلاء اللي بتناديهم بيبدأوا بعدها؛ ولو واحد منهم ماقدرش يبدأ، الرسالة بتقول «ما اتبعتتش» للوكيل ده، ومعاها «جرّب تاني»." }
+ },
+ {
   "issue": 764,
   "date": "2026-11-25",
   "en": { "title": "Your message is kept the moment you send it", "body": "A message you send is stored before the Agent is asked, so closing the page or a slow server never loses it; if the agent engine can't start on it, it stays in the Conversation marked Not sent, with Try again." },
