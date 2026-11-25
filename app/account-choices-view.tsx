@@ -24,24 +24,26 @@ type Save=(state:string,form:FormData)=>Promise<string>;
 const themeLook={light:{icon:'sun',label:'settingsLight'},dark:{icon:'moon',label:'settingsDark'},device:{icon:'monitor',label:'device'}} as const;
 
 // "Your account": the look (Light, Dark or System, saved to the account) and the interface language, each saved as soon
-// as it is chosen. While one save is on its way every choice waits, so two saves never race. It takes its two saves as
+// as it is chosen. While one save is on its way every choice waits, so two saves never race: the choices say they are
+// unavailable (aria-disabled) and a press does nothing, but they are not disabled, since a disabled button drops the focus
+// the keyboard just gave it (#720, as #588); the arrow keys still move between them. It takes its two saves as
 // props, so its component test renders it with no server action (#218).
 export default function AccountChoicesView({theme,saveTheme,saveLanguage}:{theme:string,saveTheme:Save,saveLanguage:Save}) {
  const {t,language}=useI18n();
  const [pending,startTransition]=useTransition();
  const [error,setError]=useState('');
- const save=(name:'theme'|'language',value:string)=>startTransition(async()=>{
+ const save=(name:'theme'|'language',value:string)=>{ if(!pending) startTransition(async()=>{
   const form=new FormData(); form.set(name,value);
   setError(await (name==='theme'?saveTheme:saveLanguage)('',form));
- });
+ }); };
  return <>
   <section className="dp-sec" aria-labelledby="ac-h-th"><h4 className="dp-label" id="ac-h-th"><span>{t('settingsAppearance')}</span></h4>
    <div className="panel-card set-card"><div className="segmented segmented--field" role="radiogroup" aria-labelledby="ac-h-th" onKeyDown={arrows}>
-    {themeChoices.map(key=>{const on=key===theme, look=themeLook[key]; return <button key={key} type="button" role="radio" id={`ac-th-${key}`} aria-checked={on} tabIndex={on?0:-1} disabled={pending} onClick={()=>{ if(!on) save('theme',key); }}>
+    {themeChoices.map(key=>{const on=key===theme, look=themeLook[key]; return <button key={key} type="button" role="radio" id={`ac-th-${key}`} aria-checked={on} tabIndex={on?0:-1} aria-disabled={pending||undefined} onClick={()=>{ if(!on) save('theme',key); }}>
      <SettingsIcon name={look.icon}/><span>{t(look.label)}</span></button>;})}
    </div></div></section>
   <section className="dp-sec" aria-labelledby="ac-h-lang"><Label id="ac-h-lang" info={t('settingsChatsStayArabic')}>{t('interfaceLanguage')}</Label>
-   <div className="panel-card" role="radiogroup" aria-labelledby="ac-h-lang" onKeyDown={arrows}>{languages.map(item=><button key={item.key} type="button" className="panel-row" role="radio" id={`ac-lang-${item.key}`} aria-checked={item.key===language} tabIndex={item.key===language?0:-1} disabled={pending} onClick={()=>{ if(item.key!==language) save('language',item.key); }}>
+   <div className="panel-card" role="radiogroup" aria-labelledby="ac-h-lang" onKeyDown={arrows}>{languages.map(item=><button key={item.key} type="button" className="panel-row" role="radio" id={`ac-lang-${item.key}`} aria-checked={item.key===language} tabIndex={item.key===language?0:-1} aria-disabled={pending||undefined} onClick={()=>{ if(item.key!==language) save('language',item.key); }}>
     <span className="panel-row__text"><span className="panel-row__t lang-native" lang={item.key} dir={item.key==='ar'?'rtl':'ltr'}>{t(item.name)}</span><span className="panel-row__d">{t(item.description)}</span></span>
     {item.key===language&&<span className="panel-row__meta"><SettingsIcon name="check"/></span>}
    </button>)}</div>
