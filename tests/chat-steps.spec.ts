@@ -73,3 +73,46 @@ test('a reply\'s steps on screen are its Hermes session\'s, and the chat shows t
  await expect(page.locator('.steps__list .step')).toHaveText(['web_search · accounting courses CairoDone','read_file · campaigns.csvSkipped']);
  expect(fake.settings.managementRequests.some(request=>request.path?.startsWith(`/api/sessions/${session}/messages?profile=${profile}`)),'read from the Agent\'s own profile').toBe(true);
 });
+
+// #766 (ADR 0030): the Conversation's record never waits on the Engine. With the session's read held five seconds, the
+// page's first byte and its messages are not held by it, the steps fill in once it answers, and a read that never
+// answers leaves the messages as they are, with no error line.
+test('a session read held five seconds holds neither the first byte nor the messages, and the steps arrive after',async({page})=>{
+ const conversation=randomUUID(); const session=`session-${conversation.slice(0,8)}`; const run=`slow-${conversation.slice(0,8)}`;
+ const sent=Date.parse('2026-11-16T11:12:00Z')/1000;
+ query(`do $$ begin
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name,hermes_session_id) values ('${conversation}','${company}','${omar}','${lead}','Lead','${session}');
+  insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id,created_at) values ('${company}','${conversation}','person','${omar}','Omar','Draft the ad copy','${randomUUID()}','${run}','2026-11-16T11:12:00Z');
+  insert into public.conversation_messages(company_id,conversation_id,author,agent_id,author_name,body,run_id,created_at) values ('${company}','${conversation}','agent','${lead}','Lead','Here is the copy.','${run}','2026-11-16T11:14:00Z');
+ end $$;`);
+ const call={id:'call_1',type:'function',function:{name:'web_search',arguments:JSON.stringify({query:'ad copy'})}};
+ fake.settings.sessions.set(session,{profile,messages:[
+  {role:'user',content:'Draft the ad copy',timestamp:sent+1},
+  {role:'assistant',content:'',tool_calls:[call],timestamp:sent+3},
+  {role:'tool',tool_call_id:'call_1',tool_name:'web_search',content:'{"results":[]}',timestamp:sent+10},
+  {role:'assistant',content:'Here is the copy.',timestamp:sent+42}]});
+ await signIn(page,'omar@example.com','/c/rs-learning/home');
+ fake.settings.sessionDelay=5000;
+ try {
+  const opened=Date.now();
+  await page.goto(`/c/rs-learning/conversations/${conversation}`,{waitUntil:'commit'});
+  await expect(page.getByText('Here is the copy.')).toBeVisible();
+  const took=Date.now()-opened;
+  const firstByte=await page.evaluate(()=>Math.round((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).responseStart));
+  console.log(`chat open with a slow session, messages visible: ${took} ms, first byte ${firstByte} ms`);
+  expect(firstByte,'the first byte is not held by the Engine').toBeLessThan(2000);
+  expect(took,'the messages are not held by the Engine').toBeLessThan(4000);
+  // Held five seconds the read passes the server's own five-second limit on it, so those steps never come and nothing
+  // says so; held two, they fill in once it answers.
+  await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
+  fake.settings.sessionDelay=2000;
+  await page.reload({waitUntil:'commit'});
+  await expect(page.getByText('Here is the copy.')).toBeVisible();
+  await expect(page.locator('.steps__toggle')).toHaveText('Used 1 tool · 41 sec',{timeout:15000});
+  // A session read that never answers leaves the messages as they are, with no error line in the Conversation.
+  fake.settings.sessionDelay=Infinity;
+  await page.reload({waitUntil:'commit'});
+  await expect(page.getByText('Here is the copy.')).toBeVisible();
+  await expect(page.locator('.transcript [role="alert"]')).toHaveCount(0);
+ } finally { fake.settings.sessionDelay=0; }
+});

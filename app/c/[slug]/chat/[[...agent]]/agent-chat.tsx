@@ -61,6 +61,17 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
  // with no navigation, and the focus follows it.
  const [picked,setPicked]=useState<string|null>(null);
  const shown=agents.find(choice=>choice.agent.id===picked)??{agent,empty,details};
+ // A picked Agent's details are read when it is picked (#769), once per Agent, and drawn as they arrive.
+ const [pickedDetails,setPickedDetails]=useState<Record<string,AgentDetailsView>>({});
+ const wanted=picked&&!agents.find(choice=>choice.agent.id===picked)?.details&&!pickedDetails[picked]?picked:null;
+ useEffect(()=>{
+  if(!wanted) return;
+  let gone=false;
+  // The server action is loaded only when an Agent is picked, so the chat's own bundle and its tests never load it.
+  void import('@/app/agent-details-actions').then(({pickedAgentDetails})=>pickedAgentDetails(company,wanted,slug)).then(view=>{ if(view&&!gone) setPickedDetails(current=>({...current,[wanted]:view})); }).catch(()=>{});
+  return ()=>{ gone=true; };
+ },[wanted,company,slug]);
+ const shownDetails=shown.details??(shown.agent?pickedDetails[shown.agent.id]??null:null);
  const current=shown.agent;
  const chip=useRef<HTMLButtonElement|null>(null); const pickingAgent=useRef(false);
  const pick=(id:string)=>{ if(id===current?.id||sending) return; pickingAgent.current=true; setPicked(id); setConversation(conversationOf(id)); };
@@ -99,7 +110,7 @@ export default function AgentChat({slug,company,agent,details,writer,team=false,
     return new Promise<never>(()=>{});
    }}/>:<p className="ro-line" role="note"><ShellIcon name="eye"/><span>{current.main?t('viewOnlyLead'):t('viewOnly')}</span></p>)}</div>
   </div>
-  {current&&shown.details&&<AgentDetails key={current.id} panel={panel} agent={current} details={shown.details} slug={slug} suggest={writer?text=>box.current?.fill(text):undefined}/>}
+  {current&&shownDetails&&<AgentDetails key={current.id} panel={panel} agent={current} details={shownDetails} slug={slug} suggest={writer?text=>box.current?.fill(text):undefined}/>}
   {agent&&isNew&&<OpenedMark company={company} agent={agent.id}/>}
   {/* Opening an Agent's chat wakes it for this reader (#699), the one picked from the chips too. */}
   <OpenedHere company={company} agent={current?.id}/>

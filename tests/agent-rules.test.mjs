@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { withTurnQueue } from './turn-queue.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -13,11 +14,11 @@ const hermes={address:'http://hermes:8642',key:'test-only-key'};
 const connection='f9000000-0000-0000-0000-000000000001';
 const rules=['من دلوقتي ما تبعتش حاجة للعميل من غير ما أشوفها','Answer every comment within the day'];
 const note='Answer in short points.';
-function databases({pinned,attempt=1,address='http://hermes:8642'}) {
+function databases({pinned,attempt=1,address='http://hermes:8642',held=note}) {
  const asked=/** @type {string[]} */([]);
  const rpc=async(/** @type {string} */ name,/** @type {any} */ given)=>{ asked.push(name);
   if(name==='conversation_agent') return {data:null,error:null};
-  if(name==='reserve_conversation_turn') return {data:{state:'reserved',connection,profile:'writer',note},error:null};
+  if(name==='reserve_conversation_turn') return {data:{state:'reserved',connection,profile:'writer',note:held},error:null};
   if(name==='queued_conversations') return {data:[{conversation:'c'}],error:null};
   if(name==='claim_conversation_turn') return {data:[{company:'co',agent:'a',person:'p',send_key:'k',message:'Draft the offer email',connection,profile:'writer',note,retry:false}],error:null};
   if(name==='conversation_handover_agents') return {data:[],error:null};
@@ -27,12 +28,13 @@ function databases({pinned,attempt=1,address='http://hermes:8642'}) {
   if(name==='pin_run_model') return {data:null,error:null};
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
   if(name==='pin_lead_brief') return {data:null,error:null};
-  if(name==='begin_start') return {data:attempt,error:null};
+  if(name==='begin_turn_start') return {data:attempt,error:null};
   if(['send_conversation_message','record_conversation_turn'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}}; };
  const chain=(/** @type {unknown} */ data)=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>({data,error:null})}; return c; };
- const db={rpc,from:(/** @type {string} */ table)=>chain(table==='conversation_messages'?null:{id:'a9000000-0000-0000-0000-000000000001'})};
- const service={rpc,from:()=>chain({instructions:null})};
+ const queued=withTurnQueue(rpc);
+ const db={rpc:queued,from:(/** @type {string} */ table)=>chain(table==='conversation_messages'?null:{id:'a9000000-0000-0000-0000-000000000001'})};
+ const service={rpc:queued,from:()=>chain({instructions:null})};
  return {db,service,asked,hermes:{address,key:'test-only-key'}};
 }
 const send=(/** @type {ReturnType<typeof databases>} */ {db,service,hermes},/** @type {object} */ engine)=>sendMessage(db,service,{company:'co',conversation:'c',sendKey:'k',message:'Draft the offer email',hermes,...engine});
@@ -59,8 +61,7 @@ test('a queued turn starts with no rules either',async()=>{
 });
 
 test('a run of an Agent with no rules is told none and offered only what was pinned; a run never pinned is offered nothing',async()=>{
- const fake=fakeEngine(); const quiet=databases({pinned:{tools:['create_agent','save_rule'],rules:[]}});
- quiet.db.rpc=async(name,given)=>name==='reserve_conversation_turn'?{data:{state:'reserved',connection,profile:'writer',note:null},error:null}:quiet.service.rpc(name,given);
+ const fake=fakeEngine(); const quiet=databases({pinned:{tools:['create_agent','save_rule'],rules:[]},held:null});
  await send(quiet,{engineFor:fake.engineFor});
  assert.equal(fake.runs[0].instructions,null);
  assert.deepEqual(fake.runs[0].tools.map(tool=>tool.name),['create_agent','save_rule']);
@@ -90,10 +91,10 @@ test('a run the previous app version started is retried with the exact request i
 });
 
 // #345: the team's rules live in a gtmworks section of each Agent's profile SOUL.md, written by the worker from the
-// database (agent_soul_rules_work); the profile's own text around it is never changed.
+// database (agent_soul_rules_all); the profile's own text around it is never changed.
 const soulOf=(/** @type {any} */ fake,/** @type {string} */ profile)=>fake.settings.profiles.get(profile).soul;
 const install=(/** @type {any} */ fake)=>({address:fake.address,managementAddress:fake.managementAddress,profile:'default',key:'test-only-key'});
-const rulesDatabase=(/** @type {Record<string,string[]>} */ work)=>({rpc:async(/** @type {string} */ name)=>name==='agent_soul_rules_work'?{data:Object.entries(work).map(([profile,rules])=>({profile,rules})),error:null}:{data:null,error:{message:`unexpected ${name}`}}});
+const rulesDatabase=(/** @type {Record<string,string[]>} */ work)=>({rpc:async(/** @type {string} */ name)=>name==='agent_soul_rules_all'?{data:Object.entries(work).map(([profile,rules])=>({profile,rules})),error:null}:{data:null,error:{message:`unexpected ${name}`}}});
 test('a rule given and removed appears in and leaves the profile\'s SOUL.md section, and the text around it stays as it was',async()=>{
  const hermes=await fakeHermes(); const ads='ag-a0000000000000000000000000000001'; const own='You are Ads.\nWrite short copy.\n';
  try {
@@ -166,4 +167,65 @@ test('every Agent\'s soul holds the money rule in the section gtmworks owns, wri
   assert.ok(soulOf(hermes,quiet).startsWith('Brand: warm.\n')&&soulOf(hermes,quiet).endsWith('Sign off as the team.\n'));
   assert.equal(soulOf(hermes,quiet).split(moneyRule).length,2,'the rule is in the soul once');
  } finally { await hermes.close(); }
+});
+
+// #772 (ADR 0031 point 4): the worker writes a profile's rules when they changed since its own last write, with a slow
+// pass for drift; an Engine that does not answer is left alone longer after each failure, its change of state logged
+// once with its cause; one slow profile holds no other; and every profile is served, however many.
+const soulRequests=(/** @type {any} */ fake)=>fake.settings.managementRequests.filter((/** @type {{path?:string}} */ request)=>/\/soul$/.test(request.path??'')).length;
+test('with nothing changed the worker asks the Engine for no soul until the drift pass, and a rule change is one write',async()=>{
+ const hermes=await fakeHermes(); const ads='ag-a0000000000000000000000000000772'; let clock=1e6;
+ const memory={marks:new Map(),drift:0}; const options={hermes:install(hermes),memory,now:()=>clock};
+ try {
+  hermes.settings.profiles.set(ads,{soul:'You are Ads.\n',provider:'auto',model:'',key:'test-only-key',config:{},credentials:{}});
+  const work={[ads]:[rules[0]]};
+  assert.deepEqual(await keepAgentRules(rulesDatabase(work),options),{written:1});
+  const after=soulRequests(hermes);
+  // A minute of passes, one a second as the worker runs them: no soul read or written.
+  for(let pass=0;pass<60;pass++) { clock+=1000; await keepAgentRules(rulesDatabase(work),options); }
+  assert.equal(soulRequests(hermes),after,'no SOUL.md request while nothing changed');
+  // A rule given reaches the soul on the next pass, with one read and one write.
+  work[ads]=[rules[0],rules[1]];
+  clock+=1000; assert.deepEqual(await keepAgentRules(rulesDatabase(work),options),{written:1});
+  assert.equal(soulRequests(hermes),after+2);
+  assert.ok(soulOf(hermes,ads).startsWith('You are Ads.\n')&&soulOf(hermes,ads).includes(`- ${rules[1]}`));
+  // Changed outside gtmworks: the drift pass, five minutes on, puts the section back and keeps the text around it.
+  hermes.settings.profiles.get(ads).soul='You are Ads.\nEdited by hand.\n';
+  clock+=60000; await keepAgentRules(rulesDatabase(work),options);
+  assert.equal(soulOf(hermes,ads),'You are Ads.\nEdited by hand.\n','not before the drift pass');
+  clock+=300000; assert.deepEqual(await keepAgentRules(rulesDatabase(work),options),{written:1});
+  assert.ok(soulOf(hermes,ads).startsWith('You are Ads.\nEdited by hand.\n')&&soulOf(hermes,ads).includes(`- ${rules[1]}`));
+ } finally { await hermes.close(); }
+});
+
+test('an Engine that times out is logged once with its cause, asked again after a longer wait each time, and once more when it answers',async()=>{
+ const { engineHealth } = await import('../lib/engine-health.mjs');
+ let clock=1e6; const lines=/** @type {any[]} */([]); let answers=false; const calls=/** @type {number[]} */([]);
+ const health=engineHealth({now:()=>clock,write:line=>lines.push(JSON.parse(line))});
+ const memory={marks:new Map(),drift:clock};
+ const write=async()=>{ calls.push(clock); return answers?{state:'written'}:{state:'unreachable',cause:'timedOut'}; };
+ const db=rulesDatabase({'ag-a0000000000000000000000000000773':[rules[0]]});
+ const pass=()=>keepAgentRules(db,{hermes:{address:'http://hermes-one:8642',profile:'default',key:'k'},write,memory,health,now:()=>clock});
+ await pass();
+ assert.deepEqual(lines.map(({state,cause,engine})=>[state,cause,engine]),[['down','timedOut','hermes-one:8642']],'one line, naming a timeout');
+ for(let second=1;second<=10;second++) { clock+=1000; await pass(); }
+ // Asked at 0 s, then after 2 s, then 4 s more: never every pass.
+ assert.deepEqual(calls.map(at=>(at-1e6)/1000),[0,2,6]);
+ assert.equal(lines.length,1,'the state did not change, so nothing more is logged');
+ answers=true; clock+=10000; await pass();
+ assert.deepEqual(lines.map(({state,cause})=>[state,cause]),[['down','timedOut'],['up',null]]);
+ clock+=1000; await pass();
+ assert.equal(lines.length,2);
+});
+
+test('one profile that holds holds no other, and every profile is served however many there are',async()=>{
+ const { engineHealth } = await import('../lib/engine-health.mjs');
+ const profiles=Array.from({length:150},(_,at)=>`ag-a${String(at).padStart(31,'0')}`);
+ const served=new Set(); let release=()=>{};
+ const held=new Promise(resolve=>{ release=()=>resolve({state:'written'}); });
+ const write=async(/** @type {any} */ _,/** @type {{profile:string}} */ {profile})=>{ if(profile===profiles[0]) return held; served.add(profile); return {state:'written'}; };
+ const pass=keepAgentRules(rulesDatabase(Object.fromEntries(profiles.map(profile=>[profile,[]]))),{hermes:{address:'http://hermes-two:8642',profile:'default',key:'k'},write,memory:{marks:new Map(),drift:0},health:engineHealth({write:()=>{}})});
+ await new Promise(resolve=>setTimeout(resolve,50));
+ assert.equal(served.size,149,'every other profile was served while the first one held');
+ release(); assert.deepEqual(await pass,{written:150});
 });

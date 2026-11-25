@@ -14,7 +14,8 @@ type MemberRole='owner'|'manager'|'contributor'|'viewer';
 // A Run that failed for a cause a retry cannot fix is that cause (lib/model-causes.ts): the Company has no model
 // connected at all (#428), or its model call was refused for no credit, a refused key or a missing model (#530), which
 // the channel says as a Conversation does (#422, #457), instead of that the Agent could not reply.
-type MentionState='open'|'answered'|'unanswered'|'stopped'|ModelCause;
+// `notSent`: the Engine refused the Run's start, or was not reached within the attempts (#765); its person may try again.
+type MentionState='open'|'answered'|'unanswered'|'stopped'|'notSent'|ModelCause;
 // What the Agent wrote before its question or request in the same message (#647) is drawn above the card, as its words.
 type ChannelPermission=Extract<ReplyCard,{kind:'permission'}>&{said?:string};
 // One Agent a message called (#152): its Run's state, what that Run asked to be allowed (#165), drawn as the Agent's
@@ -22,7 +23,9 @@ type ChannelPermission=Extract<ReplyCard,{kind:'permission'}>&{said?:string};
 // that turn. A question whose Agent is the main Agent is the chips card (#143) and only the Member whose message it is
 // answers it (`chips`).
 export type ChannelQuestion=Extract<ReplyCard,{kind:'question'}>&{chips:boolean,said?:string};
-export type ChannelMention={agent:string,face:string,state:MentionState,permissions:ChannelPermission[],questions:ChannelQuestion[]};
+// The Agents a person's message called, each with its own turn (#152); none for any other line.
+export const mentionsOf=(message:ChannelMessage):ChannelMention[]=>message.author==='person'?message.mentions??(message.mention?[message.mention]:[]):[];
+export type ChannelMention={agent:string,face:string,state:MentionState,ordinal?:number,permissions:ChannelPermission[],questions:ChannelQuestion[]};
 // A message that calls an Agent carries what its Run asked to be allowed (#165), drawn as the Agent's turn under it;
 // `face` is the Agent's, for that turn. A message may call up to three Agents (#152): `mentions` is each of them in the
 // order named, and `mention` the first, which a channel with one Agent called is. An Agent's reply carries its Run's
@@ -93,7 +96,7 @@ export type ChannelRecord={
 };
 type StoredMessage={id:number,author:'person'|'agent',person_id:string|null,agent_id:string|null,author_name:string,body:string,reply_to:number|null,reply_ordinal:number|null,hand_card:number|null,created_at:string,missed_files?:string[]|null};
 type StoredNote={id:number,kind:'invite'|'card',invitee_name:string|null,actor_name:string,created_at:string};
-type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,outcome:string|null};
+type StoredRun={message_id:number,ordinal:number|null,agent_id:string|null,kept_agent_id?:string|null,agent_name:string,outcome:string|null,started?:boolean|null};
 type StoredPermission={id:number,message_id:number,ordinal:number|null,title:string,content:unknown,state:string,decided_at:string|null,created_at:string,said_before?:string|null};
 type StoredFile={id:number,message_id:number,name:string,content_type?:string};
 type StoredAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,here_only:boolean};
@@ -123,7 +126,7 @@ type ReadSession=(agent:string,session:string,profile:string)=>Promise<{turns:Se
 const shownMessages=200;
 
 // A Run its person stopped (#478) is no Run that could not reply: the message says nothing more of it, as a Conversation's.
-const stateOf=(outcome:string|null):MentionState=>outcome===null?'open':outcome==='completed'?'answered':outcome==='stopped'?'stopped':modelCauseOf(outcome)??'unanswered';
+const stateOf=(outcome:string|null,started?:boolean|null):MentionState=>outcome===null?'open':outcome==='completed'?'answered':outcome==='stopped'?'stopped':outcome==='failed'&&started===false?'notSent':modelCauseOf(outcome)??'unanswered';
 // A channel row as its name: a team channel's own name, and the general channel (or a team one with no name) its word.
 export const channelNameOf=(row:{kind:string,name:string|null}):ChannelName=>row.kind==='team'&&row.name?{kind:'team',name:row.name}:{kind:'general'};
 export const channelTitle=(t:(key:string)=>string,channel:ChannelName)=>channel.kind==='team'?channel.name:t('shellGeneralChannel');
@@ -149,7 +152,7 @@ async function readChannel(db:Database,person:string,company:string,channel:stri
  const name=channelNameOf(found);
  // Runs first: a Run closed between the two reads then shows its reply too (both are written in one transaction). A
  // message may have up to three Runs (#152), one per Agent it called, in the order the Agents were named.
- const runs=(mustRead(await db.from('channel_runs').select('message_id,ordinal,agent_id,kept_agent_id,agent_name,outcome').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3),'channel runs')||[]) as StoredRun[];
+ const runs=(mustRead(await db.from('channel_runs').select('message_id,ordinal,agent_id,kept_agent_id,agent_name,outcome,started').eq('channel_id',channel).order('message_id',{ascending:false}).order('ordinal').limit(shownMessages*3),'channel runs')||[]) as StoredRun[];
  const runsOf=new Map<number,StoredRun[]>();
  for(const run of runs) runsOf.set(run.message_id,[...(runsOf.get(run.message_id)??[]),run]);
  for(const group of runsOf.values()) group.sort((a,b)=>(a.ordinal??1)-(b.ordinal??1));
@@ -229,7 +232,7 @@ async function readChannel(db:Database,person:string,company:string,channel:stri
  // asked (its own, never a sibling's).
  const mentionOf=(run:StoredRun):ChannelMention=>({agent:run.agent_name,
   // A call keeps the Agent it called when that Agent is removed (#702), and so its face.
-  face:run.agent_id||run.kept_agent_id||'',state:stateOf(run.outcome),
+  face:run.agent_id||run.kept_agent_id||'',state:stateOf(run.outcome,run.started),ordinal:run.ordinal??1,
   questions:questionsOf.get(`${run.message_id}:${run.ordinal??1}`)??[],
   permissions:asked.filter(row=>row.message_id===run.message_id&&(row.ordinal??1)===(run.ordinal??1))
    .flatMap(row=>{ const card=replyCardOf({...row,run_id:'',kind:'permission',answered_at:null,done_at:null}); return card?[{...card,...saidParts(row)}]:[]; }) as ChannelPermission[]});

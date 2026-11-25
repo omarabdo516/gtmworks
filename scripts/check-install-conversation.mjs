@@ -72,7 +72,7 @@ try {
  // The worker confirms the new profile (its tools, then its shared Skills folder) in its own loops; until then a send is
  // refused as pending and nothing is stored, so the same send is made again until the profile is ready (#282).
  const send={person:user.id,company,conversation,sendKey:randomUUID(),message:'مرحباً، اكتب لي عنواناً لمنشور عن إطلاق الدورة.'};
- const sent=await until('the company profile ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },120);
+ const sent=await until('the company profile ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },120);
  assert.deepEqual(sent,{conversation});
  // The worker closes the run from Hermes's own record and stores the reply.
  const answer=await until('reply stored',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),180);

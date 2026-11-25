@@ -22,7 +22,7 @@ function databases({pages}) {
   if(name==='pin_run_model') return {data:null,error:null};
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
   if(name==='pin_lead_brief') return {data:null,error:null};
-  if(name==='begin_start') return {data:1,error:null};
+  if(name==='begin_turn_start') return {data:1,error:null};
   if(name==='record_conversation_turn') return {data:true,error:null};
   if(['keep_unknown_start','fail_conversation_turn','refuse_run_model'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
@@ -77,7 +77,7 @@ function counted({model=null}={}) {
   if(name==='pin_run_model') return {data:model,error:null};
   if(name==='pin_lead_brief') return {data:null,error:null};
   if(name==='conversation_handover_agents') return {data:[],error:null};
-  if(name==='begin_start') return {data:++state.attempts,error:null};
+  if(name==='begin_turn_start') return {data:++state.attempts,error:null};
   if(name==='release_queued_start') { state.released.push(given); if(given.attempt===state.attempts) { state.attempts--; return {data:true,error:null}; } return {data:false,error:null}; }
   if(name==='keep_unknown_start') { state.kept++; return {data:true,error:null}; }
   if(name==='fail_conversation_turn'||name==='refuse_run_model') { state.failed.push([name,given]); return {data:true,error:null}; }
@@ -118,7 +118,7 @@ test('a queued start that may have reached the Engine keeps its attempt and is r
 });
 
 // #514 (review): a turn claimed as a retry while another caller's first attempt was in flight, and handed back before
-// this caller began, is a first attempt again: the attempt begin_start answers decides, not the claim's flag, so an
+// this caller began, is a first attempt again: the attempt begin_turn_start answers decides, not the claim's flag, so an
 // Engine that is still down is handed back here too instead of read as an unknown start that waits a day.
 test('a turn claimed as a retry whose earlier attempt was handed back is sent, and handed back, as a first attempt', async () => {
  const {state,service}=counted(); const starts=[];
@@ -126,7 +126,7 @@ test('a turn claimed as a retry whose earlier attempt was handed back is sent, a
  service.rpc=async(name,given)=>name==='claim_conversation_turn'?{data:[{company:'co',agent:'a',person:'p',send_key:'k-c1',message:'Hello',connection,profile:'writer',note:null,retry:true}],error:null}:claimed(name,given);
  const engineFor=()=>({start:async run=>{ starts.push(run); return run.retry?{state:'unknown'}:notReached; }});
  assert.equal(await startQueuedTurns(service,{hermes,engineFor:/** @type {any} */(engineFor)}),0);
- assert.deepEqual(starts.map(start=>start.retry),[false],'begin_start answered attempt 1, so it is no retry');
+ assert.deepEqual(starts.map(start=>start.retry),[false],'begin_turn_start answered attempt 1, so it is no retry');
  assert.deepEqual(state.released,[{conversation:'c1',message_key:'k-c1',attempt:1}],'and the unreached start is handed back');
  assert.equal(state.kept,0,'never kept as unknown');
 });

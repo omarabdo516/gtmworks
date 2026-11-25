@@ -1,5 +1,53 @@
 [
  {
+  "issue": 770,
+  "date": "2026-11-25",
+  "en": { "title": "An Agent's tools show at once", "body": "An Agent's Connected tools list shows straight away, each app reading Checking… until its own test answers, and it keeps the last list it read when the agent engine is slow." },
+  "ar": { "title": "أدوات الوكيل بتظهر على طول", "body": "قايمة الأدوات المتوصلة بالوكيل بقت بتظهر على طول، وكل تطبيق مكتوب عليه «بنتأكد…» لحد ما الاختبار بتاعه يرد، وبتفضل القايمة اللي اتقرت آخر مرة لو محرك الوكلاء بطيء." }
+ },
+ {
+  "issue": 769,
+  "date": "2026-11-25",
+  "en": { "title": "An Agent's details open at once", "body": "An Agent's details open straight away with its activity, tasks, files and log; its memory and permissions load on their own when shown, and a new chat reads only the Agent you opened." },
+  "ar": { "title": "تفاصيل الوكيل بتفتح على طول", "body": "تفاصيل الوكيل بقت بتفتح على طول بنشاطه ومهامه وملفاته والسجل؛ وذاكرته وصلاحياته بيتحمّلوا لوحدهم لما تفتحهم، والشات الجديد بيقرا بس الوكيل اللي فتحته." }
+ },
+ {
+  "issue": 768,
+  "date": "2026-11-25",
+  "en": { "title": "A Conversation never goes blank", "body": "If a Conversation can't be read for a moment, what you already see stays on the page and it tries again; after several tries it says so, with Try again." },
+  "ar": { "title": "المحادثة عمرها ما بتفضى", "body": "لو المحادثة ما اتقريتش للحظة، اللي قدامك بيفضل في الصفحة وبتحاول تاني؛ ولو فشلت كذا مرة بتقولك كده، ومعاها «جرّب تاني»." }
+ },
+ {
+  "issue": 767,
+  "date": "2026-11-25",
+  "en": { "title": "A Conversation stays still while you work", "body": "Sending a message or getting a reply no longer redraws the whole page, and a Conversation open in a background tab stops asking the server until you come back to it." },
+  "ar": { "title": "المحادثة بتفضل ثابتة وانت شغال", "body": "بعت رسالة أو وصول رد ما بقاش بيرسم الصفحة كلها من الأول، والمحادثة المفتوحة في تاب مش قدامك بتبطّل تسأل السيرفر لحد ما ترجعلها." }
+ },
+ {
+  "issue": 766,
+  "date": "2026-11-25",
+  "en": { "title": "Conversations open at once", "body": "A Conversation opens with its messages straight away, even when the agent engine is busy; the tools each reply used appear under it a moment later." },
+  "ar": { "title": "المحادثات بتفتح على طول", "body": "المحادثة بقت بتفتح برسايلها على طول، حتى لو محرك الوكلاء مشغول؛ والأدوات اللي كل رد استخدمها بتظهر تحته بعدها بلحظة." }
+ },
+ {
+  "issue": 765,
+  "date": "2026-11-25",
+  "en": { "title": "A channel message is kept first too", "body": "A message you send in a channel or a card's chat is stored and shown at once, and the Agents it calls start after; if one can't start, the message says Not sent to that Agent, with Try again." },
+  "ar": { "title": "رسالة القناة بتتحفظ الأول هي كمان", "body": "الرسالة اللي بتبعتها في قناة أو في شات البطاقة بتتحفظ وتظهر على طول، والوكلاء اللي بتناديهم بيبدأوا بعدها؛ ولو واحد منهم ماقدرش يبدأ، الرسالة بتقول «ما اتبعتتش» للوكيل ده، ومعاها «جرّب تاني»." }
+ },
+ {
+  "issue": 764,
+  "date": "2026-11-25",
+  "en": { "title": "Your message is kept the moment you send it", "body": "A message you send is stored before the Agent is asked, so closing the page or a slow server never loses it; if the agent engine can't start on it, it stays in the Conversation marked Not sent, with Try again." },
+  "ar": { "title": "رسالتك بتتحفظ أول ما تبعتها", "body": "الرسالة اللي بتبعتها بتتحفظ قبل ما الوكيل يتسأل، فقفل الصفحة أو بطء السيرفر عمره ما يضيّعها؛ ولو محرك الوكلاء ماقدرش يبدأ عليها، بتفضل في المحادثة ومكتوب تحتها «ما اتبعتتش» ومعاها «جرّب تاني»." }
+ },
+ {
+  "issue": 763,
+  "date": "2026-11-25",
+  "en": { "title": "The working line always says what the Agent is doing", "body": "While an Agent works on your message, the line under the conversation reads Thinking or the step it is on now, in a Conversation, a channel and a card's chat alike, and it holds until the reply is drawn, which now comes as soon as the Agent finishes." },
+  "ar": { "title": "سطر الشغل بيقولك الوكيل بيعمل إيه على طول", "body": "وانت مستني الوكيل يرد على رسالتك، السطر اللي تحت المحادثة بيقول «بيفكر» أو الخطوة اللي هو فيها دلوقتي، في المحادثة والقناة وشات البطاقة، وبيفضل لحد ما الرد يظهر، والرد بقى بيظهر أول ما الوكيل يخلّص." }
+ },
+ {
   "issue": 752,
   "date": "2026-11-25",
   "en": { "title": "Control of a Screen survives a dropped connection", "body": "When your connection drops for a moment while you have control of an Agent's Screen, the page reconnects with control still yours, and says control went back only when it really did." },

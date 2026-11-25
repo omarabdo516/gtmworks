@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withTurnQueue } from './turn-queue.mjs';
 import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
+import { startUnknown } from '../lib/hermes.mjs';
 
 // #143: the main Agent's Runs carry the brief its own person's Role calls for — its team, and the one question to ask
 // for work no Agent of theirs does. The brief is pinned by the database on the first start (supabase/tests/lead_offer.sql
@@ -34,13 +36,14 @@ function database({brief,main=true,tools=null}={}) {
   if(name==='pin_run') return ok({tools:tools?JSON.stringify(tools.map(tool=>JSON.parse(args.specs[tool]))):null});
   if(name==='pin_run_history'||name==='pin_run_model') return ok(null);
   if(name==='pin_lead_brief') return ok(main?brief??null:null);
-  if(name==='begin_start') return ok(1);
+  if(name==='begin_turn_start') return ok(1);
   if(name==='send_conversation_message'||name==='record_conversation_turn') return ok(true);
   if(name==='queued_conversations') return ok([{conversation}]);
   if(name==='claim_conversation_turn') return ok([{company,agent,person:'p1000000-0000-0000-0000-000000000001',send_key:sendKey,message:'Do the Meta ads',connection:'f9000000-0000-0000-0000-000000000001',profile:'writer',note:null,retry:false}]);
   return {data:null,error:{message:`unexpected ${name}`}};
  };
- return {db:{rpc,from:()=>chain},service:{rpc,from:()=>chain},calls};
+ const queued=withTurnQueue(rpc);
+ return {db:{rpc:queued,from:()=>chain},service:{rpc:queued,from:()=>chain},calls};
 }
 const send=async({db,service},fake)=>sendMessage(db,service,{company,conversation,sendKey,agent,message:'Do the Meta ads',hermes,engineFor:fake.engineFor});
 
@@ -79,10 +82,12 @@ test('a retry sends the same pinned brief, read again from the database for the 
  const fake=fakeEngine(); const store=database({brief:briefs.owner}); const started=[];
  // Every start of the fake Engine is recorded before it deduplicates a key, so a retry's own instructions are read.
  const engineFor=(/** @type {object} */ connection)=>{ const engine=fake.engineFor(connection);
-  return {...engine,start:async(/** @type {any} */ args)=>{ started.push(args); return engine.start(args); }}; };
- const sendNow=()=>sendMessage(store.db,store.service,{company,conversation,sendKey,agent,message:'Do the Meta ads',hermes,engineFor});
- await sendNow(); const first=fake.runs[0].instructions;
- await sendNow();
+  return {...engine,start:async(/** @type {any} */ args)=>{ started.push(args); const run=await engine.start(args); return lose-->0?startUnknown:run; }}; };
+ // The first start's answer is lost, so the one starter of turns (#764) asks again with the same key.
+ let lose=1;
+ assert.deepEqual(await sendMessage(store.db,store.service,{company,conversation,sendKey,agent,message:'Do the Meta ads',hermes,engineFor}),{conversation,queued:true});
+ const first=fake.runs[0].instructions;
+ assert.equal(await startQueuedTurns(store.service,{hermes,engineFor}),1);
  assert.equal(started.length,2,'each attempt asks the Engine to start the Run');
  assert.deepEqual(started.map(start=>start.instructions),[first,first],'and both carry the same pinned brief');
  assert.equal(fake.runs.length,1,'the same send key is the same Run');
@@ -93,7 +98,9 @@ test('another Agent\'s Run is told nothing of the person\'s team: the main Agent
  const fake=fakeEngine(); const store=database({brief:briefs.owner,main:false});
  await send(store,fake);
  assert.equal(fake.runs[0].instructions,null);
- assert.deepEqual(store.calls.filter(([name])=>name==='pin_lead_brief'),[]);
+ // The starter asks for every turn's brief (the service role may not read which Agent is the main one), and the
+ // database answers none for any other Agent.
+ assert.deepEqual(store.calls.filter(([name])=>name==='pin_lead_brief').length,1);
 });
 
 test('a Lead Run that waited starts with the same pinned brief',async()=>{

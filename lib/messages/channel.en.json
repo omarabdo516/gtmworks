@@ -9,6 +9,8 @@
   "channelNoAgents": "no agents",
   "channelRouteTip": "Agents read and reply only when someone calls them by name, like @{0}. Ordinary talk between members goes to no agent.",
   "channelRouteTipPlain": "Agents read and reply only when someone calls them by name. Ordinary talk between members goes to no agent.",
+  "channelNotSent": "Not sent to {0}",
+  "channelTryAgain": "Try again",
   "channelCouldNotReply": "{0} couldn’t reply to this message.",
   "channelDetails": "Channel details",
   "channelKind": "Channel",

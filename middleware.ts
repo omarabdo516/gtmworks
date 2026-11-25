@@ -23,5 +23,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // The manifest, like the mark, is fetched with no cookies, so it skips the session refresh (#453).
-  matcher: ['/((?!api/health|api/config|api/client-errors|_next/static|_next/image|favicon.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: ['/((?!api/health|api/config|api/client-errors|api/waits|_next/static|_next/image|favicon.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 };

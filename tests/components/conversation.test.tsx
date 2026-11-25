@@ -25,7 +25,8 @@ vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 // The live steps' read (#646) is tests/components/live-steps.test.tsx's own: here it waits for ever, so it never takes an
 // answer meant for the record.
-const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : fetch(url, init));
+// The live steps' read (#646) waits for ever, and each reply's steps (#766) are read as none: neither is the record's read.
+const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : String(url).includes('&intent=steps') ? Promise.resolve(Response.json({ steps: {}, usage: null })) : fetch(url, init));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 // The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
 const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });
@@ -105,6 +106,109 @@ for (const [language, line] of [['en', 'The agent engine did not take that model
  const later = await render(view(talk([sent, { ...queued, model_refused: true }, { ...sent, id: 3, body: 'Then the post' }]), language));
  expect(later.container.querySelector('textarea')?.value).toBe('');
  expect(later.container.querySelector('.composer-error')).toBeNull();
+});
+
+// #767: a waiting Conversation's poll sends the stamp it last read and keeps its record when nothing changed; a hidden tab
+// asks nothing until it is shown, then asks at once; a signed-out reader stops asking, and a failing read asks more slowly.
+const setHidden = (hidden: boolean) => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' }); document.dispatchEvent(new Event('visibilitychange')); };
+test('the poll asks only whether anything changed, stops in a hidden tab and reads at once when shown again', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ onTestFinished(() => { setHidden(false); vi.useRealTimers(); });
+ const waiting = { ...talk([sent], { pending: true }), stamp: 'a'.repeat(32) };
+ const asks = vi.fn(async (_url: string) => Response.json({ unchanged: true, stamp: 'a'.repeat(32) }));
+ stubFetch(asks);
+ const screen = await render(view(waiting));
+ await vi.advanceTimersByTimeAsync(500);
+ expect(asks).toHaveBeenCalledTimes(1);
+ expect(asks.mock.calls[0][0]).toBe(`/api/conversations?company=co-1&conversation=cv-2&since=${'a'.repeat(32)}`);
+ expect(screen.container.querySelector('.turn--user')?.textContent, 'nothing changed, so the record shown stays').toContain('Draft the long launch plan');
+ setHidden(true);
+ await vi.advanceTimersByTimeAsync(10000);
+ expect(asks, 'a hidden tab asks nothing').toHaveBeenCalledTimes(1);
+ setHidden(false);
+ await vi.advanceTimersByTimeAsync(0);
+ expect(asks, 'shown again, it asks at once').toHaveBeenCalledTimes(2);
+});
+
+test('a signed-out reader stops asking, and a failing read asks again more slowly', async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ onTestFinished(() => { vi.useRealTimers(); });
+ const signedOut = vi.fn(async () => Response.json({ error: 'conversationNotFound' }, { status: 401 }));
+ stubFetch(signedOut);
+ await render(view(talk([sent], { pending: true })));
+ await vi.advanceTimersByTimeAsync(20000);
+ expect(signedOut).toHaveBeenCalledTimes(1);
+ const failing = vi.fn(async () => Response.json({ error: 'conversationFailed' }, { status: 503 }));
+ stubFetch(failing);
+ await render(view(talk([sent], { pending: true })));
+ await vi.advanceTimersByTimeAsync(500);
+ expect(failing).toHaveBeenCalledTimes(1);
+ await vi.advanceTimersByTimeAsync(2999);
+ expect(failing, 'the second read waits 3 s, not 1.5 s').toHaveBeenCalledTimes(1);
+ await vi.advanceTimersByTimeAsync(1);
+ expect(failing).toHaveBeenCalledTimes(2);
+});
+
+// #768: a read that fails keeps what the page shows; after three in a row the line under the transcript says the
+// Conversation could not be read, with "Try again", and a read that lands takes the line away and draws the reply.
+for (const [language, unread, tryAgain] of [['en', 'This Conversation couldn’t be read.', 'Try again'], ['ar', 'مقدرناش نقرا المحادثة دي.', 'جرّب تاني']] as const) test(`in ${language} a Conversation whose reads fail keeps its messages and says it could not be read, with Try again`, async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ onTestFinished(() => { vi.useRealTimers(); });
+ let failing = true;
+ const replied = talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'Here is the plan.', created_at: at }]);
+ const asks = vi.fn(async () => failing ? Response.json({ error: 'conversationUnread' }, { status: 503 }) : Response.json(replied));
+ stubFetch(asks);
+ const screen = await render(view(talk([sent], { pending: true }), language));
+ for (const [wait, times] of [[500, 1], [3000, 2], [6000, 3]] as const) {
+  await vi.advanceTimersByTimeAsync(wait);
+  await expect.poll(() => asks.mock.calls.length).toBe(times);
+ }
+ expect(screen.container.querySelector('.turn--user')?.textContent, 'the messages stay').toContain('Draft the long launch plan');
+ const line = () => screen.container.querySelector('[data-outcome="unread"]');
+ await expect.poll(() => line()?.textContent).toBe(`${unread} ${tryAgain}`);
+ failing = false;
+ await screen.getByRole('button', { name: tryAgain }).click();
+ await vi.advanceTimersByTimeAsync(0);
+ await expect.poll(() => screen.container.textContent).toContain('Here is the plan.');
+ expect(line()).toBeNull();
+});
+
+// #766 (ADR 0030): a Conversation is drawn from its record at once, and each reply's steps are their own read after it:
+// they fill in under their reply when that read lands, with no second rise-in, and a read that fails changes nothing.
+test('each reply\'s steps arrive after the messages, under their own reply, and a failed read leaves the replies as they are', async () => {
+ const reply = { id: 2, author: 'agent' as const, author_name: 'Lead', body: 'Here is the plan.', created_at: at };
+ let answer: (value: Response) => void = () => {};
+ vi.stubGlobal('fetch', (url: string) => String(url).includes('&intent=steps') ? new Promise<Response>(resolve => { answer = resolve; }) : new Promise<Response>(() => {}));
+ const screen = await render(view(talk([sent, reply])));
+ await expect.element(screen.getByText('Here is the plan.')).toBeVisible();
+ expect(document.querySelector('.steps__toggle'), 'the messages are drawn before the steps').toBeNull();
+ answer(Response.json({ steps: { 2: { list: [{ tool: 'web_search', preview: 'courses', state: 'done' }], seconds: 12 } }, usage: { input: 10, output: 5 } }));
+ await expect.element(screen.getByRole('button', { name: 'Used 1 tool · 12 sec' })).toBeVisible();
+ expect(screen.getByText('Here is the plan.').element().closest('.turn')!.classList.contains('msg-in'), 'no second rise-in').toBe(false);
+ vi.stubGlobal('fetch', (url: string) => String(url).includes('&intent=steps') ? Promise.resolve(Response.json({ error: 'conversationStepsUnread' }, { status: 503 })) : new Promise<Response>(() => {}));
+ const failed = await render(view(talk([sent, reply])));
+ await expect.poll(() => failed.container.textContent).toContain('Here is the plan.');
+ expect(failed.container.querySelector('[role="alert"]'), 'no error line in the Conversation').toBeNull();
+});
+
+// #764: a message is stored the moment it is sent and its Run starts after. A turn the Engine refused stays with "Not sent"
+// under it and "Try again", which posts the same send key; one waiting behind the current reply says so, and one about to
+// start is an ordinary message.
+for (const [language, notSent, tryAgain, waits] of [['en', 'Not sent', 'Try again', 'It’ll read this after the current reply'], ['ar', 'ما اتبعتتش', 'جرّب تاني', 'هيقراها بعد الرد اللي شغال عليه']] as const) test(`in ${language} a message that was not sent stays with its line and Try again, which sends the same turn`, async () => {
+ const posts: unknown[] = [];
+ vi.stubGlobal('fetch', vi.fn(async (_: string, init?: RequestInit) => { if (init?.method === 'POST') posts.push(JSON.parse(String(init.body))); return Response.json(talk([sent])); }));
+ const refused = { id: 0, author: 'person' as const, author_name: 'Omar', body: 'Now the email version', created_at: at, kind: 'queued' as const, failed: true, key: 'k7640000-0000-0000-0000-000000000001' };
+ const screen = await render(view(talk([sent, refused]), language));
+ const turn = screen.getByRole('list', { name: language === 'en' ? 'Messages' : 'الرسائل' }).getByRole('listitem').filter({ hasText: 'Now the email version' });
+ await expect.element(turn.getByRole('alert')).toHaveTextContent(`${notSent} ${tryAgain}`);
+ expect(screen.container.querySelector('textarea')?.value, 'the words stay in the transcript, not back in the box').toBe('');
+ await turn.getByRole('button', { name: tryAgain }).click();
+ await expect.poll(() => posts).toEqual([{ company: 'co-1', conversation: 'cv-2', intent: 'retry', sendKey: 'k7640000-0000-0000-0000-000000000001' }]);
+ const waiting = await render(view(talk([sent, { ...refused, failed: undefined, key: undefined, behind: true }], { pending: true }), language));
+ await expect.element(waiting.getByText(waits)).toBeVisible();
+ const starting = await render(view(talk([sent, { ...refused, failed: undefined, key: undefined }], { pending: true }), language));
+ expect(starting.container.querySelector('.is-queued'), 'a turn about to start is an ordinary message').toBeNull();
+ expect(starting.container.querySelector('.queued')).toBeNull();
 });
 
 // Review of #330: on the same mounted Conversation, the model line goes once the refused message is no longer the latest

@@ -18,7 +18,7 @@ import { DetailsShell, HeadPill, useDetailsPanel, type DetailsPanel } from '@/ap
 import { MessageBox, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { madeDay, useZone } from '@/app/agent-made';
 import { changeChannel, channelChoices } from '@/app/channel-actions';
-import { channelCallable, channelTitle, firstName, sentMessage, withMention, type ChannelAgent, type ChannelMention, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
+import { channelCallable, channelTitle, firstName, mentionsOf, sentMessage, withMention, type ChannelAgent, type ChannelMessage, type ChannelRecord } from '@/lib/channels';
 import { PermissionCard, type DecidePermission, type PermissionOutcome } from '@/app/permission-card';
 import { ReplyCard } from '@/app/reply-card';
 import type { AnswerQuestion } from '@/app/question-card';
@@ -39,7 +39,6 @@ type Choices=NonNullable<Awaited<ReturnType<typeof channelChoices>>>;
 const roleKeys={owner:'owner',manager:'manager',contributor:'contributor',viewer:'viewer'} as const;
 // The Agents a message called (#152), in the order they were named. A message from an older drawing carries only the
 // first one, which is the one Agent it called.
-const mentionsOf=(message:ChannelMessage):ChannelMention[]=>message.author==='person'?message.mentions??(message.mention?[message.mention]:[]):[];
 
 // What each drawn message, and the cards turn under a person's message, is known by for its rise (lib/arrivals).
 // A card turn is known only once it is drawn: a called Agent with no question or request yet has none, so the first one
@@ -88,6 +87,8 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    if(response.ok) { setRecord(await response.json() as ChannelRecord); landed(); answered(true); } else answered(false);
   } catch { answered(false); }
  },[channel.company,channel.id,reading,answered]);
+ // A Run's events ended: its reply is read now, not at the next tick (#763).
+ const ended=()=>{ void refresh(); };
  // Opening the channel reads it, and asks for it fresh: the page may be a prefetch drawn before the newest messages. The
  // answer replaces only that first drawing, never a newer one from a poll or a send. Opened from a mention (#200), the
  // read names the message the Member opened, so their own waiting item is done; the address is then the channel's again.
@@ -148,6 +149,13 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    return {at:body.at,first:body.first===true};
   } catch { return {error:'conversationFailed'}; }
  };
+ // "Try again" on an Agent's turn that was not sent (#765): the same message, that Agent's place in it; then read again.
+ const retry=async(message:number,ordinal:number)=>{
+  try {
+   const response=await fetch('/api/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company:channel.company,channel:channel.id,intent:'retry',message,ordinal})});
+   if(response.ok) { setSent(value=>value+1); await refresh(); } else await response.arrayBuffer();
+  } catch { /* The line stays; the next read brings any change. */ }
+ };
  // A card an Agent's Run shows while the channel is open rises in once (design-reference: card-in); those already there
  // do not. A question is drawn under the message, a reply's cards under the Agent's reply.
  const [drawnCards]=useState(()=>new Set(initial.messages.flatMap(message=>message.author==='person'
@@ -192,7 +200,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const workingNow=waiting?mentionsOf(waiting).find(mention=>mention.state==='open')??null:null;
  // Its Run's steps live, as a Conversation shows them (#646): the reply that lands after them takes their place without
  // rising in again, its list open if the live one was.
- const {view:steps,unread}=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow);
+ const {view:steps}=useLiveSteps({company:channel.company,channel:channel.id},!!workingNow,ended);
  const landing=useLanding({working:!!workingNow,live:steps,newest:messages.findLast(message=>message.author==='agent')?.id??null});
  // Each called Agent's face while the channel is open (#700, lib/live-runs channelRuns).
  useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
@@ -213,7 +221,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    </div>
    <ol className="turns" aria-label={c('channelMessages',name)}>{messages.map((message,index)=><Fragment key={elementOf(message)}>
     {(index===0||dayOf(messages[index-1].at,zone)!==dayOf(message.at,zone))&&<li className="divider"><time dateTime={message.at} data-utc={zone}>{dayLabel(message.at)}</time></li>}
-    <Turn message={message} rise={landedHere(message)?'':rise(elementOf(message))} opened={message.author==='agent'&&landing.opened(message.id)} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} owner={record.modelLine?.owner===true}/>
+    <Turn message={message} rise={landedHere(message)?'':rise(elementOf(message))} opened={message.author==='agent'&&landing.opened(message.id)} c={c} slug={slug} name={name} cb={cb} drawnCards={drawnCards} memberNames={memberNames} done={writer?done:undefined} retry={writer?retry:undefined} owner={record.modelLine?.owner===true}/>
     {message.author==='person'&&mentionsOf(message).some(mention=>mention.questions.length>0||mention.permissions.length>0)&&mentionsOf(message).filter(mention=>mention.questions.length>0||mention.permissions.length>0).map(mention=><li key={mention.agent} className={`turn turn--agent msg${rise(`${message.author}:${message.id}:${mention.agent}`)}`} data-author="agent">
      <div className="sender"><span aria-hidden="true"><AgentFace agent={mention.face} name={mention.agent} size={20}/></span><bdi>{mention.agent}</bdi></div>
      {/* What the Agent wrote before it asked, in the same message (#647), is its words above the card. */}
@@ -225,7 +233,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     </li>)}
    </Fragment>)}
     {workingNow&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
-   {workingNow&&<WorkingLine view={live} unread={unread} fallback={t('conversationWorking',workingNow.agent)} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>}
+   {workingNow&&<WorkingLine view={live} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>}
   </div></div>
   <div className="composer-area">
    {failures>=3&&<p className="ro-line" role="alert"><span>{t('channelNotRead')}</span> <button type="button" className="link-btn" onClick={()=>{ void refresh(); }}>{t('tryAgain')}</button></p>}
@@ -256,7 +264,7 @@ function When({at,className}:{at:string,className?:string}) {
  return <time className={className} dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
 }
 
-function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,done,owner}:{message:ChannelMessage,rise:string,opened?:boolean,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,owner:boolean}) {
+function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,done,retry,owner}:{message:ChannelMessage,rise:string,opened?:boolean,c:Say,slug:string,name:string,cb:StepsBidiText,drawnCards:Set<number>,memberNames:string[],done?:MarkHandDone,retry?:(message:number,ordinal:number)=>Promise<void>,owner:boolean}) {
  const {t}=useI18n();
  // The quiet message "Done it" wrote asks its Agent to pick up (#149): the card shows the press, never a bubble of it.
  if(message.author==='person'&&message.handDone) return null;
@@ -289,6 +297,8 @@ function Turn({message,rise,opened=false,c,slug,name,cb,drawnCards,memberNames,d
  // the Agents it called it stopped, in place of each one's "couldn't reply"; one whose model call was refused (#530)
  // says its cause and its Agent, in that Agent's place.
  const failed=[...called.flatMap(mention=>mention.state==='unanswered'?[<p key={mention.agent} className="note" role="alert">{c('channelCouldNotReply',mention.agent)}</p>]
+   // Not sent (#765): the Engine refused this Agent's start or was not reached; its person tries again, as one message.
+   :mention.state==='notSent'?[<p key={mention.agent} className="note" role="alert" data-outcome="not-sent">{c('channelNotSent',mention.agent)}{message.mine&&retry&&<> <button type="button" className="link-btn" onClick={()=>void retry(message.id,mention.ordinal??1)}>{c('channelTryAgain')}</button></>}</p>]
    :isModelCause(mention.state)&&mention.state!=='noModel'?[<p key={mention.agent} className="note" role="alert" data-outcome={modelOutcome(mention.state)}><ModelLine cause={mention.state} agent={mention.agent} slug={slug} owner={owner}/></p>]:[]),
   ...(called.some(mention=>mention.state==='noModel')?[<p key="no-model" className="note" role="alert" data-outcome="no-model"><ModelLine cause="noModel" agent="" slug={slug} owner={owner}/></p>]:[])];
  // The images the message carries (#156), under its bubble on the writer's side for the writer and on the start side for

@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { supabase } from './supabase';
+import { signedInUser, supabase } from './supabase';
 import { i18n } from './i18n.mjs';
 export const getI18n = cache(async () => {
  const db=await supabase();
@@ -10,7 +10,7 @@ export const getI18n = cache(async () => {
  const named=tokenSubject(session?.access_token);
  const read=(id:string)=>db.from('people').select('language,theme').eq('id',id).single().then(result=>result);
  const early=named?read(named):null;
- const {data:{user}}=await db.auth.getUser();
+ const {data:{user}}=await signedInUser();
  if(!user) return {...i18n(),theme:'device'};
  const {data:preference,error:preferenceError}=await (named===user.id&&early?early:read(user.id));
  if(preferenceError) throw new Error('Could not load account language');

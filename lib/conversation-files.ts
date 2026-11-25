@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { discardMessageFiles, imagesOf, keepMessageFiles, type FilesPlace, type FilesTable } from './message-files';
+import { discardMessageFiles, keepMessageFiles, type FilesPlace, type FilesTable } from './message-files';
 
 // The images of one Conversation message (#155): kept in the Company's private folder for that Conversation, under the
-// message's send key, and read only by the Conversation's own person (app/c/[slug]/files/conversation/[id]).
-export { imagesOf };
+// message's send key, and read only by the Conversation's own person (app/c/[slug]/files/conversation/[id]). They are
+// kept before the turn they go with is stored (#764), so its Run reads them from here, whenever the starter takes it.
 
 const placeOf=(company:string,conversation:string,messageKey:string):FilesPlace=>({company,folder:'conversations',scope:conversation,messageKey});
 const words={notAllowed:'conversationNotAllowed',notFound:'conversationNotFound',failed:'conversationFailed'};
@@ -12,15 +12,6 @@ const discardArgs=reserveArgs;
 const reserve='reserve_conversation_files';
 const discard='discard_conversation_files';
 const table:FilesTable={table:'conversation_attachments',scope:'conversation_id'};
-
-// Whether the send starts a Conversation already there: then its files can be kept before the Agent is asked, which a
-// turn that waits behind another Run needs (the worker may start it at any moment, and it reads the files it finds).
-// Row-level security shows only the sender's own Conversation, so another person's reads as not there and is refused by
-// the send itself.
-export async function conversationExists(db:SupabaseClient,company:string,conversation:string):Promise<boolean> {
- const {data}=await db.from('conversations').select('id').eq('id',conversation).eq('company_id',company).maybeSingle();
- return !!data;
-}
 
 // Keeps a sent message's images with it: the rows first, under the database's own check (reserve_conversation_files
 // refuses another person's Conversation, a Viewer and an image the Engine cannot read, and answers -1 for a send key

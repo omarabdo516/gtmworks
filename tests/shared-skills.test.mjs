@@ -147,11 +147,17 @@ test('a space the Engine lost is forgotten, and made again with its Skill and it
  try {
   profilesOn(fake,[lead]);
   const db=sharedDatabase({[rs]:{profiles:[lead],rules:[{body:'No emojis',suggestion:'approved'}]}});
-  await keepSharedSkills(db,{hermes:install(fake)});
+  // #772: a Company whose row did not change is checked again by the slow pass for drift, five minutes on.
+  let clock=1e6; const options={hermes:install(fake),memory:{marks:new Map(),drift:0},now:()=>clock};
+  await keepSharedSkills(db,options);
+  // The space's folder is recorded by the first pass, so the second reads the row it then keeps.
+  clock+=1000; await keepSharedSkills(db,options);
   fake.settings.profiles.delete(space(rs)); fake.settings.skills.delete(space(rs));
-  await keepSharedSkills(db,{hermes:install(fake)});
-  assert.deepEqual([db.spaces.size,db.shared.size],[0,0],'the space is forgotten and its Company\'s profiles wait');
-  assert.deepEqual(await keepSharedSkills(db,{hermes:install(fake)}),{made:1,written:1,shared:1});
+  clock+=1000; await keepSharedSkills(db,options);
+  assert.deepEqual([db.spaces.size,db.shared.size],[1,1],'nothing is asked of the Engine while the row is unchanged');
+  clock+=300000; await keepSharedSkills(db,options);
+  assert.deepEqual([db.spaces.size,db.shared.size],[0,0],'the drift pass finds the space lost: it is forgotten and its Company\'s profiles wait');
+  clock+=1000; assert.deepEqual(await keepSharedSkills(db,options),{made:1,written:1,shared:1});
   assert.equal(skillOf(fake,rs),teamLessons(['No emojis']));
  } finally { await fake.close(); }
 });

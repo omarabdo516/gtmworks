@@ -116,11 +116,16 @@ test('Connect on a row signs in for this Agent: Connecting… while it is follow
  await expect.poll(appLog).toEqual([{actor_id:omar,action:'app_disconnected',app:'canva',agent:'Writer'},{actor_id:omar,action:'app_connected',app:'mixpanel',agent:'Writer'}]);
 });
 
-test('an Engine that does not answer gives the apps\' line and no rows',async({page})=>{
+// #770: the last good list read in the last minute stays when the Engine does not answer, so a slow moment never reads as
+// "can't be read" (with no good read yet the line shows: tests/components/connected-tools.test.tsx).
+test('an Engine that does not answer keeps the last good list, with no can\'t-be-read line',async({page})=>{
+ await signIn(page,'omar@example.com',`/c/rs-learning/chat/${writer}`);
+ await expect.poll(async()=>(await rowsOf(page,'Writer')).length).toBeGreaterThan(0);
  fake.settings.managementStatus=503;
  try {
-  await signIn(page,'omar@example.com',`/c/rs-learning/chat/${writer}`);
-  await expect(section(page,'Writer').locator('.panel-empty')).toHaveText('The apps can’t be read right now. Try again in a minute.');
-  await expect(section(page,'Writer').locator('.panel-row, button')).toHaveCount(0);
+  const before=(await rowsOf(page,'Writer')).map(row=>row[0]);
+  await page.reload();
+  await expect.poll(async()=>(await rowsOf(page,'Writer')).map(row=>row[0])).toEqual(before);
+  await expect(section(page,'Writer').locator('.panel-empty')).toHaveCount(0);
  } finally { fake.settings.managementStatus=200; }
 });

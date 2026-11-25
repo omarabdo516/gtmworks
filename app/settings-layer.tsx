@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { signedInUser, supabase } from '@/lib/supabase';
 import SettingsOverlay from './settings-overlay';
 import { OnSettingsAddress } from './settings-address';
 import { companyLooks } from '@/lib/agent-looks';
@@ -12,7 +12,7 @@ export type SettingsQuery = Parameters<typeof SettingsOverlay>[0]['query'];
 // was on, read with their own session. A Company they cannot read draws nothing here: the page says it was not found.
 // It is drawn beside the page, outside its Shell, so it reads the Company's looks for its own faces once (#697).
 export default async function SettingsLayer({slug,query}:{slug:string,query:SettingsQuery}) {
- const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ const db=await supabase(); const {data:{user}}=await signedInUser();
  // Signed out (a session that ran out while a page stayed open, a link): sign in, then back to these Settings with their
  // own state (section, agent, period) kept.
  if(!user) { const kept=new URLSearchParams(Object.entries({section:query.section,agent:query.agent,period:query.period}).filter((entry):entry is [string,string]=>typeof entry[1]==='string')).toString();

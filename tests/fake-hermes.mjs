@@ -21,6 +21,22 @@ export const failedRunText='Something else went wrong while the model was answer
 // data URL): a 16 by 10 JPEG whose comment names the grab, so every grab is a picture of its own.
 const screenJpeg=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAKABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDGooor6Q8w/9k=','base64');
 /** @param {string} viewer */
+// The kind of one request to the fake Engine (#762): a Run's start, read, events or other control, a session read,
+// memory, a soul, skills, apps (MCP), or other.
+/** @param {string} method @param {string} url */
+export function requestKind(method,url) {
+ const path=url.split('?')[0].replace(/^\/p\/[^/]+/,'');
+ if(path==='/v1/runs'&&method==='POST') return 'runStart';
+ if(/^\/v1\/runs\/[^/]+\/events$/.test(path)) return 'runEvents';
+ if(/^\/v1\/runs\/[^/]+$/.test(path)&&method==='GET') return 'runRead';
+ if(path.startsWith('/v1/runs')) return 'runControl';
+ if(path.startsWith('/api/sessions')) return 'session';
+ if(path.startsWith('/api/memory')||path.startsWith('/api/learning')) return 'memory';
+ if(/^\/api\/profiles\/[^/]+\/soul$/.test(path)) return 'soul';
+ if(path.startsWith('/api/skills')) return 'skills';
+ if(path.startsWith('/api/mcp')) return 'apps';
+ return 'other';
+}
 export const viewerHash=viewer=>createHash('sha256').update(viewer).digest('hex').slice(0,12);
 /** @param {number} grab */
 export function screenFrame(grab) {
@@ -194,10 +210,17 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   // `forget` drops its oldest ones as the 1,000-event backlog does, `sweep` drops its whole stream as Hermes does five
   // minutes after the start when nobody reads it. A run reports `runSeconds` from its start to its end. `stallEvents`
   // makes the events route take a request and never answer it, as a stalled Hermes or proxy does.
+  // How many requests of each kind this Engine received (#762), so a test asserts a ceiling on what a page asked of it
+  // instead of a time a shared runner cannot hold. `since` counts only the requests after that index of `requests`.
+  counts(/** @type {number} */ since=0) {
+   /** @type {Record<string,number>} */ const counts={};
+   for(const request of settings.requests.slice(since)) { const kind=requestKind(request.method||'GET',request.path||''); counts[kind]=(counts[kind]??0)+1; }
+   return counts;
+  },
   emit(/** @type {string} */ run,/** @type {any} */ event) { push(run,event); },
   forget(/** @type {string} */ run,/** @type {number} */ count) { streams.get(run)?.backlog.splice(0,count); },
   sweep(/** @type {string} */ run) { const stream=streams.get(run); streams.delete(run); for(const reader of stream?.readers||[]) reader.end(); },
-  backlogLimit:1000,runSeconds:41,
+  backlogLimit:1000,runSeconds:41,sessionDelay:0,memoryDelay:0,memoryInFlight:0,memoryAtOnce:0,
   // The folders the dashboard's file routes read (#194), by the Engine's own absolute path: each entry is the folder's
   // path to the entries `/api/files?path=` reports (a name, whether it is a folder, its size, its mtime, and `resolves`:
   // the path a link points at, which is the entry itself unless it leaves the folder), and `fileBytes` holds a file's
@@ -484,7 +507,7 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
   });
  });
  // The routes and answers observed on the pinned release's dashboard (port 9119), authenticated by its session token.
- const management=createServer((request,response)=>{
+ const manage=(/** @type {import('node:http').IncomingMessage} */ request,/** @type {import('node:http').ServerResponse} */ response)=>{
   let raw=''; request.on('data',chunk=>{raw+=chunk;}); request.on('end',()=>{
    let body=null; try { body=raw?JSON.parse(raw):null; } catch { body=null; }
    settings.managementRequests.push({method:request.method,path:request.url,authorization:request.headers.authorization,range:request.headers.range,body});
@@ -1051,6 +1074,17 @@ export async function fakeHermes({port=0,managementPort=0,host='127.0.0.1'}={}) 
    }
    send(response,404,{detail:'Not Found'});
   });
+ };
+ // `sessionDelay` holds a session's read that long (#766), and Infinity never answers it, as a busy Engine does.
+ const management=createServer((request,response)=>{
+  if(settings.sessionDelay>0&&request.method==='GET'&&/^\/api\/sessions\/[^/]+\/messages(\?|$)/.test(request.url||'')) { if(Number.isFinite(settings.sessionDelay)) setTimeout(()=>manage(request,response),settings.sessionDelay); return; }
+  // `memoryDelay` holds a memory read that long (#769), Infinity for ever; `memoryAtOnce` is the most memory reads it held at once.
+  if(settings.memoryDelay>0&&request.method==='GET'&&/^\/api\/learning\/(graph|node)(\?|$)/.test(request.url||'')) {
+   settings.memoryInFlight++; settings.memoryAtOnce=Math.max(settings.memoryAtOnce,settings.memoryInFlight);
+   response.on('close',()=>{ settings.memoryInFlight--; });
+   if(Number.isFinite(settings.memoryDelay)) setTimeout(()=>manage(request,response),settings.memoryDelay); return;
+  }
+  manage(request,response);
  });
  // The management listener's JSON-RPC socket (#712; tui_gateway/ws.py, methods_display.py), opened with the session
  // token as `?token=` (web_server_chat.py): newline-free JSON frames, the gateway.ready event first, and the display
