@@ -6,8 +6,9 @@
 // The card is laid out in its title's direction, and every text on it follows the card, as the reference sets `dir` once
 // (a line that starts with a Latin name, "SEO سابه…", must not turn left to right); the reference's "Open the merge
 // request" variant is not drawn (#21, #36). A step the Agent stopped at on its own Screen (#714, `screen`) has "Open the
-// screen" in place of the draft's link: it opens that Agent's Screen in its details beside the chat (`openScreen`), whose
-// view has its own "Done it", the same press as this card's. With no details beside the chat it shows Done it alone. Its id is the address "Waiting on you" opens the Conversation at
+// screen" in place of the draft's link: it opens that Agent's Screen in its details (`openScreen`), beside the chat or
+// on its Conversation's page, whose view has its own "Done it", the same press as this card's. Its id is the address
+// "Waiting on you" opens the Conversation at
 // (#140), and a done card whose turn to the Agent could not start tells a person who may write to tell it in a message,
 // until they write to it. In a channel (`team`) a Viewer reads the reference's wait line instead of the buttons (#149).
 import { useEffect, useRef, useState } from 'react';

@@ -15,7 +15,7 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { rememberOpener, takeReturnFocus } from '@/app/settings-opener';
 import type { AgentDetailsView } from '@/app/agent-details-server';
 import { DetailsChat, onShowRoutines } from '@/app/details-routines';
-import { onShowScreen } from '@/app/screen-hands';
+import { onShowScreen, showScreenAsked } from '@/app/screen-hands';
 import { DetailsFace } from '@/app/agent-look-window';
 
 export type DetailsAgent={id:string,connection_id:string,name:string,speciality:string,main:boolean,made?:Made|null};
@@ -95,8 +95,13 @@ export function AgentDetails({panel,agent,details,tab:first,slug,suggest}:{panel
  // Routines section takes the ask.
  useEffect(()=>onShowRoutines(()=>{ show(); setTab('activity'); }),[show]);
  // "Open the screen" on a step the Agent handed over on its Screen (#714): the panel opens on Activity, where the Agent's
- // screen card opens its view.
- useEffect(()=>onShowScreen(()=>{ show(); setTab('activity'); }),[show]);
+ // screen card opens its view, also when it was asked on the page before.
+ useEffect(()=>{
+  const open=()=>{ show(); setTab('activity'); };
+  // Asked on the page before this one (a board Card's chat, with no details beside it), the ask is still waiting.
+  if(showScreenAsked()) open();
+  return onShowScreen(open);
+ },[show]);
  // "Try writing" leaves the panel where it sits beside the chat, and closes it where it covers the chat.
  const chat=useMemo(()=>({suggest:suggest&&((sentence:string)=>{ if(overlay) hide(); suggest(sentence); })}),[suggest,overlay,hide]);
  useEffect(()=>{

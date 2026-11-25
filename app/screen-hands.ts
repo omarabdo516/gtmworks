@@ -7,14 +7,16 @@ export type { ScreenHandRow as ScreenHand } from '@/lib/agent-screen.mjs';
 // none names its title there.
 export const stepOf=(hand:{title:string,step?:string})=>hand.step||hand.title;
 
-// "Open the screen" on the chat card: the details beside the chat open on Activity, and the Agent's screen card opens its
-// view with the keyboard on "Done it". The ask waits until the card takes it, so a card not drawn yet takes it once drawn
+// "Open the screen" on the chat card: the details beside the chat open on Activity (or, with none beside it, those of
+// the page it goes to), and the Agent's screen card opens its view with the keyboard on "Done it". The ask waits until the card takes it, so a card not drawn yet takes it once drawn
 // (as app/details-routines.ts's showRoutines does).
 let asked:number|null=null;
 const opens=new Set<(card:number)=>void>();
 export const showScreen=(card:number)=>{ asked=card; opens.forEach(listener=>listener(card)); };
 export const onShowScreen=(listener:(card:number)=>void)=>{ opens.add(listener); return ()=>{ opens.delete(listener); }; };
 export const takeShowScreen=()=>{ const was=asked; asked=null; return was; };
+// An ask still waiting for a card, which details drawn after it (the page "Open the screen" went to) open on.
+export const showScreenAsked=()=>asked!==null;
 
 // "Done it" pressed on this page, in the view or on the chat card: the one record is kept, so the chat reads its record
 // again and the Screen drops the step at once rather than at the next poll.

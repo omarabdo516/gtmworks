@@ -194,6 +194,10 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    return {at:body.at,first:body.first===true};
   } catch { return {error:'conversationFailed'}; }
  };
+ // "Open the screen" on a step on the Agent's Screen (#714): with the Agent's details beside this chat they open on it;
+ // with none (a board Card's chat) the page goes to the Conversation, where the details beside it take the ask.
+ const router=useRouter();
+ const openScreen=(card:number)=>{ showScreen(card); if(!details) router.push(`/c/${slug}/conversations/${conversation.id}?tab=activity`); };
  // "Done it" pressed in the Screen's view (#714) is the same record: this chat reads it again, so the card reads done and
  // the Agent's turn it started shows.
  useEffect(()=>onHandDone((card,from)=>{ if(from==='view'&&messages.some(message=>message.cards?.some(shown=>shown.kind==='reply'&&shown.card.id===card))) asked(); }),[messages,asked]);
@@ -295,7 +299,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
     :card.kind==='access'?<AccessCard key={`access${card.access.id}`} card={card.access} fresh={!drawnAccess.has(card.access.id)} press={writer?pressAccess:undefined} c={c} cb={cb}/>
     :card.kind==='handed'?handed(card,`handed${message.id}:${card.name}:${card.goal}`,'p')
     :card.kind==='morning'?<MorningCard key="morning" slug={slug} card={card.morning}/>
-    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect} openScreen={details&&writer?showScreen:undefined}/>)}
+    :<ReplyCard key={`reply${card.card.id}`} card={card.card} fresh={!drawnCards.has(card.card.id)} chips={record.lead===true} answer={answer} done={writer?done:undefined} decide={writer?permit:undefined} may={record.permit} connect={connect} openScreen={writer?openScreen:undefined}/>)}
   </li>{message.steps?.list.flatMap((step,at)=>step.routine?[<RoutineLine key={at} routine={step.routine} details={details} rise={rise(index)}/>]:[])}</Fragment>)}
    {working&&<LiveTurn key={`live${live?.run??''}`} view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb} open={landing.open} toggled={landing.toggled}/>}</ol>
   {working&&(live?<ActivityLine view={live} agent={conversation.agent_name} face={conversation.face} c={c} cb={cb}/>

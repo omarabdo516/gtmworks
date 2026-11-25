@@ -405,9 +405,9 @@ function handedOnScreen() {
     values ('${company}','${conversation}','agent','${ads}','Ads','The campaign is ready. I stopped at Publish for you.','${run}');
   end $$;`);
  let calls=0;
- const hand=()=>{
+ const hand=(button?:string)=>{
   const call=`call-${calls++}`;
-  query(`select public.agent_show_card('${conversation}','${run}','${call}','hand','${step.title}','${JSON.stringify({app:step.app,line:'The campaign is ready in Ads Manager.',rows:[],screen:true})}'::jsonb)`);
+  query(`select public.agent_show_card('${conversation}','${run}','${call}','hand','${step.title}','${JSON.stringify({app:step.app,line:'The campaign is ready in Ads Manager.',rows:[],screen:true,...(button?{step:button}:{})})}'::jsonb)`);
   return Number(rows(`select id from public.reply_cards where conversation_id='${conversation}' and call_id='${call}'`)[0].id);
  };
  // Its steps left open are closed after, so no later test finds them waiting.
@@ -471,6 +471,33 @@ test('an Agent hands its person a step on its Screen: the toast opens it, Open t
   await view.getByRole('button',{name:'Close the screen'}).click();
   await expect(view).toHaveCount(0);
  } finally { drop(); }
+});
+
+// "Open the screen" on a chat with no details beside it (a board Card's chat) goes to the Agent's details beside the
+// Conversation, with the view open and the keyboard on "Done it". The step names the button the Agent stopped at.
+test('Open the screen from a board Card\'s chat goes to the Agent\'s details with the view open on Done it, naming the button it stopped at',async({page})=>{
+ fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
+ const {conversation,hand,drop}=handedOnScreen();
+ const [{id:board}]=rows(`insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id) select '${company}',id,'December campaign','${ads}','${conversation}' from public.work_stages where company_id='${company}' and board_column='progress' order by position,id limit 1 returning id`);
+ try {
+  hand('Publish');
+  await page.setViewportSize({width:1440,height:900});
+  await signIn(page,'omar@example.com',`/c/rs-learning/work/board?card=${board}`);
+  const sheet=page.locator('.sheet[open]');
+  await sheet.getByRole('tab',{name:'Chat'}).click();
+  const chatCard=sheet.getByRole('group',{name:`Handed to you: ${step.title}`});
+  await expect(chatCard.getByRole('button')).toHaveText(['Open the screen','Done it']);
+  await chatCard.getByRole('button',{name:'Open the screen'}).click();
+  await expect(page).toHaveURL(new RegExp(`/c/rs-learning/conversations/${conversation}`));
+  const view=page.getByRole('dialog',{name:'Ads’s screen'});
+  const banner=view.getByRole('group',{name:step.title});
+  await expect(banner.locator('.vw-hand__t > span')).toHaveText('Ads stopped at “Publish” and didn’t press it. Press it yourself in Meta Ads or take control, then “Done it”.');
+  await expect(banner.getByRole('button',{name:'Done it'})).toBeFocused();
+  await view.getByRole('button',{name:'Close the screen'}).click();
+  const details=page.getByRole('complementary',{name:'Details: Ads',exact:true});
+  const screenCard=details.locator('section.dp-sec').filter({has:page.getByRole('heading',{name:/^Agent’s screen/})});
+  await expect(screenCard.locator('.scr-ov__line')).toHaveText('Stopped at “Publish” in Meta Ads · handed to you');
+ } finally { drop(); query(`delete from public.work_cards where id=${board}`); }
 });
 
 test('a step handed on the Screen is its person\'s alone: another Member and a Viewer see the Screen as usual',async({page})=>{
