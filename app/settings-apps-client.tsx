@@ -7,7 +7,7 @@ import { overlayHref } from '@/lib/settings-overlay.mjs';
 import { AppTile } from '@/components/app-tile';
 import { ShellIcon } from '@/components/shell-icon';
 import { searchFold } from '@/lib/arabic-search.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { SettingsIcon } from './settings-icons';
 import { InfoTip } from './settings-info';
 import { toast } from './toast';
@@ -31,8 +31,8 @@ const order:AppCategory[]=['ads','content','communication','analytics','sales','
 const named=(line:string,...names:string[])=>line.split(/(\{\d\})/).map((part,index)=>{ const at=/^\{(\d)\}$/.exec(part); return at?<bdi key={index}>{names[Number(at[1])]}</bdi>:part; });
 type Say=(key:string,...values:string[])=>string;
 // Faces stand for the Agents named beside them, so they are left to the eye (design-reference: faceStack, face).
-const faces=(agents:AppAgent[])=><span className="fstack" aria-hidden="true">{agents.map(agent=><CompanyAgentFace key={agent.id} agent={{connection_id:agent.connection,name:agent.name}} size={18}/>)}</span>;
-const face=(agent:AppAgent)=><span aria-hidden="true"><CompanyAgentFace agent={{connection_id:agent.connection,name:agent.name}} size={28}/></span>;
+const faces=(agents:AppAgent[])=><span className="fstack" aria-hidden="true">{agents.map(agent=><AgentFace key={agent.id} agent={agent.id} size={18}/>)}</span>;
+const face=(agent:AppAgent)=><span aria-hidden="true"><AgentFace agent={agent.id} size={28}/></span>;
 
 // One step between the list and an app's page: a link in Settings, a button in the sheet, with the same id, class and
 // label. `stay` keeps the person on the app's page while a sign-in is followed or a request is on its way: the control

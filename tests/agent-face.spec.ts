@@ -6,9 +6,11 @@ import { execFileSync } from 'node:child_process';
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
 
 const names=['Lead','وكيل المحتوى','المصمم','الناقد'];
-async function faceMarkup(face:Locator,name:string) {
+// A legacy role agent shows its name's first letter, as a person does (#697), named for assistive technology where its
+// name is not written beside it; in a message the name beside it says who, and the letter is silent.
+async function faceMarkup(face:Locator,name:string|null) {
  await expect(face).toBeVisible();
- await expect(face).toHaveAccessibleName(name);
+ if(name) await expect(face).toHaveAccessibleName(name);
  expect(await face.evaluate(element=>element.getAnimations({subtree:true}).length)).toBe(0);
  return face.innerHTML();
 }
@@ -33,7 +35,7 @@ test('revoking a grant keeps the agent face and name in a company-only member’
   await member.goto('/c/rs-learning/work/board/1');
   const message=member.locator('.message[data-author=agent]').filter({hasText:body});
   await expect(message.locator('strong')).toHaveText(names[1]);
-  expect(await faceMarkup(message.getByRole('img',{name:names[1],exact:true}),names[1])).toBe(before);
+  expect(await faceMarkup(message.locator('.avatar'),null)).toBe(before);
  } finally {
   await page.goto('/c/rs-learning/agents');
   if(await writer.getByRole('button',{name:'Grant access to Writer'}).isVisible()) await writer.getByRole('button',{name:'Grant access to Writer'}).click();

@@ -1,0 +1,1 @@
+| `agent-birth-migration.mjs` | replays the #701 migration's statement that marks every Agent an install already has born: an Agent asked for before the update is not born again after it, and one made after it is born for its requester once (tests/db.sh) | — | supabase/tests/lead_create_agent.sql (who marks an Agent born, once) | helper, new |

@@ -83,8 +83,7 @@
 .gw .apps-sheet .panel-row__t { font-size: var(--gw-fs-sm); line-height: 1.5; color: var(--gw-text-1); overflow-wrap: anywhere; text-align: start; }
 .gw .apps-sheet .panel-row__d { font-size: var(--gw-fs-xs); line-height: 1.5; color: var(--gw-text-3); overflow-wrap: anywhere; }
 .gw .apps-sheet .fstack { display: inline-flex; align-items: center; flex: none; }
-.gw .apps-sheet .fstack .agent-face { border-radius: 50%; box-shadow: 0 0 0 2px var(--gw-bg-pane); }
-.gw .apps-sheet .fstack .agent-face + .agent-face { margin-inline-start: -5px; }
+.gw .apps-sheet .fstack .fw + .fw { margin-inline-start: -5px; }
 .gw .apps-sheet .switch {
   display: inline-flex; align-items: center; width: 32px; height: 20px; padding: 2px; flex: none; border-radius: var(--gw-r-full);
   background: var(--gw-border-1); transition: background-color var(--gw-dur-fast) var(--gw-ease-out);

@@ -104,30 +104,45 @@
         "displayName": "Scrollbar Thumb",
         "canonical": "oklch(0.7 0 0)"
       },
-      "role-account-manager": {
+      "agent-indigo": {
         "role": "secondary",
-        "displayName": "Account Manager Blue",
-        "canonical": "#a9c7dc"
+        "displayName": "Agent Indigo",
+        "canonical": "#5A58DE"
       },
-      "role-writer": {
+      "agent-violet": {
         "role": "secondary",
-        "displayName": "Writer Mint",
-        "canonical": "#b5d9cf"
+        "displayName": "Agent Violet",
+        "canonical": "#8443D0"
       },
-      "role-designer": {
+      "agent-sky": {
         "role": "secondary",
-        "displayName": "Designer Clay",
-        "canonical": "#d8baa9"
+        "displayName": "Agent Sky",
+        "canonical": "#2A6AD8"
       },
-      "role-critic": {
+      "agent-teal": {
         "role": "secondary",
-        "displayName": "Critic Lilac",
-        "canonical": "#c5b8dc"
+        "displayName": "Agent Teal",
+        "canonical": "#117A80"
       },
-      "role-arrow-agent": {
+      "agent-jade": {
         "role": "secondary",
-        "displayName": "Arrow Agent Gold",
-        "canonical": "#e5cb8d"
+        "displayName": "Agent Jade",
+        "canonical": "#1B8253"
+      },
+      "agent-rose": {
+        "role": "secondary",
+        "displayName": "Agent Rose",
+        "canonical": "#C23C86"
+      },
+      "agent-dusk": {
+        "role": "secondary",
+        "displayName": "Agent Dusk",
+        "canonical": "#8F52DC"
+      },
+      "agent-slate": {
+        "role": "secondary",
+        "displayName": "Agent Slate",
+        "canonical": "#4D586B"
       },
       "stage-amber": {
         "role": "tertiary",

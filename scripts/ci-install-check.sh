@@ -1003,11 +1003,32 @@ docker exec "$sandbox" grep -q "$od_marker" "$od_file" || fail "the design's fil
 # Each scan is read whole first and a scan that fails fails the check: under pipefail a `grep -q` that stops reading early
 # could fail the pipe on a match. They run as the work user, who owns every process and file there: the sandbox drops every
 # capability, so its root reads none of the work user's private folders.
-sandbox_env=$(docker exec --user pn "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
-if grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null; then
-  fail 'no process of the sandbox holds a provider credential'
-fi
-sandbox_files=$(docker exec --user pn "$sandbox" sh -c 'grep -rIl -e fake-model-key -e "$1" /home /work /tmp /run 2> /dev/null; true' sh "sk-or-v1-$od_marker") || fail "scan the sandbox's files"
+# A scan that could not run never reads as one that found nothing (#634): the environments read must hold the scanning
+# shell's own, and grep's "no match" (1) is told apart from an error (2 or higher).
+sandbox_env=$(docker exec --user pn --env GTMWORKS_SCAN=read "$sandbox" sh -c 'cat /proc/[0-9]*/environ 2> /dev/null | tr "\0" "\n"; true') || fail "read the sandbox's process environments"
+grep -qx 'GTMWORKS_SCAN=read' <<< "$sandbox_env" || fail "read the sandbox's process environments"
+env_found=0
+grep -E "fake-model-key|sk-or-v1-$od_marker|^(OPENAI|ANTHROPIC|OPENROUTER|GEMINI|XAI)_API_KEY=|^CLAUDE_CODE_OAUTH_TOKEN=" <<< "$sandbox_env" > /dev/null || env_found=$?
+case $env_found in
+  0) fail 'no process of the sandbox holds a provider credential' ;;
+  1) ;;
+  *) fail "scan the sandbox's process environments" ;;
+esac
+# Only the files the work user can read are scanned, so a folder it may not open is no error, and a file that went between
+# the listing and the read is read again without it; any other grep error is one. A file the scan writes first with a
+# marker of its own must be found, so a listing that found nothing fails too.
+scan_marker="gtmworks-scan-$od_marker"
+sandbox_files=$(docker exec --user pn "$sandbox" sh -c 'printf "%s\n" "$2" > /tmp/gtmworks-scan
+  find /home /work /tmp /run -type f -readable -print0 2> /dev/null | xargs -0r sh -c '"'"'
+    marker=$1; shift
+    grep -Il -e fake-model-key -e "$0" -e "$marker" -- "$@" 2> /dev/null; [ $? -le 1 ] && exit 0
+    for file; do [ ! -e "$file" ] || set -- "$@" "$file"; shift; done
+    [ $# -gt 0 ] || exit 0
+    grep -Il -e fake-model-key -e "$0" -e "$marker" -- "$@"; [ $? -le 1 ] || exit 255'"'"' "$1" "$2"
+  found=$?; rm -f /tmp/gtmworks-scan; exit "$found"' sh "sk-or-v1-$od_marker" "$scan_marker") \
+  || fail "scan the sandbox's files"
+grep -qx /tmp/gtmworks-scan <<< "$sandbox_files" || fail "scan the sandbox's files"
+sandbox_files=$(grep -vx /tmp/gtmworks-scan <<< "$sandbox_files" | sort -u) || true
 [[ -z $sandbox_files ]] || { printf '%s\n' "$sandbox_files" >&2; fail 'no file of the sandbox holds a provider credential'; }
 sandbox_keys=$(docker exec --user pn "$sandbox" find /home/pn /work \( -name auth.json -o -name .env -o -name '.hermes' -o -name 'credentials*.json' \) -print) || fail "list the sandbox's files"
 [[ -z $sandbox_keys ]] || { printf '%s\n' "$sandbox_keys" >&2; fail 'no sign-in or key file of the Engine is in the sandbox'; }
@@ -1057,6 +1078,11 @@ archived_rows() { db -c "select k.slug||' '||(select count(*) from public.work_c
  from public.companies k where k.slug like 'restore-%' order by k.slug"; }
 archived_rows > archived.before || fail 'read the archived rows before the backup'
 [[ $(cat archived.before) == $'restore-one 1 1 1\nrestore-two 1 1 1' ]] || fail 'each Company has an archived Card, Conversation and channel before the backup'
+# Every Agent's look (#696, ADR 0027), one of them picked: the restore brings back each look, given and picked.
+db -c "update public.agent_looks set picked_colour='rose',picked_shape='blob' where agent_id=(select min(agent_id::text)::uuid from public.agent_looks)" || fail 'pick a look before the backup'
+looks() { db -c "select agent_id||' '||auto_shape||' '||auto_colour||' '||auto_temperament||' '||coalesce(picked_shape,'-')||' '||coalesce(picked_colour,'-')||' '||coalesce(picked_temperament,'-') from public.agent_looks order by agent_id"; }
+looks > looks.before || fail 'read the looks before the backup'
+grep -q ' blob rose -$' looks.before || fail 'an Agent has a picked look before the backup'
 sh scripts/install.sh backup || fail 'backup'
 first_archive=$(find backups -name '*.tgz' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)
 [[ $(stat -c %a "$first_archive") == 600 ]] || fail 'private backup permissions'
@@ -1070,6 +1096,8 @@ lifecycle verify > data.after || fail 'read restored people, companies, cards an
 diff -u data.before data.after || fail 'restored identities match'
 archived_rows > archived.after || fail 'read the archived rows after the restore'
 diff -u archived.before archived.after || fail 'the restore keeps archived Cards, Conversations and channels archived'
+looks > looks.after || fail 'read the looks after the restore'
+diff -u looks.before looks.after || fail "the restore keeps every Agent's look, given and picked"
 db -c 'select name from gtmworks_install.schema_migrations order by name' > restored
 diff -u before restored || fail 'restored migration history'
 }
@@ -2385,9 +2413,10 @@ compose exec -T web node --input-type=module -e "
 # release's own Engines and sandboxes back (restore_previous_engine, ADR 0023), which reads each Engine's own sandbox key
 # before starting it and counts a sandbox restored only once its own Engine reaches it over SSH. After each, every Company's
 # Engine reaches its own sandbox over SSH, as its Agents' commands do, that sandbox takes its own Engine's key and no other
-# Company's, every sandbox and exit runs the image the install recorded before, and each work folder keeps what it held; an
-# Agent of each Company then runs a command in its own sandbox. Its own area, as the other update areas run near their
-# 12-minute limit.
+# Company's, every sandbox and exit runs the image the install recorded before, and each work folder keeps what it held; the
+# install records again the release that keeps serving (#583), a backup with the failed release's files is refused, and
+# one with that release's files after both succeeds. An Agent of each Company then runs a command in its own sandbox. Its own area,
+# as the other update areas run near their 12-minute limit.
 sandbox_rollback() {
 cd "$root"
 reset_install
@@ -2442,6 +2471,16 @@ for failing in sandbox engine; do
   cp "$root/release-broken-$failing/docker-compose.install.yml" "$root/release-broken-$failing/install.sh" . || fail "the release files whose $failing does not start in place"
   if GTMWORKS_ENGINE_WAIT=40 sh install.sh update > update.log 2>&1; then fail_update "the update whose $failing does not start must fail"; fi
   grep -Fq 'the previous release keeps serving, with its own Engines again' update.log || fail_update "the update whose $failing does not start says the previous release keeps serving"
+  # The install records again the release that keeps serving (#583), so a backup with the failed release's own files is
+  # refused before anything stops. The release whose sandbox does not start pins this release's own app image, which is
+  # what the record names, so only the one whose Engine does not start is another release to refuse.
+  [[ $(cat .install-release 2> /dev/null) == "$first" ]] || fail_update "the update whose $failing does not start records this release as the one it runs"
+  if [[ $failing == engine ]]; then
+    [[ $(sed -n 's/^release_image=//p' install.sh) == "$broken_engine" ]] || fail 'the release whose Engine does not start pins an app image of its own'
+    mkdir -p "$dir/refused-backup"
+    if sh install.sh backup "$dir/refused-backup" > backup.log 2>&1; then cat backup.log; fail "a backup with the files of the update whose $failing does not start must be refused"; fi
+    grep -Fq "This install does not run $broken_engine yet" backup.log || { cat backup.log; fail "the backup with the files of the update whose $failing does not start names the release it does not run"; }
+  fi
   # The release files of a failed update stay in the folder, as a real one leaves them: the previous release's own go
   # back with its command (scripts/get.sh); here they go back by hand.
   cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail "this release files back after the $failing failure"
@@ -2473,6 +2512,12 @@ for failing in sandbox engine; do
     [[ $(docker exec "gtmworks-sandbox-$slug" cat "/work/$rollback_marker-$slug.txt") == "$rollback_marker-$slug" ]] || fail_update "the work folder of $name keeps what it held after the update whose $failing does not start"
   done < companies-before
 done
+# The Owner backs up with the files of the release that keeps serving, without running a failed update again (#583). One
+# backup, after both: each failure above checked the record a backup reads, and a backup restarts every Engine, which the
+# area's 12 minutes have room for once. The Agents' commands below then run on the Engines it started again.
+mkdir -p "$dir/backup"
+sh install.sh backup "$dir/backup" > backup.log 2>&1 || { cat backup.log; fail "a backup with this release's files after the failed updates"; }
+[[ -f $(sed -n 's/^Backup: //p' backup.log | tail -n 1) ]] || { cat backup.log; fail 'the backup after the failed updates writes its archive'; }
 # Each Company's main Agent runs a command in its own sandbox after both failed updates and still remembers what its own
 # Engine was told; the job reads each sandbox for the file, and no other Company's sandbox has it.
 agent_marker="sandbox-rollback-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"

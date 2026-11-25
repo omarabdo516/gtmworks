@@ -12,7 +12,7 @@ test('the prepared click path measures the Inbox and the Activity log from the s
  assert.deepEqual(step('open card'), { name: 'open card', link: '.table a[href$="/board/1"]', path: '/work/board/1', content: '.modal', motion: { shown: 0, settled: 200 } });
  // The board opens a Card as its sheet and closes it, with the sheet's approved motion as its only allowance.
  assert.deepEqual(step('open sheet'), { name: 'open sheet', link: '#board-cols .kcard[data-card-id="1"] a', path: '/work/board', search: '?card=1', content: '.sheet[open]', motion: { shown: 0, settled: 280 } });
- assert.deepEqual(step('close sheet'), { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } });
+ assert.deepEqual(step('close sheet'), { name: 'close sheet', link: '.sheet[open] .sheet__top .circle-btn[aria-label="Close"]', path: '/work/board', search: '', content: '.board', gone: '.sheet[open]', motion: { shown: 190, settled: 190 } });
  // A step that opens a new page waits for the page's 200ms fadeIn, beside which the current row's 150ms fade runs
  // (#135); one that opens the board (Marketing board, and the Inbox, the board on "Waiting on you") waits for the
  // board's 700ms entrance beside them (#131, #559); a step that stays on its page (the sheet) has its own allowance

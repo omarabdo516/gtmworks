@@ -6,7 +6,7 @@ import { approvalQueue } from '@/lib/approval-queue';
 import { uuid } from '@/lib/conversations';
 import { isNewFor, orderAgents } from '@/lib/sidebar.mjs';
 import { madeColumns, madeOf } from '@/lib/agent-made';
-import { readyRoles, roleSentence, roleStart } from '@/lib/ready-roles';
+import { readyRoleLooks, readyRoles, roleSentence, roleStart } from '@/lib/ready-roles';
 import { emptyChatFacts, type EmptyChatFacts } from '@/lib/empty-chat.mjs';
 import { agentDetails } from '@/app/agent-details-server';
 import { companyHasModel } from '@/lib/provider-keys.mjs';
@@ -82,7 +82,7 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
    empty:opened?empty:emptyOf(own,row),details:opened?await detailsRead:await agentDetails(db,{company:company.id,agent:row.id,name:row.name,slug,me:user.id,role:membership?.role||'',tab})};
  })):null;
  const details=pickers?pickers.find(choice=>choice.agent.id===agent?.id)?.details??null:await detailsRead;
- const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone),owner,owners:facts?.owners??[]}:null;
+ const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone,await readyRoleLooks(db,company.id)),owner,owners:facts?.owners??[]}:null;
  const roleNames:Record<string,string>={owner:t('owner'),manager:t('manager'),contributor:t('contributor'),viewer:t('viewer')};
  return <Shell company={company} companies={companies||[]} personId={user.id} section="chat" title={t('chats')} personName={person?.name||user.email||''} role={roleNames[membership?.role||'']||''} owner={membership?.role==='owner'} approvalCount={waitingCount} agentId={agent?.id}>
   <main className="convo-page h-full"><AgentChat slug={slug} company={company.id} agent={agent?{id:agent.id,connection_id:agent.connection_id,name:agent.name,speciality:agent.speciality,main:agent.is_default,made:madeOf(agent,user.id,slug)}:null} details={details} writer={!!writer} team={company.work_mode==='team'} empty={empty} newAgent={newAgent} askOf={askOf} gallery={gallery} isNew={!!agent&&isNewFor(agent,user.id)} agents={pickers??[]} first={first==='alone'||first==='team'?first:undefined} invites={Number.parseInt(invites||'0',10)||0} noModel={await modelRead===false?{owner}:null}/></main>

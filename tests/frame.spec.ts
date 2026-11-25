@@ -198,10 +198,13 @@ test('owner assigns a new Contributor agent through settings, the work list foll
   expect(audit).toEqual({actor_id:'20000000-0000-0000-0000-000000000001',agent_role:'writer'});
   await page.goto('/c/rs-learning/work/list');
   const assigned=page.locator('.table tbody tr').filter({has:page.locator(`a[href="${cardPath}"]`)});
-  await expect(assigned.locator('td').last()).toHaveText(initialName);
+  // The next actor's name, beside its first letter as a person's (#697: a legacy role agent shows its name's first letter).
+  const nextActor=assigned.locator('td').last().locator('span:not(.avatar)');
+  await expect(assigned.locator('td').last().locator('.avatar')).toHaveText(Array.from(initialName)[0]);
+  await expect(nextActor).toHaveText(initialName);
   expect(query(`update public.people set name=${quote(renamed)} where id=${quote(person)} returning name;`)).toContain(renamed);
   await page.reload();
-  await expect(assigned.locator('td').last()).toHaveText(renamed);
+  await expect(nextActor).toHaveText(renamed);
   await page.goto('/c/rs-learning/settings/members');
   const renamedMember=page.locator('.member-row').filter({has:page.locator('strong',{hasText:new RegExp(`^${renamed}$`)})});
   await renamedMember.getByRole('combobox',{name:"Member role",exact:true}).selectOption('viewer');

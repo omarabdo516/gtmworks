@@ -4,6 +4,8 @@ import { onTestFinished, vi } from 'vitest';
 import Work, { type AddIdeaAction, type PlaceCard, type UndoMove, type WorkAction, type WorkProps } from '@/app/c/[slug]/[[...section]]/work';
 import { Frame } from '@/app/frame';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { LooksProvider } from '@/lib/agent-looks-client';
+import type { CompanyLooks } from '@/lib/agent-looks';
 import type { Language } from '@/lib/i18n.mjs';
 import '@/app/globals.css';
 import '@/app/tokens.css';
@@ -35,11 +37,11 @@ export const ideasSent = (props: WorkProps) => vi.mocked(props.addIdea).mock.cal
 export const placed = (props: WorkProps) => vi.mocked(props.placeMove).mock.calls.map(([form]) => Object.fromEntries(form));
 
 // As app/layout.tsx sets the page's language and direction.
-export async function showWork(props: WorkProps, { language = 'en', width = 1440 }: { language?: Language, width?: number } = {}) {
+export async function showWork(props: WorkProps, { language = 'en', width = 1440, looks }: { language?: Language, width?: number, looks?: CompanyLooks } = {}) {
  const { lang, dir } = document.documentElement;
  Object.assign(document.documentElement, { lang: language, dir: language === 'ar' ? 'rtl' : 'ltr' });
  onTestFinished(() => { Object.assign(document.documentElement, { lang, dir }); });
  await page.viewport(width, 900);
- return render(workView(props, language));
+ return render(looks ? <LooksProvider looks={looks}>{workView(props, language)}</LooksProvider> : workView(props, language));
 }
 export const workView = (props: WorkProps, language: Language = 'en') => <LanguageProvider language={language}><Frame sidebar={null} title="Work"><main className="content"><Work {...props}/></main></Frame></LanguageProvider>;

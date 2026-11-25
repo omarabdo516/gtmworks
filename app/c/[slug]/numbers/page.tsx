@@ -12,7 +12,7 @@ import type { LogRow } from '@/lib/activity-log.mjs';
 import { FeedWhen } from '../log/log-client';
 import { FeedText, WhoFace, logColumns, logPeople, whoOf } from '../log/entries';
 import { SystemMark } from '../log/icons';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { NoApp, NumbersFigures, NumbersHead, WaitingRow } from './parts';
 import { NumbersPlaceholder } from './numbers-client';
 
@@ -65,7 +65,7 @@ async function Figures({db,company,slug,period,writer,queue,t,language}:{db:Db,c
   const submitter=item.kind==='approval'?(submitters||[]).find(card=>card.id===item.id)?.review_submitter as string|null|undefined:undefined;
   if(submitter) return <WhoFace who={whoOf({actor_kind:people.identities.some(agent=>agent.id===submitter)||people.members.some(member=>member.person_id===submitter&&member.agent_role)?'agent':'person',actor_id:submitter} as LogRow,people,t)}/>;
   // A permission request (#165) is its Agent's, so it shows the Agent's face (design-reference: renderDashboard's face(w.agent)).
-  if(item.agent) return <span className="lg-face" aria-hidden="true"><CompanyAgentFace agent={item.agent} size={28}/></span>;
+  if(item.agent) return <span className="lg-face" aria-hidden="true"><AgentFace agent={item.agent.id} size={28}/></span>;
   if(item.asked_by) return <span className="lg-av" aria-hidden="true">{Array.from(item.asked_by.trim())[0]}</span>;
   return <SystemMark/>;
  };

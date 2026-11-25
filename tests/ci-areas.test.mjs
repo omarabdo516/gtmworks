@@ -61,7 +61,7 @@ for (const [path, components] of [
 // Screens tested as components (#81): a screen, a component, the library they import, or a component test runs them,
 // and so does the stylesheet build the motion test reads (#127).
 for (const path of [
-  'app/conversation-composer.tsx', 'components/company-agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
+  'app/conversation-composer.tsx', 'components/agent-face.tsx', 'lib/messages/en.json', 'tests/components/message-box.test.tsx', 'vitest.config.mts',
   'postcss.config.mjs', 'tests/offline.mjs',
 ]) {
   test(`${path} runs the component tests`, () => assert.equal(areas(path).components, 'true'));
@@ -121,7 +121,7 @@ for (const path of [
 for (const path of [
   'Dockerfile', '.dockerignore', 'docker-compose.install.yml', '.env.install.example', 'scripts/install.sh', 'scripts/get.sh',
   'scripts/install-db.sql', 'scripts/check-install-proxy.mjs', 'scripts/check-hermes-keys.py', 'scripts/release-assets.mjs',
-  'scripts/ci-install-check.sh', 'scripts/ci-install-lib.sh', '.github/actions/install-machine/action.yml',
+  'scripts/ci-install-check.sh', 'scripts/ci-install-lib.sh', 'scripts/ci-install-machine.sh', '.github/actions/install-machine/action.yml',
   'scripts/check-rls.sql', 'scripts/verify-db.mjs', 'scripts/forged-identity.mjs', 'supabase/migrations/20260101000000_x.sql',
   'playwright.install.config.ts', 'tests/install/rate-limit.install.ts', '.github/workflows/release.yml',
 ]) {

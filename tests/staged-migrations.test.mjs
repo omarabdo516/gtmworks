@@ -11,6 +11,13 @@ const read=name=>readFileSync(`supabase/migrations/${name}`,'utf8');
 const firstStep='20270408100000_one_set_of_tools.sql';
 const cutover='20270416000000_one_set_of_tools_cutover.sql';
 
+// The Supabase CLI applies migrations in the numeric order of their versions, the installer and the local database in
+// the order their names sort in: one order only while every version has the same 14 digits.
+test('every migration version has 14 digits, so the order its name sorts in is the order it is applied in', () => {
+ for(const name of readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')))
+  assert.match(name,/^\d{14}_[a-z0-9_]+(\.verify)?\.sql$/,`${name} has a version of other than 14 digits`);
+});
+
 test('a migration before the cutover takes no column, table or function away that the previous release reads', () => {
  for(const name of migrations.filter(name=>name>=firstStep&&!name.endsWith('_cutover.sql'))) {
   const sql=read(name);
@@ -39,12 +46,22 @@ test('the first step of the levels removal keeps the level, and the cutover remo
  for(const removed of [/alter table public\.companies drop column agent_level;/,/drop column tools_level;/,/drop column tools_policy;/,
   /drop function if exists public\.set_agent_level\(uuid,integer\);/,/drop function if exists public\.engine_tool_policy\(\);/])
   assert.match(last,removed);
- // The cutover sorts after its first step and every migration of the levels removal. A later spec's migrations sort
- // after it (#668's Card status, 20270417000000, on): each of those is held to the first test's rule, and its own
- // cutover drops what it replaced.
- assert.ok(migrations.indexOf(firstStep)<migrations.indexOf(cutover),'the cutover sorts after its first step');
- assert.ok(migrations.filter(name=>name<cutover).every(name=>name<'20270416000000'),'and after every migration it follows');
- assert.ok(migrations.filter(name=>name>cutover).every(name=>name>='20270417000000'),'a later spec\'s migration is named after it');
+ assert.ok(migrations.indexOf(cutover)>migrations.indexOf(firstStep),'the cutover sorts after the first step it follows');
+});
+
+// The installer applies a cutover by its name, after every other migration, wherever its name sorts; the Supabase CLI
+// and the local database apply it in the order the names sort. So a migration whose name sorts after the cutover (once
+// no version is left before it) is applied after the cutover there and before it on an install: the same only when it
+// makes nothing the cutover makes and reads nothing the cutover takes away.
+test('a migration sorting after the cutover makes nothing the cutover makes and reads nothing it takes away', () => {
+ const last=read(cutover);
+ const made=new Set([...last.matchAll(/create (?:or replace )?(?:function|view|trigger|policy) (?:public\.)?"?(\w+)/gi)].map(([,name])=>name));
+ const removed=new Set([...last.matchAll(/drop (?:function|table|column|policy|view|trigger)(?: if exists)? (?:public\.)?"?(\w+)/gi)].map(([,name])=>name));
+ assert.ok(made.size&&removed.size,'the cutover makes and removes what it names');
+ for(const name of migrations.slice(migrations.indexOf(cutover)+1)) {
+  const sql=read(name);
+  for(const word of [...made,...removed]) assert.doesNotMatch(sql,new RegExp(`\\b${word}\\b`),`${name} names ${word}, which the cutover makes or takes away`);
+ }
 });
 
 test('the installer applies the cutover only once this release answers, and puts the previous Engines back when an update cannot start its own', () => {

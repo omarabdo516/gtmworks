@@ -4,7 +4,7 @@ import { CircleDot } from 'lucide-react';
 import { getI18n } from '@/lib/i18n-server';
 import { AuthoredTitle } from '@/lib/authored-title';
 import { workDate } from '@/lib/work-date.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { sidebarReads } from '@/app/shell';
 import { ActivityRow, type WorkActivity, type WorkMember } from '@/lib/work-activity';
 import { currentAgentCard, homeCharts, metricValue, type HomeCard } from '@/lib/home-data.mjs';
@@ -21,7 +21,7 @@ export default async function Home({slug,companyId,agentCards,cards,activity,mem
  return <div className="home-dashboard">
   <section className="home-agents" aria-label={t('agents')}>{agents.map(agent=>{
    const current=currentAgentCard(agentCards,agent.id);
-   return <article className="panel role-agent" key={agent.id}><h2 aria-label={agent.name}><CompanyAgentFace agent={agent} size={32}/><bdi>{agent.name}</bdi></h2>{current?<AuthoredTitle className="link" href={`/c/${slug}/work/board/${current.id}`}>{current.title}</AuthoredTitle>:<p>{agentCards?t('notWorkingNow'):t('unavailable')}</p>}</article>;
+   return <article className="panel role-agent" key={agent.id}><h2 aria-label={agent.name}><AgentFace agent={agent.id} size={32}/><bdi>{agent.name}</bdi></h2>{current?<AuthoredTitle className="link" href={`/c/${slug}/work/board/${current.id}`}>{current.title}</AuthoredTitle>:<p>{agentCards?t('notWorkingNow'):t('unavailable')}</p>}</article>;
   })}</section>
   <section className="stats" aria-label={t('workFigures')}>{([[t('awaitingYourApproval'),approvalCount],[t('publishedThisWeek'),null],[t('bookingsThisWeek'),null],[t('stoppedCards'),null]] as const).map(([label,value])=><article className="stat" key={label}><MetricCard icon={CircleDot} label={label} value={metricValue(value,language)} valueClassName={value===null?"unavailable text-base sm:text-xl tracking-normal":undefined}/></article>)}</section>
   <section className="home-charts" aria-label={t('last14Days')}>

@@ -67,7 +67,7 @@ test('a chat\'s Card shows its Agent whole and the Agent\'s job on its foot, and
  await render(<Board/>);
  const foot = shownCard()!.querySelector('.kcard__foot')!;
  expect(foot.querySelector('.kcard__agent bdi')!.textContent).toBe('Ads');
- expect(foot.querySelector('.kcard__agent .agent-face')!.getAttribute('aria-label')).toBe('Ads');
+ expect(foot.querySelector<HTMLElement>('.kcard__agent .face')!.dataset.agent).toBe(ads.id);
  expect(foot.textContent).toBe('Ads· Runs the Meta ads.');
  expect(cleared).not.toHaveBeenCalled();
 });

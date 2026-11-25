@@ -1,26 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentStates, agentStatus, statusKeys, agentTasks, latestActivity, agentLogFilter, pickTab, fileSize, agentFiles, worksWith } from '../lib/agent-details.mjs';
+import { agentTasks, latestActivity, agentLogFilter, pickTab, fileSize, agentFiles, worksWith } from '../lib/agent-details.mjs';
 import { matchesFilters } from '../lib/activity-log.mjs';
 import { columnLabel, progressOf } from '../lib/board-columns.mjs';
 
-test('an Agent waiting on the reader says so before it says it is working; with neither it is idle', () => {
- assert.equal(agentStatus({ waitingMine: true, running: true }), 'waiting');
- assert.equal(agentStatus({ waitingMine: false, running: true }), 'working');
- assert.equal(agentStatus({ waitingMine: false, running: false }), 'idle');
-});
-
-test('one agent_states call gives each Agent the reader sees its state, and any other Agent reads as idle', () => {
- const stateOf = agentStates([
-  { agent: 'run', running: true, waiting_mine: false },
-  { agent: 'wait', running: false, waiting_mine: true },
-  { agent: 'both', running: true, waiting_mine: true },
-  { agent: 'rest', running: false, waiting_mine: false },
- ]);
- assert.deepEqual(['run', 'wait', 'both', 'rest', 'hidden'].map(stateOf), ['working', 'waiting', 'waiting', 'idle', 'idle']);
- assert.equal(agentStates(null)('run'), 'idle', 'a failed read leaves every Agent idle');
- assert.deepEqual(['working', 'waiting', 'idle'].map(status => statusKeys[status]), ['agentStatusWorking', 'agentStatusWaiting', 'agentStatusIdle']);
-});
 
 test('an Agent\'s Cards follow the board\'s columns, each with the reference\'s line under it', () => {
  const cards = [

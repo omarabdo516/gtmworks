@@ -23,12 +23,14 @@ test.use({timezoneId:'UTC'});
 test.beforeAll(({},testInfo)=>{
  // A retry, or a repeat of this serial file, starts it again from the seed, so its rows are inserted once.
  freshSeed(testInfo.file,testInfo.retry>0||testInfo.repeatEachIndex>0);
+ // Copy, Lead and SEO are made today, so none of them is asleep (#699: an Agent made over 7 days ago with no work for 7
+ // days sleeps): the states below are waiting, working and idle.
  query(`do $$ declare card bigint; begin
     insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,created_at,requested_by,profile) values
-   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,null,null,'details-copy'),
-   ('${lead}','${company}','${leadConnection}','Lead','General',true,null,null,'details-lead'),
+   ('${copy}','${company}','${copyConnection}','Copy','Writes the copy.',false,now(),null,'details-copy'),
+   ('${lead}','${company}','${leadConnection}','Lead','General',true,now(),null,'details-lead'),
    ('${ads}','${company}','${adsConnection}','Meta Ads','Runs the Meta ads.',false,'2026-06-10T09:01:00Z','${omar}','details-ads'),
-   ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,null,null,'details-seo');
+   ('${seo}','${company}','${seoConnection}','SEO','Writes the blog.',false,now(),null,'details-seo');
   insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('${id(9)}','${company}','${omar}','${lead}','Lead');
   insert into public.conversation_messages(company_id,conversation_id,author,person_id,agent_id,author_name,body,send_key,run_id,created_at) values
    ('${company}','${id(9)}','person','${omar}',null,'Omar','I want someone to handle our Meta ads','${id(10)}','details-made','2026-06-10T09:00:00Z'),
@@ -82,7 +84,7 @@ test('the Owner reads the Agent\'s state, what it is doing for them, its Cards a
  const details=await openDetails(page,'omar@example.com',ads,'Meta Ads');
  await expect(details.locator('.dp-id__name')).toHaveText('Meta Ads');
  await expect(details.locator('.dp-id__role')).toHaveText('Runs the Meta ads. · Working');
- await expect(details.locator('.face-wrap .dot')).toHaveClass(/\bdot--working\b/);
+ await expect(details.locator('.fw--lg > .dot')).toHaveClass(/\bdot--working\b/);
  await expect(details.locator('.born')).toContainText('Made on Jun 10 at your request');
  await expect(details.locator('.born').getByRole('link',{name:'See the ask',exact:true})).toHaveAttribute('href',`/c/rs-learning/conversations/${id(9)}`);
  await expect(details.getByRole('link',{name:'Settings for Meta Ads',exact:true})).toBeVisible();
@@ -218,7 +220,7 @@ for(const [who,email,shown] of [
  await expect(tiles(page)).toHaveCount(shown.length);
  for(const [index,[label,status]] of shown.entries()) {
   await expect(tiles(page).nth(index)).toHaveAccessibleName(label);
-  await expect(tiles(page).nth(index).locator('.face-wrap > .dot')).toHaveClass(`dot dot--${status}`);
+  await expect(tiles(page).nth(index).locator('.fw > .dot')).toHaveClass(`dot dot--${status}`);
  }
 });
 
@@ -227,15 +229,15 @@ test('Settings shows the same dot on each Agent, with its state as text in the l
  await signIn(page,'omar@example.com','/c/rs-learning/settings?section=agents');
  const row=(agent:string)=>page.locator(`#sov-ag-${agent}`);
  for(const [agent,status,word] of [[lead,'idle','Idle'],[copy,'waiting','Waiting on you'],[ads,'working','Working'],[seo,'idle','Idle']] as const) {
-  await expect(row(agent).locator('.face-wrap > .dot')).toHaveClass(`dot dot--${status}`);
+  await expect(row(agent).locator('.fw > .dot')).toHaveClass(`dot dot--${status}`);
   await expect(row(agent).locator('.panel-row__meta')).toHaveText(word);
  }
  await row(copy).click();
- await expect(page.locator('.sov-agent-id .face-wrap--lg > .dot')).toHaveClass('dot dot--waiting');
+ await expect(page.locator('.sov-agent-id .fw > .dot')).toHaveClass('dot dot--waiting');
  await expect(page.locator('.sov-agent-id .dp-id__role')).toHaveText('Writes the copy. · Waiting on you');
  await page.context().clearCookies();
  await signIn(page,'reviewer@example.com',`/c/rs-learning/settings?agent=${copy}`);
- await expect(page.locator('.sov-agent-id .face-wrap--lg > .dot')).toHaveClass('dot dot--idle');
+ await expect(page.locator('.sov-agent-id .fw > .dot')).toHaveClass('dot dot--idle');
  await expect(page.locator('.sov-agent-id .dp-id__role')).toHaveText('Writes the copy. · Idle');
 });
 

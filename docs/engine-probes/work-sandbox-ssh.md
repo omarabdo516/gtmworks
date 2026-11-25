@@ -153,6 +153,8 @@ command back on the Engine's own disk.
   sign-in, a file only the sandbox holds, another Agent's cached image — stayed literal in the Run's output. (The
   surface gtmworks does not use rewrites the tag into a data URL instead — `gateway/platforms/api_server.py`,
   `_resolve_media_to_data_urls`.)
+  gtmworks now reads the tags itself (#708, ADR 0028): a tag in the Agent's own work folder hands that file over, and
+  every other tag, these three included, is named as a file that could not be attached.
 - `skill_manage` refuses a name that leaves the profile (`Invalid skill name '../../probe-other/owned'`, batch rolled
   back), and `memory` and `cronjob_manage` act on the calling profile and its own Engine only.
 - `image_generate` was not offered at all: it needs an image provider key the probe's Engine does not hold. Its source

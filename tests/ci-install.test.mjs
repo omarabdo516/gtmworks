@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { readFileSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -128,12 +128,47 @@ test('the install and measurement jobs share one composite action for their mach
   }
   const action = load(readFileSync('.github/actions/install-machine/action.yml', 'utf8'));
   assert.equal(action.runs.using, 'composite');
-  assert.deepEqual(action.runs.steps.map(step => step.name), ['start the isolated Docker machine', 'download the image', 'load the image', 'download the work sandbox image', 'load the work sandbox image']);
+  assert.deepEqual(action.runs.steps.map(step => step.name), ['start the isolated Docker machine', 'download the image', 'restore the work sandbox image', 'load the images']);
   for (const step of action.runs.steps.filter(step => step.run)) assert.equal(step.shell, 'bash', `${step.name} names its shell`);
-  assert.match(action.runs.steps[0].run, /--privileged --name install-docker/);
-  assert.match(action.runs.steps[0].run, /docker --host tcp:\/\/127\.0\.0\.1:2375 info/, 'the start step waits for the daemon');
-  assert.equal(action.runs.steps[1].with.name, 'gtmworks-image');
-  assert.match(action.runs.steps[2].run, /gtmworks-image\.tar/);
+  const [start, image, sandbox, loadBoth] = action.runs.steps;
+  assert.equal(start.run.trim(), 'bash scripts/ci-install-machine.sh start');
+  assert.equal(image.with.name, 'gtmworks-image');
+  // #608: the work sandbox image is kept in the cache under its own files' key, which the image job names.
+  assert.equal(sandbox.uses, 'actions/cache/restore@v4');
+  assert.deepEqual(sandbox.with, { path: '${{ runner.temp }}/gtmworks-sandbox-image.tar', key: '${{ inputs.sandbox-key }}', 'fail-on-cache-miss': true });
+  assert.equal(action.inputs['sandbox-key'].required, true);
+  assert.match(loadBoth.run, /gtmworks-image\.tar" & app=\$!/, 'the two images load at once');
+  assert.match(loadBoth.run, /gtmworks-sandbox-image\.tar" & sandbox=\$!/);
+  assert.match(loadBoth.run, /wait "\$app" \|\| status=\$\?; wait "\$sandbox" \|\| status=\$\?\n\s*\(\( status == 0 \)\)/, 'a failed load fails the step once both have ended');
+  for (const name of ['install', measureJob]) {
+    const used = ci.jobs[name].steps.find(step => step.uses === './.github/actions/install-machine');
+    assert.deepEqual(used.with, { 'sandbox-key': '${{ needs.image.outputs.sandbox-key }}' }, `${name} names the run's sandbox image`);
+    assert.equal(ci.jobs[name].steps.at(-1).run, 'bash scripts/ci-install-machine.sh stop', `${name} removes the machine`);
+  }
+});
+
+// #608: the work sandbox image is built only when its files changed: the image job keeps it in the cache under their
+// hash and builds and saves it on a miss, and no longer uploads it as an artifact every run.
+test('the image job builds the work sandbox image only when no image of its files is kept', () => {
+  const image = ci.jobs.image;
+  assert.equal(image.outputs['sandbox-key'], '${{ steps.sandbox.outputs.key }}');
+  const key = image.steps.find(step => step.id === 'sandbox');
+  assert.match(key.run, /^echo "key=install-sandbox-image-\$\{\{ hashFiles\('sandbox\/\*\*'\) \}\}" >> "\$GITHUB_OUTPUT"$/);
+  const lookup = image.steps.find(step => step.id === 'sandbox-cache');
+  assert.deepEqual(lookup.with, { path: '${{ runner.temp }}/gtmworks-sandbox-image.tar', key: '${{ steps.sandbox.outputs.key }}', 'lookup-only': true });
+  const build = image.steps.find(step => step.name === 'build the work sandbox image');
+  assert.match(build.if, /steps\.sandbox-cache\.outputs\.cache-hit != 'true'/);
+  assert.equal(build.with.outputs, 'type=docker,dest=${{ runner.temp }}/gtmworks-sandbox-image.tar');
+  const save = image.steps.find(step => step.name === 'keep the work sandbox image');
+  assert.equal(save.uses, 'actions/cache/save@v4');
+  assert.equal(save.if, build.if);
+  assert.deepEqual(save.with, { path: lookup.with.path, key: lookup.with.key });
+  // A failed upload only warns, so the job looks the entry up and is red without it.
+  const kept = image.steps[image.steps.indexOf(save) + 1];
+  assert.equal(kept.name, 'the work sandbox image is kept');
+  assert.equal(kept.if, build.if);
+  assert.deepEqual(kept.with, { ...lookup.with, 'fail-on-cache-miss': true });
+  assert.equal(image.steps.some(step => step.with?.name === 'gtmworks-sandbox-image'), false, 'no artifact of it');
 });
 
 test('the install job runs under today\'s install condition and a successful image build', () => {
@@ -157,7 +192,7 @@ test('only the proxy area installs the test packages: its browser check is the o
 
 test('a job on a GitHub-hosted runner does not wait for its Docker machine to be removed', () => {
   const remove = job.steps.at(-1);
-  assert.match(remove.run, /docker rm -fv install-docker/);
+  assert.equal(remove.run, 'bash scripts/ci-install-machine.sh stop');
   assert.equal(remove.if, "${{ always() && runner.environment != 'github-hosted' }}", 'the removal stays for a runner that is reused, also after a failure');
 });
 
@@ -212,7 +247,7 @@ test('the profile-size measurement is a job of its own, and the required check d
   assert.match(load.run, /gtmworks-image\.tar/);
   assert.match(load.run, /tag gtmworks:ci "\$web_image"/);
   const remove = job.steps.at(-1);
-  assert.match(remove.run, /docker rm -fv install-docker/);
+  assert.equal(remove.run, 'bash scripts/ci-install-machine.sh stop');
   assert.equal(remove.if, "${{ always() && runner.environment != 'github-hosted' }}", 'removed on a reused runner, also after a failure');
   assert.equal(ci.jobs.check.needs.includes(measureJob), false, 'the required check does not wait for the measurement');
 });
@@ -359,7 +394,9 @@ test('release_image builds a fixed commit once, then loads what it saved', async
 // #423: `./ci.sh install` loads every image the proof runs from the host, found by name in the proof's files; the local
 // registry's image is named in the lib (start_registry), so the lib is one of the files it reads.
 test('./ci.sh install loads the images the lib names too', () => {
-  const lane = readFileSync(resolve('ci.sh'), 'utf8').split('\n').find(line => line.includes('registry:[0-9.]+'));
+  // The lane's list is the install machine's (#608).
+  assert.match(readFileSync(resolve('ci.sh'), 'utf8'), /images=\$\(bash scripts\/ci-install-machine\.sh images\)/);
+  const lane = readFileSync(resolve('scripts/ci-install-machine.sh'), 'utf8').split('\n').find(line => line.includes('registry:[0-9.]+'));
   assert.ok(lane, 'the lane finds the images by name');
   assert.match(lane, /scripts\/ci-install-check\.sh scripts\/ci-install-lib\.sh/);
   assert.match(lib, /registry:2\.8\.3/, 'the registry image is named in the lib');
@@ -420,4 +457,33 @@ test('every "publishes no host port" check of the proof asks publishes_host_port
   const checks = script.split('\n').filter(line => /publishes no (host )?port/.test(line) && !/^\s*\|\|/.test(line));
   assert.ok(checks.length > 0);
   for (const line of checks) assert.match(line, /publishes_host_port /, line);
+});
+
+// The Engine is running while a release area writes its memory, so its SQLite journal (`state.db-journal`) can appear
+// and vanish anywhere in the profile; a `chown -R` over the whole profile then fails on the vanished file (#606). A
+// stand-in `docker exec` runs the helper's own script against a scratch data folder with a `chown` that records its
+// arguments: the memory lands in MEMORY.md, and the profile folder alone and the memories folder it wrote, with what
+// is in it, are handed to the Engine's user.
+test('tell_engine hands the profile folder and the memories it wrote to the Engine user, never the whole live profile', () => {
+  const dir = mkdtempSync(`${tmpdir()}/tell-engine-`);
+  try {
+    const data = `${dir}/data`;
+    mkdirSync(`${data}/profiles/co-1`, { recursive: true });
+    writeFileSync(`${dir}/docker`, [
+      '#!/bin/bash', '[ "$1" = exec ] && [ "$2" = -i ] || exit 2', 'shift 3',
+      '[ "$1" = sh ] && [ "$2" = -ec ] || exit 2', 'body=${3//\\/opt\\/data/$DATA}', 'shift 3',
+      'exec sh -ec "$body" "$@"', '',
+    ].join('\n'));
+    writeFileSync(`${dir}/chown`, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CHOWNS"\n');
+    chmodSync(`${dir}/docker`, 0o755);
+    chmodSync(`${dir}/chown`, 0o755);
+    const out = spawnSync('bash', ['-c', '. scripts/ci-install-lib.sh; tell_engine some-engine co-1 marker-1'], {
+      encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, DATA: data, CHOWNS: `${dir}/chowns` },
+    });
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(readFileSync(`${data}/profiles/co-1/memories/MEMORY.md`, 'utf8'), 'The company code word is marker-1.\n');
+    assert.deepEqual(readFileSync(`${dir}/chowns`, 'utf8').split('\n').filter(Boolean), [`hermes:hermes ${data}/profiles/co-1`, `-R hermes:hermes ${data}/profiles/co-1/memories`]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

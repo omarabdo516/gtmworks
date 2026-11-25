@@ -10,8 +10,9 @@ import { filesProblem } from '@/lib/attachments.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
-import type { IdeaResult, PlaceResult, UndoResult } from './work';
+import type { Card, IdeaResult, PlaceResult, UndoResult } from './work';
 import { archiveIntents, type ArchiveAnswer, type ArchiveIntent, type ArchiveStopKind } from '@/lib/archive-stops';
+import { archivedCardPage, type ArchivedCursor, type ArchivedPage, type ArchivedWant } from '@/lib/archived-cards';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
 // start that fails is left to the worker and logged without the note.
 async function startNoteRun(note:number) {
@@ -75,6 +76,16 @@ export const archiveCards=withActionLog('archiveCards',async function archiveCar
  const done=((data||[]) as (number|string)[]).map(Number);
  if(done.length) revalidatePath('/c/[slug]','layout');
  return done.length?{state:'done',done}:{state:'refused'};
+});
+// A page of the board's archive list (#705): the next one after `after`, or the first of a search or a filter. Any
+// Member reads it; archived_card_list keeps it to the archived Cards they see. A failed read is null.
+export const archivedCardList=withActionLog('archivedCardList',async function archivedCardList(company:string,want:ArchivedWant,after:ArchivedCursor|null):Promise<ArchivedPage<Card>|null> {
+ const db=await supabase();
+ if(!await actionAllowed(db,'archivedCardList',company)) return null;
+ const project=Number(want?.project);
+ const cursor=after&&typeof after.at==='string'&&Number.isSafeInteger(after.id)?{at:after.at,id:after.id}:null;
+ return archivedCardPage<Card>(db,company,{q:String(want?.q||'').slice(0,200),agent:typeof want?.agent==='string'&&want.agent?want.agent:null,
+  project:want?.project!=null&&Number.isSafeInteger(project)?project:null},cursor);
 });
 // A Card placed where its person drops it, or one place up or down its column (#174): move_card moves its status (#676)
 // and decides every refusal, and the board answers it in place, so a refused place neither leaves the board nor offers an "Undo" (#168).

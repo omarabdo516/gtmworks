@@ -31,8 +31,9 @@ test('a message to an agent makes one card in Ideas with its message, assignment
   await expect(onBoard).toHaveCount(1);
   await expect(page.locator('.card').filter({hasText:title})).toHaveCount(1);
   await expect(onBoard.locator('.mode-chip')).toHaveText('Do it now');
-  // The chip carries the account manager's colour.
-  await expect(onBoard.locator('.mode-chip')).toHaveCSS('border-top-color','rgb(169, 199, 220)');
+  // The chip is drawn in the board's own border, the same for every Agent: role colours are gone (#697).
+  expect(await onBoard.locator('.mode-chip').evaluate(element=>{ const probe=document.createElement('span'); probe.style.borderColor='var(--gw-border-2)'; element.parentElement!.append(probe);
+   const same=getComputedStyle(element).borderTopColor===getComputedStyle(probe).borderTopColor; probe.remove(); return same; })).toBe(true);
   for(const width of [1440,390]) {
    await page.setViewportSize({width,height:900});
    await page.screenshot({path:`test-results/screenshots/card-request-board-en-${width}.png`});

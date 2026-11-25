@@ -1,1 +1,0 @@
-| `components/company-agent-face.test.tsx` | An Agent's face is a picture named for it at the asked size; one Agent always wears the same face; Agents whose connections draw different faces look different. (#81) | 0.2 s | agent-face.test.mjs (the face generator only), agent-face.spec.ts (faces across screens) | new |

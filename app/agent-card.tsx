@@ -5,7 +5,10 @@ import { Fragment, type ReactNode } from 'react';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
 import { localeFor } from '@/lib/i18n.mjs';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
+import { Birth } from '@/components/face-moments';
+import { useRequestAgent } from '@/lib/agent-looks-client';
+import { ChangeLookLink } from '@/app/agent-look-window';
 import { ShellIcon } from '@/components/shell-icon';
 import { AppTile } from '@/components/app-tile';
 import { markOf } from '@/lib/app-mark.mjs';
@@ -40,26 +43,29 @@ export function MadeCard({slug,agent,fresh=false}:{slug:string,agent:MadeAgent,f
  const {t,language}=useI18n(); const zone=useZone(); const {c}=useCardText();
  return <div className={`ac-card${fresh?' card-in':''}`} role="group" aria-label={c('madeAgentLabel',agent.name)}>
   <div className="hcard__top"><span className="badge badge--made" data-utc={agent.fresh?undefined:zone}><ShellIcon name="check"/>{c('madeAgentMade')} · {agent.fresh?t('agentNew'):madeDay(agent.created_at,language,zone)}</span></div>
-  <div className="card__head"><span aria-hidden="true"><CompanyAgentFace agent={agent} size={44}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
+  <div className="card__head"><span aria-hidden="true" data-birth><AgentFace agent={agent.id} size={48}/></span><div className="card__titles"><span className="card__title"><bdi>{agent.name}</bdi></span></div></div>
+  {agent.fresh&&<Birth agent={agent.id}/>}
   <AgentRows job={agent.job} apps={agent.apps}/>
-  <div className="ac-actions"><Link className="btn btn--primary" href={`/c/${slug}/chat/${agent.id}`}>{c('madeAgentOpen',agent.name)}</Link></div>
+  <div className="ac-actions"><Link className="btn btn--primary" href={`/c/${slug}/chat/${agent.id}`}>{c('madeAgentOpen',agent.name)}</Link><ChangeLookLink agent={agent}/></div>
   <p className="ac-tip"><ShellIcon name="chat"/><span>{c('madeAgentTip')}</span></p>
  </div>;
 }
 
-// A request has no Agent yet, so its face is drawn from the request until one is made. An `unread` request leaves out its
+// A request has no Agent yet: its face is the look its Agent will be made with, asked for by the id that Agent will
+// have (#696), so the request's card and the made Agent have one face. An `unread` request leaves out its
 // apps and the message that asked, which could not be read, rather than show them empty.
 export function RequestCard({slug,request,owner=false,unread=false,answer}:{slug:string,request:AgentRequestView,owner?:boolean,unread?:boolean,answer?:ReactNode}) {
  const {language}=useI18n(); const zone=useZone(); const {c,cb}=useCardText();
  const when=(at:string)=><time dateTime={at} data-utc={zone}>{new Date(at).toLocaleTimeString(localeFor(language),{hour:'2-digit',minute:'2-digit',timeZone:zone})}</time>;
  const made=request.state==='made'?request.agent:null;
+ const coming=useRequestAgent(request.id), madeAgent=made?.id??coming;
  const badge=request.state==='waiting'?<span className="badge badge--req"><ShellIcon name="userPlus"/>{owner?cb('requestBadgeFrom',request.askedBy):c('requestBadge')}</span>
   :request.state==='made'?<span className="badge badge--made"><ShellIcon name="check"/>{cb('requestBadgeMade',request.by)}</span>
   :<span className="badge"><ShellIcon name="x"/>{cb('requestBadgeDeclined',request.by)}</span>;
  const owners=new Intl.ListFormat(localeFor(language),{type:'disjunction'}).format(request.state==='waiting'?request.owners:[]);
  return <div className={`ac-card${request.state!=='made'?' ac-card--req':''}${request.state==='waiting'?'':' is-resolved'}`} role="group" aria-label={c('requestLabel',made?.name??request.name)} data-request={request.state}>
   <div className="hcard__top">{badge}</div>
-  <div className="card__head"><span aria-hidden="true"><CompanyAgentFace agent={made??{connection_id:`agent-request-${request.id}`,name:request.name}} size={44}/></span><div className="card__titles"><span className="card__title"><bdi>{made?.name??request.name}</bdi></span></div></div>
+  <div className="card__head"><span aria-hidden="true"><AgentFace agent={madeAgent} size={48}/></span><div className="card__titles"><span className="card__title"><bdi>{made?.name??request.name}</bdi></span></div></div>
   <AgentRows job={request.job} apps={unread?null:request.apps} tiles>
    <div className="kv__row"><dt>{c('requestAskedBy')}</dt><dd><bdi>{request.askedBy}</bdi>{!unread&&<span className="pp-sub" dir="auto">«{request.askedWith}»</span>}</dd></div>
    <div className="kv__row"><dt>{c('requestShowsFor')}</dt><dd>{cb('requestShowsForWho',request.askedBy)}</dd></div>

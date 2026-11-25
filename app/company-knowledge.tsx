@@ -1,7 +1,7 @@
 import Link from '@/lib/link';
 import { getI18n } from '@/lib/i18n-server';
 import { supabase } from '@/lib/supabase';
-import { CompanyAgentFace } from '@/components/company-agent-face';
+import { AgentFace } from '@/components/agent-face';
 import { agentsMainFirst, memoryAgent, overlayHref } from '@/lib/settings-overlay.mjs';
 import { knowledgeBlocks, knowledgeParts, pickPart } from '@/lib/company-knowledge.mjs';
 import { readKnowledge } from '@/lib/company-knowledge-skill.mjs';
@@ -36,7 +36,7 @@ export async function CompanyKnowledge({slug,company,canManage,part:requested}:{
  const content=unread?<div className="panel-card"><p className="panel-empty know-unread">{t('knowUnread')}</p></div>:body?<>
   <p className="know-meta">{!error&&<><span className="me__av" aria-hidden="true">{editor.trim().slice(0,1).toUpperCase()}</span>
    <span>{t('knowLastEdited')} <bdi>{editor}</bdi>{edit&&<> · <KnowledgeEditedAt at={edit.created_at}/></>}</span></>}
-   {agents.length>0&&<>{!error&&<span aria-hidden="true">·</span>}<span className="fstack" aria-hidden="true">{agents.map(agent=><CompanyAgentFace key={agent.id} agent={agent} size={18}/>)}</span>
+   {agents.length>0&&<>{!error&&<span aria-hidden="true">·</span>}<span className="fstack" aria-hidden="true">{agents.map(agent=><AgentFace key={agent.id} agent={agent.id} size={18}/>)}</span>
     <span>{t('knowReadBy')} (<span className="num">{agents.length}</span>)</span></>}</p>
   <div className="know-body" dir="auto">{knowledgeBlocks(body).map((block,index)=>block.kind==='p'?<p key={index}>{block.text}</p>
    :<ul key={index} className="know-ul">{block.items.map((item,at)=><li key={at}>{item}</li>)}</ul>)}</div>

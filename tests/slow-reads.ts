@@ -9,14 +9,18 @@ export const asAdmin = (sql: string) => execFileSync('docker', ['exec', '-i', db
 
 // Every read of `table` by a signed-in person waits on `waits` first (#172): a restrictive policy only a test adds. The
 // page's other reads stay as fast as ever, so only the part of a page that reads this table waits. Signed-in reads end
-// at the role's statement timeout (8s on Supabase), so a slow read's seconds stay under it.
-export const slowReads = (table: string, waits: string) => ({
-  set: `create policy test_slow_read on public.${table} as restrictive for select to authenticated using ((select ${waits}) is not null);`,
+// at the role's statement timeout (8s on Supabase), so a slow read's seconds stay under it. `only`, a condition on the
+// table's rows, narrows the wait to the reads that reach those rows: the wait is an InitPlan, run only when a row of
+// them is read. A page prefetches every chat its sidebar links to (lib/link.tsx), each with its own record, and ten
+// reads asleep at once hold every connection of the Data API's pool (PostgREST's 10), so the page's other reads would
+// wait for them too, not only the part that reads this table.
+export const slowReads = (table: string, waits: string, only?: string) => ({
+  set: `create policy test_slow_read on public.${table} as restrictive for select to authenticated using (${only ? `not (${only}) or ` : ''}(select ${waits}) is not null);`,
   unset: `drop policy if exists test_slow_read on public.${table};`,
 });
 
-export async function whileSlow(table: string, seconds: number, run: () => Promise<void>) {
-  const { set, unset } = slowReads(table, `pg_sleep(${seconds})`);
+export async function whileSlow(table: string, seconds: number, run: () => Promise<void>, only?: string) {
+  const { set, unset } = slowReads(table, `pg_sleep(${seconds})`, only);
   asAdmin(`${unset}\n${set}`);
   try { await run(); } finally { asAdmin(unset); }
 }
