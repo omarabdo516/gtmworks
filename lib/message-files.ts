@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // The images of one message, in a Conversation (#155) or a channel (#156). They are kept in the Company's private folder
@@ -10,8 +9,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 const bucket='creatives';
 export type ChosenImage={content_type:string,base64:string};
 
-// Where a send's files belong: the Company, the folder that names the feature, and the Conversation or channel.
-export type FilesPlace={company:string,folder:'conversations'|'channels',scope:string,messageKey:string};
+// Where a send's files belong: the Company, the folder that names the feature, and the Conversation or channel; and the
+// send's keep attempt, which its keep and its discard both name (#727).
+export type FilesPlace={company:string,folder:'conversations'|'channels',scope:string,messageKey:string,attempt:string};
 // The catalogue's words for a database refusal: a Viewer, a place that is not the caller's, and any other failure.
 type FileRefusalWords={notAllowed:string,notFound:string,failed:string};
 // The table that names a place's files, and its column for the Conversation or channel.
@@ -52,12 +52,14 @@ export async function filesAsImages(service:SupabaseClient,rows:{content_type:st
 // Keeps a send's images: the rows first, under the database's own checks (the place is the caller's, they may write, the
 // type is an image the Engine reads), then the bytes in the Company's folder, at the paths the rows name. Each keep is its
 // own attempt: rows it adds are named by it, so a send of the same key that kept them again after an earlier one gave
-// them back writes where that earlier removal never reaches (#598). A failed upload gives the rows back: the guarded
-// discard names the paths of the rows it took, and only those are removed, so a stored message's file stays.
+// them back writes where that earlier removal never reaches (#598). Every waiting row of the key records the attempts that
+// hold it, the ones that added it and the ones that found it, so a concurrent send of the key that gives them back takes
+// only itself off and leaves this one's rows and objects (#727). A failed upload gives the rows back: the guarded discard
+// names the paths of the rows it took, and only those are removed, so a stored message's file stays.
 /** @param {SupabaseClient} db @param {SupabaseClient} service @param {KeepFiles} kept @returns {Promise<{error?:string}>} */
 export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,{place,files,table,reserve,reserveArgs,discard,discardArgs,words}:KeepFiles):Promise<{error?:string}> {
  const rows=files.map((file,index)=>({position:index,name:file.name.slice(0,255)||'image',content_type:file.type.slice(0,127),size:file.size}));
- const {data,error}=await db.rpc(reserve,{...reserveArgs(place),files:rows,attempt:randomUUID()});
+ const {data,error}=await db.rpc(reserve,{...reserveArgs(place),files:rows,attempt:place.attempt});
  if(error) return {error:refusalOf(error.code,words)};
  // -2: the send key's files are kept and still held by its waiting turn or its Run (#465). The send goes on to that turn,
  // and nothing is written: not over a kept image, so its retry carries what it was sent with, and not beside them at a
@@ -90,11 +92,12 @@ export async function keepMessageFiles(db:SupabaseClient,service:SupabaseClient,
 }
 
 // A send that stored no message takes its images with it: the sender's own rows the database gives back, then their
-// bytes. A file a stored message already took is kept, and so is every file of a send key that is still a waiting turn
+// bytes. The discard names the send's attempt, and the database gives back only rows no other attempt still holds
+// (#727; a hold lapses fifteen minutes after its key's last keep). A file a stored message already took is kept, and so is every file of a send key that is still a waiting turn
 // or holds a Run reservation: the database gives back no path for them (#465).
 /** @param {SupabaseClient} db @param {SupabaseClient} service @param {{place:FilesPlace,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>}} gone */
 export async function discardMessageFiles(db:SupabaseClient,service:SupabaseClient,{place,discard,discardArgs}:{place:FilesPlace,discard:string,discardArgs:(place:FilesPlace)=>Record<string,unknown>}) {
- const {data}=await db.rpc(discard,discardArgs(place));
+ const {data}=await db.rpc(discard,{...discardArgs(place),attempt:place.attempt});
  const paths=(Array.isArray(data)?data:[]).filter((path):path is string=>typeof path==='string');
  if(paths.length) await service.storage.from(bucket).remove(paths);
 }
