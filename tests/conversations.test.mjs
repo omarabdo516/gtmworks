@@ -193,6 +193,14 @@ test('a Run\'s question follows its person\'s message with its card, also the ma
   'the main Agent\'s question is its card, drawn as chips by the page (#143), not plain words');
 });
 
+test('a job command\'s Agent asks under its own name in Lead\'s chat, its card the command\'s Run\'s (#470)',()=>{
+ // The command's Run is no Run of Lead's: the card it keeps is drawn as the Agent the command handed the job to.
+ const sent=[{id:1,author:/** @type {const} */('person'),author_name:'Omar',body:'/campaign Launch the December ads',run_id:'command:k1',created_at:at(1)}];
+ const card={kind:/** @type {const} */('reply'),card:/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf({...askedRow('open'),run_id:'command:k1'}))};
+ const drawn=shown(sent,[],[{run_id:'command:k1',at:at(2),card,said:'Two angles fit.',asker:{id:'reach',name:'Reach'}}],'Lead');
+ assert.deepEqual(drawn[1],{id:5,author:'agent',author_name:'Reach',agent_id:'reach',body:'Two angles fit.',created_at:at(2),kind:'asked',cards:[card]});
+});
+
 test('an answer claimed after the Engine stopped waiting is the person\'s turn marked not delivered; one the Engine took is not marked',()=>{
  const parts=(/** @type {string} */ state)=>{ const row=askedRow(state,angles[1]); return questionParts(row,/** @type {import('../lib/conversations.ts').ReplyCard} */(replyCardOf(row))); };
  assert.deepEqual(parts('closed'),{answer:{body:angles[1],at:at(3),delivered:false}});

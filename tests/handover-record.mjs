@@ -107,6 +107,8 @@ export function record(place,...tops) {
    if(args.reply) replies.push({agent:row.from,body:args.reply});
    Object.assign(row,{state:'done',follow_up_outcome:args.run_outcome}); return ok(true);
   }
+  // No job here is a command's (#470): nobody reads the asked Agent's chat, so the database keeps no card for it.
+  if(name==='track_handover_question'||name==='track_handover_permission') return ok(null);
   // The person's side (#478): the Conversation's Stop, and a channel message's.
   if(name==='stop_conversation_handovers') { if(chat.run) chat.stopped=true; return ok(place==='conversation'&&args.conversation===where?stop(null):[]); }
   if(name==='conversation_stop_target') return chat.run?ok([{run:chat.run,profile:team[chat.agent].profile}]):{data:null,error:{code:'P0002',message:'conversationNothingToStop'}};

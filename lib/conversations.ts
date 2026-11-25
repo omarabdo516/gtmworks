@@ -143,7 +143,8 @@ export const conversationColumns='id,agent_id,kept_agent_id,agent_name,hermes_se
 // name (lib/conversation-record.ts), and any other Agent's as the lettered card (#143).
 // A question or a permission request also carries what its Agent wrote before it in the same message (#647), drawn as
 // that Agent's words above the card.
-export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean},said?:string};
+// `asker`: the Agent whose Run asked, when it is not the chat's own: a job command's Agent (#470).
+export type PlacedCard={run_id:string,card:LeadCard,at:string,answer?:{body:string,at:string,delivered:boolean},said?:string,asker?:{id:string,name:string}};
 export const saidParts=(row:Pick<ReplyCardRow,'said_before'>):Pick<PlacedCard,'said'>=>row.said_before?{said:row.said_before}:{};
 // What a question adds to its place in the record (#138): the answer its person gave, at the time they gave it, and
 // whether it reached the Engine (one claimed after the Engine stopped waiting, or as its Run ended, did not: its card
@@ -178,7 +179,7 @@ export const shown=(messages:StoredMessage[],ends:RunEnd[]=[],leadCards:PlacedCa
  const rules=saved.filter(row=>row.run_id===message.run_id).map(row=>row.rule);
  const asked=message.author==='person'?leadCards.filter(row=>row.run_id===message.run_id&&isAsked(row)).flatMap((row):ConversationMessage[]=>{
   const id=row.card.kind==='reply'?row.card.card.id:0;
-  return [{id,author:'agent',author_name:agentName,body:row.said??'',created_at:row.at,kind:'asked',cards:[row.card]},
+  return [{id,author:'agent',author_name:row.asker?.name??agentName,...(row.asker?{agent_id:row.asker.id}:{}),body:row.said??'',created_at:row.at,kind:'asked',cards:[row.card]},
    ...(row.answer?[{id,author:'person' as const,author_name:message.author_name,body:row.answer.body,created_at:row.answer.at,kind:'answer' as const,...(row.answer.delivered?{}:{failed:true})}]:[])];
  }):[];
   const own=handTurn(message)?[]:[plain];

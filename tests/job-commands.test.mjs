@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { commandList, jobCommandIn } from '../lib/composer-mentions.mjs';
-import { sendMessage } from '../lib/conversation-runs.mjs';
+import { answerQuestion, decidePermission, sendMessage } from '../lib/conversation-runs.mjs';
 import { driveHandovers } from '../lib/handovers.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -161,7 +161,7 @@ test('a message that begins with a listed command names the job after it and the
 
 // The database's side of #358 as its functions keep it (supabase/tests/command_handovers.sql proves the real ones): the
 // person's message with its handover row, the worker's two legs, and the target's words kept as the chat's answer.
-function handedDatabases() {
+function handedDatabases({ more = null } = {}) {
  const calls = [];
  const targetSession = 'd9000000-0000-0000-0000-000000000001';
  const targetProfile = 'ag-09000000000000000000000000000002';
@@ -175,6 +175,8 @@ function handedDatabases() {
  };
  const rpc = async (name, args) => {
   calls.push([name, args]);
+  const answered = more?.(name, args, kept);
+  if (answered) return answered;
   if (name === 'conversation_agent') return { data: lead, error: null };
   if (name === 'answer_question') return { data: 'none', error: null };
   if (name === 'command_handover') {
@@ -186,7 +188,10 @@ function handedDatabases() {
   if (name === 'stopped_runs_open') return { data: [], error: null };
   if (name === 'handover_runs_stopping') return { data: [], error: null };
   if (name === 'handovers_due') return { data: kept.handover && kept.handover.state !== 'done' ? [{ id: 7, state: kept.handover.state, conversation, run: kept.handover.state === 'target' ? kept.handover.target_run : null, profile: targetProfile, attempt: 0, company }] : [], error: null };
-  if (name === 'begin_handover') return { data: [{ state: 'waiting', attempt: 1, company, profile: targetProfile, session: targetSession, input: `The job:\n${kept.handover.goal}`, instructions: 'Run the ads.' }], error: null };
+  // begin_handover's words for a command still say its Agent cannot ask (#358); the driver asks the database for the
+  // command's job as it reads now (#470, command_handover_job), and the Run is asked that.
+  if (name === 'begin_handover') return { data: [{ state: 'waiting', attempt: 1, company, profile: targetProfile, session: targetSession, input: `You cannot ask a question.\n\nThe job:\n${kept.handover.goal}`, instructions: 'Run the ads.', targets: null }], error: null };
+  if (name === 'command_handover_job') return { data: `They read this chat: ask them.\n\nThe job:\n${kept.handover.goal}`, error: null };
   if (name === 'answer_handover') { kept.handover.target_run = args.run; kept.handover.state = 'target'; return { data: true, error: null }; }
   if (name === 'close_handover_target') {
    kept.end = { run: kept.handover.run_id, outcome: args.run_outcome };
@@ -196,7 +201,9 @@ function handedDatabases() {
   }
   return { data: null, error: { message: `unexpected ${name}` } };
  };
- return { db: { rpc, from: () => query() }, service: { rpc }, calls, kept };
+ // The starter's own reads of a turn for the Lead: its Agent's instructions, and when the turn was queued.
+ const read = { select: () => read, eq: () => read, maybeSingle: async () => ({ data: { instructions: null, queued_at: null }, error: null }) };
+ return { db: { rpc, from: () => query() }, service: { rpc, from: () => read }, calls, kept };
 }
 
 test('on the fake engine a command sent to the Lead hands the job over, and the chat\'s reply comes from that Agent', async () => {
@@ -212,7 +219,117 @@ test('on the fake engine a command sent to the Lead hands the job over, and the 
  // chat's message from it.
  await driveHandovers(service, { hermes, engineFor: fake.engineFor });
  await driveHandovers(service, { hermes, engineFor: fake.engineFor });
- assert.deepEqual(fake.runs.map(run => [run.conversation, run.input]), [[`d9000000-0000-0000-0000-000000000001`, 'The job:\nLaunch the December ads']]);
+ assert.deepEqual(fake.runs.map(run => [run.conversation, run.input]), [[`d9000000-0000-0000-0000-000000000001`, 'They read this chat: ask them.\n\nThe job:\nLaunch the December ads']],
+  'asked the job as the command hands it now: the person may be asked back (#470)');
  assert.deepEqual(kept.agentMessage, { author: 'agent', agent_id: reach, author_name: 'Reach', body: `Reach did it: Launch the December ads`.padEnd(9000,' .'), run: fake.runs[0].id }, 'the reply comes from that Agent, in this chat, whole');
  assert.deepEqual(kept.end, { run: `command:${sendKey}`, outcome: 'completed' }, 'and the person\'s own message stops waiting');
+});
+
+// #470: the cards of a job command's Agent, as the database keeps them on the command's own Run in the chat
+// (supabase/tests/command_handover_cards.sql proves the real track_handover_question and track_handover_permission):
+// the question or request the Agent waits on is kept once, open, until its person answers it, and each answer is handed
+// to the worker to deliver while the Run waits; a request never offers always (it is no standing allow of the chat's Agent).
+function chatCards() {
+ const cards = [];
+ const claims = (kind, run) => cards.filter(card => card.kind === kind && card.run === run && card.state === 'sending' && !card.handed)
+  .map(card => { card.handed = true; return kind === 'question' ? { card: card.id, question: card.call, answer: card.content.answer } : { card: card.id, permission: card.call, choice: card.content.choice }; });
+ const keep = (kind, args, kept, content) => {
+  if (kept.handover.state !== 'target' || kept.handover.target_run !== args.run) return { data: [], error: null };
+  if (args.asking && !args.ended && !cards.some(card => card.call === args.asking.id)) cards.push({ id: cards.length + 1, kind, run: kept.handover.run_id, call: args.asking.id, content, state: 'open' });
+  return { data: claims(kind, kept.handover.run_id), error: null };
+ };
+ const more = (name, args, kept) => {
+  if (name === 'track_handover_question') return keep('question', args, kept, args.asking && { question: args.asking.text, choices: args.asking.choices });
+  if (name === 'track_handover_permission') return keep('permission', args, kept, args.asking && { description: args.asking.description, command: args.asking.command, choices: args.asking.choices.filter(choice => choice !== 'always') });
+  if (name === 'answer_question') {
+   const card = cards.find(each => each.id === args.card && each.kind === 'question');
+   if (!card || card.state !== 'open') return { data: card ? 'taken' : 'none', error: null };
+   Object.assign(card, { state: 'sending', content: { ...card.content, answer: card.content.choices[args.choice] } });
+   return { data: 'claimed', error: null };
+  }
+  if (name === 'decide_permission') {
+   const card = cards.find(each => each.id === args.card && each.kind === 'permission');
+   if (!card.content.choices.includes(args.choice)) return { data: null, error: { code: '22023' } };
+   Object.assign(card, { state: 'sending', content: { ...card.content, choice: args.choice } });
+   return { data: { state: 'decided', choice: args.choice, at: 'now', first: true }, error: null };
+  }
+  if (name === 'settle_question' || name === 'settle_permission') { cards.find(card => card.id === args.card).state = args.verdict; return { data: args.verdict, error: null }; }
+  // No Run of the chat's own Agent is open: the command's Run is the handover's.
+  if (name === 'open_conversation_runs') return { data: [], error: null };
+  return null;
+ };
+ return { cards, more };
+}
+
+test('on the fake engine a /campaign handover\'s question is drawn in the chat, and the person\'s answer reaches that Run and closes it', async () => {
+ // #470's first check: the target asks, its card is the command's Run's, the person picks a choice, and it is delivered.
+ const fake = fakeEngine();
+ fake.settings.questions = () => [{ text: 'Which audience first?', choices: ['Parents', 'Students'] }];
+ fake.settings.reply = (input, answers) => `Reach launched it for ${answers[0]}.`;
+ const { cards, more } = chatCards(); const { db, service, kept } = handedDatabases({ more }); const sendKey = randomUUID();
+ await sendMessage(db, service, { company, conversation, sendKey, message: '/campaign Launch the December ads', hermes, engineFor: fake.engineFor });
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ assert.deepEqual(cards.map(({ kind, run, content, state }) => ({ kind, run, content, state })), [{ kind: 'question', run: `command:${sendKey}`, content: { question: 'Which audience first?', choices: ['Parents', 'Students'] }, state: 'open' }],
+  'the question is drawn in the chat as the card of the command\'s Run, and waits for the person');
+ assert.deepEqual(fake.answers, [], 'nobody answered it for them');
+ assert.equal(kept.agentMessage, null, 'and the Agent waits on it');
+ assert.deepEqual(await answerQuestion(db, service, { company, conversation, card: cards[0].id, choice: 0, answerKey: randomUUID(), hermes, engineFor: fake.engineFor }), { state: 'claimed' });
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ assert.deepEqual(fake.answers.map(({ run, text }) => [run, text]), [[fake.runs[0].id, 'Parents']], 'the person\'s answer reaches that Run');
+ assert.equal(cards[0].state, 'answered', 'and closes the question');
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ assert.equal(kept.agentMessage?.body, 'Reach launched it for Parents.', 'the Agent goes on with it and answers the person');
+});
+
+test('on the fake engine a /campaign handover\'s request to act shows its choices in the chat, and the choice is delivered', async () => {
+ // #470's first check, its second half: once or deny (never always), and the person's yes reaches the Run.
+ const fake = fakeEngine();
+ fake.settings.permissions = () => [{ description: 'Publish the ad set', command: 'ads publish --set december' }];
+ fake.settings.reply = (input, answers, choices) => `Published (${choices[0]}).`;
+ const { cards, more } = chatCards(); const { db, service, kept } = handedDatabases({ more });
+ await sendMessage(db, service, { company, conversation, sendKey: randomUUID(), message: '/campaign Launch the December ads', hermes, engineFor: fake.engineFor });
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ assert.deepEqual(cards.map(({ kind, content, state }) => ({ kind, content, state })), [{ kind: 'permission', content: { description: 'Publish the ad set', command: 'ads publish --set december', choices: ['once', 'deny'] }, state: 'open' }],
+  'the request shows its choices in the chat, and nothing denied it');
+ assert.deepEqual(fake.permits, []);
+ const delivered = [];
+ assert.equal((await decidePermission(db, service, { company, conversation, card: cards[0].id, choice: 'once', hermes, engineFor: fake.engineFor, later: work => { delivered.push(work()); } })).state, 'decided');
+ await Promise.all(delivered);
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ assert.deepEqual(fake.permits.map(({ run, choice }) => [run, choice]), [[fake.runs[0].id, 'once']], 'the choice is delivered to that Run');
+ assert.equal(cards[0].state, 'decided');
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ assert.equal(kept.agentMessage?.body, 'Published (once).');
+});
+
+test('on the fake engine Lead\'s next Run in the chat carries the command\'s job and what that Agent answered', async () => {
+ // #470's second check: the brief pinned with Lead's next Run lists the chat's command jobs and their answers, as the
+ // database builds it from the handover (pin_lead_brief's `commands`).
+ const fake = fakeEngine(); fake.settings.reply = input => input.includes('The job:') ? 'Three ad sets, 30 days, EGP 9,000.' : 'Five it is.';
+ const turns = [];
+ const more = (name, args, kept) => {
+  if (name === 'queue_conversation_turn') { turns.push({ ...args, started: false }); return { data: { state: 'queued' }, error: null }; }
+  const waiting = turns.find(turn => !turn.started);
+  if (name === 'queued_conversations') return { data: waiting ? [{ conversation }] : [], error: null };
+  if (name === 'claim_conversation_turn') return { data: waiting ? [{ company, agent: lead, person: 'p', send_key: waiting.message_key, message: waiting.message, connection: 'f9000000-0000-0000-0000-000000000001', profile: 'co-10000000000000000000000000000001', note: null, retry: false, has_files: false }] : [], error: null };
+  if (name === 'conversation_handover_agents') return { data: [], error: null };
+  if (['pin_run', 'pin_run_history', 'pin_run_model'].includes(name)) return { data: null, error: null };
+  if (name === 'pin_lead_brief') return { data: { role: 'owner', owner: 'Omar', agents: [{ name: 'Reach', job: 'Meta ads' }],
+   commands: kept.handover?.state === 'done' ? [{ agent: 'Reach', job: kept.handover.goal, outcome: 'completed', answer: kept.agentMessage.body }] : [] }, error: null };
+  if (name === 'begin_turn_start') return { data: 1, error: null };
+  if (name === 'record_conversation_turn') { turns.find(turn => turn.message_key === args.message_key).started = true; return { data: true, error: null }; }
+  return null;
+ };
+ const { db, service, kept } = handedDatabases({ more });
+ await sendMessage(db, service, { company, conversation, sendKey: randomUUID(), message: '/campaign Launch the December ads', hermes, engineFor: fake.engineFor });
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ await driveHandovers(service, { hermes, engineFor: fake.engineFor });
+ assert.equal(kept.agentMessage.body, 'Three ad sets, 30 days, EGP 9,000.');
+ assert.deepEqual(await sendMessage(db, service, { company, conversation, sendKey: randomUUID(), message: 'make it five ad sets', hermes, engineFor: fake.engineFor }), { conversation });
+ const next = fake.runs.at(-1);
+ assert.equal(next.input, 'make it five ad sets', 'the next message goes to Lead');
+ assert.match(next.instructions, /The person gave Reach this job with a command:\nLaunch the December ads\nReach answered them:\nThree ad sets, 30 days, EGP 9,000\./,
+  'its pinned instructions hold the job and the answer');
 });

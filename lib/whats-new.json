@@ -1,5 +1,11 @@
 [
  {
+  "issue": 470,
+  "date": "2026-11-25",
+  "en": { "title": "A command's Agent asks you in the chat", "body": "The Agent a command like /campaign hands work to can now ask you a question or wait for your yes in the same chat, and Lead knows what it answered when you write next." },
+  "ar": { "title": "الوكيل اللي بتكلفه بأمر بيسألك في الشات", "body": "الوكيل اللي أمر زي /campaign بيدّيله الشغل بقى يقدر يسألك سؤال أو يستنى موافقتك في نفس الشات، وLead بيعرف هو رد بإيه لما تكتب بعدها." }
+ },
+ {
   "issue": 770,
   "date": "2026-11-25",
   "en": { "title": "An Agent's tools show at once", "body": "An Agent's Connected tools list shows straight away, each app reading Checking… until its own test answers, and it keeps the last list it read when the agent engine is slow." },

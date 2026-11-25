@@ -127,12 +127,14 @@ export async function conversationRecord(db:Database,person:string,company:strin
  // Only a job command's answer is a chat message from another Agent; a chain (#477) may ask the chat's own Agent back,
  // whose messages stay its own.
  const faces=new Map(handedRows.filter(row=>row.answers_person).map(row=>[row.to_agent,row.to_agent] as const));
+ // What a job command's Agent asks the person (#470) is kept on the command's own Run, and drawn as that Agent's.
+ const askers=new Map(handedRows.filter(row=>row.answers_person&&!row.parent).map(row=>[row.run,{id:row.to_agent,name:row.to_name}] as const));
  const cards=[...madeRows.flatMap(({run_id,call_id,created_at,hermes_agents:agent})=>agent&&!requested.has(`${run_id}:${call_id}`)?[{run_id,at:created_at,card:{kind:'made',agent:{id:agent.id,connection_id:agent.connection_id,name:agent.name,job:agent.speciality,apps:agent.apps||[],fresh:isNewFor(agent,person),created_at}}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
   ...requestRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'request',request:requestView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...handed,
   ...accessRows.map(row=>({run_id:row.run_id,at:row.created_at,card:{kind:'access',access:accessView(row)}} satisfies {run_id:string,at:string,card:LeadCard})),
   ...changeRows.flatMap(row=>row.agent&&row.by?[{run_id:row.run_id,at:row.created_at,card:{kind:'change',change:changeView({...row,agent:row.agent,by:row.by})}} satisfies {run_id:string,at:string,card:LeadCard}]:[]),
-  ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card),...saidParts(row)} satisfies PlacedCard]:[]; }),
+  ...replyRows.flatMap(row=>{ const card=handPickup(replyCardOf(row,states),queued,messages as {author:string,created_at:string}[]); const asker=askers.get(row.run_id); return card?[{run_id:row.run_id,at:row.created_at,card:{kind:'reply',card},...questionParts(row,card),...saidParts(row),...(asker?{asker}:{})} satisfies PlacedCard]:[]; }),
   ...(morning&&found.good_morning?[{run_id:`good-morning:${found.good_morning}`,at:messages[0]?.created_at??'',card:{kind:'morning',morning}} satisfies PlacedCard]:[])];
  type SavedRow={id:string,run_id:string,agent_id:string|null,removed_at:string|null,said_at:string,body:string,suggestion:'pending'|'approved'|'rejected'|null,decided_at:string|null,decider:{name:string}|null};
  const sentTo=rows.some(row=>row.suggestion)?new Map((((await db.rpc('rule_suggestions_sent_to',{conversation})).data||[]) as {rule:string,sent_to:string[]}[]).map(row=>[row.rule,row.sent_to])):new Map<string,string[]>();

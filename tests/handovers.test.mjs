@@ -50,6 +50,8 @@ function handover(overrides = {}) {
     if(row.state==='returning') { row.follow_up_run=args.run; row.state='follow_up'; return ok(true); }
     return ok(false);
    }
+   // A #317 handover is no command's (#470): the database keeps no card for its Target, which nobody's chat reads.
+   if(name==='track_handover_question'||name==='track_handover_permission') return ok(null);
    if(name==='close_handover_target') { Object.assign(row,{state:'returning',target_outcome:args.run_outcome,summary:args.words}); return ok(true); }
    if(name==='close_handover_follow_up') { ends.push({run:args.run,outcome:args.run_outcome}); if(args.reply) messages.push({author:'agent',body:args.reply,run:args.run}); row.state='done'; row.follow_up_outcome=args.run_outcome; return ok(true); }
    return {data:null,error:{message:'unexpected'}};
