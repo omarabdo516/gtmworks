@@ -17,6 +17,7 @@ The logos remain their owners' trademarks and are shown only to name the app the
 | `close.svg` | Close (CRM) | https://close.com/brand | https://close.com/downloads/close-logo-2024 (`close-logo-2024/mark.svg`) |
 | `context7.svg` | Context7 (Upstash) | https://context7.com/ | https://context7.com/_next/static/immutable/media/context7-logo-light.1irhnfg2jrcmg.svg, cut to the mark |
 | `craft.svg` | Craft | https://www.craft.do/brand | https://www.craft.do/images/craft-logo-pack/SVG/craft_logo_black.svg, its three parts filled with the colours of https://www.craft.do/images/favicon-large.png |
+| `deepwiki.svg` | DeepWiki (Cognition) | https://deepwiki.com/ | The three-hexagon mark of https://deepwiki.com/apple-icon.png and https://deepwiki.com/icon.png, taken as the vector the home page draws it with (its header's inline SVG), filled #0E1015, the dark of the same icon |
 | `fireflies.svg` | Fireflies.ai | https://fireflies.ai/ | https://fireflies.ai/_next/static/media/logo.1fprk7ded93vh.svg |
 | `gamma.svg` | Gamma | https://gamma.app/ | https://static.gamma.app/favicons/favicon.svg |
 | `globalping.svg` | Globalping (jsDelivr) | https://globalping.io/ | https://globalping.io/icons/favicon.svg |

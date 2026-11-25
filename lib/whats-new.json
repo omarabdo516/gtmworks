@@ -1,5 +1,11 @@
 [
  {
+  "issue": 580,
+  "date": "2026-11-25",
+  "en": { "title": "DeepWiki shows its own logo", "body": "In Connect apps and Settings, Apps, DeepWiki now shows its official logo instead of the letter D, so every app there carries its company's logo." },
+  "ar": { "title": "DeepWiki بقى بلوجو شركته", "body": "في «وصّل التطبيقات» وفي الإعدادات، التطبيقات، DeepWiki بقى بيظهر باللوجو الرسمي بتاعه بدل حرف D، وكده كل تطبيق هناك بقى بلوجو شركته." }
+ },
+ {
   "issue": 694,
   "date": "2026-11-25",
   "en": { "title": "Every Agent has a face of its own", "body": "Each Agent is now a living orb in its own colour, shape and temperament that breathes, blinks, looks toward your pointer and shows when it is thinking, working, done, waiting on you, stuck or asleep, the sidebar following within seconds; it listens while you write to it, perks up when you name it, greets you and is born once for whoever asked for it; the same face shows everywhere, kept in old conversations, channels, cards and the log after the Agent is removed, and it stays still with reduced motion; the Owner changes any Agent's shape, colour and temperament in a small window opened from its face, its card or its settings." },

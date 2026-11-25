@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { logoOf, logoWaiting as waiting } from '../components/logos.ts';
+import { logoOf } from '../components/logos.ts';
 import { apps, customApp, knownApp } from '../lib/app-catalogue.mjs';
 import { markOf } from '../lib/app-mark.mjs';
 import en from '../lib/messages/apps.en.json' with { type: 'json' };
@@ -9,7 +9,7 @@ import en from '../lib/messages/apps.en.json' with { type: 'json' };
 // #577: every connectable app shows its company's own logo, a file of this install. The catalogue's apps are the
 // `use.<key>` entries of its messages; `command`, `custom` and `own` name no company and keep their letter.
 const noCompany = new Set(['command', 'custom', 'own']);
-const keys = Object.keys(en).filter(key => key.startsWith('use.')).map(key => key.slice(4)).filter(key => !noCompany.has(key) && !waiting.has(key));
+const keys = Object.keys(en).filter(key => key.startsWith('use.')).map(key => key.slice(4)).filter(key => !noCompany.has(key));
 
 test('every app of the catalogue maps to a logo file in public/', () => {
   assert.ok(keys.length >= 84, `${keys.length} apps`);
@@ -18,10 +18,9 @@ test('every app of the catalogue maps to a logo file in public/', () => {
     assert.ok(file, `${key} has a logo`);
     assert.ok(existsSync(`public${file}`), `${key}: public${file} exists`);
   }
-  for (const app of apps.filter(app => !noCompany.has(app.key) && !waiting.has(app.key))) assert.ok(logoOf(app.key), `${app.key} has a logo`);
+  for (const app of apps.filter(app => !noCompany.has(app.key))) assert.ok(logoOf(app.key), `${app.key} has a logo`);
   // A ready-made role's app with no drawn mark of its own (#424) takes its file too.
   assert.equal(logoOf('github'), '/logos/simple/github.svg');
-  for (const key of waiting) assert.equal(logoOf(key), null, `${key} is still waiting: take it off the list once its file is in`);
 });
 
 // Each mark is the company the app is: these keys name a company another product shares a name with.
@@ -31,6 +30,7 @@ test('a shared name takes the right company\'s mark', () => {
   assert.equal(logoOf('make'), '/logos/simple/make.svg', 'Make.com');
   assert.match(readFileSync('public/logos/simple/make.svg', 'utf8'), /<title>Make<\/title>/);
   assert.match(logoOf('kiwi') ?? '', /^\/logos\/brand\/kiwi\.(svg|png)$/, 'Kiwi.com');
+  assert.equal(logoOf('deepwiki'), '/logos/brand/deepwiki.svg', 'DeepWiki (#580)');
 });
 
 // A logo ships inside the install and draws nothing from outside: no script, no handler, no address of another site;
