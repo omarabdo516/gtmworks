@@ -1581,6 +1581,7 @@
   "routineOnDay": "{0} {1}",
   "routineFailed": "ماحصلش. جرّب تاني.",
   "routineBusy": "شغالة دلوقتي فعلاً.",
+  "routineZoneUnknown": "المنطقة الزمنية دي gtmworks مش عارفها، فالروتين ماتحفظش. اختار واحدة تانية.",
   "routineUnread": "مش قادرين نقرا مهام الوكيل ده دلوقتي.",
   "routineNoEngine": "مش قادرين نقرا المهام المتكررة دلوقتي.",
   "routineAdded": "اتضافت «{0}»",

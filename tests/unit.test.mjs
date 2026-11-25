@@ -138,21 +138,21 @@ test('every unavailable Home metric and chart remains unavailable rather than ze
  assert.equal(metricValue(0),'0','a real measured zero remains zero');
 });
 
-test('Home charts use fourteen UTC days, actual stages and first acceptance without earlier rejection',async()=>{
+test('Home charts use fourteen days of the Company\'s zone (UTC here), actual stages and first acceptance without earlier rejection',async()=>{
  const {homeCharts}=await import('../lib/home-data.mjs');
  const now=Date.parse('2030-01-15T12:00:00Z');
  const stages=[{id:1,name:'كتابة'},{id:2,name:'تم الاعتماد',stage_key:'approved'}];
  const cards=[{id:1,stage_id:1,created_at:'2030-01-02T00:00:00Z'},{id:2,stage_id:2,created_at:'2030-01-01T23:59:59Z'}];
  const delivered=(id,card_id,created_at)=>({id,card_id,created_at,action:'card_changed',details:{field:'stage_id',new:2,new_name:'اسم قديم'}});
  const events=[{id:1,card_id:1,created_at:'2029-12-01T00:00:00Z',action:'approval_rejected',details:{}},delivered(2,1,'2030-01-03T12:00:00Z'),delivered(3,2,'2030-01-15T10:00:00Z'),delivered(4,3,'2030-01-01T23:59:59Z'),delivered(5,4,'2030-01-16T00:00:00Z')];
- const charts=homeCharts(cards,stages,events,now);
+ const charts=homeCharts(cards,stages,events,now,'UTC');
  assert.equal(charts.delivered.length,14);
  assert.equal(charts.delivered[0].label,'2030-01-02');
  assert.equal(charts.delivered.at(-1).label,'2030-01-15');
  assert.equal(charts.delivered.reduce((sum,row)=>sum+row.value,0),2);
  assert.deepEqual(charts.stages,[{label:'كتابة',value:1},{label:'تم الاعتماد',value:0}]);
  assert.equal(charts.acceptance,50);
- assert.equal(homeCharts([],stages,[],now).acceptance,null,'no denominator is unavailable');
+ assert.equal(homeCharts([],stages,[],now,'UTC').acceptance,null,'no denominator is unavailable');
 });
 
 test('an Agent works on its newest Card in progress, never one whose chat waits on a person', async()=>{
@@ -297,7 +297,7 @@ test('a redirect from a server action is not logged as a failure',async()=>{
 });
 
 test('the client error endpoint logs the message and stack of a page error without secrets, and refuses bad or excess reports',async()=>{
- const {clientErrorResponse,limiter}=await import('../lib/diagnostics.mjs');
+ const {clientErrorResponse,senderLimiter}=await import('../lib/diagnostics.mjs');
  const env={SUPABASE_JWT_SECRET:'jwt-secret-value-9999'};
  const send=(body,options={})=>clientErrorResponse(new Request('http://localhost/api/client-errors',{method:'POST',body:typeof body==='string'?body:JSON.stringify(body),headers:{'user-agent':'test-agent'}}),{env,...options});
  const lines=[];
@@ -312,8 +312,8 @@ test('the client error endpoint logs the message and stack of a page error witho
  assert.equal((await send({source:'page'},{write:line=>lines.push(line)})).status,400);
  assert.equal((await send({message:'x'.repeat(9000)},{write:line=>lines.push(line)})).status,413);
  assert.equal(lines.length,1);
- let now=0; const allowed=limiter(2,1000,()=>now);
- assert.deepEqual([allowed(),allowed(),allowed()],[true,true,false]); now=1500; assert.equal(allowed(),true);
+ let now=0; const allowed=senderLimiter({perSender:2,windowMs:1000,clock:()=>now});
+ assert.deepEqual([allowed('a'),allowed('a'),allowed('a')],[true,true,false]); now=1500; assert.equal(allowed('a'),true);
 });
 
 test('every server action is wrapped so a thrown failure is logged',()=>{

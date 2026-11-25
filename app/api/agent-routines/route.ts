@@ -13,6 +13,7 @@ const reply=(body:object,status=200)=>NextResponse.json(body,{status,headers:{'C
 function refused(state:string) {
  if(state==='missing') return reply({error:'routineNotFound'},404);
  if(state==='invalid') return reply({error:'routineInvalid'},400);
+ if(state==='zoneUnknown') return reply({error:'routineZoneUnknown'},400);
  if(state==='notAllowed') return reply({error:'routineNotAllowed'},403);
  if(state==='busy') return reply({error:'routineBusy'},409);
  if(state==='refused') return reply({error:'routineRefused'},400);

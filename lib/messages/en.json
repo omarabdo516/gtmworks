@@ -1581,6 +1581,7 @@
   "routineOnDay": "{0} {1}",
   "routineFailed": "That didn’t work. Try again.",
   "routineBusy": "It’s running already.",
+  "routineZoneUnknown": "This time zone isn’t one gtmworks knows, so the routine wasn’t saved. Pick another.",
   "routineUnread": "This agent’s tasks can’t be read right now.",
   "routineNoEngine": "Recurring tasks can’t be read right now.",
   "routineAdded": "Added “{0}”",
