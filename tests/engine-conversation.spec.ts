@@ -709,11 +709,11 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   await expect(pill).toHaveAccessibleName('On the board: Waiting on you');
   await expect(pill).toHaveClass(/\bis-waiting\b/);
 
-  // The draft is on the Card's Log for another Contributor, and on the Activity log for the Viewer.
+  // The draft is on the Card's Activity for another Contributor, and on the Activity log for the Viewer.
   await reviewer.goto(`/c/rs-learning/work/board?card=${card}`);
-  await reviewer.locator('.sheet #sh-tab-log').click();
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('delivered the draft');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('خطة المقال');
+  await reviewer.locator('.cw[open] #cw-tab-activity').click();
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('delivered the draft');
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('خطة المقال');
   await viewer.goto(`/c/rs-learning/log?card=${card}`);
   await expect(viewer.locator('main')).toContainText('delivered the draft');
 
@@ -729,9 +729,9 @@ test('a Card whose chat hands its person a step waits under Waiting on you for e
   await expect(sidebar).toHaveText(String(before.sidebar));
   expect(stageNow()).toBe(stage);
   await reviewer.goto(`/c/rs-learning/work/board?card=${card}`);
-  await reviewer.locator('.sheet #sh-tab-log').click();
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('did it');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText(handTitle);
+  await reviewer.locator('.cw[open] #cw-tab-activity').click();
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('did it');
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText(handTitle);
   await viewer.goto(`/c/rs-learning/log?card=${card}`);
   await expect(viewer.locator('main')).toContainText('did it');
  } finally {
@@ -1189,12 +1189,13 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await expect(line).toHaveText('This card was added to the board under “In progress”');
   await expect(pill).toHaveAccessibleName('On the board: In progress');
 
-  // Another Contributor reads the handover's row on the Card's Log.
+  // Another Contributor reads the handover's row on the Card's Activity.
   const reviewer=await member('reviewer@example.com');
   const onCard=(on:typeof page)=>on.locator(`#board-cols .kcard[data-card-id="${card.id}"]`);
   await reviewer.goto(`/c/rs-learning/work/board?card=${card.id}`);
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('handed to Salma');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('Plan the Meta ads for the March intake');
+  await reviewer.locator('.cw[open] #cw-tab-activity').click();
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('handed to Salma');
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('Plan the Meta ads for the March intake');
   await reviewer.goto('/c/rs-learning/work/board');
   await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Salma');
   await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Runs the March launch.');
@@ -1210,8 +1211,9 @@ test('a Card follows Lead\'s handover: the Agent handed the work owns it and a s
   await page.reload();
   await expect(page.locator('.turns > li[data-kind="boarded"]')).toHaveCount(1);
   await reviewer.goto(`/c/rs-learning/work/board?card=${card.id}`);
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('handed to Tarek');
-  await expect(reviewer.locator('.sheet .lg-wrap')).toContainText('Write the March launch email');
+  await reviewer.locator('.cw[open] #cw-tab-activity').click();
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('handed to Tarek');
+  await expect(reviewer.locator('.cw[open] #cw-list .lg-wrap')).toContainText('Write the March launch email');
   await reviewer.goto('/c/rs-learning/work/board');
   await expect(onCard(reviewer).locator('.kcard__agent')).toContainText('Tarek');
   await expect(onCard(reviewer).locator('.kcard__job')).toContainText('Writes the launch email.');

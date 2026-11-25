@@ -18,7 +18,7 @@ const company='10000000-0000-0000-0000-000000000001';
 const reviewer='20000000-0000-0000-0000-000000000003';
 const board='/c/rs-learning/work/board';
 const hermes={address:'http://127.0.0.1:9',key:'fake-engine-key'};
-const sheetOf=(page:Page)=>page.getByRole('dialog').filter({has:page.locator('#sheet-title')});
+const sheetOf=(page:Page)=>page.getByRole('dialog').filter({has:page.locator('#cw-title')});
 const confirmOf=(page:Page)=>page.getByRole('dialog',{name:/^Archive/});
 const waitingCount=(page:Page)=>page.locator('.sidebar .sb-count[href$="/approvals"] .sb-count__n');
 const count=async(page:Page)=>Number((await waitingCount(page).textContent({timeout:2000}).catch(()=>'0'))||'0');

@@ -250,7 +250,7 @@ test('an unrelated save keeps a Card\'s publishing date, and a changed date read
  await expect(dates).toHaveCount(before);
  await card.getByLabel('Publishing date',{exact:true}).fill('2032-11-12');
  await expect(dates).toHaveCount(before+1);
- await expect(dates.last()).toContainText('November 12');
+ expect(JSON.parse(query(`select to_char(go_live at time zone 'UTC','YYYY-MM-DD') as day from public.work_cards where id=2`))).toEqual([{day:'2032-11-12'}]);
  await page.goto('/c/rs-learning/home');
  await expect(page.locator('.detail-row').filter({has:page.locator('a[href="/c/rs-learning/work/board/2"]')}).getByText(/Updated publishing date: November 12/)).toBeVisible();
 });

@@ -81,12 +81,13 @@ test('a section not built yet says so at its address, and a settings page\'s tra
   await page.goto(`/c/rs-learning/${path}`);
   await expect(page.locator('.content .empty'),path).toHaveText(text);
  }
- await page.goto('/c/rs-learning/work/board/1');
+ // A Card opens in its window over the board (#678): the top bar stays the board's, with no crumb of the Card.
  const cardCrumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
- await expect(cardCrumbs).toHaveCount(2);
- await expect(cardCrumbs.first()).toHaveText(i18n().t('work'));
- await expect(cardCrumbs.first().locator('a')).toHaveAttribute('href','/c/rs-learning/work/board');
- await expect(cardCrumbs.last()).not.toHaveText('');
+ await page.goto('/c/rs-learning/work/board');
+ const boardCrumbs=await cardCrumbs.allInnerTexts();
+ await page.goto('/c/rs-learning/work/board/1');
+ await expect(page.locator('.cw[open]')).toBeVisible();
+ expect(await cardCrumbs.allInnerTexts()).toEqual(boardCrumbs);
  for(const [path,leaf] of [['settings/members','members'],['settings/work','workSettings']]) {
   await page.goto(`/c/rs-learning/${path}`);
   const crumbs=page.locator('.topbar [data-slot="breadcrumb"] li:not([role="presentation"])');
@@ -294,10 +295,10 @@ test('mobile recent cards record opens while the drawer stays closed',async({pag
  for(const id of [3,4]) {
   // A Card opens as its sheet over the board (#116), and that open is recorded as one.
   await page.locator(`.card a[href$="/board?card=${id}"]`).click();
-  await expect(page.locator('.sheet[open]')).toBeVisible();
+  await expect(page.locator('.cw[open]')).toBeVisible();
   await idle(page);
-  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
-  await expect(page.locator('.sheet')).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
+  await expect(page.locator('.cw')).toHaveCount(0);
  }
  await openMoreSection(page,'home');
  await openNavigation(page);
@@ -318,7 +319,7 @@ test('an account menu opened while the next page is still arriving stays open wh
  // stale) the board's data is held back until the menu is open, so the new shell always lands under an open menu.
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
- await expect(page.locator('.modal')).toBeVisible();
+ await expect(page.locator('.cw[open]')).toBeVisible();
  let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
  let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
  const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
@@ -326,11 +327,11 @@ test('an account menu opened while the next page is still arriving stays open wh
  await page.route(board,hold);
  try {
   const comment=`Menu stays ${Date.now()}`;
-  await page.getByLabel('Comment',{exact:true}).fill(comment);
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
+  await page.getByRole('textbox',{name:'Write a comment'}).fill(comment);
+  await page.getByRole('button',{name:'Post the comment'}).click();
+  await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:comment})).toBeVisible();
   const shell=await page.locator('.shell').elementHandle();
-  await page.locator('.close-card').click();
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
   await asked;
   // The menu rises once, as it opens; drawn again on the page that lands, it has risen already (#129).
   await page.evaluate(()=>{ const counted=window as unknown as {rises:number}; counted.rises=0; document.addEventListener('animationstart',event=>{ if((event.target as Element).id==='me-menu') counted.rises++; },true); });
@@ -339,7 +340,7 @@ test('an account menu opened while the next page is still arriving stays open wh
   await expect(menu).toBeVisible();
   release();
   await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
-  await expect(page.locator('.modal')).toHaveCount(0);
+  await expect(page.locator('.cw[open]')).toHaveCount(0);
   // The page landed with a new shell, and the menu is still open on it.
   await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
   await expect(menu).toBeVisible();
@@ -412,7 +413,7 @@ test('a menu open while its own page lands keeps the item that had focus',async(
  // As above: the board's data is held until the menu is open and focus is on one of its items.
  await page.setViewportSize({width:1440,height:900});
  await signIn(page,'omar@example.com','/c/rs-learning/work/board/1');
- await expect(page.locator('.modal')).toBeVisible();
+ await expect(page.locator('.cw[open]')).toBeVisible();
  let release!:()=>void; const held=new Promise<void>(resolve=>{release=resolve;});
  let arrived!:()=>void; const asked=new Promise<void>(resolve=>{arrived=resolve;});
  const board=(url:URL)=>url.pathname==='/c/rs-learning/work/board';
@@ -420,18 +421,18 @@ test('a menu open while its own page lands keeps the item that had focus',async(
  await page.route(board,hold);
  try {
   const comment=`Focus stays ${Date.now()}`;
-  await page.getByLabel('Comment',{exact:true}).fill(comment);
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:comment})).toBeVisible();
+  await page.getByRole('textbox',{name:'Write a comment'}).fill(comment);
+  await page.getByRole('button',{name:'Post the comment'}).click();
+  await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:comment})).toBeVisible();
   const shell=await page.locator('.shell').elementHandle();
-  await page.locator('.close-card').click();
+  await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
   await asked;
   await page.locator('.sidebar #btn-me').click();
   const menu=page.getByRole('menu');
   await menu.getByRole('menuitemradio',{name:'Dark'}).focus();
   await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();
   release();
-  await expect(page.locator('.modal')).toHaveCount(0);
+  await expect(page.locator('.cw[open]')).toHaveCount(0);
   await expect.poll(()=>shell!.evaluate(node=>node.isConnected)).toBe(false);
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('menuitemradio',{name:'Dark'})).toBeFocused();

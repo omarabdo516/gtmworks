@@ -23,14 +23,20 @@ test('a Card whose assignee leaves the Company has no assignee and stays in its 
   expect(JSON.parse(query(`select assignee_person,next_actor,status from public.work_cards where id=${card}`))[0]).toEqual({assignee_person:null,next_actor:null,status:'planned'});
 
   await signIn(page,'manager@example.com',`/c/rs-learning/work/board/${card}`);
-  const assignee=page.locator('[data-card-section="assignee"]');
-  await expect(assignee.getByRole('combobox',{name:'Assignee',exact:true})).toHaveValue('');
-  await expect(page.locator('.modal').getByText('Left with no assignee: Removed assignee left the company')).toBeVisible();
+  // The Card window's assignee menu (#678; design-reference-card: popHTML 'asg').
+  const win=page.getByRole('dialog');
+  const assignee=win.getByRole('button',{name:/^Assignee:/});
+  await expect(assignee).toHaveAccessibleName('Assignee: No one yet');
+  await win.getByRole('tab',{name:/^Activity \d+$/}).click();
+  await expect(win.locator('#cw-list')).toContainText('left the card with no assignee: the Member left');
 
-  await assignee.getByRole('button',{name:'Assign to me',exact:true}).click();
+  await assignee.click();
+  await win.getByRole('menuitem',{name:'Assign to me',exact:true}).click();
   await expect.poll(()=>JSON.parse(query(`select assignee_person,status from public.work_cards where id=${card}`))[0]).toEqual({assignee_person:manager,status:'planned'});
-  await expect(assignee.getByRole('combobox',{name:'Assignee',exact:true})).toHaveValue(`p:${manager}`);
-  await expect(assignee.getByRole('button',{name:'Assign to me',exact:true})).toHaveCount(0);
+  await expect(assignee).toHaveAccessibleName(/^Assignee: مدير/);
+  await assignee.click();
+  await expect(win.getByRole('menuitem',{name:'Assign to me',exact:true})).toHaveCount(0);
+  await page.keyboard.press('Escape');
 
   await page.goto('/c/rs-learning/work/board');
   await expect(page.locator(`#board-cols [data-column="planned"] .kcard[data-card-id="${card}"]`)).toBeVisible();

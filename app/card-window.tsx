@@ -274,7 +274,7 @@ export function CardWindow({slug,company,me,card,data,symbol,canWrite:mayWrite,a
        onChange={event=>{ setEditing(event.target.value); setTitleError(false); }} onKeyDown={event=>{ if(event.key==='Enter') { event.preventDefault(); void saveTitle(); } else if(event.key==='Escape') { event.preventDefault(); event.stopPropagation(); cancelTitle(); } }}/>
       {titleError&&<span className="set-err" id="cw-title-err" role="alert">{t('cardTitleRequired')}</span>}
       <div className="cw-edit-row"><button type="button" className="btn btn--secondary btn--sm" onClick={cancelTitle}>{t('cancel')}</button><button type="button" className="btn btn--primary btn--sm" onClick={()=>void saveTitle()}>{t('save')}</button></div></div>
-     :<h2 className="cw-title" id="cw-title" tabIndex={-1}>{W?<button type="button" id="cw-title-btn" className="cw-title-btn" data-tip={t('cwRename')} onClick={()=>setEditing(valueOf('title'))}><bdi dir="auto">{valueOf('title')}</bdi></button>:<bdi dir="auto">{valueOf('title')}</bdi>}</h2>}
+     :<h2 className="cw-title" id="cw-title" tabIndex={-1} dir="auto">{W?<button type="button" id="cw-title-btn" className="cw-title-btn" data-tip={t('cwRename')} onClick={()=>setEditing(valueOf('title'))}><bdi dir="auto">{valueOf('title')}</bdi></button>:<bdi dir="auto">{valueOf('title')}</bdi>}</h2>}
      {note('title')}
      {message&&<p role="alert" className="cw-said">{message}</p>}
      {card.archived&&<section className="cw-call" aria-label={t('cardArchived')}><div className="cw-call__head"><span className="cw-call__ic" aria-hidden="true"><ShellIcon name="archive"/></span><p className="cw-call__s od-fill"><bdi>{card.archived.by}</bdi> · <span className="num">{card.archived.at}</span></p>

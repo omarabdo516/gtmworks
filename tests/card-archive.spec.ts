@@ -17,7 +17,7 @@ async function archiveFromMenu(page: Page, id: number) {
  await sheet.getByRole('button', { name: 'More', exact: true }).click();
  await page.getByRole('menuitem', { name: 'Archive the card' }).click();
  await expect(sheet.getByRole('region', { name: 'Archived' })).toBeVisible();
- await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+ await sheet.getByRole('button', { name: 'Close the card' }).click();
  await expect(sheet).toHaveCount(0);
 }
 
@@ -41,7 +41,7 @@ test('a Contributor archives a Card from its menu: it leaves the board, and Undo
  await toast(page).getByRole('button', { name: 'Undo' }).click();
  await expect(toast(page)).toContainText('Restored');
  await expect(sheetOf(page).getByRole('region', { name: 'Archived' })).toHaveCount(0);
- await sheetOf(page).getByRole('button', { name: 'Close', exact: true }).click();
+ await sheetOf(page).getByRole('button', { name: 'Close the card' }).click();
  await expect(inColumn(page, 'ideas', 1)).toBeVisible();
  await expect(archivedToggle(page)).toHaveAccessibleName('Archived · 0');
 });
@@ -74,7 +74,8 @@ test('an archived Card opens read-only from an old link and from its chat\'s lin
  const callout = sheet.getByRole('region', { name: 'Archived' });
  await expect(callout).toContainText('مدير');
  await expect(sheet.getByRole('textbox')).toHaveCount(0);
- await expect(sheet.locator('#sheet-log')).toContainText('archived the card');
+ await sheet.getByRole('tab', { name: /^Activity \d+$/ }).click();
+ await expect(sheet.locator('#cw-list')).toContainText('archived the card');
  // Its Conversation's or its channel's link to the board (?show) opens it the same way, read-only.
  await page.goto(`${board}?show=3`);
  await expect(page).toHaveURL(new RegExp(`${board}\\?card=3$`));
@@ -83,8 +84,8 @@ test('an archived Card opens read-only from an old link and from its chat\'s lin
  await callout.getByRole('button', { name: 'Restore' }).click();
  await expect(sheet.getByRole('region', { name: 'Archived' })).toHaveCount(0);
  await expect(toast(page)).toContainText('Restored');
- await expect(sheet.locator('#sheet-log')).toContainText('restored the card');
- await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+ await expect(sheet.locator('#cw-list')).toContainText('restored the card');
+ await sheet.getByRole('button', { name: 'Close the card' }).click();
  await expect(inColumn(page, 'progress', 3)).toBeVisible();
 });
 

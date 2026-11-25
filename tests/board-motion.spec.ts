@@ -1,6 +1,8 @@
 import { test, expect, type Page } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { signIn } from './sign-in';
+// The way into review until the review is a decision of its own (#681): the Card window's status menu (#678).
+const sendForReview=async(on:Page)=>{ const card=on.getByRole('dialog'); await card.getByRole('button',{name:/^Status:/}).click(); await card.getByRole('menuitemradio',{name:'Send for review'}).click(); };
 
 // The board's motion as built (#131; design-reference: dragStart, dragMove, dragScroll, dragEnd, land, boardEnter,
 // syncWaitMarks): a carried Card leans with the pointer and scrolls the columns at an edge, flies back when it moves
@@ -243,14 +245,13 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  await tab.getByRole('button',{name:'Create card'}).click();
  await expect(tab).toHaveURL(/\/work\/board\/\d+$/);
  const id=Number(new URL(tab.url()).pathname.split('/').pop());
- await tab.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
- await tab.getByRole('button',{name:'Add design'}).click();
- await expect(tab.getByText(/Version 1:/)).toBeVisible();
+ await tab.getByLabel('Upload a version').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
+ await expect(tab.getByRole('dialog').getByRole('list',{name:'Versions'}).getByRole('link',{name:/^Open version 1/})).toBeVisible();
  await page.reload();
  const count=page.locator('.sb-count');
  const before=Number(await count.textContent());
- await tab.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
- await expect(tab.locator('.card-stage-line')).toContainText('مراجعة');
+ await sendForReview(tab);
+ await expect(tab.getByRole('dialog').getByRole('button',{name:/^Status: Waiting/})).toBeVisible();
  await redraw('ArrowRight');
  const badge=page.locator(`#board-cols .kcard[data-card-id="${id}"] .badge--wait`);
  await expect(badge).toHaveClass(/is-new/);
@@ -266,7 +267,7 @@ test('a Card newly waiting on the approver nudges its badge and pops the sidebar
  // Approving it: the count falls when the board is drawn again, and neither plays.
  await tab.reload();
  await tab.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
- await expect(tab.locator('.card-stage-line')).not.toContainText('مراجعة');
+ await expect(tab.getByRole('dialog').getByRole('button',{name:/^Status: Planned/})).toBeVisible();
  await redraw('ArrowLeft');
  await expect(count).toHaveText(String(before));
  await expect(count).not.toHaveClass(/is-pop/);

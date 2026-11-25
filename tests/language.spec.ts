@@ -84,7 +84,7 @@ test('English default, account language across sessions/devices, automatic conte
   await page.goto('/c/rs-learning/work/new');
   await page.getByLabel('Message',{exact:true}).fill(title);
   await page.getByRole('button',{name:'Create card',exact:true}).click();
-  await expect(page.locator('.modal h2').first()).toHaveText(title);
+  await expect(page.locator('.cw[open] .cw-title')).toHaveText(title);
   paths.push(new URL(page.url()).pathname);
   await page.locator('input[name=go_live]').fill(goLive);
   await Promise.all([
@@ -127,8 +127,8 @@ test('English default, account language across sessions/devices, automatic conte
     await expectTitleAligned(titleNode,link.locator('..'),index===0?'right':'left');
     await expectNumberOrder(titleNode,index===0);
     await page.goto(paths[index]);
-    await expect(page.locator('.modal h2').first()).toHaveCSS('direction',index===0?'rtl':'ltr');
-    await expectNumberOrder(page.locator('.modal h2').first(),index===0);
+    await expect(page.locator('.cw[open] .cw-title')).toHaveCSS('direction',index===0?'rtl':'ltr');
+    await expectNumberOrder(page.locator('.cw[open] .cw-title'),index===0);
     await expect(page.locator('.recent-cards').getByRole('link',{name:title,exact:true}).locator('.recent-title')).toHaveCSS('direction',index===0?'rtl':'ltr');
     await page.goto('/c/rs-learning/work/board');
    }

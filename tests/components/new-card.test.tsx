@@ -5,6 +5,7 @@ import { render } from 'vitest-browser-react';
 import type {} from '@vitest/browser-playwright';
 import NewCard from '@/app/c/[slug]/[[...section]]/new-card';
 import { LanguageProvider } from '@/lib/i18n-client';
+import { MemberPicker } from '@/lib/work-activity';
 import { sent, showWork, workProps } from './work-page';
 
 const push = vi.hoisted(() => vi.fn<(href: string) => void>());
@@ -67,4 +68,17 @@ test('a card started with the reel template asks for that template and sends it'
  await userEvent.selectOptions(screen.getByRole('combobox', { name: /^Template/ }), 'reel');
  await screen.getByRole('button', { name: 'Create card' }).click();
  await expect.poll(() => sent(props)).toEqual([{ op: 'create', slug: 'rs-learning', company: 'co-1', stage: '1', title: 'اختبار ريل', template: 'reel' }]);
+});
+
+// A picker whose saved person was removed from the Company (moved from member-picker.spec.ts, #218; then from
+// components/card-detail.test.tsx with the Card page, #678, to the New card form that still uses it): with an empty
+// choice it sends nothing, so a save clears them; without one it sends the first member.
+for (const empty of ['Not specified', undefined]) test(`a removed MemberPicker default ${empty ? 'leaves the hidden input empty' : 'selects the first member'}`, async () => {
+ const screen = await render(<LanguageProvider language="en"><form>
+  <MemberPicker members={[{ person_id: 'first', people: { name: 'First member' } }]} name="person" label="Next actor" defaultValue="removed" empty={empty}/>
+ </form></LanguageProvider>);
+ const shown = screen.getByRole('button', { name: 'Next actor' });
+ await expect.element(shown).toBeVisible();
+ expect(shown.element().querySelector(':scope > bdi')!.textContent).toBe(empty ?? 'First member');
+ expect(new FormData(document.querySelector('form')!).get('person')).toBe(empty ? '' : 'first');
 });

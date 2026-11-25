@@ -205,14 +205,16 @@ test('a channel\'s first Agent call puts one Card under In progress, which the c
  await expect(page.locator(`.kcard[data-card-id="${cardId}"] .kcard__job`)).toContainText('Channel');
 });
 
-test('the channel\'s Card\'s sheet shows the channel under Chat to its Member, and a message written there saves',async({page})=>{
+// #678: the Card's comments replace its chat, so the channel is one link away from the Card's window, for its Member.
+test('the channel\'s Card\'s window links to the channel for its Member, where a message written saves',async({page})=>{
  await signIn(page,'reviewer@example.com',`/c/rs-learning/work/board?card=${cardId}`);
- const sheet=page.getByRole('dialog',{name:'Board week'});
- await expect(sheet.getByRole('tab',{name:'Chat'})).toHaveAttribute('aria-selected','true');
- await expect(sheet.locator('.sheet__meta')).toContainText('Channel #Board week');
- await expect(sheet.locator('.hp-hash')).toBeVisible();
- await expect(sheet.getByText('Here is the plan.')).toBeVisible();
- const box=sheet.getByRole('textbox',{name:'Write your message in the channel'});
+ const card=page.getByRole('dialog',{name:'Board week'});
+ const link=card.getByRole('link',{name:'Open the channel #Board week'});
+ await expect(link).toHaveAttribute('href',`/c/rs-learning/channels/${channel}`);
+ await link.click();
+ await expect(page).toHaveURL(new RegExp(`/c/rs-learning/channels/${channel}$`));
+ await expect(page.getByText('Here is the plan.')).toBeVisible();
+ const box=page.getByRole('textbox',{name:'Write your message in the channel'});
  await box.fill('Morning, team'); await box.press('Enter');
  await expect.poll(()=>rows(`select count(*)::int n from public.channel_messages where channel_id='${channel}' and body='Morning, team'`)[0].n).toBe(1);
 });
@@ -228,24 +230,20 @@ test('a second Agent call in the channel makes no second Card',()=>{
  expect(rows(`select count(*)::int n from public.work_cards where channel_id='${channel}'`)[0].n).toBe(1);
 });
 
-test('a Viewer in the channel reads its Card\'s pill, section and sheet, and writes nothing',async({page})=>{
+test('a Viewer in the channel reads its Card\'s pill, section and window, and writes nothing',async({page})=>{
  await signIn(page,'viewer@example.com',`/c/rs-learning/channels/${channel}`);
  await expect(page.locator('.chat__corner .corner-pill')).toBeVisible();
  await expect(page.locator('#details')).toContainText('On the board');
  await page.goto(`/c/rs-learning/work/board?card=${cardId}`);
  const seen=page.getByRole('dialog',{name:'Board week'});
- await expect(seen.getByRole('tab',{name:'Chat'})).toHaveAttribute('aria-selected','true');
- await expect(seen.getByText('Here is the plan.')).toBeVisible();
- await expect(seen.getByRole('textbox',{name:'Write your message in the channel'})).toHaveCount(0);
+ await expect(seen.getByRole('link',{name:'Open the channel #Board week'})).toBeVisible();
+ await expect(seen.getByRole('textbox')).toHaveCount(0);
 });
 
-test('the Owner outside the channel opens its Card on the Log, and its Chat tab is a lock with no message of the channel',async({page})=>{
+test('the Owner outside the channel reads its Card with a lock for the channel and no message of it',async({page})=>{
  await signIn(page,'omar@example.com',`/c/rs-learning/work/board?card=${cardId}`);
  const locked=page.getByRole('dialog',{name:'Board week'});
- await expect(locked.getByRole('tab',{name:/^Log/})).toHaveAttribute('aria-selected','true');
- await locked.getByRole('tab',{name:'Chat'}).click();
- await expect(locked.getByRole('heading',{name:'#Board week'})).toBeVisible();
- await expect(locked.getByText('This card came from a channel. Its members read and write there; you can read the card’s log.')).toBeVisible();
- await expect(locked.getByText('Here is the plan.')).toHaveCount(0);
- await expect(locked.getByRole('textbox')).toHaveCount(0);
+ await expect(locked.getByRole('img',{name:'A channel you are not in: #Board week'})).toBeVisible();
+ await expect(locked.getByRole('link',{name:'Open the channel #Board week'})).toHaveCount(0);
+ expect(await page.content()).not.toContain('Here is the plan.');
 });

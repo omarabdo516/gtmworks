@@ -44,8 +44,11 @@ export async function cardWindow(db:Db,{company,card,slug,me,canWrite,t,language
   return own.length>0&&<ul className="attachments">{own.map(file=>{ const href=`/c/${slug}/files/${file.id}`;
    return <li key={file.id}>{isThumbnail(file.content_type)?<a href={href} target="_blank" rel="noreferrer"><img src={href} alt={file.name}/></a>
     :<a className="file-chip" href={href} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>}</li>; })}</ul>; };
+ // While the Agent a comment called works on it, the comment says so under it (#22), until its reply lands as a row of its own.
+ const workingOn=(row:LogRow)=>{ const run=row.source==='work_comments'?runs.find(r=>r.note_id===row.source_id&&!r.outcome):undefined;
+  return run&&<p className="lg-meta note-working"><span className="dot dot--working" aria-hidden="true"/><bdi>{run.agent_name}</bdi> · {t('noteWorkingOn',(row.actor_name||'').trim().split(/\s+/)[0])}</p>; };
  const drawList=(list:LogRow[],empty:string,forever:boolean)=><div className="lg-wrap">
-  {list.length?<LogDays oldestFirst items={list.map(row=>({id:row.id,at:row.created_at,anchor:logAnchor(row),node:<><LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={canWrite} drawnAt={drawn} t={t} language={language} cardLink={false}/>{filesOf(row)}{why(logAnchor(row))}</>}))}/>
+  {list.length?<LogDays oldestFirst items={list.map(row=>({id:row.id,at:row.created_at,anchor:logAnchor(row),node:<><LogEntry row={row} people={people} me={me} slug={slug} company={company} canWrite={canWrite} drawnAt={drawn} t={t} language={language} cardLink={false}/>{filesOf(row)}{workingOn(row)}{why(logAnchor(row))}</>}))}/>
    :<div className="panel-card"><p className="panel-empty">{empty}</p></div>}
   {forever&&<p className="lg-forever"><PageIcon name="lock"/><span>{t('cwForever')}</span></p>}
  </div>;

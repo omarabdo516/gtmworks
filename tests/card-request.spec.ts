@@ -24,8 +24,8 @@ test('a message to an agent makes one card in Ideas with its message, assignment
   await page.getByRole('button',{name:'Create card',exact:true}).dblclick();
   await expect(page).toHaveURL(/\/work\/board\/\d+$/);
   const cardPath=new URL(page.url()).pathname;
-  await expect(page.locator('.modal .comment-body').filter({hasText:'Mention the early price'})).toBeVisible();
-  await expect(page.locator('.card-stage-line .mode-chip')).toHaveText('Do it now');
+  await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:'Mention the early price'})).toBeVisible();
+  await expect(page.locator('.cw[open] [data-slot="description"] .mode-chip')).toHaveText('Do it now');
   await page.goto('/c/rs-learning/work/board');
   const onBoard=page.locator('.column[data-stage-name="أفكار"] .card').filter({hasText:title});
   await expect(onBoard).toHaveCount(1);
@@ -41,7 +41,7 @@ test('a message to an agent makes one card in Ideas with its message, assignment
   await page.setViewportSize({width:1280,height:720});
   await chooseLanguage(page,'ar');
   await page.goto(cardPath);
-  await expect(page.locator('.card-stage-line .mode-chip')).toHaveText('نفّذ الآن');
+  await expect(page.locator('.cw[open] [data-slot="description"] .mode-chip')).toHaveText('نفّذ الآن');
   for(const width of [1440,390]) {
    await page.setViewportSize({width,height:900});
    await page.screenshot({path:`test-results/screenshots/card-request-card-ar-${width}.png`});

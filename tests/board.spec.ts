@@ -4,6 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { signIn } from './sign-in';
 import { laneHermes } from './lane-hermes';
 import { inbox } from './lane.mjs';
+// The way into review until the review is a decision of its own (#681): the Card window's status menu (#678).
+// A Card's log rows, read under its window's Activity tab (#678).
+const activityOf=async(page:Page)=>{ const card=page.getByRole('dialog'); await card.getByRole('tab',{name:/^Activity \d+$/}).click(); return card.locator('#cw-list .lg-row'); };
+const sendForReview=async(on:Page)=>{ const card=on.getByRole('dialog'); await card.getByRole('button',{name:/^Status:/}).click(); await card.getByRole('menuitemradio',{name:'Send for review'}).click(); };
 
 // The board's six columns and "Waiting on you" (#34, #16; ADR 0013). The seeded accounts read English.
 const query=(sql:string)=>execFileSync('npx',['--no-install','supabase','db','query',sql,'-o','json','--agent','no'],{encoding:'utf8'});
@@ -74,8 +78,8 @@ test('a card moves by drag and by keyboard, and both moves are logged',async({pa
  expect(await columnOf(page,card.id)).toBe('progress');
  // The log under the card has both moves.
  await page.goto(card.path);
- await expect(page.locator('.detail-row').filter({hasText:'Moved the card from أفكار to بريف جاهز'})).toHaveCount(1);
- await expect(page.locator('.detail-row').filter({hasText:'Moved the card from بريف جاهز to كتابة'})).toHaveCount(1);
+ await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*أفكار\s*to\s*بريف جاهز/})).toHaveCount(1);
+ await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*بريف جاهز\s*to\s*كتابة/})).toHaveCount(1);
  // Waiting on you fills by itself: a drop there is refused on the board.
  await page.goto('/c/rs-learning/work/board');
  await page.locator(`.kcard[data-card-id="${card.id}"] a`).focus();
@@ -168,11 +172,10 @@ test('a Viewer cannot move a card',async({page})=>{
 test('a card waiting for my approval is in Waiting on you and leaves it when I approve its version',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const card=await newCard(page,'Waiting approval');
- await page.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
- await page.getByRole('button',{name:'Add design'}).click();
- await expect(page.getByText(/Version 1:/)).toBeVisible();
- await page.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+ await page.getByLabel('Upload a version').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
+ await expect(page.getByRole('dialog').getByRole('list',{name:'Versions'}).getByRole('link',{name:/^Open version 1/})).toBeVisible();
+ await sendForReview(page);
+ await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Waiting/})).toBeVisible();
  await page.goto('/c/rs-learning/approvals');
  const waiting=page.locator('.col[data-column="waiting"]');
  const queued=waiting.locator(`.kcard[data-card-id="${card.id}"]`);
@@ -182,7 +185,7 @@ test('a card waiting for my approval is in Waiting on you and leaves it when I a
  await queued.getByRole('link',{name:card.title}).click();
  await expect(page).toHaveURL(new RegExp(`${card.path}$`));
  await page.locator('[data-card-section="review"]').getByRole('button',{name:'Approve',exact:true}).click();
- await expect(page.locator('.card-stage-line')).not.toContainText('مراجعة');
+ await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Planned/})).toBeVisible();
  await page.goto('/c/rs-learning/approvals');
  await expect(waiting.locator(`.kcard[data-card-id="${card.id}"]`)).toHaveCount(0);
  await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
@@ -194,11 +197,10 @@ test('Waiting on you shows exactly the reader\'s own list, approvals and items n
  const omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', stamp=Date.now();
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const card=await newCard(page,'Own list approval');
- await page.getByLabel('New design file').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
- await page.getByRole('button',{name:'Add design'}).click();
- await expect(page.getByText(/Version 1:/)).toBeVisible();
- await page.getByLabel('Move to list',{exact:true}).selectOption({label:'مراجعة'});
- await expect(page.locator('.card-stage-line')).toContainText('مراجعة');
+ await page.getByLabel('Upload a version').setInputFiles({name:'design.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=','base64')});
+ await expect(page.getByRole('dialog').getByRole('list',{name:'Versions'}).getByRole('link',{name:/^Open version 1/})).toBeVisible();
+ await sendForReview(page);
+ await expect(page.getByRole('dialog').getByRole('button',{name:/^Status: Waiting/})).toBeVisible();
  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Older than the approval ${stamp}','',1)`);
  query(`select public.add_waiting_item('${rs}','${omar}','test_kind','Newer than the approval ${stamp}','',1)`);
  query(`select public.add_waiting_item('${rs}','${manager}','test_kind','For the Manager ${stamp}','',1)`);
@@ -279,9 +281,9 @@ test('Waiting on you lists an Agent question and an item of a new kind, each ope
   // The item of the new kind opens its Card; a comment there acts on it.
   await other.click();
   await expect(page).toHaveURL(/\/work\/board\/1$/);
-  await page.getByLabel('Comment',{exact:true}).fill(`Answered ${stamp}`);
-  await page.getByRole('button',{name:'Send',exact:true}).click();
-  await expect(page.locator('.comment-body').filter({hasText:`Answered ${stamp}`})).toBeVisible();
+  await page.getByRole('textbox',{name:'Write a comment'}).fill(`Answered ${stamp}`);
+  await page.getByRole('button',{name:'Post the comment'}).click();
+  await expect(page.locator('.cw[open] #cw-list .lg-note').filter({hasText:`Answered ${stamp}`})).toBeVisible();
   await page.goto('/c/rs-learning/approvals');
   await expect(other).toHaveCount(0);
   await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
@@ -431,7 +433,7 @@ test('a second Member sees the same order; a place inside a column is not announ
  await expect.poll(()=>orderIn(page,'ideas')).toEqual(shown);
  await expect(page.locator('.toast')).toHaveCount(0);
  await page.goto(`/c/rs-learning/work/board/${a}`);
- await expect(page.locator('.detail-row').filter({hasText:'Moved the card from'})).toHaveCount(0);
+ await expect((await activityOf(page)).filter({hasText:/moved the card/})).toHaveCount(0);
  // The Manager, in a window of their own, reads the same order.
  const other=await browser.newContext(); const managerPage=await other.newPage();
  try {
@@ -446,7 +448,7 @@ test('a second Member sees the same order; a place inside a column is not announ
  await expect(page.locator('.toast')).toContainText('Moved to “Planned”');
  await expect.poll(()=>orderIn(page,'planned')).toEqual(placed(planned,b,planned[0]));
  await page.goto(`/c/rs-learning/work/board/${b}`);
- await expect(page.locator('.detail-row').filter({hasText:'Moved the card from أفكار to بريف جاهز'})).toHaveCount(1);
+ await expect((await activityOf(page)).filter({hasText:/moved the card\s*from\s*أفكار\s*to\s*بريف جاهز/})).toHaveCount(1);
 });
 
 // #676: people who may edit move a Card freely, Live and Done included: a Contributor's drop on Live moves it there.
@@ -523,8 +525,9 @@ test('a move to another column is offered as Undo, which puts the Card back in t
  expect(await orderIn(page,'progress')).toEqual(progress);
  // The log keeps one row for the move and one for the way back, each naming who and both stages.
  await page.goto(`/c/rs-learning/work/board/${a}`);
- await expect(page.locator('.detail-row').filter({hasText:'Moved the card from كتابة to بريف جاهز'})).toHaveCount(1);
- await expect(page.locator('.detail-row').filter({hasText:'Moved the card back from Planned to In progress'})).toHaveCount(1);
+ const log=await activityOf(page);
+ await expect(log.filter({hasText:/moved the card\s*from\s*كتابة\s*to\s*بريف جاهز/})).toHaveCount(1);
+ await expect(log.filter({hasText:/moved the card back\s*from\s*Planned\s*to\s*In progress/})).toHaveCount(1);
  // The keyboard's move is told with "Undo" too, and its Undo brings the Card back again.
  await page.goto('/c/rs-learning/work/board');
  await page.locator(`.kcard[data-card-id="${a}"] a`).focus();
