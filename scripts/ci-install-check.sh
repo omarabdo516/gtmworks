@@ -387,6 +387,7 @@ nothing_left() {
   if docker volume ls -q | grep -Eq '^gtmworks-(work|sandbox-hostkey)-second-company-'; then fail "$1 left a sandbox volume"; fi
   if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-work-second-company-'; then fail "$1 left a work network"; fi
   [[ -z $(docker ps -aq --filter 'name=^gtmworks-exit-second-company-') ]] || fail "$1 left an exit container"
+  [[ -z $(docker ps -aq --filter 'name=^gtmworks-screen-driver-second-company-') ]] || fail "$1 left the Screen driver's container"
   if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-exit-second-company-'; then fail "$1 left an exit's network"; fi
   [[ $(db -c "select count(*) from public.companies where name='Second Company'") == 0 ]] || fail "$1 left no Company"
   [[ $(db -c "select count(*) from public.company_engines where address like '%second-company%'") == 0 ]] || fail "$1 left no Engine record"
@@ -658,6 +659,15 @@ sh scripts/install.sh company limits 'Proxy Company' --cpus 1.5 || fail 'company
 SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh > companies-repeat.log 2>&1 || { cat companies-repeat.log; fail 'a repeat install with limits in the shell'; }
 [[ $(limits_of gtmworks-sandbox-first) == "$(sandbox_memory_bytes) 1500000000" ]] || fail "a repeat install keeps the first Company's limits"
 [[ $(limits_of "$second_sandbox") == '805306368 1000000000' ]] || fail "a repeat install keeps the second Company's limits"
+# #711: the second Company's limit as a release before the Screens wrote it (no default noted beside it) is raised to the
+# default by the next run, once; a Company's limit above the default is never lowered.
+second_file="$(dirname "$(grep -lx "ENGINE_NAME=$second_container" .engines/*/.env)")/.env"
+grep -v '^SANDBOX_MEMORY_DEFAULT=' "$second_file" > "$second_file.old" && mv "$second_file.old" "$second_file" || fail 'the second Company file as the previous release wrote it'
+sh scripts/install.sh company limits 'Proxy Company' --memory 3g || fail 'the first Company above the default'
+sh scripts/install.sh > companies-raise.log 2>&1 || { cat companies-raise.log; fail 'the run that raises a lower limit'; }
+grep -F "had 768m of memory: raised to $(sandbox_default mem_limit)" companies-raise.log || fail 'the run says it raised the lower limit'
+[[ $(limits_of "$second_sandbox") == "$(sandbox_memory_bytes) 1000000000" ]] || fail "the second Company's lower memory limit is raised to the default"
+[[ $(limits_of gtmworks-sandbox-first) == '3221225472 1500000000' ]] || fail "the first Company's limit above the default is kept"
 }
 
 # The Engine holds none of gtmworks's own keys and passwords (#2): its environment and every file its user can
@@ -740,7 +750,8 @@ scan_engines
 # agents-sandbox: an Agent's work in its Company's work sandbox (#393, #395, #459, ADR 0018, ADR 0024), split from the
 # agents area to keep each within its minutes (#553): its command, file and code run in the sandbox and never on its
 # Engine, a command MCP server runs there, its Library shows the work folder, the Engine pins the sandbox's host key, no
-# file sync runs between them, the apps still answer, and the same scan of every Engine, sandbox and exit. It makes its
+# file sync runs between them, the Company's Screen opens a page for an Agent's Run and sleeps and wakes (#711), the apps
+# still answer, and the same scan of every Engine, sandbox and exit. It makes its
 # own install, first run and second Company, and the first Company's second Agent the sandbox checks start in.
 agents_sandbox() {
 cd "$root"
@@ -933,6 +944,42 @@ after_sync=$(engine_change "$sync_marker") || fail "read the Engine's Skills aft
 [[ -z $after_sync ]] || fail "what an Agent changed in the sandbox came back to the Engine: $after_sync"
 [[ $(docker exec "$engine_id" cat "/opt/data/profiles/$first/sandbox-check-credentials/credential.json") == "CHECK-$credential_marker" ]] \
   || fail 'a credential file of the Engine profile changed with the sandbox session'
+# The Company's Screen (#711, vault decision 0068): the Engine holds the sandbox image's own driver the install copied in,
+# so the Agent's Run is offered computer_use; asked to open a page on its Screen, the Agent captures the Screen, which
+# wakes it inside the sandbox, opens the page on its display and finds its window with computer_use, and display.status on
+# the management listener reads it awake on :20 over ssh. The host's Docker then shows the Screen's X server is a process
+# of the sandbox and never of the Engine. With the profile's idle stop set short, the Screen goes to sleep by itself, and
+# the Agent's next use wakes it again.
+engine_driver=$(docker exec "$engine_id" sha256sum /opt/data/screen-driver/cua-driver | cut -d' ' -f1) || fail "the Engine holds a cua-driver"
+sandbox_driver=$(docker exec "$sandbox" sh -c 'sha256sum "$(readlink -f "$(command -v cua-driver)")"' | cut -d' ' -f1) || fail "the sandbox image's cua-driver"
+[[ -n $engine_driver && $engine_driver == "$sandbox_driver" ]] || fail "the Engine holds the sandbox image's own cua-driver"
+screen_marker="screen-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+screen_xvnc() { docker exec "$1" ps -eo args= | awk '/X(tiger)?vnc :20 / {found=1} END {exit !found}'; }
+# What the Engine and the sandbox said about the Screen, printed when a Screen step fails.
+screen_logs() {
+  docker exec "$engine_id" sh -c 'grep -hiE "computer.use|bot.desktop|cua|screen" /opt/data/logs/*.log /opt/data/profiles/*/logs/*.log 2> /dev/null | tail -n 40' >&2 || true
+  docker exec "$sandbox" sh -c 'tail -n 20 /tmp/hermes-bot-desktop/*/launcher.log 2> /dev/null; ps -eo args= | grep -iE "vnc|xfce|chrom|cua" | grep -v grep | cut -c1-200' >&2 || true
+}
+engine_node "$engine_key" - screen-open "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-open.log \
+  || { screen_logs; fail "a Run is offered computer_use and the Agent opens a page on the Company's Screen"; }
+grep -q '"screen":{"running":true,"display":":20","placement":"terminal:ssh"}' screen-open.log || fail 'display.status reads the Screen awake on :20 inside the sandbox'
+screen_xvnc "$sandbox" || fail "the Screen's X server runs in the Company's sandbox"
+if screen_xvnc "$engine_id"; then fail "no Screen runs on the Engine"; fi
+[[ $(docker exec "$sandbox" cat "/work/$first/$screen_marker-screen.html") == *"SCREEN-$screen_marker"* ]] || fail "the page the Agent opened is in its own folder of the work folder"
+engine_node "$engine_key" - screen-sleep "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-sleep.log \
+  || { screen_logs; fail 'the idle Screen goes to sleep by itself'; }
+grep -q '"screen":{"running":false' screen-sleep.log || fail 'display.status reads the idle Screen asleep'
+if screen_xvnc "$sandbox"; then fail "the asleep Screen's X server is stopped"; fi
+engine_node "$engine_key" - screen-wake "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-wake.log \
+  || { screen_logs; fail "the Agent's next use wakes the Screen"; }
+grep -q '"screen":{"running":true,"display":":20","placement":"terminal:ssh"}' screen-wake.log || fail 'display.status reads the Screen awake again'
+screen_xvnc "$sandbox" || fail "the woken Screen's X server runs in the sandbox again"
+# #713 (ADR 0029): a browser holds the awake Screen's live stream through gtmworks's own address, the gateway, and never
+# the Engine's: the RFB handshake from the sandbox's Xvnc, a full picture held for ten seconds, a take and a give-back
+# that move the Engine's lease and write the Owner's log rows, and a socket ended in control that gives it back.
+engine_node "$engine_key" - screen-live "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-live.log \
+  || { screen_logs; fail "a browser holds the Screen's live stream through gtmworks and takes and gives back control"; }
+grep -q '"screen":{"width":1440,"height":900}' screen-live.log || fail 'the live stream is the Screen at 1440 by 900'
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
 # catalogue, connecting writes only an app's read tools and the way back to gtmworks, an unknown way back is
 # expired, and disconnecting turns the app off.
@@ -1491,7 +1538,7 @@ probe 'after the update from the one-Engine release whose Engine does not start'
 [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' gtmworks-install-hermes-1) == gtmworks-install_hermes ]] || fail_update 'the hermes Engine keeps its volume'
 [[ $(sed -n 's/^HERMES_API_KEY=//p' .env.install) == "$key" ]] || fail_update 'the Engine key is back in .env.install'
 [[ ! -e .engines ]] || fail_update 'the failed update leaves no Engine folder'
-[[ -z $(docker ps -aq --filter 'name=^gtmworks-(engine|sandbox|exit)-first$') ]] || fail_update "the failed update leaves no Engine, sandbox or exit of the template"
+[[ -z $(docker ps -aq --filter 'name=^gtmworks-(engine|sandbox|exit|screen-driver)-first$') ]] || fail_update "the failed update leaves no Engine, sandbox or exit of the template"
 if docker volume inspect gtmworks-work-first > /dev/null 2>&1; then fail_update 'the failed update leaves no work folder'; fi
 if docker network inspect gtmworks-engine-first > /dev/null 2>&1; then fail_update "the failed update leaves no Engine network"; fi
 docker run --rm --network gtmworks-install_default curlimages/curl:8.12.1 -sf -H "Authorization: Bearer $key" http://hermes:9119/api/profiles \
@@ -1669,6 +1716,15 @@ done
 marker="stable-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 tell_engine "$engine_before" "$profile" "$marker" || fail "write a memory in the Company's profile on $stable"
 sign_in_engine "$engine_before" || fail "sign the Company in on its Engine on $stable"
+# A Company whose own sandbox memory is below this release's default, as the release before the Screens wrote it (#711):
+# the update raises it to the default. A release of the one-Engine shape (before ADR 0018) keeps no Company limits at all,
+# so its Company follows the default and only the sandbox's memory is read after the update.
+lowered=no
+if [[ -f .engines/first/.env ]]; then
+  lowered=yes
+  { grep -Ev '^SANDBOX_MEMORY(_DEFAULT)?=' .engines/first/.env; echo 'SANDBOX_MEMORY=1g'; } > .engines/first/.env.low && mv .engines/first/.env.low .engines/first/.env \
+    || fail "give the Company a memory limit below the default on $stable"
+fi
 # The update to this release, as a stable install takes it: this release's two files in place of the old ones, then update.
 cp "$root/release-first/docker-compose.install.yml" "$root/release-first/install.sh" . || fail 'this release files in place'
 sh install.sh update || fail "the update from $stable to this release"
@@ -1692,6 +1748,14 @@ engine=$(first_engine_id)
 sandbox=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')
 [[ -n $sandbox && $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox") == healthy ]] || fail "the updated Company's work sandbox is healthy"
 [[ $(docker inspect -f '{{.Config.Image}}' "$sandbox") == "$(cat .work-sandbox-image)" ]] || fail 'the updated sandbox runs the image the install recorded'
+# #711: the Company's lower memory limit, when its release kept one, is raised to this release's default, and its sandbox
+# runs with the default either way.
+default_memory=$(sed -n 's/^    mem_limit: ${SANDBOX_MEMORY:-\([0-9]*\)g}$/\1/p' scripts/engine-template.yml)
+[[ -n $default_memory ]] || fail "this release's default sandbox memory, in gigabytes"
+if [[ $lowered == yes ]]; then
+  [[ $(sed -n 's/^SANDBOX_MEMORY=//p' .engines/first/.env) == "${default_memory}g" ]] || fail "the update raised the Company's lower memory limit to the default (${default_memory}g)"
+fi
+[[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == $(( default_memory * 1073741824 )) ]] || fail "the updated sandbox runs with the default memory (${default_memory}g)"
 # The Owner signs in, the Company's sign-in still serves, and the Agent still remembers what it was told on $stable.
 ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \
   || fail "the Agent remembers what it was told on $stable and the Company's sign-in still serves"
@@ -2259,7 +2323,7 @@ gtmworks update-button on || fail 'gtmworks update-button on'
 docker build -q -t localhost:5000/gtmworks:0.0.2-ci - > /dev/null <<'DOCKERFILE' || fail 'build the broken release image'
 FROM localhost:5000/gtmworks:0.0.1-ci
 RUN echo 'create table gtmworks_install.broken_release_probe(id integer);' > /app/install/supabase/migrations/99999999999999_broken_release_probe.sql \
- && echo 'process.exit(1);' > /app/server.js
+ && echo 'process.exit(1);' > /app/scripts/web-server.mjs
 DOCKERFILE
 broken=$(publish 0.0.2-ci) || fail 'push the broken release image'
 (cd "$workspace" && node scripts/release-assets.mjs "$broken" "$releases/v0.0.2" "$sandbox") || fail 'the broken release files'
@@ -2588,6 +2652,19 @@ default_mib=$(( $(sandbox_memory_bytes) / 1048576 ))
 (( render_peak < default_mib )) || fail "the render's peak memory ($render_peak MiB) is within the default limit ($default_mib MiB)"
 [[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the render at the defaults had no process killed at the memory limit'
 echo "sizes: one short render at the default limits took $render_seconds s and peaked at $render_peak MiB of the $default_mib MiB limit"
+# The Company's Screen awake with a page open (#711), started as the pinned Engine starts it in its sandbox: its own
+# launcher.sh, read out of the Engine's image, runs in the first Company's sandbox, and the sandbox's Chromium opens a
+# page through the Company's exit. A Company has one awake Screen, shared by its Agents (vault decision 0068), and the
+# default memory must hold it beside the render.
+launcher=$(docker exec "$engine_id" base64 -w0 /opt/hermes/tools/bot_desktop/launcher.sh) || fail "the pinned Engine's Screen launcher"
+docker exec -i -e SCREEN_LAUNCHER="$launcher" "$first_sandbox" node --input-type=module - < sandbox/check/screen.mjs | tee screen-defaults.log \
+  || fail 'one Screen wakes with a page open in a sandbox at the default limits'
+screen_peak=$(sed -n 's/^screen=.*"peakMiB":\([0-9]*\).*/\1/p' screen-defaults.log)
+screen_awake=$(sed -n 's/^screen=.*"awakeMiB":\([0-9]*\).*/\1/p' screen-defaults.log)
+[[ -n $screen_peak && -n $screen_awake ]] || fail 'the Screen prints its memory awake and its peak'
+(( screen_peak + render_peak < default_mib )) || fail "a Screen ($screen_peak MiB) beside the render ($render_peak MiB) fits in the default limit ($default_mib MiB)"
+[[ $(oom_kills "$first_sandbox") == 0 ]] || fail 'the Screen at the defaults had no process killed at the memory limit'
+echo "sizes: the Screen awake with a page open held $screen_awake MiB and peaked at $screen_peak MiB of the $default_mib MiB limit"
 # A render that needs more memory than its Company's limit: the second Company's sandbox gets four fifths of the render's
 # measured peak, so Chromium renders part of the way before the limit stops it, and the first Company's sandbox is asked
 # throughout. It is set on the running sandbox with `docker update`, the cgroup change a Company's own limit (`company

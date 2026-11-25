@@ -43,7 +43,8 @@ export type ReplyCard={id:number,kind:'draft',title:string,line:string,rows:{lab
  |(Hand&({state:'open'}|{state:'done',at:string,failed?:true}))
  |(Permission&({state:'open'}|{state:'decided',choice:PermissionChoice,at:string}|{state:'closed'}))
  |(Connect&{state:'open'|'connected'|'postponed'});
-type Hand={id:number,kind:'hand',title:string,line:string,app:string,rows:{label:string,value:string}[],url:string|null,note:string|null};
+// `screen`: the Agent stopped at this step on its own Screen (#714), so the card's second button opens that Screen.
+type Hand={id:number,kind:'hand',title:string,line:string,app:string,rows:{label:string,value:string}[],url:string|null,note:string|null,screen?:true};
 export const replyCardColumns='id,run_id,kind,title,content,state,answered_at,done_at,decided_at,created_at,said_before';
 // `said_before`: what the Agent wrote in the message that paused its Run on a question or a permission request (#647).
 export type ReplyCardRow={id:number,run_id:string,kind:string,title:string,content:unknown,state:string,answered_at:string|null,done_at:string|null,decided_at:string|null,created_at:string,said_before?:string|null};
@@ -59,8 +60,8 @@ const replyReaders:{[K in ReplyCard['kind']]:(row:ReplyCardRow,apps:AppStates)=>
   return state==='open'?{...asked,state:'open'}:state==='closed'||answer===undefined?{...asked,state:'closed'}:{...asked,state:'answered',answer};
  },
  hand:({id,title,content,state,done_at})=>{
-  const {line,app,rows,url,note}=content as {line:string,app:string,rows:{label:string,value:string}[],url?:string,note?:string};
-  const handed:Hand={id,kind:'hand',title,line,app,rows,url:url??null,note:note??null};
+  const {line,app,rows,url,note,screen}=content as {line:string,app:string,rows:{label:string,value:string}[],url?:string,note?:string,screen?:true};
+  const handed:Hand={id,kind:'hand',title,line,app,rows,url:url??null,note:note??null,...(screen===true?{screen}:{})};
   return state==='done'&&done_at?{...handed,state:'done',at:done_at}:{...handed,state:'open'};
  },
  permission:({id,title,content,state,decided_at})=>{

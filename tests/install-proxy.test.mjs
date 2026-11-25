@@ -130,6 +130,20 @@ test('the gateway drops a client X-Forwarded-Host on its way to Auth', () => {
  assert.ok(drop.test(auth) || (drop.test(server) && !/proxy_set_header/.test(auth)),'X-Forwarded-Host is set empty where /auth/v1/ uses it');
 });
 
+// nginx inherits the server-level proxy_set_header lines only into a location that sets none of its own. The Screen's
+// live stream sets its upgrade headers, so it repeats each server-level one: without Host the app reads its own address
+// as web:3000 and refuses the browser's Origin as another site's, and a client's claimed address would reach it (#713).
+test('a gateway location that sets its own headers repeats every server-level one', () => {
+ const conf=readFileSync('scripts/install-nginx.conf','utf8');
+ const server=conf.replace(/location [^{]*\{[^}]*\}/g,'');
+ const lines=text=>[...text.matchAll(/proxy_set_header\s+(\S+)\s+([^;]*);/g)].map(([,name,value])=>`${name.toLowerCase()} ${value}`);
+ const inherited=lines(server);
+ assert.ok(inherited.includes('host $http_host'));
+ const own=[...conf.matchAll(/location ([^{]*)\{([^}]*)\}/g)].filter(([,,body])=>/proxy_set_header/.test(body));
+ assert.ok(own.some(([,at])=>at.includes('/api/display/ws')),'the Screen\'s stream sets its own upgrade headers');
+ for(const [,at,body] of own) for(const line of inherited) assert.ok(lines(body).includes(line),`${at.trim()} repeats ${line}`);
+});
+
 test('the install job runs first run and sign-in through an HTTPS proxy whose origin is APP_ORIGIN', () => {
  const step=installJob().steps.find(step=>step.env?.INSTALL_REF);
  const run=step.run;

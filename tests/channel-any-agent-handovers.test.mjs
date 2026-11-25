@@ -61,7 +61,11 @@ test('a channel Run with no other Agent of the Company to hand to is offered no 
  assert.equal('hand_to_agent' in stores.given.pin_channel_run[0].specs,false,'nothing is asked of the database to pin a tool with no target');
  assert.deepEqual(starts[0].tools.map((/** @type {any} */ tool)=>tool.name),['show_draft']);
  const texts=toolSpecTexts();
- assert.deepEqual(channelToolSpecTexts([]),{show_draft:texts.show_draft,show_review:texts.show_review,hand_over:texts.hand_over});
+ // The handed step is the chat's tool without "on my screen" and its step (#714): a channel has no one person to open
+ // a Screen for.
+ const handOver=JSON.parse(texts.hand_over);
+ const properties={...handOver.parameters.properties}; delete properties.screen; delete properties.step;
+ assert.deepEqual(channelToolSpecTexts([]),{show_draft:texts.show_draft,show_review:texts.show_review,hand_over:JSON.stringify({...handOver,parameters:{...handOver.parameters,properties}})});
 });
 
 test('the channel\'s tool names each Agent once, even when two share a name, and keeps a name with no job line',()=>{

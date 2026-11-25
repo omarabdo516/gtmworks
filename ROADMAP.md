@@ -22,7 +22,7 @@ The order Omar set on 2026-11-21 (rs 0082, rounds 3 and 4):
 
 Blocked now: no release since 2026-11-21 07:28 UTC (#572), so lines marked "waiting for the release" are merged but not yet on a running install.
 
-In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one for each Agent (#197 to #199, decision 0060).
+In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one awake Screen per Company shared by its Agents (spec #710, decision 0068).
 
 ---
 
@@ -61,9 +61,9 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one for ea
 - ✅ **The Agent's details show its files and its screen.** [#21, #194, #195, #208]
 - 🟡 **Stop ends the whole Handover chain.** Stop in a chat, or on a channel message's Run, also stops every Handover started from it down the whole chain, each shown as stopped, and nothing more starts after it. Merged; waiting for the release (#572). [#474, #478, PR #571]
 - 🟡 **Add a file for the Agent to work from.** The files tab is disabled today; needs a proof on the pinned Engine first. [#196]
-- 🟡 **The Agent's screen: watch and wake.** Watch the Agent's browser in a large view, and "Wake it". [#197]
-- 🟡 **The Agent's screen: take control.** Take control for one session, then "Done". [#198]
-- 🟡 **A handed step opens the screen.** "Open the screen" and "Done it" in the view. [#199]
+- ✅ **The Agent's screen: watch and wake.** Its real state and picture in the Agent's details, a large view that keeps refreshing, and "Wake it". [#712, replaces #197]
+- ✅ **The Agent's screen: take control.** Take control for one session, live through gtmworks's own stream, then "Done"; closing, leaving or losing the connection gives it back, and anyone else watching sees who has control. [#713, replaces #198, ADR 0029]
+- ✅ **A handed step opens the screen.** An Agent hands a step over "on my screen": its card's "Open the screen" opens the view on "Done it", the Screen waits on its person with a banner, and "Done it" there is the chat card's one record. [#714, replaces #199]
 - 🟡 **Pause and resume an Agent.** The Settings page has the button, but the pinned Engine cannot pause one Agent, so the issue is closed while the control stays "Soon" in the test (unclear). [#177, commit 4748aca4]
 - ⚪ **Business line inside a Company.** A line with its own voice, audience and look inside one Company, only if real mixing shows the need; until then lines are separated in Company knowledge. [rs 0082 Q3, decision of 2026-11-21]
 - ⚪ **Repo manager Agent.** A specialist Agent that follows each repo; deferred until the other Agents prove efficient and stable. [rs 0082 Q14, Q18]

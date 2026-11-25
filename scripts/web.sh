@@ -39,7 +39,8 @@ if [[ "${1:-dev}" == "production" ]]; then
  # The build fetches the Google fonts (app/layout.tsx), so a browser test run builds without its offline guard, which
  # then covers the worker and the server (playwright.config.ts).
  if [[ $lane == 0 && "${GTMWORKS_WEB_PREBUILT:-}" != true ]]; then NODE_OPTIONS=${GTMWORKS_BUILD_NODE_OPTIONS-${NODE_OPTIONS:-}} npm run build; fi
- npx next start -p "$port"
+ # gtmworks's own web server serves the build and carries the Screen's live stream (scripts/web-server.mjs, ADR 0029).
+ PORT=$port node scripts/web-server.mjs
 else
- npx next dev -p "$port"
+ PORT=$port node scripts/web-server.mjs --dev
 fi

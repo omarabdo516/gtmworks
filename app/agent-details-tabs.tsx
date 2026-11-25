@@ -10,10 +10,10 @@ const Empty=({text}:{text:string})=><div className="panel-card"><p className="pa
 // The details panel's tabs around the lists the server read (agent-details-server.tsx): a list left out is empty and
 // shows the reference's empty line. The Agent's standing permissions (#166) close the Activity tab, as activityHTML ends
 // with permsHTML. It imports no server code, so a component test draws the tabs as the server does.
-export function detailsTabs({t,slug,agent,activity,tools,routines,permissions,tasks,files,fileCount,library,memory,log,logCount}:{t:I18n['t'],slug:string,agent:string,activity?:ReactNode,tools?:ReactNode,routines?:ReactNode,permissions?:ReactNode,tasks?:ReactNode,files?:ReactNode,fileCount:number,library?:ReactNode,memory?:ReactNode,log?:ReactNode,logCount:number}):Record<DetailsTab,ReactNode> {
- // design-reference: screenSecHTML. The pinned Engine shows no Agent's screen, and gtmworks keeps the browser and
- // computer tools off (lib/agent-toolsets.mjs), so the screen is always the reference's asleep frame: not a button.
- const screen=<section className="dp-sec" aria-labelledby="scr-h"><h3 className="dp-label"><span id="scr-h">{t('agentScreen')}</span></h3>
+export function detailsTabs({t,slug,agent,screen:live,activity,tools,routines,permissions,tasks,files,fileCount,library,memory,log,logCount}:{t:I18n['t'],slug:string,agent:string,screen?:ReactNode,activity?:ReactNode,tools?:ReactNode,routines?:ReactNode,permissions?:ReactNode,tasks?:ReactNode,files?:ReactNode,fileCount:number,library?:ReactNode,memory?:ReactNode,log?:ReactNode,logCount:number}):Record<DetailsTab,ReactNode> {
+ // design-reference: screenSecHTML. The Agent's Screen (#712) is read in the browser (app/agent-screen.tsx); until a
+ // page gives it, the screen is the reference's asleep frame: not a button.
+ const screen=live??<section className="dp-sec" aria-labelledby="scr-h"><h3 className="dp-label"><span id="scr-h">{t('agentScreen')}</span></h3>
   <div className="scr-card"><div className="scr-thumb is-static"><div className="scr is-off">
    <span className="scr__bar" aria-hidden="true"><span className="scr__dots"><i/><i/><i/></span><span className="scr__url" dir="ltr"/></span>
    <span className="scr__body"><span className="scr__off"><ShellIcon name="moon"/><span>{t('agentScreenOff')}</span></span></span>

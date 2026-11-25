@@ -23,6 +23,7 @@ import RecentChats from './recent-chats';
 import ChannelList from './channel-list';
 import { AgentTile, SidebarLive } from './sidebar-live';
 import { channelSidebar } from '@/lib/channels';
+import { screenHands } from '@/lib/agent-screen.mjs';
 import FirstRunChoice from './first-run-choice';
 import AgentGrid from './agent-grid';
 import { chooseWorkMode } from './work-mode-actions';
@@ -58,6 +59,8 @@ export const sidebarReads=cache(async(id:string|undefined)=>{
   !!id&&db.rpc('conversation_can_write',{c:id}).then(({data})=>data===true),
   agentIdentities(),
   companyLooks(db,id),
+  // The steps handed to this reader on an Agent's Screen (#714): those the page is drawn with are no arrival for the toast.
+  id?screenHands(db,id):[],
  ]);
 });
 type Company = {id:string,slug:string,name:string};
@@ -74,7 +77,7 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const slug=company?.slug;
  const chat=section==='chat'||section==='conversations'||section==='channels';
  const id=company?.id;
- const [[agents,states],conversations,workMode,channels,manage,canWrite,ids,looks]=await sidebarReads(id);
+ const [[agents,states],conversations,workMode,channels,manage,canWrite,ids,looks,handed]=await sidebarReads(id);
  const writer=!!id&&(owner||canWrite);
  markOpen('sidebar');
  // A chat is named as everywhere else (lib/conversation-title.mjs).
@@ -143,5 +146,5 @@ export default async function Shell({company,companies,section,title,crumbs,pers
  const callable=agents.map(({id,connection_id,name,speciality,template})=>({id,connection_id,name,speciality,role:template,status:states[id]??'idle'}));
  // Its New channel, Connect apps and Model (#158) read the Company and this reader's role.
  const place=company?.id?{slug:company.slug,company:company.id,person:personId,owner,manage,alone:workMode==='alone'}:null;
- return <LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} channels={channels} states={states}><RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider></SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider>;
+ return <LooksProvider looks={looks} change={owner&&company?{company:company.id,slug:company.slug,save:changeAgentLook,reset:resetAgentLook}:null}><AgentIdentitiesProvider agents={ids}><CallableAgentsProvider agents={callable}><ComposerPlaceProvider place={place}>{company?.id?<SidebarLive company={company.id} slug={company.slug} channels={channels} states={states} handed={handed}><RecentCardsProvider key={company.id} company={company.id} cardId={cardId}>{shown}</RecentCardsProvider></SidebarLive>:shown}</ComposerPlaceProvider></CallableAgentsProvider></AgentIdentitiesProvider></LooksProvider>;
 }
