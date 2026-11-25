@@ -1,5 +1,11 @@
 [
  {
+  "issue": 752,
+  "date": "2026-11-25",
+  "en": { "title": "Control of a Screen survives a dropped connection", "body": "When your connection drops for a moment while you have control of an Agent's Screen, the page reconnects with control still yours, and says control went back only when it really did." },
+  "ar": { "title": "الدفة بتفضل معاك لو النت فصل لحظة", "body": "لو النت فصل لحظة والدفة معاك على شاشة وكيل، الصفحة بترجع تتوصل والدفة لسه معاك، ومش بتقولك إن الدفة رجعت غير لما ترجع فعلاً." }
+ },
+ {
   "issue": 714,
   "date": "2026-11-25",
   "en": { "title": "Finish a step an Agent hands you on its Screen", "body": "When an Agent stops at a step on its Screen for you to do, its card in the chat says Open the screen, which opens the Screen with a banner naming the step and Done it; the Screen reads Awake · waiting on you for you alone, a toast tells you when it arrives, and Done it there or on the chat card records the step once." },

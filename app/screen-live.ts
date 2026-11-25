@@ -7,7 +7,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // giving it back are asked on the same socket, and closing it (the view closed, the page left) gives control back.
 // The picture is shown live only while a stream is open: when another person holds control there is none, since it may
 // show what they type. A socket that drops is opened again after a moment while the view stays open; one refused for a
-// session that needs refreshing first reads the Screen's state, which refreshes it.
+// session that needs refreshing first reads the Screen's state, which refreshes it. Control held when a socket drops is
+// the person's still when the server has not yet found the old socket dead, which hands it to the new one (#752): the
+// page says control went back only once the new socket says someone else has it.
 export type Control = 'agent' | 'mine' | 'other';
 type Rfb = { viewOnly: boolean, background: string, scaleViewport: boolean, resizeSession: boolean, focusOnClick: boolean, disconnect: () => void, focus: () => void, addEventListener: (type: string, listener: () => void) => void };
 type Events = { taken: () => void, given: () => void, refused: (reason: 'held' | 'notAllowed' | 'failed') => void, lost: () => void };
@@ -36,6 +38,8 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
   const handlers = useRef(events);
   useEffect(() => { handlers.current = events; });
   const mine = useRef(false);
+  // Control this page held when its socket dropped, until the next socket says who has it now.
+  const regaining = useRef(false);
   const rfb = useRef<Rfb | null>(null);
   const pending = useRef<string[]>([]);
 
@@ -71,10 +75,11 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
         if (message.stream === 'open') void startStream(open);
         else if (message.stream === 'closed') stopStream();
         if (message.control) {
-          const was = mine.current; mine.current = message.control === 'mine';
+          const was = mine.current, regained = regaining.current; mine.current = message.control === 'mine'; regaining.current = false;
+          if (regained && !mine.current) handlers.current.lost();
           setControl(message.control); setBy(message.by ?? '');
           if (rfb.current) rfb.current.viewOnly = !mine.current;
-          if (mine.current && !was) { handlers.current.taken(); rfb.current?.focus(); }
+          if (mine.current && !was) { if (!regained) handlers.current.taken(); rfb.current?.focus(); }
         }
         if (message.given) handlers.current.given();
         if (message.refused) handlers.current.refused(message.refused);
@@ -83,9 +88,11 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
         if (socket.current === open) socket.current = null;
         stopStream();
         if (ended) return;
-        if (mine.current) { mine.current = false; handlers.current.lost(); }
+        const held = mine.current || regaining.current; mine.current = false; regaining.current = false;
         setControl('agent'); setBy('');
-        if (event.code === 4001 || event.code === 4404) { onStale(); return; }
+        if (event.code === 4001 || event.code === 4404) { if (held) handlers.current.lost(); onStale(); return; }
+        // A socket that dropped on its own: the next one says whether control is still this person's.
+        if (held && event.code !== 4401) regaining.current = true; else if (held) handlers.current.lost();
         if (event.code === 4401) onStale();
         retry = setTimeout(connect, retryMs);
       });
@@ -93,7 +100,7 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
     connect();
     return () => {
       ended = true; clearTimeout(retry); stopStream();
-      const open = socket.current; socket.current = null; mine.current = false;
+      const open = socket.current; socket.current = null; mine.current = false; regaining.current = false;
       open?.close(1000);
       setControl('agent'); setBy(''); pending.current = [];
     };
@@ -103,5 +110,5 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
     const text = JSON.stringify(message);
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(text); else pending.current.push(text);
   }, []);
-  return { control, by, live, mine: control === 'mine', take: useCallback(() => ask({ take: true }), [ask]), giveBack: useCallback(() => ask({ giveBack: true }), [ask]), held: () => mine.current };
+  return { control, by, live, mine: control === 'mine', take: useCallback(() => ask({ take: true }), [ask]), giveBack: useCallback(() => ask({ giveBack: true }), [ask]), held: () => mine.current || regaining.current };
 }
