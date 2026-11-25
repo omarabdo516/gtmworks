@@ -387,6 +387,7 @@ nothing_left() {
   if docker volume ls -q | grep -Eq '^gtmworks-(work|sandbox-hostkey)-second-company-'; then fail "$1 left a sandbox volume"; fi
   if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-work-second-company-'; then fail "$1 left a work network"; fi
   [[ -z $(docker ps -aq --filter 'name=^gtmworks-exit-second-company-') ]] || fail "$1 left an exit container"
+  [[ -z $(docker ps -aq --filter 'name=^gtmworks-screen-driver-second-company-') ]] || fail "$1 left the Screen driver's container"
   if docker network ls --format '{{.Name}}' | grep -q '^gtmworks-exit-second-company-'; then fail "$1 left an exit's network"; fi
   [[ $(db -c "select count(*) from public.companies where name='Second Company'") == 0 ]] || fail "$1 left no Company"
   [[ $(db -c "select count(*) from public.company_engines where address like '%second-company%'") == 0 ]] || fail "$1 left no Engine record"
@@ -954,18 +955,23 @@ sandbox_driver=$(docker exec "$sandbox" sh -c 'sha256sum "$(readlink -f "$(comma
 [[ -n $engine_driver && $engine_driver == "$sandbox_driver" ]] || fail "the Engine holds the sandbox image's own cua-driver"
 screen_marker="screen-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 screen_xvnc() { docker exec "$1" ps -eo args= | awk '/X(tiger)?vnc :20 / {found=1} END {exit !found}'; }
+# What the Engine and the sandbox said about the Screen, printed when a Screen step fails.
+screen_logs() {
+  docker exec "$engine_id" sh -c 'grep -hiE "computer.use|bot.desktop|cua|screen" /opt/data/logs/*.log /opt/data/profiles/*/logs/*.log 2> /dev/null | tail -n 40' >&2 || true
+  docker exec "$sandbox" sh -c 'tail -n 20 /tmp/hermes-bot-desktop/*/launcher.log 2> /dev/null; ps -eo args= | grep -iE "vnc|xfce|chrom|cua" | grep -v grep | cut -c1-200' >&2 || true
+}
 engine_node "$engine_key" - screen-open "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-open.log \
-  || fail "a Run is offered computer_use and the Agent opens a page on the Company's Screen"
+  || { screen_logs; fail "a Run is offered computer_use and the Agent opens a page on the Company's Screen"; }
 grep -q '"screen":{"running":true,"display":":20","placement":"terminal:ssh"}' screen-open.log || fail 'display.status reads the Screen awake on :20 inside the sandbox'
 screen_xvnc "$sandbox" || fail "the Screen's X server runs in the Company's sandbox"
 if screen_xvnc "$engine_id"; then fail "no Screen runs on the Engine"; fi
 [[ $(docker exec "$sandbox" cat "/work/$first/$screen_marker-screen.html") == *"SCREEN-$screen_marker"* ]] || fail "the page the Agent opened is in its own folder of the work folder"
 engine_node "$engine_key" - screen-sleep "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-sleep.log \
-  || fail 'the idle Screen goes to sleep by itself'
+  || { screen_logs; fail 'the idle Screen goes to sleep by itself'; }
 grep -q '"screen":{"running":false' screen-sleep.log || fail 'display.status reads the idle Screen asleep'
 if screen_xvnc "$sandbox"; then fail "the asleep Screen's X server is stopped"; fi
 engine_node "$engine_key" - screen-wake "$screen_marker" < scripts/check-install-profiles.mjs | tee screen-wake.log \
-  || fail "the Agent's next use wakes the Screen"
+  || { screen_logs; fail "the Agent's next use wakes the Screen"; }
 grep -q '"screen":{"running":true,"display":":20","placement":"terminal:ssh"}' screen-wake.log || fail 'display.status reads the Screen awake again'
 screen_xvnc "$sandbox" || fail "the woken Screen's X server runs in the sandbox again"
 # Apps (#30), on the first company's profile with no vendor sign-in: the registry's apps are in the pinned
@@ -1526,7 +1532,7 @@ probe 'after the update from the one-Engine release whose Engine does not start'
 [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Name}}{{end}}{{end}}' gtmworks-install-hermes-1) == gtmworks-install_hermes ]] || fail_update 'the hermes Engine keeps its volume'
 [[ $(sed -n 's/^HERMES_API_KEY=//p' .env.install) == "$key" ]] || fail_update 'the Engine key is back in .env.install'
 [[ ! -e .engines ]] || fail_update 'the failed update leaves no Engine folder'
-[[ -z $(docker ps -aq --filter 'name=^gtmworks-(engine|sandbox|exit)-first$') ]] || fail_update "the failed update leaves no Engine, sandbox or exit of the template"
+[[ -z $(docker ps -aq --filter 'name=^gtmworks-(engine|sandbox|exit|screen-driver)-first$') ]] || fail_update "the failed update leaves no Engine, sandbox or exit of the template"
 if docker volume inspect gtmworks-work-first > /dev/null 2>&1; then fail_update 'the failed update leaves no work folder'; fi
 if docker network inspect gtmworks-engine-first > /dev/null 2>&1; then fail_update "the failed update leaves no Engine network"; fi
 docker run --rm --network gtmworks-install_default curlimages/curl:8.12.1 -sf -H "Authorization: Bearer $key" http://hermes:9119/api/profiles \
@@ -1705,8 +1711,11 @@ marker="stable-update-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 tell_engine "$engine_before" "$profile" "$marker" || fail "write a memory in the Company's profile on $stable"
 sign_in_engine "$engine_before" || fail "sign the Company in on its Engine on $stable"
 # A Company whose own sandbox memory is below this release's default, as the release before the Screens wrote it (#711):
-# the update raises it to the default.
+# the update raises it to the default. A release of the one-Engine shape (before ADR 0018) keeps no Company limits at all,
+# so its Company follows the default and only the sandbox's memory is read after the update.
+lowered=no
 if [[ -f .engines/first/.env ]]; then
+  lowered=yes
   { grep -Ev '^SANDBOX_MEMORY(_DEFAULT)?=' .engines/first/.env; echo 'SANDBOX_MEMORY=1g'; } > .engines/first/.env.low && mv .engines/first/.env.low .engines/first/.env \
     || fail "give the Company a memory limit below the default on $stable"
 fi
@@ -1733,10 +1742,13 @@ engine=$(first_engine_id)
 sandbox=$(docker ps -q --filter 'name=^gtmworks-sandbox-first$')
 [[ -n $sandbox && $(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sandbox") == healthy ]] || fail "the updated Company's work sandbox is healthy"
 [[ $(docker inspect -f '{{.Config.Image}}' "$sandbox") == "$(cat .work-sandbox-image)" ]] || fail 'the updated sandbox runs the image the install recorded'
-# #711: the Company's lower memory limit is raised to this release's default, and its sandbox runs with it.
+# #711: the Company's lower memory limit, when its release kept one, is raised to this release's default, and its sandbox
+# runs with the default either way.
 default_memory=$(sed -n 's/^    mem_limit: ${SANDBOX_MEMORY:-\([0-9]*\)g}$/\1/p' scripts/engine-template.yml)
 [[ -n $default_memory ]] || fail "this release's default sandbox memory, in gigabytes"
-[[ $(sed -n 's/^SANDBOX_MEMORY=//p' .engines/first/.env) == "${default_memory}g" ]] || fail "the update raised the Company's lower memory limit to the default (${default_memory}g)"
+if [[ $lowered == yes ]]; then
+  [[ $(sed -n 's/^SANDBOX_MEMORY=//p' .engines/first/.env) == "${default_memory}g" ]] || fail "the update raised the Company's lower memory limit to the default (${default_memory}g)"
+fi
 [[ $(docker inspect -f '{{.HostConfig.Memory}}' "$sandbox") == $(( default_memory * 1073741824 )) ]] || fail "the updated sandbox runs with the default memory (${default_memory}g)"
 # The Owner signs in, the Company's sign-in still serves, and the Agent still remembers what it was told on $stable.
 ENGINE_KEY="$key" compose exec -T -e ENGINE_KEY web node --input-type=module - "$marker" < "$root/scripts/check-install-update.mjs" \

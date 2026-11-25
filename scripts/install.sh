@@ -121,6 +121,9 @@ sandbox_container() { printf 'gtmworks-sandbox-%s' "$1"; }
 # The sandbox's exit (#394): its container and the one network of the Company's that routes out.
 exit_container() { printf 'gtmworks-exit-%s' "$1"; }
 exit_network() { printf 'gtmworks-exit-%s' "$1"; }
+# The one-off step that copies the sandbox image's Screen driver into the Engine's volume (#711): its container stays
+# after it exits, so it has a name of its own, taken away with the sandbox and the exit.
+screen_driver_container() { printf 'gtmworks-screen-driver-%s' "$1"; }
 work_volume() { printf 'gtmworks-work-%s' "$1"; }
 work_network() { printf 'gtmworks-work-%s' "$1"; }
 host_key_volume() { printf 'gtmworks-sandbox-hostkey-%s' "$1"; }
@@ -276,6 +279,7 @@ engine() {
   WORK_VOLUME=$(work_volume "$slug") \
   WORK_NETWORK=$(work_network "$slug") \
   EXIT_NAME=$(exit_container "$slug") \
+  SCREEN_DRIVER_NAME=$(screen_driver_container "$slug") \
   EXIT_NETWORK=$(exit_network "$slug") \
   docker compose --project-name "$(engine_project "$slug")" --env-file "$(engine_folder "$slug")/.env" -f "$engine_template" "$@"
 }
@@ -314,8 +318,9 @@ write_engine_env() {
   slug=$1 key=$2 volume=$3 network=$4
   folder=$(engine_folder "$slug")
   mkdir -p "$folder" || return 1
-  # The Company's own sandbox limits (#396) stay when the file is written again, as each run writes the first Engine's.
-  kept=$(grep -E '^SANDBOX_(MEMORY|CPUS)=' "$folder/.env" 2> /dev/null || true)
+  # The Company's own sandbox limits (#396) stay when the file is written again, as each run writes the first Engine's,
+  # with the default its memory limit was written under (#711), so an update does not raise the Owner's own limit again.
+  kept=$(grep -E '^SANDBOX_(MEMORY|CPUS|MEMORY_DEFAULT)=' "$folder/.env" 2> /dev/null || true)
   {
     printf 'ENGINE_NAME=%s\n' "$(engine_project "$slug")" &&
     printf 'ENGINE_KEY=%s\n' "$key" &&
@@ -418,7 +423,7 @@ healthy_within() {
 engine_destroy() {
   slug=$1 volume=$2 network=$3
   engine "$slug" down -v --remove-orphans > /dev/null 2>&1 || true
-  docker rm -f "$(engine_project "$slug")" "$(sandbox_container "$slug")" "$(exit_container "$slug")" > /dev/null 2>&1 || true
+  docker rm -f "$(engine_project "$slug")" "$(sandbox_container "$slug")" "$(exit_container "$slug")" "$(screen_driver_container "$slug")" > /dev/null 2>&1 || true
   docker volume rm "$volume" "$(work_volume "$slug")" "$(host_key_volume "$slug")" > /dev/null 2>&1 || true
   docker network rm "$(work_network "$slug")" "$(exit_network "$slug")" > /dev/null 2>&1 || true
   # The app and the worker may have joined this Engine's network before a later step failed: detach them first, or the
@@ -537,7 +542,7 @@ remove_new_sandbox_parts() {
   [ -z "$(work_sandbox_ref)" ] || return 0
   left=
   for name in $(engine_names); do
-    docker rm -f "$(sandbox_container "$name")" "$(exit_container "$name")" > /dev/null 2>&1 || true
+    docker rm -f "$(sandbox_container "$name")" "$(exit_container "$name")" "$(screen_driver_container "$name")" > /dev/null 2>&1 || true
     if grep -qxF "$name" .install-lock/sandbox-keys-made 2> /dev/null; then
       volume=$(sed -n 's/^ENGINE_VOLUME=//p' "$(engine_folder "$name")/.env")
       if [ -n "$volume" ]; then
@@ -576,7 +581,7 @@ restore_old_engine() {
   old_engine=$(cat .install-lock/old-engine)
   rm -f .install-lock/work-sandbox-image
   engine first down --remove-orphans > /dev/null 2>&1 || true
-  docker rm -f "$(engine_project first)" "$(sandbox_container first)" "$(exit_container first)" > /dev/null 2>&1 || true
+  docker rm -f "$(engine_project first)" "$(sandbox_container first)" "$(exit_container first)" "$(screen_driver_container first)" > /dev/null 2>&1 || true
   # A listing Docker could not give is never read as "removed": both Engines would write the one volume.
   left_engine=$(docker ps -aq --filter "name=^$(engine_project first)\$" 2> /dev/null) \
     || { echo "Docker could not say whether the Engine $(engine_project first) is gone, so the previous release's Engine stays stopped." >&2; return 1; }

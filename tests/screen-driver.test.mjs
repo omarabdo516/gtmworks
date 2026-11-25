@@ -34,6 +34,19 @@ test("an Engine names a driver in its own data volume and starts only once the s
   assert.equal(driver.environment, undefined);
 });
 
+// The step's container stays after it exits, as Compose keeps a finished one. It is named from the Engine's folder as
+// the sandbox and the exit are, and never `gtmworks-engine-…`, which counts Engines; whatever takes a Company's Engine
+// away (a failed `company add`, a rolled-back update) removes it with them.
+test("the step's container is named for its Company and goes with its Engine, its sandbox and its exit", () => {
+  assert.equal(driver.container_name, '${SCREEN_DRIVER_NAME:-gtmworks-screen-driver}');
+  const install = readFileSync('scripts/install.sh', 'utf8');
+  assert.match(install, /^screen_driver_container\(\) \{ printf 'gtmworks-screen-driver-%s' "\$1"; \}$/m);
+  assert.match(install, /^  SCREEN_DRIVER_NAME=\$\(screen_driver_container "\$slug"\) \\$/m);
+  const removals = install.split('\n').filter(line => /docker rm -f .*\$\(exit_container /.test(line));
+  assert.ok(removals.length >= 3, 'every removal of a sandbox and its exit');
+  for (const line of removals) assert.match(line, /\$\(screen_driver_container "?\$?\w+"?\)/, line.trim());
+});
+
 // The step's own script, run here against a folder standing in for the Engine's volume and a sandbox image whose
 // cua-driver is a link to the real file, as in the base image (/usr/local/bin/cua-driver -> /opt/cua-driver/cua-driver).
 function step(t) {

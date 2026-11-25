@@ -80,6 +80,9 @@ services:
     # unchanged one is not copied again. It runs as root with only the right to write into the Engine's folder, no
     # network and nothing else of the Engine's: the Engine's user owns the volume and the sandbox's user is not that one.
     image: ${SANDBOX_IMAGE:-gtmworks-work-sandbox:local}
+    # Named from the Engine's folder as the sandbox and the exit are (scripts/install.sh), never gtmworks-engine-…,
+    # which names Engines only; the container stays after it exits and goes with its Engine.
+    container_name: ${SCREEN_DRIVER_NAME:-gtmworks-screen-driver}
     restart: "no"
     user: "0:0"
     network_mode: none

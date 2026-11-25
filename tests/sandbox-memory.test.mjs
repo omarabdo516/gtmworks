@@ -17,7 +17,7 @@ const fn = name => {
   if (install.slice(start + 1).match(/^[a-z_]+\(\) \{ [^\n]*\}\n/)) return install.slice(start + 1, install.indexOf('\n', start + 1) + 1);
   return install.slice(start + 1, install.indexOf('\n}\n', start) + 3);
 };
-const helpers = ['engine_folder', 'sandbox_limit', 'write_limits', 'default_sandbox_memory', 'megabytes', 'raise_sandbox_memory'].map(fn).join('');
+const helpers = ['engine_project', 'engine_folder', 'write_engine_env', 'sandbox_limit', 'write_limits', 'default_sandbox_memory', 'megabytes', 'raise_sandbox_memory'].map(fn).join('');
 const template = readFileSync('scripts/engine-template.yml', 'utf8');
 const defaultMemory = template.match(/mem_limit: \$\{SANDBOX_MEMORY:-([0-9]+[mg])\}/)[1];
 
@@ -70,4 +70,15 @@ test('an update raises a Company limit below the default to it, once, and never 
   const lowered = install.run(`write_limits low 1g 1.5 && raise_sandbox_memory low`);
   assert.equal(lowered.status, 0, lowered.stderr);
   assert.match(install.env('low'), /^SANDBOX_MEMORY=1g$/m);
+});
+
+test("a limit the Owner set below the default after the update is kept when a later run writes the Engine's file again", t => {
+  const install = engines(t, { first: `ENGINE_KEY=${'b'.repeat(64)}\n` });
+  // The Owner lowers the first Company's memory after the update; every run of the installer writes the first Engine's
+  // file again (its key, volume and network), and the next update must still read the limit as the Owner's.
+  const run = install.run(`write_limits first 1g 1.5 && write_engine_env first ${'b'.repeat(64)} gtmworks-engine-first gtmworks-engine-first && raise_sandbox_memory first`);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(install.env('first'), /^SANDBOX_MEMORY=1g$/m);
+  assert.match(install.env('first'), /^SANDBOX_CPUS=1\.5$/m);
+  assert.doesNotMatch(run.stdout, /raised/);
 });

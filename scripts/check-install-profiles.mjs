@@ -992,7 +992,10 @@ try {
  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message};
  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
  assert.deepEqual(sent,{conversation});
- const answer=await until('reply on the Screen check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300);
+ // A Run that never replies says how far it came: how often it asked the model, with which tools, and what each tool
+ // answered, cut short (the tool answers are the Screen's and the sandbox's, never a key).
+ const answer=await until('reply on the Screen check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300)
+  .catch(error=>{ throw new Error(`${error.message}: the model was asked ${asked.length} times, first offered ${JSON.stringify(offered[0]?.filter(name=>/computer|terminal/.test(name||'')))}, tool answers ${JSON.stringify(results.map(result=>result.slice(0,300)))}`); });
  assert.ok(answer.body.includes(reply),answer.body);
  // The Run itself was offered computer_use, and never the browser tools no Agent gets: what the model was sent, not the
  // toolsets the profile reports, which read its settings only.
