@@ -14,7 +14,7 @@ export type DialogExitRecord=(string|boolean|string[])[];
 // A spec that records more (an entrance, the composer taking focus) pushes its own records into the same window.seen.
 export async function recordDialogExit(page:Page,{part,shown,alongside=[]}:{part:string,shown:string,alongside?:string[]}) {
  await page.evaluate(({part,shown,alongside})=>{
-  const seen:(string|boolean|string[])[][]=[]; Object.assign(window,{seen});
+  const seen:DialogExitRecord[]=[]; Object.assign(window,{seen});
   const at=()=>location.pathname+location.search;
   let opened=!!document.querySelector(shown);
   new MutationObserver(()=>{
@@ -26,5 +26,5 @@ export async function recordDialogExit(page:Page,{part,shown,alongside=[]}:{part
  },{part,shown,alongside});
 }
 
-// What recordDialogExit, and anything the spec added, has seen so far.
-export const recordedDialogExit=(page:Page)=>page.evaluate(()=>(window as unknown as {seen:DialogExitRecord[]}).seen);
+// Everything in window.seen so far: recordDialogExit's records and any the spec pushed beside them.
+export const dialogRecords=(page:Page)=>page.evaluate(()=>(window as unknown as {seen:DialogExitRecord[]}).seen);

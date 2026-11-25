@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fakeHermes } from './fake-hermes.mjs';
 import { laneHermes } from './lane-hermes';
 import { signIn } from './sign-in';
-import { dialogExit, recordDialogExit, recordedDialogExit } from './dialog-exit';
+import { dialogExit, recordDialogExit, dialogRecords } from './dialog-exit';
 import { instructionsOf, roleAppNames, roleTemplates } from '../lib/role-templates.mjs';
 
 // #14, the ready-made gallery. Lead is RS Learning's main Agent on the Company's own profile in a fake Hermes, which
@@ -98,7 +98,7 @@ test('the Owner finds a ready-made role, adds it, and Lead makes the same Agent 
  await page.keyboard.press('Escape');
  await expect(page).toHaveURL(/\/c\/rs-learning\/chat\?new=agent$/);
  await expect(page.getByRole('dialog')).toHaveCount(0);
- expect(await recordedDialogExit(page)).toEqual([['closing',dialogExit,'/c/rs-learning/chat?new=ready',true],['gone','/c/rs-learning/chat?new=ready']]);
+ expect(await dialogRecords(page)).toEqual([['closing',dialogExit,'/c/rs-learning/chat?new=ready',true],['gone','/c/rs-learning/chat?new=ready']]);
  await expect(page.getByRole('textbox',{name:'Message'})).toBeFocused();
 
  await link.click();

@@ -2,7 +2,7 @@ import { test, expect } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { signIn, openNavigation, emailLink } from './sign-in';
-import { dialogExit, recordDialogExit, recordedDialogExit } from './dialog-exit';
+import { dialogExit, recordDialogExit, dialogRecords, type DialogExitRecord } from './dialog-exit';
 
 // The settings overlay (#26): opened from the account menu over the page, closed back to it, one address per state,
 // the company's real Agents (the main one first), and the Owner's agent controls checked again on the server.
@@ -478,13 +478,13 @@ for(const who of [{role:'Owner',email:'omar@example.com',sections:['account','ag
  await signIn(page,who.email,'/c/rs-learning/work/board');
  await recordDialogExit(page,{part:'.sov',shown:'.sov-root:not([hidden])'});
  await page.evaluate(()=>{
-  const {seen}=window as unknown as {seen:string[][]};
+  const {seen}=window as unknown as {seen:DialogExitRecord[]};
   // The entrance, and any other animation of the overlay, from animationstart: the overlay stays, so the event comes
   // however late the frame. The exit of an overlay already closing is skipped: tests/dialog-exit.ts reads it from the
   // closing class (#595, #725). An exit started without the closing class (a section change) is still recorded.
   document.addEventListener('animationstart',event=>{ const part=event.target as Element; if(part.classList.contains('sov')&&!(event.animationName==='gw-modal-out'&&part.classList.contains('is-closing'))) seen.push([event.animationName,location.pathname+location.search]); });
  });
- const seen=()=>recordedDialogExit(page);
+ const seen=()=>dialogRecords(page);
  await openNavigation(page);
  const settings=page.getByRole('menu').getByRole('menuitem').filter({hasText:/^Settings/});
  await expect(async()=>{ if(!await settings.isVisible()) await page.locator('.sidebar #btn-me').click(); await expect(settings).toBeVisible({timeout:2000}); }).toPass({timeout:30000});
@@ -499,7 +499,7 @@ for(const who of [{role:'Owner',email:'omar@example.com',sections:['account','ag
  await overlay.getByRole('button',{name:'Close settings and go back'}).click();
  await expect(page).toHaveURL(/\/c\/rs-learning\/work\/board$/);
  await expect(overlay).toHaveCount(0);
- // The exit leaves from the last section's address; the first section, Company, has the bare one.
+ // The exit leaves from the last section's address; Company, the default section, has the bare one.
  const last=`/c/rs-learning/settings${who.sections.at(-1)==='company'?'':`?section=${who.sections.at(-1)}`}`;
  expect(await seen()).toEqual([['gw-fade-in','/c/rs-learning/settings'],['closing',dialogExit,last],['gone',last]]);
 });
