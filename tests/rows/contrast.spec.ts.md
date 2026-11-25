@@ -1,0 +1,7 @@
+| `contrast.spec.ts` | Text contrast on the key screens, read from the styles the browser draws with and never from a picture: every visible text run of the visual lane's screens (Home, the board, a Card, the chat, a channel, Agents, an Agent's details, Members, Numbers, Approvals, a proposed change in a chat, Recurring tasks, a proposal on an Agent's Settings page, each with the state the lane gave it, and sign-in) keeps 4.5:1 in the dark theme, in Arabic and English at 1440 and 390, and the quiet labels of Home, the board and a Card keep 4.5:1 and stay weaker than the body text in the light theme. (moved from visual-lane.spec.ts when the visual lane went, #257, #805) | — | contrast-measure.spec.ts (the measure itself); first-run.spec.ts (first run's form) | new (#805) |
+
+## Cases
+
+| `contrast.spec.ts` "every key screen keeps its text at 4.5:1 in ar, dark and light" | stays | Contrast is never removed (#218): the visual lane measured it beside its pictures, and it is measured here on its own now that the lane is gone (#805). |
+| `contrast.spec.ts` "every key screen keeps its text at 4.5:1 in en, dark and light" | stays | Contrast is never removed (#218), in both languages: the lane measured the quiet labels in English too (#257, #805). |
+| `contrast.spec.ts` "the sign-in page keeps its text at 4.5:1 in the dark theme, in Arabic and English at 1440 and 390" | stays | Contrast is never removed (#218): the page a visitor sees first, signed out, so it has no Member's language (#805). |

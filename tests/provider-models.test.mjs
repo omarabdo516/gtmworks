@@ -4,6 +4,7 @@ import { readModelAccess, readProviderModels, changeProviderModel, offeredModels
 import { readCompanyModels, changeCompanySetting } from '../lib/engine-settings.mjs';
 import { companyProfile } from '../lib/agent-toolsets.mjs';
 import { setProviderKey } from '../lib/hermes.mjs';
+import { changeFallbackModel } from '../lib/fallback-model.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
 
 // #620 (spec #611): each Provider's models are switched on or off by the Owner, and a model choice is offered once while
@@ -160,6 +161,32 @@ test('a partly connected subscription lists its own profile\'s models beside a s
   const switches=await readProviderModels(db,{company,hermes:install(fake)});
   assert.deepEqual(switches['sub-anthropic'],[{model:'claude-opus-4-6',enabled:true},{model:'claude-sonnet-4-6',enabled:false}]);
   assert.deepEqual(switches['key-anthropic'],[{model:'claude-opus-4-6',enabled:true}]);
+ } finally { await fake.close(); }
+});
+
+test('a model switched off on the only Provider that lists it is offered nowhere, though another Provider of its provider is on (#735)', async () => {
+ const fake=await fakeHermes();
+ try {
+  seed(fake);
+  // As in #638: the Claude sign-in on the Company's profile reaches Opus and Sonnet, the shared space's Anthropic key Opus
+  // only. The key has no switch for Sonnet, since it does not list it; that must not keep Sonnet on.
+  delete fake.settings.defaultCredentials.anthropic;
+  fake.settings.profiles.get(main).credentials.anthropic='test-only-claude-oauth';
+  const {db}=database();
+  const sonnet={provider:'anthropic',model:'claude-sonnet-4-6'};
+  assert.ok(modelEnabled(await access(db,fake),sonnet),'on the subscription, Sonnet is offered');
+  assert.equal((await changeProviderModel(db,{company,entry:'sub-anthropic',model:sonnet.model,enabled:false})).status,200);
+  const found=await access(db,fake);
+  assert.equal(modelEnabled(found,sonnet),false,'off on the subscription, the key does not keep it on');
+  assert.equal(modelEnabled(found,{provider:'anthropic',model:'claude-opus-4-6'}),true,'Opus, which both list, stays on');
+  assert.deepEqual(pairs(offeredModels([sonnet,{provider:'anthropic',model:'claude-opus-4-6'}],found)),['anthropic/claude-opus-4-6'],'not in the chat\'s "+" menu');
+  const picks=await ownerPicks(db,fake);
+  assert.ok(!picks.company.includes('anthropic/claude-sonnet-4-6')&&!picks.agent.includes('anthropic/claude-sonnet-4-6'),'nor on Agents');
+  assert.deepEqual(await changeCompanySetting(db,{company,agent:'a1',setting:'model',value:'anthropic/claude-sonnet-4-6',hermes:install(fake)}),{state:'notEnabled'});
+  assert.deepEqual(await changeFallbackModel(db,{company,value:'anthropic/claude-sonnet-4-6',hermes:install(fake)}),{status:400,body:{error:'settingModelNotEnabled'}},'nor as the Fallback model');
+  // Opus off on the key alone: the subscription lists it and has it on, so it stays offered.
+  await changeProviderModel(db,{company,entry:'key-anthropic',model:'claude-opus-4-6',enabled:false});
+  assert.equal(modelEnabled(await access(db,fake),{provider:'anthropic',model:'claude-opus-4-6'}),true,'a model two Providers list stays while either has it on');
  } finally { await fake.close(); }
 });
 

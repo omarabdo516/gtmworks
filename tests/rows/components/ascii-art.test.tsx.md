@@ -1,1 +1,1 @@
-| `components/ascii-art.test.tsx` | The sign-in artwork holds one frame of paperclips with reduced motion, moves without it, and holds still again when reduced motion comes back. (moved from app.spec.ts, #218) | 0.3 s | visual-lane.spec.ts (the sign-in screens and their first frame) | new |
+| `components/ascii-art.test.tsx` | The sign-in artwork holds one frame of paperclips with reduced motion, moves without it, and holds still again when reduced motion comes back. (moved from app.spec.ts, #218) | 0.3 s | — | new |

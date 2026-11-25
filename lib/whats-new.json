@@ -120,6 +120,18 @@
   "ar": { "title": "المالك بس هو اللي يغيّر في المالك", "body": "المدير مبقاش يقدر يشيل مالك أو يغيّر دوره أو صلاحياته، ولا يغيّر دوره أو صلاحياته هو، وصفحة الفريق مبقتش بتعرضله الحاجات دي؛ والمديرين لسه بيديروا المساهمين والمشاهدين والمديرين التانيين زي الأول." }
  },
  {
+  "issue": 752,
+  "date": "2026-11-25",
+  "en": { "title": "Control of a Screen survives a dropped connection", "body": "When your connection drops for a moment while you have control of an Agent's Screen, the page reconnects with control still yours, and says control went back only when it really did." },
+  "ar": { "title": "الدفة بتفضل معاك لو النت فصل لحظة", "body": "لو النت فصل لحظة والدفة معاك على شاشة وكيل، الصفحة بترجع تتوصل والدفة لسه معاك، ومش بتقولك إن الدفة رجعت غير لما ترجع فعلاً." }
+ },
+ {
+  "issue": 735,
+  "date": "2026-11-25",
+  "en": { "title": "A model you switch off stays off", "body": "Switching a model off on one provider now takes it out of the chat's model menu, every agent's model choice and the Fallback model, unless another provider that lists that model still has it on." },
+  "ar": { "title": "الموديل اللي بتقفله بيفضل مقفول", "body": "لما تقفل موديل في مزوّد، بقى بيختفي من قايمة الموديلات في المحادثة ومن اختيار موديل أي وكيل ومن الموديل البديل، إلا لو فيه مزوّد تاني بيعرض نفس الموديل ولسه مشغّله." }
+ },
+ {
   "issue": 708,
   "date": "2026-11-24",
   "en": { "title": "Agents send you files in the chat", "body": "When an Agent makes a PDF, a spreadsheet, an image or any other file in its work folder, it sends it in its reply as a file you open and download, with images shown as thumbnails, and a file it cannot send says so instead of showing a path." },

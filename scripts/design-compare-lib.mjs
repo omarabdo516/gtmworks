@@ -121,7 +121,7 @@ export const screens = {
   account: { reference: { steps: settingsSection('account') }, builtPath: '/c/rs-learning/settings?section=account' },
   knowledge: { reference: { steps: settingsSection('knowledge') }, builtPath: '/c/rs-learning/settings?section=knowledge' },
   // Recurring tasks (#31): every Agent's Routines. Built: the Routines are the Engine's, so they need an Engine that holds
-  // some (the visual lane's `routines` state and its fake Engine).
+  // some (`npm run cloud:up`'s fake Engine with Routines made there).
   routines: { reference: { steps: settingsSection('routines') }, builtPath: '/c/rs-learning/settings?section=routines' },
   // Good morning (#182): the main Agent's daily message, on its Settings page. Built: the switch and time are the Engine's,
   // so they need an Engine that holds the main Agent's own profile (`npm run cloud:up`'s fake Engine with an Agent made

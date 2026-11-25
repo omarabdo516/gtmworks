@@ -84,7 +84,7 @@ test('the dependencies come from the fast job\'s cache too, installed only on a 
   assert.match(save.if, /steps\.modules\.outputs\.cache-hit != 'true'/);
 });
 
-test('ci.sh installs no system package for the CI integration run, and the visual lane keeps its browser', () => {
+test('ci.sh installs no system package for the CI integration run, and the navigation budgets keep their browser', () => {
   const text = readFileSync('ci.sh', 'utf8');
   const arm = name => {
     const start = text.indexOf(`\n ${name})`);
@@ -96,21 +96,21 @@ test('ci.sh installs no system package for the CI integration run, and the visua
   // The workflow restores the browser above, so the CI run must not reach for a package mirror: the arm calls no helper
   // that would install one.
   assert.doesNotMatch(arm('integration'), /install_chromium|--with-deps|\bapt(?:-get)?\b/);
-  // The visual lane on main still installs the browser with its system packages (#257, #359).
+  // The navigation budgets on main still install the browser with its system packages (#224, #359).
   assert.match(text, /npx --yes "playwright@\$version" install --with-deps chromium/);
-  assert.match(arm('visual'), /install_chromium/);
+  assert.match(arm('budgets'), /install_chromium/);
 });
 
-// #359: the browser installs beside start_lane's npm ci, not in series after the lane, and is waited for only before
-// the navigation budgets. It runs the locked Playwright from outside the checkout, so it never reads the node_modules
-// npm ci is rewriting.
-test('ci.sh visual installs Chromium beside the lane and waits for it before the budgets (#359)', () => {
+// #359: the browser installs beside the budgets' npm ci and the stack, not in series after them, and is waited for only
+// before the budgets run. It runs the locked Playwright from outside the checkout, so it never reads the node_modules npm
+// ci is rewriting.
+test('ci.sh budgets installs Chromium beside the stack and waits for it before the budgets (#359)', () => {
   const text = readFileSync('ci.sh', 'utf8');
-  const start = text.indexOf('\n visual)');
-  const visual = text.slice(start, text.indexOf('\n  ;;', start));
-  const at = pattern => { const index = visual.search(pattern); assert.ok(index >= 0, `the visual arm has ${pattern}`); return index; };
-  assert.ok(at(/install_chromium/) < at(/\n  start_lane\n/), 'the install starts before the lane');
-  assert.ok(at(/lane_test/) < at(/chromium_installed/), 'the lane does not wait for the browser');
+  const start = text.indexOf('\n budgets)');
+  const budgets = text.slice(start, text.indexOf('\n  ;;', start));
+  const at = pattern => { const index = budgets.search(pattern); assert.ok(index >= 0, `the budgets arm has ${pattern}`); return index; };
+  assert.ok(at(/install_chromium/) < at(/npm ci/), 'the install starts before the dependencies');
+  assert.ok(at(/wait_lanes/) < at(/chromium_installed/), 'the stack does not wait for the browser');
   assert.ok(at(/chromium_installed/) < at(/--project=measured/), 'the budgets wait for the browser');
   const helper = text.slice(text.indexOf('install_chromium() {'), text.indexOf('\n}\n', text.indexOf('install_chromium() {')));
   assert.match(helper, /packages\['node_modules\/playwright'\]\.version/, 'the locked Playwright, not whatever npx finds');
