@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-// #711: a Company's work sandbox holds its Agents' Screens, so its default memory is set from one measured Screen awake
+// #711: a Company's work sandbox holds its Screen, which its Agents share, so its default memory is set from one measured Screen awake
 // with a page open (README, Server size). An install the previous release made may hold a Company whose own limit is
 // below that default: the update raises it to the default, once, and never lowers one. A limit an Owner sets after that
 // (`company limits`) is the Owner's and is kept. The installer's own functions run here against a folder of Engine files.
@@ -17,7 +17,7 @@ const fn = name => {
   if (install.slice(start + 1).match(/^[a-z_]+\(\) \{ [^\n]*\}\n/)) return install.slice(start + 1, install.indexOf('\n', start + 1) + 1);
   return install.slice(start + 1, install.indexOf('\n}\n', start) + 3);
 };
-const helpers = ['engine_folder', 'sandbox_limit', 'write_limits', 'default_sandbox_memory', 'megabytes', 'raise_sandbox_memory'].map(fn).join('');
+const helpers = ['engine_project', 'engine_folder', 'write_engine_env', 'sandbox_limit', 'write_limits', 'default_sandbox_memory', 'megabytes', 'raise_sandbox_memory'].map(fn).join('');
 const template = readFileSync('scripts/engine-template.yml', 'utf8');
 const defaultMemory = template.match(/mem_limit: \$\{SANDBOX_MEMORY:-([0-9]+[mg])\}/)[1];
 
@@ -35,12 +35,11 @@ function engines(t, files) {
   return { run, env };
 }
 
-test('the default sandbox memory fits two Screens awake with a page open, or one beside a render', () => {
-  // The measurement (README): one Screen awake with an ads page open peaked at 831 MiB of its sandbox's working set, and
-  // one short render at 337 MiB.
+test("the default sandbox memory fits the Company's Screen awake with a page open beside a render", () => {
+  // The measurement (README): the Screen awake with an ads page open peaked at 831 MiB of its sandbox's working set, and
+  // one short render at 337 MiB. A Company has one awake Screen, shared by its Agents (vault decision 0068).
   const mib = Number(defaultMemory.slice(0, -1)) * (defaultMemory.endsWith('g') ? 1024 : 1);
   assert.equal(defaultMemory, '2g');
-  assert.ok(mib > 2 * 831, 'two Screens at once');
   assert.ok(mib > 831 + 337, 'a Screen beside a render');
   const readme = readFileSync('README.md', 'utf8');
   assert.match(readme, /\*\*2 GB of RAM and 2 CPUs\*\* by default/);
@@ -71,4 +70,15 @@ test('an update raises a Company limit below the default to it, once, and never 
   const lowered = install.run(`write_limits low 1g 1.5 && raise_sandbox_memory low`);
   assert.equal(lowered.status, 0, lowered.stderr);
   assert.match(install.env('low'), /^SANDBOX_MEMORY=1g$/m);
+});
+
+test("a limit the Owner set below the default after the update is kept when a later run writes the Engine's file again", t => {
+  const install = engines(t, { first: `ENGINE_KEY=${'b'.repeat(64)}\n` });
+  // The Owner lowers the first Company's memory after the update; every run of the installer writes the first Engine's
+  // file again (its key, volume and network), and the next update must still read the limit as the Owner's.
+  const run = install.run(`write_limits first 1g 1.5 && write_engine_env first ${'b'.repeat(64)} gtmworks-engine-first gtmworks-engine-first && raise_sandbox_memory first`);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(install.env('first'), /^SANDBOX_MEMORY=1g$/m);
+  assert.match(install.env('first'), /^SANDBOX_CPUS=1\.5$/m);
+  assert.doesNotMatch(run.stdout, /raised/);
 });

@@ -8,8 +8,8 @@
  {
   "issue": 711,
   "date": "2026-11-25",
-  "en": { "title": "Every Agent has its own Screen", "body": "An Agent now works on its own desktop and browser inside its company's work sandbox, which wakes when the Agent needs it and sleeps after 30 minutes unused; it publishes or spends only when a member in the conversation asks for that exact thing with its amount, and the update raises each company's sandbox memory to 2 GB so the Screens fit." },
-  "ar": { "title": "كل وكيل بقى ليه شاشته", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح بتوعه جوه صندوق الشغل بتاع الشركة، والشاشة بتصحى لما الوكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام؛ ومش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشات تكفي." }
+  "en": { "title": "Agents work on a Screen", "body": "An Agent now works on a desktop and browser inside its company's work sandbox: one Screen the company's Agents share, so an account signed in there is signed in for all of them; it wakes when an Agent needs it and sleeps after 30 minutes unused, an Agent publishes or spends only when a member in the conversation asks for that exact thing with its amount, and the update raises each company's sandbox memory to 2 GB so the Screen fits." },
+  "ar": { "title": "الوكلاء بقوا بيشتغلوا على شاشة", "body": "الوكيل بقى بيشتغل على سطح مكتب ومتصفح جوه صندوق الشغل بتاع الشركة: شاشة واحدة بيشاركها وكلاء الشركة، فأي حساب يتسجّل دخوله عليها بيبقى مسجّل لكلهم؛ والشاشة بتصحى لما وكيل يحتاجها وبتنام بعد ٣٠ دقيقة من غير استخدام، والوكيل مش بينشر ولا بيصرف غير لما عضو في المحادثة يطلب الحاجة دي بالظبط بمبلغها، والتحديث بيرفع ذاكرة صندوق كل شركة لـ ٢ جيجا عشان الشاشة تكفي." }
  },
  {
   "issue": 694,

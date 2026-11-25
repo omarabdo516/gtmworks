@@ -17,7 +17,7 @@ const fn = name => {
   if (install.slice(start + 1).match(/^[a-z_]+\(\) \{ [^\n]*\}\n/)) return install.slice(start + 1, install.indexOf('\n', start + 1) + 1);
   return install.slice(start + 1, install.indexOf('\n}\n', start) + 3);
 };
-const helpers = ['engine_folder', 'sandbox_container', 'exit_container', 'exit_network', 'work_volume', 'work_network', 'host_key_volume',
+const helpers = ['engine_folder', 'sandbox_container', 'exit_container', 'screen_driver_container', 'exit_network', 'work_volume', 'work_network', 'host_key_volume',
   'engine_names', 'work_sandbox_ref', 'keep_previous_engine', 'keep_previous_release', 'keep_sandbox_parts', 'previous_engine_files_back', 'previous_engine_files_kept_back', 'new_engine_files_removed', 'remove_new_sandbox_parts'].map(fn).join('');
 
 // The stand-in: `volume ls`, `network ls`, `inspect`, `rm` over two files, every call written to a log on one line, and a failing
@@ -84,8 +84,8 @@ test('an update from a release before the work sandbox removes every sandbox vol
   assert.deepEqual(install.read('networks'), ['gtmworks-engine-first', 'gtmworks-engine-acme', 'gtmworks-install_default']);
   const log = install.read('log');
   // Each Company's sandbox and exit go, and the key each Engine's volume got is taken out of it.
-  assert.ok(log.includes('rm -f gtmworks-sandbox-first gtmworks-exit-first'), log.join('\n'));
-  assert.ok(log.includes('rm -f gtmworks-sandbox-acme gtmworks-exit-acme'), log.join('\n'));
+  assert.ok(log.includes('rm -f gtmworks-sandbox-first gtmworks-exit-first gtmworks-screen-driver-first'), log.join('\n'));
+  assert.ok(log.includes('rm -f gtmworks-sandbox-acme gtmworks-exit-acme gtmworks-screen-driver-acme'), log.join('\n'));
   for (const volume of ['gtmworks-install_hermes', 'gtmworks-engine-acme']) {
     const wipe = log.find(line => line.startsWith('run ') && line.includes(`-v ${volume}:/data `));
     assert.ok(wipe, `the key in ${volume}`);

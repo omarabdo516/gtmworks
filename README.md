@@ -52,27 +52,28 @@ the CPU and RAM of one of the two server sizes below. No host Node.js, Git,
 Supabase CLI, cloud project or external account is required.
 
 **Server size.** Two sizes, from the install job's measurement (`install-sizes`,
-run 44848354569, which prints these numbers on every run) and one Agent's Screen
+run 44848354569, which prints these numbers on every run) and the Company's Screen
 measured on the pinned Engine (#711):
 
 - **Without video: 2 CPU cores and 4 GB RAM.** Idle, the install's own services
   (web app, worker, Postgres, sign-in, REST, Storage, gateway and mail inbox) use
   493 MiB, the first Company's idle Engine 466 MiB and its idle work sandbox 1 MiB: about
-  1 GB for one Company, which leaves room for the system, an Engine at work, one
-  Agent's Screen awake and a few more Companies.
+  1 GB for one Company, which leaves room for the system, an Engine at work, the
+  Company's Screen awake and a few more Companies.
 - **With video: 4 CPU cores and 8 GB RAM.** One short render (60 frames of
   1280x720 drawn by Chromium and joined by ffmpeg into a two-second video) took
   13.7 s and peaked at 337 MiB in its sandbox. A sandbox may use up to its limit,
   **2 GB of RAM and 2 CPUs** by default, so each Company rendering at the same time
   needs up to 2 GB and 2 cores more than the size without video.
-- **Each Agent's Screen** costs nothing asleep. Awake, its desktop (Xvnc and Xfce
-  at 1440x900) holds about 100 MiB of its Company's sandbox, and 400 to 690 MiB with
-  one page open in its browser (a Wikipedia article 405 MiB, YouTube 588 MiB, the
-  Google Ads page 545 to 687 MiB), peaking at **831 MiB**; the driver `computer_use`
-  runs there adds 26 MiB. It sleeps after 30 minutes unused. The default sandbox
-  limit of 2 GB holds two Screens awake with such a page at once, or one beside a
-  render; a Company whose Agents keep more Screens awake together needs about
-  0.8 GB more for each (`gtmworks company limits`).
+- **A Company's Screen** is one desktop and browser its Agents share (one awake
+  per Company, with one browser profile, so a sign-in on it serves every Agent).
+  It costs nothing asleep. Awake, its desktop (Xvnc and Xfce at 1440x900) holds
+  about 100 MiB of the Company's sandbox, and 400 to 690 MiB with one page open in
+  its browser (a Wikipedia article 405 MiB, YouTube 588 MiB, the Google Ads page
+  545 to 687 MiB), peaking at **831 MiB**; the driver `computer_use` runs there adds
+  26 MiB. It sleeps after 30 minutes unused. The default sandbox limit of 2 GB holds
+  the Screen awake with such a page beside a render, or beside the Agents' own
+  commands and code.
 - **Each added Company** costs its Engine, 466 MiB idle with its main Agent (the
   same `install-sizes` run; an Engine holding twenty more Agent profiles is measured
   apart, see below), its sandbox, 1 MiB idle and up to its 2 GB limit while it
@@ -91,7 +92,7 @@ limits (more CPUs than the server has, say), it starts again with the earlier on
 the command says so. A Company's limits are kept with its own files beside its
 Engine's key, so an update, a backup and restore and a repeat install give its sandbox
 the same limits; a Company given none follows the install's default. The update that
-raised the default to 2 GB (for the Agents' Screens) raises a Company's own lower
+raised the default to 2 GB (for the Company's Screen) raises a Company's own lower
 memory limit to it once and never lowers one; a limit you set after that is kept. A render that needs more memory than its Company's limit is stopped at the
 limit, and every other Company's sandbox keeps answering: one Company's video cannot
 starve the others.
@@ -191,9 +192,10 @@ Company's shared space is `cs-<company id>`. Every Agent gets one fixed set of
 tools (ADR 0018): web, vision, image generation, skills, a task list, memory,
 session search, the question tool and scheduled work. The work sandbox's terminal,
 files and code, and the Agent's tools as a whole, are set out in Settings, Company.
-Every Agent also gets `computer_use`, its own Screen: a desktop and a browser the
-Engine places inside its Company's work sandbox, which starts by itself when the
-Agent needs it and sleeps after the Engine's idle time (30 minutes). `browser` and
+Every Agent also gets `computer_use` on its Company's Screen: one desktop and
+browser the Engine places inside the Company's work sandbox and the Company's
+Agents share, sign-ins included, which starts by itself when an Agent needs it and
+sleeps after the Engine's idle time (30 minutes). `browser` and
 the desktop and project tools stay off for every Agent, so a member cannot ask an
 agent to read another Company's data. An install
 was proven with four Agents across two
