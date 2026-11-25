@@ -685,7 +685,9 @@ engine_healthy "$second_container" 300 && engine_healthy "$second_sandbox" 120 |
 [[ $(started_of gtmworks-sandbox-first) == "$first_before" ]] || fail "the first Company's sandbox kept running"
 # A Company whose work folder a previous release kept as a plain volume on the server's disk (#507): the next run moves
 # it onto a work disk of the Company's limit and removes the volume. Here the second Company is put back in that shape.
-docker stop "$second_container" "$second_sandbox" > /dev/null || fail 'stop the second Engine and sandbox'
+# Docker keeps a volume while any container names it, running or not, so the Engine and sandbox go; the repeat install
+# below makes them again.
+docker rm -f "$second_container" "$second_sandbox" > /dev/null || fail 'remove the second Engine and sandbox'
 disk_helper remove "$second_slug" && docker volume rm "gtmworks-folder-$second_slug" "gtmworks-home-$second_slug" > /dev/null \
   && rmdir ".work-disks/$second_slug/fs" ".work-disks/$second_slug" || fail "remove the second Company's work disk"
 docker volume create "gtmworks-work-$second_slug" > /dev/null || fail 'the previous work folder'
@@ -2765,7 +2767,7 @@ for sandbox in "$first_sandbox" "$second_sandbox"; do
   (( $(size_kib "$sandbox" /work) > disk_default * 1024 * 1024 * 95 / 100 && $(size_kib "$sandbox" /work) <= disk_default * 1024 * 1024 )) \
     || fail "the sandbox $sandbox has the install's default work disk"
   if docker exec "$sandbox" sh -c 'echo x > /usr/local/written' 2> /dev/null; then fail "the sandbox $sandbox writes nothing to its root"; fi
-  [[ $(size_kib "$sandbox" /tmp) == 1048576 && $(size_kib "$sandbox" /var/tmp) == 262144 ]] || fail "the sandbox $sandbox has scratch folders of a fixed size"
+  (( $(size_kib "$sandbox" /tmp) == 1048576 && $(size_kib "$sandbox" /var/tmp) == 262144 )) || fail "the sandbox $sandbox has scratch folders of a fixed size"
 done
 echo "sizes: the default work disk is ${disk_default} GB a Company; the root is read-only, /tmp is 1 GB and /var/tmp 256 MB of memory"
 # Filled to its limit: the second Company gets a 1g disk (`company limits --disk`, which stops its Engine and sandbox while

@@ -101,6 +101,9 @@ if [ ! -f "$image" ]; then
   mv "$image.new" "$image"
   echo made
 fi
+# The image file is the install's, like every other file in its folder: it belongs to whoever owns the Company's folder
+# (the user who installed), so that user can back the folder up, move it or remove it.
+chown "$(stat -c %u:%g /disk)" "$image"
 
 have=$(stat -c %s "$image")
 if [ "$want" -ne "$have" ]; then

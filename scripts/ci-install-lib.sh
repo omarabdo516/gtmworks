@@ -264,7 +264,9 @@ DOCKERFILE
 # left to CI.
 owned_by_others() {
   if [[ -n ${INSTALL_LANE_FOREIGN_OWNER:-} ]]; then echo "file owners not checked here (INSTALL_LANE_FOREIGN_OWNER)" >&2; return 0; fi
-  find "$1" ! -user "$(id -u)"
+  # A mounted work disk (#507) is a filesystem of its own, whose files (its root, at fs/, included) are the Company's
+  # sandbox user's: not looked into.
+  find "$1" -xdev ! -user "$(id -u)" ! -path '*/.work-disks/*/fs'
 }
 web_image() { docker inspect -f '{{.Image}}' "$(compose ps -q web)"; }
 # The public half of the key an Engine dials its Company's sandbox with (#393): read from the Engine's own data volume in a
