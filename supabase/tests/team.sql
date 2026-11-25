@@ -21,7 +21,7 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004'
 select is(public.is_member('10000000-0000-0000-0000-000000000002'),false,'removed member loses company access');
 select throws_ok($$select public.remove_member('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003')$$,'P0001','not permitted to remove members','viewer cannot remove using the member action');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select lives_ok($$insert into public.member_invitations(company_id,email,role) values ('10000000-0000-0000-0000-000000000002','viewer@example.com','contributor')$$,'owner can reinvite a removed member');
+select lives_ok($$select public.invite_member('10000000-0000-0000-0000-000000000002','viewer@example.com','contributor')$$,'owner can reinvite a removed member');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select lives_ok($$select public.claim_invitations()$$,'removed member can claim a new invitation');
 select is(public.is_member('10000000-0000-0000-0000-000000000002'),true,'reinvitation restores company access');
