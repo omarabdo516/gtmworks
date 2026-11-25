@@ -31,8 +31,8 @@ insert into public.channel_messages(company_id,channel_id,author,agent_id,author
  ('10000000-0000-0000-0000-000000000001','69000000-0000-0000-0000-000000000001','agent','a7020000-0000-0000-0000-000000000002','Ads','Written.',current_setting('test.called')::bigint);
 insert into public.agent_handovers(company_id,channel_message_id,run_id,call_id,from_agent,to_agent,goal,state,target_outcome,summary,closed_at) values
  ('10000000-0000-0000-0000-000000000001',current_setting('test.handed')::bigint,'run-h','call-h','a7020000-0000-0000-0000-000000000001','a7020000-0000-0000-0000-000000000002','Write the launch','done','completed','Written.',now());
-insert into public.work_cards(id,company_id,stage_id,title,agent_id) overriding system value
- select -7021,'10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1),'Ads card','a7020000-0000-0000-0000-000000000002';
+insert into public.work_cards(id,company_id,status,title,agent_id) overriding system value
+ select -7021,'10000000-0000-0000-0000-000000000001','ideas','Ads card','a7020000-0000-0000-0000-000000000002';
 insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,source,source_id,created_at) values
  ('10000000-0000-0000-0000-000000000001','a7020000-0000-0000-0000-000000000002','agent','Ads','card',-7021,'a7020000-0000-0000-0000-000000000002','channel_reply','work_activity',-7021,now());
 create temp table before_removal on commit drop as
@@ -98,8 +98,8 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name) va
  ('b7020000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a7020000-0000-0000-0000-000000000001','Lead');
 select is((select kept_agent_id::text from public.conversations where id='b7020000-0000-0000-0000-000000000003'),'a7020000-0000-0000-0000-000000000001',
  'a Conversation started without naming the kept id keeps it');
-insert into public.work_cards(id,company_id,stage_id,title,agent_id) overriding system value
- select -7022,'10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1),'Lead card','a7020000-0000-0000-0000-000000000001';
+insert into public.work_cards(id,company_id,status,title,agent_id) overriding system value
+ select -7022,'10000000-0000-0000-0000-000000000001','ideas','Lead card','a7020000-0000-0000-0000-000000000001';
 update public.work_cards set agent_id=null where id=-7022;
 select is((select kept_agent_id from public.work_cards where id=-7022),null,'a Card whose living Agent a person lets go names it no longer');
 

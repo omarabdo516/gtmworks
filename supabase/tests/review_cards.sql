@@ -26,7 +26,7 @@ reset role;
 
 -- Nothing else changes when a review is shown: no Approval, no Card move, no Version.
 create temporary table work_before as select (select count(*) from public.work_activity) activity,(select count(*) from public.work_versions) versions,
- (select string_agg(id||':'||stage_id||':'||coalesce(approval_step_id::text,'-'),',' order by id) from public.work_cards) cards;
+ (select string_agg(id||':'||status,',' order by id) from public.work_cards) cards;
 
 select set_config('test.review','{"line":"3 نصوص · Meta Ads · قبل ما تطلع","items":[{"text":"من خريج تجارة لمحاسب شغال في 3 شهور","fine":true,"note":"الوعد واضح."},{"text":"أضمن طريق لأول وظيفة محاسبة","fine":false,"note":"«أضمن» وعد مقدرش نثبته."},{"text":"Excel وOdoo والضرايب في كورس واحد","fine":true,"note":"السعر مطابق."}],"decision":"2 جاهزين، و1 رجع لـ Ads بالبديل"}',true);
 set local role service_role;
@@ -61,7 +61,7 @@ select results_eq($$select run_id,kind,title,jsonb_array_length(content->'items'
  $$values ('review-run-1','review',repeat('t',100),8),('review-run-2','review','Hooks review',1),('review-run-3','review','مراجعة نصوص إعلانات ديسمبر',3)$$,
  'one card for each review that was shown');
 select results_eq($$select (select count(*) from public.work_activity),(select count(*) from public.work_versions),
-  (select string_agg(id||':'||stage_id||':'||coalesce(approval_step_id::text,'-'),',' order by id) from public.work_cards)$$,
+  (select string_agg(id||':'||status,',' order by id) from public.work_cards)$$,
  $$select activity,versions,cards from work_before$$,
  'showing a review records no Approval or Card activity, moves no Card and adds no Version');
 select results_eq($$select actor_id,actor_kind,action,details->'card',details->>'private',details->>'teller' from public.company_log where agent_id='f4000000-0000-0000-0000-000000000002' and source='reply_cards' order by details->>'teller'$$,

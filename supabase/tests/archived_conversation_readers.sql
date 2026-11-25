@@ -43,7 +43,7 @@ insert into decisions
   'public.agent_permission_inflight(uuid,uuid)','public.agent_permission_sending(uuid,uuid)','public.rule_suggestions_sent_to(uuid)']) fn
  union all select fn,'exempt','makes a Conversation, which is current, or finds the one it made before' from unnest(array[
   'public.choose_work_mode(uuid,text)','public.open_first_conversation(uuid,uuid,uuid,text)',
-  'public.record_good_morning(uuid,uuid,text,date,timestamptz,text,jsonb)','public.start_card_conversation(uuid,bigint,uuid)']) fn
+  'public.record_good_morning(uuid,uuid,text,date,timestamptz,text,jsonb)']) fn
  union all select fn,'exempt','asks whether a Card is archived, not its Conversation: archiving a Conversation leaves its Card''s work and waits as they are' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.card_archive_stops(uuid,bigint[])']) fn
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller' from unnest(array[

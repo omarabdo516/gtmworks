@@ -18,9 +18,8 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name) va
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
  select '10000000-0000-0000-0000-000000000001',('c1840000-0000-0000-0000-00000000000'||n)::uuid,'person','20000000-0000-0000-0000-000000000001','عمر','Plan the week',gen_random_uuid(),'states-run-'||n
  from generate_series(2,3) n;
-insert into public.work_cards(company_id,stage_id,title,agent_id)
- select s.company_id,s.id,a.name||' card',a.id from public.hermes_agents a
- cross join lateral (select company_id,id from public.work_stages where company_id=a.company_id order by position limit 1) s
+insert into public.work_cards(company_id,status,title,agent_id)
+ select a.company_id,'ideas',a.name||' card',a.id from public.hermes_agents a
  where a.id in ('a1840000-0000-0000-0000-000000000002','a1840000-0000-0000-0000-000000000003');
 insert into public.waiting_items(company_id,person_id,kind,title,card_id)
  select '10000000-0000-0000-0000-000000000001',p.person,'question','Which audience?',w.id from public.work_cards w

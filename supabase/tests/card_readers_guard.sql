@@ -27,8 +27,8 @@ where s.definer and (s.body ~ pattern.tables
 create temporary table decisions(fn text primary key, decision text not null check (decision in ('checks','exempt')), reason text not null check (btrim(reason)<>''));
 insert into decisions
  select fn,'checks','answers for a Card its Agent hides from the caller, or from the person it names, as for a Card that does not exist' from unnest(array[
-  'public.agent_run_facts(uuid,uuid)','public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.edit_card_note(uuid,bigint,text)',
-  'public.start_card_conversation(uuid,bigint,uuid)','public.card_chat_person(uuid,bigint)',
+  'public.agent_run_facts(uuid,uuid)','public.edit_card_note(uuid,bigint,text)',
+  'public.card_chat_person(uuid,bigint)',
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)',
   'public.archived_cards(uuid)','public.archived_card_list(uuid,text,uuid,bigint,timestamptz,bigint,integer)','public.archived_card_count(uuid)','public.archive_cards(uuid,bigint[])','public.restore_cards(uuid,bigint[],timestamptz)','public.card_archive_stops(uuid,bigint[])']) fn
  union all select 'public.stop_card_work(uuid,bigint)','exempt','callable inside the database only, by archive_cards, which asks can_see_card for the Card first (#671); it answers nothing'
@@ -40,13 +40,12 @@ insert into decisions
  union all select 'public.can_see_card_file(text)','checks','a stored file follows each Card it belongs to'
  union all select 'public.can_see_card(uuid,bigint)','exempt','the read rule itself'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted, answers no caller, and every row it writes is read under card_agent_visible' from unnest(array[
-  'public.approval_card_guard()','public.conversation_reply_card()','public.log_card_activity()','public.log_card_comment()',
+  'public.conversation_reply_card()','public.log_card_activity()','public.log_card_comment()',
   'public.log_company_change()','public.log_member_change()','public.log_member_invitation()','public.log_note_edit()','public.note_mentions()',
-  'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.schedule_approved_card()','public.work_audit()','public.work_card_place()','public.work_guard()',
-  'public.channel_run_card()','public.channel_reply_card()','public.align_card_status()','public.align_card_assignee()','public.assignee_from_list()']) fn
+  'public.resolve_waiting_on_card()','public.resolve_waiting_on_reply()','public.work_audit()','public.work_card_place()',
+  'public.channel_run_card()','public.channel_reply_card()','public.align_card_assignee()']) fn
  union all select 'public.tick_card_todo(uuid,bigint,integer,text,boolean)','checks','ticks a to-do on a Card the caller sees (can_see_card) and writes its own Activity row (#679); a hidden Card is not found'
  union all select fn,'checks','asks for or decides the review of a Card the caller sees (can_see_card); a hidden Card is not found (#681)' from unnest(array['public.ask_review(uuid,bigint)','public.decide_review(uuid,bigint,bigint,text,text)']) fn
- union all select 'public.review_from_steps()','exempt','a trigger (#681): it keeps a review open while the previous release''s approval step holds the Card and closes it when the step does; it answers no caller, and the reviews it writes are read under card_agent_visible'
  union all select fn,'checks','sets, ends or reads the waits of Cards the caller sees (can_see_card); a Card waited for that they may not see is named by nothing (#682)' from unnest(array['public.add_card_wait(uuid,bigint,bigint)','public.remove_card_wait(uuid,bigint,bigint)','public.card_wait_links(uuid,bigint)','public.open_card_waits(uuid)']) fn
  union all select 'public.wait_open(public.work_card_waits)','exempt','callable inside the database only, by the readers of waits that ask can_see_card first (#682); it answers whether one wait still holds'
  union all select fn,'exempt','a trigger (#682): it refuses a loop of waits or releases the waits on an archived Card, and answers no caller' from unnest(array['public.refuse_wait_loop()','public.release_waits_on_archive()']) fn
@@ -85,11 +84,9 @@ insert into decisions
  union all select 'public.pin_run_history(uuid,uuid)','exempt','the worker''s, callable by the service role only: it reads when an Agent last moved from that Agent''s log rows, which name no Card, and answers the Conversation''s own messages'
  union all select 'public.agent_move_blocked(uuid)','exempt','callable inside the database only; it answers whether an Agent has running work, and names no Card'
  union all select fn,'exempt','reads only the waiting items of rule suggestions, which name no Card; the rule''s Agent is checked with can_see_agent' from unnest(array[
-  'public.decide_agent_rule(uuid,bigint,boolean)','public.remove_agent_rule(uuid,uuid)','public.rule_suggestions_sent_to(uuid)']) fn
- union all select fn,'exempt','an Owner or a Manager changes an approval step: every Card on it moves with it so none is left on a removed step, and nothing about a Card is answered' from unnest(array[
-  'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn;
+  'public.decide_agent_rule(uuid,bigint,boolean)','public.remove_agent_rule(uuid,uuid)','public.rule_suggestions_sent_to(uuid)']) fn;
 
-select is((select count(*)::int from card_tables),16,'the card tables are the 16 that carry #221''s rule, the Card itself, its reviews (#681), its waits (#682) and its description''s versions (#680) among them');
+select is((select count(*)::int from card_tables),13,'the card tables are the 13 that carry #221''s rule, the Card itself, its reviews (#681), its waits (#682) and its description''s versions (#680) among them; the checklist, labels and other assignees went with the cutover (#684)');
 select ok(not exists(select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef
   and (not coalesce(p.proconfig,'{}') && array['search_path=""'] or regexp_replace(regexp_replace(p.prosrc,'/\*.*?\*/',' ','g'),'--[^\n]*',' ','g') ~* '\yexecute\y')),
  'every function that runs as its owner has an empty search path and no dynamic SQL, so every table it reads is named with its schema in its body');
@@ -112,7 +109,7 @@ create function public.guard_fixture_inner(c uuid, card bigint) returns text lan
 create function public.guard_fixture_through(c uuid, card bigint) returns text language sql stable security definer set search_path='' as $$
  select public.guard_fixture_inner(c,card) $$;
 create function public.guard_fixture_trigger() returns trigger language plpgsql security definer set search_path='' as $$ begin return new; end $$;
-create trigger guard_fixture_trigger before update on public.work_card_labels for each row execute function public.guard_fixture_trigger();
+create trigger guard_fixture_trigger before update on public.work_card_waits for each row execute function public.guard_fixture_trigger();
 create function public.guard_fixture_checked(c uuid, card bigint) returns text language sql stable security definer set search_path='' as $$
  select title from public.work_cards where company_id=c and id=card and public.can_see_card(c,card) $$;
 select set_eq($$select fn::text from card_readers r where not r.checks and r.fn::text like '%guard\_fixture\_%'$$,

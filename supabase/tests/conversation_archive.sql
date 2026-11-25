@@ -33,9 +33,9 @@ insert into public.reply_cards(company_id,conversation_id,run_id,call_id,kind,ti
  ('10000000-0000-0000-0000-000000000001','e6740000-0000-0000-0000-000000000002','busy-run','q1','question','Which offer?','{"question":"Which offer?","choices":[],"multiple":false}','open'),
  ('10000000-0000-0000-0000-000000000001','e6740000-0000-0000-0000-000000000002','busy-run','p1','permission','Publish the draft','{"description":"Publish the draft","command":"publish","choices":["once","deny"]}','open'),
  ('10000000-0000-0000-0000-000000000001','e6740000-0000-0000-0000-000000000002','busy-run','h1','hand','Press Publish','{"app":"WordPress","line":"The draft is ready; you press Publish.","rows":[]}','open');
-insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id) values
- ('10000000-0000-0000-0000-000000000001',3,'Plans card','a6740000-0000-0000-0000-000000000001','e6740000-0000-0000-0000-000000000001'),
- ('10000000-0000-0000-0000-000000000001',3,'Later card','a6740000-0000-0000-0000-000000000001','e6740000-0000-0000-0000-000000000004');
+insert into public.work_cards(company_id,status,title,agent_id,conversation_id) values
+ ('10000000-0000-0000-0000-000000000001','progress','Plans card','a6740000-0000-0000-0000-000000000001','e6740000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000001','progress','Later card','a6740000-0000-0000-0000-000000000001','e6740000-0000-0000-0000-000000000004');
 create temporary table ids on commit drop as select title,id from public.work_cards where title in ('Plans card','Later card');
 grant select on ids to authenticated,service_role;
 create function pg_temp.card(title text) returns bigint language sql as $$ select id from ids where ids.title=card.title $$;

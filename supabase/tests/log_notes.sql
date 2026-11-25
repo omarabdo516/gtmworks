@@ -8,7 +8,7 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_
  ('a2200000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','f2200000-0000-0000-0000-000000000001','Faye','Marketing',false,'Write short.','default'),
  ('a2200000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f2200000-0000-0000-0000-000000000002','Secret','Hidden',false,null,'default');
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','a2200000-0000-0000-0000-000000000001');
-insert into public.work_cards(company_id,stage_id,title) select '10000000-0000-0000-0000-000000000003',id,'Aleem launch' from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' order by position limit 1;
+insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000003','ideas','Aleem launch');
 create temporary table card on commit drop as select id, title from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' order by id limit 1;
 create temporary table aleem_card on commit drop as select id from public.work_cards where company_id='10000000-0000-0000-0000-000000000003' and title='Aleem launch';
 create temporary table notes(label text, id bigint) on commit drop;

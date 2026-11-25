@@ -14,8 +14,7 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
  ('10000000-0000-0000-0000-000000000001','c2000000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000001','عمر','Plan the week',gen_random_uuid(),'details-run-1','2026-06-12T09:00:00Z'),
  ('10000000-0000-0000-0000-000000000001','c2000000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000003','مراجع','A private question',gen_random_uuid(),'details-run-2','2026-06-12T10:00:00Z'),
  ('10000000-0000-0000-0000-000000000003','c2000000-0000-0000-0000-000000000003','person','20000000-0000-0000-0000-000000000005','عضو','Hello',gen_random_uuid(),'details-run-3','2026-06-12T11:00:00Z');
-insert into public.work_cards(company_id,stage_id,title,agent_id)
- select company_id,id,'Ads card','a2000000-0000-0000-0000-000000000002' from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1;
+insert into public.work_cards(company_id,status,title,agent_id) values ('10000000-0000-0000-0000-000000000001','ideas','Ads card','a2000000-0000-0000-0000-000000000002');
 set local role authenticated;
 select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 
@@ -47,7 +46,7 @@ select results_eq($$select started_at,my_conversation from public.agent_open_run
  $$values ('2026-06-12T09:00:00Z'::timestamptz,'c2000000-0000-0000-0000-000000000001'::uuid)$$,'an answered run is no longer open');
 
 reset role;
-select throws_ok($$insert into public.work_cards(company_id,stage_id,title,agent_id) select company_id,id,'Elsewhere','a2000000-0000-0000-0000-000000000003' from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1$$,
+select throws_ok($$insert into public.work_cards(company_id,status,title,agent_id) values ('10000000-0000-0000-0000-000000000001','ideas','Elsewhere','a2000000-0000-0000-0000-000000000003')$$,
  '23503',null,'a Card cannot take another Company''s Agent');
 delete from public.hermes_agents where id='a2000000-0000-0000-0000-000000000002';
 select is((select count(*)::int from public.work_cards where title='Ads card' and agent_id is null and company_id='10000000-0000-0000-0000-000000000001'),1,'removing the Agent keeps its Card, with no Agent');

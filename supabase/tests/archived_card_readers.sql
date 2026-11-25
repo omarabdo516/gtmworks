@@ -27,14 +27,11 @@ insert into decisions
  union all select fn,'exempt','answers for the one Card, or the one Conversation, its caller already read, so an archived Card opened from its link reads its chat and wait as it was' from unnest(array[
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)','public.card_chat_person(uuid,bigint)']) fn
  union all select 'public.good_morning_waits(uuid)','exempt','lists through waiting_list, which runs as the caller under card_current; it reads a Card itself only to ask whether its Agent is hidden'
- union all select fn,'exempt','a write on the Card it is named, or on the Cards of an approval step it changes; it lists no current Cards, and work on an archived Card is refused where work starts (#671)' from unnest(array[
-  'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.start_card_conversation(uuid,bigint,uuid)',
-  'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller' from unnest(array[
-  'public.schedule_approved_card()','public.note_mentions()','public.conversation_reply_card()','public.work_card_place()',
+  'public.note_mentions()','public.conversation_reply_card()','public.work_card_place()',
   'public.channel_run_card()','public.channel_reply_card()']) fn
  union all select fn,'exempt','a trigger (#677): it keeps a Card''s one assignee, current or archived, equal to the old shapes, or lets an assignee removed from the Company go; it lists no Cards and answers no caller' from unnest(array[
-  'public.assignee_from_list()','public.unassign_removed()']) fn
+  'public.unassign_removed()']) fn
  union all select fn,'exempt','the worker''s, callable by the service role only: it answers the worker, never a Member' from unnest(array[
   'public.lead_hand_to_agent(uuid,text,text,text,text,text)','public.close_handover_target(bigint,text,text,text)',
   'public.channel_hand_to_agent(bigint,text,text,text,text,text)','public.handover_hand_to_agent(bigint,text,text,text,text,text)',

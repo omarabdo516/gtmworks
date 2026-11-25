@@ -36,7 +36,7 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select is((select string_agg(kind,',') from public.waiting_list('10000000-0000-0000-0000-000000000001')),'test_kind,approval','a reply in the Conversation clears the question');
 select public.change_work_card('10000000-0000-0000-0000-000000000001',1,'comment',jsonb_build_object('body','Done'));
 select is((select string_agg(kind,',') from public.waiting_list('10000000-0000-0000-0000-000000000001')),'approval','a change on the Card clears its item');
-select public.decide_approval('10000000-0000-0000-0000-000000000001',5,'approve');
+select public.decide_review('10000000-0000-0000-0000-000000000001',5,(select version_id from public.work_reviews where card_id=5 and decision is null),'approve',null);
 select is((select count(*)::int from public.waiting_list('10000000-0000-0000-0000-000000000001')),0,'deciding clears the approval');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is((select count(*)::int from public.waiting_list('10000000-0000-0000-0000-000000000001')),1,'the Manager''s question is still there');

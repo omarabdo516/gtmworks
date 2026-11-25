@@ -17,8 +17,8 @@ select is((select concat_ws('|',actor_id::text,action,body) from public.company_
 select is((select count(*)::int from public.company_log where body='ملاحظة للسجل'),1,'a comment is logged once, not again as activity');
 -- A change made by an Agent is logged as the Agent's.
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
-update public.work_cards set hook='خطاف الوكيل' where id=(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001');
-select is((select actor_kind from public.company_log where details->>'field'='hook' order by id desc limit 1),'agent','a Card change by an Agent is logged as the Agent''s');
+update public.work_cards set title='عنوان الوكيل' where id=(select min(id) from public.work_cards where company_id='10000000-0000-0000-0000-000000000001');
+select is((select actor_kind from public.company_log where details->>'field'='title' order by id desc limit 1),'agent','a Card change by an Agent is logged as the Agent''s');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 
 -- A Member change writes a row with the Member and what changed.

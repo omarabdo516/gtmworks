@@ -27,7 +27,7 @@ reset role;
 
 -- Nothing else changes when a step is handed over or marked done: no Approval, no Card move, no Version.
 create temporary table work_before as select (select count(*) from public.work_activity) activity,(select count(*) from public.work_versions) versions,
- (select string_agg(id||':'||stage_id||':'||coalesce(approval_step_id::text,'-'),',' order by id) from public.work_cards) cards;
+ (select string_agg(id||':'||status,',' order by id) from public.work_cards) cards;
 
 select set_config('test.hand','{"app":"WordPress","line":"مقال «إزاي تبدأ في المحاسبة» جاهز كمسودة","rows":[{"label":"الكلمة المفتاحية","value":"كورس محاسبة"},{"label":"الطول","value":"1,450 كلمة"}],"url":"https://rslearning.example/wp-admin/post.php?post=812&action=edit","note":"هتابع ترتيبه في Search Console بعد أسبوع."}',true);
 set local role service_role;
@@ -101,7 +101,7 @@ select results_eq($$select actor_id,actor_kind,actor_name,subject,agent_id,actio
   '{"hand":{"title":"انشر المقال"},"private":true,"teller":"20000000-0000-0000-0000-000000000003"}'::jsonb,current_setting('test.card')::bigint,current_setting('test.done_at')::timestamptz$$,
  'the press is logged once, privately, as the person who did it, with the step''s title');
 select results_eq($$select (select count(*) from public.work_activity),(select count(*) from public.work_versions),
-  (select string_agg(id||':'||stage_id||':'||coalesce(approval_step_id::text,'-'),',' order by id) from public.work_cards)$$,
+  (select string_agg(id||':'||status,',' order by id) from public.work_cards)$$,
  $$select activity,versions,cards from work_before$$,
  'handing a step over and marking it done record no Approval or Card activity, move no Card and add no Version');
 

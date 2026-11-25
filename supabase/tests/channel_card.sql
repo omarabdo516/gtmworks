@@ -35,7 +35,7 @@ reset role;
 select is((select count(*)::int from public.work_cards where company_id='10000000-0000-0000-0000-000000000001'
  and channel_id=(select id from made where label='launch')),1,'the first Agent called in a team channel makes one Card');
 select is((select title from public.work_cards where channel_id=(select id from made where label='launch')),'Launch week','titled with the channel''s name');
-select is((select s.board_column from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id
+select is((select w.status from public.work_cards w
  where w.channel_id=(select id from made where label='launch')),'progress','under In progress');
 select is((select agent_id from public.work_cards where channel_id=(select id from made where label='launch')),'a1510000-0000-0000-0000-000000000001'::uuid,'with the Agent called');
 select is((select conversation_id from public.work_cards where channel_id=(select id from made where label='launch')),null::uuid,'and no Conversation');
@@ -113,16 +113,15 @@ select is((select count(*)::int from public.channel_messages where channel_id=(s
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);
 select ok((select count(*) from public.channel_messages where channel_id=(select id from made where label='launch'))>0,'a Viewer in the channel reads its messages');
 reset role;
-update public.work_cards set stage_id=(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001'
- and kind='review' order by position limit 1) where channel_id=(select id from made where label='launch');
+update public.work_cards set status='waiting' where channel_id=(select id from made where label='launch');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
-select is(public.channel_board_card((select id from made where label='launch'))->>'column','waiting','a Card in a review stage reads as waiting');
+select is(public.channel_board_card((select id from made where label='launch'))->>'column','waiting','a Card in review reads as waiting');
 select is(public.channel_board_card((select id from made where label='launch'))->>'waiting','true','with its waiting mark');
 
 -- Only the database ties a Card to a channel.
-select throws_ok($$insert into public.work_cards(company_id,stage_id,title,channel_id) values('10000000-0000-0000-0000-000000000001',
- (select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1),'Mine',(select id from made where label='launch'))$$,
+select throws_ok($$insert into public.work_cards(company_id,status,title,channel_id) values('10000000-0000-0000-0000-000000000001',
+ 'ideas','Mine',(select id from made where label='launch'))$$,
  '42501','cardChannelProtected','no Member makes a Card tied to a channel by hand');
 select throws_ok($$update public.work_cards set channel_id=null where channel_id=(select id from made where label='launch')$$,
  '42501','cardChannelProtected','nor unties one');

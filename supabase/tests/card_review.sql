@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(30);
 -- #681 (spec #668, ADR 0026): one review, decided by any Owner or Manager who sees the Card, on the exact Version; the
 -- first answer closes it. Approved goes to Planned with the approved Version when its date is ahead, else to Done; sent
 -- back goes to In progress with the reason as a comment. A later Version needs its own Approval. Approval steps are gone:
@@ -98,15 +98,8 @@ select throws_ok($$select pg_temp.decide('hidden','approve')$$,'P0002','card not
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select is(pg_temp.waiting(),'Rev back,Rev hidden','the Owner, who sees every Agent, has it waiting');
 
--- The previous release: a Card it puts on an approval step is in review here, and closing the step closes the review.
+-- The previous release's approval steps, and the bridge that kept a review open on them, went with the cutover (#684).
 reset role;
-insert into public.approval_steps(company_id,name,position,role) values('10000000-0000-0000-0000-000000000681','Owner OK',1,'owner');
-select set_config('approval.internal','yes',true);
-update public.work_cards set status='waiting', approval_step_id=(select id from public.approval_steps where company_id='10000000-0000-0000-0000-000000000681' and name='Owner OK') where id=pg_temp.id('empty');
-select is((select count(*)::int from public.work_reviews where card_id=pg_temp.id('empty') and decision is null),1,'a Card put on a step by the previous release is in review');
-update public.work_cards set status='planned', approval_step_id=null where id=pg_temp.id('empty');
-select set_config('approval.internal','',true);
-select is((select decision from public.work_reviews where card_id=pg_temp.id('empty') order by id desc limit 1),'approved','and the step it closed closes the review');
 
 select * from finish();
 rollback;

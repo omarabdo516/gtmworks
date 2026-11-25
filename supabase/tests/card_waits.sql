@@ -15,11 +15,10 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
  ('10000000-0000-0000-0000-000000000001','e1460000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000003','مراجع','Get the article out',gen_random_uuid(),'w-run-1'),
  ('10000000-0000-0000-0000-000000000001','e1460000-0000-0000-0000-000000000002','person','20000000-0000-0000-0000-000000000003','مراجع','Get the post out',gen_random_uuid(),'w-run-2'),
  ('10000000-0000-0000-0000-000000000001','e1460000-0000-0000-0000-000000000001','person','20000000-0000-0000-0000-000000000003','مراجع','Plan the campaign',gen_random_uuid(),'w-run-3');
-insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
- select company_id,id,'Get the article out','c1460000-0000-0000-0000-000000000002','e1460000-0000-0000-0000-000000000001' from public.work_stages
- where company_id='10000000-0000-0000-0000-000000000001' and board_column='progress' and kind='before_review' order by position,id limit 1;
+insert into public.work_cards(company_id,status,title,agent_id,conversation_id)
+ values ('10000000-0000-0000-0000-000000000001','progress','Get the article out','c1460000-0000-0000-0000-000000000002','e1460000-0000-0000-0000-000000000001');
 select set_config('test.card',(select id::text from public.work_cards where conversation_id='e1460000-0000-0000-0000-000000000001'),true);
-select set_config('test.stage',(select stage_id::text from public.work_cards where id=current_setting('test.card')::bigint),true);
+select set_config('test.stage',(select status from public.work_cards where id=current_setting('test.card')::bigint),true);
 insert into auth.users(id,email) values ('90000000-0000-0000-0000-000000000146','outsider@example.test');
 insert into public.people(id,name) values ('90000000-0000-0000-0000-000000000146','Outsider');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000002','90000000-0000-0000-0000-000000000146','contributor');
@@ -141,7 +140,7 @@ select results_eq($$select public.mark_hand_done('10000000-0000-0000-0000-000000
 select pg_temp.read_wait('done','20000000-0000-0000-0000-000000000005');
 reset role;
 select is((select wait from reads where who='done'),null,'with nothing left open, the Card waits on nobody');
-select is((select stage_id from public.work_cards where id=current_setting('test.card')::bigint),current_setting('test.stage')::bigint,'the Card stayed in its stage throughout');
+select is((select status from public.work_cards where id=current_setting('test.card')::bigint),current_setting('test.stage'),'the Card stayed in its column throughout');
 
 -- The chat's rows: on its Card in the tied chat, private to its person in the other.
 select results_eq($$select action,subject,card_id,details ? 'private',details ? 'teller' from public.company_log where agent_id='c1460000-0000-0000-0000-000000000002' order by action,card_id nulls last,id$$,

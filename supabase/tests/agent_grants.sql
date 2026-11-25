@@ -5,7 +5,7 @@ select is((select count(*)::int from public.agent_grants where company_id='10000
 select is((select count(*)::int from public.agent_grants where company_id='10000000-0000-0000-0000-000000000003'),0,'Aleem has no grant rows yet');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
-select is((select count(*)::int from public.work_stages where company_id='10000000-0000-0000-0000-000000000003'),0,'an agent with no grant sees nothing of Aleem');
+select is((select count(*)::int from public.companies where id='10000000-0000-0000-0000-000000000003'),0,'an agent with no grant sees nothing of Aleem');
 select throws_ok($$select public.grant_agent_access('10000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000001')$$,'42501',null,'an agent cannot grant itself access');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select throws_ok($$select public.revoke_agent_access('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001')$$,'42501',null,'a manager cannot revoke access');
@@ -14,7 +14,7 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001'
 select lives_ok($$select public.grant_agent_access('10000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000001')$$,'the owner grants the Writer to Aleem');
 select is((select count(*)::int from public.agent_grants where company_id='10000000-0000-0000-0000-000000000003' and agent_id='30000000-0000-0000-0000-000000000001' and granted_by='20000000-0000-0000-0000-000000000001' and revoked_at is null),1,'the grant row records who granted it');
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
-select cmp_ok((select count(*)::int from public.work_stages where company_id='10000000-0000-0000-0000-000000000003'),'>',0,'a granted agent sees Aleem');
+select cmp_ok((select count(*)::int from public.companies where id='10000000-0000-0000-0000-000000000003'),'>',0,'a granted agent sees Aleem');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select lives_ok($$select public.revoke_agent_access('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001')$$,'the owner revokes the Writer from RS');
 reset role;
@@ -23,7 +23,7 @@ select throws_ok($$update public.members set removed_at=null where company_id='1
 set local role authenticated;
 select set_config('request.jwt.claim.sub','30000000-0000-0000-0000-000000000001',true);
 select is((select count(*)::int from public.work_cards where company_id='10000000-0000-0000-0000-000000000001'),0,'the Writer sees no RS cards after revocation');
-select throws_ok($$select public.agent_write('10000000-0000-0000-0000-000000000001','denied-key','fingerprint','create',null,'{"stage":1,"title":"Denied"}')$$,null,null,'the Writer cannot write RS cards after revocation');
+select throws_ok($$select public.new_card('10000000-0000-0000-0000-000000000001','Denied','ideas')$$,'42501',null,'the Writer cannot write RS cards after revocation');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
 select lives_ok($$select public.grant_agent_access('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001')$$,'the owner grants the Writer to RS again');
 reset role;

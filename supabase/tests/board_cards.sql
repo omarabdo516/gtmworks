@@ -8,11 +8,11 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_
  ('a1900000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','f1900000-0000-0000-0000-000000000002','Ads','Ads',false,'default'),
  ('a1900000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','f1900000-0000-0000-0000-000000000003','SEO','SEO',false,'default');
 insert into public.member_agent_access(company_id,person_id,agent_id) values ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a1900000-0000-0000-0000-000000000002');
-insert into public.work_cards(company_id,stage_id,title,agent_id)
- select s.company_id,s.id,x.title,x.agent::uuid from (values ('Board Lead','a1900000-0000-0000-0000-000000000001'),('Board Ads','a1900000-0000-0000-0000-000000000002'),
+insert into public.work_cards(company_id,status,title,agent_id)
+ select '10000000-0000-0000-0000-000000000001','ideas',x.title,x.agent::uuid from (values ('Board Lead','a1900000-0000-0000-0000-000000000001'),('Board Ads','a1900000-0000-0000-0000-000000000002'),
   ('Board SEO','a1900000-0000-0000-0000-000000000003'),('Board none',null)) x(title,agent)
- join public.work_stages s on s.company_id='10000000-0000-0000-0000-000000000001' and s.kind='ideas';
-insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Board Aleem' from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and kind='ideas';
+;
+insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000003','ideas','Board Aleem');
 insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,body,source,source_id,created_at)
  select '10000000-0000-0000-0000-000000000001',x.actor::uuid,x.kind,x.name,'card',(select id from public.work_cards where title='Board Ads'),x.agent::uuid,'note_reply','Done','note_runs',x.source,now()-x.ago
  from (values ('a1900000-0000-0000-0000-000000000003','agent','SEO','a1900000-0000-0000-0000-000000000003',9190001,interval '3 hours'),

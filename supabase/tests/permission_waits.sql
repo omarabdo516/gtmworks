@@ -13,9 +13,8 @@ insert into public.conversations(id,company_id,person_id,agent_id,agent_name)
  select ('e2650000-0000-0000-0000-00000000000'||n)::uuid,'10000000-0000-0000-0000-000000000001'::uuid,('20000000-0000-0000-0000-00000000000'||n)::uuid,'e1650000-0000-0000-0000-000000000002'::uuid,'Ads' from generate_series(1,5) n;
 insert into public.conversation_messages(company_id,conversation_id,author,person_id,author_name,body,send_key,run_id)
  select '10000000-0000-0000-0000-000000000001',('e2650000-0000-0000-0000-00000000000'||n)::uuid,'person',('20000000-0000-0000-0000-00000000000'||n)::uuid,'Someone','Clean up the exports',gen_random_uuid(),'w-run-'||n from generate_series(1,5) n;
-insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
- select company_id,id,'Clean up the exports','e1650000-0000-0000-0000-000000000002','e2650000-0000-0000-0000-000000000003' from public.work_stages
- where company_id='10000000-0000-0000-0000-000000000001' and board_column='progress' and kind='before_review' order by position,id limit 1;
+insert into public.work_cards(company_id,status,title,agent_id,conversation_id)
+ values ('10000000-0000-0000-0000-000000000001','progress','Clean up the exports','e1650000-0000-0000-0000-000000000002','e2650000-0000-0000-0000-000000000003');
 insert into auth.users(id,email) values ('e3650000-0000-0000-0000-000000000001','karim.waits@example.test');
 insert into public.people(id,name) values ('e3650000-0000-0000-0000-000000000001','Karim');
 insert into public.members(company_id,person_id,role) values ('10000000-0000-0000-0000-000000000003','e3650000-0000-0000-0000-000000000001','manager');

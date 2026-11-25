@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(11);
 -- Exercise the installed function against the same empty state as the browser, without recreating it as the test caller.
 do $$ declare tables text; begin
  select string_agg(format('%I.%I',schemaname,tablename),',') into tables from pg_tables where schemaname='public';
@@ -24,8 +24,8 @@ select ok((select language='ar' and name='First owner' from public.people where 
 select ok((select slug ~ '^first-company-[a-f0-9]{8}$' and name='First Company' from public.companies),'the first company has its Home slug');
 select ok((select count(*)=1 from public.companies c join public.company_engines e on e.id=c.engine_id where c.name='First Company'),'first run names the Engine record the installer registered');
 select ok((select role='owner' and grant_publishing and grant_money_figures and grant_customer_data and removed_at is null from public.members where person_id='90000000-0000-0000-0000-000000000238'),'the new owner has all company grants');
-select is((select count(*)::int from public.work_stages),10,'the company trigger creates the workflow with Done (ADR 0013)');
-select is((select count(*)::int from public.approval_steps where role='owner'),1,'the company trigger creates the Owner approval step');
+-- A new Company needs no workflow made for it: a Card's status is its column, and any Owner or Manager decides a review (#684).
+select ok(to_regclass('public.work_stages') is null and to_regclass('public.approval_steps') is null,'a new company has no stages or approval steps to make');
 select is((select count(*)::int from public.member_audit where person_id='90000000-0000-0000-0000-000000000238' and action='INSERT'),1,'the membership trigger records the first owner');
 select * from finish();
 rollback;

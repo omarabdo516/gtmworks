@@ -2,8 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(20);
 -- Two companies, one card with one message in each, and three stored files: two in RS Learning's folder, one in Aleem's.
-insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Attachments RS' from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and position=1;
-insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Attachments Aleem' from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and position=1;
+insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000001','ideas','Attachments RS'),('10000000-0000-0000-0000-000000000003','ideas','Attachments Aleem');
 insert into public.work_comments(company_id,card_id,body) select company_id,id,'First message' from public.work_cards where title in ('Attachments RS','Attachments Aleem');
 select set_config('test.rs_card',(select id::text from public.work_cards where title='Attachments RS'),true);
 select set_config('test.aleem_card',(select id::text from public.work_cards where title='Attachments Aleem'),true);

@@ -10,14 +10,13 @@ insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_
 insert into public.member_agent_access(company_id,person_id,agent_id) values
  ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a7050000-0000-0000-0000-000000000001');
 insert into public.work_projects(company_id,name) values ('10000000-0000-0000-0000-000000000001','List June');
-insert into public.work_cards(company_id,stage_id,title,agent_id,project_id,archived_at,archived_by)
- select s.company_id,s.id,x.title,x.agent::uuid,case when x.project then (select id from public.work_projects where name='List June') end,
+insert into public.work_cards(company_id,status,title,agent_id,project_id,archived_at,archived_by)
+ select '10000000-0000-0000-0000-000000000001','progress',x.title,x.agent::uuid,case when x.project then (select id from public.work_projects where name='List June') end,
   timestamptz '2026-11-01 09:00Z'+x.n*interval '1 day','20000000-0000-0000-0000-000000000003'
  from (values (1,'List weekly report',null,false),(2,'List ads June','a7050000-0000-0000-0000-000000000001',false),(3,'List project brief',null,true),
   (4,'List مُــهمّة أسعار',null,false),(5,'List ads July','a7050000-0000-0000-0000-000000000001',false)) x(n,title,agent,project)
- join public.work_stages s on s.company_id='10000000-0000-0000-0000-000000000001' and s.id=3;
-insert into public.work_cards(company_id,stage_id,title,archived_at)
- select company_id,id,'List elsewhere',now() from public.work_stages where company_id='10000000-0000-0000-0000-000000000002' and kind='ideas' order by position limit 1;
+;
+insert into public.work_cards(company_id,status,title,archived_at) values ('10000000-0000-0000-0000-000000000002','ideas','List elsewhere',now());
 create temporary table ids on commit drop as select title,id,archived_at from public.work_cards where title like 'List %';
 grant select on ids to authenticated;
 -- The titles of the Cards a call of the list gave, in its order, the fixture's alone.

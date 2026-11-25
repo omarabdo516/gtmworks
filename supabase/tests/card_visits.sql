@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 select plan(13);
-insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Other company' from public.work_stages where company_id='10000000-0000-0000-0000-000000000003' and position=1;
+insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000003','ideas','Other company');
 select set_config('test.other_card',(select id::text from public.work_cards where title='Other company'),true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',true);

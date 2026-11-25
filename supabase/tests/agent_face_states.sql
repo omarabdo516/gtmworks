@@ -41,8 +41,8 @@ insert into chat select agent_name,id from public.conversations where id::text l
 grant select on chat to authenticated;
 
 -- Reach's Card.
-insert into public.work_cards(id,company_id,stage_id,title,agent_id) overriding system value
- select -6991,'10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' order by position limit 1),'Reach card',agent
+insert into public.work_cards(id,company_id,status,title,agent_id) overriding system value
+ select -6991,'10000000-0000-0000-0000-000000000001','ideas','Reach card',agent
  from named where name='Reach';
 
 set local session_replication_role=replica;
