@@ -1255,7 +1255,6 @@
   "screenControlToast": "You have control for this session only",
   "screenGaveBackToast": "Gave control back to {0}, and it carried on from where it was",
   "screenClosedToast": "Control went back to {0} when you closed the screen",
-  "screenLostToast": "The connection to the screen was lost, and control went back to {0}",
   "screenControlLine": "You have control · {0} is holding still",
   "screenWaitingOnYou": "Awake · waiting on you",
   "screenHandLine": "Stopped at “{0}” in {1} · handed to you",

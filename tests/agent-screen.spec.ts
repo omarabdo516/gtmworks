@@ -303,6 +303,23 @@ test('a Member takes control of the Screen for this session, works it with their
  await expect.poll(()=>fake.settings.screenStreams).toBe(0);
 });
 
+test('a page that loses its connection while in control says control went back, as closing the screen does',async({page})=>{
+ fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
+ // The page's own socket passes through as it is, until the connection is cut from the page's side.
+ const sockets:{close:(options?:{code?:number,reason?:string})=>Promise<void>}[]=[];
+ await page.routeWebSocket(/\/api\/display\/ws/,socket=>{ socket.connectToServer(); sockets.push(socket); });
+ const {card}=await openScreen(page,'omar@example.com');
+ await card.getByRole('button',{name:'Watch',exact:true}).click();
+ const view=page.getByRole('dialog',{name:'Ads’s screen'});
+ await view.getByRole('button',{name:'Take control'}).click();
+ await view.getByRole('button',{name:'Allow for this session'}).click();
+ await expect(view.getByRole('button',{name:'Done',exact:true})).toBeVisible();
+ await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('human');
+ await sockets.at(-1)?.close({code:1011,reason:'lost'});
+ await expect(page.locator('.toast')).toContainText('Control went back to Ads when you closed the screen');
+ await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
+});
+
 test('while one person holds the Screen, another sees Watching only with who has control and no picture of what is typed',async({page,browser})=>{
  fake.settings.screens.set(adsProfile,{running:true});
  const {card}=await openScreen(page,'omar@example.com');

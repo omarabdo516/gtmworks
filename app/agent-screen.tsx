@@ -197,7 +197,7 @@ function ScreenViewer({company,agent,name,state,picture,withheld,canWake,refused
   taken:()=>{ setAsking(false); toast(t('screenControlToast'),{icon:'hand'}); focusLater(doneButton); },
   given:()=>{ toast(t('screenGaveBackToast',name),{icon:'hand'}); focusLater(takeButton); },
   refused:reason=>{ setAsking(false); if(reason!=='held') toast(t('screenTakeFailed'),{icon:'hand'}); focusLater(takeButton); },
-  lost:()=>toast(t('screenLostToast',name),{icon:'hand'}),
+  lost:()=>toast(t('screenClosedToast',name),{icon:'hand'}),
  });
  const mine=screen.control==='mine'; const other=screen.control==='other';
  useEffect(()=>{ onLive(screen.live); },[screen.live,onLive]);

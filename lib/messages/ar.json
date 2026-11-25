@@ -1255,7 +1255,6 @@
   "screenControlToast": "الدفة معاك للجلسة دي بس",
   "screenGaveBackToast": "رجّعت الدفة لـ {0}، وكمّل من مكانه",
   "screenClosedToast": "الدفة رجعت لـ {0} لما قفلت الشاشة",
-  "screenLostToast": "الاتصال بالشاشة اتقطع، والدفة رجعت لـ {0}",
   "screenControlLine": "الدفة معاك · {0} واقف مكانه",
   "screenWaitingOnYou": "صاحي · مستنيك",
   "screenHandLine": "وقف عند «{0}» في {1} · اتسلّمتلك",
