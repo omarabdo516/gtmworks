@@ -1259,11 +1259,12 @@ if grep -E -- "$work_marker-[0-9a-f]+-(cache\.bin|module\.js)\$|^work/.*/(\.cach
 fi
 # The install is made empty and the one archive brings both Companies and both Engines back.
 remove_install || fail 'remove the install before the every-Engine restore'
+# The removed install took its work disks with it (#507); the fresh install makes the first Company's again, and the
+# restore makes the second's, each at its own size from the archive whatever the shell holds, and writes its work
+# folder there.
+[[ ! -e .work-disks ]] || fail 'the removed install left no work disk'
 rm -f .env.install
 sh scripts/install.sh || fail 'fresh install before the every-Engine restore'
-# The removed install took its work disks with it (#507): the restore makes each Company's disk again, at its own size
-# from the archive whatever the shell holds, and writes its work folder there.
-[[ ! -e .work-disks/first ]] || fail 'the removed install left no work disk'
 SANDBOX_MEMORY=3g SANDBOX_CPUS=3 SANDBOX_DISK=50g sh scripts/install.sh restore "$every_engine" || fail 'restore every Engine'
 [[ $(ls -d .engines/*/ | wc -l) == "$engines_before" ]] || fail 'the every-Engine restore brings every Engine back'
 for folder in .engines/*/; do
