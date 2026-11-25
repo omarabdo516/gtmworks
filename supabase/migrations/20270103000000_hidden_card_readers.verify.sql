@@ -12,7 +12,7 @@ select json_build_object(
  'grants_kept',(select bool_and(array(select r from unnest(array['anon','authenticated','service_role']) r where has_function_privilege(r,oid,'execute') order by r)=callers) from found),
  'hidden_card_answers_as_missing',(select bool_and(prosrc ~ 'public\.(can_see_card|agent_visible_to)\s*\(') from found),
  'waiting_list_reads_under_the_rules',(select not prosecdef from pg_proc where oid='public.waiting_list(uuid)'::regprocedure),
- 'read_rules_unchanged',(select count(*)=15 from pg_policies where schemaname='public' and policyname='card_agent_visible')
+ 'read_rules_unchanged',(select count(*)=16 from pg_policies where schemaname='public' and policyname='card_agent_visible')
   and (select count(*)=12 from pg_policies where schemaname='public' and policyname='card_agent_visible_write')
   and (select count(*)=2 from pg_policies where schemaname='storage' and tablename='objects' and policyname in ('card_file_visible','card_file_visible_write'))
 );
