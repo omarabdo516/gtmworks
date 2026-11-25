@@ -6,13 +6,13 @@
 -- Company (one's own removed_at) and joining again through an invitation (a removed row) are not changes of one's
 -- own Role or Grants.
 --
--- An invitation is made by invite_member alone, which checks the Owner: the policies that let an Owner or a Manager write
--- the invitation row directly go, and so does the table's write grant to a signed-in person. claim_invitations already
--- leaves an active Member's row as it is (its update is only for a removed row) and stays.
+-- An invitation is made only by a person who may invite, an Owner, whichever way it is called: the app calls invite_member
+-- alone, which checks the Owner, and the policies that let a Manager write the invitation row directly are narrowed to an
+-- Owner. claim_invitations already leaves an active Member's row as it is (its update is only for a removed row) and stays.
 --
--- Narrowing, and only for what the previous app version should not do: its members page's update of an Owner by a
--- Manager, or of a Manager's own row, is refused with an error, and its old invite form (changeMember's invite) is
--- refused; everything else it does is unchanged.
+-- Narrowing, and only for what a Manager should not do (ADR 0023 needs no cutover): the previous app version's members
+-- page refuses a Manager's change of an Owner or of their own row, and a Manager's invitation, with its error line; its
+-- Owner's invitation and every other change work as before.
 
 create or replace function public.guard_member() returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -38,6 +38,5 @@ begin
  return new;
 end $$;
 
-drop policy if exists invitation_insert on public.member_invitations;
-drop policy if exists invitation_update on public.member_invitations;
-revoke insert, update, delete on public.member_invitations from anon, authenticated;
+alter policy invitation_insert on public.member_invitations with check (public.is_company_owner(company_id));
+alter policy invitation_update on public.member_invitations using (public.is_company_owner(company_id)) with check (public.is_company_owner(company_id));

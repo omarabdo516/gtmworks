@@ -11,8 +11,8 @@ select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002'
 select throws_ok($$insert into public.member_invitations(company_id,email,role) values ('10000000-0000-0000-0000-000000000001','omar@example.com','viewer')$$,'42501',null,'a Manager cannot write an invitation row');
 select throws_ok($$insert into public.member_invitations(company_id,email,role) values ('10000000-0000-0000-0000-000000000001','new@example.test','viewer')$$,'42501',null,'not even for a new person');
 select is((select count(*)::int from public.member_invitations where email in ('omar@example.com','new@example.test')),0,'no invitation was made');
+with changed as (update public.member_invitations set role='owner' where company_id='10000000-0000-0000-0000-000000000001' returning 1) select is((select count(*)::int from changed),0,'nor change one');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select throws_ok($$insert into public.member_invitations(company_id,email,role) values ('10000000-0000-0000-0000-000000000001','new@example.test','viewer')$$,'42501',null,'the Owner too invites only through invite_member');
 select isnt(public.invite_member('10000000-0000-0000-0000-000000000001','new@example.test','viewer'),null,'which still invites a new person');
 
 -- However an invitation for a Member's email came to be (an old row, a Member who joined since), claiming it changes

@@ -11,7 +11,7 @@ const tables={card:'work_attachments',conversation:'conversation_attachments',ch
 // or agent: the attachment row and the storage object are both read through it, so row level security decides who gets here.
 // null when there is no such file for this reader; 'failed' when a read failed (#777), which the route answers as an
 // error, never as "not found".
-export async function attachmentFile(db: SupabaseClient, company: string, id: number, source: AttachmentSource = { from: 'card' }): Promise<Response | null | 'failed'> {
+async function attachmentFile(db: SupabaseClient, company: string, id: number, source: AttachmentSource = { from: 'card' }): Promise<Response | null | 'failed'> {
  if (!Number.isSafeInteger(id) || id < 1) return null;
  const found = db.from(tables[source.from]).select('name,content_type,path').eq('company_id', company).eq('id', id);
  const row = await (source.from === 'card' && source.card !== undefined ? found.eq('card_id', source.card) : found).maybeSingle();

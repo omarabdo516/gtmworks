@@ -28,7 +28,7 @@ import { Approvals, ApprovalSettings } from './approvals';
 import { type WorkActivity, type WorkMember } from '@/lib/work-activity';
 import { mustRead } from '@/lib/read-failed';
 
-export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,show?:string,idea?:string,decided?:string,item?:string,invited?:string}>}) { const {t,language}=await getI18n();
+export default async function CompanyPage({params,searchParams}:{params:Promise<{slug:string,section?:string[]}>,searchParams:Promise<{message?:string,refused?:string,failed?:string,section?:string,agent?:string,period?:string,card?:string,show?:string,idea?:string,decided?:string,item?:string}>}) { const {t,language}=await getI18n();
  const {slug,section:parts}=await params; const cardId=parts?.[0]==='work' && parts?.[1]==='board' && parts?.[2] ? Number(parts[2]) : undefined; const section=cardId?'work/board':parts?.join('/') || 'home'; const db=await supabase(); const {data:{user}}=await db.auth.getUser();
  // Signing in returns to the page asked for, with the settings overlay's own state (section, agent, period), the Card
  // open over the board (card) and the Card a chat shows on the board (show) kept, so a link to Settings, Subscription
