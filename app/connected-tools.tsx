@@ -90,11 +90,11 @@ export function ConnectedTools({company,agent,name,owner,tools:given}:{company:s
  const end=(tool:AgentToolItem)=>{
   const state=stateOf(tool);
   if(state==='connecting') return <span className="panel-row__meta">{t('connectConnecting')}</span>;
-  // Its own test has not answered yet (#770), in the row's waiting style.
-  if(state==='checking') return <span className="panel-row__meta panel-row__meta--wait">{t('agentToolChecking')}</span>;
   if(state==='missing') return owner?<button type="button" className="btn btn--primary btn--sm" onClick={()=>void connect(tool)}>{t('connectDo')}</button>
    :<span className="panel-row__meta">{t('agentToolMissing')}</span>;
   if(managing&&owner) return <button type="button" className="link-btn" onClick={()=>void disconnect(tool)}>{t('agentToolDisconnect')}</button>;
+  // Its own test has not answered yet (#770), in the row's waiting style.
+  if(state==='checking') return <span className="panel-row__meta panel-row__meta--wait">{t('agentToolChecking')}</span>;
   if(state==='turnedOff') return <span className="panel-row__meta">{t('agentToolOff')}</span>;
   // A sign-in that stopped working, as Settings, Apps shows it (the reference has no such state).
   if(state==='attention') return <span className="panel-row__meta panel-row__meta--wait">{t('agentToolAttention')}</span>;
