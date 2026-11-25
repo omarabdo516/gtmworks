@@ -97,6 +97,22 @@ test('the auth callback redirects on APP_ORIGIN after the code is exchanged and 
  assert.equal(noCode.headers.get('location'),`${origin}/sign-in`);
 });
 
+// #775: a claim that fails is told on the sign-in page and logged, never passed over to the page the link names.
+test('the auth callback tells the person when their invitation could not be claimed', async () => {
+ process.env.APP_ORIGIN=origin;
+ server();
+ const answer=globalThis.fetch;
+ globalThis.fetch=async (input,init)=>new URL(input instanceof Request?input.url:String(input)).pathname==='/rest/v1/rpc/claim_invitations'
+  ?new Response(JSON.stringify({code:'P0001',message:'boom'}),{status:400,headers:{'Content-Type':'application/json'}}):answer(input,init);
+ await (await supabase()).auth.signInWithOtp({email:owner.email,options:{emailRedirectTo:`${origin}/auth/callback`}});
+ const lines=[]; const write=console.error; console.error=line=>lines.push(String(line));
+ try {
+  const response=await callback(new NextRequest(`http://gateway:8080/auth/callback?code=one-time&next=${encodeURIComponent('/c/first-company-0000abcd/home')}`,{headers:inside}));
+  assert.equal(response.headers.get('location'),`${origin}/sign-in?invitation=failed`);
+ } finally { console.error=write; }
+ assert.ok(lines.some(line=>line.includes('claimInvitations')&&line.includes('P0001')),'the failed claim is logged');
+});
+
 test('the reset link is built on APP_ORIGIN, not on the forwarded request', async () => {
  process.env.APP_ORIGIN=origin;
  const requests=server();
