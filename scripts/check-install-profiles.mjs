@@ -1025,9 +1025,10 @@ if(step==='screen-sleep') {
  await until('control taken again',async()=>live.said.filter(message=>message.control==='mine').length>=2,30);
  live.socket.terminate();
  await until('the lease back with the Agent after the socket ended',async()=>(await display('display.status')).lease?.holder==='agent',30);
- const rows=await checked(service.from('company_log').select('action,actor_id').eq('agent_id',first.agent).in('action',['agent_screen_taken','agent_screen_given_back']));
+ // The Owner reads the log as they would in Activity: the service role has no grant on it.
+ const rows=await checked(browser.from('company_log').select('action,actor_id').eq('agent_id',first.agent).in('action',['agent_screen_taken','agent_screen_given_back']));
  const by=action=>rows.filter(row=>row.action===action&&row.actor_id===owner).length;
- await until('the give-back rows',async()=>{ const again=await checked(service.from('company_log').select('action,actor_id').eq('agent_id',first.agent).eq('action','agent_screen_given_back')); return again.filter(row=>row.actor_id===owner).length>=2; },30);
+ await until('the give-back rows',async()=>{ const again=await checked(browser.from('company_log').select('action,actor_id').eq('agent_id',first.agent).eq('action','agent_screen_given_back')); return again.filter(row=>row.actor_id===owner).length>=2; },30);
  assert.equal(by('agent_screen_taken'),2,'each take is one log row with the Owner');
  writeProof({step,marker,profile:first.profile,screen:{width,height},bytes:received});
 } else {
