@@ -967,17 +967,29 @@ const page=`/work/${first.profile}/${marker}-screen.html`;
 const open=`printf '<!doctype html><title>${title}</title><h1>${marker}</h1>' > ${page} && set -a && . "$(ls -t /tmp/hermes-bot-desktop/*/env | head -n 1)" && set +a && exec chromium --user-data-dir="$HOME/.hermes/bot-desktop/browser-profile" --no-first-run --no-default-browser-check file://${page}`;
 const offered=[];
 const textOf=messages=>messages.filter(message=>message.role==='user').map(message=>typeof message.content==='string'?message.content:JSON.stringify(message.content)).join('\n');
-const call=(done,name,args)=>({id:`call_screen_${done}`,type:'function',function:{name,arguments:JSON.stringify(args)}});
+// The pinned Engine defers computer_use behind its tool search (tools.tool_search.defer): `tool_search` lists it by name
+// and `tool_call` invokes it, as the sandbox-mcp step calls a deferred tool; a Run that lists it directly calls it so.
+let direct=false;
+const call=(done,name,args)=>name==='computer_use'&&!direct
+ ?{id:`call_screen_${done}`,type:'function',function:{name:'tool_call',arguments:JSON.stringify({calls:[{name,arguments:args}]})}}
+ :{id:`call_screen_${done}`,type:'function',function:{name,arguments:JSON.stringify(args)}};
 const plan=(messages,body)=>{
- offered.push((body.tools||[]).map(tool=>tool.function?.name));
+ const tools=(body?.tools||[]).map(tool=>tool?.function).filter(Boolean);
+ // The Engine also asks the model for its own auxiliary calls, with no tools: only a Run's own requests count.
+ if(tools.length) {
+  direct=tools.some(tool=>tool.name==='computer_use');
+  const deferred=tools.some(tool=>tool.name==='tool_call')&&/\bcomputer_use\b/.test(tools.find(tool=>tool.name==='tool_search')?.description||'');
+  offered.push({names:tools.map(tool=>tool.name),computerUse:direct||deferred});
+ }
+ if(!tools.length) return null;
  const text=textOf(messages);
- const tools=messages.filter(message=>message.role==='tool');
- const done=tools.length;
+ const answers=messages.filter(message=>message.role==='tool');
+ const done=answers.length;
  if(text.includes(`SCREEN-WAKE ${marker}`)) return done<1?call(done,'computer_use',{action:'capture',mode:'ax'}):null;
  if(!text.includes(`SCREEN-OPEN ${marker}`)) return null;
  if(done===0) return call(done,'computer_use',{action:'capture',mode:'ax'});
  if(done===1) return call(done,'terminal',{command:open,background:true});
- const seen=tools.slice(2).some(message=>JSON.stringify(message.content).includes(title));
+ const seen=answers.slice(2).some(message=>JSON.stringify(message.content).includes(title));
  if(seen||done>=16) return null;
  return done%2===0?call(done,'computer_use',{action:'list_windows'}):call(done,'computer_use',{action:'wait',seconds:2});
 };
@@ -995,12 +1007,12 @@ try {
  // A Run that never replies says how far it came: how often it asked the model, with which tools, and what each tool
  // answered, cut short (the tool answers are the Screen's and the sandbox's, never a key).
  const answer=await until('reply on the Screen check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300)
-  .catch(error=>{ throw new Error(`${error.message}: the model was asked ${asked.length} times, first offered ${JSON.stringify(offered[0]?.filter(name=>/computer|terminal/.test(name||'')))}, tool answers ${JSON.stringify(results.map(result=>result.slice(0,300)))}`); });
+  .catch(error=>{ throw new Error(`${error.message}: the model was asked ${asked.length} times, first offered ${JSON.stringify(offered[0])}, tool answers ${JSON.stringify(results.map(result=>result.slice(0,300)))}`); });
  assert.ok(answer.body.includes(reply),answer.body);
  // The Run itself was offered computer_use, and never the browser tools no Agent gets: what the model was sent, not the
  // toolsets the profile reports, which read its settings only.
- assert.ok(offered.length>0&&offered.every(names=>names.includes('computer_use')),`the Run is offered computer_use: ${JSON.stringify(offered[0])}`);
- assert.ok(!offered.flat().some(name=>/^browser_/.test(name||'')),'the Run is offered no browser tool');
+ assert.ok(offered.length>0&&offered.every(request=>request.computerUse),`the Run is offered computer_use: ${JSON.stringify(offered[0])}`);
+ assert.ok(!offered.some(request=>request.names.some(name=>/^browser_/.test(name||''))),'the Run is offered no browser tool');
  const captured=String(results[0]??'');
  assert.ok(results.length>=1&&!/human_has_control|not ready|not installed|is not running/.test(captured),`the Screen is captured: ${captured.slice(0,400)}`);
  if(step==='screen-open') {
