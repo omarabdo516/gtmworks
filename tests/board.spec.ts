@@ -456,6 +456,8 @@ test('a Contributor drops a Card on Live and it moves there, with Undo',async({p
  const [card]=placeCards(Date.now(),1);
  await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
  await expect(page.locator(`.col[data-column="ideas"] .kcard[data-card-id="${card}"]`)).toBeVisible();
+ // The file's earlier tests leave their own Cards above it in Ideas, so it may start below the fold.
+ await page.locator(`.kcard[data-card-id="${card}"]`).scrollIntoViewIfNeeded();
  const from=(await page.locator(`.kcard[data-card-id="${card}"]`).boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
  await page.mouse.move(from.x+from.width/2,from.y+20);
  await page.mouse.down();
@@ -478,6 +480,8 @@ test('a Contributor dropping a Card archived meanwhile is told it cannot move it
  await signIn(page,'reviewer@example.com','/c/rs-learning/work/board');
  await expect(page.locator(`.col[data-column="ideas"] .kcard[data-card-id="${card}"]`)).toBeVisible();
  query(`update public.work_cards set archived_at=now(),archived_by='20000000-0000-0000-0000-000000000001' where id=${card}`);
+ // The file's earlier tests leave their own Cards above it in Ideas, so it may start below the fold.
+ await page.locator(`.kcard[data-card-id="${card}"]`).scrollIntoViewIfNeeded();
  const from=(await page.locator(`.kcard[data-card-id="${card}"]`).boundingBox())!,to=(await page.locator('.col[data-column="live"] .col__body').boundingBox())!;
  await page.mouse.move(from.x+from.width/2,from.y+20);
  await page.mouse.down();
