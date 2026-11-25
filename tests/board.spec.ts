@@ -192,9 +192,10 @@ test('a card waiting for my approval is in Waiting on you and leaves it when I a
  await expect(waiting.locator('.col__count')).toHaveText(String(count-1));
 });
 
-test('Waiting on you shows exactly the reader\'s own list, approvals and items newest first, and nothing for someone else',async({page,browser})=>{
- // Omar holds the review step: a card he must approve, one item from before it entered review and one from after, so
- // approvals and items interleave by time. The Manager holds no approval, so a card in review is not theirs.
+test('Waiting on you shows exactly the reader\'s own list, the reviews they decide and their items newest first, and nothing for someone else',async({page,browser})=>{
+ // A card in review, one item of Omar's from before it entered review and one from after, so approvals and items
+ // interleave by time. Any Owner or Manager who sees the Card decides its review (#681), so it is the Manager's too; their
+ // items are not.
  const omar='20000000-0000-0000-0000-000000000001', manager='20000000-0000-0000-0000-000000000002', stamp=Date.now();
  await signIn(page,'omar@example.com','/c/rs-learning/work/board');
  const card=await newCard(page,'Own list approval');
@@ -227,17 +228,17 @@ test('Waiting on you shows exactly the reader\'s own list, approvals and items n
   await page.goto('/c/rs-learning/home');
   await expect(page.locator('.stats .stat').first().locator('strong')).toHaveText(String(approvals));
 
-  // The Manager sees their own item and not Omar's card in review, nor Omar's items.
+  // The Manager sees their own item and the card in review they may decide too, not Omar's items.
   const other=await browser.newContext(); const managerPage=await other.newPage();
   try {
    await signIn(managerPage,'manager@example.com','/c/rs-learning/approvals');
    const theirs=managerPage.locator('.col[data-column="waiting"]');
    await expect(theirs.locator('.mcard').filter({hasText:`For the Manager ${stamp}`})).toBeVisible();
-   await expect(theirs.locator(`.kcard[data-card-id="${card.id}"]`)).toHaveCount(0);
+   await expect(theirs.locator(`.kcard[data-card-id="${card.id}"]`)).toBeVisible();
    await expect(theirs.getByText(`than the approval ${stamp}`)).toHaveCount(0);
    const count=await theirs.locator(':is(.kcard,.mcard)').count();
    await expect(theirs.locator('.col__count')).toHaveText(String(count));
-   expect(Number(rows(`select count(*)::int as n from public.waiting_items where person_id='${manager}' and resolved_at is null`)[0].n)).toBe(count);
+   expect(Number(rows(`select count(*)::int as n from public.waiting_items where person_id='${manager}' and resolved_at is null`)[0].n)).toBe(await theirs.locator('.mcard').count());
   } finally { await other.close(); }
  } finally {
   query(`update public.waiting_items set resolved_at=now() where resolved_at is null and title like '%${stamp}'`);

@@ -183,8 +183,7 @@ test('a review: an Owner approves it into Planned with its date ahead and into D
  const review=card.locator('[data-card-section="review"]');
  await review.getByRole('button',{name:"Approve"}).click();
  // Its publishing date is ahead: Planned, with the approved symbol; the review is closed for everyone.
- await expect(card.getByRole('button',{name:/^Status: Planned/})).toBeVisible();
- await expect(card.getByRole('img',{name:'Approved'})).toBeVisible();
+ await expect(card.getByRole('button',{name:'Status: Planned · Approved'})).toBeVisible();
  expect(JSON.parse(query(`select decision from public.work_reviews where card_id=${cardId}`))).toEqual([{decision:'approved'}]);
  await page.goto('/c/rs-learning/approvals');
  await expect(waiting.locator('.kcard').filter({hasText:title})).toHaveCount(0);

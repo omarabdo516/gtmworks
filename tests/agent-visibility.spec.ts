@@ -115,6 +115,9 @@ test('the board shows a Member chips and Cards of the Agents they see only, and 
   insert into public.company_log(company_id,actor_id,actor_kind,actor_name,subject,card_id,agent_id,action,body,source,source_id,created_at) values
    ('${company}','${seo}','agent','SEO','card',card,'${seo}','note_reply','Keywords','note_runs',9190101,now()-interval '2 hours'),
    ('${company}','${ads}','agent','Meta Ads','card',card,'${ads}','note_reply','Audience','note_runs',9190102,now()-interval '1 hour');
+  -- The seed's own review waits on every Owner and Manager who sees it (#681); answered here, the Manager's list holds
+  -- only what this test puts there.
+  update public.work_reviews set decision='ended',decided_at=now() where company_id='${company}' and decision is null;
   perform set_config('approval.internal','yes',true);
   insert into public.approval_steps(company_id,name,position,person_id) values ('${company}','Manager',9,'20000000-0000-0000-0000-000000000002') returning id into step;
   select id into review from public.work_stages where company_id='${company}' and kind='review' order by position limit 1;
