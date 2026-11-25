@@ -84,6 +84,7 @@ test('an archived Card opens read-only from an old link and from its chat\'s lin
  await callout.getByRole('button', { name: 'Restore' }).click();
  await expect(sheet.getByRole('region', { name: 'Archived' })).toHaveCount(0);
  await expect(toast(page)).toContainText('Restored');
+ await sheet.getByRole('tab', { name: /^Activity \d+$/ }).click();
  await expect(sheet.locator('#cw-list')).toContainText('restored the card');
  await sheet.getByRole('button', { name: 'Close the card' }).click();
  await expect(inColumn(page, 'progress', 3)).toBeVisible();

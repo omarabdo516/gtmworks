@@ -167,7 +167,7 @@ test('owner assigns a new Contributor agent through settings, the work list foll
  const current=writerRow.getByRole('link');
  await expect(current).toBeVisible();
  const cardPath=await current.getAttribute('href');
- const card=Number(cardPath!.split('/').pop());
+ const card=Number(cardPath!.split('=').pop());
  const person=randomUUID();
  const initialName=`وكيل اختبار مستقل ${person}`;
  const renamed='كاتب المحتوى بعد تغيير الاسم';
