@@ -154,12 +154,12 @@ test('an open socket whose session has run out is closed for the page to sign in
 test('the web server takes the Screen\'s upgrade, leaves others to Next in development, and ends any other in production',()=>{
  const taken=[];
  const socket=()=>Object.assign(new Duplex({read(){},write(_chunk,_encoding,done){ done(); }}),{});
- const request=url=>/** @type {any} */({url});
+ const asked=path=>new URL(path,'http://gtmworks'), request=/** @type {any} */({});
  for(const dev of [true,false]) {
   const route=screenUpgrades({dev,screen:(_request,_socket,_head,query)=>{ taken.push([dev,query.get('agent')]); }});
   const screen=socket(), other=socket();
-  route(request(`${screenStreamPath}?agent=a`),screen,Buffer.alloc(0));
-  route(request('/_next/webpack-hmr'),other,Buffer.alloc(0));
+  route(asked(`${screenStreamPath}?agent=a`),request,screen,Buffer.alloc(0));
+  route(asked('/_next/webpack-hmr'),request,other,Buffer.alloc(0));
   assert.equal(screen.destroyed,false);
   assert.equal(other.destroyed,!dev,dev?'hot reload is Next\'s':'nothing else upgrades');
  }
