@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // show what they type. A socket that drops is opened again after a moment while the view stays open; one refused for a
 // session that needs refreshing first reads the Screen's state, which refreshes it.
 export type Control = 'agent' | 'mine' | 'other';
-type Rfb = { viewOnly: boolean, scaleViewport: boolean, resizeSession: boolean, focusOnClick: boolean, disconnect: () => void, focus: () => void, addEventListener: (type: string, listener: () => void) => void };
+type Rfb = { viewOnly: boolean, background: string, scaleViewport: boolean, resizeSession: boolean, focusOnClick: boolean, disconnect: () => void, focus: () => void, addEventListener: (type: string, listener: () => void) => void };
 type Events = { taken: () => void, given: () => void, refused: (reason: 'held' | 'notAllowed' | 'failed') => void, lost: () => void };
 
 // The channel noVNC reads one RFB stream from (core/websock.js attach: send, close, binaryType, the on* handlers,
@@ -52,7 +52,8 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
       for (let frame = 0; frame < 10 && !target.current && !ended && channel === here; frame++) await new Promise(resolve => requestAnimationFrame(resolve));
       if (ended || channel !== here || !target.current) return;
       const client = new RFB(target.current, here, { shared: true });
-      client.scaleViewport = true; client.resizeSession = false; client.focusOnClick = true; client.viewOnly = !mine.current;
+      // The frame's own background shows around the Screen, in either theme, in place of noVNC's dark grey.
+      client.background = 'transparent'; client.scaleViewport = true; client.resizeSession = false; client.focusOnClick = true; client.viewOnly = !mine.current;
       client.addEventListener('connect', () => { if (channel === here) setLive(true); });
       client.addEventListener('disconnect', () => { if (rfb.current === client) rfb.current = null; if (channel === here) setLive(false); });
       rfb.current = client;
