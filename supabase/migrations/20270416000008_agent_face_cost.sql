@@ -3,10 +3,10 @@
 -- some twenty parts planned again on every call, and asked can_see_agent, in_channel and can_see_card once per row.
 -- The same answers, read once for all the reader's Agents: every source of work is read once for the Company, grouped by
 -- Agent; which Agents, channels and Cards the reader sees is asked once per Agent, channel or Card, never per Run; and
--- each read is a PL/pgSQL function, whose plans the database keeps between calls on the same connection.
--- What each state means is unchanged (20270416000002). agent_run_facts goes: only agent_work read it, and no role could.
-
-drop function public.agent_run_facts(uuid, uuid);
+-- each read is a PL/pgSQL function, whose plans the database keeps between calls on the same connection, and uses from
+-- the second call on (force_generic_plan: the plans depend on nothing but the Company's and the reader's ids).
+-- What each state means is unchanged (20270416000002). agent_run_facts is no longer read, and no role may call it; it
+-- stays until a cutover, since an update keeps the previous release serving on this schema (ADR 0023).
 
 -- Each Agent the reader sees, with whether it works now, its failure that is the reader's to see, its work times and the
 -- reader's own marks. Security definer for the Runs and the marks; it answers only for the reader and the Agents they see.
@@ -22,7 +22,7 @@ drop function public.agent_run_facts(uuid, uuid);
 create or replace function public.agent_work(c uuid)
 returns table(agent uuid, working boolean, failed_at timestamptz, failed_conversation uuid, failed_channel uuid, failed_card bigint,
  last_work_at timestamptz, created_at timestamptz, woken_at timestamptz)
-language plpgsql stable security definer set search_path='' as $$
+language plpgsql stable security definer set search_path='' set plan_cache_mode=force_generic_plan as $$
 #variable_conflict use_column
 declare reader uuid := auth.uid();
 begin
@@ -52,9 +52,20 @@ begin
   select n.agent_id, n.card_id, n.created_at, n.closed_at, n.outcome from public.note_runs n
   join seen_agents a on a.id=n.agent_id where n.company_id=c
  ),
- -- A Handover's two Agents, each with the leg that is theirs: the target's, and the follow-up of the Agent that handed it.
+ -- A Handover's two Agents, each with the leg that is theirs: the target's, and the follow-up of the Agent that handed it
+ -- (never the same Agent, agent_handovers_other_agent): whether it is under way, and how and when it ended.
  handed as (
-  select a.id agent_id, h.* from public.agent_handovers h join seen_agents a on a.id in (h.to_agent, h.from_agent) where h.company_id=c
+  select a.id agent_id, h.conversation_id, h.channel_message_id, h.created_at, h.closed_at, h.target_closed_at,
+   h.return_started_at, h.answer_started_at,
+   case when a.id=h.to_agent then h.state in ('waiting','target') else h.state in ('returning','follow_up') end leg_open,
+   case when a.id=h.to_agent then coalesce(h.target_closed_at, h.closed_at) else h.closed_at end leg_closed_at,
+   case when a.id=h.to_agent then h.target_outcome
+    when h.closed_at is not null then h.follow_up_outcome end leg_outcome
+  from public.agent_handovers h join seen_agents a on a.id in (h.to_agent, h.from_agent) where h.company_id=c
+ ),
+ -- The Cards with an ended note Run the reader may see, asked once each.
+ seen_cards as (
+  select v.card_id from (select distinct card_id from note_work where outcome is not null) v where public.can_see_card(c, v.card_id)
  ),
  -- Every fact of work, one row each: whether it is open, when it began, when it ended.
  facts as (
@@ -64,8 +75,8 @@ begin
     and not exists(select 1 from public.channel_runs q where q.message_id=w.message_id and q.outcome is null and q.ordinal<w.ordinal),
    w.created_at, w.closed_at from channel_work w
   union all select agent_id, outcome is null, created_at, closed_at from note_work
-  union all select agent_id, to_agent=agent_id and state in ('waiting','target') or from_agent=agent_id and state in ('returning','follow_up'),
-   greatest(created_at, return_started_at, answer_started_at), greatest(closed_at, target_closed_at) from handed
+  union all select agent_id, leg_open, greatest(created_at, return_started_at, answer_started_at), greatest(closed_at, target_closed_at)
+   from handed
   union all select r.agent_id, r.seen_at > now() - interval '2 minutes', r.started_at, null from public.routine_runs_open r
    join seen_agents a on a.id=r.agent_id where r.company_id=c
   union all select r.agent_id, false, null, r.ended_at from public.routine_results r join seen_agents a on a.id=r.agent_id where r.company_id=c
@@ -83,18 +94,14 @@ begin
   select w.agent_id, w.closed_at, w.outcome, null, w.channel_id, null from channel_work w join my_channels k on k.id=w.channel_id
    where w.outcome is not null
   union all
-  select n.agent_id, n.closed_at, n.outcome, null, null, n.card_id from note_work n
-   where n.outcome is not null and n.card_id in (select v.card_id from (select distinct card_id from note_work where outcome is not null) v
-    where public.can_see_card(c, v.card_id))
+  select n.agent_id, n.closed_at, n.outcome, null, null, n.card_id from note_work n join seen_cards v on v.card_id=n.card_id
+   where n.outcome is not null
   union all
-  select h.agent_id, case when h.agent_id=h.to_agent then coalesce(h.target_closed_at, h.closed_at) else h.closed_at end,
-   case when h.agent_id=h.to_agent then h.target_outcome else h.follow_up_outcome end, v.id, k.id, null from handed h
+  select h.agent_id, h.leg_closed_at, h.leg_outcome, v.id, k.id, null from handed h
    left join public.conversations v on v.id=h.conversation_id and v.person_id=reader
    left join public.channel_messages m on m.id=h.channel_message_id
    left join my_channels k on k.id=m.channel_id
-   where (v.id is not null or k.id is not null)
-    and (h.agent_id=h.to_agent and h.target_outcome is not null
-     or h.agent_id=h.from_agent and h.follow_up_outcome is not null and h.closed_at is not null)
+   where (v.id is not null or k.id is not null) and h.leg_outcome is not null
  ),
  last_seen as (select distinct on (s.agent_id) s.* from seen s where s.at is not null order by s.agent_id, s.at desc),
  facts_of as (
@@ -121,10 +128,11 @@ revoke all on function public.agent_work(uuid) from public, anon, authenticated,
 grant execute on function public.agent_work(uuid) to authenticated;
 
 -- "Waiting on you" (20270415100000's waiting_list), unchanged, as a PL/pgSQL function: the same query, whose plan the
--- database keeps between calls on a connection instead of planning its eleven parts on every page and every poll.
+-- database keeps between calls on a connection instead of planning its eleven parts on every page and every poll. This
+-- is now its newest definition: a change to the list starts from here.
 create or replace function public.waiting_list(c uuid)
 returns table(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamptz)
-language plpgsql stable set search_path='' as $$
+language plpgsql stable set search_path='' set plan_cache_mode=force_generic_plan as $$
 #variable_conflict use_column
 begin
  return query select * from (
@@ -196,7 +204,7 @@ end $$;
 create or replace function public.agent_face_states(c uuid)
 returns table(agent uuid, state text, working boolean, waiting boolean, failed_at timestamptz, failed_conversation uuid,
  failed_channel uuid, failed_card bigint, last_work_at timestamptz, created_at timestamptz, woken_at timestamptz)
-language plpgsql stable set search_path='' as $$
+language plpgsql stable set search_path='' set plan_cache_mode=force_generic_plan as $$
 #variable_conflict use_column
 declare asking uuid[];
 begin
