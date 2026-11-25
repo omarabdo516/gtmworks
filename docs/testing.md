@@ -178,7 +178,7 @@ starts the local Supabase stack first reserves its ports (`scripts/ci-runner.mjs
   turns off the browser's cache and changes the headers a test reads. Each context reports the outside addresses it
   tried: a test fails naming each host, and one a hook tried is kept for the worker, with the test before it, and fails
   the worker when it ends. `tests/components/offline-setup.ts` fails a component test the same way. Name lookups are
-  not guarded. The install suite, which drives a real install on purpose, are not guarded, nor yet the containers' network.
+  not guarded. The install suite, which drives a real install on purpose, is not guarded, nor yet the containers' network.
   `provider-hosts.test.mjs` fails `static` when a tracked file under `tests/` names a real model provider host
   (`scripts/provider-hosts.mjs`): tests talk to the fake engine, the fake Hermes or the install proof's fake provider.
 - The nightly `Time zones` workflow (`time-zones.yml`, #266) runs the node tests (`npm test`) and `./ci.sh components`

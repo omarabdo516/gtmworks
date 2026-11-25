@@ -5,6 +5,7 @@ import { localQuery, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { signIn } from './sign-in';
 import { dialogExit, recordDialogExit, dialogRecords, type DialogExitRecord } from './dialog-exit';
 import { inbox, serverLogOf } from './lane.mjs';
+import { expectDarkContrast } from './contrast';
 
 // The install's setup code (playwright.config.ts), as the installer's setup link carries it (issue #50).
 const code=process.env.SETUP_CODE!;
@@ -382,4 +383,19 @@ for(const motion of ['no-preference','reduce'] as const) test(`the saved answer 
  expect(seen.slice(0,2)).toEqual(motion==='reduce'?[['gone',home],['composer',expect.stringMatching(new RegExp(`^/c/${slug}/conversations/`))]]
   :[['closing',dialogExit,home],['gone',home]]);
  if(motion!=='reduce') expect(seen[2]).toEqual(['composer',expect.stringMatching(new RegExp(`^/c/${slug}/conversations/`))]);
+});
+
+// Contrast is never removed (#218): first run's form keeps every text run at 4.5:1 in the dark theme, in both languages at
+// 1440 and 390. It was the visual lane's `first-run` screen (#257) until the lane went (#805); it is measured here, where
+// the install is empty.
+test('the first-run form keeps its text at 4.5:1 in the dark theme, in Arabic and English at 1440 and 390',async({page})=>{
+ for(const language of ['ar','en'] as const) for(const width of [1440,390]) {
+  await page.setViewportSize({width,height:900});
+  await page.emulateMedia({colorScheme:'dark'});
+  await page.goto(`/first-run#code=${code}`);
+  await page.locator('select').first().selectOption(language);
+  await expect(page.locator('html')).toHaveAttribute('lang',language);
+  await expect(page.locator('input[name=company]')).toBeVisible();
+  await expectDarkContrast(page);
+ }
 });

@@ -12,7 +12,7 @@
 // of #333), so there is no draft state to read: a suite a draft's files need must succeed like any other. A failed or
 // cancelled stage is always red.
 const env = process.env;
-// The compared screens are not a stage: they run on main only and never judge a pull request (#257).
+// The navigation budgets are not a stage: they run on main only and never judge a pull request (#257, #805).
 const stages = ['IMAGE', 'DATABASE', 'INTEGRATION', 'CHAT_OPEN', 'INSTALL'];
 const keys = ['CHANGES_RESULT', 'FAST_RESULT', 'COMPONENTS_RUN', ...stages.flatMap(stage => [`${stage}_RUN`, `${stage}_RESULT`])];
 console.log(keys.map(key => `${key}=${env[key] ?? ''}`).join(' '));

@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 
 // The required `check` (#76, like Hermes `all-checks-pass`): a suite the first job did not ask for counts as passed only
 // when it was skipped; a suite it asked for, or one whose need is unknown, must succeed; a failed or cancelled stage is
-// always red. The compared screens are not a stage: they run on main only and never judge a pull request (#257).
+// always red. The navigation budgets are not a stage: they run on main only and never judge a pull request (#257, #805).
 // The app image is a stage of its own (#403): it follows the browser suite's and the install proof's own answers and the
 // required check waits for it. The install proof is one stage (#406): its job runs one matrix entry per area — the first
 // install with Companies, Agents and backup; the proxy; the update; and the one-line install — so its one result is red
