@@ -19,7 +19,9 @@ begin
  if tg_op = 'DELETE' then raise exception 'members must be removed by updating removed_at'; end if;
  if tg_op = 'UPDATE' and (new.company_id <> old.company_id or new.person_id <> old.person_id) then raise exception 'membership identity cannot change'; end if;
  if auth.uid() is not null then
-  if tg_op = 'UPDATE' and old.removed_at is null and not public.is_company_owner(old.company_id) then
+  -- A signed-in person's write (the request's role), however it reaches the row: the database's own maintenance is not
+  -- a person changing a Member.
+  if tg_op = 'UPDATE' and current_setting('role', true) = 'authenticated' and old.removed_at is null and not public.is_company_owner(old.company_id) then
    if old.role = 'owner' and (new.role, new.agent_role, new.grant_publishing, new.grant_money_figures, new.grant_customer_data, new.removed_at)
       is distinct from (old.role, old.agent_role, old.grant_publishing, old.grant_money_figures, old.grant_customer_data, old.removed_at) then
     raise exception 'ownerChangedByOwnerOnly' using errcode = '42501';
