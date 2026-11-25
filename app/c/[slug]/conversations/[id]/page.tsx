@@ -73,14 +73,18 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // Until then the chat is named as the sidebar names it (app/shell.tsx): the first line of its first message.
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
  // chat slow to open (decision 0042).
- const [{data:first},{data:agent},{data:person},membershipAnswer,{data:writer}]=await Promise.all([
+ // A first message that still waits for its Run (#764) names the chat as well, with the files sent with it.
+ const [{data:stored},{data:waiting},{data:agent},{data:person},membershipAnswer,{data:writer}]=await Promise.all([
   db.from('conversation_messages').select('body,conversation_attachments(name)').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
+  db.from('conversation_queued_turns').select('message,send_key').eq('conversation_id',id).order('queued_at').limit(1).maybeSingle(),
   agentRead,
   db.from('people').select('name').eq('id',user.id).single(),
   membershipRead,
   // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
   db.rpc('conversation_can_write',{c:company.id}),
  ]);
+ const waitingFiles=!stored&&waiting?(await db.from('conversation_attachments').select('name').eq('conversation_id',id).eq('send_key',waiting.send_key).order('position').limit(1)).data:null;
+ const first=stored??(waiting&&{body:waiting.message,conversation_attachments:waitingFiles??[]});
  const membership=mustRead(membershipAnswer,'membership');
  markOpen('reads',timing);
  // #434: the Owner's empty Conversation with Lead (first run makes one) is where Lead opens the Company's first

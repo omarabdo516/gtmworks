@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(21);
+select plan(22);
 -- #764 (ADR 0029): a message is stored as its sender's waiting turn by one call, before any Run starts; a repeated send
 -- key stores it once; the starter's claim takes it once; a turn the Engine refused is "not sent" and "Try again" puts
 -- the same turn back to waiting; a refusal by the database stores nothing; the previous release's send still works.
@@ -30,6 +30,7 @@ select is(pg_temp.reservations('c7640000-0000-0000-0000-000000000001'),0,'and no
 select is(pg_temp.send('c7640000-0000-0000-0000-000000000001','d7640000-0000-0000-0000-000000000001'),'queued','the same send key again, from this tab or another, is the same turn');
 select is(pg_temp.turns('c7640000-0000-0000-0000-000000000001'),1,'still one turn');
 select is((select count(*)::int from public.conversations where id='c7640000-0000-0000-0000-000000000001'),1,'the new Conversation is made with it');
+select ok((select last_message_at>now()-interval '1 minute' from public.conversations where id='c7640000-0000-0000-0000-000000000001'),'and is the newest chat by its waiting message, before its Run stores it');
 select is(public.queue_conversation_turn('c7640000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','a7640000-0000-0000-0000-000000000001','d7640000-0000-0000-0000-000000000009','',true)->>'state',
  'opened','open_only makes a Conversation for its files first, with no turn');
 select is(pg_temp.turns('c7640000-0000-0000-0000-000000000002'),0,'and stores no turn');

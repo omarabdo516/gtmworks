@@ -435,7 +435,8 @@ done
 # #773: the installer names every Engine's network for the app and the worker in its own Compose file, so recreating
 # them outside the installer, as an Owner's own Compose command does, leaves both on each Engine's network.
 grep -qx "  $second_network:" docker-compose.engines.yml || fail "the installer's Compose file names the second Engine's network"
-engine_networks=$(sed -n 's/^  \([^ :]*\):$/\1/p' docker-compose.engines.yml | sort -u)
+# Only the file's own top-level networks block names networks; its services block names web and worker the same way.
+engine_networks=$(sed -n '/^networks:$/,$s/^  \([^ :]*\):$/\1/p' docker-compose.engines.yml | sort -u)
 docker compose --env-file .env.install -f docker-compose.install.yml -f docker-compose.engines.yml up -d --no-deps --force-recreate --wait --wait-timeout 300 web worker \
   || fail 'the app and the worker recreated outside the installer'
 for service in web worker; do

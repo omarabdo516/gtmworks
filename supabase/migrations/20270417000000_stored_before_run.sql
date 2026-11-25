@@ -60,6 +60,8 @@ begin
  end if;
  insert into public.conversation_queued_turns(conversation_id,send_key,company_id,person_id,agent_id,message)
   values(conversation,message_key,c,auth.uid(),agent,message) on conflict (conversation_id,send_key) do nothing;
+ -- The message is the chat's newest from now (#764): the sidebar lists the chat by it before its Run stores it.
+ update public.conversations set last_message_at=now() where id=conversation and last_message_at<now();
  return jsonb_build_object('state','queued');
 end $$;
 revoke all on function public.queue_conversation_turn(uuid,uuid,uuid,uuid,text,boolean) from public,anon,service_role;
