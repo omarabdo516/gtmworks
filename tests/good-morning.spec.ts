@@ -72,8 +72,10 @@ test('the Owner switches Good morning on at a time on the main Agent\'s page (#1
 
 test('a run of the job opens one Conversation for each Member with anything in their card, and none for a Member with nothing',async({page})=>{
  test.setTimeout(120000);
- // Ads ran a Routine overnight; something waits on the Contributor 5, who does not see Ads.
- query(`do $$ begin insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('c2000000-0000-0000-0000-000000000005','${company}','${person(5)}','${lead}','Lead');
+ // Ads ran a Routine overnight; something waits on the Contributor 5, who does not see Ads. The seed's own review waits on
+ // every Owner and Manager who sees its Card (#681); it is answered here, so the Manager has nothing waiting.
+ query(`do $$ begin update public.work_reviews set decision='ended',decided_at=now() where company_id='${company}' and decision is null;
+  insert into public.conversations(id,company_id,person_id,agent_id,agent_name) values ('c2000000-0000-0000-0000-000000000005','${company}','${person(5)}','${lead}','Lead');
   insert into public.waiting_items(company_id,person_id,kind,title,asked_by,conversation_id) values ('${company}','${person(5)}','question','Which offer goes first?','Lead','c2000000-0000-0000-0000-000000000005'); end $$;`);
  const before=rows(`select count(*)::int as n from public.conversations where good_morning is not null`)[0].n;
  expect(before).toBe(0);
