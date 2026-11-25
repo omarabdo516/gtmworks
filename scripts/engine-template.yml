@@ -133,6 +133,19 @@ services:
     shm_size: 1gb
     mem_limit: ${SANDBOX_MEMORY:-2g}
     cpus: ${SANDBOX_CPUS:-2.0}
+    # The disk a sandbox writes to (#507, ADR 0032): nothing on the server's own disk. Its root is read-only; its home and
+    # the Company's work folder are on the Company's work disk, one filesystem of a fixed size and inode count that
+    # scripts/install.sh makes and mounts (sandbox/work-disk); and the scratch folders the image's tools write are memory
+    # of a fixed size, counted in the sandbox's memory limit. The disk's default is the label below, set here and nowhere
+    # else: 10 GB holds a Company's files, renders and tool caches with room to spare, and the image file grows on the
+    # server's disk only as far as the Company writes. A Company's own size (`company add --disk`, `company limits --disk`)
+    # is kept in its Engine's folder as SANDBOX_DISK and replaces it through scripts/install.sh alone.
+    labels:
+      gtmworks.disk: ${SANDBOX_DISK:-10g}
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+      - /var/tmp:size=256m,mode=1777
     environment:
       # The public key that arrived when the container started; no private key is here, and a sandbox that gets none
       # accepts nobody.
@@ -140,6 +153,9 @@ services:
     volumes:
       # The Company's work folder: one named volume, written by the sandbox only (the Engine reads it, #395).
       - work:/work
+      # The sandbox's home, kept on the Company's work disk beside the work folder: the Screen's one browser profile (its
+      # sign-ins), the tools' settings and caches. Never in a backup, which takes the work folder only.
+      - home:/home/pn
       # The host key is made once with the Engine's key pair and kept here, mounted read-only at the path sshd reads it
       # from, so a recreated container keeps the key its Engine's known_hosts is pinned to.
       - host-key:/home/pn/.ssh-host:ro
@@ -190,8 +206,14 @@ services:
 volumes:
   data:
     name: ${ENGINE_VOLUME:?Run scripts/install.sh}
+  # Both bind a folder of the Company's work disk, which scripts/install.sh makes (#507): external, so Compose never makes
+  # either as a plain volume on the server's own disk, and a sandbox or an Engine whose disk is not mounted does not start.
   work:
-    name: ${WORK_VOLUME:-gtmworks-work-first}
+    name: ${WORK_VOLUME:-gtmworks-folder-first}
+    external: true
+  home:
+    name: ${SANDBOX_HOME_VOLUME:-gtmworks-home-first}
+    external: true
   host-key:
     name: ${SANDBOX_HOST_KEY_VOLUME:-gtmworks-sandbox-hostkey-first}
 

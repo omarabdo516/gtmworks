@@ -99,7 +99,23 @@ remove_engine() {
   docker volume rm gtmworks-install_hermes gtmworks-work-first gtmworks-sandbox-hostkey-first > /dev/null 2>&1 || true
   docker network rm gtmworks-engine-first gtmworks-work-first gtmworks-exit-first > /dev/null 2>&1 || true
   docker rm -f gtmworks-install-hermes-1 > /dev/null 2>&1 || true
+  remove_work_disks
   rm -rf .engines
+}
+# Every Company's work disk (#507), unmounted and deleted by the work sandbox image's own helper as the installer runs it,
+# with its two volumes; its folder goes only once empty, so nothing on a disk still mounted is removed with it.
+remove_work_disks() {
+  local image folder
+  image=$(cat .work-sandbox-image 2> /dev/null || echo gtmworks-work-sandbox:local)
+  for folder in .work-disks/*/; do
+    [[ -d $folder ]] || continue
+    folder=${folder%/}
+    docker volume rm "gtmworks-folder-${folder#.work-disks/}" "gtmworks-home-${folder#.work-disks/}" > /dev/null 2>&1 || true
+    docker run --rm --privileged --pid host --network none --user 0 --entrypoint /usr/local/bin/work-disk \
+      -v "$PWD/$folder:/disk" "$image" remove "$PWD/$folder" > /dev/null 2>&1 || true
+    rmdir "$folder/fs" "$folder" 2> /dev/null || true
+  done
+  rmdir .work-disks 2> /dev/null || true
 }
 remove_install() { compose down -v && remove_engine; }
 # An area starts on a fresh isolated Docker machine (#406): whatever an earlier area or an earlier run left there is

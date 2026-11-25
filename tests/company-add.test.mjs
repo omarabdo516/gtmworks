@@ -25,6 +25,8 @@ case "$*" in
  *' ps -q web'*) echo web-id;;
  *' ps -q worker'*) echo worker-id;;
  *'network inspect '*) exit 1;;
+ # A Company made by this release has no work folder from a previous release (#507).
+ *'volume inspect gtmworks-work-'*) exit 1;;
  *' up -d '*)
   printf 'limits memory=%s cpus=%s\\n' "\${SANDBOX_MEMORY:-}" "\${SANDBOX_CPUS:-}" >> "$COMMANDS"
   if [ "\${KILL_ON_UP:-}" = 1 ]; then kill -TERM "$PPID"; exit 1; fi
@@ -36,7 +38,9 @@ case "$*" in
  *'exec -T db psql'*) printf '%s\\n' "\${COMPANY_ROW-http://gtmworks-engine-second-company-0000abcd:8642|Second Company}";;
  *'ps -aq --filter name=^gtmworks-sandbox-'*) echo sandbox-id;;
  *'{{.State.Running}}'*) echo true;;
- *'.HostConfig.Memory'*) echo '2147483648 1500000000';;
+ *'.HostConfig.Memory'*) echo "2147483648 1500000000 \${DISK_LABEL:-10g}";;
+ # The work disk's helper (#507): a size the disk does not hold is refused with what it holds (WORK_DISK_REFUSE_FILE).
+ *'/usr/local/bin/work-disk '*' mount '*) if [ -n "\${WORK_DISK_REFUSE_FILE:-}" ] && [ -f "$WORK_DISK_REFUSE_FILE" ]; then echo 'used 3000'; exit 4; fi;;
 esac
 exit 0
 `;
@@ -404,7 +408,68 @@ test('company limits changes one Company\'s limits and starts only its sandbox a
  assert.match(ups[0],/^compose --project-name gtmworks-engine-second-company-0000abcd .* up -d --no-deps --wait --wait-timeout \d+ sandbox$/);
  assert.ok(commands.includes('limits memory=3g cpus=1.5'),commands.join('\n'));
  assert.ok(commands.some(line=>/exec -u hermes gtmworks-engine-second-company-0000abcd ssh .*pn@sandbox true/.test(line)));
- assert.equal(result.stdout.trim(),'Company "Second Company": its work sandbox now has 2048 MiB of memory and 1.5 CPUs.');
+ assert.equal(result.stdout.trim(),'Company "Second Company": its work sandbox now has 2048 MiB of memory, 1.5 CPUs and a 10g work disk.');
+ // A limit not named keeps its value: the work disk is left at its size, and the Engine is not stopped.
+ assert.ok(commands.some(line=>/work-disk .* mount \S+\/\.work-disks\/second-company-0000abcd 10g$/.test(line)),commands.join('\n'));
+ assert.equal(commands.some(line=>line.startsWith('stop ')),false,commands.join('\n'));
+});
+
+// A Company's work disk (#507, ADR 0032): its size is a limit like memory and CPUs, kept with the Company's files and
+// given to the one-off helper that makes, resizes and mounts the disk, never a value left in the shell.
+test('company add keeps the disk limit it was given, and the helper makes the disk at that size', t => {
+ const installDir=install(t,{env:{SANDBOX_DISK:'50g'}});
+ const result=installDir.run('company','add','--name','Second Company','--owner','person@example.com','--disk','5g');
+ assert.equal(result.status,0,result.stderr);
+ assert.match(readFileSync(installDir.envFile('second-company-0000abcd'),'utf8'),/^SANDBOX_DISK=5g$/m);
+ const commands=installDir.lines();
+ const helper=commands.find(line=>line.includes('--entrypoint /usr/local/bin/work-disk'));
+ // The helper: privileged for its loop device, the host's process table for the Docker daemon's mount namespace, no
+ // network, this Company's folder alone, the image the install recorded, and a fixed command.
+ assert.match(helper,/^run --rm --privileged --pid host --network none --user 0 --entrypoint \/usr\/local\/bin\/work-disk -v (\S+)\/\.work-disks\/second-company-0000abcd:\/disk gtmworks-work-sandbox:local mount \1\/\.work-disks\/second-company-0000abcd 5g$/);
+ // The work folder and the home bind the mounted disk's folders, made before the sandbox starts.
+ const folder=`${installDir.directory}/.work-disks/second-company-0000abcd/fs`;
+ const at=line=>commands.findIndex(command=>command.includes(line));
+ assert.ok(at(`volume create --driver local --opt type=none --opt o=bind --opt device=${folder}/work gtmworks-folder-second-company-0000abcd`)>at('work-disk'),commands.join('\n'));
+ assert.ok(at(`volume create --driver local --opt type=none --opt o=bind --opt device=${folder}/home gtmworks-home-second-company-0000abcd`)>at('work-disk'),commands.join('\n'));
+ assert.ok(at(`volume create --driver local --opt type=none`)<at(' up -d '),commands.join('\n'));
+ // No disk named: the template's default, never the shell's.
+ const plain=install(t,{env:{SANDBOX_DISK:'50g'}});
+ assert.equal(plain.run('company','add','--name','Second Company','--owner','person@example.com').status,0);
+ assert.doesNotMatch(readFileSync(plain.envFile('second-company-0000abcd'),'utf8'),/SANDBOX_DISK/);
+ assert.ok(plain.lines().some(line=>/work-disk .* mount \S+ 10g$/.test(line)),plain.lines().join('\n'));
+});
+
+test('a disk limit that is not a size of at least a gigabyte is refused before anything is made', t => {
+ for(const value of ['lots','512m','0g']) {
+  const installDir=install(t);
+  const refused=installDir.run('company','add','--name','Second Company','--owner','person@example.com','--disk',value);
+  assert.notEqual(refused.status,0);
+  assert.equal(refused.stderr.trim(),`The disk limit is a whole number of megabytes or gigabytes of at least 1g, such as 5g or 20g, not ${value}.`);
+  assert.deepEqual(installDir.lines(),[],'the refused add asked Docker for nothing');
+ }
+});
+
+test('company limits --disk resizes the Company\'s work disk and starts its sandbox again', t => {
+ const installDir=withCompany(t);
+ const result=installDir.run('company','limits','Second Company','--disk','20g');
+ assert.equal(result.status,0,result.stderr);
+ assert.match(readFileSync(installDir.envFile('second-company-0000abcd'),'utf8'),/^SANDBOX_DISK=20g$/m);
+ const commands=installDir.lines();
+ assert.ok(commands.some(line=>/work-disk .* mount \S+ 20g$/.test(line)),commands.join('\n'));
+ assert.ok(commands.includes('limits memory=2g cpus=1.5'),'memory and CPUs keep their values');
+});
+
+test('company limits --disk below what the disk holds is refused, and the disk is kept as it was', t => {
+ const refuse=join(mkdtempSync(join(tmpdir(),'gtmworks-disk-refuse-')),'refuse');
+ t.after(()=>rmSync(dirname(refuse),{recursive:true,force:true}));
+ const installDir=withCompany(t,{WORK_DISK_REFUSE_FILE:refuse});
+ writeFileSync(refuse,'');
+ const result=installDir.run('company','limits','Second Company','--disk','2g');
+ assert.notEqual(result.status,0);
+ assert.equal(result.stdout.trim(),'The limits of Company "Second Company" were not changed: its work disk holds 3000 MiB, which does not fit in 2g. Its disk is kept as it was.');
+ assert.doesNotMatch(readFileSync(installDir.envFile('second-company-0000abcd'),'utf8'),/SANDBOX_DISK/);
+ // The Company runs again on the disk it had.
+ assert.ok(installDir.lines().some(line=>/ up -d --no-deps .* sandbox$/.test(line)),installDir.lines().join('\n'));
 });
 
 test('company limits that the sandbox cannot start with puts the earlier limits back', t => {

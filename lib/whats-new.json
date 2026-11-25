@@ -1,5 +1,11 @@
 [
  {
+  "issue": 507,
+  "date": "2026-11-25",
+  "en": { "title": "Each Company has a disk of its own", "body": "A Company's Agents now work on a disk of a fixed size, 10 GB by default and changed with gtmworks company limits --disk, so a command that fills it stops there and the rest of the install keeps running." },
+  "ar": { "title": "كل شركة ليها ديسك خاص بيها", "body": "وكلاء كل شركة بقوا بيشتغلوا على ديسك بحجم ثابت، ١٠ جيجا في الأول وبيتغيّر بـ gtmworks company limits --disk، فلو أمر ملاه بيقف عنده، وباقي التثبيت بيفضل شغال." }
+ },
+ {
   "issue": 735,
   "date": "2026-11-25",
   "en": { "title": "A model you switch off stays off", "body": "Switching a model off on one provider now takes it out of the chat's model menu, every agent's model choice and the Fallback model, unless another provider that lists that model still has it on." },

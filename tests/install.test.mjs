@@ -662,10 +662,11 @@ test('backup and restore round-trip every Engine\'s volume and key; failed extra
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','.engines/first','.engines/second-company',
   ...paths.map(path=>`volumes/${path}`),`volumes/${firstVolume}/agents`,`volumes/${secondVolume}/profiles/co-second/memories`,
-  'volumes/gtmworks-work-first/co-first/.cache','volumes/gtmworks-work-second-company/ag-second/site/node_modules/pkg']) {
+  'volumes/gtmworks-folder-first/co-first/.cache','volumes/gtmworks-folder-second-company/ag-second/site/node_modules/pkg']) {
   mkdirSync(join(directory,folder),{recursive:true});
  }
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ copyFileSync('scripts/engine-template.yml',join(directory,'scripts/engine-template.yml'));
  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),secrets,{mode:0o600});
  // The image every Company's sandbox runs, as an install of this release records it (#392): the Engines restart with
@@ -682,16 +683,16 @@ test('backup and restore round-trip every Engine\'s volume and key; failed extra
  writeFileSync(join(directory,'volumes',firstVolume,'agents','SOUL.md'),'the team says this',{mode:0o600});
  writeFileSync(join(directory,'volumes',secondVolume,'profiles','co-second','memories','MEMORY.md'),'the second team says this',{mode:0o600});
  // Each Company's work folder (#399), with a file its Agent made and the tool caches its commands left.
- writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),'the first brief',{mode:0o644});
+ writeFileSync(join(directory,'volumes/gtmworks-folder-first/co-first/brief.md'),'the first brief',{mode:0o644});
  // The links an Agent can make in it: a restore refuses a link member, so the backup leaves them out and keeps the file.
- symlinkSync('brief.md',join(directory,'volumes/gtmworks-work-first/co-first/latest.md'));
- linkSync(join(directory,'volumes/gtmworks-work-first/co-first/brief.md'),join(directory,'volumes/gtmworks-work-first/co-first/brief-again.md'));
- writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/.cache/big.bin'),'cache');
+ symlinkSync('brief.md',join(directory,'volumes/gtmworks-folder-first/co-first/latest.md'));
+ linkSync(join(directory,'volumes/gtmworks-folder-first/co-first/brief.md'),join(directory,'volumes/gtmworks-folder-first/co-first/brief-again.md'));
+ writeFileSync(join(directory,'volumes/gtmworks-folder-first/co-first/.cache/big.bin'),'cache');
  // A file a tool also linked into its cache keeps its own name: the cache's name sorts first and is left out with the cache.
- writeFileSync(join(directory,'volumes/gtmworks-work-first/co-first/report.md'),'the report',{mode:0o644});
- linkSync(join(directory,'volumes/gtmworks-work-first/co-first/report.md'),join(directory,'volumes/gtmworks-work-first/co-first/.cache/report.md'));
- writeFileSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site/index.html'),'the second site',{mode:0o644});
- writeFileSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site/node_modules/pkg/index.js'),'module');
+ writeFileSync(join(directory,'volumes/gtmworks-folder-first/co-first/report.md'),'the report',{mode:0o644});
+ linkSync(join(directory,'volumes/gtmworks-folder-first/co-first/report.md'),join(directory,'volumes/gtmworks-folder-first/co-first/.cache/report.md'));
+ writeFileSync(join(directory,'volumes/gtmworks-folder-second-company/ag-second/site/index.html'),'the second site',{mode:0o644});
+ writeFileSync(join(directory,'volumes/gtmworks-folder-second-company/ag-second/site/node_modules/pkg/index.js'),'module');
  writeFileSync(join(directory,'bin/docker'),`#!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { appendFileSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -737,8 +738,8 @@ if(args[0]==='compose') {
  if(backingUp) {
   // BusyBox has one global -C, unlike GNU tar's positional -C options.
   assert.equal(command[2].match(/ -C /g).length,1);
-  assert.ok(args.includes('gtmworks-work-first:/work/first:ro'),'the first work folder is archived');
-  assert.ok(args.includes('gtmworks-work-second-company:/work/second-company:ro'),'the second work folder is archived');
+  assert.ok(args.includes('gtmworks-folder-first:/work/first:ro'),'the first work folder is archived');
+  assert.ok(args.includes('gtmworks-folder-second-company:/work/second-company:ro'),'the second work folder is archived');
   assert.ok(args.includes(cwd+'/.env.install:/.env.install:ro'));
   assert.ok(args.includes(cwd+'/.engines:/.engines:ro'),'the Engine keys are archived too');
   assert.ok(args.includes(cwd+'/.install-lock/engines.list:/engines.list:ro'),'the Engines the Companies name are archived too');
@@ -835,12 +836,12 @@ if(args[0]==='compose') {
  assert.equal(readFileSync(join(directory,'.engines/first/.env'),'utf8'),firstEnv);
  assert.equal(readFileSync(join(directory,'.engines/second-company/.env'),'utf8'),secondEnv);
  // Each Company's work folder is emptied and put back as the archive kept it, its caches left out (#399).
- const restored=readdirSync(join(directory,'volumes/gtmworks-work-first/co-first'));
+ const restored=readdirSync(join(directory,'volumes/gtmworks-folder-first/co-first'));
  assert.ok(restored.includes('report.md'),restored.join());
  const brief=restored.filter(name=>name!=='report.md');
  assert.equal(brief.length,1,brief.join());
- assert.equal(readFileSync(join(directory,'volumes/gtmworks-work-first/co-first',brief[0]),'utf8'),'the first brief');
- assert.deepEqual(readdirSync(join(directory,'volumes/gtmworks-work-second-company/ag-second/site')),['index.html']);
+ assert.equal(readFileSync(join(directory,'volumes/gtmworks-folder-first/co-first',brief[0]),'utf8'),'the first brief');
+ assert.deepEqual(readdirSync(join(directory,'volumes/gtmworks-folder-second-company/ag-second/site')),['index.html']);
  assert.doesNotMatch(restore.stdout,/Hermes data was not in this backup/);
  assert.match(readFileSync(join(directory,'commands'),'utf8'),/--force-recreate/);
  // Every Engine starts from its own folder again, and the app and the worker join each Engine's network.
@@ -962,6 +963,9 @@ test('an archive from before every Company had its own Engine restores as one En
  for(const folder of ['scripts','bin','volumes/opt/data/agents',...paths.map(path=>`volumes/${path}`),
   ...paths.map(path=>`tree/${path}`),'tree/opt/data/agents','tree/.engines/first']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ copyFileSync('scripts/engine-template.yml',join(directory,'scripts/engine-template.yml'));
+ // The image the install recorded: a restore mounts each Company's work disk with it before it writes (#507).
+ writeFileSync(join(directory,'.work-sandbox-image'),'gtmworks-work-sandbox:local\n');
  const secrets=Object.entries(generateInstallEnv()).map(([name,value])=>`${name}=${value}`).join('\n');
  writeFileSync(join(directory,'.env.install'),'fresh keys',{mode:0o600});
  writeFileSync(join(tree,'.env.install'),secrets);
@@ -1668,6 +1672,9 @@ test('a restore applies the migrations before it recreates web and the worker, t
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  for(const folder of ['scripts','bin','supabase/migrations']) mkdirSync(join(directory,folder),{recursive:true});
  copyFileSync('scripts/install.sh',join(directory,'scripts/install.sh'));
+ copyFileSync('scripts/engine-template.yml',join(directory,'scripts/engine-template.yml'));
+ // The image the install recorded: a restore mounts each Company's work disk with it before it writes (#507).
+ writeFileSync(join(directory,'.work-sandbox-image'),'gtmworks-work-sandbox:local\n');
  writeFileSync(join(directory,'supabase/migrations/001_first.sql'),'select 1;');
  writeFileSync(join(directory,'.env.install'),'fresh keys',{mode:0o600});
  writeFileSync(join(directory,'backup.tgz'),'archive');

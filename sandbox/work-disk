@@ -1,0 +1,129 @@
+#!/bin/sh
+# A Company's work disk (#507, ADR 0032): one ext4 filesystem of a fixed size in an image file under the install's
+# .work-disks/<Engine folder>/, which holds the Company's work folder (work/) and its sandbox's home (home/). Docker's own
+# volume and writable-layer size limits work only on XFS with project quotas, and the servers the README supports are
+# ordinary ext4 ones, so the limit is the filesystem's own size and inode count.
+#
+# The installer runs this as a one-off container of the work sandbox image, with this fixed command and nothing else of
+# the Company's: privileged (a loop device and a mount need it), the host's process table (to reach the Docker daemon's
+# mount namespace), no network, and only this Company's folder at /disk. It never runs long: it makes, grows, shrinks,
+# mounts or unmounts the one image, then exits. The mount is made in the Docker daemon's own mount namespace, at
+# <folder>/fs, so it outlives this container, and the Company's work and home volumes are binds of fs/work and fs/home:
+# while the disk is not mounted those paths do not exist, so no container can start on the host's own disk instead.
+#
+#   work-disk mount <host folder> <size>  make the disk (moving the previous release's work folder in, from /old), resize
+#                                         it when it is not mounted, and mount it; prints `made`, `size <size>`,
+#                                         `resized <size>`
+#   work-disk unmount <host folder>       unmount it (every container using it is stopped first)
+#   work-disk remove <host folder>        unmount it and delete the image
+#
+# Exit 3: another size was asked while the disk is mounted. Exit 4: the disk holds more than the size asked; it is
+# kept as it was, and the line `used <MiB>` says how much it holds.
+set -eu
+
+action=${1:-} host=${2:-} size=${3:-}
+image=/disk/fs.img
+mounted_at=/disk/fs
+case "$action" in mount|unmount|remove) ;; *) echo "work-disk: unknown action $action" >&2; exit 2;; esac
+case "$host" in /*) ;; *) echo 'work-disk: the folder must be an absolute path' >&2; exit 2;; esac
+[ -d /disk/fs ] || { echo 'work-disk: the folder has no fs/ to mount at' >&2; exit 2; }
+
+# The Docker daemon's mount namespace, where its containers' volumes are mounted from: a mount made there stays after
+# this container exits. The daemon's own process, or the host's first process when no dockerd is found.
+daemon=1
+for proc in /proc/[0-9]*; do
+  if [ "$(cat "$proc/comm" 2> /dev/null)" = dockerd ]; then daemon=${proc#/proc/}; break; fi
+done
+in_daemon() { nsenter --target "$daemon" --mount -- "$@"; }
+
+# Bytes for a size as the installer writes it (512m, 10g).
+bytes() { case "$1" in *g) echo $(( ${1%g} * 1073741824 ));; *m) echo $(( ${1%m} * 1048576 ));; *) return 1;; esac; }
+# Whether the disk is mounted: /disk is bound with its submounts, so a mount the daemon holds at fs/ is here too.
+mounted() { awk -v at="$mounted_at" '$5 == at { found = 1 } END { exit !found }' /proc/self/mountinfo; }
+# A filesystem check before it is resized or mounted; 1 means it corrected something and the disk is sound.
+check() { e2fsck -f -p "$image" > /dev/null || [ $? -le 1 ]; }
+# MiB the filesystem holds: every block in use, its data, metadata and journal.
+used_mib() {
+  dumpe2fs -h "$image" 2> /dev/null | awk -F: '
+    /^Block count/ { count = $2 } /^Free blocks/ { free = $2 } /^Block size/ { size = $2 }
+    END { printf "%d\n", ((count - free) * size + 1048575) / 1048576 }'
+}
+unmount() {
+  mounted || return 0
+  umount "$mounted_at" 2> /dev/null || true
+  in_daemon umount "$host/fs"
+  # The loop device goes with its last mount: one still attached means a container still holds the disk.
+  sleep 1
+  if [ -n "$(losetup -j "$image" 2> /dev/null)" ]; then
+    echo 'work-disk: the disk is still in use by a running container' >&2
+    return 1
+  fi
+}
+
+case "$action" in
+  unmount) unmount; exit 0;;
+  remove) unmount; rm -f "$image" "$image.new"; exit 0;;
+esac
+
+want=$(bytes "$size") || { echo "work-disk: $size is not a size" >&2; exit 2; }
+if [ ! -f "$image" ]; then
+  # A new disk. The previous release's work folder (a plain volume, at /old) moves in; a disk too small for it is made
+  # large enough, in whole gigabytes with a quarter to spare, and the size it got is printed for the installer to keep.
+  rm -f "$image.new"
+  if [ -d /old ]; then
+    old_kib=$(du -sk /old | cut -f 1)
+    if [ $(( old_kib * 1024 * 5 / 4 )) -gt "$want" ]; then
+      gib=$(( (old_kib * 5 / 4 + 1048575) / 1048576 ))
+      size=${gib}g want=$(bytes "$size")
+      echo "size $size"
+    fi
+  fi
+  truncate -s "$want" "$image.new"
+  # One inode for every 16 KiB: the inode limit grows and shrinks with the size. No blocks are reserved for root, who
+  # never writes here.
+  mkfs.ext4 -q -F -m 0 -i 16384 -L gtmworks-work -E root_owner=1000:1000 "$image.new"
+  stage=$(mktemp -d)
+  mount -o loop "$image.new" "$stage"
+  install -d -o 1000 -g 1000 -m 755 "$stage/work" "$stage/home"
+  # The home the image ships (its desktop and shell settings, the folders sshd and the tools expect).
+  cp -a /home/pn/. "$stage/home/"
+  if [ -d /old ]; then
+    cp -a /old/. "$stage/work/"
+    # The folder itself is the sandbox user's, whoever owned the volume's root before.
+    chown 1000:1000 "$stage/work"
+    chmod 755 "$stage/work"
+  fi
+  rm -rf "$stage/lost+found"
+  umount "$stage"
+  rmdir "$stage"
+  mv "$image.new" "$image"
+  echo made
+fi
+
+have=$(stat -c %s "$image")
+if [ "$want" -ne "$have" ]; then
+  # A new size is made with the disk unmounted, so ext4 never resizes under a running Company (an online grow also needs
+  # a capability some hosts' Docker lacks): the installer stops the Company's Engine and sandbox, runs `unmount`, then this.
+  mounted && exit 3
+  check
+  if [ "$want" -lt "$have" ]; then
+    # Never below what it holds: resize2fs refuses a size its files and metadata do not fit in, and changes nothing. The
+    # disk is mounted again as it was, and the installer says how much it holds.
+    if resize2fs "$image" "$(( want / 1024 ))K" > /dev/null 2>&1; then
+      truncate -s "$want" "$image"
+    else
+      refused=$(used_mib)
+    fi
+  else
+    truncate -s "$want" "$image"
+    resize2fs "$image" > /dev/null 2>&1
+  fi
+  [ -n "${refused:-}" ] || echo "resized $size"
+fi
+
+if ! mounted; then
+  check
+  # No device files and no set-uid programs on it: what an Agent writes there is only ever its own user's.
+  in_daemon mount -o loop,nodev,nosuid "$host/fs.img" "$host/fs"
+fi
+if [ -n "${refused:-}" ]; then echo "used $refused"; exit 4; fi
