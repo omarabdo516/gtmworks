@@ -114,6 +114,12 @@
   "ar": { "title": "رسالتك بتظهر أول ما تبعتها", "body": "الرسالة اللي بتبعتها في محادثة أو قناة بقت بتظهر أول ما تدوس «ابعت»، بملفاتها، وسطر الوكيل بيقول «بيفكر» من ساعتها، حتى لو السيرفر مشغول؛ ولو ما اتبعتتش، كلامها بيرجع في الخانة." }
  },
  {
+  "issue": 774,
+  "date": "2026-11-25",
+  "en": { "title": "Only an Owner changes an Owner", "body": "A Manager can no longer remove an Owner, change an Owner's Role or Grants, or change their own Role or Grants, and the team page no longer offers them those controls; Managers still manage Contributors, Viewers and other Managers as before." },
+  "ar": { "title": "المالك بس هو اللي يغيّر في المالك", "body": "المدير مبقاش يقدر يشيل مالك أو يغيّر دوره أو صلاحياته، ولا يغيّر دوره أو صلاحياته هو، وصفحة الفريق مبقتش بتعرضله الحاجات دي؛ والمديرين لسه بيديروا المساهمين والمشاهدين والمديرين التانيين زي الأول." }
+ },
+ {
   "issue": 708,
   "date": "2026-11-24",
   "en": { "title": "Agents send you files in the chat", "body": "When an Agent makes a PDF, a spreadsheet, an image or any other file in its work folder, it sends it in its reply as a file you open and download, with images shown as thumbnails, and a file it cannot send says so instead of showing a path." },

@@ -7,6 +7,7 @@ import { passwordProblem } from '@/lib/password.mjs';
 import { supabase } from '@/lib/supabase';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
 import { appUrl } from '@/lib/app-origin.mjs';
+import { cappedForm } from '@/lib/request-body.mjs';
 
 // Sending a first-Owner link (#383, ADR 0019) makes the Company waiting behind it on that link's Engine record, with the
 // person sending the form as its Owner, and signs them in. The link is spent by this request, never by opening the page;
@@ -16,7 +17,10 @@ const secretShape=/^[a-f0-9]{64}$/;
 const refused=(language:'en'|'ar')=>new NextResponse(i18n(language).t('firstOwnerNeedsLink'),{status:410,headers:{'content-type':'text/plain; charset=utf-8'}});
 
 export async function POST(request:NextRequest) {
- const form=await request.formData(), secret=String(form.get('code')||''), language=form.get('language')==='ar'?'ar':'en';
+ // The form is read only up to its limit (#778): a larger body is refused before it is read.
+ const form=await cappedForm(request,16000);
+ if(!form) return new NextResponse(null,{status:413});
+ const secret=String(form.get('code')||''), language=form.get('language')==='ar'?'ar':'en';
  if(!secretShape.test(secret)) {
   logActionFailure('first_owner_link_missing',new Error('The first-Owner link carried no secret'));
   return refused(language);

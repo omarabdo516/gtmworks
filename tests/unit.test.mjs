@@ -144,7 +144,7 @@ test('every unavailable Home metric and chart remains unavailable rather than ze
 
 // #676: Home reads Approvals and status moves, never stages. A delivery is an Approval that closed a review: its
 // decision moved the Card out of review in the same moment (an earlier approval step's Approval moves nothing).
-test('Home charts use fourteen UTC days, each Card\'s status and first acceptance without earlier rejection',async()=>{
+test('Home charts use fourteen days of the Company\'s zone (UTC here), each Card\'s status and first acceptance without earlier rejection',async()=>{
  const {homeCharts}=await import('../lib/home-data.mjs');
  const now=Date.parse('2030-01-15T12:00:00Z');
  const cards=[{id:1,status:'progress',created_at:'2030-01-02T00:00:00Z'},{id:2,status:'planned',created_at:'2030-01-01T23:59:59Z'},{id:3,status:'planned',created_at:'2030-01-10T00:00:00Z'}];
@@ -158,7 +158,7 @@ test('Home charts use fourteen UTC days, each Card\'s status and first acceptanc
   approved(8,4,'2030-01-16T00:00:00Z'),moved(9,4,'2030-01-16T00:00:00Z'),
   // An Approval of an earlier step moved nothing: it is no delivery; a move with no Approval is none either.
   approved(10,5,'2030-01-12T00:00:00Z'),moved(11,6,'2030-01-12T08:00:00Z')];
- const charts=homeCharts(cards,events,now);
+ const charts=homeCharts(cards,events,now,'UTC');
  assert.equal(charts.delivered.length,14);
  assert.equal(charts.delivered[0].label,'2030-01-02');
  assert.equal(charts.delivered.at(-1).label,'2030-01-15');
@@ -166,7 +166,7 @@ test('Home charts use fourteen UTC days, each Card\'s status and first acceptanc
  assert.deepEqual(charts.delivered.filter(row=>row.value).map(row=>row.label),['2030-01-03','2030-01-15']);
  assert.deepEqual(charts.statuses,[{label:'waiting',value:0},{label:'ideas',value:0},{label:'planned',value:1},{label:'progress',value:1},{label:'live',value:0},{label:'done',value:0}]);
  assert.equal(charts.acceptance,50);
- assert.equal(homeCharts([],[],now).acceptance,null,'no denominator is unavailable');
+ assert.equal(homeCharts([],[],now,'UTC').acceptance,null,'no denominator is unavailable');
 });
 
 test('an Agent works on its newest Card in progress, never one whose chat waits on a person', async()=>{
@@ -309,7 +309,7 @@ test('a redirect from a server action is not logged as a failure',async()=>{
 });
 
 test('the client error endpoint logs the message and stack of a page error without secrets, and refuses bad or excess reports',async()=>{
- const {clientErrorResponse,limiter}=await import('../lib/diagnostics.mjs');
+ const {clientErrorResponse,senderLimiter}=await import('../lib/diagnostics.mjs');
  const env={SUPABASE_JWT_SECRET:'jwt-secret-value-9999'};
  const send=(body,options={})=>clientErrorResponse(new Request('http://localhost/api/client-errors',{method:'POST',body:typeof body==='string'?body:JSON.stringify(body),headers:{'user-agent':'test-agent'}}),{env,...options});
  const lines=[];
@@ -324,8 +324,8 @@ test('the client error endpoint logs the message and stack of a page error witho
  assert.equal((await send({source:'page'},{write:line=>lines.push(line)})).status,400);
  assert.equal((await send({message:'x'.repeat(9000)},{write:line=>lines.push(line)})).status,413);
  assert.equal(lines.length,1);
- let now=0; const allowed=limiter(2,1000,()=>now);
- assert.deepEqual([allowed(),allowed(),allowed()],[true,true,false]); now=1500; assert.equal(allowed(),true);
+ let now=0; const allowed=senderLimiter({perSender:2,windowMs:1000,clock:()=>now});
+ assert.deepEqual([allowed('a'),allowed('a'),allowed('a')],[true,true,false]); now=1500; assert.equal(allowed('a'),true);
 });
 
 test('every server action is wrapped so a thrown failure is logged',()=>{

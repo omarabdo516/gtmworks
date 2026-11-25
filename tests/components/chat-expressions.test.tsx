@@ -51,7 +51,7 @@ function server({ shared = { ads: 'idle' } as Record<string, AgentFaceState>, re
 }
 
 const Sidebar = ({ children, states = { ads: 'idle' } }: { children: ReactNode, states?: Record<string, AgentFaceState> }) => <LanguageProvider language="en"><div className="gw">
- <SidebarLive company="co-1" channels={[]} states={states}>
+ <SidebarLive person="p-1" company="co-1" channels={[]} states={states}>
   <ul>{Object.keys(states).map(agent => <li key={agent}><AgentTile agent={agent} href={`/c/rs/chat/${agent}`} named={[agent]} title={agent}><bdi>{agent}</bdi></AgentTile></li>)}</ul>
   {children}
  </SidebarLive>

@@ -52,7 +52,7 @@ export function unguarded(files, read) {
       const levels = new Set(Object.values(routePermissions[file] || { any: 'owner' }));
       if (levels.has('setupCode')) { if (!/setupCodeMatches\(/.test(source)) problems.push(file); }
       else if (levels.has('ownerLink')) { if (!/ownerSecretHash\(/.test(source)) problems.push(file); }
-      else if (![...levels].every(level => level === 'public') && !(source.includes('routeAllowed(') && source.includes(`'${file}'`))) problems.push(file);
+      else if (![...levels].every(level => level === 'public') && !(/\b(routeAllowed|routePermission)\(/.test(source) && source.includes(`'${file}'`))) problems.push(file);
     } else for (const action of exportedActions(source)) if (requiredFor(actionPermissions, action) !== 'public' && !source.includes(`actionAllowed(db,'${action}'`)) problems.push(`${file} ${action}`);
   }
   return problems;

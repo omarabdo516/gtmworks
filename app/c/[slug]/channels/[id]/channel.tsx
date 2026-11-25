@@ -77,13 +77,17 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
  const drawnArrivals=arrivals(messages);
  const {rises,settled}=useArrivals(drawnArrivals);
  const rise=(element:string)=>{ const arrival=drawnArrivals.find(item=>item.element===element); return arrival&&rises(arrival)?' msg-in':''; };
+ // Reads that failed in a row (#776): the channel keeps what it shows, asks again later each time, and after three says
+ // it could not be read, with Try again. The route answers a failed read as an error, never an empty channel.
+ const [failures,setFailures]=useState(0);
+ const answered=useCallback((ok:boolean)=>setFailures(count=>ok?0:count+1),[]);
  const refresh=useCallback(async()=>{
   try {
    const landed=reading();
    const response=await fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'});
-   if(response.ok) { setRecord(await response.json() as ChannelRecord); landed(); }
-  } catch {}
- },[channel.company,channel.id,reading]);
+   if(response.ok) { setRecord(await response.json() as ChannelRecord); landed(); answered(true); } else answered(false);
+  } catch { answered(false); }
+ },[channel.company,channel.id,reading,answered]);
  // Opening the channel reads it, and asks for it fresh: the page may be a prefetch drawn before the newest messages. The
  // answer replaces only that first drawing, never a newer one from a poll or a send. Opened from a mention (#200), the
  // read names the message the Member opened, so their own waiting item is done; the address is then the channel's again.
@@ -91,9 +95,9 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
   const mention=/^#mention-\d+$/.test(location.hash)?location.hash.slice('#mention-'.length):null;
   void fetch(`/api/channels?company=${channel.company}&channel=${channel.id}${mention?`&mention=${mention}`:''}`,{cache:'no-store'}).then(async response=>{
    if(mention) history.replaceState(history.state,'',location.pathname+location.search);
-   if(response.ok) { const fresh=await response.json() as ChannelRecord; setRecord(current=>{ if(current!==initial) return current; settled(arrivals(fresh.messages)); return fresh; }); } else await response.arrayBuffer();
-  }).catch(()=>{});
- },[channel.company,channel.id,initial,settled]);
+   if(response.ok) { const fresh=await response.json() as ChannelRecord; setRecord(current=>{ if(current!==initial) return current; settled(arrivals(fresh.messages)); return fresh; }); answered(true); } else { await response.arrayBuffer(); answered(false); }
+  }).catch(()=>answered(false));
+ },[channel.company,channel.id,initial,settled,answered]);
  useEffect(()=>{
   let stopped=false; let timer:ReturnType<typeof setTimeout>|undefined;
   const poll=async()=>{
@@ -101,14 +105,16 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
     try {
      const landed=reading();
      const response=await fetch(`/api/channels?company=${channel.company}&channel=${channel.id}`,{cache:'no-store'});
-     if(response.ok&&!stopped) { setRecord(await response.json() as ChannelRecord); landed(); }
-    } catch {}
+     if(!stopped) { if(response.ok) { setRecord(await response.json() as ChannelRecord); landed(); answered(true); } else answered(false); }
+    } catch { if(!stopped) answered(false); }
    }
-   if(!stopped) timer=setTimeout(poll,(open||handover)?1500:6000);
+   if(!stopped) timer=setTimeout(poll,every);
   };
-  timer=setTimeout(poll,sent?300:(open||handover)?1500:6000);
+  // After a failed read each next one waits twice as long, up to 30 s.
+  const every=Math.min(((open||handover)?1500:6000)*2**Math.min(failures,4),30000);
+  timer=setTimeout(poll,sent&&!failures?300:every);
   return ()=>{stopped=true;clearTimeout(timer);};
- },[open,handover,sent,channel.company,channel.id,reading]);
+ },[open,handover,sent,failures,answered,channel.company,channel.id,reading]);
  // The Member who called the Agent decides its Run's request (#165), as a Conversation's person does (#163); the choice
  // then goes to the waiting Run after the answer, and the next read shows the reply.
  const permit:DecidePermission=async(request,choice)=>{
@@ -222,6 +228,7 @@ export default function ChannelView({person,slug,initial}:{person:string,slug:st
    {workingNow&&<WorkingLine view={live} unread={unread} fallback={t('conversationWorking',workingNow.agent)} agent={workingNow.agent} face={workingNow.face} c={c} cb={cb}/>}
   </div></div>
   <div className="composer-area">
+   {failures>=3&&<p className="ro-line" role="alert"><span>{t('channelNotRead')}</span> <button type="button" className="link-btn" onClick={()=>{ void refresh(); }}>{t('tryAgain')}</button></p>}
    {/* An archived channel (#675; design-reference-card: arc-line) is read by its Members, and nobody writes in it. */}
    {record.archived&&<p className="arc-line" role="note"><ShellIcon name="archive"/><span>{c('channelArchivedLine')}</span></p>}
    {/* Stop (#478; design-reference: syncComposer): while a message the reader may stop has work open, an empty box turns

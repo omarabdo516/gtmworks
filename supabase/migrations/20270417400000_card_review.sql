@@ -131,13 +131,12 @@ insert into public.work_reviews(company_id,card_id,version_id,asked_by,asked_at)
 
 -- 7. "Waiting on you" lists every open review for each Owner and Manager who sees its Card (waiting_list runs as the
 -- caller, so a Card hidden from them or archived is left out), named by who asked; the rest is as it was.
-CREATE OR REPLACE FUNCTION public.waiting_list(c uuid)
- RETURNS TABLE(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamp with time zone)
- LANGUAGE sql
- STABLE
- SET search_path TO ''
-AS $function$
- select * from (
+create or replace function public.waiting_list(c uuid)
+returns table(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamptz)
+language plpgsql stable set search_path='' set plan_cache_mode=force_generic_plan as $$
+#variable_conflict use_column
+begin
+ return query select * from (
   select 'approval'::text, w.id, w.title, ''::text, coalesce(p.name,''), w.id, null::uuid, r.asked_at
    from public.work_reviews r
    join public.work_cards w on w.company_id=r.company_id and w.id=r.card_id
@@ -198,4 +197,4 @@ AS $function$
    where r.company_id=c and public.agent_access_waits(r)
  ) x(kind,id,title,body,asked_by,card_id,conversation_id,created_at)
  order by created_at desc, id desc;
-$function$;
+end $$;

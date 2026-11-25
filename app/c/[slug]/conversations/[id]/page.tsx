@@ -19,6 +19,7 @@ import { openOnVisit } from '@/lib/lead-opening.mjs';
 import { companyHasModel } from '@/lib/provider-keys.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from '@/lib/supabase-config';
+import { mustRead } from '@/lib/read-failed';
 
 // Only the person who started a conversation can read it; everyone else, in this company or another, gets not found.
 // ?tab=<key> opens the Agent's details on that tab.
@@ -27,10 +28,11 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  const db=await supabase();
  // The person's own Companies and the Conversation are read beside the sign-in check (RLS reads nothing without one),
  // and the Conversation is then held to the Company in the address.
- const [{t,language},{data:{user}},{data:companies},{data:found}]=await Promise.all([getI18n(),db.auth.getUser(),
+ const [{t,language},{data:{user}},companiesRead,{data:found}]=await Promise.all([getI18n(),db.auth.getUser(),
   db.from('companies').select('id,slug,name,work_mode').order('name'),
   uuid.test(id)?db.from('conversations').select(`${conversationColumns},company_id,archived_at`).eq('id',id).maybeSingle():{data:null}]);
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations/${id}`)}`);
+ const companies=mustRead(companiesRead,'companies');
  const company=companies?.find(c=>c.slug===slug);
  if(!company||!uuid.test(id)) notFound();
  const conversation=found?.company_id===company.id?found:null;
@@ -63,7 +65,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
  // Until then the chat is named as the sidebar names it (app/shell.tsx): the first line of its first message.
  // The frame's reads go out together: each is one round trip, and on a busy machine a chain of them is what makes the
  // chat slow to open (decision 0042).
- const [{data:first},{data:agent},{data:person},{data:membership},{data:writer}]=await Promise.all([
+ const [{data:first},{data:agent},{data:person},membershipAnswer,{data:writer}]=await Promise.all([
   db.from('conversation_messages').select('body,conversation_attachments(name)').eq('conversation_id',id).eq('author','person').order('id').limit(1).maybeSingle(),
   agentRead,
   db.from('people').select('name').eq('id',user.id).single(),
@@ -71,6 +73,7 @@ export default async function ConversationPage({params,searchParams}:{params:Pro
   // Any Member but a Viewer may write (#287); the database decides, as it does for every send.
   db.rpc('conversation_can_write',{c:company.id}),
  ]);
+ const membership=mustRead(membershipAnswer,'membership');
  markOpen('reads',timing);
  // #434: the Owner's empty Conversation with Lead (first run makes one) is where Lead opens the Company's first
  // Conversation, once the Company has a model (lib/lead-opening.mjs); the record is then read again with its message.

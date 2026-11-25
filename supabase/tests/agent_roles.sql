@@ -31,7 +31,7 @@ reset role;
 select throws_ok($$update public.members set removed_at=null where company_id=current_setting('test.agent_company')::uuid and person_id=current_setting('test.agent_one')::uuid$$,'23505',null,'restoring a conflicting holder is rejected');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-insert into public.member_invitations(company_id,email,role) values (current_setting('test.agent_company')::uuid,'returning-agent@example.test','contributor');
+select public.invite_member(current_setting('test.agent_company')::uuid,'returning-agent@example.test','contributor');
 select set_config('request.jwt.claim.sub',current_setting('test.agent_one'),true);
 select lives_ok($$select public.claim_invitations()$$,'removed agent can reclaim an invitation while a replacement holds its old key');
 select is(public.is_member(current_setting('test.agent_company')::uuid),true,'claim reactivates the removed member');

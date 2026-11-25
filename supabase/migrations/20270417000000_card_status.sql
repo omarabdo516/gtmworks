@@ -221,12 +221,11 @@ grant execute on function public.undo_card_move(uuid,bigint) to authenticated;
 
 -- 10. "Waiting on you" reads a Card in review by its status (the Numbers page's waiting panel and the sidebar count).
 create or replace function public.waiting_list(c uuid)
- returns table(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamp with time zone)
- language sql
- stable
- set search_path to ''
-as $function$
- select * from (
+returns table(kind text, id bigint, title text, body text, asked_by text, card_id bigint, conversation_id uuid, created_at timestamptz)
+language plpgsql stable set search_path='' set plan_cache_mode=force_generic_plan as $$
+#variable_conflict use_column
+begin
+ return query select * from (
   select 'approval'::text, w.id, w.title, coalesce(a.name,''), ''::text, w.id, null::uuid, coalesce(w.review_entered_at,w.created_at)
    from public.work_cards w
    left join public.approval_steps a on a.company_id=w.company_id and a.id=w.approval_step_id
@@ -286,4 +285,4 @@ as $function$
    where r.company_id=c and public.agent_access_waits(r)
  ) x(kind,id,title,body,asked_by,card_id,conversation_id,created_at)
  order by created_at desc, id desc;
-$function$;
+end $$;
