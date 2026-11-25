@@ -1103,6 +1103,7 @@
   "handBadge": "Handed to you",
   "handLabel": "Handed to you: {0}",
   "handOpen": "Open the draft",
+  "handOpenScreen": "Open the screen",
   "handDone": "Done it",
   "handWaitTeam": "Waiting for someone on the team to do it",
   "handDoneAt": "Done · {0}.",
