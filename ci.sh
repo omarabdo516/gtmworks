@@ -132,7 +132,7 @@ case "${1:-check}" in
   npm run test:db
   ;;
  integration)
-  # Any further arguments go to the browser suite; CI passes --shard=<i>/7 (#335, #404, #653), and the proxy suite runs in
+  # Any further arguments go to the browser suite; CI passes --shard=<i>/8 (#335, #404, #653, #710), and the proxy suite runs in
   # shard 1 only. A shard runs the spec files scripts/browser-shards.mjs gives it, split by measured time, in place of
   # Playwright's own --shard, which splits by test count (#653).
   shift
