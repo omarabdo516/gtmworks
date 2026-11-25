@@ -154,7 +154,7 @@ function ScreenFrame({state,picture,withheld,large,control=false,live,streaming=
  let body;
  if(state==='asleep') body=<span className="scr__off"><ShellIcon name="moon"/><span>{t('screenOffBody')}</span></span>;
  else if(state==='waking') body=<span className="scr__off scr__off--waking"><span className="scr__wake"><i className="scr__ln" style={{'--w':'70%'} as CSSProperties}/><i className="scr__ln" style={{'--w':'48%'} as CSSProperties}/><i className="scr__ln" style={{'--w':'60%'} as CSSProperties}/></span><span>{t('screenWakingPill')}</span></span>;
- else if(withheld) body=<span className="scr__off"><ShellIcon name="hand"/><span>{t('screenWithheld')}</span></span>;
+ else if(withheld) body=<>{live}<span className="scr__off"><ShellIcon name="hand"/><span>{t('screenWithheld')}</span></span></>;
  else body=<>{live}{streaming?null:picture?<img className="scr__shot" src={picture} alt=""/>:<span className="scr__off"/>}</>;
  return <div className={`scr${large?' scr--lg':''}${state!=='awake'?' is-off':''}${control&&state==='awake'?' is-control':''}`} aria-hidden={live?undefined:'true'}>
   <span className="scr__bar"><span className="scr__dots"><i/><i/><i/></span><span className="scr__url" dir="ltr"/></span>

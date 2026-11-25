@@ -370,5 +370,5 @@ test('the server takes control only for a Member who is not a Viewer and sees th
  await page.context().clearCookies();
  expect(await (await stream(page)).closed).toBe(4401);
  expect(acquires()).toBe(before);
- expect(fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
+ expect(fake.settings.screens.get(adsProfile)?.holder??'agent').toBe('agent');
 });

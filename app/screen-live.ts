@@ -48,6 +48,8 @@ export function useScreenLive({ company, agent, on, target, onStale }: { company
       stopStream();
       const here = new StreamChannel(open); channel = here;
       const { default: RFB } = await import('@novnc/novnc') as unknown as { default: new (target: HTMLElement, channel: unknown, options?: object) => Rfb };
+      // The element it draws in may be put on the page by the same message that opened the stream.
+      for (let frame = 0; frame < 10 && !target.current && !ended && channel === here; frame++) await new Promise(resolve => requestAnimationFrame(resolve));
       if (ended || channel !== here || !target.current) return;
       const client = new RFB(target.current, here, { shared: true });
       client.scaleViewport = true; client.resizeSession = false; client.focusOnClick = true; client.viewOnly = !mine.current;
