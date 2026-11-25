@@ -1153,9 +1153,12 @@ esac
   const [sql,cutover]=runs;
   assert.doesNotMatch(sql,/003_third_cutover/,'the cutover is not applied before the app answers');
   assert.match(cutover,/\\echo Applying migration: 003_third_cutover\.sql\n\\ir \/migrations\/003_third_cutover\.sql/);
-  assert.doesNotMatch(cutover,/00[12]_/,'the cutover transaction applies the cutover alone');
+  assert.doesNotMatch(cutover,/\b00[12]_/,'the cutover transaction applies the cutover alone');
   assert.match(readFileSync(`${env.INSTALL_SQL}.args`,'utf8'),/ON_ERROR_STOP=1 --single-transaction/);
   assert.match(sql,/pg_advisory_xact_lock/);
+  // #816: a migration renamed after it reached main is recorded under its new name before any file is applied.
+  const renamed=sql.indexOf("update gtmworks_install.schema_migrations set name='20270417100002_ran_out_accounts.sql' where name='20270417100001_ran_out_accounts.sql'");
+  assert.ok(renamed>sql.indexOf('create table if not exists gtmworks_install.schema_migrations')&&renamed<sql.indexOf('Applying migration'),sql);
   assert.match(sql,/\\gset\n\\if :applied\n\\else\n\\echo Applying migration: 001_first.sql\n\\ir \/migrations\/001_first.sql/);
   assert.match(sql,/\\endif\n/);
   assert.ok(sql.indexOf('/001_first.sql')<sql.indexOf('/002_second.sql'));

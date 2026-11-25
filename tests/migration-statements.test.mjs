@@ -65,3 +65,20 @@ test('every migration has a version of its own', () => {
  const versions=migrations.map(name=>name.split('_')[0]);
  assert.deepEqual(versions.filter((version,at)=>versions.indexOf(version)!==at),[]);
 });
+
+// #816: a migration renamed after it reached main keeps its history on an install that applied it under the old name:
+// the installer's renamed_migrations moves that record to the new name before anything is applied (scripts/install.sh).
+test('every renamed migration names an old file that is gone and a new one that is there', () => {
+ const list=readFileSync('scripts/install.sh','utf8').match(/^renamed_migrations='([^']*)'$/m);
+ assert.ok(list,'the installer keeps its renamed migrations');
+ const renames=list[1].split('\n').map(line=>line.split(' '));
+ assert.ok(renames.length>0);
+ for(const [old,renamed,...rest] of renames) {
+  assert.deepEqual(rest,[],`${old}: one old name and one new name`);
+  assert.match(old,/^\d{14}_[a-z0-9_]+\.sql$/);
+  assert.equal(migrations.includes(old),false,`${old} is no longer a migration`);
+  assert.ok(migrations.includes(renamed),`${renamed} is a migration`);
+  assert.equal(old.slice(old.indexOf('_')),renamed.slice(renamed.indexOf('_')),`${old} keeps its name past the version`);
+ }
+ assert.ok(renames.some(([old,renamed])=>old==='20270417100001_ran_out_accounts.sql'&&renamed==='20270417100002_ran_out_accounts.sql'));
+});

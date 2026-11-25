@@ -1044,6 +1044,12 @@ volumes() {
 # (ADR 0023): `apply_migrations` leaves it out, and `apply_migrations cutover` applies it alone, once this release's app
 # answers and its worker runs. Every other migration keeps the database usable by the previous release, so a run that fails before
 # the cutover leaves that release serving on a schema it was built for.
+#
+# A migration renamed after it reached main, one "old new" pair a line (#816): the installer records a migration by its
+# file name, so an install that applied it under the old name would apply it again under the new one. Its record moves to
+# the new name first, in the same transaction, unless the new name is already recorded.
+renamed_migrations='20270415999996_handover_model_causes.sql 20270415999997_handover_model_causes.sql
+20270417100001_ran_out_accounts.sql 20270417100002_ran_out_accounts.sql'
 apply_migrations() {
   stage=${1:-}
   {
@@ -1052,6 +1058,10 @@ apply_migrations() {
       'create table if not exists gtmworks_install.schema_migrations(name text primary key);' \
       'select not exists(select 1 from gtmworks_install.schema_migrations) as bootstrap \gset' \
       '\if :bootstrap' '\ir /bootstrap-grants.sql' '\endif'
+    printf '%s\n' "$renamed_migrations" | while read -r old new; do
+      printf '%s\n' "update gtmworks_install.schema_migrations set name='$new' where name='$old'" \
+        "  and not exists(select 1 from gtmworks_install.schema_migrations where name='$new');"
+    done
     for file in supabase/migrations/*.sql; do
       case "$file" in *.verify.sql) continue;; esac
       case "$file" in
