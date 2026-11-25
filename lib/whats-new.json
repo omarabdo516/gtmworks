@@ -1,5 +1,11 @@
 [
  {
+  "issue": 735,
+  "date": "2026-11-25",
+  "en": { "title": "A model you switch off stays off", "body": "Switching a model off on one provider now takes it out of the chat's model menu, every agent's model choice and the Fallback model, unless another provider that lists that model still has it on." },
+  "ar": { "title": "الموديل اللي بتقفله بيفضل مقفول", "body": "لما تقفل موديل في مزوّد، بقى بيختفي من قايمة الموديلات في المحادثة ومن اختيار موديل أي وكيل ومن الموديل البديل، إلا لو فيه مزوّد تاني بيعرض نفس الموديل ولسه مشغّله." }
+ },
+ {
   "issue": 714,
   "date": "2026-11-25",
   "en": { "title": "Finish a step an Agent hands you on its Screen", "body": "When an Agent stops at a step on its Screen for you to do, its card in the chat says Open the screen, which opens the Screen with a banner naming the step and Done it; the Screen reads Awake · waiting on you for you alone, a toast tells you when it arrives, and Done it there or on the chat card records the step once." },
