@@ -41,13 +41,15 @@ begin
   join public.conversation_run_notes n on n.conversation_id=m.conversation_id and n.send_key=m.send_key
   where m.conversation_id=conversation and m.run_id=run and m.author='person' and jsonb_typeof(n.model)='object' limit 1;
  insert into public.conversation_run_ran_out(company_id,conversation_id,run_id,provider,account,place)
-  select distinct on (a.provider,a.account) e.company_id,e.conversation_id,e.run_id,a.provider,a.account,a.place::integer
+  select distinct on (a.provider,a.account) e.company_id,e.conversation_id,e.run_id,a.provider,a.account,n.place
   from public.conversation_run_ends e,
    jsonb_to_recordset((select coalesce(jsonb_agg(item),'[]'::jsonb) from jsonb_array_elements(ran_out) item where jsonb_typeof(item)='object'))
     as a(provider text,account text,place text)
+   -- The cast runs only on a place that is a number: the WHERE clause's checks run in no set order.
+   cross join lateral (select case when a.place ~ '^[1-9][0-9]?$' then a.place::integer end as place) n
   where e.conversation_id=conversation and e.run_id=run and e.outcome='no_access'
    and a.provider=coalesce(chosen,own_provider) and a.provider ~ '^[a-z0-9][a-z0-9._-]{0,63}$'
-   and a.account ~ '^[A-Za-z0-9_-]{1,64}$' and a.place ~ '^[1-9][0-9]?$' and a.place::integer<=64
+   and a.account ~ '^[A-Za-z0-9_-]{1,64}$' and n.place<=64
    and not exists(select 1 from public.provider_order o where o.company_id=e.company_id and o.provider=a.provider and o.account=a.account and not o.enabled);
  return closed;
 end $$;
