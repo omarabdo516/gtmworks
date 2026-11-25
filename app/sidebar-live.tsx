@@ -45,7 +45,8 @@ export function SidebarLive({company,person,slug,channels:read,states,handed=noH
    clearTimeout(timer);
    if(document.visibilityState==='visible') {
     try {
-     const response=await fetch(`/api/sidebar?company=${company}`,{cache:'no-store'});
+     // The poll names the reader it draws for: after another tab signed in as someone else, the route answers nothing.
+     const response=await fetch(`/api/sidebar?company=${company}&person=${person}`,{cache:'no-store'});
      if(response.ok&&!stopped) { const answer=await response.json() as SidebarNow; if(!stopped) { channelsShown.set(shownKey,answer.channels); setPolled(was=>kept(was,basis,answer)); } }
     } catch {}
    }
@@ -57,7 +58,7 @@ export function SidebarLive({company,person,slug,channels:read,states,handed=noH
   // question shows its own state without waiting for the next poll.
   const ended=onWatchedRunEnded(()=>ask.current());
   return ()=>{stopped=true;clearTimeout(timer);ask.current=()=>{};ended();};
- },[company,basis,shownKey]);
+ },[company,person,basis,shownKey]);
  const refresh=useCallback(()=>ask.current(),[]);
  // A step "Done it" kept on this page leaves the Screen at once, and the poll is asked again (#714).
  const [done,setDone]=useState<ReadonlySet<number>>(()=>new Set());

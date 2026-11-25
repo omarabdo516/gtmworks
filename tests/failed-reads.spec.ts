@@ -78,6 +78,20 @@ test('the sidebar keeps its channels when their read fails, on the next page and
  await expect(link).toHaveText('general');
 });
 
+// #776: the sidebar's poll answers only for the reader it was drawn for. After another tab signed in as someone else, the
+// poll this tab sends names its own reader, gets nothing, and the sidebar keeps what it shows.
+test('a sidebar poll for another reader than the one signed in gets nothing', async ({ page }) => {
+ await signIn(page, 'reviewer@example.com', '/c/rs-learning/home');
+ const company = '10000000-0000-0000-0000-000000000001';
+ const reviewer = '20000000-0000-0000-0000-000000000003', owner = '20000000-0000-0000-0000-000000000001';
+ const mine = await page.request.get(`/api/sidebar?company=${company}&person=${reviewer}`);
+ expect(mine.status()).toBe(200);
+ expect((await mine.json()).channels.length).toBeGreaterThan(0);
+ const theirs = await page.request.get(`/api/sidebar?company=${company}&person=${owner}`);
+ expect(theirs.status()).toBe(409);
+ expect(await theirs.json()).toEqual({ error: 'readerChanged' });
+});
+
 // #777
 test('a Company that cannot be read shows could not be read on every page, never not found', async ({ page }) => {
  await signIn(page, 'omar@example.com', '/c/rs-learning/home');

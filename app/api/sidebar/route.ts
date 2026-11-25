@@ -20,6 +20,10 @@ export async function GET(request:NextRequest) {
   if(!user) return reply({error:'channelNotFound'},401);
   const company=request.nextUrl.searchParams.get('company');
   if(!company||!uuid.test(company)) return reply({error:'channelFailed'},400);
+  // A poll for another reader than the one signed in now (another tab changed the account) gets nothing: their page
+  // keeps what it shows until it is drawn again for the reader who is signed in.
+  const person=request.nextUrl.searchParams.get('person');
+  if(person!==null&&person!==user.id) return reply({error:'readerChanged'},409);
   // A membership read that failed is an error, not "not found" (#776, #777).
   const allowed=await routePermission(db,'app/api/sidebar/route.ts','GET',company,user.id);
   if(allowed==='failed') return reply({error:'channelNotRead'},503);

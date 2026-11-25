@@ -34,7 +34,7 @@ test('an Agent that fails while the page shows looks stuck in the sidebar within
  const tile = screen.getByRole('link', { name: 'Reach · Runs the ads. · Idle' });
  await expect.element(tile).toBeVisible();
  await vi.advanceTimersByTimeAsync(5000);
- expect(asked.mock.calls[0][0]).toBe('/api/sidebar?company=co-1');
+ expect(asked.mock.calls[0][0]).toBe('/api/sidebar?company=co-1&person=p-1');
  await expect.element(screen.getByRole('link', { name: 'Reach · Runs the ads. · Stuck' })).toBeVisible();
  expect(screen.container.querySelector('.agent-tile .dot')?.className).toBe('dot dot--stuck');
 });
