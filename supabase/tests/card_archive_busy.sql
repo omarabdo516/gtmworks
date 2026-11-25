@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(42);
 -- #671 (spec #667). Archiving a Card an Agent works on, or that waits on someone. RS Learning's Busy Agent is shown to
 -- the Manager (…02), the first Contributor (…03) and the Viewer (…04), and hidden from the second Contributor (…05).
 -- "Busy chat" is tied to the first Contributor's chat with Busy: its Run is open, a turn waits behind it, and the Run
@@ -30,8 +30,8 @@ insert into public.conversation_queued_turns(conversation_id,send_key,company_id
  ('e6710000-0000-0000-0000-000000000001','e6711000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a6710000-0000-0000-0000-000000000001','And the August one');
 insert into public.conversation_run_reservations(conversation_id,send_key,company_id,connection_id,person_id,agent_id,message,profile,start_attempts) values
  ('e6710000-0000-0000-0000-000000000001','e6711000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','c6710000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','a6710000-0000-0000-0000-000000000001','And the August one','archive-busy',1);
-insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
- select '10000000-0000-0000-0000-000000000001',3,x.title,x.agent::uuid,x.conversation::uuid
+insert into public.work_cards(company_id,status,title,agent_id,conversation_id)
+ select '10000000-0000-0000-0000-000000000001','progress',x.title,x.agent::uuid,x.conversation::uuid
  from (values ('Busy chat','a6710000-0000-0000-0000-000000000001','e6710000-0000-0000-0000-000000000001'),('Busy note',null,null),('Busy approval',null,null),('Busy idle',null,null)) x(title,agent,conversation);
 insert into public.work_comments(company_id,card_id,author_id,body)
  select company_id,id,'20000000-0000-0000-0000-000000000002',x.body from public.work_cards, (values ('Draft the hook'),('Check the caption'),('Mind the length')) x(body) where title='Busy note';
@@ -66,7 +66,6 @@ insert into public.channel_permissions(company_id,channel_id,message_id,run_id,o
 insert into public.channel_permissions(company_id,channel_id,message_id,run_id,ordinal,request_id,title,content,state,decided_by,decided_at)
  select company_id,channel_id,id,'busy-room-run',1,'p0','Read the page','{"description":"Read the page","command":"read","choices":["once","deny"],"choice":"once"}','sending','20000000-0000-0000-0000-000000000003',now()
  from public.channel_messages where send_key='e6713000-0000-0000-0000-000000000001';
-update public.approval_steps set person_id='20000000-0000-0000-0000-000000000002',role=null where company_id='10000000-0000-0000-0000-000000000001' and removed_at is null;
 create temporary table ids on commit drop as select title,id from public.work_cards where title like 'Busy %';
 grant select on ids to authenticated;
 create function pg_temp.card(title text) returns bigint language sql as $$ select id from ids where ids.title=card.title $$;
@@ -95,7 +94,7 @@ select ok(not has_function_privilege('anon','public.card_archive_stops(uuid,bigi
 set local role authenticated;
 select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',pg_temp.card('Busy approval'),'waiting');
+select public.ask_review('10000000-0000-0000-0000-000000000001',pg_temp.card('Busy approval'));
 
 -- Before: each thing that waits on someone is in their list.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
@@ -141,7 +140,7 @@ select is((select string_agg(format('%s %s',kind,state),',' order by kind) from 
  'hand closed,permission closed,permission closed,question closed','the chat''s question, permission and handed step close unanswered, and a choice not delivered yet is never delivered');
 select is((select string_agg(state,',') from public.channel_permissions where channel_id='e6712000-0000-0000-0000-000000000001'),'closed,closed','so do the room''s request and its choice not delivered yet');
 select is((select count(*)::int from public.work_activity where card_id=pg_temp.card('Busy approval') and action in ('approval_rejected','approval_approved')),0,'the approval ends with no decision: it is not a rejection');
-select is((select approval_step_id from public.work_cards where id=pg_temp.card('Busy approval')),null,'and the Card waits on no approval step');
+select is((select string_agg(coalesce(decision,'open'),',') from public.work_reviews where card_id=pg_temp.card('Busy approval')),'ended','and its review is ended, with no decision');
 select is((select details->>'column' from public.work_activity where card_id=pg_temp.card('Busy approval') and action='card_archived'),'waiting','the archive row still names the column the Card left');
 
 -- A Run that closes after the archive writes its end, and never asks, moves or restores the Card.
@@ -159,7 +158,7 @@ reset role;
 select is((select count(*)::int from public.reply_cards where conversation_id='e6710000-0000-0000-0000-000000000001' and state='open'),0,'so nothing in the chat waits on anyone');
 select is((select string_agg(format('%s %s',title,(archived_at is not null)::text),',' order by title) from public.work_cards where id=any(pg_temp.cards())),
  'Busy approval true,Busy chat true,Busy idle true,Busy note true,Busy room true','every Card stays archived after its Runs closed');
-select is((select stage_id from public.work_cards where id=pg_temp.card('Busy chat')),3::bigint,'and none moved');
+select is((select status from public.work_cards where id=pg_temp.card('Busy chat')),'progress','and none moved');
 
 -- Nothing starts work on an archived Card.
 insert into public.work_comments(company_id,card_id,author_id,body) values ('10000000-0000-0000-0000-000000000001',pg_temp.card('Busy note'),'20000000-0000-0000-0000-000000000003','@Busy one more line');
@@ -173,7 +172,6 @@ reset role;
 select is((select outcome from public.note_runs n join public.work_comments c on c.id=n.note_id where c.body='@Busy one more line'),'stopped','it ends stopped');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
-select is(pg_temp.answer(format('select public.start_card_conversation(%L,%s,%L)','10000000-0000-0000-0000-000000000001',pg_temp.card('Busy idle'),'e6714000-0000-0000-0000-000000000001')),'P0002','a chat is not started from an archived Card');
 
 -- Restore starts nothing: the Cards are back, and nobody waits again.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000003',true);
@@ -181,7 +179,7 @@ select is(array_length(string_to_array(pg_temp.answer(format('select public.rest
 select is(pg_temp.waits(),'','nothing waits on the Contributor again');
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is(pg_temp.waits(),'','nor on the Manager');
-select is((select format('%s %s',s.board_column,w.approval_step_id is null) from public.work_cards w join public.work_stages s on s.company_id=w.company_id and s.id=w.stage_id where w.id=pg_temp.card('Busy approval')),
+select is((select format('%s %s',w.status,not exists(select 1 from public.work_reviews r where r.card_id=w.id and r.decision is null)) from public.work_cards w where w.id=pg_temp.card('Busy approval')),
  'progress t','the Card whose approval ended is back in the column it was sent from, where it may be sent for approval again');
 reset role;
 

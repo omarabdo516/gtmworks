@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 create temp table isolation_matrix(name text primary key, fixed jsonb not null default '{}');
 insert into isolation_matrix(name) values
  ('agent_access_requests'),('agent_change_proposals'),('agent_looks'),('agent_reader_marks'),('agent_grants'),('agent_permission_revoked'),('agent_permission_revokes'),('agent_handovers'),('agent_key_waits'),('agent_morning_leases'),('agent_profile_leftovers'),('agent_profiles'),
- ('agent_requests'),('agent_rules'),('approval_steps'),
+ ('agent_requests'),('agent_rules'),
  ('channel_agents'),('channel_archives'),('channel_attachments'),('channel_invitees'),('channel_messages'),('channel_notes'),('channel_people'),('channel_permissions'),('channel_reads'),('channel_runs'),('channels'),
  ('company_app_sign_ins'),('company_audit'),('company_key_holds'),('company_key_unfinished'),('company_log'),
  ('company_fallback_models'),('company_profile_keepers'),('company_profiles'),('company_provider_models'),('company_shared_spaces'),
@@ -18,8 +18,8 @@ insert into isolation_matrix(name) values
  ('member_agent_access'),('member_audit'),('member_invitations'),('member_notes'),('members'),
  ('note_runs'),('provider_names'),('provider_order'),('reply_cards'),('role_permissions'),('routine_results'),('routine_runs_open'),('stopped_runs'),
  ('waiting_items'),
- ('work_activity'),('work_assignees'),('work_attachments'),('work_card_labels'),('work_card_moves'),('work_card_description_versions'),('work_card_waits'),('work_card_visits'),('work_cards'),
- ('work_checklist'),('work_comments'),('work_creatives'),('work_labels'),('work_projects'),('work_reviews'),('work_stages'),('work_versions');
+ ('work_activity'),('work_attachments'),('work_card_moves'),('work_card_description_versions'),('work_card_waits'),('work_card_visits'),('work_cards'),
+ ('work_comments'),('work_creatives'),('work_projects'),('work_reviews'),('work_versions');
 -- Values a table's own checks need, as SQL (RS Learning is 10000000-...-0001). The member row names a person of no
 -- Company, as naming the caller would make them a member of RS Learning, and a Contributor, so the Owner-only guard
 -- does not answer before the policy does.
@@ -41,7 +41,6 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('agent_permission_revoked', $${"entry": "'isolation'", "revoked_at": "now()"}$$),
  -- A revoke's hold on an Agent (#166) names who holds it.
  ('agent_permission_revokes', $${"held_by": "'e3370000-0000-0000-0000-000000000001'", "held_until": "now()"}$$),
- ('approval_steps', $${"person_id": "'e3370000-0000-0000-0000-000000000001'", "role": "null"}$$),
  ('channel_attachments', $${"channel_id": "'e3370000-0000-0000-0000-00000000000d'",
    "path": "'10000000-0000-0000-0000-000000000001/channels/e3370000-0000-0000-0000-00000000000d/isolation'"}$$),
  ('channel_messages', $${"author": "'person'", "send_key": "gen_random_uuid()"}$$),
@@ -85,7 +84,6 @@ update isolation_matrix m set fixed = v.fixed::jsonb from (values
  ('work_attachments', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$),
  -- A Card's status is one of the board's six columns (#676).
  ('work_cards', $${"status": "'ideas'"}$$),
- ('work_stages', $${"board_column": "'ideas'"}$$),
  ('work_versions', $${"path": "'10000000-0000-0000-0000-000000000001/isolation'"}$$)
 ) v(name, fixed) where m.name = v.name;
 select plan((select 1 + 4 * count(*)::int from isolation_matrix));

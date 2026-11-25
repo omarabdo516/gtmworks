@@ -60,10 +60,10 @@ select ok(public.close_conversation_run('e1440000-0000-0000-0000-000000000005','
  'the Runs that saved a rule, made or asked for an Agent, and the main Agent''s, each end with a reply');
 reset role;
 
-select results_eq($$select c.title,s.board_column,s.id=(select id from public.work_stages where company_id=c.company_id and board_column='progress' order by position,id limit 1),c.agent_id,c.next_actor is null
-  from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.conversation_id='e1440000-0000-0000-0000-000000000001'$$,
- $$values ('Plan the June campaign for the accounting co'::text,'progress'::text,true,'a1440000-0000-0000-0000-000000000002'::uuid,true)$$,
- 'one Card, in the first In progress stage, titled by the first line cut to 44 characters without the mention or the command, with Ads, waiting on nobody');
+select results_eq($$select c.title,c.status,c.agent_id,c.assignee_agent,c.assignee_person is null
+  from public.work_cards c where c.conversation_id='e1440000-0000-0000-0000-000000000001'$$,
+ $$values ('Plan the June campaign for the accounting co'::text,'progress'::text,'a1440000-0000-0000-0000-000000000002'::uuid,'a1440000-0000-0000-0000-000000000002'::uuid,true)$$,
+ 'one Card, In progress, titled by the first line cut to 44 characters without the mention or the command, with Ads, assigned to Ads');
 select is((select title from public.work_cards where conversation_id='e1440000-0000-0000-0000-000000000002'),'Ads','a message with nothing left in it titles its Card by the Agent');
 select is((select count(*)::int from public.work_cards where conversation_id in (select conversation from chats where n between 3 and 8)),0,
  'no Card when the first Run failed or was stopped, saved a rule, made or asked for an Agent, or was the main Agent''s');
@@ -125,9 +125,9 @@ select is((select count(*)::int from public.work_comments where card_id=current_
 select is((select count(*)::int from public.company_log where card_id=current_setting('test.card')::bigint),0,'nor its log rows');
 select is((select count(*)::int from public.conversations where id='e1440000-0000-0000-0000-000000000001'),0,'nor the chat');
 select is((select count(*)::text from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and conversation_id is null),current_setting('test.untied'),'while every untied Card reads as before');
-select throws_ok($$select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'planned')$$,'P0001','card not found or not permitted','and they cannot move it');
+select throws_ok($$select public.move_card('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'planned',null,null)$$,'P0002','card not found or not permitted','and they cannot move it');
 select throws_ok($$insert into public.work_comments(company_id,card_id,body) values ('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'Sneaking a note in')$$,'42501',null,'nor write a note on it');
-select throws_ok($$insert into public.work_checklist(company_id,card_id,title) values ('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'Sneaking a step in')$$,'42501',null,'nor add a step to it');
+select throws_ok($$select public.save_card_description('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'- [ ] Sneaking a step in',0)$$,null,null,'nor add a to-do to it');
 select is((select count(*)::int from storage.objects where bucket_id='creatives' and name in ('10000000-0000-0000-0000-000000000001/'||current_setting('test.card')||'/brief.pdf','10000000-0000-0000-0000-000000000001/new-card/0')),0,'nor read its stored files, in its folder or named by its attachment');
 select is((select count(*)::int from storage.objects where bucket_id='creatives' and name='10000000-0000-0000-0000-000000000001/1/brief.pdf'),1,'while an untied Card''s file reads as before');
 select throws_ok($$insert into storage.objects(bucket_id,name) values ('creatives','10000000-0000-0000-0000-000000000001/'||current_setting('test.card')||'/sneaked.pdf')$$,'42501',null,'nor store a file in its folder');
@@ -137,13 +137,13 @@ select is((select count(*)::int from storage.objects where bucket_id='creatives'
 
 -- The tie is the database's: a Member who may edit Cards moves this one like any other, and never sets its chat.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select lives_ok($$select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'planned')$$,'the Owner moves the Card');
-select is((select s.board_column from public.work_cards c join public.work_stages s on s.id=c.stage_id where c.id=current_setting('test.card')::bigint),'planned','and it is in Planned, still tied');
+select lives_ok($$select public.move_card('10000000-0000-0000-0000-000000000001',current_setting('test.card')::bigint,'planned',null,null)$$,'the Owner moves the Card');
+select is((select c.status from public.work_cards c where c.id=current_setting('test.card')::bigint and c.conversation_id is not null),'planned','and it is in Planned, still tied');
 select throws_ok($$update public.work_cards set conversation_id=null where id=current_setting('test.card')::bigint$$,'42501','cardConversationProtected','the Owner cannot untie it');
 select throws_ok($$update public.work_cards set conversation_id='e1440000-0000-0000-0000-000000000009' where id=1$$,'42501','cardConversationProtected','nor tie another Card to a chat');
-select throws_ok($$insert into public.work_cards(company_id,stage_id,title,conversation_id) select '10000000-0000-0000-0000-000000000001',id,'Forged','e1440000-0000-0000-0000-000000000009' from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'$$,
+select throws_ok($$insert into public.work_cards(company_id,status,title,conversation_id) values ('10000000-0000-0000-0000-000000000001','ideas','Forged','e1440000-0000-0000-0000-000000000009')$$,
  '42501','cardConversationProtected','nor make a Card tied to one');
-select lives_ok($$select public.create_work_card('10000000-0000-0000-0000-000000000001',(select id from public.work_stages where company_id='10000000-0000-0000-0000-000000000001' and kind='ideas'),'An untied idea')$$,'a Card made by hand is made as before');
+select lives_ok($$select public.new_card('10000000-0000-0000-0000-000000000001','An untied idea','ideas')$$,'a Card made by hand is made as before');
 reset role;
 select set_config('request.jwt.claim.sub','',true);
 select set_config('request.jwt.claims','{"role":"service_role"}',true);

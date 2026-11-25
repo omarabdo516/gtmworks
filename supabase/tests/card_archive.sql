@@ -11,12 +11,11 @@ insert into public.member_agent_access(company_id,person_id,agent_id)
  select '10000000-0000-0000-0000-000000000001',p,'a6700000-0000-0000-0000-000000000001'
  from unnest(array['20000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000003','20000000-0000-0000-0000-000000000004']::uuid[]) p;
 insert into public.work_projects(company_id,name) values ('10000000-0000-0000-0000-000000000001','Archive June');
-insert into public.work_cards(company_id,stage_id,title,agent_id,project_id)
- select s.company_id,s.id,x.title,x.agent::uuid,case when x.project then (select id from public.work_projects where name='Archive June') end
+insert into public.work_cards(company_id,status,title,agent_id,project_id)
+ select '10000000-0000-0000-0000-000000000001','progress',x.title,x.agent::uuid,case when x.project then (select id from public.work_projects where name='Archive June') end
  from (values ('Archive writing',null,false),('Archive ads','a6700000-0000-0000-0000-000000000001',false),('Archive project',null,true)) x(title,agent,project)
- join public.work_stages s on s.company_id='10000000-0000-0000-0000-000000000001' and s.id=3;
-insert into public.work_cards(company_id,stage_id,title) select company_id,id,'Archive elsewhere' from public.work_stages where company_id='10000000-0000-0000-0000-000000000002' and kind='ideas' order by position limit 1;
-update public.approval_steps set person_id='20000000-0000-0000-0000-000000000002',role=null where company_id='10000000-0000-0000-0000-000000000001' and removed_at is null;
+;
+insert into public.work_cards(company_id,status,title) values ('10000000-0000-0000-0000-000000000002','ideas','Archive elsewhere');
 create temporary table ids on commit drop as select title,id from public.work_cards where title like 'Archive %';
 grant select on ids to authenticated;
 -- A Card's id, read once before any is archived (an archived Card is out of the caller's own reads).
@@ -40,8 +39,8 @@ select ok(not has_function_privilege('anon','public.archive_cards(uuid,bigint[])
 set local role authenticated;
 select set_config('request.jwt.claims','{"aal":"aal1"}',true);
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true);
-select public.move_work_card_to_column('10000000-0000-0000-0000-000000000001',pg_temp.card('Archive project'),'waiting');
-select is((select approval_step_id is not null from public.work_cards where id=pg_temp.card('Archive project')),true,'the Project''s Card waits on the Manager''s approval');
+select public.ask_review('10000000-0000-0000-0000-000000000001',pg_temp.card('Archive project'));
+select is((select count(*)::int from public.work_reviews where card_id=pg_temp.card('Archive project') and decision is null),1,'the Project''s Card waits on a review');
 reset role;
 select set_config('test.log',(select count(*)::text from public.company_log where company_id='10000000-0000-0000-0000-000000000001'),true);
 set local role authenticated;
@@ -58,10 +57,10 @@ select is(pg_temp.seen('10000000-0000-0000-0000-000000000001'),'Archive ads','an
 select is((select count(*)::int from public.board_cards('10000000-0000-0000-0000-000000000001') where title like 'Archive %'),1,'the board leaves archived Cards out');
 select is((select count(*)::int from public.work_cards where company_id='10000000-0000-0000-0000-000000000001' and project_id is not null and title like 'Archive %'),0,'the Project''s count leaves its archived Card out');
 select is(pg_temp.archived('10000000-0000-0000-0000-000000000001'),'Archive project,Archive writing','the archived list holds both');
-select is((select string_agg(format('%s %s %s',x.stage_id,x.archived_by,(x.archived_at is not null)::text),',' order by x.title) from public.archived_cards('10000000-0000-0000-0000-000000000001') x where x.title like 'Archive %'),
- '5 20000000-0000-0000-0000-000000000003 true,3 20000000-0000-0000-0000-000000000003 true','each archived Card keeps the column it was in and says who archived it, and when');
+select is((select string_agg(format('%s %s %s',x.status,x.archived_by,(x.archived_at is not null)::text),',' order by x.title) from public.archived_cards('10000000-0000-0000-0000-000000000001') x where x.title like 'Archive %'),
+ 'waiting 20000000-0000-0000-0000-000000000003 true,progress 20000000-0000-0000-0000-000000000003 true','each archived Card keeps the column it was in and says who archived it, and when');
 select is(pg_temp.answer(format('select card from public.archive_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'))),'','a Card already archived is not archived again');
-select is(pg_temp.answer(format('select public.move_work_card_to_column(%L,%s,%L)','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'),'done')),'P0001','an archived Card is not moved');
+select is(pg_temp.answer(format('select public.move_card(%L,%s,%L,null,null)','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'),'done')),'P0002','an archived Card is not moved');
 
 -- The Manager no longer waits on the archived Card's approval.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
@@ -102,7 +101,7 @@ select is(pg_temp.answer(format('select x.id from public.archived_cards(%L) x','
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true);
 select is(pg_temp.answer(format('select public.restore_cards(%L,array[%s,%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'),pg_temp.card('Archive ads'))),
  format('%s,%s',pg_temp.card('Archive writing'),pg_temp.card('Archive ads')),'a Manager restores two Cards in one call');
-select is((select string_agg(format('%s %s',title,stage_id),',' order by title) from public.board_cards('10000000-0000-0000-0000-000000000001') where title like 'Archive %'),'Archive ads 3,Archive writing 3','restored Cards are back on the board in the column they were in');
+select is((select string_agg(format('%s %s',title,status),',' order by title) from public.board_cards('10000000-0000-0000-0000-000000000001') where title like 'Archive %'),'Archive ads progress,Archive writing progress','restored Cards are back on the board in the column they were in');
 select is(pg_temp.answer(format('select public.restore_cards(%L,array[%s])','10000000-0000-0000-0000-000000000001',pg_temp.card('Archive writing'))),'','a current Card is not restored again');
 reset role;
 select is((select string_agg(format('%s %s',actor_id,details->>'column'),',') from public.company_log where action='card_restored' and card_id=pg_temp.card('Archive writing')),

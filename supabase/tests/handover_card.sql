@@ -26,18 +26,17 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
  ('10000000-0000-0000-0000-000000000001','c1470000-0000-0000-0000-000000000003','person','20000000-0000-0000-0000-000000000003','مراجع','Plan the June intake',gen_random_uuid(),'run-contributor'),
  ('10000000-0000-0000-0000-000000000001','c1470000-0000-0000-0000-000000000004','person','20000000-0000-0000-0000-000000000004','مشاهد','Plan the July intake',gen_random_uuid(),'run-viewer');
 -- The Contributor's chat already has a Card, made for Writer, in Ideas: a handover gives it the Agent handed the work.
-insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
- select '10000000-0000-0000-0000-000000000001',s.id,'Plan the June intake','a1470000-0000-0000-0000-000000000013','c1470000-0000-0000-0000-000000000003'
- from public.work_stages s where s.company_id='10000000-0000-0000-0000-000000000001' and s.position=1;
-create temporary table kept as select id as card,stage_id,agent_id from public.work_cards where conversation_id='c1470000-0000-0000-0000-000000000003';
+insert into public.work_cards(company_id,status,title,agent_id,conversation_id)
+ values ('10000000-0000-0000-0000-000000000001','ideas','Plan the June intake','a1470000-0000-0000-0000-000000000013','c1470000-0000-0000-0000-000000000003');
+create temporary table kept as select id as card,status,agent_id from public.work_cards where conversation_id='c1470000-0000-0000-0000-000000000003';
 
 -- A chat with no Card makes one under "In progress" for the Agent handed the work, titled as #144's Card is, once.
 select is(public.lead_hand_to_agent('c1470000-0000-0000-0000-000000000001','run-owner','call-1',' Ads ','Plan the Meta ads for the March intake','EGP 9,000 for 30 days.'),
  '{"state":"created","agent":"Ads"}'::jsonb,'the Lead keeps a handover to an Agent of its Company');
 select is((select count(*)::int from public.work_cards where conversation_id='c1470000-0000-0000-0000-000000000001'),1,'and one Card follows it');
-select is((select w.title||':'||w.agent_id||':'||s.board_column||':'||s.kind from public.work_cards w join public.work_stages s on s.id=w.stage_id and s.company_id=w.company_id
+select is((select w.title||':'||w.agent_id||':'||w.status from public.work_cards w
  where w.conversation_id='c1470000-0000-0000-0000-000000000001'),
- 'Plan the March intake:a1470000-0000-0000-0000-000000000012:progress:before_review','under In progress, for Ads, titled from the person''s first message and tied to the Conversation');
+ 'Plan the March intake:a1470000-0000-0000-0000-000000000012:progress','under In progress, for Ads, titled from the person''s first message and tied to the Conversation');
 select is(public.lead_hand_to_agent('c1470000-0000-0000-0000-000000000001','run-owner','call-1','Ads','Plan it again',null),'{"state":"created","agent":"Ads"}'::jsonb,'the same call again answers the same');
 select is((select count(*)::int from public.work_cards where conversation_id='c1470000-0000-0000-0000-000000000001'),1,'and keeps one Card');
 select is((select count(*)::int from public.company_log where source='agent_handovers'),1,'with one log row');
@@ -49,8 +48,8 @@ select is((select w.created_at=l.created_at from public.work_cards w join public
 -- A chat that has a Card gives it the Agent handed the work, keeps its stage, and logs the handover on it.
 select is(public.lead_hand_to_agent('c1470000-0000-0000-0000-000000000003','run-contributor','call-2',' Ads ','Plan the June intake',''),'{"state":"created","agent":"Ads"}'::jsonb,'a Contributor''s handover is kept');
 select is((select count(*)::int from public.work_cards where conversation_id='c1470000-0000-0000-0000-000000000003'),1,'the Conversation keeps its one Card');
-select is((select w.id||':'||w.agent_id||':'||w.stage_id from public.work_cards w where w.conversation_id='c1470000-0000-0000-0000-000000000003'),
- (select card||':a1470000-0000-0000-0000-000000000012:'||stage_id from kept),'with Ads and its stage, nothing else changed');
+select is((select w.id||':'||w.agent_id||':'||w.status from public.work_cards w where w.conversation_id='c1470000-0000-0000-0000-000000000003'),
+ (select card||':a1470000-0000-0000-0000-000000000012:'||status from kept),'with Ads and its column, nothing else changed');
 select is((select count(*)::int from public.company_log l join public.work_cards w on w.id=l.card_id where w.conversation_id='c1470000-0000-0000-0000-000000000003' and l.action='agent_handed_to'),1,'and the handover''s log row on it');
 
 -- A Viewer's Conversation hands nothing over, so no Card follows; a call to an Agent nobody sees makes none either.
@@ -84,8 +83,8 @@ insert into public.conversation_messages(company_id,conversation_id,author,perso
 create function pg_temp.race_card() returns trigger language plpgsql as $$
 begin
  if pg_trigger_depth()=1 then
-  insert into public.work_cards(company_id,stage_id,title,agent_id,conversation_id)
-   values(new.company_id,new.stage_id,'The other handover''s card',(select id from public.hermes_agents where company_id=new.company_id and name='Writer'),new.conversation_id);
+  insert into public.work_cards(company_id,status,title,agent_id,conversation_id)
+   values(new.company_id,new.status,'The other handover''s card',(select id from public.hermes_agents where company_id=new.company_id and name='Writer'),new.conversation_id);
  end if;
  return new;
 end $$;
@@ -93,9 +92,9 @@ create trigger race_card before insert on public.work_cards for each row execute
 select is(public.lead_hand_to_agent('c1470000-0000-0000-0000-000000000005','run-race','call-1','Ads','Plan the September intake',null),
  '{"state":"created","agent":"Ads"}'::jsonb,'a handover whose Card raced another keeps its handover');
 drop trigger race_card on public.work_cards;
-select is((select w.title||':'||w.agent_id||':'||s.board_column||':'||s.kind from public.work_cards w join public.work_stages s on s.id=w.stage_id and s.company_id=w.company_id
+select is((select w.title||':'||w.agent_id||':'||w.status from public.work_cards w
  where w.conversation_id='c1470000-0000-0000-0000-000000000005'),
- 'The other handover''s card:a1470000-0000-0000-0000-000000000012:progress:before_review','the raced Card keeps its title and stage, and takes the Agent handed the work');
+ 'The other handover''s card:a1470000-0000-0000-0000-000000000012:progress','the raced Card keeps its title and column, and takes the Agent handed the work');
 select is((select count(*)::int from public.company_log l join public.work_cards w on w.id=l.card_id
  where w.conversation_id='c1470000-0000-0000-0000-000000000005' and l.action='agent_handed_to'),1,'and its row lands on that one Card');
 select * from finish();
