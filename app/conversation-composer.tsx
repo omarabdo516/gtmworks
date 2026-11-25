@@ -50,6 +50,8 @@ export const newId=()=>{const b=crypto.getRandomValues(new Uint8Array(16));b[6]=
 // Commands. Its keys are the reference's: Arrow keys move and wrap, Enter or Tab picks in place of the token with one
 // space after it, Escape closes and keeps the text, and Enter sends only when the list is closed. Opening the list
 // closes the "+" menu and the other way round. A note field draws the same list without Commands (app/card-sheet.tsx).
+// `drawn`: the place draws a message the moment it is sent (#756), so the box lets it go then, and a refused send puts it
+// back, with its files and its send key, beside the line that says why.
 // `insert` adds a sentence after what is typed; `fill` puts it in the field in place of what is typed (#205's "Try
 // writing", design-reference: the routine-example case), the caret at its end. Neither sends.
 export type MessageBoxHandle={insert:(sentence:string)=>void,fill:(sentence:string)=>void};
@@ -142,7 +144,7 @@ export type ModelTarget={company:string,conversation:string,agent:string};
 // Why a chosen image, or a set of them, cannot go with this message: the one line under the box (design-reference has
 // no such line, since it takes any file; the Engine reads images only).
 const refusalOf=(problem:'type'|'count'|'size'|'request')=>problem==='type'?'attachTypeRefused':problem==='count'?'attachCountRefused':problem==='size'?'attachSizeRefused':'attachRequestRefused';
-export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,to,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,to?:string|null,ref?:Ref<MessageBoxHandle>}) {
+export function MessageBox({placeholder,label,send,stop,focus=false,call,model,refused,attach=true,voice,to,drawn=false,ref}:{placeholder:string,label?:string,send:(text:string,sendKey:string,files:File[])=>Promise<string|null>,stop?:{label:string,run:()=>Promise<string|null>},focus?:boolean,call?:Callable,model?:ModelTarget,refused?:{key:string,text:string},attach?:boolean,voice?:DictationTarget,to?:string|null,drawn?:boolean,ref?:Ref<MessageBoxHandle>}) {
  const {t}=useI18n(); const [text,setText]=useState(''); const [files,setFiles]=useState<File[]>([]); const [key,setKey]=useState(newId); const [busy,setBusy]=useState(false); const [error,setError]=useState('');
  // The Agent being written to listens while the field holds words (#700, lib/live-runs): the chat's own Agent (`to`), or
  // in a channel each Agent the words name after "@". An empty field, or a sent one, stops it.
@@ -243,9 +245,11 @@ export function MessageBox({placeholder,label,send,stop,focus=false,call,model,r
   if(problem) { setError(refusalOf(problem)); return; }
   setBusy(true); setError(''); setRefusalLine(false); setList(null);
   flights.fly(sendButton.current);
-  const failure=await send(text,key,files);
+  const said=text; const carried=files;
+  if(drawn) { setText(''); setFiles([]); }
+  const failure=await send(said,key,carried);
   setBusy(false);
-  if(failure) setError(failure); else { setText(''); setFiles([]); setKey(newId()); }
+  if(failure) { setError(failure); if(drawn) { setText(said); setFiles(carried); } } else { setText(''); setFiles([]); setKey(newId()); }
  }
  async function halt({run}:{run:()=>Promise<string|null>}) {
   setBusy(true); setError(''); setRefusalLine(false);

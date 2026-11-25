@@ -12,6 +12,7 @@ import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
 import type { ConversationRecord } from '@/lib/conversation-record';
+import type { Send } from '@/lib/sending';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
@@ -24,7 +25,7 @@ import { toast } from '@/app/toast';
 import { useRouter } from 'next/navigation';
 
 // The record as the loaded transcript keeps it current, and how it asks for the reply after a send.
-type Live={record:ConversationRecord,asked:()=>void};
+type Live={record:ConversationRecord,asked:()=>void,sending:Send};
 // The record, and the sends made before it arrived, reach the title, the corner and the composer through this store,
 // not through this frame's state or its context value: the transcript arrives while the page still streams in, and a
 // render of this frame then would make React draw the transcript again in the browser, leaving the streamed copy hidden
@@ -99,7 +100,7 @@ function ChatComposer({company,conversation,writer,box,archived,restored}:{compa
  const live=useSyncExternalStore(store.subscribe,store.get,()=>undefined);
  const sent=()=>{ if(!archived) return; restored(); router.refresh(); toast(t('conversationBack'),{icon:'restore'}); };
  return <div className="composer-area">{archived&&<p className="arc-line"><ShellIcon name="archive"/><span>{t(writer?'conversationArchivedLine':'conversationArchivedLineRead')}</span></p>}
-  <ConversationComposer company={company} conversation={conversation} record={live?.record??null} writer={writer} asked={live?.asked??store.earlier} box={box} usage sent={sent}/></div>;
+  <ConversationComposer company={company} conversation={conversation} record={live?.record??null} writer={writer} asked={live?.asked??store.earlier} sending={live?.sending} box={box} usage sent={sent}/></div>;
 }
 
 // The transcript's boundary renders only when the transcript itself changes. This frame renders again while it
@@ -119,11 +120,11 @@ const useView=()=>use(ChatView)!;
 // The transcript once its record is read, in place of the placeholder.
 export function ConversationLoaded({initial,team}:{initial:ConversationRecord,team:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
- const {record,asked,reread}=useConversationRecord({company,initial});
+ const {record,asked,reread,sending}=useConversationRecord({company,initial});
  const {messages}=record;
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  // `asked` only sets this transcript's own state, so the one it was first given stays good.
- useLayoutEffect(()=>{ store.set({record,asked}); },[record]); // eslint-disable-line react-hooks/exhaustive-deps
+ useLayoutEffect(()=>{ store.set({record,asked,sending}); },[record]); // eslint-disable-line react-hooks/exhaustive-deps
  const early=useSyncExternalStore(store.subscribe,store.early,()=>0);
  // Opened from "Waiting on you" at a handed step (#140, `#hand-<card>`) or a permission request (#165,
  // `#permission-<card>`), or from Settings at a proposed change to an Agent's settings (#178, `#change-<proposal>`): that
