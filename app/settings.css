@@ -20,8 +20,9 @@
 .gw .sov :where(h2, h3, h4, p) { margin: 0; letter-spacing: normal; text-transform: none; }
 .gw .sov :where(a) { color: inherit; text-decoration: none; }
 .gw .sov [aria-disabled="true"] { cursor: default; }
-/* A choice that waits for a save to finish keeps its focus (aria-disabled, #588, #720) and the dimmed look of a disabled button. */
-.gw .sov [role="radio"][aria-disabled="true"] { opacity: .5; }
+/* A segmented or row choice that waits for a save keeps its focus (aria-disabled, #588, #720) and a disabled button's dimmed look;
+   the Company's mode cards (cr-kind) are read-only, not waiting, and keep their own look. */
+.gw .sov :is(.segmented, .panel-card) > [role="radio"][aria-disabled="true"] { opacity: .5; }
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .sov-icon { width: var(--od-icon-size, 18px); height: var(--od-icon-size, 18px); flex: none; display: inline-block; }
 .gw .sov .num { font-variant-numeric: tabular-nums; }
 .gw :is(.sov, .apps-sheet, .modal.team-dlg) .muted { color: var(--gw-text-3); }
