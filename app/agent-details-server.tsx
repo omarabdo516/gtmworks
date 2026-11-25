@@ -22,6 +22,7 @@ import { companyKnowledgeHref } from '@/lib/settings-overlay.mjs';
 import { readAgentMemory } from '@/lib/agent-memory.mjs';
 import { readAgentPermissions } from '@/lib/standing-permissions.mjs';
 import { StandingPermissions } from '@/app/standing-permissions';
+import { channelNameOf, channelTitle } from '@/lib/channels';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 export type AgentDetailsView={status:AgentFaceState,tab:DetailsTab,tabs:Record<DetailsTab,ReactNode>};
@@ -36,13 +37,17 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  const waitingRead=approvalQueue(db,company,me);
  // The Agent's state for the reader (#699), the sidebar's own read; the open Run above says only what it is doing.
  const stateRead=agentFaceStates(db,company);
- const [{t,language},name,role,{data:cardRows},{data:logRows,count},{data:runs},{data:talkFileRows,count:talkFileCount}]=await Promise.all([getI18n(),named,roled,
+ const [{t,language},name,role,{data:cardRows},{data:logRows,count},{data:runs},{data:talkFileRows,count:talkFileCount},{data:channelFileRows,count:channelFileCount}]=await Promise.all([getI18n(),named,roled,
   db.from('work_cards').select('id,title,stage_id,wait:card_wait').eq('company_id',company).eq('agent_id',agent).order('id'),
   db.from('company_log').select(logColumns,{count:'exact'}).eq('company_id',company).or(agentLogFilter(agent)).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(logShown),
   db.rpc('agent_open_run',{c:company,agent}),
   // The files of the reader's own Conversations with the Agent (#21): row-level security shows a person only theirs.
   db.from('conversation_attachments').select('id,name,size,created_at,conversation_id,conversations!inner(agent_name)',{count:'exact'}).eq('company_id',company).eq('conversations.agent_id',agent)
    .order('created_at',{ascending:false}).order('id',{ascending:false}),
+  // The files the Agent handed over in a channel (#715): row-level security shows a person only the channels they are a
+  // Member of, whose files are every Member's.
+  db.from('channel_attachments').select('id,name,size,created_at,channel_messages!inner(author,agent_id),channels!inner(kind,name)',{count:'exact'}).eq('company_id',company)
+   .eq('channel_messages.author','agent').eq('channel_messages.agent_id',agent).order('created_at',{ascending:false}).order('id',{ascending:false}),
  ]);
  const writer=canCreateCard({role});
  const cards=(cardRows||[]) as {id:number,title:string,stage_id:number,wait:CardWait|null}[]; const ids=cards.map(card=>card.id);
@@ -90,7 +95,8 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
   </Link>)}</div></section>:undefined;
 
  const titles=new Map(talks.flatMap((talk,index)=>{ const line=firsts[index]?.split('\n')[0]; return line?[[talk,line] as [string,string]]:[]; }));
- const files=agentFiles({slug,cards,cardFiles:(cardFileRows||[]) as {id:number,name:string,size:number,created_at:string,card_id:number}[],conversationFiles:talkFiles,titles});
+ const files=agentFiles({slug,cards,cardFiles:(cardFileRows||[]) as {id:number,name:string,size:number,created_at:string,card_id:number}[],conversationFiles:talkFiles,titles,
+  channelFiles:((channelFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,channels:{kind:string,name:string|null}}[]).map(file=>({...file,channel:channelTitle(t,channelNameOf(file.channels))}))});
  const filesList=files.length?<ul className="panel-card">{files.map(file=><li key={file.key} className="panel-row"><span className="panel-row__icon"><ShellIcon name="file"/></span><span className="panel-row__text">
    <a className="panel-row__t od-truncate dp-file" href={file.href} target="_blank" rel="noreferrer" title={file.name}><bdi dir="auto">{file.name}</bdi></a>
    <span className="panel-row__d"><bdi dir="ltr">{fileSize(file.size)}</bdi> · <bdi>{file.source}</bdi></span></span></li>)}</ul>:undefined;
@@ -106,7 +112,7 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
   tabs:detailsTabs({t,slug,agent,screen:<AgentScreen key={`screen-${agent}`} company={company} agent={agent} name={name} canWake={writer}/>,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,
    // The Agent's Routines (#205): read in the browser too; the Owner and Managers change them, as in Settings (#31).
    routines:<AgentRoutines key={agent} company={company} agent={agent} name={name} canManage={role==='owner'||role==='manager'} canWrite={writer}/>,
-   permissions:standing.permissions?.length?<StandingPermissions key={`standing-${agent}`} company={company} agent={agent} permissions={standing.permissions} canRevoke={role==='owner'||role==='manager'} returnTo="dp-settings"/>:undefined,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0),
+   permissions:standing.permissions?.length?<StandingPermissions key={`standing-${agent}`} company={company} agent={agent} permissions={standing.permissions} canRevoke={role==='owner'||role==='manager'} returnTo="dp-settings"/>:undefined,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0)+(channelFileCount??0),
    memory:memory.state==='found'?<AgentMemory key={agent} company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>:undefined,
    log,logCount:count??rows.length})};
 }
