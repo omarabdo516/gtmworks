@@ -14,7 +14,10 @@ export default defineConfig({
   oxc: { jsx: { runtime: 'automatic' } },
   // Prebundled up front so Vite never reloads a running test to add it.
   optimizeDeps: { include: ['react/jsx-dev-runtime', 'react-dom/client', 'vitest-browser-react'] },
-  resolve: { alias: { '@': import.meta.dirname } },
+  // A client screen can load a server action (New's picked Agent, #769): Next replaces it with a reference, Vite follows
+  // it to server code that imports `server-only`. Next's own empty stub lets the scan through, so it never gives up on
+  // prebundling and reloads a running test.
+  resolve: { alias: { '@': import.meta.dirname, 'server-only': 'next/dist/compiled/server-only/empty.js' } },
   test: {
     include: ['tests/components/**/*.test.tsx'],
     setupFiles: ['tests/components/offline-setup.ts'],

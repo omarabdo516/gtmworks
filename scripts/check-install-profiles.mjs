@@ -144,7 +144,7 @@ const askerFor=({asked,reply,person})=>async(entry,agent,label,message='مرحب
  // A profile the worker has not yet confirmed (its tools, its shared Skills folder) refuses the send as pending and
  // stores nothing, so the same send is made again until it is ready (#282).
  const send={person:entry.person,company:entry.company,conversation,sendKey:randomUUID(),agent,message};
- const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(client,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(client,service,send); return 'queued' in result?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until(`reply on ${label}`,async()=>(await checked(client.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);
@@ -426,7 +426,8 @@ try {
  await pointAtFakeModel(firstEngine,first.profile);
  const person=await signedIn();
  const conversation=randomUUID();
- const sent=await until('the first Agent ready for a run',async()=>{ const result=await sendMessage(person,service,{person:first.person??(await person.auth.getUser()).data.user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:'مرحباً، اكتب عنواناً قصيراً.'}); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ const firstKey=randomUUID();
+ const sent=await until('the first Agent ready for a run',async()=>{ const result=await sendMessage(person,service,{person:first.person??(await person.auth.getUser()).data.user.id,company:first.company,conversation,sendKey:firstKey,agent:first.agent,message:'مرحباً، اكتب عنواناً قصيراً.'}); return 'queued' in result?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until('the first Agent still answers',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);
@@ -457,7 +458,7 @@ const {model,reply}=await fakeModel(asked,results,plan);
 try {
  const conversation=randomUUID();
  const send={person:user.id,company:company.id,conversation,sendKey:randomUUID(),agent:agent.id,message:`COMPANY-SANDBOX ${marker}: run the check.`};
- const sent=await until(`${name}'s Agent ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ const sent=await until(`${name}'s Agent ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until(`reply of ${name}'s Agent`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);
@@ -505,7 +506,7 @@ try {
   const before=results.length;
   const conversation=randomUUID();
   const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent,message};
-  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+  const sent=await until(`${label} ready for a run`,async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
   assert.deepEqual(sent,{conversation});
   const answer=await until(`reply on ${label}`,async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
   assert.ok(answer.body.includes(reply),answer.body);
@@ -617,7 +618,7 @@ try {
   if(attempt) await new Promise(resolve=>setTimeout(resolve,15000));
   const conversation=randomUUID();
   const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-MCP ${marker}: call your design tool.`};
-  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
   assert.deepEqual(sent,{conversation});
   answered=await until('the reply',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),300);
  }
@@ -733,7 +734,7 @@ try {
   if(attempt) await new Promise(resolve=>setTimeout(resolve,15000));
   const conversation=randomUUID();
   const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`OPEN-DESIGN ${marker}: make a spring sale poster with Open Design and give me its file.`};
-  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+  const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
   assert.deepEqual(sent,{conversation});
   answered=await until('the reply',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),480);
  }
@@ -773,7 +774,7 @@ try {
  assert.ok(user,'the first-run Owner signs in');
  const conversation=randomUUID();
  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-KEY ${marker}: run the check.`};
- const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until('reply on the sandbox key check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);
@@ -823,7 +824,7 @@ try {
  assert.ok(user,'the first-run Owner signs in');
  const conversation=randomUUID();
  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`SANDBOX-SYNC ${marker}: write the paths a sync would copy.`};
- const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until('reply on the sandbox sync check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);
@@ -875,7 +876,7 @@ try {
  assert.ok(user,'the first-run Owner signs in');
  const conversation=randomUUID();
  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message:`LIBRARY-RUN ${marker}: save the brief and the shot.`};
- const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
  assert.deepEqual(sent,{conversation});
  const answer=await until('reply on the library check',async()=>(await checked(person.from('conversation_messages').select('body').eq('conversation_id',conversation).eq('author','agent'))).at(0),240);
  assert.ok(answer.body.includes(reply),answer.body);
@@ -1079,7 +1080,7 @@ try {
  const conversation=randomUUID();
  const message=step==='screen-open'?`SCREEN-OPEN ${marker}: open the page on your Screen.`:`SCREEN-WAKE ${marker}: look at your Screen.`;
  const send={person:user.id,company:first.company,conversation,sendKey:randomUUID(),agent:first.agent,message};
- const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return result.error==='conversationAgentToolsPending'?null:result; },180);
+ const sent=await until('the Agent ready for a run',async()=>{ const result=await sendMessage(person,service,send); return 'queued' in result?null:result; },180);
  assert.deepEqual(sent,{conversation});
  // A Run that never replies says how far it came: how often it asked the model, with which tools, and what each tool
  // answered, cut short (the tool answers are the Screen's and the sandbox's, never a key).

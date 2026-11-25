@@ -25,9 +25,9 @@ export default defineConfig({
   // CI retries a failed test once; Playwright reports one that then passes as flaky. Local runs never retry.
   retries: process.env.CI ? 1 : 0,
   // An expectation waits 10 s in CI and Playwright's own 5 s here (#746). A CI shard runs four lanes on a runner of four
-  // CPUs, where every page a test opens renders the ten pages its links prefetch in full (lib/link.tsx) and reads each
-  // face's state for each (agent_face_states, #707): a Send, a Remove or an Approve answered in 5-6 s there, just past
-  // 5 s, while it answers in under one on a lane alone (that cost is #754). The measured budgets have their own job and
+  // CPUs, where every page a test opened rendered the ten pages its links prefetched in full until #771 (lib/link.tsx now
+  // prefetches only on intent) and reads each face's state (agent_face_states, #707): a Send, a Remove or an Approve
+  // answered in 5-6 s there, just past 5 s, while it answers in under one on a lane alone (that cost is #754). The measured budgets have their own job and
   // limits (#69, #257).
   expect: { timeout: process.env.CI ? 10000 : 5000 },
   use: { baseURL: appOrigin },

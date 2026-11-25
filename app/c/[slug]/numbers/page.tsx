@@ -3,7 +3,7 @@ import '../../../numbers.css';
 import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { getI18n } from '@/lib/i18n-server';
-import { supabase } from '@/lib/supabase';
+import { signedInUser, supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { localeFor } from '@/lib/i18n.mjs';
@@ -26,7 +26,7 @@ import { mustRead } from '@/lib/read-failed';
 
 export default async function NumbersPage({params,searchParams}:{params:Promise<{slug:string}>,searchParams:Promise<{period?:string}>}) {
  const {t,language}=await getI18n(); const {slug}=await params; const period=parsePeriod((await searchParams).period);
- const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ const db=await supabase(); const {data:{user}}=await signedInUser();
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/numbers${period==='30'?'?period=30':''}`)}`);
  const companies=mustRead(await db.from('companies').select('id,slug,name').order('name'),'companies'); const company=companies?.find(c=>c.slug===slug);
  if(!company) notFound();

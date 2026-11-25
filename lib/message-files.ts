@@ -28,12 +28,6 @@ async function keptPaths(service:SupabaseClient,{place,table}:{place:FilesPlace,
 
 const refusalOf=(code:string|undefined,words:FileRefusalWords)=>code==='42501'?words.notAllowed:code==='P0002'?words.notFound:words.failed;
 
-// The images as the Engine reads them: each file's own type and its bytes in base64, for the image part of a Run.
-/** @param {File[]} files */
-export async function imagesOf(files:File[]):Promise<ChosenImage[]> {
- return Promise.all(files.map(async file=>({content_type:file.type,base64:Buffer.from(await file.arrayBuffer()).toString('base64')})));
-}
-
 // The image parts of a stored message, read from its file rows in the order they were chosen: base64 in the file's own
 // type. Read when the Run starts, so a retry of the same start sends the same body. A stored object that is gone never
 // reads again, so a waiting turn fails for its sender instead of being claimed on every pass (#368); any other storage

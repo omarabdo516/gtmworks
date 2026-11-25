@@ -206,7 +206,7 @@ test('a Card with an Agent and no chat opens on Chat; the first message starts t
  await expect.element(field).toHaveFocus();
  await userEvent.type(field, 'Plan three ads for the course{Enter}');
  await expect.element(chatPanel(screen).getByText('Plan three ads for the course')).toBeVisible();
- await expect.element(screen.getByText('Ads is working on a reply…')).toBeVisible();
+ await expect.element(chatPanel(screen).getByRole('status')).toHaveTextContent('AdsThinking…');
  // The first message rises in, as one sent in an open Conversation does (#132).
  expect(chatPanel(screen).getByText('Plan three ads for the course').element().closest('.turn')!.classList.contains('msg-in')).toBe(true);
  const posted = JSON.parse(String(asks.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body));

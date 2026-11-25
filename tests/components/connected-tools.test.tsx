@@ -85,10 +85,10 @@ test('drawn with no tools, the section reads this Agent\'s tools from the apps r
   expect(rows(screen).map(row => row[2])).toEqual(['Connected', 'Turned off for it', 'Needs attention', 'Connect']);
  } finally { fetch.mockRestore(); }
 });
-test('a read of the tools that fails shows the apps\' line', async () => {
+test('a read of the tools that fails, with no good read before it, shows the apps\' line', async () => {
  const fetch = vi.spyOn(window, 'fetch').mockResolvedValue(new Response('{}', { status: 500 }));
  try {
-  const screen = await drawn({ tools: undefined, owner: true });
+  const screen = await drawn({ tools: undefined, owner: true, agent: 'ag-never-read' });
   await expect.element(screen.getByText('The apps can’t be read right now. Try again in a minute.')).toBeVisible();
   expect(screen.container.querySelectorAll('button, .panel-row')).toHaveLength(0);
  } finally { fetch.mockRestore(); }
@@ -121,4 +121,40 @@ test('after a handoff to the sheet, a connect there is read back into the row', 
   await expect.element(screen.getByText('Connected')).toBeVisible();
   await expect.element(screen.getByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
  } finally { vi.unstubAllGlobals(); }
+});
+
+// #770: the list shows at once; each connected app reads "Checking…", in the row's waiting style, until its own test
+// answers, and one slow test holds no other row. The last good list stays while a new read fails, and is read again.
+test('a connected app reads Checking… until its own test answers, and the rest of the list does not wait for it', async () => {
+ let answer: (response: Response) => void = () => {};
+ const listed: AgentToolItem[] = [{ ...tools[0], state: 'checking' }, tools[1], { ...tools[2], key: 'klaviyo', state: 'checking' }];
+ const fetch = vi.spyOn(window, 'fetch').mockImplementation(async input => {
+  const url = String(input);
+  if (url.includes('&test=canva')) return new Promise<Response>(resolve => { answer = resolve; });
+  if (url.includes('&test=klaviyo')) return Response.json({ state: 'attention' });
+  return Response.json({ tools: listed });
+ });
+ try {
+  const screen = await drawn({ tools: undefined, agent: 'ag-checking' });
+  await expect.poll(() => rows(screen).map(row => row[2])).toEqual(['Checking…', 'Turned off for it', 'Needs attention']);
+  expect(screen.container.querySelector('.panel-row__meta--wait')?.textContent).toBe('Checking…');
+  answer(Response.json({ state: 'connected' }));
+  await expect.poll(() => rows(screen).map(row => row[2])).toEqual(['Connected', 'Turned off for it', 'Needs attention']);
+ } finally { fetch.mockRestore(); }
+});
+
+test('after one good read, a read that fails keeps the last good list and is tried again without a reload', async () => {
+ let failing = false;
+ const fetch = vi.spyOn(window, 'fetch').mockImplementation(async () => failing ? new Response('{}', { status: 503 }) : Response.json({ tools }));
+ try {
+  const first = await drawn({ tools: undefined, agent: 'ag-kept' });
+  await expect.poll(() => rows(first).length).toBe(4);
+  first.unmount();
+  failing = true;
+  const again = await drawn({ tools: undefined, agent: 'ag-kept' });
+  expect(rows(again).length, 'the last good list, at once').toBe(4);
+  await expect.poll(() => fetch.mock.calls.length, { timeout: 5000 }).toBeGreaterThan(2);
+  expect(again.container.textContent).not.toContain('can’t be read');
+  expect(rows(again).length).toBe(4);
+ } finally { fetch.mockRestore(); }
 });

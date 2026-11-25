@@ -26,6 +26,7 @@ insert into decisions
  union all select fn,'exempt','a write on the Card it is named, or on the Cards of an approval step it changes; it lists no current Cards, and work on an archived Card is refused where work starts (#671)' from unnest(array[
   'public.decide_approval(uuid,bigint,text,text,boolean,boolean)','public.start_card_conversation(uuid,bigint,uuid)',
   'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn
+ union all select 'public.conversation_stamp(uuid)','exempt','the stamp of what changed in the one Conversation its own person names (#767): it reads the Card tied to it only to count its rows, and answers a digest, never a Card'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller' from unnest(array[
   'public.schedule_approved_card()','public.note_mentions()','public.conversation_reply_card()','public.work_card_place()',
   'public.channel_run_card()','public.channel_reply_card()']) fn

@@ -17,8 +17,8 @@ const jpeg=Buffer.from('a jpeg, not really').toString('base64');
 const files=[{content_type:'image/png',base64:png},{content_type:'image/jpeg',base64:jpeg}];
 const imagePart=(type,base64)=>({type:'image_url',image_url:{url:`data:${type};base64,${base64}`}});
 
-/** @param {{has_files?:boolean,retry?:boolean,begin?:'fails'|'none'|null,files?:{content_type:string,path:string,bytes:string}[],refuse?:string|null,download?:'not found'|'fails once'|null}} [options] */
-function databases({has_files=false,retry=false,begin=null,files=[],refuse=null,download=null}={}) {
+/** @param {{has_files?:boolean,retry?:boolean,begin?:'fails'|'none'|null,files?:{content_type:string,path:string,bytes:string}[],download?:'not found'|'fails once'|null}} [options] */
+function databases({has_files=false,retry=false,begin=null,files=[],download=null}={}) {
  const calls=/** @type {[string,any][]} */([]);
  const downloads=/** @type {string[]} */([]);
  // The Conversation's waiting turns, oldest first: the first until a turn is failed, then the next, then nothing.
@@ -28,41 +28,52 @@ function databases({has_files=false,retry=false,begin=null,files=[],refuse=null,
  const retried=()=>claimed===0&&retry;
  let transient=download==='fails once'?1:0;
  const ok=(/** @type {unknown} */ data)=>({data,error:null});
- const completion={state:'reserved',connection,profile:'writer',note:null};
+ const sentKeys=new Set(); const kept=/** @type {{content_type:string,path:string,bytes:string}[]} */([]);
  const rpc=async(/** @type {string} */ name,/** @type {any} */ args)=>{ calls.push([name,args]);
   if(name==='conversation_agent') return ok(null);
   if(name==='queued_conversations') return ok([{conversation}]);
-  if(name==='reserve_conversation_turn') return ok(completion);
+  // #764: a send stores its turn first, after its files are kept (open_only makes a new Conversation for them); the
+  // starter then claims it. A key already recorded answers as sent.
+  if(name==='queue_conversation_turn') {
+   if(args.open_only) return ok({state:'opened'});
+   if(sentKeys.has(args.message_key)) return ok({state:'sent'});
+   if(!turns.slice(claimed).some(turn=>turn.send_key===args.message_key)) turns.splice(claimed,0,{send_key:args.message_key,message:args.message,has_files:kept.length>0});
+   return ok({state:'queued'});
+  }
   if(name==='claim_conversation_turn') { const turn=turns[claimed];
    return ok(turn?[{company:'co',agent:'a',person:'p',send_key:turn.send_key,message:turn.message,connection,profile:'writer',note:null,retry:retried(),has_files:turn.has_files}]:[]); }
   if(name==='conversation_handover_agents') return ok([]);
   if(['pin_run','pin_run_history','pin_run_model','pin_lead_brief'].includes(name)) return ok(null);
-  if(name==='begin_start') return begin==='fails'?{data:null,error:{code:'40001',message:'could not serialize access'}}:begin==='none'?ok(null):ok(retried()?2:1);
-  if(name==='release_conversation_run') return ok(true);
+  if(name==='begin_turn_start') return begin==='fails'?{data:null,error:{code:'40001',message:'could not serialize access'}}:begin==='none'?ok(null):ok(retried()?2:1);
   // The three-argument form fails a turn nobody attempted yet (attempt 0): it leaves the queue, so the next claim gets
   // the next turn. A retried turn's attempt is above 0, or its start was attempted before this claim, and the database
   // leaves it alone: it may hold a Run.
   if(name==='fail_conversation_turn') { if(args.attempt===0&&!retried()) claimed++; return ok(null); }
-  if(name==='send_conversation_message') return refuse?{data:null,error:{code:refuse}}:ok(true);
-  if(name==='record_conversation_turn') { claimed++; return ok(true); }
+  if(name==='record_conversation_turn') { sentKeys.add(args.message_key); claimed++; return ok(true); }
   return {data:null,error:{message:`unexpected ${name}`}};
  };
+ const stored=()=>[...files,...kept];
  const chain=(/** @type {unknown} */ data)=>{ const c={select:()=>c,eq:()=>c,order:async()=>ok(data),maybeSingle:async()=>ok(Array.isArray(data)?data[0]??null:data)}; return c; };
- const db={rpc,from:(/** @type {string} */ table)=>chain(table==='conversation_attachments'?files.map(file=>({content_type:file.content_type,path:file.path})):{id:'a',instructions:null})};
- const service={rpc,from:(/** @type {string} */ table)=>chain(table==='conversation_attachments'?files.map(file=>({content_type:file.content_type,path:file.path})):{id:'a',instructions:null}),
+ const read=(/** @type {string} */ table)=>chain(table==='conversation_attachments'?stored().map(file=>({content_type:file.content_type,path:file.path})):table==='conversation_queued_turns'?{started_at:sentKeys.size?'now':null,failed_at:null}:{id:'a',instructions:null});
+ const db={rpc,from:read};
+ const service={rpc,from:read,
   storage:{from:()=>({download:async(/** @type {string} */ path)=>{ downloads.push(path);
    if(download==='not found') return {data:null,error:{statusCode:'404',status:400,error:'not_found',message:'Object not found'}};
    if(transient>0) { transient--; return {data:null,error:{status:503,statusCode:'503',message:'Service temporarily unavailable'}}; }
-   const file=files.find(each=>each.path===path); return file?{data:new Blob([file.bytes]),error:null}:{data:null,error:{statusCode:'404',status:400,error:'not_found',message:'Object not found'}}; }})}};
- return {db,service,calls,downloads};
+   const file=stored().find(each=>each.path===path); return file?{data:new Blob([file.bytes]),error:null}:{data:null,error:{statusCode:'404',status:400,error:'not_found',message:'Object not found'}}; }})}};
+ // The route's keep of a send's images (lib/conversation-files.ts): the rows and bytes under the send's key.
+ const keepFiles=(/** @type {{content_type:string,base64:string}[]} */ images)=>async()=>{ calls.push(['keepFiles',null]); kept.push(...images.map((image,at)=>({content_type:image.content_type,path:`co/conversations/c/k-${at}`,bytes:Buffer.from(image.base64,'base64')}))); return {}; };
+ return {db,service,calls,downloads,keepFiles};
 }
 
-const send=(/** @type {ReturnType<typeof databases>} */ {db,service},/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {object} */ extra={})=>
- sendMessage(db,service,{company:'co',conversation,sendKey:'k',message:'Look at these',hermes,engineFor:fake.engineFor,...extra});
+const send=(/** @type {ReturnType<typeof databases>} */ {db,service,keepFiles},/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {{images?:{content_type:string,base64:string}[],message?:string}} */ {images,...extra}={})=>
+ sendMessage(db,service,{company:'co',conversation,sendKey:'k',message:'Look at these',hermes,engineFor:fake.engineFor,...(images?{keepFiles:keepFiles(images)}:{}),...extra});
 
-test('a message with images reaches the Engine as its text and one image part per file',async()=>{
+test('a message with images keeps them before its turn is stored, and its Run carries its text and one image part per file',async()=>{
  const fake=fakeEngine(); const stand=databases();
  assert.deepEqual(await send(stand,fake,{images:files}),{conversation});
+ const names=stand.calls.map(([name,args])=>name==='queue_conversation_turn'&&!args.open_only?'queue':name);
+ assert.ok(names.indexOf('keepFiles')<names.indexOf('queue'),'the files are kept before the turn the starter claims');
  assert.equal(fake.runs.length,1);
  assert.deepEqual(fake.runs[0].input,[{role:'user',content:[{type:'text',text:'Look at these'},imagePart('image/png',png),imagePart('image/jpeg',jpeg)]}]);
 });
@@ -79,12 +90,12 @@ test('a message without images is sent as its text, as every message was before'
  assert.equal(fake.runs[0].input,'Look at these');
 });
 
-test('a retry of the same send carries the same images, so it is the same Run',async()=>{
+test('a retry of the same send is the same message, so it is the same Run',async()=>{
  const fake=fakeEngine(); const stand=databases();
  const first=await send(stand,fake,{images:files});
  const again=await send(stand,fake,{images:files});
  assert.deepEqual([first,again],[{conversation},{conversation}]);
- assert.equal(fake.runs.length,1,'the same idempotency key is the same Run');
+ assert.equal(fake.runs.length,1,'the same send key is the same turn');
  assert.deepEqual(fake.runs[0].input,[{role:'user',content:[{type:'text',text:'Look at these'},imagePart('image/png',png),imagePart('image/jpeg',jpeg)]}]);
 });
 
@@ -117,13 +128,13 @@ test('a queued turn whose stored image is gone fails for its sender, and the nex
  assert.equal(failed().length,1,'the next turn is not failed');
 });
 
-// #465: a send whose start could not be begun gives its reservation back before the route gives its images back: a held
-// reservation keeps them (discard_conversation_files), and nothing else would release it before the worker's ten minutes.
-for(const begin of /** @type {const} */(['fails','none'])) test(`a send whose start ${begin==='fails'?'fails to begin':'is not begun'} releases its reservation, so its images can go`,async()=>{
- const fake=fakeEngine(); const stand=databases({begin});
- const sent=await send(stand,fake,{images:files});
- assert.ok('code' in sent||'error' in sent,'the send is refused');
- assert.deepEqual(stand.calls.filter(([name])=>name==='release_conversation_run').map(([,args])=>args),[{conversation,c:'co',message_key:'k',attempt:0}]);
+// #764: a send whose images cannot be kept is refused before its turn is stored, so nothing is left half sent and the
+// route gives its words back to the box.
+test('a send whose images cannot be kept stores no turn',async()=>{
+ const fake=fakeEngine(); const stand=databases();
+ const sent=await sendMessage(stand.db,stand.service,{company:'co',conversation,sendKey:'k',message:'Look at these',hermes,engineFor:fake.engineFor,keepFiles:async()=>({error:'conversationFailed'})});
+ assert.deepEqual(sent,{error:'conversationFailed',status:500});
+ assert.equal(stand.calls.some(([name,args])=>name==='queue_conversation_turn'&&!args.open_only),false);
  assert.equal(fake.runs.length,0);
 });
 

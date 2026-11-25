@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { reportWait } from './waits';
 
 // A message drawn the moment its person sends it (#756), before the send is answered: the place it is sent to (a
 // Conversation or a channel) draws it from here, with the text and the names of the files it carries, until its own record
@@ -9,12 +10,14 @@ import { useState } from 'react';
 // `id` is the drawn message's own, in the order sent, so one going leaves the others' as they were.
 export type Sending={id:number,key:string,body:string,files:string[],at:string,posting:boolean};
 export type Send=(key:string,body:string,files:readonly {name:string}[])=>(failure:string|null)=>void;
-export function useSending():{list:Sending[],start:Send,reading:()=>()=>void} {
+// In a Conversation (`place`), the time from the press until the message is drawn is reported once (#762).
+export function useSending(place?:{company:string,conversation:string}):{list:Sending[],start:Send,reading:()=>()=>void} {
  const [list,setList]=useState<Sending[]>([]);
+ const [pressed]=useState(()=>new Map<number,number>());
  const [calls]=useState(()=>{
   const accepted=new Set<string>(); let sent=0;
   const start:Send=(key,body,files)=>{
-   accepted.delete(key); const id=++sent;
+   accepted.delete(key); const id=++sent; pressed.set(id,performance.now());
    setList(current=>[...current.filter(sending=>sending.key!==key),{id,key,body,files:files.map(file=>file.name),at:new Date().toISOString(),posting:true}]);
    return failure=>{
     if(failure) { setList(current=>current.filter(sending=>sending.key!==key)); return; }
@@ -33,5 +36,15 @@ export function useSending():{list:Sending[],start:Send,reading:()=>()=>void} {
   };
   return {start,reading};
  });
+ const company=place?.company; const conversation=place?.conversation;
+ useEffect(()=>{
+  if(!company||!conversation) return;
+  for(const sending of list) {
+   const at=pressed.get(sending.id); if(at===undefined) continue;
+   pressed.delete(sending.id);
+   // Drawn once the browser paints the frame that holds it.
+   requestAnimationFrame(()=>reportWait({event:'message_drawn',company,conversation,ms:performance.now()-at}));
+  }
+ },[list,pressed,company,conversation]);
  return {list,...calls};
 }

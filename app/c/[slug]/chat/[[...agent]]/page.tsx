@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { getI18n } from '@/lib/i18n-server';
-import { supabase } from '@/lib/supabase';
+import { signedInUser, supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { uuid } from '@/lib/conversations';
@@ -28,7 +28,7 @@ type AgentRow={id:string,connection_id:string,name:string,speciality:string,is_d
 // ?tab=<key> opens the details on that tab.
 export default async function AgentChatPage({params,searchParams}:{params:Promise<{slug:string,agent?:string[]}>,searchParams:Promise<{new?:string,tab?:string,first?:string,invites?:string}>}) {
  const {t,language}=await getI18n(); const {slug,agent:parts}=await params; const {new:mode,tab,first,invites}=await searchParams;
- const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ const db=await supabase(); const {data:{user}}=await signedInUser();
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/chat${parts?.length?`/${parts.join('/')}`:''}`)}`);
  const companies=mustRead(await db.from('companies').select('id,slug,name,work_mode').order('name'),'companies'); const company=companies?.find(c=>c.slug===slug);
  if(!company||(parts&&(parts.length!==1||!uuid.test(parts[0])))) notFound();
@@ -74,13 +74,14 @@ export default async function AgentChatPage({params,searchParams}:{params:Promis
   :{state:'new',works:own.works,...roleStart(language,alone,row.template),made:madeOf(row,user.id,slug)};
  const empty:EmptyChat=!agent||!facts?{state:'known',example:null}:emptyOf(facts,agent);
  // The picker offers every Agent this reader sees (#171; design-reference: visibleAgents), so an Agent's empty chat can
- // become any of theirs with no navigation: each one's state and details are read beside the opened Agent's and handed to
- // the client. Only an Agent this reader already writes to shows the picker, so the others are read only then.
+ // become any of theirs with no navigation: each one's state is read beside the opened Agent's and handed to the client,
+ // and its details when it is picked (#769). Only an Agent this reader already writes to shows the picker, so the others are read only then.
  const pickers=empty.state==='known'?await Promise.all(visible.map(async row=>{
   const opened=row.id===agent?.id;
   const own=opened&&facts?facts:await emptyChatFacts(db,{company:company.id,agent:row.id,me:user.id,main:!!row.is_default,fresh:false,alone,owner,asks:false});
   return {agent:{id:row.id,connection_id:row.connection_id,name:row.name,speciality:row.speciality,main:row.is_default,made:madeOf(row,user.id,slug)},
-   empty:opened?empty:emptyOf(own,row),details:opened?await detailsRead:await agentDetails(db,{company:company.id,agent:row.id,name:row.name,slug,me:user.id,role:membership?.role||'',tab})};
+   // Only the opened Agent's details are read here; another Agent's are read when it is picked (#769).
+   empty:opened?empty:emptyOf(own,row),details:opened?await detailsRead:null};
  })):null;
  const details=pickers?pickers.find(choice=>choice.agent.id===agent?.id)?.details??null:await detailsRead;
  const gallery=mode==='ready'&&newAgent?{company:company.name,alone,roles:readyRoles(language,alone,await readyRoleLooks(db,company.id)),owner,owners:facts?.owners??[]}:null;

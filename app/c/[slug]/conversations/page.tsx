@@ -3,7 +3,7 @@ import '@/app/channel.css';
 import '@/app/all-conversations.css';
 import { notFound, redirect } from 'next/navigation';
 import { getI18n } from '@/lib/i18n-server';
-import { supabase } from '@/lib/supabase';
+import { signedInUser, supabase } from '@/lib/supabase';
 import Shell, { sidebarReads } from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { conversationCounts, conversationPage, type ConversationTab } from '@/lib/all-conversations';
@@ -16,7 +16,7 @@ export default async function AllConversationsPage({params,searchParams}:{params
  const {slug}=await params; const {tab:asked}=await searchParams;
  const tab:ConversationTab=asked==='archived'?'archived':'current';
  const db=await supabase();
- const [{t,language},{data:{user}},companiesRead]=await Promise.all([getI18n(),db.auth.getUser(),db.from('companies').select('id,slug,name').order('name')]);
+ const [{t,language},{data:{user}},companiesRead]=await Promise.all([getI18n(),signedInUser(),db.from('companies').select('id,slug,name').order('name')]);
  const companies=mustRead(companiesRead,'companies');
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/conversations${tab==='archived'?'?tab=archived':''}`)}`);
  const company=companies?.find(c=>c.slug===slug);

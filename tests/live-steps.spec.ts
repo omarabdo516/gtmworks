@@ -80,4 +80,6 @@ test('while Lead works, its step now and its steps so far are on screen live, a 
  await expect(reply.locator('.steps__toggle')).toHaveAttribute('aria-expanded','true');
  await expect(reply.locator('.steps__list .step')).toHaveText(['web_search · accounting courses CairoDone','read_file · campaigns.csvSkipped']);
  expect(fake.settings.requests.some(request=>request.path===`/p/${profile}/v1/runs/${run}/events`),'read from the profile the Run is on').toBe(true);
+ // The fake Engine counts what it was asked, by kind (#762): one message started one Run.
+ expect(fake.settings.counts().runStart).toBe(1);
 });

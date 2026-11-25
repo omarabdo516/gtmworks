@@ -30,6 +30,7 @@ insert into decisions
  union all select 'public.agent_work(uuid)','exempt','asks which channels the reader is in, to tell whether a Run there is theirs to see: an archived channel''s Members still read it, so its Runs still count; it lists no channels'
  union all select 'public.card_archive_stops(uuid,bigint[])','exempt','names what stops in the one team channel of a current Card it is asked about; an archived channel''s work stopped when it was archived, so it names nothing there'
  union all select 'public.create_channel_inviting(uuid,uuid,text,uuid[],uuid[],uuid[])','exempt','makes a new channel, which is current; the same request key answers the channel it made'
+ union all select 'public.retry_channel_run(uuid,bigint,smallint)','exempt','puts the one Agent''s turn of the one message its own person names back to never started (#765); the drive that starts it refuses work in an archived channel, and it lists no channels'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller' from unnest(array[
   'public.add_general_channel()','public.start_general_read()','public.note_member_invitation()','public.channel_run_card()']) fn;
 

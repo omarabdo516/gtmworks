@@ -13,7 +13,7 @@ import { useLiveSteps } from '@/app/run-activity';
 import { channelRuns, useReportRuns } from '@/lib/live-runs';
 import { MessageBox, newId, postMessage, postMessageWithFiles } from '@/app/conversation-composer';
 import { ConversationComposer, ConversationTurns, useConversationRecord } from '@/app/conversation-thread';
-import { channelCallable, firstName, sentMessage, type ChannelRecord } from '@/lib/channels';
+import { channelCallable, firstName, mentionsOf, sentMessage, type ChannelRecord } from '@/lib/channels';
 import { named } from '@/lib/bidi';
 import type { ConversationRecord } from '@/lib/conversation-record';
 import '@/app/channel.css';
@@ -130,7 +130,12 @@ function SheetChannel({slug,channel,person,company,shown}:{slug:string,channel:C
  const messages=[...record.messages,...sendingList.map(sent=>sentMessage(sent,record.agents,me))];
  // Its called Agents' faces follow their Runs here as on the channel's page (#700): thinking until the first step the
  // Run's live read gives, working after it, done once a reply lands.
- const {view:steps}=useLiveSteps({company,channel:id},record.open);
+ const {view:steps}=useLiveSteps({company,channel:id},record.open,()=>{ void read(); });
+ // "Try again" on an Agent's turn that was not sent (#765), then the chat is read again.
+ const retry=async(message:number,ordinal:number)=>{
+  try { const failure=await postMessage({company,channel:id,intent:'retry',message,ordinal},'/api/channels'); if(!failure) await read(); }
+  catch { /* The line stays; the next read brings any change. */ }
+ };
  useReportRuns(channelRuns(messages,!!steps&&(steps.steps.length>0||!!steps.now)));
  return <>
   <div {...panel} ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}>
@@ -144,7 +149,10 @@ function SheetChannel({slug,channel,person,company,shown}:{slug:string,channel:C
      : <li key={message.sending?`sending:${message.sending.key}`:message.id} className={`turn ${message.mine?'turn--user':'turn--peer'} msg${message.sending?.posting?' is-sending':''}`} data-author="person" aria-busy={message.sending?.posting?true:undefined}>
       {!message.mine&&<div className="sender"><span className="me__av lg-av" style={{'--av':'20px'} as CSSProperties} aria-hidden="true">{Array.from(message.name.trim())[0]||'?'}</span><bdi>{firstName(message.name)}</bdi></div>}
       {!!message.body.trim()&&<div className={`bubble ${message.mine?'bubble--user':'bubble--peer'}`} dir="auto">{message.body}</div>}
-      {!!message.files.length&&<div className="msg-files">{message.files.map(file=>message.sending?<span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>:<a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}</li>)}
+      {!!message.files.length&&<div className="msg-files">{message.files.map(file=>message.sending?<span key={file.id} className="file-chip"><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></span>:<a key={file.id} className="file-chip" href={`/c/${slug}/files/channel/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)}><ShellIcon name="clip"/><bdi dir="auto">{file.name}</bdi></a>)}</div>}
+      {/* Not sent (#765): as on the channel's own page, with "Try again" for the message's own person. */}
+      {!message.sending&&mentionsOf(message).filter(mention=>mention.state==='notSent').map(mention=><p key={mention.agent} className="note" role="alert" data-outcome="not-sent">{c('channelNotSent',mention.agent)}
+       {message.mine&&writer&&<> <button type="button" className="link-btn" onClick={()=>void retry(message.id,mention.ordinal??1)}>{c('channelTryAgain')}</button></>}</p>)}</li>)}
    </ol></div>
   </div>
   <div className="composer-area">{writer?<MessageBox label={c('channelMessageLabel')} placeholder={c('channelPlaceholder',name)} call={channelCallable(record,person)} drawn send={async(message,sendKey,files)=>{

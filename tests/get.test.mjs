@@ -1164,7 +1164,7 @@ test('CI runs the one line twice, gtmworks status from a new shell, an update, a
   /gtmworks v0\.0\.1 is running: \$next/,
   /if gtmworks update --version v0\.0\.0 > /,
   /owners=\$\(owned_by_others "\$dir"\)/,
-  /find "\$1" ! -user "\$\(id -u\)"/,
+  /find "\$1" -xdev ! -user "\$\(id -u\)" ! -path '\*\/\.work-disks\/\*\/fs'/,
   /gtmworks update --version v0\.0\.2 --no-backup/,
   /Applying migration: 99999999999999_failure\.sql/,
   /\[\[ \$\(compose ps -q web\) == "\$old_web" \]\]/,

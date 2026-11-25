@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { changeCompanyApp } from '@/lib/company-apps.mjs';
-import { agentToolItems, companyAppItems } from '@/lib/company-app-items';
+import { agentToolItems, agentToolTest, companyAppItems } from '@/lib/company-app-items';
 import { getI18n } from '@/lib/i18n-server';
 
 // The Company's apps (#30): any Member reads them, each with every Agent's state, in the reader's words (null when the
@@ -22,6 +22,9 @@ export async function GET(request:NextRequest) {
   const agent=request.nextUrl.searchParams.get('agent');
   if(agent!==null&&!uuid.test(agent)) return reply({error:'appsInvalid'},400);
   if(!await routeAllowed(db,'app/api/company-apps/route.ts','GET',company,user.id)) return reply({error:'appsNotAllowed'},403);
+  // One connected app's own test (#770): the list reads `checking` until it answers.
+  const test=request.nextUrl.searchParams.get('test');
+  if(agent&&test!==null) { const tested=/^[a-z0-9][a-z0-9_-]{0,63}$/.test(test)?await agentToolTest(company,agent,test):null; return tested?reply(tested):reply({error:'appsFailed'},503); }
   const {language}=await getI18n();
   return reply(agent?{tools:await agentToolItems(company,agent,language)}:{apps:await companyAppItems(company,language)});
  } catch { return reply({error:'appsFailed'},500); }

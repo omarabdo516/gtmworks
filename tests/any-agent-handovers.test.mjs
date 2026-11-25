@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendMessage } from '../lib/conversation-runs.mjs';
+import { withTurnQueue } from './turn-queue.mjs';
+import { sendMessage, startQueuedTurns } from '../lib/conversation-runs.mjs';
+import { startUnknown } from '../lib/hermes.mjs';
 import { conversationHandOverSpec, conversationToolSpecTexts, toolSpecTexts } from '../lib/agent-tools.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -24,20 +26,23 @@ function databases(listed=others) {
   // The database offers a writer every tool run_tools names for this Agent among the texts it was given.
   if(name==='pin_run') { if(pinned===undefined) pinned=['show_draft','hand_to_agent'].some(tool=>args.specs[tool])?`[${['show_draft','hand_to_agent'].filter(tool=>args.specs[tool]).map(tool=>args.specs[tool]).join(',')}]`:null; return {data:{tools:pinned},error:null}; }
   if(name==='pin_run_history'||name==='pin_run_model'||name==='pin_lead_brief') return {data:null,error:null};
-  if(name==='begin_start') return {data:(given.begin_start?.length??0),error:null};
+  if(name==='begin_turn_start') return {data:(given.begin_turn_start?.length??0),error:null};
   if(name==='send_conversation_message') return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}};
  };
  const chain={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({data:{id:writer,instructions:null,is_default:false},error:null})};
- return {db:{rpc,from:()=>chain},service:{rpc},given,team};
+ const queued=withTurnQueue(rpc);
+ return {db:{rpc:queued,from:()=>chain},service:{rpc:queued,from:()=>chain},given,team};
 }
 const send=(/** @type {ReturnType<typeof databases>} */ {db,service},/** @type {any} */ engineFor,sendKey='k1')=>
  sendMessage(db,service,{company:'co',conversation:'c4750000-0000-0000-0000-000000000001',sendKey,agent:writer,message:'Write the March ad copy',hermes,engineFor});
 
 test('a Run of an Agent that is not the main one is offered hand_to_agent naming the Company\'s other Agents with their jobs, pinned with the Run',async()=>{
  const fake=fakeEngine(); const stores=databases(); const sent=/** @type {any[]} */([]);
- const engineFor=(/** @type {any} */ connection)=>{ const engine=fake.engineFor(connection); return {...engine,start:(/** @type {any} */ args)=>{ sent.push(args); return engine.start(args); }}; };
- assert.deepEqual(await send(stores,engineFor),{conversation:'c4750000-0000-0000-0000-000000000001'});
+ // The first start's answer is lost, so the starter asks again later with the same key (#764: one starter of turns).
+ let lose=1;
+ const engineFor=(/** @type {any} */ connection)=>{ const engine=fake.engineFor(connection); return {...engine,start:async(/** @type {any} */ args)=>{ sent.push(args); const run=await engine.start(args); return lose-->0?startUnknown:run; }}; };
+ assert.deepEqual(await send(stores,engineFor),{conversation:'c4750000-0000-0000-0000-000000000001',queued:true});
  assert.deepEqual(stores.given.conversation_handover_agents,[{conversation:'c4750000-0000-0000-0000-000000000001',message_key:'k1'}],'the list is the database\'s, for this Run');
  const run=fake.runs[0];
  const hand=run.tools.find((/** @type {any} */ tool)=>tool.name==='hand_to_agent');
@@ -49,7 +54,7 @@ test('a Run of an Agent that is not the main one is offered hand_to_agent naming
  // The text sent is the text pinned: a retry of the same send sends it again, whoever the team became meanwhile.
  assert.equal(JSON.stringify(hand),stores.given.pin_run[0].specs.hand_to_agent);
  stores.team.splice(0,stores.team.length,{name:'Critic',job:'Reviews'});
- await send(stores,engineFor);
+ assert.equal(await startQueuedTurns(stores.service,{hermes,engineFor}),1);
  assert.equal(sent.length,2,'the same send asked again');
  assert.deepEqual(sent[1].tools,sent[0].tools,'the retry sends the pinned tools unchanged');
 });

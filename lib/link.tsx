@@ -2,7 +2,7 @@
 import { useI18n } from '@/lib/i18n-client';
 
 import NextLink, { useLinkStatus } from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useState, type ComponentProps } from 'react';
 
@@ -68,14 +68,21 @@ function Pending({ href }: { href: string }) {
   return pending ? <Feedback href={href} /> : null;
 }
 
+// A link loads its page only when the person points at it, focuses it or touches it (#771, #739): never every link on
+// screen in the background, which rendered a whole page (a Conversation's included) for each. A press right after the
+// intent opens the page it prepared; a press with none fetches it then.
 export default function Link({ children, ...props }: ComponentProps<typeof NextLink>) {
+  const router = useRouter();
   const target = props.as || props.href;
   const href = typeof target === 'string' ? target : target.pathname || '';
+  const intent = () => { try { router.prefetch(href, { kind: 'full' } as Parameters<typeof router.prefetch>[1]); } catch { /* A prefetch never stands in the way of a press. */ } };
   // A plain click or Enter (which the browser turns into a click) opens the page here; a modified click opens it
   // elsewhere and is not this page being opened.
   const onClick: ComponentProps<typeof NextLink>['onClick'] = event => {
     props.onClick?.(event);
     if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && (!props.target || props.target === '_self')) opening = new URL(href, location.href).pathname;
   };
-  return <NextLink {...props} onClick={onClick} prefetch>{children}<Pending href={href} /></NextLink>;
+  return <NextLink {...props} onClick={onClick} prefetch={false}
+    onMouseEnter={event => { props.onMouseEnter?.(event); intent(); }} onFocus={event => { props.onFocus?.(event); intent(); }}
+    onTouchStart={event => { props.onTouchStart?.(event); intent(); }}>{children}<Pending href={href} /></NextLink>;
 }

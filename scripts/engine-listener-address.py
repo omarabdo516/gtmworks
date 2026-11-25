@@ -10,7 +10,12 @@ It is one file so the start command (scripts/engine-template.yml) and the health
 standard library is used: the Engine image has no `ip`, `ss`, `hostname` or `getent`, but it has its own python.
 
     python3 engine-listener-address.py           # prints the address
-    python3 engine-listener-address.py --health  # asks the Run API's /health at that address, failing if it is not 200
+    python3 engine-listener-address.py --health  # asks the Run API's /health at that address, failing if it is not 200,
+                                                 # and the management listener, failing if it does not answer at all
+
+A healthy Engine is one gtmworks can use (#773): its Run listener answers /health, and its management listener, which
+gtmworks reads and writes profiles, souls, memory and apps through, answers HTTP. Any answer of the management listener
+counts (it asks for a key on most routes); a refused connection or no answer within five seconds does not.
 """
 from __future__ import annotations
 
@@ -18,6 +23,7 @@ import fcntl
 import socket
 import struct
 import sys
+import urllib.error
 import urllib.request
 
 SIOCGIFADDR = 0x8915
@@ -38,13 +44,24 @@ def install_network_address() -> str:
     raise SystemExit("The Engine has no route to its install network: start it with scripts/install.sh.")
 
 
+def management_answers(address: str) -> bool:
+    """Whether the management listener answers HTTP at all: any status counts, no answer does not."""
+    try:
+        with urllib.request.urlopen(f"http://{address}:9119/", timeout=5):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except (urllib.error.URLError, OSError):
+        return False
+
+
 def main(argv: list[str]) -> int:
     address = install_network_address()
     if argv == ["--health"]:
         with urllib.request.urlopen(f"http://{address}:8642/health", timeout=5) as answer:
             if answer.status != 200:
                 return 1
-        return 0
+        return 0 if management_answers(address) else 1
     print(address)
     return 0
 

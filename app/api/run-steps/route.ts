@@ -12,7 +12,7 @@ import { uuid } from '@/lib/conversations';
 // database names it to this reader (conversation_live_run, channel_live_run), and that Run's tool calls as the Engine
 // streams them (the engine contract's `steps`), passed on one line of JSON per view (lib/live-steps.mjs) until the Run's
 // events end or the reader goes. Nothing of it is kept or logged. With no Run working, or no Engine to read, the only
-// line is the end, and the page keeps its "is working on a reply" line.
+// line is the end, and the page keeps its "Thinking" line (#763).
 const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
 // no-transform: the server's compression would hold the lines back until enough of them came.
 const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no'};

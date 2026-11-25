@@ -2,7 +2,7 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { answerQuestion, closeOpenRuns, decidePermission, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
+import { answerQuestion, closeOpenRuns, decidePermission, retryTurn, sendMessage, startQueuedTurns, stopConversationRun } from '@/lib/conversation-runs.mjs';
 import { engineOf, onProfile } from '@/lib/company-engine.mjs';
 import { engineFor } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
@@ -11,9 +11,9 @@ import { crossSiteWrite } from '@/lib/app-origin.mjs';
 import { routeAllowed } from '@/lib/route-permissions.mjs';
 import { conversationColumns, uuid } from '@/lib/conversations';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
-import { conversationExists, discardConversationFiles, imagesOf, keepConversationFiles } from '@/lib/conversation-files';
+import { discardConversationFiles, keepConversationFiles } from '@/lib/conversation-files';
 import type { PermissionChoice } from '@/lib/engine.mjs';
-import { conversationRecord } from '@/lib/conversation-record';
+import { conversationRecord, conversationSteps } from '@/lib/conversation-record';
 import { agentAppStates, agentSessionTurns } from '@/lib/company-app-items';
 
 type Database=Awaited<ReturnType<typeof supabase>>;
@@ -24,13 +24,15 @@ const service=()=>createClient(supabaseConfig.url,process.env.SUPABASE_SERVICE_R
 const refuseFor=(code:string|undefined)=>refuse(...(refusals[code||'']||['conversationFailed',500]));
 const permissionChoices:readonly unknown[]=['once','always','deny'] satisfies PermissionChoice[];
 
-// A message is checked, sent to the agent's engine and stored by lib/conversation-runs.mjs (through the engine
-// contract, lib/engine.mjs); this route only checks the request's shape and turns refusals into answers. Who wrote it
-// is the signed-in person: no field of the request names an author, and any such field is ignored.
+// A message is checked and stored by lib/conversation-runs.mjs (ADR 0029, #764): the answer goes once it is stored, and
+// its Run starts after it, through the one starter of turns (after(), and the worker's pass over waiting turns). This
+// route only checks the request's shape and turns refusals into answers. Who wrote it is the signed-in person: no field
+// of the request names an author, and any such field is ignored.
 // A first message from a Card's sheet names the Card (#145): the database starts the Card's chat with its Agent, or
 // answers the caller's own chat already on it, and the message goes there.
-// Images go with the message (#155): the check runs before anything is uploaded or sent, the images are read into the
-// Agent's Run, and only a stored message keeps them (lib/conversation-files.ts). Nothing of the request is logged.
+// Images go with the message (#155): the check runs before anything is uploaded or stored, and they are kept with the
+// turn before it is stored, so its Run reads them from the Conversation's files (lib/conversation-files.ts). Nothing of
+// the request is logged.
 async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
  if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))||body.agent!==undefined&&(typeof body.agent!=='string'||!uuid.test(body.agent))) return refuse('conversationFailed',400);
  if(body.card!==undefined&&!(typeof body.card==='number'&&Number.isSafeInteger(body.card)&&body.card>0)) return refuse('conversationFailed',400);
@@ -46,29 +48,15 @@ async function send(db:Database,body:Record<string,unknown>,chosen:File[]) {
   if(error) return error.message==='cardChatTaken'?refuse('sheetChatTaken',409):refuseFor(error.code);
   conversation=started as string;
  }
- const images=chosen.length?await imagesOf(chosen):undefined;
  const messageKey=body.sendKey as string; const company=body.company as string;
  const files=()=>({company,conversation,messageKey});
- // A Conversation already there keeps its images before the Agent is asked, so a turn that has to wait behind another
- // Run is started with them, whenever the worker takes it. A new Conversation is never busy: its images go into its
- // first Run here, and are kept once its message is stored.
- const early=chosen.length>0&&await conversationExists(db,company,conversation);
- if(early) {
-  const kept=await keepConversationFiles(db,service(),{...files(),files:chosen});
-  if(kept.error) return refuse(kept.error,kept.error==='conversationFailed'?500:403);
- }
- const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message,...(images?{images}:{})});
- // The engine refused the send: nothing was stored, so the images kept for it go too.
- if('code' in sent) { if(early) await discardConversationFiles(db,service(),files()); return refuseFor(sent.code); }
- if('error' in sent) { if(early) await discardConversationFiles(db,service(),files()); return refuse(sent.error,sent.status); }
- // A note to a person and an answer to a question store no message, so nothing can sit under one: their images go.
- if(early&&('addressed' in sent||'answered' in sent)) { await discardConversationFiles(db,service(),files()); return reply(sent); }
- // Kept only for a message that is stored, and for a new Conversation only now, when its row is there.
- if(chosen.length&&!early) {
-  const kept=await keepConversationFiles(db,service(),{...files(),files:chosen});
-  // The message is stored either way, so a retry with the same send key finds it and keeps the files then.
-  if(kept.error) return refuse(kept.error,kept.error==='conversationFailed'?500:403);
- }
+ const keepFiles=chosen.length?()=>keepConversationFiles(db,service(),{...files(),files:chosen}):undefined;
+ const sent=await sendMessage(db,service(),{company,conversation,sendKey:messageKey,agent:body.card===undefined?body.agent as string|undefined:undefined,message:body.message,keepFiles,later:after});
+ // Refused before the turn was stored: nothing was, so the images kept for it go too, and the words go back to the box.
+ if('code' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files()); return refuseFor(sent.code); }
+ if('error' in sent) { if(keepFiles) await discardConversationFiles(db,service(),files()); return refuse(sent.error,sent.status); }
+ // A note to a person and an answer to a question store no turn, so nothing can sit under one: their images go.
+ if(keepFiles&&('addressed' in sent||'answered' in sent)) await discardConversationFiles(db,service(),files());
  return reply(sent);
 }
 
@@ -78,9 +66,12 @@ async function stop(db:Database,body:Record<string,unknown>) {
  const stopped=await stopConversationRun(db,{company:body.company as string,conversation:body.conversation});
  if('code' in stopped) return stopped.message==='conversationNothingToStop'?reply({stopped:false}):refuseFor(stopped.code);
  if('error' in stopped) return refuse(stopped.error,stopped.status);
- // The stopped run is closed now, and a turn waiting behind it may start.
- await closeOpenRuns(service(),{conversation:body.conversation});
- await startQueuedTurns(service(),{conversation:body.conversation});
+ // The stopped run is closed after the answer, and a turn waiting behind it may start then (the worker does both too).
+ const conversation=body.conversation;
+ after(async()=>{
+  try { await closeOpenRuns(service(),{conversation}); await startQueuedTurns(service(),{conversation}); }
+  catch { logActionFailure('conversation',new Error('Stopped run not closed yet')); }
+ });
  return reply(stopped);
 }
 
@@ -188,25 +179,44 @@ async function models(db:Database,person:string,company:string,conversation:stri
  return reply({state:read.state,models:offeredModels(read.models,access),current:found.model??read.current});
 }
 
-// Reading the record also closes any of its runs Hermes has ended (lib/conversation-runs.mjs, as the worker does), so
-// the page shows the reply, and the usage of every ended run, without a reload; then a turn that waited for that run
-// starts. The person's session must see the conversation first; only their own runs of it are closed.
-async function read(db:Database,person:string,company:string,conversation:string) {
- const {data:found}=await db.from('conversations').select(conversationColumns).eq('id',conversation).eq('company_id',company).maybeSingle();
- if(!found) return refuse('conversationNotFound',404);
- await closeOpenRuns(service(),{conversation,owner:person});
- await startQueuedTurns(service(),{conversation});
- // A new chat's first Run, closed just now, is what names its Engine session: read again, so the reply that lands carries
- // its steps at once, where its live steps were (#646), whoever closed the Run first.
- if(!found.hermes_session_id) {
-  const {data:named}=await db.from('conversations').select('hermes_session_id').eq('id',conversation).maybeSingle();
-  if(named?.hermes_session_id) found.hermes_session_id=named.hermes_session_id;
+// The record of the Conversation, as the database holds it (ADR 0030). A read never closes a Run or starts a turn (#767):
+// the worker and the one starter of turns do both. With `since`, the stamp the page last read, the answer is only that
+// nothing changed when the database's stamp is the same, so a waiting page's poll costs one round trip. The person's
+// session must see the Conversation; anyone else reads not found.
+async function read(db:Database,person:string,company:string,conversation:string,since:unknown) {
+ if(typeof since==='string'&&/^[0-9a-f]{32}$/.test(since)) {
+  const {data:stamp}=await db.rpc('conversation_stamp',{conversation});
+  if(stamp===since) return reply({unchanged:true,stamp});
  }
- return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent),(agent,session)=>agentSessionTurns(company,agent,session)));
+ const {data:found,error:unfound}=await db.from('conversations').select(conversationColumns).eq('id',conversation).eq('company_id',company).maybeSingle();
+ if(unfound) return refuse('conversationUnread',503);
+ if(!found) return refuse('conversationNotFound',404);
+ // A read that fails answers an error, never an empty Conversation (#768): the page keeps what it shows and asks again.
+ try { return reply(await conversationRecord(db,person,company,found,agent=>agentAppStates(company,agent))); }
+ catch { return refuse('conversationUnread',503); }
+}
+
+// "Try again" on a message that was not sent (#764): the same turn, by its send key, waits again and its Run starts
+// after the answer; no second message is made. Only its own person, while they may write (retry_conversation_turn).
+async function retry(db:Database,body:Record<string,unknown>) {
+ if(![body.conversation,body.sendKey].every(value=>typeof value==='string'&&uuid.test(value))) return refuse('conversationFailed',400);
+ const retried=await retryTurn(db,service(),{company:body.company as string,conversation:body.conversation as string,sendKey:body.sendKey as string,later:after});
+ if('code' in retried) return refuseFor(retried.code);
+ return reply(retried);
+}
+
+// Each reply's steps and the Conversation's token use (#766, ADR 0030): their own request, after the messages are drawn,
+// read from the Agent's Hermes session through the person's own session (RLS sees only their Conversation). A session
+// that cannot be read answers 503, and the page keeps the replies as they are. Nothing of it is kept or logged.
+async function steps(db:Database,company:string,conversation:string) {
+ const {data:found}=await db.from('conversations').select('id,agent_id,hermes_session_id').eq('id',conversation).eq('company_id',company).maybeSingle();
+ if(!found) return refuse('conversationNotFound',404);
+ const read=await conversationSteps(db,found,(agent,session)=>agentSessionTurns(company,agent,session));
+ return read?reply(read):refuse('conversationStepsUnread',503);
 }
 
 // Each write's intent and its handler; any other intent is a message to send.
-const writes={stop,answer,done,permit,model:pickModel,later,access};
+const writes={stop,answer,done,permit,model:pickModel,later,access,retry};
 
 async function respond(request:NextRequest) {
  try {
@@ -248,8 +258,9 @@ async function respond(request:NextRequest) {
    const {data:agents}=writer?await db.from('hermes_agents').select('id,connection_id,name,is_default').eq('company_id',body.company).order('name'):{data:[]};
    return reply({writer:!!writer,agents:agents||[]});
   }
+  if(body.intent==='steps') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await steps(db,body.company,body.conversation):refuse('conversationNotFound',404);
   if(body.intent==='models') return typeof body.conversation==='string'&&uuid.test(body.conversation)?await models(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
-  return typeof body.conversation==='string'&&uuid.test(body.conversation)?await read(db,user.id,body.company,body.conversation):refuse('conversationNotFound',404);
+  return typeof body.conversation==='string'&&uuid.test(body.conversation)?await read(db,user.id,body.company,body.conversation,body.since):refuse('conversationNotFound',404);
  } catch { logActionFailure('conversation',new Error('Conversation request failed')); return refuse('conversationFailed',400); }
 }
 export const GET=respond;
