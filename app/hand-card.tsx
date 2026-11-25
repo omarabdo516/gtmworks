@@ -4,8 +4,11 @@
 // address the Agent gave in a new tab that gets no handle on this page, and "Done it" records, once, that this person
 // did the step. Done: the time and the Agent's closing note. gtmworks does not do the step and checks nothing outside.
 // The card is laid out in its title's direction, and every text on it follows the card, as the reference sets `dir` once
-// (a line that starts with a Latin name, "SEO سابه…", must not turn left to right); the reference's "Open the screen" and "Open the
-// merge request" variants are not drawn (#21, #36). Its id is the address "Waiting on you" opens the Conversation at
+// (a line that starts with a Latin name, "SEO سابه…", must not turn left to right); the reference's "Open the merge
+// request" variant is not drawn (#21, #36). A step the Agent stopped at on its own Screen (#714, `screen`) has "Open the
+// screen" in place of the draft's link: it opens that Agent's Screen in its details (`openScreen`), beside the chat or
+// on its Conversation's page, whose view has its own "Done it", the same press as this card's. Its id is the address
+// "Waiting on you" opens the Conversation at
 // (#140), and a done card whose turn to the Agent could not start tells a person who may write to tell it in a message,
 // until they write to it. In a channel (`team`) a Viewer reads the reference's wait line instead of the buttons (#149).
 import { useEffect, useRef, useState } from 'react';
@@ -29,7 +32,7 @@ const settling=900;
 // An app gtmworks does not know draws the reference's plain tile.
 const handApp=(name:string)=>knownApp(name)??{key:'',mark:'·'};
 
-export function HandCard({card,fresh,done,team=false}:{card:Hand,fresh:boolean,done?:MarkHandDone,team?:boolean}) {
+export function HandCard({card,fresh,done,team=false,openScreen}:{card:Hand,fresh:boolean,done?:MarkHandDone,team?:boolean,openScreen?:(card:number)=>void}) {
  const {t,language}=useI18n(); const zone=useZone();
  const [pressed,setPressed]=useState<string|null>(null); const [error,setError]=useState(''); const [just,setJust]=useState(false);
  const [sending,setSending]=useState(false); const busy=useRef(false);
@@ -62,7 +65,8 @@ export function HandCard({card,fresh,done,team=false}:{card:Hand,fresh:boolean,d
   {at?<div className="card__outcome"><ShellIcon name="check"/><span><bdi className="hand__at" dir={language==='ar'?'rtl':'ltr'}>{before}{time(at)}{after}</bdi>{card.note&&<> <span className="hand__note">{card.note}</span></>}</span></div>
    :!done&&team?<div className="card__outcome"><ShellIcon name="clock"/><span>{t('handWaitTeam')}</span></div>
    :<div className="card__actions">
-    {card.url&&<a className="btn btn--secondary" href={card.url} target="_blank" rel="noopener noreferrer"><ShellIcon name="open"/><span>{t('handOpen')}</span></a>}
+    {card.screen?openScreen&&<button type="button" className="btn btn--secondary" onClick={()=>openScreen(card.id)}><ShellIcon name="monitor"/><span>{t('handOpenScreen')}</span></button>
+     :card.url&&<a className="btn btn--secondary" href={card.url} target="_blank" rel="noopener noreferrer"><ShellIcon name="open"/><span>{t('handOpen')}</span></a>}
     <button type="button" className="btn btn--primary" disabled={!done||sending} onClick={()=>void press()}>{t('handDone')}</button>
    </div>}
   {error&&!at&&<p className="hand__error" role="alert">{t(error)}</p>}

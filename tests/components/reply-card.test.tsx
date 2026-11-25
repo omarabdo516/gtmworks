@@ -184,6 +184,26 @@ test.each(['en', 'ar'] as const)('in the %s interface, an open hand card shows t
  expect(group.element().textContent, 'the closing note waits for Done it').not.toContain(card.note);
 });
 
+// #714: a step the Agent stopped at on its own Screen (design-reference: cardHTML's hand branch with c.screen): the
+// second button is "Open the screen", which opens that Screen's view, in place of the draft's link.
+test.each(['en', 'ar'] as const)('in the %s interface, a step on the Agent\'s Screen shows Open the screen in place of the draft, and it opens the Screen', async language => {
+ const card = handed({ screen: true });
+ const opened = vi.fn();
+ const screen = await render(<LanguageProvider language={language}><div dir={language === 'ar' ? 'rtl' : 'ltr'}><ReplyCard card={card} fresh={false} done={async () => ({ at: '2026-06-10T09:41:00Z', first: true })} openScreen={opened}/>
+  <div data-testid="icons"><ShellIcon name="monitor"/></div></div></LanguageProvider>);
+ const group = screen.getByRole('group', { name: handWords[language].label(card.title) });
+ const words = { en: 'Open the screen', ar: 'افتح الشاشة' }[language];
+ expect(group.getByRole('button').elements().map(button => button.textContent)).toEqual([words, handWords[language].done]);
+ expect(group.element().querySelector('a'), 'no draft link').toBeNull();
+ const open = group.getByRole('button', { name: words });
+ expect(open.element().querySelector('svg')?.innerHTML).toBe(screen.getByTestId('icons').element().querySelector('svg')?.innerHTML);
+ await open.click();
+ expect(opened).toHaveBeenCalledExactlyOnceWith(7);
+ // With no Screen to open beside the chat (the Agent's details are not there), the step shows Done it alone.
+ const alone = await render(<LanguageProvider language={language}><ReplyCard card={{ ...card, id: 8 }} fresh={false} done={async () => ({ at: '2026-06-10T09:41:00Z', first: true })}/></LanguageProvider>);
+ expect(alone.getByRole('group').elements().at(-1)?.querySelectorAll('button, a').length).toBe(1);
+});
+
 test('in the Arabic interface, the line, the rows and the note of a hand card follow the card, also when they start with a Latin name', async () => {
  const language = 'ar';
  const card = handed({ state: 'done', at: '2026-06-10T09:41:00Z' } as Partial<Hand>);

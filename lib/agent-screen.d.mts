@@ -1,0 +1,10 @@
+import type { ScreenPicture } from './engine.mjs';
+export type AgentScreen = { state: 'none' | 'asleep' | 'awake', control: 'agent' | 'person', refusal: null | 'missing' | 'busy', busy?: string };
+type ScreenRequest = { company: string, agent: unknown, hermes?: { address: string, key: string } | null, engine?: unknown };
+export function readAgentScreen(db: unknown, request: ScreenRequest): Promise<{ state: 'found', screen: AgentScreen } | { state: 'missing' | 'unreachable' }>;
+export type AgentScreenWake = { state: 'awake' } | { state: 'notStarted', reason: 'missing' | 'failed' | 'busy', busy?: string } | { state: 'notAllowed' | 'missing' | 'unreachable' | 'failed' };
+export function wakeAgentScreen(db: unknown, request: ScreenRequest): Promise<AgentScreenWake>;
+export function agentScreenPicture(db: unknown, request: ScreenRequest): Promise<ScreenPicture>;
+export type ScreenHandRow = { card: number, conversation: string, agent: string, agent_name: string, title: string, app: string, step: string };
+export function screenLogged(db: unknown, fn: 'log_screen_woken' | 'log_screen_taken' | 'log_screen_given_back', company: string, agent: string): Promise<void>;
+export function screenHands(db: unknown, company: string): Promise<ScreenHandRow[]>;

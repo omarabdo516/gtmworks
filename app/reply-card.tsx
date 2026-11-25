@@ -3,7 +3,7 @@
 // the reference lays out its Arabic card right to left in either language, and every other text keeps its own. `fresh`:
 // it arrived after the page was drawn, so it rises in once (design-reference: card-in). A question (#138) is answered
 // in the card itself (`answer`), so it draws its own frame (app/question-card.tsx), as a step handed to the person does
-// (#139, `done`; app/hand-card.tsx), and a request to allow an action (#163, `decide`, with the choices this person may
+// (#139, `done`; app/hand-card.tsx, with `openScreen` for a step on the Agent's Screen, #714), and a request to allow an action (#163, `decide`, with the choices this person may
 // send, `may`; app/permission-card.tsx), and an app the Agent needs (#203, `connect`; app/connect-card.tsx). The main
 // Agent's question draws the reference's chip card (`chips`, #143); any other Agent's draws the lettered one. In a
 // channel (`team`) a card nobody may act on shows the team's wait line instead of a disabled button (#149).
@@ -16,10 +16,10 @@ import { PermissionCard, type DecidePermission } from '@/app/permission-card';
 import { ConnectCard, type ConnectApps } from '@/app/connect-card';
 import { offeredChoices, type PermissionChoice, type ReplyCard as Card } from '@/lib/conversations';
 
-export function ReplyCard({card,fresh,answer,chips=false,done,decide,may=[],connect,team=false,waitingFor=null}:{card:Card,fresh:boolean,answer?:AnswerQuestion,chips?:boolean,done?:MarkHandDone,decide?:DecidePermission,may?:PermissionChoice[],connect?:ConnectApps,team?:boolean,waitingFor?:string|null}) {
+export function ReplyCard({card,fresh,answer,chips=false,done,decide,may=[],connect,team=false,waitingFor=null,openScreen}:{card:Card,fresh:boolean,answer?:AnswerQuestion,chips?:boolean,done?:MarkHandDone,decide?:DecidePermission,may?:PermissionChoice[],connect?:ConnectApps,team?:boolean,waitingFor?:string|null,openScreen?:(card:number)=>void}) {
  switch(card.kind) {
   case 'question': return <QuestionCard card={card} fresh={fresh} answer={answer} chips={chips} team={team} waitingFor={waitingFor}/>;
-  case 'hand': return <HandCard card={card} fresh={fresh} done={done} team={team}/>;
+  case 'hand': return <HandCard card={card} fresh={fresh} done={done} team={team} openScreen={openScreen}/>;
   case 'permission': return <PermissionCard card={card} fresh={fresh} offered={offeredChoices(card,may)} decide={decide}/>;
   case 'connect': return <ConnectCard card={card} fresh={fresh} connect={connect}/>;
   case 'draft': case 'review': return <Shown card={card} fresh={fresh}/>;

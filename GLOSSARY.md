@@ -67,7 +67,7 @@ One person's exchange with one Agent, started from New. It stays with that Agent
 _Avoid_: chat, thread, session
 
 **Step / خطوة**:
-One tool call the Engine reported for the Run behind an Agent's reply in a Conversation, listed under the reply's sender line as the Engine reported it: the tool's name, the Engine's own preview of the call (left out when it holds a path, a key or the Engine's name), and whether the call ended ("Done") or failed ("Skipped"). gtmworks writes no step of its own. A Run's steps are kept once, when it closes completed; a failed or stopped Run, and one whose events were lost before they were read, shows none.
+One tool call the Engine reported for the Run behind an Agent's reply in a Conversation, listed under the reply's sender line as the Engine reported it: the tool's name, the Engine's own preview of the call (left out when it holds a path, a key or the Engine's name), and whether the call ended ("Done") or failed ("Skipped"). gtmworks writes no step of its own. The Engine alone keeps a Run's steps (ADR 0017): gtmworks reads them from it after the reply is drawn (ADR 0030) and stores none; a failed or stopped Run, and one whose events were lost before they were read, shows none.
 _Avoid_: action, task, activity
 
 **Channel / قناة**:
@@ -91,7 +91,7 @@ A Company's own machine for its Agents' work: commands, files, code, a Screen wi
 _Avoid_: container, VM, workspace, environment
 
 **Screen / الشاشة**:
-An Agent's own desktop and browser inside its Company's Work sandbox: each Agent has one. A Member can watch it and take it over, for example to sign in to an account. Whatever a person signs in to on an Agent's Screen, that Agent can use, within that account's own permissions; another Agent cannot.
+The desktop and browser an Agent works on, inside its Company's Work sandbox. A Company has one, shared by its Agents: one display and one browser profile, so one Screen is awake per Company at a time, whichever Agent is using it (vault decision 0068). A Member can watch it and take it over, for example to sign in to an account. Whatever a person signs in to on the Screen, every Agent of the Company can use, within that account's own permissions.
 _Avoid_: bot screen, remote desktop, browser session
 
 **Waiting / في الانتظار**:
@@ -113,14 +113,14 @@ The named set of permissions a member holds in one company: Owner, Manager, Cont
 _Avoid_: group, user type, access level
 
 **Grant / صلاحية منفصلة**:
-A separate per-member permission in one company: publishing, money figures, or customer data.
+A separate per-member permission in one company: publishing, money figures, or customer data. A Manager never changes their own.
 
 **Permission / صلاحية**:
 One thing a role allows in a company, such as approving a post, sending a comment reply, or connecting accounts.
 _Avoid_: right, privilege, scope
 
 **Owner / مالك**:
-The role that can do everything in its company; only an Owner can make another member an Owner. The first person through first-run is the first company's Owner; a Company made later gets its first Owner through a first-Owner link from the install owner, which works once. A company always has at least one.
+The role that can do everything in its company; only an Owner can make another member an Owner, and only an Owner changes or removes an Owner. The first person through first-run is the first company's Owner; a Company made later gets its first Owner through a first-Owner link from the install owner, which works once. A company always has at least one.
 _Avoid_: admin, super admin
 
 **Install owner / صاحب التثبيت**:

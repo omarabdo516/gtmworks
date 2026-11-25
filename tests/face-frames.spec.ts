@@ -42,7 +42,10 @@ test('sixteen moving faces of 56px, two working, keep 50 frames a second on a CP
  // The page settles first: what it does once, as it opens, is not the faces' cost.
  await page.waitForTimeout(5000);
  // Frames drawn and long tasks over the ten seconds.
+ // Each window starts from a heap just collected: a major collection is a long task, and the first window would
+ // otherwise pay for what opening the page left behind, so the faces would be charged for it (#710's chat-open run).
  const measure=async()=>{
+  await session.send('HeapProfiler.collectGarbage');
   const result=page.evaluate(async seconds=>{
    const long:number[]=[];
    const observer=new PerformanceObserver(list=>{ for(const entry of list.getEntries()) long.push(Math.round(entry.duration)); });

@@ -6,11 +6,13 @@ import { channelSidebar } from '@/lib/channels';
 import { agentFaceStates } from '@/lib/agent-face-states';
 import { uuid } from '@/lib/conversations';
 import type { SidebarNow } from '@/app/sidebar-live';
+import { screenHands } from '@/lib/agent-screen.mjs';
 
 const reply=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 
 // The sidebar's poll (app/sidebar-live): the reader's channels with their unread counts (#24) and the state of each Agent
-// they see (#699), both read as the reader, so a hidden Agent has no state and nothing but the state is told.
+// they see (#699), both read as the reader, so a hidden Agent has no state and nothing but the state is told; and the steps
+// handed to the reader on an Agent's Screen in their own Conversations (#714).
 export async function GET(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -18,7 +20,7 @@ export async function GET(request:NextRequest) {
   const company=request.nextUrl.searchParams.get('company');
   if(!company||!uuid.test(company)) return reply({error:'channelFailed'},400);
   if(!await routeAllowed(db,'app/api/sidebar/route.ts','GET',company,user.id)) return reply({error:'channelNotFound'},404);
-  const [channels,{states}]=await Promise.all([channelSidebar(db,company),agentFaceStates(db,company)]);
-  return reply({channels,agents:states} satisfies SidebarNow);
+  const [channels,{states},handed]=await Promise.all([channelSidebar(db,company),agentFaceStates(db,company),screenHands(db,company)]);
+  return reply({channels,agents:states,handed} satisfies SidebarNow);
  } catch { logActionFailure('sidebar',new Error('Sidebar request failed')); return reply({error:'channelFailed'},400); }
 }
