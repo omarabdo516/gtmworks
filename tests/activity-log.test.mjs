@@ -106,6 +106,13 @@ test('Card, Member and Agent rows say who changed what', () => {
  assert.deepEqual([woken.act, woken.obj, woken.to], [['logActScreenWoken', { text: 'Ads' }], undefined, undefined]);
  assert.equal(i18n('en').t('logActScreenWoken', 'Ads'), 'woke the screen of Ads');
  assert.equal(i18n('ar').t('logActScreenWoken', 'Ads'), 'صحّى شاشة Ads');
+ // Control of its Screen taken and given back (#713).
+ const [taken, given] = ['agent_screen_taken', 'agent_screen_given_back'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads' } }));
+ assert.deepEqual([taken.act, given.act], [['logActScreenTaken', { text: 'Ads' }], ['logActScreenGivenBack', { text: 'Ads' }]]);
+ assert.equal(i18n('en').t('logActScreenTaken', 'Ads'), 'took control of the screen of Ads');
+ assert.equal(i18n('en').t('logActScreenGivenBack', 'Ads'), 'gave control of the screen back to Ads');
+ assert.equal(i18n('ar').t('logActScreenTaken', 'Ads'), 'خد الدفة من شاشة Ads');
+ assert.equal(i18n('ar').t('logActScreenGivenBack', 'Ads'), 'رجّع الدفة لـ Ads');
  // One note of an Agent's memory edited, or forgotten by the Owner (#191): the Agent is named, the note never is.
  const [edited, forgotten] = ['memory_edit', 'memory_forget'].map(action => describeEntry({ subject: 'agent', action, agent_id: lead, details: { agent_name: 'Ads' } }));
  assert.deepEqual([edited.act, edited.obj], [['logActMemoryEdit', { text: 'Ads' }], undefined]);
