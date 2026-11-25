@@ -211,6 +211,22 @@ for (const [language, notSent, tryAgain, waits] of [['en', 'Not sent', 'Try agai
  expect(starting.container.querySelector('.queued')).toBeNull();
 });
 
+// #731: a reply that ran out of usage names the accounts that ran out, as Settings › Providers names them, each in its own
+// direction, beside when the usage resets; with none named the line stays as it was.
+for (const [language, names, line] of [
+ ['en', ['ChatGPT', 'حساب عمر'], 'ChatGPT and حساب عمر ran out of usage.'],
+ ['ar', ['ChatGPT', 'حساب عمر'], 'الاستخدام خلص على ChatGPT وحساب عمر.']] as const) test(`in ${language} a reply that ran out of usage names the accounts that ran out`, async () => {
+ const screen = await render(view(talk([asking], { failed: true, modelRefused: { reason: 'access', owner: false, resetsAt: '2027-05-01T19:24:00.000Z', ranOut: [...names] } }), language));
+ const alert = screen.getByRole('alert');
+ await expect.poll(() => alert.element().textContent).toContain(line);
+ expect([...alert.element().querySelectorAll('bdi')].map(name => name.textContent)).toEqual([...names]);
+ expect(alert.element().querySelector('time')).not.toBeNull();
+ await screen.unmount();
+ const unnamed = await render(view(talk([asking], { failed: true, modelRefused: { reason: 'access', owner: false } }), language));
+ expect(unnamed.getByRole('alert').element().querySelector('bdi')).toBeNull();
+ await unnamed.unmount();
+});
+
 // Review of #330: on the same mounted Conversation, the model line goes once the refused message is no longer the latest
 // (another tab sent one); the message in the box stays, and so does a line about something else.
 test('the model line goes when the refused message is no longer the latest, keeping the box\'s text and any other line', async () => {
