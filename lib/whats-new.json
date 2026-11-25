@@ -1,5 +1,11 @@
 [
  {
+  "issue": 712,
+  "date": "2026-11-25",
+  "en": { "title": "Watch an Agent's Screen and wake it", "body": "An Agent's details now show whether its Screen is awake, asleep or waking up with a small live picture, Watch opens a large view that keeps refreshing, and any member who is not a viewer can wake it, with the reason in one line when it cannot wake, such as another Agent of the company using the screen." },
+  "ar": { "title": "اتفرج على شاشة الوكيل وصحّيها", "body": "تفاصيل الوكيل بقت بتوريك شاشته صاحية ولا نايمة ولا بتصحى بصورة صغيرة حيّة، و«اتفرج» بتفتح شاشة كبيرة بتتحدّث لوحدها، وأي عضو مش مشاهد يقدر يصحّيها، ولو مصحيتش بيقولك السبب في سطر، زي إن وكيل تاني في الشركة شغال على الشاشة." }
+ },
+ {
   "issue": 711,
   "date": "2026-11-25",
   "en": { "title": "Every Agent has its own Screen", "body": "An Agent now works on its own desktop and browser inside its company's work sandbox, which wakes when the Agent needs it and sleeps after 30 minutes unused; it publishes or spends only when a member in the conversation asks for that exact thing with its amount, and the update raises each company's sandbox memory to 2 GB so the Screens fit." },
