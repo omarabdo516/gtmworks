@@ -21,16 +21,13 @@ test('unit test and brand file changes run no long suite: static covers them on 
   assert.deepEqual(areas('tests/unit.test.mjs', 'tests/hermes.test.mjs', 'brand/wordmark.png', 'brand/README.md'), none);
 });
 
-// Screens alone: the component tests prove how they behave. The compared screens run on main only (Omar, 2026-11-17,
-// #257), so no level sends a pull request to them: screens alone start no browser job. None of them runs the database
-// or the install.
+// Screens alone: the component tests prove how they behave, and their look is held to the design system (#805), so
+// screens alone start no browser job. None of them runs the database or the install.
 const screens = {
   'app/page.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
   'app/globals.css': { components: 'true', database: 'false', integration: 'false', install: 'false' },
   'components/shell/sidebar.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
   'lib/messages/en.json': { components: 'true', database: 'false', integration: 'false', install: 'false' },
-  'tests/visual-lane/screens.json': { components: 'false', database: 'false', integration: 'false', install: 'false' },
-  'tests/visual-lane/images/home-ar-1440-light.png': { components: 'false', database: 'false', integration: 'false', install: 'false' },
   'tests/components/message-box.test.tsx': { components: 'true', database: 'false', integration: 'false', install: 'false' },
 };
 for (const [path, expected] of Object.entries(screens)) {
@@ -186,13 +183,3 @@ test('an empty, malformed or unreadable list runs every suite', t => {
   assert.equal(unreadable.stdout, 'components=true\ndatabase=true\nintegration=true\ninstall=true\n');
 });
 
-// No path, however it is mixed, routes a pull request to the compared screens (#257).
-test('no change sends a pull request to the compared screens', () => {
-  for (const path of ['app/page.tsx', 'tests/visual-lane/screens.json', 'tests/visual-lane/images/home-ar-1440-light.png', 'tests/visual-lane/renderer', 'docs/testing.md']) {
-    assert.doesNotMatch(run([path]), /=visual$|^(lane|proof|visual)=/m, path);
-  }
-});
-// The lane's own files need no journeys: they run in the visual job alone, on main.
-for (const path of ['playwright.lane.config.ts', 'tests/visual-lane.spec.ts', 'tests/visual-lane-guards.ts', 'tests/visual-lane-guards.spec.ts', 'tests/visual-lane.mjs']) {
-  test(`${path} does not run the whole browser suite`, () => assert.equal(areas(path).integration, 'false'));
-}

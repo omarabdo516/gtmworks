@@ -2,8 +2,8 @@ import { test, expect } from './fresh-seed';
 import { chooseLanguageInSettings } from './choose-language';
 import { signIn, chooseCompany } from './sign-in';
 import { appOrigin, inbox, mail } from './lane.mjs';
-// Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the visual
-// lane checks the Arabic faces on its screens; the English ones are read by the next case (#257).
+// Every page here is read in both languages at 1440, and the List and the Agents page also at 390. At 390 the next
+// case reads the English faces (#257); Arabic at 390 is held to the design system (#805).
 test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,context})=>{
  // Twenty whole pages, each read in two languages, is the longest sweep in the suite; the browser shard runs four lanes
  // on four cores, where it once passed the minute before the last page (and finished in 42 s on its retry). The budget
@@ -62,7 +62,7 @@ test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,contex
  expect(externalFonts).toEqual([]);
 });
 
-// The visual lane draws Arabic only (#257): each page in English at 390 keeps Inter, has loaded every face it draws text
+// Each page in English at 390 keeps Inter, has loaded every face it draws text
 // in, and does not scroll sideways.
 test('every page in English at 390 draws in faces that loaded, Inter for its own text',async({page})=>{
  await page.setViewportSize({width:390,height:900});

@@ -20,7 +20,7 @@ const budgets = {
   check: { limit: 3, measured: 0.1 },
 };
 const MAX = 12;
-// What the full check runs. `visual` and `install-measure` are not part of it: they run on main and on a manual run.
+// What the full check runs. `budgets` and `install-measure` are not part of it: they run on main and on a manual run.
 // `supabase-images` is not part of it either: it only warms a cache, never fails a run, and after a cache-key change it
 // pulls every Supabase image, so its limit is not one of the check's.
 const fullCheck = ['changes', 'fast', 'image', 'database', 'integration', 'chat-open', 'install', 'check'];

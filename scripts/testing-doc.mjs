@@ -17,8 +17,8 @@ const FILE_HEADER = '| File | Promise | Runtime | Also guarded by | Decision |';
 const CASE_HEADER = '| Case | Decision | Why, and what guards it now |';
 const FILE_RULE = '|---|---|---|---|---|';
 const CASE_RULE = '|---|---|---|';
-// Rows for a folder are data for a test, like the lane's screens and images: the folder keeps one row, not each file.
-const folders = ['ci-logs/', 'visual-lane/'];
+// Rows for a folder are data for a test, like the failed job logs: the folder keeps one row, not each file.
+const folders = ['ci-logs/'];
 
 const title = text => (text.length > 160 ? `${text.slice(0, 157)}...` : text);
 

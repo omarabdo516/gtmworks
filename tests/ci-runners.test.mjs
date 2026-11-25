@@ -28,7 +28,7 @@ function triggers(yaml) {
 
 test('the scan sees every workflow', () => {
  const paths = workflows.map(file => file.path);
- for (const path of ['ci.yml', 'design-compare.yml', 'release.yml', 'release-tag.yml', 'visual-baselines.yml']) assert.ok(paths.includes(`${dir}/${path}`), path);
+ for (const path of ['ci.yml', 'design-compare.yml', 'release.yml', 'release-tag.yml']) assert.ok(paths.includes(`${dir}/${path}`), path);
 });
 
 test('no workflow names the paid runner', () => {
@@ -78,15 +78,15 @@ test('a workflow a pull request starts reads no secret but GITHUB_TOKEN', () => 
  }
 });
 
-// The local Supabase stack starts through ci.sh (database, images, integration, visual, visual-update) or
+// The local Supabase stack starts through ci.sh (database, images, integration, budgets) or
 // scripts/local-db.sh.
-const startsSupabase = step => /\bci\.sh\b.*\b(database|images|integration|visual|visual-update)\b|\blocal-db\.sh\b/.test(step.run ?? '');
+const startsSupabase = step => /\bci\.sh\b.*\b(database|images|integration|budgets)\b|\blocal-db\.sh\b/.test(step.run ?? '');
 const condition = step => String(step.if ?? '').replace(/^\$\{\{\s*|\s*\}\}$/g, '');
 const supabaseJobs = jobs.filter(({ job }) => (job.steps ?? []).some(startsSupabase));
 const label = ({ path, name }) => `${path} ${name}`;
 
 test('the jobs that start the local Supabase stack are found', () => {
- for (const name of [`${dir}/ci.yml database`, `${dir}/ci.yml integration`, `${dir}/ci.yml visual`, `${dir}/visual-baselines.yml update`]) {
+ for (const name of [`${dir}/ci.yml database`, `${dir}/ci.yml integration`, `${dir}/ci.yml budgets`]) {
   assert.ok(supabaseJobs.map(label).includes(name), name);
  }
 });

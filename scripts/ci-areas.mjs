@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 // Which long suites a change needs (#76), as Hermes `detect` and T3 Code `Changes` decide it: each suite runs only when
 // the files it covers changed. Static (lint, types, catalogues, the node unit tests) runs on every change and needs no
 // entry here. Prints components=, database=, integration= and install= lines for $GITHUB_OUTPUT. Each suite prints the
-// first of its levels whose files changed, or false. The compared screens are not here: they run on main only, never on
-// a pull request (#257). With --main (a push to main) every suite runs unless every file is a document.
+// first of its levels whose files changed, or false. The navigation budgets are not here: they run on main only, never on
+// a pull request (#257, #805). With --main (a push to main) every suite runs unless every file is a document.
 // Accepts path arguments or git diff --name-only -z on stdin; an empty, malformed or unreadable list runs every suite.
 const everything = [/^\.github\/workflows\/ci\.yml$/, /^ci\.sh$/, /^scripts\/ci-(areas|verdict|runner|fast)\.mjs$/, /^package(-lock)?\.json$/];
 const suites = {
@@ -34,7 +34,7 @@ const suites = {
     // and the root files the build and server read.
     true: [
       /^app\/.+\.ts$/, /^lib\/(?!messages\/)/, /^worker\//, /^(middleware|instrumentation)\.ts$/, /^(next|postcss)\.config\.mjs$/,
-      /^server\.js$/, /^scripts\/web-server\.mjs$/, /^tests\/(?!visual-lane)(.+\/)?[^/]+\.spec\.ts$/, /^tests\/(?!visual-lane)[^/]+\.ts$/,
+      /^server\.js$/, /^scripts\/web-server\.mjs$/, /^tests\/(.+\/)?[^/]+\.spec\.ts$/, /^tests\/[^/]+\.ts$/,
       // tests/frame.spec.ts reads the motion table to tell a moving button from one that swaps at once (#271).
       /^tests\/(lane|fake-hermes|fake-engine|offline|motion-table)\.mjs$/,
       /^playwright(\.proxy)?\.config\.ts$/, /^Dockerfile$/, /^\.dockerignore$/,
