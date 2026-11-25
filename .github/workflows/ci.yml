@@ -107,8 +107,9 @@ jobs:
     needs: [changes]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    # 2.7 min measured on run 44636876755: 5 min is 1.5 times it, rounded up (#410).
-    timeout-minutes: 5
+    # 2.7 min measured on run 44636876755 (#410); 4.4 min on run 45665003628 and cancelled at 5.2 min on run 45626470767
+    # (#755), as the suite grew: 7 min is 1.5 times 4.4, rounded up.
+    timeout-minutes: 7
     permissions:
       contents: read
     env:
@@ -379,9 +380,9 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.integration != 'false' || needs.changes.outputs.install != 'false' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     # 3.4 min measured on run 44726291691 with a warm work-sandbox layer cache (#392), and 6.5 min on run 44735657345
-    # when that cache was cold and the whole sandbox image was exported to it (#393): 10 min is 1.5 times the slower one,
-    # rounded up (#410).
-    timeout-minutes: 10
+    # when that cache was cold and the whole sandbox image was exported to it (#393); 9.9 min on run 45664486098, where
+    # spec #710 changed sandbox/ and the work sandbox image was built again (#755): 12 min is 1.5 times it, capped at 12.
+    timeout-minutes: 12
     permissions:
       contents: read
     # The work sandbox image's cache key, which every install area restores it under (#608).
@@ -488,7 +489,9 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
     # 10.0 min measured for the slowest of the seven shards on run 45088411177 (#653): 12 min is 1.5 times it, capped at
-    # 12 (#410). Spec #710's Screen tests took three of seven past it (run 45654432600), so the suite runs as eight.
+    # 12 (#410). Spec #710's Screen tests took three of seven past it (run 45654432600), so the suite runs as eight. Its
+    # split, measured again on runs 45664486098 and 45668614439 after #753, had shards at 11.6 min (#755); refreshed, the
+    # slowest is the one that holds good-morning.spec.ts, a serial file of 5.7 min of tests alone.
     timeout-minutes: 12
     permissions:
       contents: read
