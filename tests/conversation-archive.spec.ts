@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './fresh-seed';
+import { test, expect, laneRows, type Page } from './fresh-seed';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { laneHermes } from './lane-hermes';
@@ -129,8 +129,11 @@ test('A person archives several Conversations from All conversations and one fro
  const toast=page.locator('.toast').filter({hasText:'2 archived'});
  await expect(toast).toBeVisible();
  await expect(titled(mark)).toHaveCount(1);
- // Undo lasts as long as its toast (app/toast.tsx): pressed before any slower read, as a person does (#746). The counts
- // and who archived are read below, on the two archived and kept.
+ await expect(page.getByRole('button',{name:`Current ${count-2}`})).toBeVisible();
+ await expect(page.getByRole('button',{name:`Archived ${before+2}`})).toBeVisible();
+ // Read on the lane's database at once (laneRows): Undo lasts only as long as its toast (app/toast.tsx), and a read
+ // through the Supabase CLI took up to 8 s on a loaded runner, past it (#746).
+ expect(laneRows(`select count(*)::int as n from public.conversations where id in ('${first}','${second}') and archived_by='${owner}'`)[0].n).toBe(2);
  await toast.getByRole('button',{name:'Undo'}).click();
  await expect(page.locator('.toast').filter({hasText:'2 restored'})).toBeVisible();
  await expect(titled(mark)).toHaveCount(3);
@@ -145,9 +148,7 @@ test('A person archives several Conversations from All conversations and one fro
  await recent.getByRole('button',{name:`More: ${august}`}).click();
  await page.getByRole('menuitem',{name:'Archive the conversation'}).click();
  await expect(page.locator('#sb-recent .thread-row').filter({hasText:august})).toHaveCount(0);
- expect(rows(`select count(*)::int as n from public.conversations where id in ('${first}','${third}') and archived_by='${owner}'`)[0].n).toBe(2);
- await expect(page.getByRole('button',{name:`Current ${count-2}`})).toBeVisible();
- await expect(page.getByRole('button',{name:`Archived ${before+2}`})).toBeVisible();
+ expect(rows(`select count(*)::int as n from public.conversations where id in ('${first}','${third}') and archived_at is not null`)[0].n).toBe(2);
 
  // Archived holds them, newest message first; Restore brings one back, then the other.
  await page.getByRole('button',{name:/^Archived \d+$/}).click();

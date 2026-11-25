@@ -98,10 +98,13 @@ try {
   // that comes first, where frame() is not yet defined, and one in flight while the page commits is lost with it. A
   // render under a low memory limit loads slowly enough to meet this (#746), so the page's own document is waited for.
   let loaded = false;
-  for (let attempt = 0; attempt < 300 && !loaded; attempt++) {
+  const loadBy = Date.now() + 30000;
+  while (!loaded && Date.now() < loadBy) {
     if (chromiumEnded !== null) throw new Error(`Chromium ended with ${chromiumEnded} before the page loaded`);
     try {
-      loaded = (await send('Runtime.evaluate', { expression: 'location.protocol === "file:" && document.readyState === "complete"', returnByValue: true })).result?.value === true;
+      // A call lost while the page commits never answers: each is given a second, then asked again.
+      const answer = await Promise.race([send('Runtime.evaluate', { expression: 'location.protocol === "file:" && document.readyState === "complete"', returnByValue: true }), sleep(1000).then(() => null)]);
+      loaded = answer?.result?.value === true;
     } catch (error) {
       if (String(error.message).startsWith('Chromium closed devtools')) throw error;
     }

@@ -27,7 +27,8 @@ export default defineConfig({
   // An expectation waits 10 s in CI and Playwright's own 5 s here (#746). A CI shard runs four lanes on a runner of four
   // CPUs, where every page a test opens renders the ten pages its links prefetch in full (lib/link.tsx) and reads each
   // face's state for each (agent_face_states, #707): a Send, a Remove or an Approve answered in 5-6 s there, just past
-  // 5 s, while it answers in under one on a lane alone. The measured budgets have their own job and limits (#69, #257).
+  // 5 s, while it answers in under one on a lane alone (that cost is #754). The measured budgets have their own job and
+  // limits (#69, #257).
   expect: { timeout: process.env.CI ? 10000 : 5000 },
   use: { baseURL: appOrigin },
   // Lane 0 builds the app and serves it; every other lane serves that build on its own port (scripts/web.sh).

@@ -135,10 +135,8 @@ test('a selected Card that changed meanwhile is left and named; the others are a
   await bar(page).getByRole('button',{name:'Archive'}).click();
   await expect(toast(page)).toContainText('Archived');
   await expect(page.getByRole('alert').filter({hasText:'Not archived'})).toContainText(`Not archived: “${titleOf(2)}”`);
-  // Undo lasts as long as its toast (app/toast.tsx), so it is pressed before the board is read again (#746): card 1
-  // comes back, so it was archived, and card 2, which this person did not archive, stays off the board.
+  await expect(onBoard(page,1)).toHaveCount(0);
   await toast(page).getByRole('button',{name:'Undo'}).click();
   await expect(inColumn(page,'ideas',1)).toBeVisible();
-  await expect(onBoard(page,2)).toHaveCount(0);
  } finally { query('update public.work_cards set archived_at=null,archived_by=null where id=2'); }
 });

@@ -1,4 +1,4 @@
-import { test, expect, freshSeed } from './fresh-seed';
+import { test, expect, freshSeed, laneRows } from './fresh-seed';
 import { execFileSync } from 'node:child_process';
 import type { Browser } from '@playwright/test';
 import { signIn } from './sign-in';
@@ -59,8 +59,9 @@ test('the Manager archives a team channel after one confirmation naming what wai
  await expect(sidebar).toHaveText(['general']);
  await expect(page.locator('.arc-line')).toHaveText('This channel is archived. Nobody writes in it until it is restored.');
  await expect(page.getByRole('textbox',{name:'Write your message in the channel'})).toHaveCount(0);
- // Undo lasts as long as its toast (app/toast.tsx): pressed before any slower read, as a person does. The next test
- // reads who archived it.
+ // Read on the lane's database at once (laneRows): Undo lasts only as long as its toast (app/toast.tsx), and a read
+ // through the Supabase CLI took up to 8 s on a loaded runner, past it (#746).
+ expect(laneRows(`select archived_by::text by from public.channels where id='${channel}'`)).toEqual([{by:'20000000-0000-0000-0000-000000000002'}]);
  await page.locator('.toast').getByRole('button',{name:'Undo'}).click();
  await expect(page.locator('.toast')).toContainText('Restored');
  await expect(sidebar).toHaveText(['general','Spring launch']);
@@ -80,7 +81,6 @@ test('with nothing waiting it archives without asking; its Members read it and c
  }).toPass({timeout:30000});
  await expect(page.getByRole('dialog',{name:'Archive the channel?'})).toHaveCount(0);
  await expect(page.locator('.toast')).toContainText('Archived');
- expect(rows(`select archived_by::text by from public.channels where id='${channel}'`)).toEqual([{by:'20000000-0000-0000-0000-000000000002'}]);
 
  const contributor=await as(browser,'reviewer@example.com',path);
  try {
