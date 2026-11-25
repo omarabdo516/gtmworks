@@ -113,9 +113,9 @@ create function public.reply_card_asker(card bigint) returns uuid language sql s
 $$;
 revoke all on function public.reply_card_asker(bigint) from public,anon,authenticated,service_role;
 
--- 20270128000000's log_chat_event, naming the Agent the event is about when it is not the Conversation's own.
-drop function public.log_chat_event(uuid,uuid,text,text,text,jsonb,uuid,text,bigint,timestamptz);
-create function public.log_chat_event(conversation uuid, actor uuid, actor_kind text, actor_name text, action text, details jsonb, teller uuid, origin text, origin_id bigint, at timestamptz, agent uuid default null) returns void
+-- 20270128000000's log_chat_event, naming the Agent the event is about when it is not the Conversation's own
+-- (log_chat_event_for); the old signature stays, and passes on the Conversation's own Agent.
+create function public.log_chat_event_for(conversation uuid, actor uuid, actor_kind text, actor_name text, action text, details jsonb, teller uuid, origin text, origin_id bigint, at timestamptz, agent uuid) returns void
 language plpgsql set search_path='' as $$
 declare talk public.conversations; tied bigint;
 begin
@@ -126,7 +126,12 @@ begin
    case when tied is null then details||jsonb_build_object('private',true,'teller',teller) else details end,origin,origin_id,at)
   on conflict (source,source_id) do nothing;
 end $$;
-revoke all on function public.log_chat_event(uuid,uuid,text,text,text,jsonb,uuid,text,bigint,timestamptz,uuid) from public,anon,authenticated,service_role;
+revoke all on function public.log_chat_event_for(uuid,uuid,text,text,text,jsonb,uuid,text,bigint,timestamptz,uuid) from public,anon,authenticated,service_role;
+create or replace function public.log_chat_event(conversation uuid, actor uuid, actor_kind text, actor_name text, action text, details jsonb, teller uuid, origin text, origin_id bigint, at timestamptz) returns void
+language plpgsql set search_path='' as $$
+begin
+ perform public.log_chat_event_for(conversation,actor,actor_kind,actor_name,action,details,teller,origin,origin_id,at,null);
+end $$;
 
 -- 20270128000000's settle_question and 20270129000000's settle_permission, logging the answer as given to the Agent that asked.
 create or replace function public.settle_question(card bigint, verdict text) returns text
@@ -142,7 +147,7 @@ begin
  if not (asked.state='sending' or verdict='answered' and asked.state='closed' and asked.content ? 'answer') then return asked.state; end if;
  update public.reply_cards set state=verdict where id=asked.id;
  if verdict='answered' then
-  perform public.log_chat_event(asked.conversation_id,asked.answered_by,'person',(select name from public.people where id=asked.answered_by),'agent_question_answered',
+  perform public.log_chat_event_for(asked.conversation_id,asked.answered_by,'person',(select name from public.people where id=asked.answered_by),'agent_question_answered',
    jsonb_build_object('question',jsonb_build_object('text',asked.content->'question','answer',asked.content->'answer')),
    asked.answered_by,'reply_card_answers',asked.id,asked.answered_at,public.reply_card_asker(asked.id));
  end if;
