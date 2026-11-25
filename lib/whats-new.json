@@ -1,5 +1,11 @@
 [
  {
+  "issue": 681,
+  "date": "2026-11-25",
+  "en": { "title": "One review, by any Owner or Manager", "body": "A card in review shows its version with Approve and Send back; any Owner or Manager who sees it decides, the first answer counts, and a card sent back gets the reason as a comment. Approval steps are gone." },
+  "ar": { "title": "مراجعة واحدة، من أي مالك أو مدير", "body": "البطاقة اللي في المراجعة بتعرض نسختها مع «وافق» و«رجّعها»؛ أي مالك أو مدير شايفها يقرر، وأول رد هو اللي بيتحسب، والبطاقة اللي بترجع بيتكتب سببها كتعليق. خطوات الموافقة اتشالت." }
+ },
+ {
   "issue": 679,
   "date": "2026-11-25",
   "en": { "title": "A card's description, with to-do items you tick as you read", "body": "A card's description shows headings, lists, quotes, links, tables, pictures and code, each line in its own direction; you tick its to-do items as you read, and the list and the tile count how many are done." },
