@@ -1,5 +1,11 @@
 [
  {
+  "issue": 680,
+  "date": "2026-11-25",
+  "en": { "title": "Write a card's description where you read it", "body": "Press Edit in a card to write its description in place: / for blocks, the usual Markdown shortcuts, @ to call someone or an Agent, pictures, and a bar of blocks on a phone. It saves by itself, and when someone else changes it at the same time both changes are kept." },
+  "ar": { "title": "اكتب وصف البطاقة مكان ما بتقراه", "body": "دوس «عدّل» في البطاقة عشان تكتب وصفها في مكانه: / للبلوكات، واختصارات ماركداون المعتادة، و@ تنادي حد أو وكيل، وصور، وشريط بلوكات على الموبايل. بيتحفظ لوحده، ولو حد تاني غيّر فيه في نفس الوقت التغييرين بيتحفظوا." }
+ },
+ {
   "issue": 682,
   "date": "2026-11-25",
   "en": { "title": "A card waits for other cards", "body": "In a card, Waits for names the cards it waits for and Waited for by the cards waiting for it; the tile shows how many it still waits for, and a card that is live, done or archived holds nobody up." },

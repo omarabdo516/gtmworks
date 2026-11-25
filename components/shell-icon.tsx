@@ -71,6 +71,19 @@ const paths = {
  play: <path d="M8 5.5v13l10.5-6.5z"/>,
  sendBack: <><path d="M15 14l4-4-4-4"/><path d="M19 10h-9a5 5 0 0 0 0 10h2"/></>,
  todo: <><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></>,
+ // The description's blocks (#680; design-reference-card's editor icons). Indent and outdent are drawn for a left-to-right
+ // line and mirrored in Arabic by the bar.
+ heading: <path d="M6 5v14M18 5v14M6 12h12"/>,
+ list: <><path d="M10 6.5h10M10 12h10M10 17.5h10"/><path d="M5 6.5h.01M5 12h.01M5 17.5h.01" strokeWidth="3"/></>,
+ listNumbered: <><path d="M10.5 6.5H20M10.5 12H20M10.5 17.5H20"/><path d="M4.5 4.75L6 4v5"/><path d="M4.5 14.2a1.5 1.5 0 0 1 3 .3c0 1.2-3 2-3 3.5h3"/></>,
+ quote: <><path d="M5 6v12"/><path d="M9.5 8H19M9.5 12H19M9.5 16H15"/></>,
+ code: <path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5"/>,
+ table: <><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/></>,
+ divider: <><path d="M4 12h16"/><path d="M8 6.5h8M8 17.5h8" strokeOpacity=".45"/></>,
+ bot: <><rect x="5" y="7.5" width="14" height="11" rx="3"/><path d="M12 4.5v3M9.5 12.5v1M14.5 12.5v1"/></>,
+ indent: <><path d="M4 6h16M4 18h16M11 12h9"/><path d="M4 9l3 3-3 3"/></>,
+ outdent: <><path d="M4 6h16M4 18h16M11 12h9"/><path d="M7 9l-3 3 3 3"/></>,
+ grip: <><circle cx="9" cy="6.5" r="1.1"/><circle cx="15" cy="6.5" r="1.1"/><circle cx="9" cy="12" r="1.1"/><circle cx="15" cy="12" r="1.1"/><circle cx="9" cy="17.5" r="1.1"/><circle cx="15" cy="17.5" r="1.1"/></>,
  open: <><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></>,
 };
 export type ShellIconName = keyof typeof paths;

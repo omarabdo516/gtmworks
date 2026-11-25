@@ -225,3 +225,46 @@ test('a Card waits for another: both sides show it, the tile counts it, a loop i
  await expect(page.locator('#board-cols .kcard[data-card-id="2"]')).toBeVisible();
  await expect(page.locator('#board-cols .kcard[data-card-id="1"] .kcard__waits')).toHaveCount(0);
 });
+
+test('the description is written on the page: its editor loads only on Edit, saves by itself, and keeps another writer\'s line and a tick made meanwhile', async ({ page }) => {
+ // #680, on the seed's card 3.
+ query(`do $$ begin perform set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true); update public.work_cards set description=E'Intro\\n\\n* [ ] Hook\\n* [ ] Caption', description_version=description_version+1 where id=3; end $$`);
+ await signIn(page, 'omar@example.com', `${board}?card=3`);
+ const card = windowOf(page);
+ await expect(card.getByRole('checkbox', { name: 'Hook' })).toBeVisible();
+ await expect(card.locator('.ProseMirror')).toHaveCount(0);
+ const scripts: string[] = [];
+ page.on('request', request => { if (request.resourceType() === 'script') scripts.push(request.url()); });
+ await card.getByRole('button', { name: 'Edit', exact: true }).click();
+ const editor = card.locator('.de--edit .ProseMirror');
+ await expect(editor).toBeVisible();
+ expect(scripts.length, 'the editor\'s code arrives when Edit is pressed').toBeGreaterThan(0);
+
+ // Meanwhile another person changes the first line and a tick lands on Hook.
+ const read = Number(JSON.parse(query(`select description_version v from public.work_cards where id=3`))[0].v);
+ query(`do $$ begin perform set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000002',true); perform public.save_card_description('10000000-0000-0000-0000-000000000001',3,E'Intro by the Manager\\n\\n* [ ] Hook\\n* [ ] Caption',${read}); perform public.tick_card_todo('10000000-0000-0000-0000-000000000001',3,3,'Hook',true); end $$`);
+ // Omar writes on the last line.
+ await editor.locator('li').last().click();
+ await page.keyboard.press('End');
+ await page.keyboard.type(', short');
+ await expect.poll(() => JSON.parse(query(`select description d from public.work_cards where id=3`))[0].d, { timeout: 10000 })
+  .toBe('Intro by the Manager\n\n* [x] Hook\n* [ ] Caption, short');
+ await expect(card.locator('.de-status')).toHaveText('Someone else changed it too; both changes are kept');
+ await card.getByRole('button', { name: 'Done' }).click();
+ await expect(card.getByRole('checkbox', { name: 'Hook' })).toHaveAttribute('aria-checked', 'true');
+ await expect(card.getByText('Intro by the Manager')).toBeVisible();
+});
+
+test('on a phone the description is written with a bar of blocks', async ({ page }) => {
+ await page.setViewportSize({ width: 390, height: 844 });
+ await signIn(page, 'omar@example.com', `${board}?card=4`);
+ const card = windowOf(page);
+ await card.getByRole('button', { name: /^(Edit|Add a description)$/ }).first().click();
+ const bar = card.getByRole('toolbar', { name: 'Blocks' });
+ await expect(bar).toBeVisible();
+ await card.locator('.de--edit .ProseMirror').click();
+ await page.keyboard.type('Plan');
+ await bar.getByRole('button', { name: 'To-do' }).click();
+ await expect(card.locator('.de--edit li[data-item-type="task"]')).toHaveText('Plan');
+ await expect.poll(() => JSON.parse(query(`select description d from public.work_cards where id=4`))[0].d, { timeout: 10000 }).toMatch(/\[ \] Plan$/);
+});

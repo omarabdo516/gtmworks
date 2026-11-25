@@ -12,6 +12,8 @@ import { supabaseConfig } from '@/lib/supabase-config';
 import { driveNoteRuns } from '@/lib/channel-runs.mjs';
 import type { Card, IdeaResult, PlaceResult, SaveResult, UndoResult } from './work';
 import type { TickResult } from '@/app/card-description';
+import type { DescriptionSaved, PictureUploaded } from '@/app/description-editor';
+import { mergeDescriptions } from '@/lib/description-merge.mjs';
 import { archiveIntents, type ArchiveAnswer, type ArchiveIntent, type ArchiveStopKind } from '@/lib/archive-stops';
 import { archivedCardPage, type ArchivedCursor, type ArchivedPage, type ArchivedWant } from '@/lib/archived-cards';
 // A note that calls an Agent starts its one Run at once (#22), as a channel message does; the worker reads the reply. A
@@ -134,6 +136,41 @@ export const tickTodo=withActionLog('tickTodo',async function tickTodo(form: For
  }
  revalidatePath(`/c/${String(form.get('slug'))}`,'layout');
  return (data as {changed:boolean}).changed?{ticked:true}:{changed:false};
+});
+// The description written on the page (#680), saved by itself over the version its writer read. When it moved on
+// meanwhile (another writer, or a tick), the text read, the newer text and this one are merged by lines and saved again:
+// different lines both stay and a line both changed keeps both. The answer is the text now saved and its version, which
+// the editor shows in place of its own when the merge changed it.
+export const saveDescription=withActionLog('saveDescription',async function saveDescription(form: FormData): Promise<DescriptionSaved> {
+ const {t}=await getI18n();
+ const db=await supabase(); const company=String(form.get('company')); const card=Number(form.get('card'));
+ if(!await actionAllowed(db,'saveDescription',company)) return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+ // A form sends its line breaks as CR LF; the description keeps Markdown's own.
+ let body=String(form.get('body')??'').replace(/\r\n?/g,'\n'); let base=Number(form.get('base')); let merged=false; let conflicted=false;
+ for(let attempt=0;attempt<4;attempt++) {
+  const {data,error}=await db.rpc('save_card_description',{c:company,card,body,base});
+  if(error) { logActionFailure('saveDescription',error,{form}); return {error:String(error.message||'').includes('too long')?t('deTooLong'):t('couldNotSaveTheChangeCheckPermissionsAnd')}; }
+  const answer=data as {saved:boolean,version:number,body:string,base?:string|null};
+  if(answer.saved) { revalidatePath(`/c/${String(form.get('slug'))}`,'layout'); return {version:answer.version,body:answer.body,merged,conflicted}; }
+  const result=mergeDescriptions(answer.base??'',body,answer.body);
+  body=result.text; base=answer.version; merged=true; conflicted=conflicted||result.conflicted;
+ }
+ return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+});
+// A picture put in the description (#680) is stored in the Card's own folder of the Company's storage and served by the
+// app, so the description only ever shows pictures from inside the Company.
+export const uploadDescriptionPicture=withActionLog('uploadDescriptionPicture',async function uploadDescriptionPicture(form: FormData): Promise<PictureUploaded> {
+ const {t}=await getI18n();
+ const db=await supabase(); const company=String(form.get('company')); const card=Number(form.get('card')); const slug=String(form.get('slug'));
+ if(!await actionAllowed(db,'uploadDescriptionPicture',company)) return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+ const file=form.get('files');
+ if(!(file instanceof File)||!file.type.startsWith('image/')) return {error:t('deNotAPicture')};
+ const stored=await storeFiles(db,company,form,`${card}/files/${crypto.randomUUID()}`);
+ if(stored.error||!stored.files.length) { logActionFailure('uploadDescriptionPicture',stored.error??{message:'nothing stored'},{form}); return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')}; }
+ const {error}=await db.rpc('attach_card_files',{c:company,card,files:stored.files});
+ const {data:row}=error?{data:null}:await db.from('work_attachments').select('id').eq('company_id',company).eq('path',stored.files[0].path).maybeSingle();
+ if(error||!row) { logActionFailure('uploadDescriptionPicture',error??{message:'attachment not found'},{form}); return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')}; }
+ return {url:`/c/${slug}/files/${row.id}`,name:stored.files[0].name};
 });
 // An idea from the Ideas column (#188): made once per request key, so Add pressed twice or a retry is one Card (#452). It
 // answers the form with its Card instead of redirecting, since a redirect rejects the promise the form waits on.

@@ -35,7 +35,9 @@ import { ArchiveConfirm } from '@/app/archive-confirm';
 import type { ArchiveAnswer, ArchiveIntent, ArchiveStop } from '@/lib/archive-stops';
 import { useArchivedList, type ReadArchived } from './archived-list';
 import type { ArchivedPage } from '@/lib/archived-cards';
-import { CardDescription, type TickResult, type TickTodo } from '@/app/card-description';
+import type { TickResult, TickTodo } from '@/app/card-description';
+import { DescriptionPlace } from '@/app/description-place';
+import type { DescriptionSaved, PictureUploaded } from '@/app/description-editor';
 import { todoProgress } from '@/lib/card-description.mjs';
 import '@/app/board.css';
 type Stage={id:number,name:string,position:number,board_column?:string|null}; type Label={id:number,name:string,color:string};
@@ -54,6 +56,8 @@ export type PlaceCard=(form:FormData)=>Promise<PlaceResult>;
 export type SaveResult={saved:string}|{stale:string}|{error:string};
 type SaveCard=(form:FormData)=>Promise<SaveResult>;
 type TickTodoAction=(form:FormData)=>Promise<TickResult>;
+type SaveDescriptionAction=(form:FormData)=>Promise<DescriptionSaved>;
+type UploadPictureAction=(form:FormData)=>Promise<PictureUploaded>;
 export type IdeaResult={card:number}|{failed:true};
 // Archiving or restoring Cards (#670): the Cards the database archived or restored, or none.
 // Which question of what archiving would stop is the newest still wanted: an answer to an older or dropped one is ignored.
@@ -61,7 +65,7 @@ function newestQuestion() { let newest=0; return {ask:()=>++newest,drop:()=>{ ne
 type ArchiveCards=(company:string,intent:ArchiveIntent|'undo',cards:number[],version?:string)=>Promise<ArchiveAnswer<number>>;
 export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
 export type OpenReview={card_id:number,version_id:number|null,asked_by:string|null,asked_at:string};
-export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,reviews?:OpenReview[],openWaits?:{card_id:number,waiting:number}[],placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
+export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,saveDescription?:SaveDescriptionAction,uploadPicture?:UploadPictureAction,reviews?:OpenReview[],openWaits?:{card_id:number,waiting:number}[],placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
 // The board's archive list (#670, #705): the server's first page, how many archived Cards the reader sees (null when it
 // could not be read), and an archived Card the address names that the page does not hold, which opens over the board.
 type ArchivedCards={first:ArchivedPage<Card>|null,total:number|null,named:Card[]};
@@ -362,13 +366,18 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  const windowDescription=(c:Card)=>{ const fields=([['hook',t('hook')],['offering',t('offering')],['segment',t('segment')],['goal',t('goal')],['channel',t('channel')],['format',t('format')],['caption',t('caption')]] as const).filter(([key])=>String(c[key]||'').trim());
   const todos=p.items.filter(i=>i.card_id===c.id); const labels=p.cardLabels.filter(x=>x.card_id===c.id).flatMap(x=>p.labels.find(l=>l.id===x.label_id)??[]);
   const body=c.description||'';
-  if(!body.trim()&&!fields.length&&!todos.length&&!labels.length&&!c.mode) return null;
   const tick=p.canCreate&&!c.archived_at;
+  if(!body.trim()&&!fields.length&&!todos.length&&!labels.length&&!c.mode&&!tick) return null;
+  // Written on the page (#680): saved over the version read, merged by lines with a save made meanwhile.
+  const formFor=(more:Record<string,string>)=>{ const form=new FormData(); for(const [key,value] of Object.entries({company:p.company,slug:p.slug,card:String(c.id),...more})) form.set(key,value); return form; };
+  const saveBody=async(text:string,base:number):Promise<DescriptionSaved>=>p.saveDescription?p.saveDescription(formFor({body:text,base:String(base)})):{error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+  const uploadPicture=async(form:FormData):Promise<PictureUploaded>=>p.uploadPicture?p.uploadPicture(form):{error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
+  const callable=[...p.members.filter(m=>m.people?.name).map(m=>({id:m.person_id,name:m.people!.name,kind:'person' as const})),...companyAgents.map(a=>({id:a.id,name:a.name,kind:'agent' as const}))];
   // The description, read drawn and ticked while reading (#679); the old fields below it until they move into it (#684).
   const tickOne:TickTodo=async(line,item,done)=>{ if(!p.tickTodo) return {error:t('couldNotSaveTheChangeCheckPermissionsAnd')};
    const form=new FormData(); for(const [key,value] of Object.entries({company:p.company,slug:p.slug,card:String(c.id),line:String(line),item,done:String(done)})) form.set(key,value);
    return p.tickTodo(form); };
-  return <>{body.trim()&&<CardDescription body={body} slug={p.slug} canTick={tick} tick={tickOne}/>}{c.mode&&<p className="cw-mode">{modeChip(c)}</p>}{fields.length>0&&<dl className="cw-kv">{fields.map(([key,label])=><div key={key} className="cw-kv__r"><dt>{label}</dt><dd dir="auto">{String(c[key])}</dd></div>)}</dl>}
+  return <><DescriptionPlace key={c.id} body={body} version={c.description_version??0} slug={p.slug} company={p.company} card={c.id} canWrite={tick} people={callable} tick={tickOne} save={saveBody} upload={uploadPicture}/>{c.mode&&<p className="cw-mode">{modeChip(c)}</p>}{fields.length>0&&<dl className="cw-kv">{fields.map(([key,label])=><div key={key} className="cw-kv__r"><dt>{label}</dt><dd dir="auto">{String(c[key])}</dd></div>)}</dl>}
    {labels.length>0&&<div className="member-chips">{labels.map(l=><span dir="auto" className="label-chip" style={{borderColor:l.color}} key={l.id}>{l.name}</span>)}</div>}
    {todos.length>0&&<ul className="cw-todos" aria-label={t('checklist')}>{todos.map(i=><li key={i.id}>{tick?<form action={workAction}>{hidden('check')}<input type="hidden" name="card" value={c.id}/><input type="hidden" name="item" value={i.id}/><input type="hidden" name="done" value={String(!i.done)}/><input type="hidden" name="view" value="sheet"/>
     <label dir="auto"><input type="checkbox" checked={i.done} onChange={e=>e.currentTarget.form?.requestSubmit()}/> {i.title}</label></form>:<span className="cw-todo" dir="auto"><span className={`cw-todo__box${i.done?' is-done':''}`} role="img" aria-label={t(i.done?'cwTodoDone':'cwTodoOpen')}>{i.done&&<ShellIcon name="check"/>}</span>{i.title}</span>}</li>)}</ul>}</>; };
