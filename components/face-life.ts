@@ -12,7 +12,7 @@ export type FaceState='idle'|'listening'|'thinking'|'working'|'done'|'waiting'|'
 export type Moment='press'|'done'|'greet'|'perk'|'nod'|'birth';
 
 type Keyframes=Keyframe[];
-type Face=HTMLElement&{_nb?:number,_ng?:number,_busy?:boolean,_lx?:string,_ly?:string,_tm?:number[],_gt?:number[],_an?:Animation[]};
+type Face=HTMLElement&{_nb?:number,_ng?:number,_busy?:boolean,_lx?:string,_ly?:string,_tm?:number[],_gt?:number,_bt?:number,_an?:Animation[],_rig?:Rig};
 const momentsOf:Record<Exclude<Moment,'birth'>,{dur:number,easing:string,act:Keyframes,shadow?:Keyframes,spark?:boolean,cls:[string,number,number][]}>={
  press:{dur:620,easing:'cubic-bezier(.3,0,.3,1)',
   act:[{transform:'none'},{transform:'translateY(6%) scale(1.14,.84)',offset:.16},{transform:'translateY(-16%) scale(.92,1.1)',offset:.46},{transform:'translateY(0) scale(1.08,.92)',offset:.7},{transform:'translateY(0) scale(.98,1.02)',offset:.86},{transform:'none'}],
@@ -59,6 +59,7 @@ function clearMoment(face:Face) {
  (face._tm||[]).forEach(timer=>window.clearTimeout(timer)); face._tm=[];
  face.classList.remove('is-wide','is-look','is-up','is-squint','is-shut','is-birth');
  (face._an||[]).forEach(animation=>animation.cancel()); face._an=[];
+ if(face._rig?.nod) rest(face._rig.nod);
  delete face.dataset.moment;
 }
 function timedClass(face:Face,name:string,from:number,to:number) {
@@ -72,6 +73,8 @@ function timedClass(face:Face,name:string,from:number,to:number) {
 export function playMoment(face:HTMLElement|null|undefined,kind:Moment) {
  const target=face as Face|null|undefined;
  if(!target||!isLive(target)) return;
+ // A moment looks at you, so a glance that plays ends; a nod is the caring glance's own.
+ if(kind!=='nod') stopGlance(target,true);
  clearMoment(target);
  const frames=reduced()?(stillFramesOf[kind]||[]):null;
  let ends=0;
@@ -79,6 +82,7 @@ export function playMoment(face:HTMLElement|null|undefined,kind:Moment) {
  else {
   const animate=(element:Element|null,keyframes:Keyframes,options:KeyframeAnimationOptions)=>{ if(element) target._an!.push(element.animate(keyframes,options)); };
   if(kind==='birth') ends=birth(target,animate);
+  else if(kind==='nod') ends=nod(target);
   else {
    const moment=momentsOf[kind];
    animate(target.querySelector('.f-act'),moment.act,{duration:moment.dur,easing:moment.easing});
@@ -90,6 +94,15 @@ export function playMoment(face:HTMLElement|null|undefined,kind:Moment) {
  }
  target.dataset.moment=kind;
  target._tm!.push(window.setTimeout(()=>{ if(target.dataset.moment===kind) delete target.dataset.moment; },Math.max(ends,1)));
+}
+// The caring glance's nod comes back by itself every few seconds, so it waits on the face as a blink does (the rig).
+function nod(face:Face) {
+ const rig=rigOf(face), nodding=rig&&nodOf(face,rig);
+ if(!nodding) return 0;
+ nodding.currentTime=0; nodding.play();
+ const {dur}=momentsOf.nod;
+ face._tm!.push(window.setTimeout(()=>rest(nodding),dur+50));
+ return dur;
 }
 // Birth: light gathers, the orb fills out, then opens its eyes for the first time and looks at you.
 function birth(face:Face,animate:(element:Element|null,keyframes:Keyframes,options:KeyframeAnimationOptions)=>void) {
@@ -106,12 +119,44 @@ function birth(face:Face,animate:(element:Element|null,keyframes:Keyframes,optio
 // The look parts live on the eyes and the highlight only, so a look never touches the body's animations.
 const eyesOf=(face:Face)=>face.querySelector<HTMLElement>('.f-eyes');
 const leanersOf=(face:Face)=>[eyesOf(face),face.querySelector<HTMLElement>('.f-specs')].filter(Boolean) as HTMLElement[];
-function gaze(face:Face,x:number,y:number) { const eyes=eyesOf(face); eyes?.style.setProperty('--gx',String(x)); eyes?.style.setProperty('--gy',String(y)); }
-function ungaze(face:Face) { const eyes=eyesOf(face); eyes?.style.removeProperty('--gx'); eyes?.style.removeProperty('--gy'); }
+// Each face keeps its blink and its glance as Web Animations that wait, paused where they change nothing, and play
+// from their start when the face blinks or glances (#697). A blink or a glance that made an animation of its own would
+// add one and take it away again, and each time the browser lays out the layers of the whole page anew: sixteen faces
+// blinking and glancing did that on most frames, which kept a CPU slowed four times under 50 frames a second
+// (tests/face-frames.spec.ts). A waiting animation lasts a minute, so a late timer never plays it twice.
+type Rig={blink:Animation[],look:Animation,nod?:Animation,looking:string,ease:string,eyeMs:number};
+const rigMs=60000, blinkMs=150;
+const at=(ms:number)=>ms/rigMs;
+const blinkFrames:Keyframes=[{transform:'scaleY(1)',easing:'ease-in'},{transform:'scaleY(.08)',offset:at(blinkMs*.45),easing:'ease-out'},{transform:'scaleY(1)',offset:at(blinkMs)},{transform:'scaleY(1)'}];
+const waiting=(element:Element,keyframes:Keyframes)=>{ const animation=element.animate(keyframes,{duration:rigMs,iterations:Infinity}); animation.pause(); animation.currentTime=0; return animation; };
+const rest=(animation:Animation)=>{ animation.pause(); animation.currentTime=0; };
+const targetOf=(animation:Animation)=>(animation.effect as KeyframeEffect|null)?.target;
+function dropRig(face:Face) { face._rig?.blink.forEach(animation=>animation.cancel()); face._rig?.look.cancel(); face._rig?.nod?.cancel(); face._rig=undefined; }
+function rigOf(face:Face):Rig|null {
+ const eyes=[...face.querySelectorAll('.f-eye')], look=face.querySelector('.f-look'), kept=face._rig;
+ if(kept&&targetOf(kept.look)===look&&kept.blink.length===eyes.length&&kept.blink.every((animation,index)=>targetOf(animation)===eyes[index])) return kept;
+ dropRig(face);
+ if(!look) return null;
+ const style=getComputedStyle(face);
+ const rig:Rig={blink:eyes.map(eye=>waiting(eye,blinkFrames)),look:waiting(look,[{transform:'none'},{transform:'none'}]),looking:'',ease:style.getPropertyValue('--gw-ease-out').trim()||'ease-out',eyeMs:0};
+ if(numbersOf(face).glance.style==='nod') nodOf(face,rig);
+ face._rig=rig;
+ return rig;
+}
+function nodOf(face:Face,rig:Rig) {
+ const act=face.querySelector('.f-act'), {act:frames,dur,easing}=momentsOf.nod;
+ if(rig.nod&&targetOf(rig.nod)!==act) { rig.nod.cancel(); rig.nod=undefined; }
+ if(act) rig.nod??=waiting(act,[...frames.map((frame,index)=>({...frame,offset:at((frame.offset??(index?1:0))*dur),easing})),{transform:'none'}]);
+ return rig.nod;
+}
 function blink(face:Face) {
- face.querySelectorAll('.f-eye').forEach(eye=>eye.animate([{transform:'scaleY(1)'},{transform:'scaleY(.08)',offset:.45},{transform:'scaleY(1)'}],{duration:150,easing:'ease-in-out'}));
+ const rig=rigOf(face); if(!rig) return;
+ rig.blink.forEach(animation=>{ animation.currentTime=0; animation.play(); });
+ window.clearTimeout(face._bt); face._bt=window.setTimeout(()=>rig.blink.forEach(rest),blinkMs+50);
 }
 const blinkGap=(numbers:TemperamentNumbers)=>numbers.glance.style==='precise'?4000:numbers.glance.style==='dart'?rand(1600,3400):numbers.glance.style==='steady'?rand(4200,7000):rand(2600,5600);
+// A glance: each look moves the eyes over the temperament's eye time, holds, and the last comes back the same way, as
+// the approved orb's gaze does. The eyes move by a share of the face's size (agent-orb-v2: .065 across, .06 down).
 function glance(face:Face,numbers:TemperamentNumbers) {
  const side=Math.random()<.5?-1:1;
  const steps:[number,number,number][]={
@@ -119,15 +164,29 @@ function glance(face:Face,numbers:TemperamentNumbers) {
   up:[[side*.35,-.95,2000]], precise:[[side*.6,0,700],[-side*.6,0,700]], nod:[[0,.45,1100]],
  }[numbers.glance.style] as [number,number,number][];
  if(numbers.glance.style==='nod') playMoment(face,'nod');
- face._busy=true; face._gt=[];
- let at=0;
- for(const [x,y,hold] of steps) { face._gt.push(window.setTimeout(()=>{ if(face.dataset.state==='idle') gaze(face,x,y); },at)); at+=hold+numbers.glance.eyeMs; }
- face._gt.push(window.setTimeout(()=>stopGlance(face),at));
+ const rig=(face.dataset.state||'idle')==='idle'?rigOf(face):null; if(!rig) return;
+ const size=parseFloat(face.style.getPropertyValue('--s'))||face.offsetWidth, eyeMs=numbers.glance.eyeMs;
+ const place=([x,y]:[number,number,number]|[number,number])=>`translate(${(x*size*.065).toFixed(2)}px, ${(y*size*.06).toFixed(2)}px)`;
+ const keyframes:Keyframes=[]; let from='none', ms=0;
+ for(const step of steps) {
+  keyframes.push({transform:from,offset:at(ms),easing:rig.ease},{transform:from=place(step),offset:at(ms+eyeMs)});
+  ms+=step[2]+eyeMs;
+ }
+ keyframes.push({transform:from,offset:at(ms),easing:rig.ease},{transform:'none',offset:at(ms+eyeMs)},{transform:'none',offset:1});
+ const looking=JSON.stringify(keyframes);
+ if(rig.looking!==looking) { (rig.look.effect as KeyframeEffect).setKeyframes(keyframes); rig.looking=looking; }
+ rig.eyeMs=eyeMs; rig.look.currentTime=0; rig.look.play();
+ face._busy=true;
+ window.clearTimeout(face._gt); face._gt=window.setTimeout(()=>stopGlance(face),ms+eyeMs+50);
 }
-// A glance ends, played out or stopped (reduced motion turned on, the face gone): its looks to come never do.
-function stopGlance(face:Face) {
- (face._gt||[]).forEach(timer=>window.clearTimeout(timer)); face._gt=[];
- ungaze(face); face._busy=false;
+// A glance ends, played out or stopped (the face's state changed, a moment that looks at you, reduced motion turned
+// on, the face gone): its looks to come never do. `back` brings the eyes back over the eye time from where they are.
+function stopGlance(face:Face,back=false) {
+ window.clearTimeout(face._gt); face._busy=false;
+ const look=face._rig?.look; if(!look||look.playState!=='running') return;
+ const element=targetOf(look) as HTMLElement|null|undefined, from=back&&!reduced()&&element?getComputedStyle(element).transform:'none';
+ rest(look);
+ if(element&&from!=='none') element.animate([{transform:from},{transform:'none'}],{duration:face._rig!.eyeMs,easing:face._rig!.ease});
 }
 function tick() {
  if(reduced()||document.hidden) return;
@@ -135,6 +194,8 @@ function tick() {
  for(const face of visible) {
   if(!face.isConnected) { visible.delete(face); continue; }
   const numbers=numbersOf(face), state=face.dataset.state||'idle';
+  // Its rig is made as it first shows, with the other faces shown with it: one change of the page's layers for them all.
+  if(!face._rig) rigOf(face);
   face._nb||=now+rand(600,4000);
   face._ng||=now+rand(1200,numbers.glance.seconds*1000);
   if(blinks.has(state)&&now>=face._nb) {
@@ -232,7 +293,7 @@ function setUp() {
  window.addEventListener('click',press,true);
  // Back in view, the next blink and glance are counted again; turning reduced motion on stops what plays.
  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) visible.forEach(face=>{ face._nb=0; face._ng=0; }); });
- window.matchMedia(reducedQuery).addEventListener('change',query=>{ if(!query.matches) return; document.querySelectorAll<Face>('.face--live').forEach(face=>{ clearMoment(face); stopGlance(face); }); queueLook(); });
+ window.matchMedia(reducedQuery).addEventListener('change',query=>{ if(!query.matches) return; document.querySelectorAll<Face>('.face--live').forEach(face=>{ clearMoment(face); stopGlance(face); window.clearTimeout(face._bt); dropRig(face); }); queueLook(); });
  return observer;
 }
 
@@ -241,7 +302,7 @@ export function watchFace(face:HTMLElement) {
  const watching=setUp();
  watching.observe(face);
  if(hop) queueMicrotask(again);
- return ()=>{ watching.unobserve(face); visible.delete(face as Face); clearMoment(face as Face); stopGlance(face as Face); };
+ return ()=>{ const gone=face as Face; watching.unobserve(gone); visible.delete(gone); clearMoment(gone); stopGlance(gone); window.clearTimeout(gone._bt); dropRig(gone); };
 }
 
 // A temperament felt before it is picked (design-reference-orb/agent-look.html: sample): the face blinks and glances as
@@ -261,6 +322,6 @@ export function faceStateChanged(face:HTMLElement,state:FaceState,from:FaceState
   const element=(animation.effect as KeyframeEffect|null)?.target as Element|null;
   if(element?.classList.contains('f-breath')&&animation.playbackRate!==rate) animation.updatePlaybackRate(rate);
  }
- if(state!=='idle') ungaze(target);
+ if(state!=='idle') stopGlance(target,true);
  if(state==='done'&&from&&from!=='done') playMoment(target,'done');
 }

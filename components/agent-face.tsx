@@ -43,7 +43,7 @@ function Orb({agent,size,state='idle',dot=false,live=false}:{agent:string|null|u
      <span className="f-specs"><i className="f-spec"/><i className="f-spec2"/></span>
      <svg className="f-rim" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false"><use href={`#gw-shape-${look.shape}`}/></svg>
     </span>
-    <span className="f-eyes"><span className="f-gaze">{eye('l')}{eye('r')}</span></span>
+    <span className="f-eyes"><span className="f-gaze"><span className="f-look">{eye('l')}{eye('r')}</span></span></span>
    </span></span></span>
    {big&&<span className="f-spark"><i/><i/><i/></span>}
   </span>

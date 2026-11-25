@@ -22,15 +22,18 @@ const faceIn = (selector: string) => document.querySelector<HTMLElement>(`${sele
 const lean = (face: Element) => { const eyes = getComputedStyle(face.querySelector('.f-eyes')!), light = getComputedStyle(face.querySelector('.f-specs')!); return [eyes.getPropertyValue('--lx'), light.getPropertyValue('--lx')]; };
 const point = (x: number, y: number, pointerType = 'mouse') => window.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, pointerType, bubbles: true }));
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-// Whether a face's eyes blink in the next `ms`, watched frame by frame.
+// Whether a face's eyes blink in the next `ms`, watched frame by frame: an eye closes. A face's blink waits on its eyes,
+// paused, between blinks (components/face-life: the rig).
 async function blinksWithin(face: Element, ms: number) {
  const until = performance.now() + ms;
  while (performance.now() < until) {
-  if ([...face.querySelectorAll('.f-eye')].some(eye => eye.getAnimations().length)) return true;
+  if ([...face.querySelectorAll('.f-eye')].some(eye => new DOMMatrixReadOnly(getComputedStyle(eye).transform === 'none' ? undefined : getComputedStyle(eye).transform).d < .9)) return true;
   await new Promise(resolve => requestAnimationFrame(resolve));
  }
  return false;
 }
+// Where a face's eyes look, in pixels across, apart from the pointer and the state: a glance moves them.
+const lookX = (face: Element) => { const transform = getComputedStyle(face.querySelector('.f-look')!).transform; return transform === 'none' ? 0 : Math.round(new DOMMatrixReadOnly(transform).m41 * 100) / 100; };
 const hopping = (face: Element | null) => face instanceof HTMLElement && face.dataset.moment === 'press';
 
 // Faces at known places: the 56px one's centre at (100, 100), a 20px one below it, one far off screen.
@@ -68,8 +71,9 @@ test('a face on screen blinks and glances by itself; one off screen, one under 2
  // Off screen its breath is paused.
  expect(getComputedStyle(faceIn('#away').querySelector('.f-breath')!).animationPlayState).toBe('paused');
  expect(await blinksWithin(faceIn('#big'), 1500)).toBe(true);
- // Calm looks to the side and back (design-reference-orb: steady).
- await expect.poll(() => getComputedStyle(faceIn('#big').querySelector('.f-eyes')!).getPropertyValue('--gx'), { timeout: 3000 }).toBe('-0.55');
+ // Calm looks to the side and back (design-reference-orb: steady): .55 of the eyes' reach, .065 of the 56px face.
+ await expect.poll(() => lookX(faceIn('#big')), { timeout: 4000 }).toBe(-2);
+ await expect.poll(() => lookX(faceIn('#big')), { timeout: 4000 }).toBe(0);
  expect(await blinksWithin(faceIn('#away'), 300)).toBe(false);
  expect(await blinksWithin(faceIn('#small'), 300)).toBe(false);
  const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
@@ -136,12 +140,12 @@ test('turning reduced motion on stops a moment that plays', async () => {
 test('turning reduced motion on stops a glance that plays: the eyes come back and look nowhere after', async () => {
  vi.spyOn(Math, 'random').mockReturnValue(0);
  await render(<Company><span id="neat"><AgentFace agent="b" size={56}/></span></Company>);
- const gx = () => getComputedStyle(faceIn('#neat').querySelector('.f-eyes')!).getPropertyValue('--gx');
- // Neat looks one way and then the other (design-reference-orb: precise).
+ const look = () => lookX(faceIn('#neat'));
+ // Neat looks one way and then the other (design-reference-orb: precise): .6 of the eyes' reach, .065 of 56px.
  sampleFace(faceIn('#neat'));
- await expect.poll(gx).toBe('-0.6');
+ await expect.poll(look).toBe(-2.18);
  await reducedMotion(true);
- await expect.poll(gx).toBe('');
+ await expect.poll(look).toBe(0);
  await wait(1500);
- expect(gx(), 'the glance\'s next look never comes').toBe('');
+ expect(look(), 'the glance\'s next look never comes').toBe(0);
 });
