@@ -5,7 +5,7 @@ import { MorningCard } from './morning-card';
 // (page weight, #55).
 import conversationEn from '@/lib/messages/conversation.en.json';
 import conversationAr from '@/lib/messages/conversation.ar.json';
-import { Fragment, Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { Fragment, Suspense, createContext, lazy, use, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from '@/lib/link';
 import { useI18n } from '@/lib/i18n-client';
@@ -15,7 +15,7 @@ import { ReplyFiles } from '@/app/reply-files';
 import { HandedRow } from '@/app/handed-row';
 import { MessageBox, postMessage, postMessageWithFiles, type MessageBoxHandle } from '@/app/conversation-composer';
 import type { Decision, LeadCard, SavedRule } from '@/lib/conversations';
-import { StepsList } from '@/app/run-steps';
+import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
 import { LiveTurn, WorkingLine, useLanding, useLiveSteps } from '@/app/run-activity';
 import { showRoutines } from '@/app/details-routines';
 import { handDoneHere, onHandDone, showScreen } from '@/app/screen-hands';
@@ -94,7 +94,7 @@ export function useConversationText() {
 // (#317) keeps it asking until Lead's follow-up reply is in the record (`handover`).
 // A message its person sends is drawn at once, before the send is answered (#756, `sending`), and the Agent is shown
 // working from then: the first read begun after the send was answered holds the stored message, which takes its place.
-export function useConversationRecord({company,initial}:{company:string,initial:ConversationRecord}) {
+export function useConversationRecord({company,initial,steps:firstSteps}:{company:string,initial:ConversationRecord,steps?:Promise<ConversationSteps|null>}) {
  const id=initial.conversation.id;
  const [record,setRecord]=useState(initial); const [sent,setSent]=useState(0);
  const {list:sendingList,start:sending,reading}=useSending({company,conversation:id});
@@ -173,19 +173,38 @@ export function useConversationRecord({company,initial}:{company:string,initial:
   hurry.current=10;
   try { const answer=await read(null); if(answer.record) setUnread(false); } catch { /* The next send or read brings it. */ }
  };
- // Each reply's steps and the token use are their own read (ADR 0030, #766), after the messages are drawn, and again
- // when a new reply lands: a read that fails leaves the replies as they are, with no line about it.
+ // Each reply's steps and the token use are their own read (ADR 0030, #766), never part of the messages: the page's
+ // own read, streamed after them, for the replies it opened with, and a read of their own when a new reply lands. A
+ // read that fails leaves the replies as they are, with no line about it.
  const [steps,setSteps]=useState<ConversationSteps|null>(null);
  const replies=messages.filter(message=>message.author==='agent'&&!message.kind).map(message=>message.id).join(',');
+ const [opened]=useState(()=>firstSteps?replies:null);
  useEffect(()=>{
-  if(!replies) return;
+  let gone=false;
+  firstSteps?.then(read=>{ if(read&&!gone) setSteps(current=>current??read); },()=>{});
+  return ()=>{ gone=true; };
+ },[firstSteps]);
+ useEffect(()=>{
+  if(!replies||replies===opened) return;
   const stopped=new AbortController();
   void fetch(`/api/conversations?company=${company}&conversation=${id}&intent=steps`,{cache:'no-store',signal:stopped.signal})
    .then(async response=>{ if(response.ok) setSteps(await response.json() as ConversationSteps); else await response.arrayBuffer(); }).catch(()=>{});
   return ()=>stopped.abort();
- },[replies,company,id]);
+ },[replies,opened,company,id]);
  const drawn=useMemo(()=>{ const shown=withSteps(withSending(record,sendingList),steps); return unread?{...shown,unread:true as const}:shown; },[record,sendingList,steps,unread]);
  return {record:drawn,asked,reread,sending};
+}
+// The page's own read of each reply's steps (#766), streamed after the messages: drawn by the server once it answers, so
+// a reply shows its steps before the page's script has run, and replaced by the record's own once the hook has it.
+const OpeningStepsContext=createContext<Promise<ConversationSteps|null>|null>(null);
+export const OpeningSteps=OpeningStepsContext.Provider;
+function FirstSteps({reply,c,cb}:{reply:number,c:StepsText,cb:StepsBidiText}) {
+ const read=useContext(OpeningStepsContext);
+ return read?<Suspense fallback={null}><StreamedSteps read={read} reply={reply} c={c} cb={cb}/></Suspense>:null;
+}
+function StreamedSteps({read,reply,c,cb}:{read:Promise<ConversationSteps|null>,reply:number,c:StepsText,cb:StepsBidiText}) {
+ const steps=use(read)?.steps[reply];
+ return steps?.list.length?<StepsList steps={steps} c={c} cb={cb}/>:null;
 }
 // The record with each reply's steps under it and the Conversation's token use, once read; a reply the read does not
 // name stays as it is.
@@ -367,7 +386,7 @@ export function ConversationTurns({slug,company,record,writer,asked,reread,detai
    {message.lost&&<p className="note" data-outcome="lost">{t('conversationRunLost')}</p>}
   </li>:<Fragment key={`${message.kind||'m'}${message.id}`}><li className={`turn turn--agent msg${rise(index)}`} data-author="agent" data-kind={message.kind}>
    <div className="sender">{face(20,message.face,message.author_name)}<bdi>{message.author_name}</bdi>{message.kind==='handed'&&message.to&&<span className="sender__to">{cb('handoverTo',message.to)}</span>}{when(message.created_at,'sender__time')}</div>
-   {!!message.steps?.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={landing.opened(message.id)}/>}
+   {message.steps?!!message.steps.list.length&&<StepsList steps={message.steps} c={c} cb={cb} opened={landing.opened(message.id)}/>:<FirstSteps reply={message.id} c={c} cb={cb}/>}
    {message.body&&<div className="bubble bubble--agent" dir="auto">{message.body}</div>}
    <ReplyFiles files={message.files} missed={message.missed} href={id=>`/c/${slug}/files/conversation/${id}`}/>
    {/* A tool the Engine could not run because the Company's work sandbox is down (#398): one plain line under the reply,

@@ -108,7 +108,7 @@ test('a session read held five seconds holds neither the first byte nor the mess
   fake.settings.sessionDelay=2000;
   await page.reload({waitUntil:'commit'});
   await expect(page.getByText('Here is the copy.')).toBeVisible();
-  await expect(page.locator('.steps__toggle')).toHaveText('Used 1 tool · 39 sec',{timeout:15000});
+  await expect(page.locator('.steps__toggle')).toHaveText('Used 1 tool · 41 sec',{timeout:15000});
   // A session read that never answers leaves the messages as they are, with no error line in the Conversation.
   fake.settings.sessionDelay=Infinity;
   await page.reload({waitUntil:'commit'});

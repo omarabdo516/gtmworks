@@ -11,12 +11,12 @@ import type { DetailsTab } from '@/lib/agent-details.mjs';
 import { LeadWelcome } from '@/app/lead-welcome';
 import { PrivateLine } from '@/app/private-line';
 import { conversationTitle } from '@/lib/conversation-title.mjs';
-import type { ConversationRecord } from '@/lib/conversation-record';
+import type { ConversationRecord, ConversationSteps } from '@/lib/conversation-record';
 import type { Send } from '@/lib/sending';
 import { columnLabel } from '@/lib/board-columns.mjs';
 import { useNewlyWaiting } from '@/lib/newly-waiting';
 import type { MessageBoxHandle } from '@/app/conversation-composer';
-import { ChatPlaceholder, ConversationComposer, ConversationTurns, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
+import { ChatPlaceholder, ConversationComposer, ConversationTurns, OpeningSteps, useConversationRecord, useConversationText, type ThreadConversation } from '@/app/conversation-thread';
 import { FirstRunToast } from '@/app/first-run-toast';
 import { ShellIcon } from '@/components/shell-icon';
 import { MoreMenu } from '@/app/more-menu';
@@ -125,9 +125,9 @@ export function ConversationNotRead() {
  return <div className="transcript"><div className="transcript__col"><p className="note convo-status" role="alert" data-outcome="unread">{c('conversationUnread')} <button type="button" className="link-btn" onClick={()=>router.refresh()}>{c('conversationTryAgain')}</button></p></div></div>;
 }
 
-export function ConversationLoaded({initial,team}:{initial:ConversationRecord,team:boolean}) {
+export function ConversationLoaded({initial,steps,team}:{initial:ConversationRecord,steps?:Promise<ConversationSteps|null>,team:boolean}) {
  const {slug,agent,company,conversation,writer,suggest,live:store}=useView();
- const {record,asked,reread,sending}=useConversationRecord({company,initial});
+ const {record,asked,reread,sending}=useConversationRecord({company,initial,steps});
  const {messages}=record;
  const box=useRef<HTMLDivElement>(null); const stick=useRef(true);
  // `asked` only sets this transcript's own state, so the one it was first given stays good.
@@ -158,7 +158,7 @@ export function ConversationLoaded({initial,team}:{initial:ConversationRecord,te
  return <div className="transcript" ref={box} onScroll={event=>{ const view=event.currentTarget; stick.current=view.scrollHeight-view.scrollTop-view.clientHeight<80; }}><div className="transcript__col">
   {team&&<PrivateLine agent={conversation.agent_name}/>}
   {welcome&&agent&&<LeadWelcome agent={agent} suggest={writer?suggest:undefined}/>}
-  <ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread} details={!!agent}/>
+  <OpeningSteps value={steps??null}><ConversationTurns slug={slug} company={company} record={record} writer={writer} asked={asked} reread={reread} details={!!agent}/></OpeningSteps>
  </div></div>;
 }
 
