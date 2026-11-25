@@ -1,5 +1,11 @@
 [
  {
+  "issue": 768,
+  "date": "2026-11-25",
+  "en": { "title": "A Conversation never goes blank", "body": "If a Conversation can't be read for a moment, what you already see stays on the page and it tries again; after several tries it says so, with Try again." },
+  "ar": { "title": "المحادثة عمرها ما بتفضى", "body": "لو المحادثة ما اتقريتش للحظة، اللي قدامك بيفضل في الصفحة وبتحاول تاني؛ ولو فشلت كذا مرة بتقولك كده، ومعاها «جرّب تاني»." }
+ },
+ {
   "issue": 767,
   "date": "2026-11-25",
   "en": { "title": "A Conversation stays still while you work", "body": "Sending a message or getting a reply no longer redraws the whole page, and a Conversation open in a background tab stops asking the server until you come back to it." },

@@ -149,6 +149,30 @@ test('a signed-out reader stops asking, and a failing read asks again more slowl
  expect(failing).toHaveBeenCalledTimes(2);
 });
 
+// #768: a read that fails keeps what the page shows; after three in a row the line under the transcript says the
+// Conversation could not be read, with "Try again", and a read that lands takes the line away and draws the reply.
+for (const [language, unread, tryAgain] of [['en', 'This Conversation couldn’t be read.', 'Try again'], ['ar', 'مقدرناش نقرا المحادثة دي.', 'جرّب تاني']] as const) test(`in ${language} a Conversation whose reads fail keeps its messages and says it could not be read, with Try again`, async () => {
+ vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+ onTestFinished(() => { vi.useRealTimers(); });
+ let failing = true;
+ const replied = talk([sent, { id: 2, author: 'agent', author_name: 'Lead', body: 'Here is the plan.', created_at: at }]);
+ const asks = vi.fn(async () => failing ? Response.json({ error: 'conversationUnread' }, { status: 503 }) : Response.json(replied));
+ stubFetch(asks);
+ const screen = await render(view(talk([sent], { pending: true }), language));
+ for (const [wait, times] of [[500, 1], [3000, 2], [6000, 3]] as const) {
+  await vi.advanceTimersByTimeAsync(wait);
+  await expect.poll(() => asks.mock.calls.length).toBe(times);
+ }
+ expect(screen.container.querySelector('.turn--user')?.textContent, 'the messages stay').toContain('Draft the long launch plan');
+ const line = () => screen.container.querySelector('[data-outcome="unread"]');
+ await expect.poll(() => line()?.textContent).toBe(`${unread} ${tryAgain}`);
+ failing = false;
+ await screen.getByRole('button', { name: tryAgain }).click();
+ await vi.advanceTimersByTimeAsync(0);
+ await expect.poll(() => screen.container.textContent).toContain('Here is the plan.');
+ expect(line()).toBeNull();
+});
+
 // #766 (ADR 0030): a Conversation is drawn from its record at once, and each reply's steps are their own read after it:
 // they fill in under their reply when that read lands, with no second rise-in, and a read that fails changes nothing.
 test('each reply\'s steps arrive after the messages, under their own reply, and a failed read leaves the replies as they are', async () => {
