@@ -99,10 +99,11 @@ test('by touch: a tap selects a Card and a tap on Archive archives it, with Undo
 
 test('"Archive everything in Done" archives every Card shown in Done at once, and Undo puts them back; a Viewer has neither control',async({page,browser})=>{
  // Two Cards already published and done, put there as the approval that moved them would (its guard is the database's).
- // They stay in Done for the rest of the file; the next file starts from the seed.
+ // They stay in Done for the rest of the file; the next file starts from the seed. Written past the triggers, each
+ // carries its status as well as its stage (#676).
  query(`do $$ begin
   set local session_replication_role=replica;
-  insert into public.work_cards(company_id,stage_id,title,board_order) select company_id,id,x,n from public.work_stages, unnest(array['Spring post','Summer post']) with ordinality as made(x,n) where company_id='${company}' and board_column='done';
+  insert into public.work_cards(company_id,stage_id,status,title,board_order) select company_id,id,'done',x,n from public.work_stages, unnest(array['Spring post','Summer post']) with ordinality as made(x,n) where company_id='${company}' and board_column='done';
   set local session_replication_role=origin;
  end $$;`);
  const made=rows(`select id from public.work_cards where company_id='${company}' and title in ('Spring post','Summer post') order by id`).map(row=>Number(row.id));
