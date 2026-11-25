@@ -6,5 +6,12 @@ export function logActionFailure(action: string, error: unknown, options?: { out
 export function withActionLog<A extends unknown[], R>(action: string, run: (...args: A) => Promise<R>, options?: { write?: Write; env?: Env }): (...args: A) => Promise<R>;
 export function senderLimiter(options?: { perSender?: number; ceiling?: number; windowMs?: number; clock?: () => number }): (sender: string) => boolean;
 export function clientErrorResponse(request: Request, options?: { sender?: string; write?: Write; env?: Env; allowed?: (sender: string) => boolean }): Promise<Response>;
-export function chatOpenLine(open: { company: string; conversation: string; steps: Record<string, number> }, options?: { now?: Date }): string;
+export type RenderKind = 'open' | 'prefetch' | 'refresh';
+export function chatOpenLine(open: { company: string; conversation: string; steps: Record<string, number>; render?: RenderKind }, options?: { now?: Date }): string;
+export function renderKind(headers: { get(name: string): string | null }, path: string): RenderKind;
+export type Wait = { event: 'message_drawn' | 'run_started' | 'reply_drawn'; company: string; conversation: string; ms: number; from?: 'stream' | 'stored' };
+export function waitLine(wait: Wait, options?: { now?: Date }): string | null;
+export function waitResponse(request: Request, options?: { sender?: string; write?: Write; allowed?: (sender: string) => boolean }): Promise<Response>;
 export function settingSaveLine(save: { company: unknown; setting: unknown; status: number; steps: Record<string, number> }, options?: { now?: Date }): string;
+export function appsUnreadLine(read: { company: string; agent: string; cause: string }, options?: { now?: Date }): string;
+export function engineStateLine(change: { engine: string; state: 'up' | 'down'; cause: string | null }, options?: { now?: Date }): string;

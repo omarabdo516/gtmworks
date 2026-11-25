@@ -70,6 +70,22 @@ test('while the called Agent replies the page says so and asks again, and a repl
  await expect.element(failed.getByRole('alert')).toHaveTextContent('Lead couldn’t reply to this message.');
 });
 
+// #765: an Agent's turn whose start the Engine refused is "not sent" for that Agent, and its own person's "Try again" posts
+// the same message's place, never a second message.
+for (const [language, notSent, tryAgain] of [['en', 'Not sent to Lead', 'Try again'], ['ar', 'ما اتبعتتش لـ Lead', 'جرّب تاني']] as const) test(`in ${language} a call that was not sent says so with Try again, which retries the same turn`, async () => {
+ const posts: unknown[] = [];
+ vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => { if (url.startsWith('/api/run-steps?')) return new Promise<Response>(() => {}); if (init?.method === 'POST') posts.push(JSON.parse(String(init.body))); return Response.json(record([called('notSent')])); }));
+ const message: ChannelMessage = { ...called('notSent') as Extract<ChannelMessage, { author: 'person' }>, mention: { agent: 'Lead', face: 'c-1', state: 'notSent' as const, ordinal: 1, permissions: [], questions: [] } };
+ const screen = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([message])}/></LanguageProvider>);
+ await expect.element(screen.getByRole('alert')).toHaveTextContent(`${notSent} ${tryAgain}`);
+ await screen.getByRole('button', { name: tryAgain }).click();
+ await expect.poll(() => posts).toEqual([{ company: 'co-1', channel: 'ch-1', intent: 'retry', message: 2, ordinal: 1 }]);
+ // Another member's message that was not sent has no Try again for this reader.
+ const theirs = await render(<LanguageProvider language={language}><ChannelView slug="rs-learning" person="p-1" initial={record([{ ...message as Extract<ChannelMessage, { author: 'person' }>, mine: false }])}/></LanguageProvider>);
+ await expect.poll(() => theirs.container.querySelector('[data-outcome="not-sent"]')?.textContent).toBe(notSent);
+ expect(theirs.container.querySelectorAll('[data-outcome="not-sent"] button').length).toBe(0);
+});
+
 // #428: a channel Run that failed because the Company has no model at all says so, in the words a Conversation uses
 // (#422), instead of that the Agent could not reply: the Owner gets the way to Subscription and models, a Member is told
 // to ask the Owner.

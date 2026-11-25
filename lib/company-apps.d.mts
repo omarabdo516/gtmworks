@@ -7,8 +7,9 @@ export function readChannelAgentSession(db:SupabaseClient,request:{company:strin
 export type UsageModel={model:string,input:number,output:number,sessions:number};
 export type AgentsUsage={agents:{id:string,name:string}[],input:number|null,output:number|null,sessions:number|null,models:UsageModel[]|null};
 export function readCompanyUsage(db:SupabaseClient,request:{company:string,days:number,hermes?:{address:string,key:string}|null,driver?:object}):Promise<AgentsUsage[]|null>;
-export type AgentTool={key:string,name:string,mark:string,state:'connected'|'attention'|'turnedOff'|'missing'};
-export function readAgentTools(db:SupabaseClient,request:{company:string,agent:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<AgentTool[]|null>;
+export type AgentTool={key:string,name:string,mark:string,state:'connected'|'attention'|'turnedOff'|'missing'|'checking'};
+export function readAgentTools(db:SupabaseClient,request:{company:string,agent:string,hermes?:{address:string,key:string}|null,driver?:object,test?:boolean,cause?:(cause:string)=>void}):Promise<AgentTool[]|null>;
+export function testAgentTool(db:SupabaseClient,request:{company:string,agent:string,app:string,hermes?:{address:string,key:string}|null,driver?:object}):Promise<{state:'connected'|'attention'}|null>;
 export const uuid:RegExp;
 export const callbackOf:(key:string)=>string;
 export const badToken:(token:unknown)=>boolean;

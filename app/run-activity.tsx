@@ -3,9 +3,10 @@
 // activity line, and stepsHTML): the line under the transcript names the Agent and the step it is on now, and the steps
 // it finished in this Run fill the turn's steps list (app/run-steps.tsx) before the reply lands. Both come from the open
 // Run's tool calls as the Engine streams them (app/api/run-steps). A Conversation and a channel draw them alike, each
-// with the words of its own catalogue. When the stream cannot be read, the page keeps its "is working on a reply" line;
-// before the Run's first view it reads "Thinking" (#756).
-import { useEffect, useState } from 'react';
+// with the words of its own catalogue. Before the Run's first view the line reads "Thinking" (#756), and it never falls
+// back to another line (#763, vault decision 0071): a stream that ends, cannot be read or no longer knows the Run keeps
+// what the line shows until the reply is drawn.
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AgentFace } from '@/components/agent-face';
 import { useAgentState } from '@/app/sidebar-live';
 import { StepsList, type StepsBidiText, type StepsText } from '@/app/run-steps';
@@ -15,21 +16,25 @@ import type { LiveLine, LiveView } from '@/lib/live-steps.mjs';
 const againAfter=1500;
 
 // The Run's view while the place it works in waits on it (`working`), null while there is none to draw: nothing works,
-// or no Run has reached the Engine yet. A view stays drawn once its Run's events end (`ended`), until the reply lands and
-// the place no longer waits. `unread`: the stream could not be read (#646), the one time the page keeps its "is working
-// on a reply" line; until then the line reads "Thinking" (#756), from the moment the person sent.
+// or no Run has reached the Engine yet, which the line reads as "Thinking" (#756). A view stays drawn once its Run's
+// events end (`ended`), and also when the stream is cut, refused or never answers, until the reply lands and the place
+// no longer waits (#763). When the Run's events end, `ended` is called, so the place reads its record at once instead of
+// waiting for its next tick, and the reply is drawn within a second of its Run's end.
 export type LiveRun=LiveView&{ended?:true};
-export function useLiveSteps(place:{company:string,conversation?:string,channel?:string},working:boolean):{view:LiveRun|null,unread:boolean} {
- const [view,setView]=useState<LiveRun|null>(null); const [unread,setUnread]=useState(false);
+export function useLiveSteps(place:{company:string,conversation?:string,channel?:string},working:boolean,ended?:()=>void):{view:LiveRun|null} {
+ const [view,setView]=useState<LiveRun|null>(null);
  const {company,conversation,channel}=place;
+ const onEnd=useRef(ended); onEnd.current=ended;
  useEffect(()=>{
   if(!working) return;
-  const stopped=new AbortController(); let timer:ReturnType<typeof setTimeout>|undefined;
+  const stopped=new AbortController(); let timer:ReturnType<typeof setTimeout>|undefined; let failures=0;
   const query=new URLSearchParams({company,...(conversation?{conversation}:{}),...(channel?{channel}:{})});
   const read=async()=>{
    let end:string|null=null;
    try {
     const response=await fetch(`/api/run-steps?${query}`,{cache:'no-store',signal:stopped.signal});
+    // A signed-out reader reads nothing more here; the place's own read says so.
+    if(response.status===401) return;
     if(!response.ok||!response.body) throw new Error('unread');
     const reader=response.body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer='';
@@ -39,22 +44,23 @@ export function useLiveSteps(place:{company:string,conversation?:string,channel?
      buffer+=value;
      for(let at=buffer.indexOf('\n');at>=0;at=buffer.indexOf('\n')) {
       const line=JSON.parse(buffer.slice(0,at)) as LiveLine; buffer=buffer.slice(at+1);
-      if('end' in line) end=line.end; else { setView(line); setUnread(false); }
+      if('end' in line) end=line.end; else setView(line);
      }
     }
    } catch { if(stopped.signal.aborted) return; end='unreachable'; }
    if(stopped.signal.aborted) return;
-   // A Run that ended keeps its last view until the reply lands. No Run working yet (`none`) is the time before its
-   // first step; a stream that cannot be read brings the plain line back.
-   if(end==='ended') setView(current=>current&&{...current,ended:true});
-   else if(end!=='closed') { setView(null); setUnread(end!=='none'); }
-   timer=setTimeout(read,againAfter);
+   // A Run that ended keeps its last view until the reply lands, and the place reads its record now. Any other end keeps
+   // the line as it is: "Thinking" before the first view, the last view after it.
+   if(end==='ended'||end==='gone') { setView(current=>current&&{...current,ended:true}); onEnd.current?.(); }
+   failures=end==='unreachable'?failures+1:0;
+   // A stream that cannot be read is asked again more slowly each time, up to fifteen seconds.
+   timer=setTimeout(read,Math.min(againAfter*2**failures,15000));
   };
   void read();
   // Once the place no longer waits, the view goes with it.
-  return ()=>{ stopped.abort(); clearTimeout(timer); setView(null); setUnread(false); };
+  return ()=>{ stopped.abort(); clearTimeout(timer); setView(null); };
  },[working,company,conversation,channel]);
- return {view,unread};
+ return {view};
 }
 
 // The reply that lands after live steps were drawn takes their place (#646): the turn it is drawn in does not rise in
@@ -76,19 +82,18 @@ export function useLanding<Id>({working,live,newest}:{working:boolean,live:LiveR
   landed:(id:Id)=>landed.id!==null&&id===landed.id,opened:(id:Id)=>landed.id!==null&&id===landed.id&&landed.open};
 }
 
-// The line under the transcript while an Agent works: the live line, "Thinking" while no Run's view is drawn yet (#756),
-// or, when the stream cannot be read, the plain line the place names (`fallback`). One element across them, so the first
-// view read does not rise in over "Thinking".
+// The line under the transcript while an Agent works: the live line, "Thinking" while no Run's view is drawn yet (#756).
+// One element across them, so the first view read does not rise in over "Thinking". A turn that waits behind another
+// person's Run says whom the Agent works for (`working`), after the line.
 const beforeTheRun:LiveView={run:'',steps:[],now:null};
-export function WorkingLine({view,unread,fallback,agent,face,c,cb}:{view:LiveView|null,unread:boolean,fallback:string,agent:string,face:string,c:StepsText,cb:StepsBidiText}) {
- if(!view&&unread) return <p className="thinking convo-status" role="status"><span className="shimmer">{fallback}</span></p>;
- return <ActivityLine view={view??beforeTheRun} agent={agent} face={face} c={c} cb={cb}/>;
+export function WorkingLine({view,working,agent,face,c,cb}:{view:LiveView|null,working?:ReactNode,agent:string,face:string,c:StepsText,cb:StepsBidiText}) {
+ return <ActivityLine view={view??beforeTheRun} working={working} agent={agent} face={face} c={c} cb={cb}/>;
 }
 
 // The live line (design-reference: .activity): the working dot, the Agent's face and name, then its step now: the tool
 // and the Engine's preview as the steps list reads them, "Writing the reply" between calls and after the last one, and
 // "Thinking" before the first. Each new step rises in and breathes (`is-swap`); the first does not rise.
-function ActivityLine({view,agent,face,c,cb}:{view:LiveView,agent:string,face:string,c:StepsText,cb:StepsBidiText}) {
+function ActivityLine({view,working,agent,face,c,cb}:{view:LiveView,working?:ReactNode,agent:string,face:string,c:StepsText,cb:StepsBidiText}) {
  const now=view.now;
  const said=now?(now.preview?cb('stepLine',now.tool,now.preview):[<bdi key="tool">{now.tool}</bdi>]):[c(view.steps.length?'activityWriting':'activityThinking')];
  const key=now?`${view.steps.length}:${now.tool}:${now.preview??''}`:`${view.steps.length}:none`;
@@ -96,6 +101,7 @@ function ActivityLine({view,agent,face,c,cb}:{view:LiveView,agent:string,face:st
  return <p className="activity convo-status" role="status" aria-live="polite" data-live>
   <span className="dot dot--working" aria-hidden="true"/><span aria-hidden="true"><AgentFace agent={face} size={16}/></span>
   <bdi className="activity__who">{agent}</bdi><span key={key} className={`activity__t shimmer${key!==first?' is-swap':''}`}>{said}…</span>
+  {working&&<span className="activity__for">{working}</span>}
  </p>;
 }
 

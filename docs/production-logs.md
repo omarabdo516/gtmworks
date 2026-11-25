@@ -11,8 +11,27 @@ password, anything shaped like a token, and short digit runs such as authenticat
 - `"event":"chat_opened"`: one line per chat opened (`/c/<slug>/conversations/<id>`), written once its response has gone.
   Fields: `company`, `conversation`, and `ms`, each step's elapsed milliseconds from the page's start: `frame` (sign-in,
   Companies and the Conversation), `reads` (the page's other reads), `details` (the Agent's details), `sidebar` (the
-  Shell's reads), `firstByte` (the frame is drawn and its first bytes leave), `session` (the Hermes session read), `record`
-  (the transcript's reads) and `done`. A step that did not run is left out. Never a body or a key.
+  Shell's reads), `firstByte` (the frame is drawn and its first bytes leave), `record` (the transcript's reads) and `done`. The Hermes
+  session is no step of an open since #766: the steps under the replies are their own request after the page is drawn. A step that did not run is left out. Never a body or a key. `render` (#762) says
+  what the render was: `open` (a person opened the page), `prefetch` (a link drew it ahead of a press) or `refresh` (the
+  page the browser already showed, drawn again); only `open` lines measure what a person waited for.
+- `"event":"engine_state"`: a Company's Engine stopped answering the worker's upkeep, or answers again (#772): one line
+  per change of state, never one per call. Fields: `engine` (its host and port), `state` (`down` or `up`) and `cause`
+  (`timedOut`, `refused`, `nameNotFound`, `noNetwork`, `errorAnswer` or `failed`; null when `up`). While it is down the
+  worker asks it again after 2 s, then 4 s, and so on up to five minutes. A slow Engine reads `timedOut`, never
+  unreachable. The worker writes an Agent's rules and its Company's shared Skills only when they changed since its own
+  last write, and reads every profile once every five minutes for drift.
+- `"event":"apps_unread"`: an Agent's apps that could not be listed for its Connected tools (#770), one line per failed
+  read. Fields: `company`, `agent`, `cause` (`unreachable`, `timedOut`, `refused`, `noNetwork`, `errorAnswer`, `failed`,
+  `noProfile`, `database`, `missing`). The page keeps the last good list it read in the last minute and reads again.
+- `"event":"message_drawn"`: from a person pressing Send in a Conversation until their own message was drawn, measured
+  by their browser and reported to `POST /api/waits` (#762). Fields: `company`, `conversation`, `ms`. At most 120 lines
+  a minute from the browser's reports; never a message's text.
+- `"event":"run_started"`: from a message being stored until the Engine started its Run, written by the one starter of
+  a Conversation's turns once the Run is recorded (#762). Fields: `company`, `conversation`, `ms`.
+- `"event":"reply_drawn"`: from a Run's end until its reply was drawn in the person's browser, reported to
+  `POST /api/waits` (#762). Fields: `company`, `conversation`, `ms`, and `from`: `stream` when the end is the moment the
+  Steps stream said the Run ended, `stored` when no stream was read and the reply's own stored time is used.
 - `"event":"agent_setting_saved"`: one line per `POST /api/agent-settings` (an Agent's or the Company's model, sub-agents
   or other Engine setting, or a learning mode), written once its answer has gone. Fields: `company`, `setting` (the
   setting's name, `settings` for several at once, `learning` for a mode), `status` (the answer's HTTP status) and `ms`,

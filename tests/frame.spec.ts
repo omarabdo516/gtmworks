@@ -461,6 +461,8 @@ test('an open account menu closes when the keyboard opens another page of the sa
  await page.route(numbers,hold);
  try {
   await signIn(page,'omar@example.com','/c/rs-learning/work/board');
+  // A link prepares its page when the person points at it (lib/link.tsx): Numbers is pointed at first.
+  await page.locator('.sidebar .nav a[href$="/numbers"]').hover();
   await asked;
   await page.locator('.sidebar #btn-me').click();
   await expect(page.getByRole('menu')).toBeVisible();

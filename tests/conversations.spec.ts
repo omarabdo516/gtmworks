@@ -225,9 +225,13 @@ test('integration: a run unknown to Hermes is recorded as lost and the conversat
   await ownerSignIn(page); agents=attachAgents();
   const conversation=randomUUID();
   expect((await send(page,{conversation,message:'First try',sendKey:randomUUID()})).status()).toBe(200);
+  // The message is stored first and its Run starts after the answer (#764).
+  await expect.poll(()=>fake.settings.runs.length).toBe(1);
   // Hermes forgets the run: it now answers not found for it.
   fake.settings.runs[0].id='forgotten-by-hermes';
   const read=async()=>(await (await page.request.get(`/api/conversations?company=${company}&conversation=${conversation}`)).json());
+  // The worker closes it as lost (#767: a read closes nothing).
+  await expect.poll(async()=>(await read()).failed,{timeout:15000}).toBe(true);
   const lost=await read();
   expect(lost.pending).toBe(false);
   expect(lost.failed).toBe(true);

@@ -27,6 +27,7 @@ insert into decisions
  union all select fn,'exempt','answers for the one Card, or the one Conversation, its caller already read, so an archived Card opened from its link reads its chat and wait as it was' from unnest(array[
   'public.card_wait(public.work_cards)','public.reply_card_waits(public.reply_cards)','public.card_chat_person(uuid,bigint)']) fn
  union all select 'public.good_morning_waits(uuid)','exempt','lists through waiting_list, which runs as the caller under card_current; it reads a Card itself only to ask whether its Agent is hidden'
+ union all select 'public.conversation_stamp(uuid)','exempt','the stamp of what changed in the one Conversation its own person names (#767): it reads the Card tied to it only to count its rows, and answers a digest, never a Card'
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller' from unnest(array[
   'public.note_mentions()','public.conversation_reply_card()','public.work_card_place()',
   'public.channel_run_card()','public.channel_reply_card()']) fn

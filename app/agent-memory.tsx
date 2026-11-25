@@ -18,13 +18,14 @@ import type { MemoryNote } from '@/lib/engine.mjs';
 // The search (#192) narrows the notes as a person types, in the browser, while the heading keeps the whole count; a
 // search that finds nothing offers "Clear search", and Escape in a filled field does the same. The intro's second line
 // and the way to Company knowledge (knowledgeHref, from lib/settings-overlay.mjs) follow what the person may do.
-export type AgentMemoryProps={company:string,agent:{id:string,name:string},notes:MemoryNote[],main:boolean,canReset:boolean,canEdit:boolean,canForget:boolean,knowledgeHref?:string};
+// `reread`: the notes are read again after a change; without it the server's parts are drawn again (Settings).
+export type AgentMemoryProps={company:string,agent:{id:string,name:string},notes:MemoryNote[],main:boolean,canReset:boolean,canEdit:boolean,canForget:boolean,knowledgeHref?:string,reread?:()=>void};
 // The reference's toast with an action stays six seconds (design-reference/app.js: toast); the removal happens then, on
 // the toast's own clock, which runs from the frame it is drawn in (#561), so Undo never shows after the note is gone.
 // The action's accessible name carries the note's first line, as the reference's does (design-reference: memNoteHTML).
 const short=(text:string)=>text.length>40?`${text.slice(0,40)}…`:text;
-export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget,knowledgeHref,introAsHelp=false}:AgentMemoryProps&{introAsHelp?:boolean}) {
- const {t}=useI18n(); const router=useRouter();
+export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget,knowledgeHref,reread,introAsHelp=false}:AgentMemoryProps&{introAsHelp?:boolean}) {
+ const {t}=useI18n(); const router=useRouter(); const again=()=>{ if(reread) reread(); else router.refresh(); };
  const [asking,setAsking]=useState(false); const [pending,setPending]=useState(false); const [failed,setFailed]=useState(false);
  const [editing,setEditing]=useState<string|null>(null); const [draft,setDraft]=useState(''); const [editError,setEditError]=useState<'empty'|'tooLong'|'stale'|'failed'|null>(null); const [saving,setSaving]=useState(false);
  const [hidden,setHidden]=useState<string[]>([]); const [forgetError,setForgetError]=useState(false);
@@ -80,7 +81,7 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
   try {
    const response=await fetch('/api/agent-memory',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company,agent:agent.id}),cache:'no-store'});
    if(!response.ok) { setFailed(true); setPending(false); return; }
-   setAsking(false); setPending(false); router.refresh();
+   setAsking(false); setPending(false); again();
   } catch { setFailed(true); setPending(false); }
  };
  const openEdit=(note:MemoryNote)=>{ setEditError(null); setDraft(note.text); setEditing(note.id); };
@@ -101,7 +102,7 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
     const at=notes.findIndex(each=>each.id===note.id);
     setEditing(null); setSaving(false);
     focusAfter.current=found&&!text.toLowerCase().includes(found.toLowerCase())?{search:true}:at<0?null:{editAt:{at,text}};
-    toast(t('memoryUpdated')); router.refresh(); return;
+    toast(t('memoryUpdated')); again(); return;
    }
    const body=await response.json().catch(()=>null) as {error?:string}|null;
    setEditError(body?.error==='agentMemoryStale'?'stale':body?.error==='agentMemoryRefused'?'tooLong':'failed');
@@ -113,7 +114,7 @@ export function AgentMemory({company,agent,notes,main,canReset,canEdit,canForget
   try {
    const response=await fetch('/api/agent-memory',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({company:target.company,agent:target.agent,note:note.id}),cache:'no-store',keepalive});
    if(!response.ok) { reveal(note.id); setForgetError(true); return; }
-   router.refresh();
+   again();
   } catch { reveal(note.id); setForgetError(true); }
  };
  const removeLatest=useRef(removeNote);

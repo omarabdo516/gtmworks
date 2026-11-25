@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { provideProfile, readApps, readUsage, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/hermes.mjs';
+import { provideProfile, readApps, testApp, readUsage, startAppSignIn, pollAppSignIn, cancelAppSignIn, finishAppSignIn, disconnectApp } from '../lib/hermes.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
-import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps, readAgentTools, readCompanyUsage } from '../lib/company-apps.mjs';
+import { changeCompanyApp, readCompanyApps, finishCompanyAppSignIn, readAgentApps, readAgentTools, readCompanyUsage, testAgentTool } from '../lib/company-apps.mjs';
 import { changeCompanyServer } from '../lib/company-servers.mjs';
 import { mergedState } from '../lib/app-catalogue.mjs';
 import { fakeHermes } from './fake-hermes.mjs';
@@ -54,7 +54,7 @@ function sessions(fake,{person,isOwner,canManage=isOwner,signIns,agents=[leadRow
 // The fake's management listener is not on port 9119 of the run address, so the driver is pointed at it.
 function driverAt(fake) {
  const at=target=>({...target,managementAddress:fake.managementAddress});
- return {read:target=>readApps(at(target)),start:(target,key,back)=>startAppSignIn(at(target),key,back),poll:(target,flow)=>pollAppSignIn(at(target),flow),
+ return {read:(target,options)=>readApps(at(target),options),testApp:(target,key)=>testApp(at(target),key),start:(target,key,back)=>startAppSignIn(at(target),key,back),poll:(target,flow)=>pollAppSignIn(at(target),flow),
   cancel:(target,flow)=>cancelAppSignIn(at(target),flow),finish:(target,signIn)=>finishAppSignIn(at(target),signIn),disconnect:(target,key)=>disconnectApp(at(target),key)};
 }
 // A profile in the fake Engine, and an app as gtmworks leaves it there after a sign-in: on, with its way back, and no
@@ -188,7 +188,14 @@ test('an Agent\'s connected tools are its own profile\'s apps with their states,
   ]);
   assert.deepEqual(await tools(lead),[{key:'amplitude',name:'Amplitude',mark:'A',state:'connected'}],'two Agents of one Company, two lists');
   assert.equal(await tools(analyst),null,'an Agent not listed for the person');
-  assert.equal(await readAgentTools(db,{company,agent:writer,hermes:{address:fake.address,key:'test-only-key'},driver:{read:async()=>({state:'unreachable',apps:null})}}),null);
+  const causes=[];
+  assert.equal(await readAgentTools(db,{company,agent:writer,hermes:{address:fake.address,key:'test-only-key'},driver:{read:async()=>({state:'unreachable',apps:null})},cause:cause=>causes.push(cause)}),null);
+  assert.deepEqual(causes,['unreachable'],'a failed read names its cause (#770)');
+  // #770: listed without the tests, an app that is on reads checking, and its own test answers its state.
+  assert.deepEqual((await readAgentTools(db,{company,agent:writer,driver,hermes,test:false})).map(tool=>tool.state),['checking','checking','missing','turnedOff','missing']);
+  assert.deepEqual(await testAgentTool(db,{company,agent:writer,app:'canva',driver,hermes}),{state:'connected'});
+  assert.deepEqual(await testAgentTool(db,{company,agent:writer,app:'klaviyo',driver,hermes}),{state:'attention'});
+  assert.equal(await testAgentTool(db,{company,agent:analyst,app:'canva',driver,hermes}),null,'an Agent not listed for the person');
  } finally { await fake.close(); }
 });
 

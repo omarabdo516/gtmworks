@@ -2,7 +2,7 @@ import '../../../log.css';
 import { notFound, redirect } from 'next/navigation';
 import Link from '@/lib/link';
 import { getI18n } from '@/lib/i18n-server';
-import { supabase } from '@/lib/supabase';
+import { signedInUser, supabase } from '@/lib/supabase';
 import Shell from '@/app/shell';
 import { approvalQueue } from '@/lib/approval-queue';
 import { drawnAt, logCursor, logEmptyNote, logPageSize, parseBefore, parseCard, parseWho, type LogRow } from '@/lib/activity-log.mjs';
@@ -21,7 +21,7 @@ const shown=logPageSize;
 // it and by Card. Read with the signed-in person's session, so the database shows only their own Company's rows.
 export default async function ActivityLogPage({params,searchParams}:{params:Promise<{slug:string}>,searchParams:Promise<{who?:string,card?:string,before?:string}>}) {
  const {t,language}=await getI18n(); const {slug}=await params; const query=await searchParams;
- const db=await supabase(); const {data:{user}}=await db.auth.getUser();
+ const db=await supabase(); const {data:{user}}=await signedInUser();
  // Signing in comes back to the same filters.
  const filters=new URLSearchParams(Object.entries(query).filter((entry):entry is [string,string]=>typeof entry[1]==='string'));
  if(!user) redirect(`/sign-in?next=${encodeURIComponent(`/c/${slug}/log${filters.size?`?${filters}`:''}`)}`);

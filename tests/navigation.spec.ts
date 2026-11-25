@@ -95,8 +95,9 @@ test('prepared navigation (production, warm-up + 3 runs)', async ({ page }, test
   await idle(page);
 });
 
-// The approved sidebar (#8) lists Chats, Marketing board, Numbers and Activity log, so Numbers is the entry whose full
-// prefetch this holds back: the click has no prepared cache to open and must answer for itself.
+// The approved sidebar (#8) lists Chats, Marketing board, Numbers and Activity log, so Numbers is the entry whose page
+// this holds back: links prefetch only on intent (#771), so the press (and the hover before it) asks for the page, the
+// request is held, and the click has no prepared cache to open and must answer for itself.
 test('unprepared links answer within 50ms and clear feedback when content arrives', async ({ page }, testInfo) => {
   await signIn(page, 'manager@example.com', '/c/rs-learning/work/board');
   const answers: number[] = [];
@@ -113,7 +114,6 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
     try {
       await page.goto('/c/rs-learning/work/board');
       await expect(page.locator('.board')).toBeVisible();
-      await requestArrived; // Hold the full prefetch so the click cannot use the prepared cache.
       await page.evaluate(async () => { await document.fonts.ready; });
       await page.evaluate(() => {
         const state = window as typeof window & { answerMs?: number };
@@ -132,6 +132,7 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
       });
       await openNavigation(page);
       await page.locator('.nav a[href$="/numbers"]').click();
+      await requestArrived; // The page's request is held, so the click cannot use a prepared cache.
       await page.waitForFunction(() => (window as typeof window & { answerMs?: number }).answerMs !== undefined);
       const answer = await page.evaluate(() => (window as typeof window & { answerMs: number }).answerMs);
       if (run) answers.push(answer);
@@ -150,7 +151,9 @@ test('unprepared links answer within 50ms and clear feedback when content arrive
   expect(median(answers)).toBeLessThan(50);
 });
 
-test('visible links fully prefetch page data and closing reuses the visited board', async ({ page: sessionPage }) => {
+// #771, #739: a link loads its page only on intent. Loading the board renders no other page in the background; pointing
+// at a link prefetches its whole page, which the press then opens; closing the sheet reuses the visited board.
+test('links prefetch only on intent: nothing in the background, a pointed link\'s whole page, and closing reuses the visited board', async ({ page: sessionPage }) => {
   await signIn(sessionPage, 'manager@example.com', '/c/rs-learning/work/board');
   const page = await sessionPage.context().newPage();
   const prepared = new Map<string, string>();
@@ -167,32 +170,14 @@ test('visible links fully prefetch page data and closing reuses the visited boar
   });
   await page.goto('/c/rs-learning/work/board');
   await idle(page);
-  const links = await page.locator('a[href^="/"]').evaluateAll(async links => {
-    // Respect clipping inside the scrolling sidebar and board, as link prefetch does.
-    const visible = await Promise.all(links.map(link => new Promise<boolean>(resolve => {
-      const observer = new IntersectionObserver(([entry]) => {
-        observer.disconnect();
-        resolve(entry.intersectionRatio > 0);
-      });
-      observer.observe(link);
-    })));
-    return links.filter((_, index) => visible[index]).map(link => link.getAttribute('href')!);
-  });
-  // A board Card opens as its sheet (#116), at the board's own address with the Card named in it.
-  expect(links.some(link => /\/board\?card=\d+$/.test(link))).toBe(true);
-  for (const link of new Set(links)) {
-    // The current page already carries its data; it needs no prefetch of itself.
-    if (link === '/c/rs-learning/work/board') continue;
-    // Network idle can precede the browser's visibility callback that starts prefetch.
-    await expect.poll(() => prepared.has(link), { message: `${link}: full prefetch response` }).toBe(true);
-    const body = prepared.get(link)!;
-    expect(body, `${link}: page data, not a partial layout/loading shell`).toContain('"content"');
-    if (link.endsWith('/home')) expect(body).toContain("Recent activity");
-    if (/\/board\/\d+$/.test(link)) expect(body).toContain(`"cardId":${link.split('/').pop()}`);
-    if (/\/board\?card=\d+$/.test(link)) expect(body).toContain(`"sheet":{"id":${link.split('=').pop()}`);
-    if (link.endsWith('/work/calendar')) expect(body).toContain('work/calendar');
-    if (link.endsWith('/work/list')) expect(body).toContain('work/list');
-  }
+  expect([...prepared.keys()], 'no page is rendered in the background').toEqual([]);
+  const numbers = page.locator('.nav a[href$="/numbers"]');
+  await openNavigation(page);
+  await numbers.hover();
+  await expect.poll(() => prepared.has('/c/rs-learning/numbers'), { message: 'the pointed link\'s page' }).toBe(true);
+  expect(prepared.get('/c/rs-learning/numbers'), 'page data, not a partial layout/loading shell').toContain('"content"');
+  expect([...prepared.keys()], 'and only that one').toEqual(['/c/rs-learning/numbers']);
+  await closeNavigation(page);
   await page.locator('.card a[href$="/board?card=1"]').click();
   await expect(page.locator('.cw[open]')).toBeVisible();
   await idle(page);

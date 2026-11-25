@@ -16,12 +16,9 @@ import { detailsTabs } from '@/app/agent-details-tabs';
 import { ConnectedTools } from '@/app/connected-tools';
 import { AgentLibrary } from '@/app/agent-library';
 import { AgentScreen } from '@/app/agent-screen';
-import { AgentMemory } from '@/app/agent-memory';
+import { AgentMemoryPart, AgentPermissionsPart } from '@/app/agent-details-parts';
 import { AgentRoutines } from '@/app/agent-routines';
 import { companyKnowledgeHref } from '@/lib/settings-overlay.mjs';
-import { readAgentMemory } from '@/lib/agent-memory.mjs';
-import { readAgentPermissions } from '@/lib/standing-permissions.mjs';
-import { StandingPermissions } from '@/app/standing-permissions';
 import { channelNameOf, channelTitle } from '@/lib/channels';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
@@ -55,17 +52,12 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
  const run=(runs as {started_at:string,my_conversation:string|null}[]|null)?.[0];
  const talkFiles=((talkFileRows||[]) as unknown as {id:number,name:string,size:number,created_at:string,conversation_id:string,conversations:{agent_name:string}}[]).map(file=>({...file,agent_name:file.conversations.agent_name}));
  const talks=[...new Set(talkFiles.map(file=>file.conversation_id))];
- const [{of:faceOf},{items:waiting},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts,memory,standing]=await Promise.all([stateRead,waitingRead,
+ const [{of:faceOf},{items:waiting},{data:ask},people,{data:cardFileRows,count:cardFileCount},firsts]=await Promise.all([stateRead,waitingRead,
   run?.my_conversation?db.from('conversation_messages').select('body,reply_cards(title)').eq('conversation_id',run.my_conversation).eq('author','person').eq('created_at',run.started_at).order('id',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null}),
   logPeople(db,company,rows.flatMap(row=>row.card_id!=null?[row.card_id]:[])),
   ids.length?db.from('work_attachments').select('id,name,size,created_at,card_id',{count:'exact'}).eq('company_id',company).in('card_id',ids).order('created_at',{ascending:false}).order('id',{ascending:false}):Promise.resolve({data:[],count:0}),
   // A Conversation is named as the sidebar names it: the first line of its person's first message.
   Promise.all(talks.map(async talk=>(await db.from('conversation_messages').select('body').eq('conversation_id',talk).eq('author','person').order('id').limit(1).maybeSingle()).data?.body as string|undefined)),
-  // The Agent's memory (#350) is its own Engine profile's; an Agent the reader does not see is not found, and an Engine
-  // that cannot be read leaves the tab unread rather than empty.
-  readAgentMemory(db,{company,agent}).catch(()=>({state:'failed' as const,main:false,notes:null})),
-  // Its standing permissions (#166), from that same own profile; one that cannot be read draws no section.
-  readAgentPermissions(db,{company,agent}).catch(()=>({state:'failed',permissions:null})),
  ]);
  const tasks=agentTasks(cards,waiting);
  const recent=latestActivity(rows,feedSince());
@@ -110,7 +102,9 @@ export async function agentDetails(db:Db,{company,agent,name:named,slug,me,role:
   tabs:detailsTabs({t,slug,agent,screen:<AgentScreen key={`screen-${agent}`} company={company} agent={agent} name={name} canWake={writer}/>,activity,tools:<ConnectedTools company={company} agent={agent} name={name} owner={role==='owner'}/>,
    // The Agent's Routines (#205): read in the browser too; the Owner and Managers change them, as in Settings (#31).
    routines:<AgentRoutines key={agent} company={company} agent={agent} name={name} canManage={role==='owner'||role==='manager'} canWrite={writer}/>,
-   permissions:standing.permissions?.length?<StandingPermissions key={`standing-${agent}`} company={company} agent={agent} permissions={standing.permissions} canRevoke={role==='owner'||role==='manager'} returnTo="dp-settings"/>:undefined,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0)+(channelFileCount??0),
-   memory:memory.state==='found'?<AgentMemory key={agent} company={company} agent={{id:agent,name}} notes={memory.notes} main={memory.main} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>:undefined,
+   // Its standing permissions (#166) and its memory (#350) are its own Engine profile's: each is read from the browser
+   // when shown (#769, ADR 0030), so the details never wait on the Engine and no part holds another.
+   permissions:<AgentPermissionsPart key={`standing-${agent}`} company={company} agent={agent} canRevoke={role==='owner'||role==='manager'}/>,tasks:tasksTab,files:filesList,library,fileCount:(cardFileCount??0)+(talkFileCount??0)+(channelFileCount??0),
+   memory:<AgentMemoryPart key={agent} company={company} agent={{id:agent,name}} canReset={role==='owner'} canEdit={role==='owner'||role==='manager'} canForget={role==='owner'} knowledgeHref={companyKnowledgeHref(slug,role)}/>,
    log,logCount:count??rows.length})};
 }

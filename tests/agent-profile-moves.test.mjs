@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withTurnQueue } from './turn-queue.mjs';
 import { toolConfig, companyProfile } from '../lib/agent-toolsets.mjs';
 import { moveAgentProfiles } from '../lib/company-profiles.mjs';
 import { engineFor } from '../lib/engine.mjs';
@@ -120,12 +121,13 @@ function runDatabases(fake,{history}) {
   if(name==='pin_run_model') return {data:null,error:null};
   // #143: every queued turn asks for the main Agent's brief, which the database answers null for any other Agent.
   if(name==='pin_lead_brief') return {data:null,error:null};
-  if(name==='begin_start') { attempts.set(given.message_key,(attempts.get(given.message_key)??0)+1); return {data:attempts.get(given.message_key),error:null}; }
+  if(name==='begin_turn_start') { attempts.set(given.message_key,(attempts.get(given.message_key)??0)+1); return {data:attempts.get(given.message_key),error:null}; }
   if(['send_conversation_message','record_conversation_turn','keep_unknown_start'].includes(name)) return {data:true,error:null};
   return {data:null,error:{message:`unexpected ${name}`}}; };
  const chain=(/** @type {unknown} */ data)=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>({data,error:null})}; return c; };
- const db={rpc,from:(/** @type {string} */ table)=>chain(table==='conversation_messages'?null:{id:writer,instructions:null})};
- const service={rpc,from:(/** @type {string} */ table)=>chain(table==='hermes_agents'?{instructions:null}:null)};
+ const queued=withTurnQueue(rpc);
+ const db={rpc:queued,from:(/** @type {string} */ table)=>chain(table==='conversation_messages'?null:{id:writer,instructions:null})};
+ const service={rpc:queued,from:(/** @type {string} */ table)=>chain(table==='hermes_agents'?{instructions:null}:null)};
  return {db,service};
 }
 

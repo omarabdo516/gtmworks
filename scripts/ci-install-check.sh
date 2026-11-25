@@ -432,6 +432,21 @@ for service in web worker; do
     fail "the $service stays off the second work network"
   fi
 done
+# #773: the installer names every Engine's network for the app and the worker in its own Compose file, so recreating
+# them outside the installer, as an Owner's own Compose command does, leaves both on each Engine's network.
+grep -qx "  $second_network:" docker-compose.engines.yml || fail "the installer's Compose file names the second Engine's network"
+# Only the file's own top-level networks block names networks; its services block names web and worker the same way.
+engine_networks=$(sed -n '/^networks:$/,$s/^  \([^ :]*\):$/\1/p' docker-compose.engines.yml | sort -u)
+docker compose --env-file .env.install -f docker-compose.install.yml -f docker-compose.engines.yml up -d --no-deps --force-recreate --wait --wait-timeout 300 web worker \
+  || fail 'the app and the worker recreated outside the installer'
+for service in web worker; do
+  for network in $engine_networks; do
+    docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$(compose ps -q "$service")" | grep -qx "$network" \
+      || fail "the recreated $service stays on the Engine network $network"
+  done
+done
+docker exec "$(compose ps -q web)" node -e "fetch('http://$second_container:8642/health',{signal:AbortSignal.timeout(5000)}).then(response=>process.exit(response.ok?0:1),()=>process.exit(1))" \
+  || fail 'the recreated app reaches the second Engine'
 # From inside the second Engine's network the first Engine cannot be reached, and neither can any install service.
 docker run --rm --network "$second_network" node:22.14.0-alpine3.21 node --input-type=module -e "try { await fetch('http://gtmworks-engine-first:8642/health',{signal:AbortSignal.timeout(5000)}); process.exit(1); } catch { console.log('the other Engine is unreachable'); }" || fail 'one Engine cannot reach another'
 docker run --rm --network "$second_network" -e INSTALL_SERVICE_IPS="$(install_service_ips)" -v "$PWD/scripts:/check:ro" \

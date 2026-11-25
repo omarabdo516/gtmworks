@@ -193,7 +193,6 @@ export const motionTable = [
   // icon pops in when it turns between send and stop.
   { built: '.gw .msg-in', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><ol class="turns"><li class="turn turn--user msg msg-in"></li></ol></div></div>' },
   { built: '.gw .ac-card.card-in', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="ac-card card-in" role="group"></div></div></div>' },
-  { built: '.gw .thinking .shimmer', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><p class="thinking convo-status" role="status"><span class="shimmer">Lead is working…</span></p></div></div>' },
   { built: '.gw.send-fly', file: 'app/shell.css', html: '<span class="gw send-fly" aria-hidden="true"><svg class="gw-icon"></svg></span>' },
   { built: '.gw .composer__send .gw-icon.is-morph', file: 'app/shell.css', html: '<div class="gw"><div class="chat"><div class="composer"><button type="button" class="composer__send" aria-label="Send"><svg class="gw-icon is-morph"></svg></button></div></div></div>' },
 ];

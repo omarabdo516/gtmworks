@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { withTurnQueue } from './turn-queue.mjs';
 import { answerQuestion, closeOpenRuns, sendMessage } from '../lib/conversation-runs.mjs';
 import { fakeEngine } from './fake-engine.mjs';
 
@@ -25,7 +26,7 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake,role='owner
   if(name==='pin_run') return ok({tools:null});
   if(name==='pin_run_history'||name==='pin_run_model') return ok(null);
   if(name==='pin_lead_brief') return ok({...brief,role});
-  if(name==='begin_start') return ok(1);
+  if(name==='begin_turn_start') return ok(1);
   if(name==='send_conversation_message') return ok(true);
   if(name==='open_conversation_runs') return ok(fake.runs.filter(run=>!closed.has(run.id)).map((run,index)=>({message:index+1,conversation,run:run.id,person:'p1000000-0000-0000-0000-000000000001',connection:'f9000000-0000-0000-0000-000000000001',address:'http://hermes:8642',profile:'writer',state:'connected'})));
   if(name==='track_run_question') {
@@ -39,8 +40,9 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake,role='owner
   if(name==='close_conversation_run') { closed.set(args.run,args); return ok(true); }
   return ok({state:'ignored'});
  };
+ const queued=withTurnQueue(rpc);
  const answerRpc=async(/** @type {string} */ name,/** @type {any} */ args)=>{
-  if(name!=='answer_question') return rpc(name,args);
+  if(name!=='answer_question') return queued(name,args);
   calls.push([name,args]);
   const card=args.card===null?cards.find(each=>each.key===args.answer_key)||cards.find(each=>['open','sending'].includes(each.state)):cards.find(each=>each.id===args.card);
   if(!card) return ok('none');
@@ -52,7 +54,7 @@ function databases(/** @type {ReturnType<typeof fakeEngine>} */ fake,role='owner
  const agentRow={id:agent,instructions:null,is_default:true};
  const chain=data=>{ const c={select:()=>c,eq:()=>c,maybeSingle:async()=>ok(data)}; return c; };
  const from=/** @param {string} table */ table=>chain(table==='hermes_agents'?agentRow:null);
- return {service:{rpc,from},person:{rpc:answerRpc,from},cards,calls,closed};
+ return {service:{rpc:queued,from},person:{rpc:answerRpc,from},cards,calls,closed};
 }
 
 const start=async(/** @type {ReturnType<typeof fakeEngine>} */ fake,/** @type {any} */ person,/** @type {any} */ service,/** @type {string} */ sendKey)=>

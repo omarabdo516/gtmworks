@@ -17,7 +17,8 @@ vi.mock('@/app/conversation-archive-actions', () => ({ archiveConversations: vi.
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 // The live steps' read (#646) is tests/components/live-steps.test.tsx's own: here it waits for ever, so it never takes an
 // answer meant for the record.
-const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : fetch(url, init));
+// The live steps' read (#646) waits for ever, and each reply's steps (#766) are read as none: neither is the record's read.
+const stubFetch = (fetch: (url: string, init?: RequestInit) => unknown) => vi.stubGlobal('fetch', (url: string, init?: RequestInit) => String(url).startsWith('/api/run-steps?') ? new Promise<Response>(() => {}) : String(url).includes('&intent=steps') ? Promise.resolve(Response.json({ steps: {}, usage: null })) : fetch(url, init));
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 // The record as the server hands it over once it is read: React's use() takes a promise it can see is settled at once.
 const arrived = (record: ConversationRecord) => Object.assign(Promise.resolve(record), { status: 'fulfilled', value: record });

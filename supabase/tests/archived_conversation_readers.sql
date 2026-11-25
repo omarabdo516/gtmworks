@@ -46,6 +46,8 @@ insert into decisions
   'public.record_good_morning(uuid,uuid,text,date,timestamptz,text,jsonb)']) fn
  union all select fn,'exempt','asks whether a Card is archived, not its Conversation: archiving a Conversation leaves its Card''s work and waits as they are' from unnest(array[
   'public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)','public.card_archive_stops(uuid,bigint[])']) fn
+ union all select fn,'exempt','answers for, or writes in, the one Conversation its caller names (#764, #767): a message stored as its sender''s turn there (a message its person writes in an archived one brings it back), or the stamp of what changed in it; it lists no Conversations' from unnest(array[
+  'public.queue_conversation_turn(uuid,uuid,uuid,uuid,text,boolean)','public.conversation_stamp(uuid)']) fn
  union all select fn,'exempt','a trigger: it runs on a write the table''s own rules admitted and answers no caller' from unnest(array[
   'public.conversation_reply_card()','public.keep_conversation_newest()']) fn;
 

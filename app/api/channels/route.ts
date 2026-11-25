@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { supabaseConfig } from '@/lib/supabase-config';
-import { decideChannelPermission, driveChannelRuns, postChannelMessage, answerChannelQuestion, markChannelHandDone, stopChannelMessage } from '@/lib/channel-runs.mjs';
+import { decideChannelPermission, driveChannelRuns, postChannelMessage, answerChannelQuestion, markChannelHandDone, retryChannelRun, stopChannelMessage } from '@/lib/channel-runs.mjs';
 import { bodyLengthRefused, conversationFilesProblem, fileRefusal, maxRequestBytes } from '@/lib/attachments.mjs';
 import type { PermissionChoice } from '@/lib/engine.mjs';
 import { logActionFailure } from '@/lib/diagnostics.mjs';
@@ -65,6 +65,14 @@ async function stop(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,u
  return reply(stopped);
 }
 
+// "Try again" on an Agent's turn that was not sent (#765): the message's id and that Agent's place in it, never text. Only
+// the message's own person, while they may write (retry_channel_run); its Run starts after the answer.
+async function retry(db:Awaited<ReturnType<typeof supabase>>,body:Record<string,unknown>) {
+ if(!(typeof body.message==='number'&&Number.isSafeInteger(body.message)&&body.message>0)||!(typeof body.ordinal==='number'&&Number.isSafeInteger(body.ordinal)&&body.ordinal>=1&&body.ordinal<=3)) return refuse('channelFailed',400);
+ const retried=await retryChannelRun(db,service(),{channel:body.channel as string,message:body.message,ordinal:body.ordinal,later:after});
+ return 'refused' in retried?refuse(retried.refused,retried.status):reply(retried);
+}
+
 async function respond(request:NextRequest) {
  try {
   const db=await supabase(); const {data:{user}}=await db.auth.getUser();
@@ -100,6 +108,7 @@ async function respond(request:NextRequest) {
  if(writing&&body.intent==='answer') return await answer(db,body);
  if(writing&&body.intent==='done') return await done(db,body);
   if(writing&&body.intent==='stop') return await stop(db,body);
+  if(writing&&body.intent==='retry') return await retry(db,body);
   if(writing) {
    if(typeof body.sendKey!=='string'||!uuid.test(body.sendKey)||typeof body.message!=='string'||body.message.length>20000) return refuse('channelFailed',400);
    // An image the Engine cannot read, more of them than a message carries, or text and images past its request limit:
@@ -107,7 +116,7 @@ async function respond(request:NextRequest) {
    const problem=conversationFilesProblem(chosen,body.message);
    if(problem) return refuse(fileRefusal(problem),400);
    if(!chosen.length&&!body.message.trim()) return refuse('channelFailed',400);
-   const sent=await postChannelMessage(db,service(),{company,channel:channelId,sendKey:body.sendKey,message:body.message,files:chosen});
+   const sent=await postChannelMessage(db,service(),{company,channel:channelId,sendKey:body.sendKey,message:body.message,files:chosen,later:after});
    return 'refused' in sent?refuse(sent.refused,sent.status):reply(sent);
   }
   // A Member opened the channel from their mention of a message (#200): their own item is done. Opening the channel any

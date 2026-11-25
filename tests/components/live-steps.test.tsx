@@ -13,8 +13,8 @@ import '@/app/tokens.css';
 import '@/app/shell.css';
 
 // #646: while an Agent works, the line under the transcript names the step it is on now and the turn's steps list fills
-// in, from the Run's calls as a fake Engine streams them (app/api/run-steps); when the stream cannot be read, the page
-// keeps its plain line, and the reply still lands.
+// in, from the Run's calls as a fake Engine streams them (app/api/run-steps); when the stream cannot be read, the line
+// still reads "Thinking" (#763), and the reply still lands.
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/c/rs-learning/conversations/cv-1', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/link', () => ({ default: (props: ComponentProps<'a'>) => <a {...props}/> }));
 vi.mock('@/app/channel-actions', () => ({ changeChannel: vi.fn(), channelChoices: vi.fn() }));
@@ -100,21 +100,53 @@ test('a reader who opens the chat mid-Run sees the step now and the steps so far
 
 test.each<[string, () => Promise<Response>]>([
  ['the Engine cannot be read', () => Promise.resolve(new Response(`${JSON.stringify({ end: 'unreachable' })}\n`))],
+ ['no Run is known yet', () => Promise.resolve(new Response(`${JSON.stringify({ end: 'none' })}\n`))],
  ['the route fails', () => Promise.resolve(new Response('{"error":"conversationFailed"}', { status: 500 }))],
  ['the network is down', () => Promise.reject(new TypeError('Failed to fetch'))],
-])('when %s, the page keeps its "is working on a reply" line, and the reply still lands', async (_, answer) => {
+])('when %s, the line still reads "Thinking", never "is working on a reply" (#763), and the reply still lands', async (_, answer) => {
  const reads = vi.fn(answer);
  vi.stubGlobal('fetch', (url: string) => url.startsWith('/api/run-steps?') ? reads() : new Promise<Response>(() => {}));
  const screen = await render(chat('en', working));
  await expect.poll(() => reads.mock.calls.length).toBeGreaterThan(0);
- await expect.element(screen.getByRole('status')).toHaveTextContent('Ads is working on a reply…');
- expect(line()).toBeNull();
+ await expect.element(screen.getByRole('status')).toHaveTextContent('AdsThinking…');
+ expect(document.body.textContent).not.toContain('working on a reply');
  // It reads again while the Agent works, and the line stays as it was meanwhile.
  await expect.poll(() => reads.mock.calls.length, { timeout: 4000 }).toBeGreaterThan(1);
- await expect.element(screen.getByRole('status')).toHaveTextContent('Ads is working on a reply…');
+ await expect.element(screen.getByRole('status')).toHaveTextContent('AdsThinking…');
  await screen.rerender(chat('en', landed));
  await expect.element(screen.getByText('I read the last three campaigns.')).toBeVisible();
  await expect.element(screen.getByRole('status')).not.toBeInTheDocument();
+});
+
+test('a stream cut mid-Run keeps the step it showed until the reply is drawn (#763)', async () => {
+ const fake = engine();
+ await render(chat('en', working));
+ await expect.poll(() => fake.asked.length).toBeGreaterThan(0);
+ fake.send({ run: 'run_1', steps: [found], now: { tool: 'sheets', preview: null } });
+ await expect.poll(() => step()?.textContent).toBe('sheets…');
+ fake.end();
+ // The stream closed without the Run's end: the line holds what it showed, nothing else is drawn.
+ await new Promise(resolve => setTimeout(resolve, 300));
+ expect(step()?.textContent).toBe('sheets…');
+ expect(document.body.textContent).not.toContain('working on a reply');
+});
+
+test('when the Run\'s events end, the record is read at once, and the line holds until the reply is drawn (#763)', async () => {
+ const fake = engine();
+ const reread = vi.fn(async () => {});
+ await render(page('en', <ConversationTurns slug="rs-learning" company="co-1" record={working} writer asked={() => {}} reread={reread}/>));
+ await expect.poll(() => fake.asked.length).toBeGreaterThan(0);
+ fake.send({ run: 'run_1', steps: [found], now: null });
+ await expect.poll(() => step()?.textContent).toBe('Writing the reply…');
+ fake.send({ end: 'ended' }); fake.end();
+ await expect.poll(() => reread.mock.calls.length).toBe(1);
+ expect(step()?.textContent).toBe('Writing the reply…');
+});
+
+test('a turn waiting behind another person\'s Run says whom the Agent works for', async () => {
+ engine();
+ const screen = await render(chat('en', { ...working, working: 'Mona Adel', workingFor: 'Mona Adel' }));
+ await expect.element(screen.getByRole('status')).toHaveTextContent('AdsThinking…Working for Mona Adel');
 });
 
 test('with reduced motion the step does not breathe or rise in: text only', async () => {
