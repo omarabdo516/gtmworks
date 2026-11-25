@@ -231,8 +231,7 @@ work_disk_up() {
   if printf '%s\n' "$disk_out" | grep -qx made; then printf '%s\n' "$disk_slug" >> .install-lock/work-disks-made; fi
   disk_used=$(printf '%s\n' "$disk_out" | sed -n 's/^used //p')
   case "$disk_status" in
-    0) ;;
-    4) return 4;;
+    0|4) ;;
     *) echo "The work disk of the Engine $disk_slug could not be made or mounted." >&2; return 1;;
   esac
   disk_moved=$(printf '%s\n' "$disk_out" | sed -n 's/^size //p')
@@ -241,9 +240,12 @@ work_disk_up() {
     echo "The work folder of the Engine $disk_slug needed more than $disk_size: its work disk is $disk_moved."
   fi
   bind_volume "$(work_volume "$disk_slug")" "$(work_disk_folder "$disk_slug")/fs/work" || return 1
-  bind_volume "$(home_volume "$disk_slug")" "$(work_disk_folder "$disk_slug")/fs/home"
+  bind_volume "$(home_volume "$disk_slug")" "$(work_disk_folder "$disk_slug")/fs/home" || return 1
+  # A refused smaller size leaves the disk mounted as it was, bound like any other.
+  return "$disk_status"
 }
-# A Company's disk limit alone, kept with its other limits in its Engine's file.
+# A Company's disk limit alone, kept with its other limits in its Engine's file. Not through write_limits, which notes a
+# memory limit with the default of this release and so would skip the raise an update owes it (raise_sandbox_memory).
 write_disk_limit() {
   disk_file="$(engine_folder "$1")/.env"
   { grep -v '^SANDBOX_DISK=' "$disk_file" || true; printf 'SANDBOX_DISK=%s\n' "$2"; } > "$disk_file.tmp" || return 1
@@ -268,29 +270,30 @@ remove_work_disk() {
 }
 # What this run made of the work disks, taken away when an update goes back (#507): the previous release's Engines run
 # the work folder they had, so a disk this update made, with its copy of that folder, goes, and the next update moves the
-# folder again. This release's Engine and sandbox of that Company hold the disk, so they go first; the previous release's
-# own start makes them again.
+# folder again. What an Agent wrote on that disk between the move and the failure goes with it: the previous release
+# serves from the folder as it was when the update began. This release's Engine and sandbox of that Company hold the
+# disk, so they go first; the previous release's own start makes them again.
 remove_new_work_disks() {
   [ -f .install-lock/work-disks-made ] || return 0
-  for name in $(sort -u .install-lock/work-disks-made); do
-    docker rm -f "$(engine_project "$name")" "$(sandbox_container "$name")" > /dev/null 2>&1 || true
-    remove_work_disk "$name" \
-      || echo "The work disk this update made for the Engine $name could not be removed: run the update again." >&2
+  for disk_name in $(sort -u .install-lock/work-disks-made); do
+    docker rm -f "$(engine_project "$disk_name")" "$(sandbox_container "$disk_name")" > /dev/null 2>&1 || true
+    remove_work_disk "$disk_name" \
+      || echo "The work disk this update made for the Engine $disk_name could not be removed: run the update again." >&2
   done
   rm -f .install-lock/work-disks-made
 }
 # The previous release's work folders go once this run, which moved each onto its Company's work disk, is whole (#507).
 drop_moved_work_volumes() {
-  for name in $(engine_names); do
-    moved=$(old_work_volume "$name")
-    [ -f "$(work_disk_folder "$name")/fs.img" ] || continue
+  for disk_name in $(engine_names); do
+    moved=$(old_work_volume "$disk_name")
+    [ -f "$(work_disk_folder "$disk_name")/fs.img" ] || continue
     docker volume inspect "$moved" > /dev/null 2>&1 || continue
     docker volume rm "$moved" > /dev/null \
       || echo "The previous work folder $moved is on its work disk now but could not be removed: docker volume rm $moved" >&2
   done
 }
 # A Company's Engine started again after its work disk was resized, and healthy before this returns.
-engine_running() {
+start_engine_again() {
   [ "$(docker inspect -f '{{.State.Running}}' "$(engine_project "$1")" 2> /dev/null)" != true ] || return 0
   docker start "$(engine_project "$1")" > /dev/null || return 1
   healthy_within "$(engine_project "$1")" "${GTMWORKS_ENGINE_WAIT:-300}"
@@ -1026,7 +1029,7 @@ company_limits() {
     if [ "$resized" -ne 0 ]; then
       write_limits "$slug" "$old_memory" "$old_cpus" "$old_disk" || return 1
       # The disk is mounted as it was (work-disk mounts it again when it refuses), so the Company runs again on it.
-      engine_running "$slug" >&2 && sandbox_restart "$slug" >&2 \
+      start_engine_again "$slug" >&2 && sandbox_restart "$slug" >&2 \
         || echo "Company \"$name\"'s Engine or work sandbox did not come back: run this command again, or the install command." >&2
       if [ "$resized" -eq 4 ]; then
         echo "The limits of Company \"$name\" were not changed: its work disk holds $disk_used MiB, which does not fit in $disk. Its disk is kept as it was."
@@ -1035,7 +1038,7 @@ company_limits() {
       fi
       return 1
     fi
-    engine_running "$slug" >&2 || { echo "Company \"$name\"'s Engine did not start again after its work disk was resized: run the install command." >&2; return 1; }
+    start_engine_again "$slug" >&2 || { echo "Company \"$name\"'s Engine did not start again after its work disk was resized: run the install command." >&2; return 1; }
   fi
   if ! sandbox_restart "$slug" >&2; then
     # The disk keeps its new size; only the memory and CPUs go back.

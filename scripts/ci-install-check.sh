@@ -1202,7 +1202,7 @@ install_source backup-engines-install.log || fail 'every-Engine backup area inst
 complete_setup || fail 'first run before the every-Engine backup'
 # A second Company on an Engine of its own for the every-Engine archive: the first run's Owner is its Owner, and the
 # worker gives it its main Agent by itself. It is given its own sandbox limits (#396), which the restore brings back.
-second_company scripts/install.sh --memory 1536m --cpus 1.5 || fail 'the second Company for the every-Engine backup'
+second_company scripts/install.sh --memory 1536m --cpus 1.5 --disk 2g || fail 'the second Company for the every-Engine backup'
 # Every Company's Engine is in one backup and comes back from it (#386, ADR 0018). Each Company's main Agent is told
 # a code word in its own Engine first; after the restore each Company's Agent answers on its own Engine, with its own
 # code word and never the other Company's.
@@ -1261,7 +1261,10 @@ fi
 remove_install || fail 'remove the install before the every-Engine restore'
 rm -f .env.install
 sh scripts/install.sh || fail 'fresh install before the every-Engine restore'
-SANDBOX_MEMORY=3g SANDBOX_CPUS=3 sh scripts/install.sh restore "$every_engine" || fail 'restore every Engine'
+# The removed install took its work disks with it (#507): the restore makes each Company's disk again, at its own size
+# from the archive whatever the shell holds, and writes its work folder there.
+[[ ! -e .work-disks/first ]] || fail 'the removed install left no work disk'
+SANDBOX_MEMORY=3g SANDBOX_CPUS=3 SANDBOX_DISK=50g sh scripts/install.sh restore "$every_engine" || fail 'restore every Engine'
 [[ $(ls -d .engines/*/ | wc -l) == "$engines_before" ]] || fail 'the every-Engine restore brings every Engine back'
 for folder in .engines/*/; do
   name=$(engine_value "$folder" NAME)
@@ -1283,6 +1286,12 @@ for folder in .engines/*/; do
   # Each sandbox comes back with the limits its Company was given, whatever the shell of the restore held (#396).
   if [[ $name == gtmworks-engine-first ]]; then want_limits="$(sandbox_memory_bytes) $(sandbox_nano_cpus)"; else want_limits='1610612736 1500000000'; fi
   [[ $(docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$sandbox") == "$want_limits" ]] || fail "the restored sandbox of $name has its Company's limits"
+  # Its work folder is on its own work disk again, of its Company's size (#507).
+  if [[ $name == gtmworks-engine-first ]]; then want_disk=$(sed -n 's/^      gtmworks.disk: ${SANDBOX_DISK:-\([0-9]*\)g}$/\1/p' scripts/engine-template.yml); else want_disk=2; fi
+  [[ -f ".work-disks/${name#gtmworks-engine-}/fs.img" ]] || fail "the restore made the work disk of $name"
+  [[ $(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/work"}}{{.Name}}{{end}}{{end}}' "$sandbox") == "gtmworks-folder-${name#gtmworks-engine-}" ]] || fail "the restored sandbox of $name works on its work disk"
+  disk_kib=$(docker exec "$sandbox" df -k --output=size /work | tail -n 1)
+  (( disk_kib > want_disk * 1024 * 1024 * 95 / 100 && disk_kib <= want_disk * 1024 * 1024 )) || fail "the restored work disk of $name is its Company's ${want_disk}g ($disk_kib KiB)"
 done
 # The restored Engine binds every listener to its install-network address alone again, over every port it listens on:
 # the work-network check runs after the restore, on the other side of a restart (#393).

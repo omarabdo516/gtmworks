@@ -26,7 +26,7 @@ image=/disk/fs.img
 mounted_at=/disk/fs
 case "$action" in mount|unmount|remove) ;; *) echo "work-disk: unknown action $action" >&2; exit 2;; esac
 case "$host" in /*) ;; *) echo 'work-disk: the folder must be an absolute path' >&2; exit 2;; esac
-[ -d /disk/fs ] || { echo 'work-disk: the folder has no fs/ to mount at' >&2; exit 2; }
+[ -d "$mounted_at" ] || { echo 'work-disk: the folder has no fs/ to mount at' >&2; exit 2; }
 
 # The Docker daemon's mount namespace, where its containers' volumes are mounted from: a mount made there stays after
 # this container exits. The daemon's own process, or the host's first process when no dockerd is found.
@@ -52,12 +52,14 @@ unmount() {
   mounted || return 0
   umount "$mounted_at" 2> /dev/null || true
   in_daemon umount "$host/fs"
-  # The loop device goes with its last mount: one still attached means a container still holds the disk.
-  sleep 1
-  if [ -n "$(losetup -j "$image" 2> /dev/null)" ]; then
-    echo 'work-disk: the disk is still in use by a running container' >&2
-    return 1
-  fi
+  # The loop device goes with its last mount, a moment after it: one still attached after that means a container still
+  # holds the disk.
+  for wait in 1 2 3 4 5 6 7 8 9 10; do
+    [ -n "$(losetup -j "$image" 2> /dev/null)" ] || return 0
+    sleep 1
+  done
+  echo 'work-disk: the disk is still in use by a running container' >&2
+  return 1
 }
 
 case "$action" in
