@@ -12,7 +12,7 @@ const budgets = {
   fast: { limit: 7, measured: 4.4 }, // run 45665003628, as the suite grew; cancelled at 5.2 min on run 45626470767 (#755)
   image: { limit: 12, measured: 9.9 }, // the work sandbox image built again for a sandbox/ change, run 45664486098 (#755)
   database: { limit: 4, measured: 2.1 },
-  integration: { limit: 12, measured: 10.0 }, // its slowest shard, seven split by measured time (#653), run 45088411177
+  integration: { limit: 12, measured: 11.6 }, // its slowest of eight shards, run 45664486098, before #755 measured the split again (10.0 of seven on run 45088411177, #653)
   install: { limit: 12, measured: 10.0 }, // its slowest area, updater, run 44967491326, once #553 split agents and backup (from 11.3 min, backup)
   // One lane's stack, one build and the one chat-open test, with the machine to itself (#421). The first estimate for
   // the run that starts it; the job says its measured minutes in the pull request that adds it.
