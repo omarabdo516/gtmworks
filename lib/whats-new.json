@@ -1,5 +1,11 @@
 [
  {
+  "issue": 684,
+  "date": "2026-11-25",
+  "en": { "title": "Your old card fields are in each card's description", "body": "Every card kept its column and its assignee; its hook, offering, segment, goal, channel, format, caption, mode, labels and other assignees are now lines at the end of its description, and its checklist is its to-do items. Stages, labels, approval steps and Work settings are gone." },
+  "ar": { "title": "خانات البطاقة القديمة بقت جوه وصفها", "body": "كل بطاقة فضلت في عمودها ومع المسؤول عنها؛ والخطاف والعرض والشريحة والهدف والقناة والشكل والكابشن والطريقة والتصنيفات وباقي المسؤولين بقوا سطور في آخر وصفها، وقايمة المهام بقت مهامها في الوصف. المراحل والتصنيفات وخطوات الموافقة وإعدادات الشغل اتشالوا." }
+ },
+ {
   "issue": 683,
   "date": "2026-11-25",
   "en": { "title": "One New card form, and a board that filters by who and which project", "body": "New card on the toolbar and + on Ideas open the same form with a title, a description, an assignee and a project; the board filters by assignee and project, and each card tells its state in one symbol." },
