@@ -183,7 +183,7 @@ test('the seven shards and the chat-open job together run every browser test exa
  const chatOpen = listed(list(['--project=alone', '--no-deps'], true, { hostedElsewhere: false })).sort();
  assert.ok(chatOpen.length > 0, 'the chat-open job has the chat test');
  // Every test that runs on a pull request: the shards' own list plus the alone project, but not the navigation budgets,
- // which keep their machine on main (`visual`).
+ // which keep their machine on main (`budgets`).
  const everywhere = listed(list([], true, { hostedElsewhere: false })).filter(entry => !entry.startsWith('measured ')).sort();
  assert.deepEqual([...elsewhere, ...chatOpen].sort(), everywhere);
 });

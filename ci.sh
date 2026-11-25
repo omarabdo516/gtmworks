@@ -6,9 +6,9 @@ cd "$(dirname "$0")"
 lanes=${GTMWORKS_TEST_LANES:-1}
 [[ $lanes =~ ^[1-7]$ ]] || { echo 'GTMWORKS_TEST_LANES must be 1 to 7' >&2; exit 2; }
 install_chromium() {
-  # The visual lane's browser and its system packages, as it has always installed them (#257); the browser suite's
-  # shards get theirs from the workflow's cache, and install no system package (#404). It starts in the background beside
-  # start_lane's npm ci (#359), so it runs the locked Playwright from a folder of its own: npm ci is rewriting the
+  # The navigation budgets' browser and its system packages, as they have always installed them (#224); the browser
+  # suite's shards get theirs from the workflow's cache, and install no system package (#404). It starts in the background
+  # beside the budgets' npm ci (#359), so it runs the locked Playwright from a folder of its own: npm ci is rewriting the
   # checkout's node_modules meanwhile. The browser lands in the cache the checkout's Playwright reads.
   local version
   version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")
@@ -47,48 +47,12 @@ images_loaded() {
   bash scripts/supabase-images.sh list > "$images_before"
   trap 'bash scripts/supabase-images.sh pulled "$images_before" || true; rm -f "$images_before"' EXIT
 }
-# The fast steps' logs and the visual job's test results go under ci-ledger/<job> (Playwright empties test-results/ when
-# it starts); a failed visual job on main reads its results back (scripts/visual-regression.mjs). Prints the folder.
+# The fast steps' logs and the budgets job's test results go under ci-ledger/<job> (Playwright empties test-results/ when
+# it starts); a failed budgets job on main reads its results back (scripts/budget-regression.mjs). Prints the folder.
 ledger_dir() {
   local dir="ci-ledger/${GITHUB_JOB:-$1}"
   rm -rf "$dir" && mkdir -p "$dir"
   echo "$dir"
-}
-# The visual lane (#257) is drawn by one pinned browser in its container, through Playwright's own server (the checkout's
-# locked package, so nothing is downloaded); the tests, the app and lane 0's stack stay on this machine. The image pulls
-# while the dependencies install and the stack starts.
-renderer=gtmworks-lane-renderer
-renderer_port=3900
-start_lane() {
-  local lanes=1 image pull
-  image=$(< tests/visual-lane/renderer)
-  mkdir -p playwright-report
-  docker pull --quiet "$image" > playwright-report/renderer.log 2>&1 &
-  pull=$!
-  load_images
-  if [[ "${CI:-}" == "true" ]]; then
-    npm ci
-  fi
-  images_loaded
-  start_lanes
-  wait_lanes
-  wait "$pull" || { cat playwright-report/renderer.log >&2; echo 'the renderer image did not pull' >&2; exit 1; }
-  docker rm --force "$renderer" > /dev/null 2>&1 || true
-  # One exit handler for both: images_loaded's report of what was pulled, and the renderer taken away.
-  trap 'docker rm --force "$renderer" > /dev/null 2>&1 || true; bash scripts/supabase-images.sh pulled "$images_before" || true; rm -f "$images_before"' EXIT
-  # -i: the server stops when its standard input closes. --unsafe: it takes the launch flags the lane's config sends.
-  docker run --detach --interactive --name "$renderer" --init --ipc=host -p "127.0.0.1:$renderer_port:$renderer_port" \
-    -v "$PWD:/work:ro" -w /work "$image" \
-    node node_modules/playwright/cli.js run-server --port "$renderer_port" --host 0.0.0.0 --unsafe > /dev/null
-  # Docker opens the port before the server inside listens, so the server's own line says it is ready.
-  second=0
-  until docker logs "$renderer" 2>&1 | grep -q '^Listening on'; do
-    if ((second++ >= 60)); then docker logs "$renderer" >&2; echo 'the renderer did not start' >&2; exit 1; fi
-    sleep 1
-  done
-}
-lane_test() {
-  GTMWORKS_TEST_LANES=1 GTMWORKS_LANE_RENDERER="ws://127.0.0.1:$renderer_port/" npx playwright test -c playwright.lane.config.ts "$@"
 }
 case "${1:-check}" in
  check)
@@ -96,7 +60,7 @@ case "${1:-check}" in
   # (.github/workflows/ci.yml, scripts/ci-areas.mjs).
   bash ci.sh fast
   bash ci.sh database
-  bash ci.sh visual
+  bash ci.sh budgets
   bash ci.sh integration
   bash ci.sh chat-open
   ;;
@@ -172,7 +136,7 @@ case "${1:-check}" in
   if [[ $proxy == true ]]; then npm run test:e2e:proxy; fi
   bash scripts/local-db.sh
   wait "$build_pid" || { cat playwright-report/build.log >&2; echo 'the browser suite build failed' >&2; exit 1; }
-  # The measured budgets run on their own (`ci.sh visual`), on a GitHub-hosted runner.
+  # The measured budgets run on their own (`ci.sh budgets`), on a GitHub-hosted runner.
   GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=$lanes GTMWORKS_HOSTED_ELSEWHERE=true npm run test:e2e -- "${files[@]}" "$@"
   ;;
  chat-open)
@@ -204,28 +168,26 @@ case "${1:-check}" in
   npx --no-install supabase test db --workdir "$project" "$project/images.sql"
   bash scripts/supabase-images.sh save
   ;;
- visual)
-  # The visual lane's key screens on the pinned renderer, and its guard tests (#257). Then the navigation time budgets,
-  # which need a machine of their own (#224). In CI the budgets' browser installs beside the lane (#359).
+ budgets)
+  # The measured navigation budgets (#224), which need a machine of their own: one lane's stack, one build of the app and
+  # the `measured` project. In CI the browser installs beside the dependencies and the stack (#359).
+  lanes=1
   if [[ "${CI:-}" == "true" ]]; then
     install_chromium
   fi
-  start_lane
-  dir=$(ledger_dir visual)
-  status=0
-  PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/lane.json" lane_test || status=$?
+  load_images
+  if [[ "${CI:-}" == "true" ]]; then
+    npm ci
+  fi
+  images_loaded
+  start_lanes
+  wait_lanes
+  LANE=0 bash scripts/web.sh build
   if [[ "${CI:-}" == "true" ]]; then
     chromium_installed
   fi
-  # Its own output folder: Playwright empties the one it writes to, and test-results/lane/ holds the lane's differences.
-  # The budgets serve the build the lane's web server made; with none (the lane stopped before it), they build their own.
-  GTMWORKS_WEB_PREBUILT=$([[ -f .next/BUILD_ID ]] && echo true || echo false) GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps --output=test-results/measured || status=$?
-  exit "$status"
-  ;;
- visual-update)
-  # Rewrites only the lane's images that changed; the pinned renderer draws them the same on every machine.
-  start_lane
-  lane_test --update-snapshots=changed
+  dir=$(ledger_dir budgets)
+  GTMWORKS_WEB_PREBUILT=true GTMWORKS_TEST_LANES=1 PLAYWRIGHT_JSON_OUTPUT_FILE="$dir/measured.json" npx playwright test --project=measured --no-deps
   ;;
  install)
   # One area of the install proof (scripts/ci-install-check.sh, #406) on an isolated Docker machine of its own, in a
@@ -294,5 +256,5 @@ case "${1:-check}" in
   export INSTALL_LANE_FOREIGN_OWNER=1
   DOCKER_HOST=$machine bash scripts/ci-install-check.sh "$@"
   ;;
-  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | visual | visual-update | install [first-install | companies | agents | agents-sandbox | open-design | backup | backup-engines | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
+  *) echo 'usage: ./ci.sh check | fast | static | components | database | images | integration | chat-open | budgets | install [first-install | companies | agents | agents-sandbox | open-design | backup | backup-engines | proxy | rollback | update | previous-archive | release-update | sandbox-update | staged-update | sandbox-rollback | sizes | engines-update | one-line | updater | measure]' >&2; exit 2;;
 esac

@@ -1,45 +1,21 @@
-import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { laneImage, loadLaneScreens, themes, widths } from './visual-lane.mjs';
-import { blockOutsideRequests, forgetBlocked, expectDarkContrast, expectDeterministic, expectQuietContrast, fixClock, fixClockText, type QuietCheck } from './visual-lane-guards';
-import { freshSeed } from './fresh-seed';
+import { test, expect, type Page } from './fresh-seed';
 import { signIn, openNavigation } from './sign-in';
 import { idle } from './navigation-measure';
-import { appOrigin } from './lane.mjs';
 import { asAdmin } from './slow-reads';
-import { localQuery, localStatement, resetFirstRun } from '../scripts/first-run-db.mjs';
 import { laneHermes } from './lane-hermes';
 import { toolConfig } from '../lib/agent-toolsets.mjs';
+import { expectDarkContrast, expectQuietContrast, type QuietCheck } from './contrast';
 
-// The visual lane (#257): each key screen in tests/visual-lane/screens.json, in Arabic at 1440 and 390, light and dark,
-// against its approved image. Each screen starts from the seed as built and signs in again, so the screens pass in any
-// order.
-const screens = loadLaneScreens();
+// Text contrast on the key screens, measured from the styles the browser draws with, never from a picture (#805): every
+// visible text run keeps 4.5:1 in the dark theme, in Arabic and English at 1440 and 390, and the quiet labels of Home, the
+// board and a Card keep 4.5:1 and stay weaker than the body text in the light theme. These checks and the screens' states
+// were the visual lane's (#257); the lane went, and contrast checks never go away (#218). First run's form is measured in
+// first-run.spec.ts, which owns the empty install.
 const rsLearning = '10000000-0000-0000-0000-000000000001';
-const seedAuthor = '30000000-0000-0000-0000-000000000001';
 const omar = '20000000-0000-0000-0000-000000000001';
 
-// Secondary text measured after the light picture; on a phone the sidebar's labels are read with the drawer open.
-const quietText: Record<string, QuietCheck[]> = {
-  home: [['chart subtitle', '.home-charts article h2 + span'], ['sidebar heading', '.sidebar .sb-label'], ['account role', '.sidebar .me__role']],
-  board: [['toolbar label', '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)']],
-  card: [['comment placeholder', '.modal textarea[name=body]', '::placeholder']],
-};
-for (const name of Object.keys(quietText)) if (!screens.some(screen => screen.name === name)) throw new Error(`${name}: quiet text is measured only on a lane screen`);
-
-// The seed schedules its cards relative to the moment the database was built. Pin them to fixed days in a past month so
-// the board and the card look the same on every run, through the same audit trigger the app uses.
-function fixPublishingDates(baseURL: string | undefined) {
-  localStatement(`do $$ begin
-    perform set_config('request.jwt.claim.sub','${seedAuthor}',true);
-    update public.work_cards c set go_live=x.fixed
-    from (select id,('2026-06-'||lpad((row_number() over (order by id)*4)::text,2,'0')||'T12:00:00Z')::timestamptz fixed
-          from public.work_cards where company_id='${rsLearning}') x
-    where c.id=x.id and c.go_live is distinct from x.fixed;
-  end $$;`, baseURL);
-}
-
 // The states the seed does not hold, written as the database's administrator with triggers off (their rows are
-// append-only) and taken away after each picture. Every time is fixed, so no picture depends on the day it is drawn.
+// append-only) and taken away after each screen. Every time is fixed, so no screen depends on the day it is read.
 const general = '69000000-0000-0000-0000-000000000001';
 const talk = (n: number) => `69000000-0000-0000-0000-0000000000${n}`;
 const busy = (n: number) => `69100000-0000-0000-0000-00000000000${n}`;
@@ -48,7 +24,7 @@ const routine = (n: number) => `69300000-0000-0000-0000-00000000000${n}`;
 const ownProfile = (agent: string) => `ag-${agent.replaceAll('-', '')}`;
 const companyProfile = `co-${rsLearning.replaceAll('-', '')}`;
 // A screen's Agents are written with triggers off, so none is given its look as a made Agent is (#696): each is given it
-// here, as the trigger would, so every picture draws the Agents in their own looks, never the plain look of one with none.
+// here, as the trigger would, so every screen draws the Agents in their own looks, never the plain look of one with none.
 const givenLooks = `select public.give_agent_look(a.company_id,a.id,a.is_default,a.template) from public.hermes_agents a
   where not exists(select 1 from public.agent_looks l where l.agent_id=a.id) order by a.created_at,a.id;`;
 // A Routine as the fake Engine keeps it (#31): no zone of its own, so it reads in UTC, and its next and last runs are
@@ -137,9 +113,8 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
   },
   // Meta Ads's page in Settings: Lead's proposal of a faster model for it waiting on Omar's OK (#178), and after Tools the
   // one standing permission Omar gave it (#166), Always allow on the Meta Ads app's create_campaign, kept in Meta Ads's
-  // own profile in the Engine. One screen holds both: the lane keeps fifteen. The June campaign's Run and the Run in which
-  // Lead proposed are over, so both Agents are idle: left open, the lane's worker ended each at its own pace and the page
-  // drew Meta Ads (#572) or Lead in the sidebar (#641) busy or idle by the race.
+  // own profile in the Engine. One screen holds both. The June campaign's Run and the Run in which
+  // Lead proposed are over, so both Agents are idle (#572, #641).
   'settings-proposal': {
     set: `      insert into public.hermes_agents(id,company_id,connection_id,name,speciality,is_default,profile) values
        ('${standing(1)}','${rsLearning}','${standing(5)}','Lead','General',true,'visual-standing-lead'),
@@ -176,116 +151,60 @@ const screenStates: Record<string, { set: string, unset: string, engine?: (fake:
     engine: fake => { fake.settings.profiles.set(`ag-${standing(2).replaceAll('-', '')}`, { soul: '', provider: 'auto', model: '', key: fake.settings.key, config: { command_allowlist: ['mcp:meta-ads/create_campaign'] }, credentials: {} }); },
   },
 };
+
+type Screen = { name: string, path: string, ready: string, state?: string, quiet?: QuietCheck[] };
+const screens: Screen[] = [
+  { name: 'home', path: '/c/rs-learning/home', ready: '.home-dashboard', state: 'agent-details', quiet: [['chart subtitle', '.home-charts article h2 + span'], ['sidebar heading', '.sidebar .sb-label'], ['account role', '.sidebar .me__role']] },
+  { name: 'board', path: '/c/rs-learning/work/board', ready: '.board', quiet: [['toolbar label', '.work-toolbar .tabs a:not(.active), .work-toolbar .tabs button:not(.active)']] },
+  { name: 'card', path: '/c/rs-learning/work/board/1', ready: '.modal', quiet: [['comment placeholder', '.modal textarea[name=body]', '::placeholder']] },
+  { name: 'chat', path: '/c/rs-learning/chat', ready: '.chat' },
+  { name: 'channel', path: `/c/rs-learning/channels/${general}`, ready: '.ch-intro', state: 'channel' },
+  { name: 'agents', path: '/c/rs-learning/agents', ready: '.company-hermes-agents' },
+  { name: 'agent-details', path: `/c/rs-learning/chat/${busy(5)}`, ready: '.chat', state: 'agent-details' },
+  { name: 'members', path: '/c/rs-learning/settings/members', ready: '.member-row' },
+  { name: 'numbers', path: '/c/rs-learning/numbers', ready: '.numbers-page' },
+  { name: 'approvals', path: '/c/rs-learning/approvals', ready: '.approvals' },
+  { name: 'change-proposal', path: `/c/rs-learning/conversations/${change(3)}`, ready: '.chg-card', state: 'change-proposal' },
+  { name: 'routines', path: '/c/rs-learning/settings?section=routines', ready: '.rt-row', state: 'routines' },
+  { name: 'settings-proposal', path: `/c/rs-learning/settings?agent=${standing(2)}`, ready: '.sov-pend', state: 'settings-proposal' },
+];
 for (const screen of screens) if (screen.state && !screenStates[screen.state]) throw new Error(`${screen.name}: no state "${screen.state}"`);
+const widths = [1440, 390];
+const languages = ['ar', 'en'] as const;
 
-// The lane's worker closes every open Run it can read from an Engine, at its own pace. A screen with no Engine keeps its
-// open Runs open (its Agent stays working on every run); a screen with the fake Engine would draw its Agent working or
-// idle by the race (#572, #641). So a state that brings an Engine ends every Run it writes, and this says which it left.
-function expectNoOpenRun(screen: string, baseURL: string | undefined) {
-  const open = localQuery(`select cv.agent_name as agent, o.run from public.conversations cv cross join lateral public.conversation_open_run(cv.id) o
-    where cv.company_id='${rsLearning}' order by cv.agent_name, o.run`, baseURL) as { agent: string, run: string }[];
-  if (open.length) throw new Error(`${screen}: the state brings an Engine, so the lane's worker would end these open Runs mid-picture; record each one's end: ${open.map(row => `${row.agent} (${row.run})`).join(', ')}`);
+async function open(page: Page, path: string, ready: string, language: string) {
+  await page.goto(path);
+  await expect(page.locator('html')).toHaveAttribute('lang', language);
+  await expect(page.locator(ready).first()).toBeVisible();
+  await idle(page);
 }
 
-// The shell scrolls inside its own frame, so a page taller than the window would be cut at the fold. Grow the window until
-// nothing scrolls, so the whole screen is compared.
-async function showWholePage(page: Page, width: number) {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const hidden = await page.evaluate(() => Math.max(0, ...Array.from(document.querySelectorAll('*'))
-      .filter(element => /auto|scroll/.test(getComputedStyle(element).overflowY) && element.clientHeight > 0)
-      .map(element => element.scrollHeight - element.clientHeight)));
-    if (hidden <= 1) return;
-    await page.setViewportSize({ width, height: Math.min(page.viewportSize()!.height + hidden, 8000) });
-    await idle(page);
-  }
-}
+test.afterAll(() => asAdmin(`update public.people set language='en' where id='${omar}'`));
 
-async function laneContext(browser: Browser) {
-  const context = await browser.newContext({ baseURL: appOrigin, viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, locale: 'ar-EG', timezoneId: 'UTC', reducedMotion: 'reduce' });
-  await blockOutsideRequests(context);
-  await fixClock(context);
-  return context;
-}
-
-for (const screen of screens) {
-  test.describe(screen.name, () => {
-    let context: BrowserContext;
-    let page: Page;
-    test.beforeAll(async ({ browser, baseURL }) => {
-      test.setTimeout(120000);
-      // A visitor's screen draws no Company data: sign-in needs nothing, and first run empties the installation itself.
-      if (screen.name === 'first-run') resetFirstRun(baseURL);
-      if (!screen.anonymous) {
-        freshSeed(test.info(), true);
-        fixPublishingDates(baseURL);
-        asAdmin(`update public.people set language='ar' where id='${omar}'`);
-      }
-      context = await laneContext(browser);
-      page = await context.newPage();
-      if (screen.anonymous) return;
-      await signIn(page, 'omar@example.com', '/c/rs-learning/home');
-      // The sidebar lists recently opened Cards and the board orders Ideas by last change: opening Card 1 first gives
-      // every screen the same list.
-      await page.goto('/c/rs-learning/work/board/1');
-      await expect(page.locator('.modal')).toBeVisible();
-      await idle(page);
-      // The open is recorded once Home lists it, before any picture's sidebar asks for the list (as the old spec waited).
-      await page.goto('/c/rs-learning/home');
-      await expect(page.locator('.recent-cards a')).toHaveCount(1);
-    });
-    test.afterAll(async ({ baseURL }) => {
-      await context?.close();
-      // First run empties the installation; the seed goes back for whatever runs next, as the old screens did.
-      if (screen.name === 'first-run') resetFirstRun(baseURL, true);
-    });
-
-    for (const width of widths) for (const theme of themes) {
-      test(`${screen.name} ${width} ${theme}`, async ({ baseURL }) => {
-        forgetBlocked(context);
+for (const language of languages) {
+  test(`every key screen keeps its text at 4.5:1 in ${language}, dark and light`, async ({ page }) => {
+    test.setTimeout(300000);
+    asAdmin(`update public.people set language='${language}' where id='${omar}'`);
+    await signIn(page, 'omar@example.com', '/c/rs-learning/home');
+    for (const screen of screens) {
+      await test.step(screen.name, async () => {
+        // A screen whose data the seed does not hold writes it first, and one whose data the Engine holds reads it from a
+        // fake Engine made for this screen alone.
         const state = screen.state ? screenStates[screen.state] : undefined;
         if (state) { asAdmin(state.unset); asAdmin(state.set); asAdmin(givenLooks); }
-        if (state?.engine) expectNoOpenRun(screen.name, baseURL);
-        // A screen whose data the Engine holds draws it from the lane's fake Engine, made for this picture alone.
         const engine = state?.engine ? await laneHermes() : null;
         if (engine) state!.engine!(engine);
         try {
-          await page.emulateMedia({ colorScheme: theme });
-          await page.setViewportSize({ width, height: 900 });
-          // The first-run form shows only through the installer's setup link (#50).
-          await page.goto(screen.name === 'first-run' ? `${screen.path}#code=${process.env.SETUP_CODE}` : screen.path);
-          if (screen.anonymous) await page.locator('select').selectOption('ar');
-          await expect(page.locator('html')).toHaveAttribute('lang', 'ar');
-          await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-          await expect(page.locator(screen.ready ?? '.content').first()).toBeVisible();
-          await idle(page);
-          // A face's moment (a greeting, a birth: #701) shows as still frames for at most 1.8s; the picture waits it out.
-          await page.waitForFunction(() => !document.querySelector('.face[data-moment]'));
-          // The fixed text is shorter than a real date, so it goes in before the window is sized for the page.
-          await fixClockText(page);
-          await showWholePage(page, width);
-          // With reduced motion the sign-in artwork holds its first frame; it only exists on the wide layout.
-          if (screen.name === 'sign-in' && width === 1440) await expect(page.locator('pre[aria-hidden=true]')).toContainText('╭');
-          await expectDeterministic(page);
-          if (theme === 'dark') await expectDarkContrast(page);
-          await expect(page).toHaveScreenshot(laneImage(screen, width, theme), { fullPage: true });
-          const quiet = quietText[screen.name];
-          if (theme === 'light' && quiet) {
-            const measure = async () => {
-              if (quiet.some(([, selector]) => selector.startsWith('.sidebar'))) await openNavigation(page);
-              await expectQuietContrast(page, quiet);
-            };
-            await measure();
-            // The same labels in English, measured with no picture: the lane draws Arabic only, contrast is kept in both.
-            asAdmin(`update public.people set language='en' where id='${omar}'`);
-            try {
-              await page.reload();
-              await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-              await expect(page.locator(screen.ready ?? '.content').first()).toBeVisible();
-              await idle(page);
-              await measure();
-            } finally {
-              asAdmin(`update public.people set language='ar' where id='${omar}'`);
-            }
+          for (const width of widths) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.emulateMedia({ colorScheme: 'dark' });
+            await open(page, screen.path, screen.ready, language);
+            await expectDarkContrast(page);
+            if (!screen.quiet) continue;
+            await page.emulateMedia({ colorScheme: 'light' });
+            await open(page, screen.path, screen.ready, language);
+            if (screen.quiet.some(([, selector]) => selector.startsWith('.sidebar'))) await openNavigation(page);
+            await expectQuietContrast(page, screen.quiet);
           }
         } finally {
           await engine?.close();
@@ -295,3 +214,18 @@ for (const screen of screens) {
     }
   });
 }
+
+test('the sign-in page keeps its text at 4.5:1 in the dark theme, in Arabic and English at 1440 and 390', async ({ page }) => {
+  for (const language of languages) for (const width of widths) {
+    await test.step(`${language} ${width}`, async () => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await page.goto('/sign-in');
+      await page.locator('select').selectOption(language);
+      await expect(page.locator('html')).toHaveAttribute('lang', language);
+      await expect(page.locator('input[name=email]')).toBeVisible();
+      await idle(page);
+      await expectDarkContrast(page);
+    });
+  }
+});

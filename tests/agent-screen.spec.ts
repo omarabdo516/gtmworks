@@ -303,21 +303,48 @@ test('a Member takes control of the Screen for this session, works it with their
  await expect.poll(()=>fake.settings.screenStreams).toBe(0);
 });
 
-test('a page that loses its connection while in control says control went back, as closing the screen does',async({page})=>{
+// #752: a dropped connection is opened again after about 2 s, while the server finds the old socket dead only on its
+// heartbeat, up to half a minute later.
+test('a page that loses its connection while in control has it again on reconnecting, and says control went back only once it did',async({page})=>{
  fake.settings.screens.set(adsProfile,{running:true}); fake.settings.screens.set(seoProfile,{});
- // The page's own socket passes through as it is, until the connection is cut on the page's side, as a network that
- // drops. The server gives control back when its heartbeat finds the dead socket, which the case above shows with a
- // socket that ends without a closing word; here it is what the page says.
- const sockets:{close:(options?:{code?:number,reason?:string})=>Promise<void>}[]=[];
- await page.routeWebSocket(/\/api\/display\/ws/,socket=>{ socket.connectToServer(); sockets.push(socket); });
+ // The page's own socket passes through as it is, until the connection is cut: on the page's side only, as a network
+ // that drops before the server knows, or on both sides, as the server finding the dead socket.
+ const sockets:{page:{close:(options?:{code?:number,reason?:string})=>Promise<void>},server:{close:(options?:{code?:number,reason?:string})=>Promise<void>}}[]=[];
+ await page.routeWebSocket(/\/api\/display\/ws/,socket=>{ sockets.push({page:socket,server:socket.connectToServer()}); });
+ const taken=controlRows('agent_screen_taken').length, given=controlRows('agent_screen_given_back').length;
  const {card}=await openScreen(page,'omar@example.com');
  await card.getByRole('button',{name:'Watch',exact:true}).click();
  const view=page.getByRole('dialog',{name:'Ads’s screen'});
  await view.getByRole('button',{name:'Take control'}).click();
  await view.getByRole('button',{name:'Allow for this session'}).click();
- await expect(view.getByRole('button',{name:'Done',exact:true})).toBeVisible();
+ const done=view.getByRole('button',{name:'Done',exact:true});
+ await expect(done).toBeVisible();
  await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('human');
- await sockets.at(-1)?.close({code:1011,reason:'lost'});
+
+ // The network drops while the server still holds the old socket: the new socket has control, with no word of losing it.
+ const count=sockets.length;
+ await sockets.at(-1)?.page.close({code:1011,reason:'lost'});
+ await expect.poll(()=>sockets.length).toBe(count+1);
+ // The view reads as theirs throughout, and the stream comes back on the new socket.
+ await expect(done).toBeVisible();
+ await expect(view.locator('.scr__live:not(.is-waiting) canvas')).toBeVisible();
+ await expect(view.getByText('You have control').first()).toBeVisible();
+ // The heartbeat ends the old socket: control stays on the new one.
+ await sockets.at(-2)?.server.close();
+ await page.waitForTimeout(500);
+ await expect(done).toBeVisible();
+ expect(fake.settings.screens.get(adsProfile)?.holder).toBe('human');
+ await expect(page.locator('.toast').filter({hasText:'Control went back'})).toHaveCount(0);
+ expect(controlRows('agent_screen_taken').length).toBe(taken+1);
+ expect(controlRows('agent_screen_given_back').length).toBe(given);
+
+ // The server finds the socket dead and gives control back before the page reconnects: the page says so once its
+ // next socket reads it. (A page that reconnects first is handed control again, as above.)
+ const last=sockets.at(-1);
+ await last?.server.close();
+ await expect.poll(()=>fake.settings.screens.get(adsProfile)?.holder).toBe('agent');
+ await expect.poll(()=>controlRows('agent_screen_given_back').length).toBe(given+1);
+ await last?.page.close({code:1011,reason:'lost'});
  await expect(page.locator('.toast')).toContainText('Control went back to Ads when you closed the screen');
  await expect(view.getByRole('button',{name:'Take control'})).toBeVisible();
 });

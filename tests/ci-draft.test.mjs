@@ -120,7 +120,7 @@ test('a draft and a ready pull request start the same jobs for the same files', 
 
 test('a push to main runs every suite for a code change, and none of the heavy ones for documents only', () => {
   const code = started({ event: 'push', files: ['scripts/ci-fast.mjs'] });
-  for (const job of ['changes', 'fast', 'check', 'visual', 'image', 'database', 'integration', 'chat-open', ...installJobs]) assert.ok(code.includes(job), job);
+  for (const job of ['changes', 'fast', 'check', 'budgets', 'image', 'database', 'integration', 'chat-open', ...installJobs]) assert.ok(code.includes(job), job);
   assert.deepEqual(started({ event: 'push', files: documentFiles }), ['changes', 'check', 'fast']);
 });
 
@@ -178,7 +178,7 @@ test('a pull request that changes install files starts the install proof as one 
 });
 
 // #408: the profile-size measurement is no check a pull request needs. It runs on a push to main and on a manual run
-// only, like the visual lane, and a documents-only push starts none of it.
+// only, like the navigation budgets, and a documents-only push starts none of it.
 test('the profile-size measurement starts on a push to main and on a manual run, never on a pull request', () => {
   for (const draft of [true, false]) {
     assert.equal(started({ event: 'pull_request', draft, files: heavyFiles }).includes('install-measure'), false, `a draft=${draft} pull request`);
