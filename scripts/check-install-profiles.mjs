@@ -958,7 +958,8 @@ if(step==='screen-sleep') {
 } else if(step==='screen-live') {
  // screen-live (#713, ADR 0029): the awake Screen's live stream through gtmworks's own address only. The Owner signs in
  // as a browser does (the session cookie the app reads), opens /api/display/ws on the gateway, the install's one public
- // address, and holds the stream: the real Xvnc's RFB handshake to its framebuffer of 1440 by 900, then a full picture.
+ // address, with the Origin a browser sends (the app refuses one whose host is not the Host the gateway passed on), and
+ // holds the stream: the real Xvnc's RFB handshake to its framebuffer of 1440 by 900, then a full picture.
  // Taking control leaves the Engine's lease with a person, a pointer move goes through, and "Done" gives it back; both
  // are one Company log row with the Owner. Then the socket closes while in control, as a lost connection, and the lease
  // is back with the Agent.
@@ -973,7 +974,7 @@ if(step==='screen-sleep') {
  const owner=signedIn.data.user.id;
  const cookie=[...jar].map(([name,value])=>`${name}=${value}`).join('; ');
  const open=()=>{
-  const socket=new WebSocketClient(`${origin.replace(/^http/,'ws')}/api/display/ws?company=${first.company}&agent=${first.agent}`,{headers:{cookie}});
+  const socket=new WebSocketClient(`${origin.replace(/^http/,'ws')}/api/display/ws?company=${first.company}&agent=${first.agent}`,{headers:{cookie,origin}});
   const said=[]; let bytes=Buffer.alloc(0); let wake=()=>{};
   socket.on('message',(data,binary)=>{ if(binary) bytes=Buffer.concat([bytes,data]); else said.push(JSON.parse(String(data))); wake(); });
   const closed=new Promise(resolve=>socket.on('close',code=>{ wake(); resolve(code); }));

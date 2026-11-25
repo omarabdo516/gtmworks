@@ -109,7 +109,9 @@ test('the install applies the auth service rate limit per connection address wri
  assert.deepEqual(Object.keys(environment).filter(name=>/FORWARDED/i.test(name)),[]);
  assert.ok(authBlock!==undefined,'the gateway routes /auth/v1/');
  assert.ok(setForAuth(header,'$remote_addr'),`${header} is the connection address where /auth/v1/ uses it`);
- assert.equal([...nginx.matchAll(new RegExp(`proxy_set_header\\s+${header}\\b`,'gi'))].length,1,`${header} is set once, from the connection`);
+ // Set at the server level and repeated only where a location sets headers of its own, each time from the connection.
+ const sets=[...nginx.matchAll(new RegExp(`proxy_set_header\\s+${header}\\s+([^;]*);`,'gi'))].map(([,value])=>value);
+ assert.ok(sets.length>=1&&sets.every(value=>value==='$remote_addr'),`${header} is only ever the connection address`);
 });
 
 test('no client-supplied address header reaches Auth: each is replaced by the connection address or dropped', () => {
