@@ -138,7 +138,7 @@ test('a card waiting for a decision moves only by it: a drop on Live opens the c
  await page.mouse.move(to.x+to.width/2,to.y+40,{steps:10});
  await page.mouse.up();
  // The toast raised on the board is still there on the card the drop opened.
- await expect(page).toHaveURL(/\/work\/board\/5$/);
+ await expect(page).toHaveURL(/\/work\/board\?card=5$/);
  await expect(page.locator('.toast')).toHaveText('It needs your OK first. Decide here and the card moves on its own');
  await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
  await page.goto('/c/rs-learning/work/board');
@@ -146,7 +146,7 @@ test('a card waiting for a decision moves only by it: a drop on Live opens the c
  await page.keyboard.press('Shift+ArrowRight');
  await expect(page.locator('.toast')).toHaveText('This card is waiting for your decision. Decide in the chat first');
  await expect(page.getByRole('button',{name:'Undo'})).toHaveCount(0);
- await expect(page).toHaveURL(/\/work\/board\/5$/);
+ await expect(page).toHaveURL(/\/work\/board\?card=5$/);
  await page.goto('/c/rs-learning/work/board');
  expect(await landedColumn(page,5)).toBe('waiting');
 });

@@ -118,7 +118,7 @@ export default async function CompanyPage({params,searchParams}:{params:Promise<
  for(const named of [shownId,sheetId]) if(onArchiveBoard&&named!=null&&!archived().some(c=>c.id===named)&&!workData[2]?.data?.some(c=>c.id===named)) {
   const {data:asked}=await db.rpc('archived_cards',{c:company.id}).select('*').eq('id',named).maybeSingle(); if(asked) archivedNamed.push(asked as Card); }
  const isArchived=(id:number|null|undefined)=>id!=null&&archived().some(c=>c.id===id)&&!workData[2]?.data?.some(c=>c.id===id);
- if(isArchived(shownId)) redirect(`/c/${slug}/work/board?card=${shownId}`);
+ for(const named of [cardId,shownId]) if(isArchived(named)) redirect(`/c/${slug}/work/board?card=${named}`);
  const sheetArchived=isArchived(sheetId);
  const sheet=sheetId!=null&&(sheetArchived||workData[2]?.data?.some(c=>c.id===sheetId))?await cardWindow(db,{company:company.id,card:sheetId,slug,me:user.id,canWrite:canCreate&&!sheetArchived,t,language}):undefined;
  const {data:workMembers}=(isWork||section==='home'||section==='approvals')?await db.from('members').select('person_id,role,agent_role,people(name)').is('removed_at',null).eq('company_id',company.id):{data:[]};

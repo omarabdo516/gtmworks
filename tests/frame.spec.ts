@@ -162,7 +162,7 @@ test('Home has four parts in order and missing sources show unavailable, never z
 test('owner assigns a new Contributor agent through settings, the work list follows its rename, and demotion clears the key',async({page})=>{
  await signIn(page,'omar@example.com','/c/rs-learning/work/list');
  // The Writer's own Card (seed Card 1), not the Card in review it is also the assignee of (#677).
- const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})}).filter({has:page.locator('a[href$="/work/board/1"]')});
+ const writerRow=page.locator('.table tbody tr').filter({has:page.locator('td:last-child',{hasText:'وكيل المحتوى'})}).filter({has:page.locator('a[href$="/work/board?card=1"]')});
  await expect(writerRow).toHaveCount(1);
  const current=writerRow.getByRole('link');
  await expect(current).toBeVisible();
@@ -238,6 +238,9 @@ test('recent cards record actual opens only, newest three per person and company
  await page.goto('/c/rs-learning/work/board/1');
  await expect(page.locator('.recent-cards a').first()).toHaveAttribute('href','/c/rs-learning/work/board/1');
  expect(await hrefs()).toEqual([1,4,3].map(id=>`/c/rs-learning/work/board/${id}`));
+ // The Card's window is modal (#678): it is closed before the sidebar is used.
+ await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
+ await expect(page.locator('.cw[open]')).toHaveCount(0);
  await chooseCompany(page,'aleem');
  await expect(page).toHaveURL(/\/c\/aleem\/work\/board$/);
  await expect(page.locator('.recent-cards')).toHaveCount(0);
@@ -333,6 +336,8 @@ test('an account menu opened while the next page is still arriving stays open wh
   const shell=await page.locator('.shell').elementHandle();
   await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
   await asked;
+  // The Card's window is modal (#678): the sidebar answers once it has left.
+  await expect(page.locator('.cw[open]')).toHaveCount(0);
   // The menu rises once, as it opens; drawn again on the page that lands, it has risen already (#129).
   await page.evaluate(()=>{ const counted=window as unknown as {rises:number}; counted.rises=0; document.addEventListener('animationstart',event=>{ if((event.target as Element).id==='me-menu') counted.rises++; },true); });
   await page.locator('.sidebar #btn-me').click();
@@ -427,6 +432,8 @@ test('a menu open while its own page lands keeps the item that had focus',async(
   const shell=await page.locator('.shell').elementHandle();
   await page.getByRole('dialog').getByRole('button',{name:'Close the card'}).click();
   await asked;
+  // The Card's window is modal (#678): the sidebar answers once it has left.
+  await expect(page.locator('.cw[open]')).toHaveCount(0);
   await page.locator('.sidebar #btn-me').click();
   const menu=page.getByRole('menu');
   await menu.getByRole('menuitemradio',{name:'Dark'}).focus();

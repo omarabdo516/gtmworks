@@ -38,7 +38,7 @@ test('Paperclip Inter and Arabic-only Vazirmatn load locally',async({page,contex
    expect(drawn.filter(font=>font!==family&&font!==plex),'no other face draws text').toEqual([]);
    if(!['work/board','work/board/1','work/calendar','work/list','approvals'].includes(path)) expect(drawn).toContain(family);
    for(const font of drawn) expect(await page.evaluate(font=>Array.from(document.fonts).some(face=>face.family.replaceAll(/["']/g,'')===font&&face.status==='loaded'),font),`${font} loaded`).toBe(true);
-   for(const el of await page.locator(':is(.content h1,.content h2,.content h3,.modal h2):not(.board-view *)').all()) expect(await el.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toBe(family);
+   for(const el of await page.locator(':is(.content h1,.content h2,.content h3,.modal h2):not(.board-view *, .cw *)').all()) expect(await el.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toBe(family);
    // The shell and the board (ADR 0013) take the approved reference's face (IBM Plex Sans Arabic) in both languages.
    if(width===1440) for(const heading of await page.locator('.sidebar .sb-label, .board-view h1, .board-view h2').all()) expect(await heading.evaluate(el=>getComputedStyle(el).fontFamily.split(',')[0].trim().replaceAll(/["']/g,''))).toMatch(/^(?:__)?IBM[_ ]Plex[_ ]Sans[_ ]Arabic(?:_|$)/);
    if(path==='home') for(const metric of await page.locator('.stats .stat').all()) {

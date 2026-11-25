@@ -78,7 +78,7 @@ test('English default, account language across sessions/devices, automatic conte
  const suffix=Date.now();
  const titles=[`بطاقة من الإعدادات 1440 ${suffix}`,`Settings card 1440 ${suffix}`];
  const calendarTitles=[`ع 1440 ${suffix.toString(36)}`,`A 1440 ${suffix.toString(36)}`];
- const goLive=`${new Date().toISOString().slice(0,10)}T12:00`;
+ const goLive=new Date().toISOString().slice(0,10);
  const paths:string[]=[];
  for(const title of [...titles,...calendarTitles]) {
   await page.goto('/c/rs-learning/work/new');
@@ -86,13 +86,13 @@ test('English default, account language across sessions/devices, automatic conte
   await page.getByRole('button',{name:'Create card',exact:true}).click();
   await expect(page.locator('.cw[open] .cw-title')).toHaveText(title);
   paths.push(new URL(page.url()).pathname);
-  await page.locator('input[name=go_live]').fill(goLive);
+  // The Card window saves its publishing date as it changes (#678).
   await Promise.all([
    page.waitForResponse(response=>response.request().method()==='POST' && new URL(response.url()).pathname===paths.at(-1)),
-   page.getByRole('button',{name:'Save changes',exact:true}).click()
+   page.getByRole('dialog').getByLabel('Publishing date',{exact:true}).fill(goLive)
   ]);
   await page.reload();
-  await expect(page.locator('input[name=go_live]')).toHaveValue(goLive);
+  await expect(page.getByRole('dialog').getByLabel('Publishing date',{exact:true})).toHaveValue(goLive);
  }
  try {
   for(const language of ['en','ar'] as const) {
