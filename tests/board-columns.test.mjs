@@ -197,7 +197,12 @@ test('a Card shows one state: its chat\'s question, a review, an Agent at work, 
  assert.equal(cardSymbol({ status: 'planned', assignee_person: 'p-2' }, { me }), '');
  // #681: Planned on its approved Version shows it approved, until a later Version needs its own Approval.
  const at = '2026-11-25T10:00:00Z';
- assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: 7, latest_version: 7, assignee_person: me }, { me }), 'approved');
+ assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: 7, latest_version: 7 }, { me }), 'approved');
+ assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: 7, latest_version: 7, assignee_person: me }, { me }), 'onyou', 'a Card on the reader says so before that it was approved');
+ // #682: a Card waiting for others shows it, after a question, a review or work under way.
+ assert.equal(cardSymbol({ status: 'planned', open_waits: 2, assignee_person: me }, { me }), 'waits');
+ assert.equal(cardSymbol({ status: 'progress', open_waits: 1 }, { me, working: true }), 'working');
+ assert.equal(cardSymbol({ status: 'waiting', open_waits: 1 }, { me }), 'review');
  assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: 7, latest_version: 9 }, { me }), '');
  assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: null, latest_version: null }, { me }), 'approved');
  assert.equal(cardSymbol({ status: 'planned', approved_at: at, approved_version: null, latest_version: 3 }, { me }), '');

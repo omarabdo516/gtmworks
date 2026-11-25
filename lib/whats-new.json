@@ -1,5 +1,11 @@
 [
  {
+  "issue": 682,
+  "date": "2026-11-25",
+  "en": { "title": "A card waits for other cards", "body": "In a card, Waits for names the cards it waits for and Waited for by the cards waiting for it; the tile shows how many it still waits for, and a card that is live, done or archived holds nobody up." },
+  "ar": { "title": "البطاقة بتستنى بطاقات تانية", "body": "جوه البطاقة، «مستنية» بيقول البطاقات اللي مستنياها و«مستنياها» بيقول اللي مستنيين عليها؛ والبطاقة على اللوحة بتعرض هي مستنية كام، والبطاقة اللي بقت شغالة لايف أو خلصت أو اتأرشفت ماتعطّلش حد." }
+ },
+ {
   "issue": 681,
   "date": "2026-11-25",
   "en": { "title": "One review, by any Owner or Manager", "body": "A card in review shows its version with Approve and Send back; any Owner or Manager who sees it decides, the first answer counts, and a card sent back gets the reason as a comment. Approval steps are gone." },

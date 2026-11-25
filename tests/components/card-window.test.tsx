@@ -23,7 +23,7 @@ const move = vi.fn<(column: string) => Promise<boolean>>(async () => true);
 afterEach(() => { vi.useRealTimers(); push.mockReset(); refresh.mockReset(); send.mockClear(); save.mockClear(); move.mockClear(); });
 
 const data = (more: Partial<CardWindowData> = {}): CardWindowData => ({ id: 7, working: false, comments: <p>Shorter please</p>, commentCount: 1, activity: <p>Omar moved the card</p>, activityCount: 3,
- runs: [], files: [], creative: null, versions: [], made: { from: 'board', by: 'Omar', at: '2026-11-20T10:00:00Z' }, ...more });
+ runs: [], files: [], creative: null, versions: [], made: { from: 'board', by: 'Omar', at: '2026-11-20T10:00:00Z' }, waits: [], ...more });
 const card = (more: Partial<CardWindowCard> = {}): CardWindowCard => ({ id: 7, title: 'Launch post', status: 'planned', go_live: '2026-11-12T00:00:00+00:00', project_id: null, assignee: '', ...more });
 const columnName = (column: string) => ({ waiting: 'Waiting on you', ideas: 'Ideas', planned: 'Planned', progress: 'In progress', live: 'Live', done: 'Done' })[column] ?? column;
 type Props = Partial<ComponentProps<typeof CardWindow>>;
@@ -214,4 +214,37 @@ test('a long title never hides the details: they are reached by scrolling the wi
  const side = document.querySelector('.cw-side')!.getBoundingClientRect(); const view = body.getBoundingClientRect();
  expect(side.top).toBeLessThan(view.bottom);
  expect(document.querySelector('.cw-head')!.getBoundingClientRect().height).toBeLessThan(80);
+});
+
+// #682: a Card waits for other Cards; each side shows the other, a released one ticked, a hidden one unnamed.
+test('the Cards a Card waits for and those waiting for it are chips that open them; a writer adds and takes off a wait', async () => {
+ const waits = [
+  { side: 'waits_for' as const, other: 3, title: 'Design', status: 'progress', open: true },
+  { side: 'waits_for' as const, other: 4, title: 'Copy', status: 'done', open: false },
+  { side: 'waits_for' as const, other: 5, title: null, status: null, open: true },
+  { side: 'waited_by' as const, other: 9, title: 'Launch', status: 'planned', open: true },
+ ];
+ const screen = await show({ data: data({ waits }), waitChoices: [{ id: 3, title: 'Design', status: 'progress' }, { id: 6, title: 'Research', status: 'ideas' }, { id: 8, title: 'Old', status: 'done' }, { id: 7, title: 'Launch post', status: 'planned' }] });
+ const design = screen.getByRole('link', { name: 'Design · In progress' });
+ await expect.element(design).toHaveAttribute('href', '/c/rs-learning/work/board?card=3');
+ await expect.element(screen.getByRole('link', { name: 'Copy · Done' })).toBeVisible();
+ expect(document.querySelector('a[aria-label="Copy · Done"] .dot')).toBeNull();
+ await expect.element(screen.getByText('A hidden card')).toBeVisible();
+ await expect.element(screen.getByRole('link', { name: 'Launch · Planned' })).toBeVisible();
+ // Taking a wait off.
+ await screen.getByRole('button', { name: 'Stop waiting for Design' }).click();
+ expect(Object.fromEntries(send.mock.lastCall![0].entries())).toMatchObject({ op: 'wait-remove', card: '7', waits_for: '3' });
+ // Adding one: the Card itself, one it already waits for and a Done one are not offered.
+ await screen.getByRole('button', { name: 'Wait for another card' }).click();
+ const items = screen.getByRole('menuitem');
+ expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(1);
+ await screen.getByRole('menuitem', { name: 'Research' }).click();
+ expect(Object.fromEntries(send.mock.lastCall![0].entries())).toMatchObject({ op: 'wait-add', card: '7', waits_for: '6' });
+});
+
+test('a Viewer reads the waits with no control', async () => {
+ const screen = await show({ canWrite: false, data: data({ waits: [{ side: 'waits_for', other: 3, title: 'Design', status: 'progress', open: true }] }), waitChoices: [{ id: 6, title: 'Research', status: 'ideas' }] });
+ await expect.element(screen.getByRole('link', { name: 'Design · In progress' })).toBeVisible();
+ expect(document.querySelector('.cw-chip__x')).toBeNull();
+ expect(screen.container.querySelector('[aria-label="Wait for another card"]')).toBeNull();
 });

@@ -25,17 +25,19 @@ import './card-window.css';
 export type CardMade={by:string,at:string}&({from:'board'}|{from:'chat',href:string}|{from:'chat-private',person:string}|{from:'channel',href:string,name:string}|{from:'channel-locked',name:string});
 export type CardRun={n:number,note:number,agent:string,name:string,outcome:string|null,start:string,end:string|null};
 // What the server reads for an open Card (app/card-window-server.tsx).
+// One side of a wait (#682): a Card this one waits for, or one waiting for it; a Card the reader may not see has no title.
+export type CardWaitLink={side:'waits_for'|'waited_by',other:number,title:string|null,status:string|null,open:boolean};
 export type CardWindowData={id:number,working:boolean,comments:ReactNode,commentCount:number,activity:ReactNode,activityCount:number,runs:CardRun[],
- files:{id:number,name:string,by:string,at:string}[],creative:number|null,versions:{id:number,n:number,name:string,url:string|null,at:string}[],made:CardMade};
+ files:{id:number,name:string,by:string,at:string}[],creative:number|null,versions:{id:number,n:number,name:string,url:string|null,at:string}[],made:CardMade,waits:CardWaitLink[]};
 // The Card as the board holds it, with its assignee as the window saves it ('a:<Agent>', 'p:<Member>' or '').
 export type CardWindowCard={id:number,title:string,status:string,go_live:string|null,project_id:number|null,assignee:string,archived?:{by:string,at:string}};
-export type CardSymbol='question'|'review'|'approved'|'working'|'onyou'|'archived'|'readonly';
+export type CardSymbol='question'|'review'|'approved'|'working'|'waits'|'onyou'|'archived'|'readonly';
 type Field='title'|'go_live'|'project'|'assignee';
 type Tab='comments'|'activity'|'runs';
 type SuggestionList={token:{type:string,q:string,start:number,end:number},items:Suggestion[],index:number};
 
 const symbols:Record<CardSymbol,{icon:ShellIconName|null,tone:string,key:string}>={
- question:{icon:'ask',tone:'wait',key:'symQuestion'},review:{icon:'needsReview',tone:'wait',key:'symReview'},approved:{icon:'approved',tone:'ok',key:'symApproved'},working:{icon:null,tone:'ok',key:'symWorking'},
+ question:{icon:'ask',tone:'wait',key:'symQuestion'},review:{icon:'needsReview',tone:'wait',key:'symReview'},approved:{icon:'approved',tone:'ok',key:'symApproved'},waits:{icon:'hourglass',tone:'mute',key:'symWaits'},working:{icon:null,tone:'ok',key:'symWorking'},
  onyou:{icon:'hand',tone:'wait',key:'symOnyou'},archived:{icon:'archive',tone:'mute',key:'symArchived'},readonly:{icon:'eye',tone:'mute',key:'cwReadOnly'},
 };
 // One state as one symbol (design-reference-card: symHTML): an image named by its tooltip, or, inside a control that
@@ -94,10 +96,10 @@ const leaveMs=190;
 // line saying so. A Viewer, and anyone on an archived Card, reads it all with no control drawn and nothing drawn for an
 // empty property. Closing lets it leave first; then the board's own address comes back and the keyboard is on the tile.
 // Its actions are the board's server actions, handed in so this client file never imports the server module.
-export function CardWindow({slug,company,me,card,data,symbol,canWrite:mayWrite,alone,message,columnName,assignees,people=[],agents=[],projects,send,save,move,archive,callout,description,intoReview}:{
+export function CardWindow({slug,company,me,card,data,symbol,canWrite:mayWrite,alone,message,columnName,assignees,people=[],agents=[],projects,send,save,move,archive,callout,description,intoReview,waitChoices=[]}:{
  slug:string,company:string,me:string,card:CardWindowCard,data:CardWindowData,symbol:CardSymbol|'',canWrite:boolean,alone:boolean,message?:string,
  columnName:(column:string)=>string,assignees:{agents:{id:string,name:string}[],people:{id:string,name:string}[]},people?:CallablePerson[],agents?:CallableAgent[],
- projects:{id:number,name:string}[],send:(form:FormData)=>Promise<void>,save:(form:FormData)=>Promise<SaveResult>,move:(column:string)=>Promise<boolean>,
+ projects:{id:number,name:string}[],waitChoices?:{id:number,title:string,status:string}[],send:(form:FormData)=>Promise<void>,save:(form:FormData)=>Promise<SaveResult>,move:(column:string)=>Promise<boolean>,
  archive?:{archive:()=>void,restore:()=>void},callout?:ReactNode,description?:ReactNode,intoReview?:()=>void}) {
  const {t,language}=useI18n(); const router=useRouter();
  const W=mayWrite&&!card.archived;
@@ -201,6 +203,24 @@ export function CardWindow({slug,company,me,card,data,symbol,canWrite:mayWrite,a
   :made.from==='channel-locked'?<span className="cwp__ic cwp__src" role="img" aria-label={t('cwChannelLocked',made.name)} data-tip={t('cwChannelLocked',made.name)}><ShellIcon name="lock"/></span>
   :<span className="cwp__ic cwp__src" role="img" aria-label={t('cwFromBoard')} data-tip={t('cwFromBoard')}><ShellIcon name="board"/></span>;
  const fileList=data.files.length>0&&<ul className="cw-fls">{data.files.map(file=><li key={file.id} className="cw-fl"><a className="file-chip cw-file" href={`/c/${slug}/files/${file.id}`} target="_blank" rel="noreferrer" aria-label={t('attachOpen',file.name)} data-tip={t('cwFileBy',file.by,workDate(file.at,language,{month:'short'}))}><ShellIcon name="file"/><bdi dir="auto">{file.name}</bdi></a></li>)}</ul>;
+ // Waits for, and waited for by (#682; design-reference-card: cwSideHTML): each Card a chip that opens it, ticked once
+ // released (Live, Done or archived); a Card the reader may not see is a hidden Card. A writer adds a wait from the
+ // Cards on the board and takes one off; the database refuses a loop.
+ const waitForm=(op:string,other:number)=>{ const form=new FormData(); for(const [key,value] of Object.entries({op,slug,company,card:String(card.id),view:'sheet',waits_for:String(other)})) form.set(key,value); return form; };
+ const waitsFor=data.waits.filter(w=>w.side==='waits_for'); const waitedBy=data.waits.filter(w=>w.side==='waited_by');
+ const waitChip=(w:CardWaitLink,removable:boolean)=><li key={`${w.side}-${w.other}`} className="cw-chip">{w.title==null
+  ?<span className="cw-chip__open is-hidden"><ShellIcon name="lock"/><span>{t('cwHiddenCard')}</span></span>
+  :<Link className="cw-chip__open" href={`/c/${slug}/work/board?card=${w.other}`} scroll={false} aria-label={`${w.title} · ${w.status==='archived'?t('symArchived'):columnName(w.status||'')}`} data-tip={w.status==='archived'?t('symArchived'):columnName(w.status||'')}>
+   {w.open?<span className="dot" aria-hidden="true"/>:<ShellIcon name="check"/>}<bdi className="od-truncate" dir="auto">{w.title}</bdi></Link>}
+  {removable&&<button type="button" className="cw-chip__x" aria-label={t('cwWaitRemove',w.title??t('cwHiddenCard'))} data-tip={t('cwWaitRemove',w.title??t('cwHiddenCard'))} onClick={()=>void send(waitForm('wait-remove',w.other))}><ShellIcon name="x"/></button>}</li>;
+ const taken=new Set([card.id,...waitsFor.map(w=>w.other)]);
+ const waitItems:MenuItem[]=waitChoices.filter(x=>!taken.has(x.id)&&x.status!=='done').map(x=>({key:String(x.id),label:<bdi dir="auto">{x.title}</bdi>,run:()=>void send(waitForm('wait-add',x.id))}));
+ const waitAdd=(className:string,inner:ReactNode)=>waitItems.length?<CwMenu label={t('cwWaitAdd')} className={className} items={waitItems} button={inner}/>:null;
+ const waitRows=<>{waitsFor.length?<div className="cwp cwp--chips"><span className="cwp__ic" data-tip={t('cwWaitsFor')} aria-hidden="true"><ShellIcon name="hourglass"/></span><span className="sr-only">{t('cwWaitsFor')}:</span>
+   <ul className="cw-chips">{waitsFor.map(w=>waitChip(w,W))}</ul>{W&&waitAdd('ib ib--sm',<ShellIcon name="plus"/>)}</div>
+  :W&&waitItems.length>0&&<div className="cwp">{waitAdd('cwp__b is-empty',<>{icon('hourglass')}{addLabel}</>)}</div>}
+  {waitedBy.length>0&&<div className="cwp cwp--chips"><span className="cwp__ic" data-tip={t('cwWaitedBy')} aria-hidden="true"><ShellIcon name="link"/></span><span className="sr-only">{t('cwWaitedBy')}:</span>
+   <ul className="cw-chips">{waitedBy.map(w=>waitChip(w,false))}</ul></div>}</>;
  const side=<aside className="cw-side" aria-label={t('cwDetails')}><div className="cwp-list">
   {W?<div className="cwp"><CwMenu label={t('cwPropertyValue',t('assignee'),assigneeName(assignee)||t('assigneeNoOne'))} className={`cwp__b${assignee?'':' is-empty'}`} items={assigneeItems} button={<><span className="cwp__ic" data-tip={t('assignee')}>{assigneeFace(assignee,20)}</span>{assignee?<bdi className="od-truncate">{assigneeName(assignee)}</bdi>:addLabel}</>}/></div>
    :stat(assigneeFace(assignee,20),t('assignee'),<bdi className="od-truncate">{assigneeName(assignee)||t('assigneeNoOne')}</bdi>)}
@@ -212,6 +232,7 @@ export function CardWindow({slug,company,me,card,data,symbol,canWrite:mayWrite,a
   {W?<div className="cwp"><CwMenu label={t('cwPropertyValue',t('project'),projectName(project)||t('cwNone'))} className={`cwp__b${project?'':' is-empty'}`} radio items={projectItems} button={<>{icon('folder')}{project?<bdi className="od-truncate">{projectName(project)}</bdi>:addLabel}</>}/></div>
    :project&&stat(<ShellIcon name="folder"/>,t('project'),<bdi className="od-truncate">{projectName(project)}</bdi>)}
   {note('project')}
+  {waitRows}
   {W?<form ref={cardFiles} action={send} className={`cwp${data.files.length?' cwp--chips':''}`}>{hidden('files')}
     {data.files.length?<><span className="cwp__ic" data-tip={t('cwFiles')} aria-hidden="true"><ShellIcon name="clip"/></span><span className="sr-only">{t('cwFiles')}:</span>{fileList}
      <label className="ib ib--sm cw-pick-files" data-tip={t('cwAddFiles')}><ShellIcon name="plus"/><input type="file" name="files" multiple className="sr-only" aria-label={t('cwAddFiles')} onChange={()=>cardFiles.current?.requestSubmit()}/></label></>

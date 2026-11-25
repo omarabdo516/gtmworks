@@ -61,7 +61,7 @@ function newestQuestion() { let newest=0; return {ask:()=>++newest,drop:()=>{ ne
 type ArchiveCards=(company:string,intent:ArchiveIntent|'undo',cards:number[],version?:string)=>Promise<ArchiveAnswer<number>>;
 export type AddIdeaAction=(form:FormData)=>Promise<IdeaResult>;
 export type OpenReview={card_id:number,version_id:number|null,asked_by:string|null,asked_at:string};
-export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,reviews?:OpenReview[],placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
+export type WorkProps={workAction:WorkAction,saveCard?:SaveCard,tickTodo?:TickTodoAction,reviews?:OpenReview[],openWaits?:{card_id:number,waiting:number}[],placeMove:PlaceCard,addIdea:AddIdeaAction,undoMove:UndoMove,me:string,slug:string,company:string,section:string,stages:Stage[],labels:Label[],cards:Card[],items:Item[],members:Person[],activity:Activity[],creatives:Creative[],versions:Version[],cardLabels:CL[],projects:Project[],message?:string,approvableIds:number[],assigned?:AssignedCard[],agents:{person_id:string,role:string,granted:boolean}[],canCreate:boolean,initialCreating:boolean,attachments:WorkAttachment[],waiting?:WaitingItem[],focus?:'waiting',alone?:boolean,opened?:CardWindowData,show?:number,ideaAdded?:boolean,ruleDecision?:{approve:boolean,agent:string},cardAgents?:CardAgent[],archived?:ArchivedCards,readArchived?:ReadArchived<Card>,archiveCards?:ArchiveCards};
 // The board's archive list (#670, #705): the server's first page, how many archived Cards the reader sees (null when it
 // could not be read), and an archived Card the address names that the page does not hold, which opens over the board.
 type ArchivedCards={first:ArchivedPage<Card>|null,total:number|null,named:Card[]};
@@ -254,6 +254,8 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // Read from every Card, not the drawn ones, so a filter that brings a waiting Card back does not shake it again.
  const fresh=useNewlyWaiting(p.cards.filter(c=>columnOfCard(c)==='waiting'&&yours(c)).map(c=>c.id));
  const cardView=(c:Card,isOverlay=false)=>{ const column=columnOfCard(c); const agent=agentOfCard(c); const own=cardAgentOf(c); const crew=(c.crew||[]).flatMap(id=>agentById.get(id)??[]); const names=crew.map(a=>a.name); const job=c.channel_id?t('boardCardChannel'):c.channel||own?.speciality||''; const mine=p.approvableIds.includes(c.id); const chat=chatOf(c); const step=(p.waiting||[]).find(item=>item.kind==='approval'&&item.id===c.id)?.body; const progress=column==='progress'?progressOf(c,p.items):null;
+  // How many Cards it still waits for (#682), on the tile.
+  const waits=waitCount.get(c.id)??0; const waitChip=waits>0&&<span className="kcard__todo kcard__waits od-nowrap" title={t('symWaitsN',String(waits))}><span aria-hidden="true"><ShellIcon name="hourglass"/><span className="num">{waits}</span></span><span className="sr-only">{t('symWaitsN',String(waits))}</span></span>;
   // The description's to-do count on the tile (#679), "2/5", only when it has to-do items.
   const todos=todoProgress(c.description); const todoChip=todos.total>0&&<span className={`kcard__todo od-nowrap${todos.done===todos.total?' is-all':''}`} title={t('deTileTodos',String(todos.done),String(todos.total))}><span aria-hidden="true"><ShellIcon name="todo"/><bdi dir="ltr" className="num">{todos.done}/{todos.total}</bdi></span><span className="sr-only">{t('deTileTodos',String(todos.done),String(todos.total))}</span></span>;
   const brief=stagesIn(column).length>1?stageName(c):[c.hook,c.offering,c.goal].find(Boolean)||'';
@@ -278,7 +280,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
    </>:progress?<span className="kcard__prog"><span className="kcard__t" dir="auto">{progress.next||stageName(c)} · <span className="num">{progress.pct}%</span></span><span className="bar" role="progressbar" aria-label={t('boardProgress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.pct}><span className="bar__fill" style={{transform:`scaleX(${progress.pct/100})`}}/></span></span>
    :brief?<span className="kcard__t" dir="auto">{brief}</span>:idea?<span className="kcard__t" dir="auto">{idea}</span>:null}
    {crew.length>1&&<span className="kcard__crew"><span className="fstack" aria-hidden="true">{crew.map(a=><AgentFace key={a.id} agent={a.id} size={18}/>)}</span><span className="kcard__crew-t">{t('boardWorkedOn')} {crew.map((a,i)=><Fragment key={a.id}>{i>0&&t('boardNamesJoin')}<bdi>{a.name}</bdi></Fragment>)}</span></span>}
-   {own?<ChatCardFoot agent={own} job={job} due={(todoChip||due(c))&&<>{todoChip}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</>}/>:<span className="kcard__foot">{agent&&<span className="kcard__agent card-avatars">{letter(agent,18)}<bdi className="od-truncate">{agentName(agent)}</bdi></span>}{job&&<span>{agent?'· ':''}<bdi>{job}</bdi></span>}{todoChip}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>}
+   {own?<ChatCardFoot agent={own} job={job} due={(todoChip||waitChip||due(c))&&<>{waitChip}{todoChip}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</>}/>:<span className="kcard__foot">{agent&&<span className="kcard__agent card-avatars">{letter(agent,18)}<bdi className="od-truncate">{agentName(agent)}</bdi></span>}{job&&<span>{agent?'· ':''}<bdi>{job}</bdi></span>}{waitChip}{todoChip}{due(c)&&<span className="kcard__due od-nowrap">{due(c)}</span>}</span>}
   </KanbanCard>; };
  // A learning suggestion (#25; design-reference: lnRowHTML) is decided where it waits: the rule, its Agent, who told it,
  // and Decline or Make it team-wide.
@@ -342,6 +344,7 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
  // A Card's latest Version, the one a review is asked on (#681), and its open review.
  const latestVersion=new Map<number,number>(); for(const v of p.versions) { const card=p.creatives.find(x=>x.id===v.creative_id)?.card_id; if(card!=null&&v.id>(latestVersion.get(card)??0)) latestVersion.set(card,v.id); }
  const reviewOf=(c:Card)=>p.reviews?.find(r=>r.card_id===c.id);
+ const waitCount=new Map((p.openWaits||[]).map(row=>[row.card_id,row.waiting]));
  const intoReview=(c:Card)=>p.canCreate&&!c.archived_at&&c.status!=='waiting'?()=>void workAction(formOf('review',c)).then(()=>router.refresh()):undefined;
  const windowCallout=(c:Card)=>{ const chat=chatOf(c); const mine=p.approvableIds.includes(c.id);
   if(c.wait) return <section className="cw-call cw-call--wait" data-card-section="question"><div className="cw-call__head"><Sym kind="question"/><p className="cw-call__t od-fill" dir="auto">{c.wait.title}</p>
@@ -375,12 +378,12 @@ export default function Work(p:WorkProps) { const {workAction,placeMove,undoMove
   const assigneeAgents=[...companyAgents.map(a=>({id:a.id,name:a.name})),...(own&&!companyAgents.some(a=>a.id===own.id)?[{id:own.id,name:own.name}]:[])];
   return <CardWindow key={c.id} slug={p.slug} company={p.company} me={p.me} data={data} canWrite={p.canCreate} alone={!!p.alone} message={p.message}
    card={{id:c.id,title:c.title,status:columnOf({...c,wait:null}),go_live:c.go_live,project_id:c.project_id,assignee:assigneeOf(c),archived:archivedOf(c)}}
-   symbol={cardSymbol({...c,latest_version:latestVersion.get(c.id)??null},{me:p.me,working:data.working})} columnName={columnName}
+   symbol={cardSymbol({...c,latest_version:latestVersion.get(c.id)??null,open_waits:waitCount.get(c.id)??0},{me:p.me,working:data.working})} columnName={columnName}
    assignees={{agents:assigneeAgents,people:assignable.map(m=>({id:m.person_id,name:m.people?.name||''}))}}
    people={p.members.filter(member=>member.person_id!==p.me&&member.people?.name).map(member=>({id:member.person_id,name:member.people!.name,role:member.role}))} agents={companyAgents}
    projects={p.projects} send={workAction} save={p.saveCard??(async()=>({error:t('couldNotSaveTheChangeCheckPermissionsAnd')}))} move={moveTo(c)}
    archive={p.archiveCards&&{archive:()=>archive([c.id]),restore:()=>restore([c.id])}}
-   callout={windowCallout(c)} description={windowDescription(c)} intoReview={intoReview(c)}/>; };
+   callout={windowCallout(c)} description={windowDescription(c)} intoReview={intoReview(c)} waitChoices={p.cards.filter(x=>!x.archived_at).map(x=>({id:x.id,title:x.title,status:x.status}))}/>; };
  const ideasStage=stagesIn('ideas')[0]?.id;
  // "+" on Ideas opens that column's form and a second press closes it (#188); Cancel and Escape come back to it too.
  const closeIdea=()=>{ setAddingIdea(false); addButton.current?.focus({preventScroll:true}); };

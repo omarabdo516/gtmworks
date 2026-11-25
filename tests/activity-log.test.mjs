@@ -16,6 +16,10 @@ test('Card, Member and Agent rows say who changed what', () => {
  const ticked = describeEntry({ subject: 'card', action: 'todo_ticked', details: { item: 'Write the hook', done: true } });
  const unticked = describeEntry({ subject: 'card', action: 'todo_ticked', details: { item: 'اكتب الخطاف', done: false } });
  assert.deepEqual([ticked.act, ticked.to, unticked.act, unticked.to], [['logActTodoTicked'], { text: 'Write the hook' }, ['logActTodoUnticked'], { text: 'اكتب الخطاف' }]);
+ // A wait set or ended (#682) names the Card waited for, or a hidden Card.
+ const waited = describeEntry({ subject: 'card', action: 'wait_added', details: { waits_for: 3, title: 'Design' } });
+ const unwaited = describeEntry({ subject: 'card', action: 'wait_removed', details: { waits_for: 4, title: null } });
+ assert.deepEqual([waited.act, waited.to, unwaited.act, unwaited.to], [['logActWaitAdded'], { text: 'Design' }, ['logActWaitRemoved'], { key: 'cwHiddenCard' }]);
  const note = describeEntry({ subject: 'card', action: 'note', body: 'ملاحظة' });
  assert.deepEqual([note.act, note.note], [['logActNote'], 'ملاحظة']);
  // An idea added in the Ideas column (#188) says so, in both languages.

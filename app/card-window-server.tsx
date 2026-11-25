@@ -8,7 +8,7 @@ import { ShellIcon } from '@/components/shell-icon';
 import { ModelLine } from './model-line';
 import { modelCauseOf, modelCauseOutcomes, modelOutcome } from '@/lib/model-causes';
 import { isThumbnail } from '@/lib/attachments.mjs';
-import type { CardMade, CardWindowData } from './card-window';
+import type { CardMade, CardWaitLink, CardWindowData } from './card-window';
 
 type Db=Awaited<ReturnType<typeof supabase>>;
 // How many of a Card's log rows its window reads, comments and activity together; an older one is on the Log page.
@@ -21,7 +21,7 @@ const comment=(row:LogRow)=>row.source==='work_comments'||row.action==='note_rep
 // files, and who made it from where. Read as the signed-in person, so the database shows only what they may see: a
 // Card made in another Member's private chat shows who made it and nothing that was said.
 export async function cardWindow(db:Db,{company,card,slug,me,canWrite,t,language}:{company:string,card:number,slug:string,me:string,canWrite:boolean,t:I18n['t'],language:Language}):Promise<CardWindowData> {
- const [{data},{data:runRows},people,{data:fileRows},{data:creativeRows},{data:versionRows},made]=await Promise.all([
+ const [{data},{data:runRows},people,{data:fileRows},{data:creativeRows},{data:versionRows},made,{data:waitRows}]=await Promise.all([
   db.from('company_log').select(logColumns).eq('company_id',company).eq('card_id',card).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(windowRows),
   db.from('note_runs').select('note_id,agent_id,agent_name,outcome,created_at,closed_at').eq('company_id',company).eq('card_id',card).order('created_at'),
   logPeople(db,company,[card]),
@@ -29,6 +29,8 @@ export async function cardWindow(db:Db,{company,card,slug,me,canWrite,t,language
   db.from('work_creatives').select('id,name').eq('company_id',company).eq('card_id',card).order('id'),
   db.from('work_versions').select('id,creative_id,path,created_at').eq('company_id',company).eq('card_id',card).order('id'),
   madeOf(db,company,card,slug),
+  // Both sides of its waits (#682), a Card the reader may not see named by nothing.
+  db.rpc('card_wait_links',{c:company,card}),
  ]);
  const rows=(data||[]) as LogRow[]; const drawn=drawnAt();
  const runs=((runRows||[]) as {note_id:number,agent_id:string,agent_name:string,outcome:string|null,created_at:string,closed_at:string|null}[]);
@@ -57,7 +59,7 @@ export async function cardWindow(db:Db,{company,card,slug,me,canWrite,t,language
  const versions=(versionRows||[]) as {id:number,creative_id:number,path:string,created_at:string}[];
  const signed=versions.length?await db.storage.from('creatives').createSignedUrls(versions.map(v=>v.path),3600):{data:[]};
  const creatives=(creativeRows||[]) as {id:number,name:string}[];
- return {id:card,working:runs.some(run=>!run.outcome),
+ return {id:card,working:runs.some(run=>!run.outcome),waits:(waitRows||[]) as CardWaitLink[],
   comments:drawList(comments,t('cwNoComments'),false),commentCount:comments.length,
   activity:drawList(activity,t('cwNoActivity'),true),activityCount:activity.length,
   runs:runs.map((run,n)=>({n:n+1,note:run.note_id,agent:run.agent_id,name:run.agent_name,outcome:run.outcome,start:run.created_at,end:run.closed_at})),

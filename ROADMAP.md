@@ -97,6 +97,7 @@ In flight now: Open Design (#544, PR #570). Next: the Agent's screen, one for ea
 - ✅ **Board, calendar and list views of Cards.** [#34, `work.tsx` has `work/calendar` and `work/list`]
 - ✅ **Versions and Approvals.** Editing makes a new Version, an approval applies to one exact Version, and an Agent never approves. [#16, #137, GLOSSARY.md Version, Approval]
 - ✅ **One review.** A Card in review shows its Version with Approve and Send back with a reason; any Owner or Manager who sees the Card decides it, the first answer closing it. Approved goes to Planned with the approved symbol when its date is ahead, else to Done; sent back goes to In progress with the reason as a comment. Approval steps are gone. [#681, #513]
+- ✅ **A Card waits for other Cards.** Each side names the other, the tile counts the Cards it still waits for, a loop is refused, and a Card Live, Done or archived holds nobody up. [#682]
 - ✅ **"Waiting on you".** One list for approvals, questions, permissions, requests and mentions. [#16, #165, #200]
 - ✅ **Add an idea.** The Ideas column takes a new Card, once even if pressed twice. [#188, #452]
 - ✅ **Alone or with a team.** First run asks one question; "Alone" hides the team parts until the first Member joins. [#9, #10, #186]

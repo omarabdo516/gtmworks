@@ -47,6 +47,9 @@ insert into decisions
  union all select 'public.tick_card_todo(uuid,bigint,integer,text,boolean)','checks','ticks a to-do on a Card the caller sees (can_see_card) and writes its own Activity row (#679); a hidden Card is not found'
  union all select fn,'checks','asks for or decides the review of a Card the caller sees (can_see_card); a hidden Card is not found (#681)' from unnest(array['public.ask_review(uuid,bigint)','public.decide_review(uuid,bigint,bigint,text,text)']) fn
  union all select 'public.review_from_steps()','exempt','a trigger (#681): it keeps a review open while the previous release''s approval step holds the Card and closes it when the step does; it answers no caller, and the reviews it writes are read under card_agent_visible'
+ union all select fn,'checks','sets, ends or reads the waits of Cards the caller sees (can_see_card); a Card waited for that they may not see is named by nothing (#682)' from unnest(array['public.add_card_wait(uuid,bigint,bigint)','public.remove_card_wait(uuid,bigint,bigint)','public.card_wait_links(uuid,bigint)','public.open_card_waits(uuid)']) fn
+ union all select 'public.wait_open(public.work_card_waits)','exempt','callable inside the database only, by the readers of waits that ask can_see_card first (#682); it answers whether one wait still holds'
+ union all select fn,'exempt','a trigger (#682): it refuses a loop of waits or releases the waits on an archived Card, and answers no caller' from unnest(array['public.refuse_wait_loop()','public.release_waits_on_archive()']) fn
  union all select 'public.log_card_files()','exempt','a trigger on files added to a Card itself (#678): it writes one log row naming them, read under card_agent_visible, and answers no caller'
  union all select 'public.unassign_removed()','exempt','a trigger on removing an Agent or a Member (#677): it leaves their Cards assigned to nobody and answers no caller; the log rows it writes are read under card_agent_visible'
  union all select 'public.keep_record_agent()','exempt','a trigger: it keeps the Agent a Card, a Conversation or a channel call was made with when that Agent is removed (#702), reading only whether the Agent still exists; it answers no caller'
@@ -82,7 +85,7 @@ insert into decisions
  union all select fn,'exempt','an Owner or a Manager changes an approval step: every Card on it moves with it so none is left on a removed step, and nothing about a Card is answered' from unnest(array[
   'public.remove_approval_step(uuid,bigint)','public.save_approval_step(uuid,bigint,text,integer,uuid,public.member_role)']) fn;
 
-select is((select count(*)::int from card_tables),14,'the card tables are the 14 that carry #221''s rule, the Card itself and its reviews (#681) among them');
+select is((select count(*)::int from card_tables),15,'the card tables are the 15 that carry #221''s rule, the Card itself, its reviews (#681) and its waits (#682) among them');
 select ok(not exists(select 1 from pg_proc p where p.pronamespace='public'::regnamespace and p.prosecdef
   and (not coalesce(p.proconfig,'{}') && array['search_path=""'] or regexp_replace(regexp_replace(p.prosrc,'/\*.*?\*/',' ','g'),'--[^\n]*',' ','g') ~* '\yexecute\y')),
  'every function that runs as its owner has an empty search path and no dynamic SQL, so every table it reads is named with its schema in its body');

@@ -192,3 +192,32 @@ test('a description is read drawn and its to-do items are ticked while reading: 
  await expect(read).toHaveAttribute('aria-checked', 'true');
  await expect(windowOf(viewer).locator('.de button')).toHaveCount(0);
 });
+
+test('a Card waits for another: both sides show it, the tile counts it, a loop is refused, and archiving the other releases it for good', async ({ page }) => {
+ // #682, on the seed's cards 1 and 2.
+ await signIn(page, 'omar@example.com', `${board}?card=1`);
+ const card = windowOf(page);
+ const other = JSON.parse(query(`select title from public.work_cards where id=2`))[0].title as string;
+ await card.getByRole('button', { name: 'Wait for another card' }).click();
+ await card.getByRole('menuitem', { name: other }).click();
+ await expect(card.getByRole('link', { name: new RegExp(`^${other} · `) })).toBeVisible();
+ await expect.poll(() => JSON.parse(query(`select count(*)::int n from public.work_card_waits where card_id=1 and waits_for=2`))[0].n).toBe(1);
+ await expect(card.getByRole('button', { name: /^Status: .* · Waiting for another card$/ })).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(page.locator('#board-cols .kcard[data-card-id="1"] .kcard__waits')).toContainText('1');
+
+ // Card 2 shows who waits for it, and waiting back is refused.
+ await page.goto(`${board}?card=2`);
+ const title = JSON.parse(query(`select title from public.work_cards where id=1`))[0].title as string;
+ await expect(card.getByRole('link', { name: new RegExp(`^${title} · `) })).toBeVisible();
+ await card.getByRole('button', { name: 'Wait for another card' }).click();
+ await card.getByRole('menuitem', { name: title }).click();
+ await expect(page.getByRole('alert')).toContainText('Those cards would wait for each other. Pick another one.');
+ expect(JSON.parse(query(`select count(*)::int n from public.work_card_waits where card_id=2`))[0].n).toBe(0);
+
+ // Archiving card 2 releases the wait for good: restored, nobody waits again.
+ query(`do $$ begin perform set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',true); perform public.archive_cards('10000000-0000-0000-0000-000000000001',array[2::bigint]); perform public.restore_cards('10000000-0000-0000-0000-000000000001',array[2::bigint]); end $$`);
+ await page.goto(board);
+ await expect(page.locator('#board-cols .kcard[data-card-id="2"]')).toBeVisible();
+ await expect(page.locator('#board-cols .kcard[data-card-id="1"] .kcard__waits')).toHaveCount(0);
+});

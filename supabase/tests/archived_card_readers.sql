@@ -18,6 +18,7 @@ insert into decisions
   'public.card_archive_stops(uuid,bigint[])','public.stop_named_channel_run(public.channel_runs,text)']) fn
  union all select 'public.tick_card_todo(uuid,bigint,integer,text,boolean)','asks','ticks a to-do only on a current Card: an archived one is not found (#679)'
  union all select fn,'asks','asks for or decides the review of a current Card only: an archived one is not found (#681)' from unnest(array['public.ask_review(uuid,bigint)','public.decide_review(uuid,bigint,bigint,text,text)']) fn
+ union all select fn,'asks','sets, ends or counts the waits of current Cards only: an archived one is not found, and one waited for that is archived holds nobody (#682)' from unnest(array['public.add_card_wait(uuid,bigint,bigint)','public.remove_card_wait(uuid,bigint,bigint)','public.open_card_waits(uuid)','public.wait_open(public.work_card_waits)','public.card_wait_links(uuid,bigint)']) fn
  union all select 'public.stop_card_work(uuid,bigint)','exempt','inside the database only: archive_cards stops the work of the one Card it is archiving, before marking it'
  union all select fn,'asks','starts no work on an archived Card and keeps no wait on one (#671): it reads a Card only to ask whether it is archived' from unnest(array[
   'public.begin_note_start(bigint)','public.answer_note_start(bigint,integer,text)','public.add_waiting_item(uuid,uuid,text,text,text,bigint,uuid,text)']) fn
