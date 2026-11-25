@@ -111,7 +111,8 @@ export function useConversationRecord({company,initial}:{company:string,initial:
  // answer is the record only when it did. A hidden tab asks nothing until it is shown again, then asks at once; a read
  // that fails asks again more slowly, up to thirty seconds apart, and a signed-out reader stops asking. After a Run's
  // events end (`hurry`) it asks every 300 ms for a few seconds, so the reply is drawn within a second of its Run's end.
- const stamp=useRef(initial.stamp??null); const latest=useRef(record); latest.current=record;
+ const stamp=useRef(initial.stamp??null); const latest=useRef(record);
+ useEffect(()=>{ latest.current=record; },[record]);
  // Three reads in a row that failed say so under the transcript (#768); what is drawn stays, and the next read that
  // lands takes the line away.
  const [unread,setUnread]=useState(false);
